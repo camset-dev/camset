@@ -16,9 +16,9 @@ for macOS on Apple silicon and a tarball for Linux. Windows has no package yet, 
 ([The editor from source](#the-editor-from-source)). Take 0.2.0 or later: 0.1.0 is withdrawn, and its editor does not
 open today's camera definitions.
 
-- **macOS:** the app is not notarized, so macOS refuses to open it the first time. Then open System Settings >
-  Privacy & Security and click Open Anyway (on macOS 14 and earlier, right-click the app > Open instead). Not yet
-  tried on a downloaded copy.
+- **macOS:** open the disk image and drag Camset Editor onto Applications. The app is not notarized, so macOS
+  refuses to open it the first time. Then open System Settings > Privacy & Security and click Open Anyway (on macOS
+  14 and earlier, right-click the app > Open instead). Not yet tried on a downloaded copy.
 - **Windows:** the release workflow is written to build it, but it has not been built or tried yet. The program is
   not signed, so Windows may warn before it runs.
 

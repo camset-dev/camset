@@ -471,6 +471,19 @@ pub(crate) mod definitions_tests {
         assert!(shipped().join("ILCE-1M2_fw4.00.json").is_file());
     }
 
+    /// The macOS disk image installs the macOS way: beside the app it holds a shortcut to /Applications to drag it
+    /// onto, made in the image's folder (made afresh, so nothing of an earlier run is left in it) before the image is
+    /// made from it.
+    #[test]
+    fn the_disk_image_offers_drag_to_install() {
+        let mac = include_str!("../../packaging/build_macos_app.sh");
+        let fresh = mac.find("rm -rf \"$STAGE\"\nmkdir -p \"$STAGE\"\n").expect("the image's folder is made afresh");
+        let staged = mac.find("ditto \"$APP\" \"$STAGE/Camset Editor.app\"").expect("the app goes into the image's folder");
+        let link = mac.find("ln -s /Applications \"$STAGE/Applications\"").expect("the image holds the Applications shortcut");
+        let made = mac.find("hdiutil create -volname \"Camset Editor\" -srcfolder \"$STAGE\"").expect("the image is made from that folder");
+        assert!(fresh < staged && staged < link && link < made, "the shortcut is made beside the app, before the image");
+    }
+
     /// A path written with "/" as this system spells it: as it is on macOS and Linux, with "\" on Windows (where these
     /// tests' paths that start with "/" are paths from the current drive's root, shown with its separator).
     fn spelled(s: &str) -> String {

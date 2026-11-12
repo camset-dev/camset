@@ -13,7 +13,9 @@
 //! - `web`: the web page, a small HTTP server inside the editor that answers from the same state.
 //!
 //! Under test, `test_support` holds the helpers several test modules share.
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]   // no console window behind the app on Windows
+// no console window behind the app on Windows; the tests' build (`cargo test --release`, as CI runs it) keeps its
+// console, so it prints its results and names a failing test
+#![cfg_attr(all(not(debug_assertions), not(test)), windows_subsystem = "windows")]
 
 use eframe::egui::{self, Color32, FontFamily, FontId, RichText, TextStyle};
 use camset_editor::camset::{self, CamSet, FileFormat};
@@ -49,7 +51,7 @@ fn main() -> eframe::Result {
         return Ok(());
     }
     let size = prefs.window.unwrap_or([1280.0, 860.0]);
-    let mut viewport = egui::ViewportBuilder::default().with_inner_size(size).with_title("Camset Editor").with_app_id(APP_ID);
+    let mut viewport = egui::ViewportBuilder::default().with_inner_size(size).with_title(window_title()).with_app_id(APP_ID);
     if let Ok(icon) = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")) {
         viewport = viewport.with_icon(std::sync::Arc::new(icon));    // the taskbar / dock icon when run unbundled
     }
@@ -265,6 +267,8 @@ struct App {
     recovered: Vec<recovery::Found>,
     /// Settings > Changes: the changelog's window is open.
     show_changes: bool,
+    /// The About window is open (the status bar's version, or the one at the foot of Settings, opens it).
+    show_about: bool,
 }
 
 impl App {
@@ -387,6 +391,7 @@ impl App {
             journal: recovery::Journal::new(Self::recovery_dir()),
             recovered: recovery::list(&Self::recovery_dir(), &recovery::running),
             show_changes: false,
+            show_about: false,
         };
         app.web_start_pending = app.prefs.web_at_start;
         if let Ok(v) = std::env::var("CAMSET_VIEW") {
@@ -399,6 +404,7 @@ impl App {
                 "memories" => app.view = View::Memories,
                 "mymenu" => app.view = View::MyMenu,
                 "settings" => app.show_settings = true,
+                "about" => app.show_about = true,
                 "settings_definitions" => { app.show_settings = true; app.settings_tab = SettingsTab::Definitions; }
                 "settings_camera" => { app.show_settings = true; app.settings_tab = SettingsTab::Camera; }
                 "write" | "write_reading" | "history" | "backups" | "connect" | "statuslog" => app.view = View::Main,
@@ -665,6 +671,7 @@ impl eframe::App for App {
         self.unchecked_window(ctx);
         self.def_replace_window(ctx);
         self.recovery_window(ctx);
+        self.about_window(ctx);
         self.changes_window(ctx);
         self.unsaved_window(ctx);
         self.shortcuts(ctx);
@@ -688,16 +695,18 @@ impl eframe::App for App {
                 let n = self.doc.as_ref().map(|d| d.changes().len()).unwrap_or(0);
                 ui.label(if n > 0 { RichText::new(format!("{EDIT_MARK} {}", self.unsaved_words(n))).color(tone::edit(ui.visuals())) } else { RichText::new("No edits") });
                 ui.separator();
-                let room = ui.available_width() - if self.web.is_some() { 280.0 } else { 0.0 };
+                // the room the right end keeps: the editor's version always, the web page's address while it is on
+                let room = ui.available_width() - Self::version_label_width(ui) - if self.web.is_some() { 280.0 } else { 0.0 };
                 self.status_line(ui, room);
-                if let Some(w) = &self.web {
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    self.version_label(ui);
+                    if let Some(w) = &self.web {
                         if ui.link(format!("Web page on · {}", w.url)).on_hover_text("Open in a browser on another computer or a phone; the access code is in Settings").clicked() {
                             self.show_settings = true;
                             self.settings_tab = SettingsTab::Definitions;
                         }
-                    });
-                }
+                    }
+                });
             });
         });
         if self.mode == Mode::Edit && self.doc.is_some() {

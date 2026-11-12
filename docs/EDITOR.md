@@ -142,6 +142,15 @@ project's `CHANGELOG.md`, built into the program), and Third-party licences open
 built into the editor in your browser (`THIRD_PARTY_LICENSES.html`, which the packages carry; a build of your own has
 it only once `cargo about` has written it). The web page's Settings name the same version.
 
+The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.0"), at the right end of the
+status bar, and on the welcome page in full. A click on the status bar's version, or on the one at the foot of
+Settings, opens About Camset Editor: the version and the build, the cameras the editor works with, Changes, Third-party
+licences and Copy version (the version in full, for a message about a problem). The web page names the version at
+the right end of its status bar and on its welcome page, and its Settings end with the version and Changes; a click on
+either version opens the page's About, with the version and the build, the cameras and Changes. The page's About has
+no Copy version, and its Third-party licences is greyed out, as the licences page is on the editor's computer. On macOS the application menu's About Camset Editor is the system's own panel: the packaged
+app's name, version and copyright line, from its Info.plist.
+
 The window describes itself to the computer's screen reader (VoiceOver, Narrator, Orca) through egui's AccessKit
 support: buttons, check boxes and lists by their words, and the controls that show none by a name of their own (the
 search box, the address and login fields, a setting's number and list boxes, the Main page's tiles with their values,

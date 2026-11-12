@@ -1499,3 +1499,97 @@ def test_only_the_status_bar_and_the_toast_speak_and_each_open_is_named():
     assert not re.search(r'aria-live|role: "(?:status|alert)"', script)
     opens = [re.search(rf'<button id="b-open-{w}"[^>]*aria-label="([^"]+)"', page).group(1) for w in ("a", "b", "base")]
     assert opens == ["Open file A…", "Open file B…", "Open a base file…"]
+
+
+@needs_node
+def test_the_status_bar_version_opens_about_and_its_changes(tmp_path):
+    """As in the window: the status bar's right end names the editor and its short version, the whole version on
+    hover, and a click opens About, which gives the version, the build (when there is one), the cameras it works
+    with and the not-affiliated line; its Changes asks the editor for the changelog and shows it, release by release;
+    the licences, a page on the editor's computer, are greyed out with where they are. The welcome page gives the
+    whole version."""
+    got = run(tmp_path, """
+(async () => {
+  const asked = [];
+  api = async (name) => { asked.push(name); return { blocks: [[2, "Unreleased"], [3, "The editor"], [1, "A point."]] }; };
+  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", build: "1a2b3c4", works_with: ["ILCE-1M2"], not_sony: "Not Sony's." };
+  drawVersion(state);
+  const b = $("foot-version");
+  const label = { text: b.textContent, title: b.title, aria: b.getAttribute("aria-label") };
+  const welcomeText = welcome().textContent;
+  b.click();
+  const about = $("about");
+  const texts = about.querySelectorAll("p, div").map((n) => n.textContent);
+  const buttons = about.querySelectorAll("button").map((n) => [n.textContent, !!n.disabled]);
+  const shown = { open: xp.windows.about, hidden: about.hidden, title: about.querySelector(".title > span").textContent, role: about.getAttribute("role") };
+  about.querySelectorAll("button").find((n) => n.textContent === "Changes").click();
+  await tick(); await tick();
+  const changes = { open: xp.windows.changelog, asked, title: $("changelog").querySelector(".title > span").textContent,
+    heads: $("changelog").querySelectorAll("h1").map((n) => n.textContent), text: $("changelog").textContent };
+  delete state.build;
+  xp.keys.about = null;
+  drawAbout();
+  const noBuild = $("about").textContent;
+  console.log(JSON.stringify({ label, welcomeText, texts, buttons, shown, changes, noBuild }));
+})();
+""")
+    assert got["label"] == {"text": "Camset Editor 0.2.0", "title": "Camset Editor 0.2.0 (build 1a2b3c4)\nClick for About", "aria": "Camset Editor 0.2.0"}
+    assert "Version 0.2.0 (build 1a2b3c4)" in got["welcomeText"]
+    assert got["shown"] == {"open": True, "hidden": False, "title": "About Camset Editor", "role": "dialog"}
+    for t in ["Camset Editor", "Version 0.2.0", "Build 1a2b3c4", "Works with: ILCE-1M2", "Not Sony's."]:
+        assert t in got["texts"], (t, got["texts"])
+    assert ["Changes", False] in got["buttons"] and ["Third-party licences", True] in got["buttons"]
+    assert got["changes"]["open"] is True and got["changes"]["asked"] == ["changelog"] and got["changes"]["title"] == "Changes"
+    assert got["changes"]["heads"] == ["Unreleased"] and "A point." in got["changes"]["text"] and "Camset Editor 0.2.0 (build 1a2b3c4)" in got["changes"]["text"]
+    assert "Build" not in got["noBuild"] and "Version 0.2.0" in got["noBuild"]
+
+
+@needs_node
+def test_changes_says_when_the_editor_could_not_be_asked_and_asks_again(tmp_path):
+    """The page's Changes window, its request failed: it says so in plain words and how to try again, and keeps
+    nothing, so closing and opening it again asks the editor again and shows the changelog."""
+    got = run(tmp_path, """
+(async () => {
+  const asked = [];
+  let fail = true;
+  api = async (name) => { asked.push(name); if (fail) throw new Error("The editor did not answer."); return { blocks: [[2, "Unreleased"], [1, "A point."]] }; };
+  state = { ...state, version: "0.2.0" };
+  openWindow("changelog");
+  await tick(); await tick();
+  const failedText = $("changelog").textContent;
+  const kept = xp.changelog;
+  fail = false;
+  closeWindow("changelog");
+  openWindow("changelog");
+  await tick(); await tick();
+  console.log(JSON.stringify({ asked, failedText, kept, again: $("changelog").textContent, toast: $("toast").textContent }));
+})();
+""")
+    assert "could not be asked" in got["failedText"] and "open it again to try again" in got["failedText"]
+    assert "Asking the editor" not in got["failedText"] and got["kept"] is None
+    assert got["toast"] == "The editor did not answer."
+    assert got["asked"] == ["changelog", "changelog"]
+    assert "A point." in got["again"] and "could not be asked" not in got["again"]
+
+
+@needs_node
+def test_the_version_at_the_foot_of_settings_opens_about(tmp_path):
+    """As in the window: Settings end with the editor's version, which opens About, and Changes, which opens Changes."""
+    got = run(tmp_path, """
+(async () => {
+  api = async () => ({ blocks: [] });
+  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", not_sony: "Not Sony's.", settings_tabs: [["Appearance", "Theme."]],
+    prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
+  openWindow("settings");
+  const foot = $("settings").querySelector(".set-foot");
+  const buttons = foot.querySelectorAll("button");
+  const version = buttons.find((b) => b.textContent === "Camset Editor 0.2.0 (build 1a2b3c4)");
+  version.click();
+  const about = xp.windows.about && !$("about").hidden;
+  buttons.find((b) => b.textContent === "Changes").click();
+  await tick();
+  console.log(JSON.stringify({ words: buttons.map((b) => b.textContent), about, changes: xp.windows.changelog }));
+})();
+""")
+    assert got["words"] == ["Camset Editor 0.2.0 (build 1a2b3c4)", "Changes"]
+    assert got["about"] is True and got["changes"] is True

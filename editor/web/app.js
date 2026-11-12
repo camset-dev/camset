@@ -186,9 +186,10 @@ const xp = {
   reveal: null,                                               // a setting to bring into view once its tab is drawn
   expert: null,                                               // the Expert switch as the Menu column was drawn for
   rm: { unmapped: false, edited: false, open: new Set() },    // the record map's filters and unfolded records
-  windows: { backups: false, history: false, settings: false, connect: false },   // the windows open, by their element's id
+  windows: { backups: false, history: false, settings: false, connect: false, about: false, changelog: false },   // the windows open, by their element's id
   keys: {},                                                   // what each window was last drawn for
   backups: null, history: null, historyRev: null,             // the lists Backups and Edit history show
+  changelog: null, changelogFailed: false,                    // the changelog the Changes window shows, and whether asking failed
   historyAsked: 0,                                            // the newest Edit history request; older answers are dropped
   settingsTab: 0,                                             // the Settings tab shown
   folds: new Set(),                                           // the folding parts of the windows left open
@@ -795,6 +796,7 @@ function render() {
   $("edits").className = s.edits ? "edit" : "";
   setText($("status"), s.status || "");
   $("status").title = s.status || "";
+  drawVersion(s);
   drawMore(s, f);
   maybeDraw();
 }
@@ -1302,6 +1304,8 @@ function welcome() {
         () => replaceAct("sample", {}, null, "Explore a sample", opening("the sample"), "Open the sample")) : null),
     s.works_with && s.works_with.length ? el("p", { class: "weak" }, `Works with: ${s.works_with.join(", ")}`) : null,
     el("p", { class: "small weak" }, s.not_sony),
+    // which editor this is, in full (the status bar gives it short; About has the rest)
+    s.version ? el("p", { class: "small weak" }, `Version ${s.version}`) : null,
     recent.length ? el("div", { class: "strong", style: { "margin-top": "24px" } }, "Recent files") : null,
     ...recent.map((r, i) => el("div", { style: { margin: "4px 0" } },
       el("a", { href: "#", title: r.path || r.name, style: { color: "var(--link)" }, onclick: (e) => { e.preventDefault(); openRecent(i); } }, r.name))));
@@ -3392,7 +3396,7 @@ function drawSend(j) {
     el("div", { class: "buttons" }, go, el("button", { onclick: close }, "Cancel")));
 }
 
-// --- the windows: Settings, Connect to the camera, Backups and Edit history ---
+// --- the windows: Settings, Connect to the camera, Backups, Edit history, About and Changes ---
 
 /** Open one of the windows (`xp.windows`), with what it shows asked for afresh. */
 function openWindow(name) {
@@ -3401,6 +3405,7 @@ function openWindow(name) {
   if (name === "connect" || (name === "settings" && xp.settingsTab === 1)) loadCameraCards();
   if (name === "backups") loadBackups();
   if (name === "history") xp.historyRev = null;
+  if (name === "changelog") loadChangelog();
   drawWindows();
 }
 
@@ -3445,7 +3450,7 @@ function drawWindows() {
     xp.cameraKey = ck;
     if (xp.windows.connect || (xp.windows.settings && xp.settingsTab === 1)) loadCameraCards();
   }
-  const draw = { backups: drawBackups, history: drawHistory, settings: drawSettings, connect: drawConnect };
+  const draw = { backups: drawBackups, history: drawHistory, settings: drawSettings, connect: drawConnect, about: drawAbout, changelog: drawChangelog };
   for (const name of Object.keys(xp.windows)) {
     const box = $(name);
     if (!xp.windows[name]) {
@@ -3520,7 +3525,9 @@ function drawSettings() {
     el("hr"),
     el("div", { class: "set-foot small weak" },
       el("span", { title: `Preferences file: ${s.prefs.prefs_path}` }, plain("⚙ Preferences")),
-      el("span", { title: "The editor's version, and the commit it was built from when built from the project's repository" }, `Camset Editor ${s.version || ""}`),
+      el("button", { class: "small sel weak", title: "The editor's version, and the commit it was built from when built from the project's repository. Click for About.",
+        onclick: () => openWindow("about") }, `Camset Editor ${s.version || ""}`),
+      el("button", { class: "small sel", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
       el("span", {}, s.not_sony)));
 }
 
@@ -3836,6 +3843,65 @@ function drawHistory() {
   fillWindow("history", "Edit history", ...body);
 }
 
+/** The status bar's version, at its right end, as the window's: the editor's name and short version (the version alone
+ *  on a phone), the whole version on hover; a click or a tap opens About. */
+function drawVersion(s) {
+  const b = $("foot-version");
+  const short = s.version_short || s.version || "";
+  if (b.dataset.key === `${short}|${s.version}`) return;
+  b.dataset.key = `${short}|${s.version}`;
+  b.replaceChildren(el("span", { class: "vname" }, "Camset Editor "), short);
+  b.title = `Camset Editor ${s.version || short}\nClick for About`;
+  b.setAttribute("aria-label", `Camset Editor ${short}`);
+}
+
+/** About Camset Editor, as the window's: which editor this is (its version, and the commit of a build made from the
+ *  repository), the cameras it works with, and the ways to what changed and to the licences (those are a page on the
+ *  editor's computer, which the desktop app opens). */
+function drawAbout() {
+  const s = state;
+  if (drawnFor("about", JSON.stringify([s.version, s.version_short, s.build, s.works_with, s.not_sony]))) return;
+  fillWindow("about", "About Camset Editor",
+    el("div", { class: "strong", style: { "font-size": "1.429rem" } }, "Camset Editor"),
+    el("p", {}, `Version ${s.version_short || s.version || ""}`),
+    s.build ? el("p", { title: "The commit it was built from, in the project's repository" }, `Build ${s.build}`) : null,
+    s.works_with && s.works_with.length ? el("p", { class: "weak" }, `Works with: ${s.works_with.join(", ")}`) : null,
+    el("p", { class: "small weak" }, s.not_sony),
+    el("div", { class: "buttons" },
+      el("button", { class: "small", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
+      deskButton("Third-party licences", "In the desktop app: About Camset Editor, or the foot of Settings, opens the licences page on the editor's computer")));
+}
+
+/** Ask the editor for the changelog built into it, for Changes, each time the window opens: a request that failed
+ *  leaves nothing kept, so opening Changes again asks again. */
+async function loadChangelog() {
+  xp.changelog = null;
+  xp.changelogFailed = false;
+  try {
+    xp.changelog = (await api("changelog")).blocks || [];
+  } catch (e) {
+    xp.changelogFailed = true;
+    failed(e);
+  }
+  drawWindows();
+}
+
+/** Changes, as the window's: the changelog built into this editor, release by release (kind 2 a release, 3 a part,
+ *  1 a point, 0 a paragraph; `changelog_blocks`). */
+function drawChangelog() {
+  const b = xp.changelog;
+  if (drawnFor("changelog", JSON.stringify([b, xp.changelogFailed, state.version]))) return;
+  const block = ([kind, text]) => kind === 2 ? el("h1", { style: { "margin-top": "10px" } }, text)
+    : kind === 3 ? el("div", { class: "strong", style: { "margin-top": "6px" } }, text)
+    : kind === 1 ? el("div", { class: "set-row", style: { "align-items": "flex-start" } }, el("span", {}, "•"), el("span", {}, text))
+    : el("p", {}, text);
+  fillWindow("changelog", "Changes",
+    el("p", { class: "weak" }, `Camset Editor ${state.version || ""}`),
+    b ? el("div", {}, ...b.map(block))
+      : xp.changelogFailed ? el("p", { class: "warn" }, "The editor could not be asked for what changed. Close Changes and open it again to try again.")
+      : el("p", { class: "weak" }, "Asking the editor…"));
+}
+
 // --- the toolbar: what does not fit folds into More ---
 
 // the top bar keeps one row: the buttons that do not fit fold into More, the lowest data-fold first (the text size,
@@ -4094,6 +4160,11 @@ $("b-retry").addEventListener("click", () => {
 $("side").addEventListener("scroll", stripEdges, { passive: true });
 $("statusbar").addEventListener("click", () => {
   if (matchMedia("(max-width: 699px)").matches) $("statusbar").classList.toggle("open");
+});
+// the status bar's version opens About, and leaves the status bar as it was
+$("foot-version").addEventListener("click", (e) => {
+  e.stopPropagation();
+  openWindow("about");
 });
 
 // how the focus is reached (`focusOrigin`): the last key or tap before it moved. A tap or a click elsewhere also ends

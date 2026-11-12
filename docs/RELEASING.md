@@ -51,9 +51,9 @@ None of them holds help text or a value from anyone's camera.
 
 | Platform | Build | State |
 |---|---|---|
-| macOS | `sh packaging/build_macos_app.sh` (from `editor/`): `Camset Editor.app` and a `.dmg` in `editor/target/dist`, with only the tools macOS ships; the bundle identifier is `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Built and launched by Finder's route (`open`) on the Mac that built it, 2026-10-29: Apple silicon, ad-hoc signed. A downloaded copy, which macOS marks as from the internet, not yet tried. |
+| macOS | `sh packaging/build_macos_app.sh` (from `editor/`): `Camset Editor.app` and a `.dmg` (the app beside a shortcut to Applications, to drag it onto) in `editor/target/dist`, with only the tools macOS ships; the bundle identifier is `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Built and launched by Finder's route (`open`) on the Mac that built it, 2026-10-29: Apple silicon, ad-hoc signed. A downloaded copy, which macOS marks as from the internet, not yet tried. |
 | Linux | `sh packaging/build_linux.sh` (from `editor/`): a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | `build_linux.sh` written, not yet run. The editor itself was built and run on Ubuntu 26.04 (`PORTING.md`, "Seen on Windows / Linux"). |
-| Windows | The workflow zips `camset_editor.exe`; the release build has no console window | Not yet built. The exe has no embedded icon yet (the window and taskbar show it). |
+| Windows | The workflow zips `camset_editor.exe`; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results) | Not yet built. The exe has no embedded icon yet (the window and taskbar show it). |
 
 **Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.0 now), add the release's section to `CHANGELOG.md`,
 commit, then tag that commit `v<version>` (for example `v0.2.0`) and push the tag to GitHub only. The release is

@@ -185,7 +185,7 @@ impl App {
         if needs_target && !self.shown_sections().contains(&target) {
             return WebReply::error(400, "This file has no such set.");
         }
-        let needs_file = !matches!(action, "state" | "read" | "open" | "dismiss" | "retry" | "put_back" | "sample" | "backups" | "open_backup" | "prefs"
+        let needs_file = !matches!(action, "state" | "read" | "open" | "dismiss" | "retry" | "put_back" | "sample" | "backups" | "open_backup" | "prefs" | "changelog"
             | "open_recent" | "clear_recent" | "reload_schemas" | "camera_link" | "camera_search" | "camera_use" | "camera_name" | "camera_forget"
             | "camera_check" | "camera_steps" | "switch_usb" | "camera_cards" | "camera_report" | "send_cancel");
         if needs_file && self.doc.is_none() {
@@ -289,6 +289,8 @@ impl App {
             "exposure" if self.schema.camera.exposure.is_none() => WebReply::error(409, "This camera's definition has no exposure page."),
             "exposure" => WebReply::json(self.web_exposure()),
             "changes" => WebReply::json(self.web_changes()),
+            // About's Changes: the changelog built into this editor, as the window's Changes shows it
+            "changelog" => WebReply::json(json!({ "blocks": changelog_blocks(CHANGELOG) })),
             "read" if !idle => WebReply::error(409, "The editor is busy with the camera; wait for it to finish."),
             "read" => {
                 if let Some(no) = self.web_unsaved(discard) {
@@ -729,7 +731,7 @@ impl App {
             "status": self.page_status(),
             "prefs": self.web_prefs(),
             "settings_tabs": SettingsTab::ALL.iter().map(|t| [t.label(), t.subtitle()]).collect::<Vec<_>>(),
-            // the editor's version, as Settings shows it ("0.2.0 (build 1a2b3c4)")
+            // the editor's version, as Settings shows it ("0.2.0 (build 1a2b3c4)"); its two parts are set below
             "version": crate::version_words(),
             "row_hovers": self.web_row_hovers(),
             "history": self.undo.len(),
@@ -777,6 +779,10 @@ impl App {
         // set apart, as the object above is as large as the json! macro takes
         out["help_refused"] = self.schema.help_refused.iter().zip(self.schema.help_refusals())
             .map(|((p, _), text)| json!({ "file": file_name_of(&p.to_string_lossy()), "text": text })).collect();
+        // the version's two parts, for About and the status bar: the short version ("0.2.0") and the build's commit
+        // (null for a build made outside the repository)
+        out["version_short"] = json!(version_short());
+        out["build"] = json!(build_hash());
         out
     }
 
@@ -2670,6 +2676,16 @@ pub(crate) mod tests {
         let a = answer(app, name, body);
         assert_eq!(a.status, 200, "{name}: {}", String::from_utf8_lossy(&a.body));
         serde_json::from_slice(&a.body).unwrap()
+    }
+
+    /// About's Changes on the page: the changelog built in, as the window's Changes reads it, with or without a file open.
+    #[test]
+    fn the_page_reads_the_changelog() {
+        let mut app = App::new(vec![], Prefs::default());
+        let blocks = |v: &Value| serde_json::from_value::<Vec<(u8, String)>>(v["blocks"].clone()).unwrap();
+        assert_eq!(blocks(&ask(&mut app, "changelog", json!({}))), changelog_blocks(CHANGELOG));
+        app.open_sample_now();
+        assert_eq!(blocks(&ask(&mut app, "changelog", json!({}))), changelog_blocks(CHANGELOG));
     }
 
     /// A file the page sends up (`api(name, {}, file)` in app.js): its bytes as the body, its name as

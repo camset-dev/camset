@@ -9,7 +9,8 @@
 # builds it and picks it in Settings. The signature is ad hoc (runs on the Mac that built it);
 # another Mac needs a Developer ID signature and notarization, or right-click > Open the first time.
 # The app and the disk image carry the project's LICENSE and, when cargo about has written it, the
-# third-party licences page (the crates, and the fonts egui builds in).
+# third-party licences page (the crates, and the fonts egui builds in). The disk image also holds a shortcut
+# to /Applications, so the person installs by dragging Camset Editor onto it, the macOS way.
 #
 # CAMSET_INTERNAL=1 makes the internal build: the help files in ../private/help (the camera's own help text,
 # Sony's, never published; docs/decisions/0018) and, when it is built, the camera helper with the SDK's
@@ -19,6 +20,12 @@
 set -eu
 IDENTIFIER="${CAMSET_BUNDLE_ID:-app.camset.editor}"
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+# the line macOS's About panel shows under the version: the project's licence's copyright holders
+COPYRIGHT=$(sed -n 's/^Copyright (c) //p' ../LICENSE | head -1)
+# it goes into a sed replacement and the plist's XML as it is: none, or one with & | \ < >, stops the build
+case "$COPYRIGHT" in
+  ""|*[\&\|\\\<\>]*) echo "LICENSE needs a \"Copyright (c) ...\" line without & | \\ < or >: the app's Info.plist takes its words" >&2; exit 1 ;;
+esac
 ARCH=$(uname -m)
 INTERNAL=""
 if [ "${CAMSET_INTERNAL:-}" = 1 ]; then
@@ -65,13 +72,16 @@ fi
 cp ../LICENSE "$APP/Contents/Resources/LICENSE.txt"
 LICENSES=target/dist/THIRD_PARTY_LICENSES.html
 if [ -f "$LICENSES" ]; then cp "$LICENSES" "$APP/Contents/Resources/"; fi
-sed -e "s/@VERSION@/$VERSION/g" -e "s/@IDENTIFIER@/$IDENTIFIER/g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
+# the name, version (Cargo.toml's) and copyright line macOS's own About panel shows for the app
+sed -e "s/@VERSION@/$VERSION/g" -e "s/@IDENTIFIER@/$IDENTIFIER/g" -e "s|@COPYRIGHT@|$COPYRIGHT|g" packaging/macos/Info.plist > "$APP/Contents/Info.plist"
 codesign --force --deep -s - "$APP"
 rm -rf "$STAGE"
 mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/Camset Editor.app"
 cp ../LICENSE "$STAGE/LICENSE.txt"
 if [ -f "$LICENSES" ]; then cp "$LICENSES" "$STAGE/"; fi
+# the Applications shortcut the app is dragged onto (in the folder made afresh above)
+ln -s /Applications "$STAGE/Applications"
 DMG="$OUT/Camset-Editor-$VERSION-macos-$ARCH$KIND.dmg"
 rm -f "$DMG"
 hdiutil create -volname "Camset Editor" -srcfolder "$STAGE" -ov -format UDZO "$DMG" >/dev/null

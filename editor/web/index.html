@@ -213,6 +213,8 @@ select option { background: var(--panel); color: var(--text); }
 #central { overflow: auto; padding: 8px; min-width: 0; }
 #statusbar { grid-column: 1 / -1; border-top: 1px solid var(--sep); padding: 4px 8px; display: flex; gap: 8px; align-items: center; white-space: nowrap; overflow: hidden; background: var(--panel); }
 #statusbar #status { overflow: hidden; text-overflow: ellipsis; }
+/* the editor's name and version at the status bar's right end: weak and small, as the window's */
+#foot-version { margin-left: auto; flex: none; font-size: 0.857rem; min-height: 0; padding: 0 6px; color: var(--weak); }
 
 /* the page */
 .head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 8px; }
@@ -513,6 +515,7 @@ td.mm-do button + button { margin-left: 4px; }
   #statusbar.open { flex-wrap: wrap; white-space: normal; }
   #statusbar.open #status { overflow: visible; }
   #statusbar.open #foot-file { display: block; flex: 1 1 100%; }
+  #foot-version .vname { display: none; }   /* on a phone the version alone */
   #foot-file:empty { display: none !important; }
   #bar-compare .search { flex: 1 1 100%; }
   #side { display: flex; align-items: center; gap: 4px; overflow-x: auto; white-space: nowrap; border-right: 0; border-bottom: 1px solid var(--sep); padding: 4px 8px;
@@ -668,7 +671,7 @@ td.mm-do button + button { margin-left: 4px; }
     <div id="job" class="frame" hidden></div>
     <div id="content"></div>
   </main>
-  <footer id="statusbar" title="Tap for the whole message"><span id="foot-file"></span><span id="edits" aria-live="polite">No edits</span><span class="vsep"></span><span id="status" role="status"></span></footer>
+  <footer id="statusbar" title="Tap for the whole message"><span id="foot-file"></span><span id="edits" aria-live="polite">No edits</span><span class="vsep"></span><span id="status" role="status"></span><button id="foot-version" class="sel weak"></button></footer>
 </div>
 <div id="windows">
   <div id="backdrop" hidden></div>
@@ -679,6 +682,8 @@ td.mm-do button + button { margin-left: 4px; }
   <section id="connect" class="window wide" hidden></section>
   <section id="backups" class="window" hidden></section>
   <section id="history" class="window" hidden></section>
+  <section id="about" class="window" hidden></section>
+  <section id="changelog" class="window wide" hidden></section>
   <div id="mymenu" role="dialog" aria-label="My Menu" hidden></div>
   <div id="moremenu" class="popmenu" role="menu" aria-label="More" hidden></div>
 </div>

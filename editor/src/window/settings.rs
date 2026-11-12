@@ -1,18 +1,50 @@
-//! The Settings window, its Changes window, and the switches that only Expert mode shows.
+//! The Settings window, its Changes window, the About window and the status bar's version, and the switches that only
+//! Expert mode shows.
 
 use crate::*;
 
-/// The editor's version as Settings, the web page and a crash log give it: `version` in Cargo.toml and, for a build
-/// made in a git checkout, its commit ("0.2.0 (build 1a2b3c4)"; build.rs).
-pub(crate) fn version_words() -> String {
+/// The editor's version alone, `version` in Cargo.toml ("0.2.0"): the window's title and the status bar give it, short.
+pub(crate) fn version_short() -> &'static str {
+    env!("CARGO_PKG_VERSION")
+}
+
+/// The commit a build made in a git checkout was built from ("1a2b3c4"; build.rs); none for any other build.
+pub(crate) fn build_hash() -> Option<&'static str> {
     match env!("CAMSET_GIT_HASH") {
-        "" => env!("CARGO_PKG_VERSION").to_string(),
-        hash => format!("{} (build {hash})", env!("CARGO_PKG_VERSION")),
+        "" => None,
+        hash => Some(hash),
     }
+}
+
+/// The editor's version as Settings, About, the web page and a crash log give it: `version_short` and, for a build
+/// made in a git checkout, its commit ("0.2.0 (build 1a2b3c4)").
+pub(crate) fn version_words() -> String {
+    match build_hash() {
+        None => version_short().to_string(),
+        Some(hash) => format!("{} (build {hash})", version_short()),
+    }
+}
+
+/// The window's title: the editor's name and its short version ("Camset Editor 0.2.0").
+pub(crate) fn window_title() -> String {
+    format!("Camset Editor {}", version_short())
 }
 
 /// What the welcome page and the foot of Settings say, in the window and on the web page alike.
 pub(crate) const NOT_SONY: &str = "Independent project; not affiliated with or endorsed by Sony.";
+
+/// The third-party licences button of Settings' foot and of About: it opens the licences page the packages carry in
+/// the browser, and says so greyed out in a build that has none.
+fn licences_button(ui: &mut egui::Ui) {
+    let licences = licences_page();
+    let (label, hover) = match &licences {
+        Some(p) => ("Third-party licences", format!("The licences of the crates and fonts built into the editor, in your browser ({})", shown_path(p))),
+        None => ("Third-party licences: not in a development build", "The editor's packages carry the licences page (THIRD_PARTY_LICENSES.html); a build of your own has it once cargo about writes it into editor/target/dist (see editor/about.toml).".to_string()),
+    };
+    if ui.add_enabled(licences.is_some(), egui::Button::new(RichText::new(label).small())).on_hover_text(&hover).on_disabled_hover_text(&hover).clicked() {
+        if let Some(p) = &licences { open_in_file_manager(p); }
+    }
+}
 
 /// What changed, release by release (CHANGELOG.md), built into the program: Settings > Changes shows it.
 pub(crate) const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
@@ -482,21 +514,16 @@ impl App {
                         ui.label(RichText::new(NOT_SONY).small().color(tone::weak(ui.visuals())));
                     });
                 });
-                // which editor this is, what changed, and the licences of what it is built from
+                // which editor this is (a click opens About), what changed, and the licences of what it is built from
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new(format!("Camset Editor {}", version_words())).small().color(tone::weak(ui.visuals())))
-                        .on_hover_text("The version, and the commit it was built from when built from the project's repository");
+                    if ui.add(egui::Button::new(RichText::new(format!("Camset Editor {}", version_words())).small().color(tone::weak(ui.visuals()))).frame(false))
+                        .on_hover_text("The version, and the commit it was built from when built from the project's repository. Click for About.").clicked() {
+                        self.show_about = true;
+                    }
                     if ui.link(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
                         self.show_changes = true;
                     }
-                    let licences = licences_page();
-                    let (label, hover) = match &licences {
-                        Some(p) => ("Third-party licences", format!("The licences of the crates and fonts built into the editor, in your browser ({})", shown_path(p))),
-                        None => ("Third-party licences: not in a development build", "The editor's packages carry the licences page (THIRD_PARTY_LICENSES.html); a build of your own has it once cargo about writes it into editor/target/dist (see editor/about.toml).".to_string()),
-                    };
-                    if ui.add_enabled(licences.is_some(), egui::Button::new(RichText::new(label).small())).on_hover_text(&hover).on_disabled_hover_text(&hover).clicked() {
-                        if let Some(p) = &licences { open_in_file_manager(p); }
-                    }
+                    licences_button(ui);
                 });
             });
         self.show_settings = open;
@@ -533,5 +560,56 @@ impl App {
             });
         });
         self.show_changes = open;
+    }
+
+    /// The status bar's version, at its right end: the editor's name and short version, weak and small, the whole
+    /// version on hover; a click opens About.
+    pub(crate) fn version_label(&mut self, ui: &mut egui::Ui) {
+        let words = format!("Camset Editor {}", version_short());
+        if ui.add(egui::Button::new(RichText::new(words).small().color(tone::weak(ui.visuals()))).frame(false))
+            .on_hover_text(format!("Camset Editor {}\nClick for About", version_words())).clicked() {
+            self.show_about = true;
+        }
+    }
+
+    /// How wide the status bar's version is (`version_label`), so the status line leaves it room.
+    pub(crate) fn version_label_width(ui: &egui::Ui) -> f32 {
+        let words = format!("Camset Editor {}", version_short());
+        let w = ui.fonts(|f| f.layout_no_wrap(words, egui::TextStyle::Small.resolve(ui.style()), Color32::PLACEHOLDER)).size().x;
+        w + 2.0 * ui.spacing().button_padding.x + 2.0 * ui.spacing().item_spacing.x
+    }
+
+    /// About Camset Editor: which editor this is (its version, and the commit of a build made from the repository),
+    /// the cameras it works with, and the ways to what changed and to the licences. The status bar's version and the
+    /// one at the foot of Settings open it.
+    pub(crate) fn about_window(&mut self, ctx: &egui::Context) {
+        if !self.show_about { return; }
+        let mut open = true;
+        egui::Window::new("About Camset Editor").open(&mut open).resizable(false).collapsible(false).default_width(380.0).show(ctx, |ui| {
+            let weak = tone::weak(ui.visuals());
+            ui.label(RichText::new("Camset Editor").strong().size(20.0));
+            ui.label(format!("Version {}", version_short()));
+            if let Some(hash) = build_hash() {
+                ui.label(format!("Build {hash}")).on_hover_text("The commit it was built from, in the project's repository");
+            }
+            let models = self.defs.works_with();
+            if !models.is_empty() {
+                ui.label(RichText::new(format!("Works with: {}", models.join(", "))).color(weak));
+            }
+            ui.label(RichText::new(NOT_SONY).small().color(weak));
+            ui.add_space(6.0);
+            ui.horizontal_wrapped(|ui| {
+                if ui.button(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
+                    self.show_changes = true;
+                }
+                licences_button(ui);
+                let words = format!("Camset Editor {}", version_words());
+                if ui.button(RichText::new("Copy version").small()).on_hover_text(format!("Copies \"{words}\", to put in a message about a problem")).clicked() {
+                    ui.ctx().copy_text(words);
+                    self.status = "Version copied".into();
+                }
+            });
+        });
+        self.show_about = open;
     }
 }

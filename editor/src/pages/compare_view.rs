@@ -769,6 +769,61 @@ pub(crate) mod screen_reader_tests {
         assert!(said.iter().all(|(_, l)| !l.trim().is_empty()));
     }
 
+    /// The status bar names the editor and its short version at its right end, on the welcome page and with a file open;
+    /// a click on it, or on the version at the foot of Settings, opens About, which gives the version (and the build,
+    /// when there is one), the cameras it works with, and the ways to the changes, the licences and a copy of the version.
+    #[test]
+    fn the_status_bar_version_opens_about() {
+        use egui::accesskit::{Action as Ak, ActionRequest};
+        let label = format!("Camset Editor {}", version_short());
+        let mut app = App::new(vec![], Prefs::default());
+        let said = spoken(&mut app);
+        assert!(has(&said, Role::Button, &label), "on the welcome page: {said:?}");
+        // the window run frame by frame; a label's words are its value, a control's its name
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut frame = eframe::Frame::_new_kittest();
+        let mut run = |app: &mut App, events: Vec<egui::Event>| {
+            let out = ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| app.update(ctx, &mut frame));
+            out.platform_output.accesskit_update.map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().or(n.value()).map(|l| (*id, n.role(), l.to_string()))).collect::<Vec<_>>()).unwrap_or_default()
+        };
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        assert!(said.iter().any(|(_, _, l)| *l == format!("Version {}", version_words())), "the welcome page's line: {said:?}");
+        app.open_sample_now();
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        let hit: Vec<_> = said.iter().filter(|(_, r, l)| *l == label && *r == Role::Button).collect();
+        assert_eq!(hit.len(), 1, "with a file open, one version in the status bar: {said:?}");
+        assert!(!app.show_about);
+        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: hit[0].0, data: None })]);
+        assert!(app.show_about, "a click on the version opens About");
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        let shows = |name: &str| said.iter().any(|(_, _, l)| l == name);
+        assert!(shows("About Camset Editor") && shows(&format!("Version {}", version_short())) && shows(NOT_SONY), "{said:?}");
+        assert_eq!(build_hash().is_some_and(|h| shows(&format!("Build {h}"))), build_hash().is_some(), "{said:?}");
+        let models = app.defs.works_with();
+        assert!(models.is_empty() || shows(&format!("Works with: {}", models.join(", "))), "{said:?}");
+        for b in ["Changes", "Copy version"] {
+            assert!(said.iter().any(|(_, r, l)| l == b && *r == Role::Button), "{b}: {said:?}");
+        }
+        assert!(said.iter().any(|(_, r, l)| l.starts_with("Third-party licences") && *r == Role::Button), "{said:?}");
+        // About's Changes opens the changelog
+        let changes: Vec<_> = said.iter().filter(|(_, r, l)| l == "Changes" && *r == Role::Button).collect();
+        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: changes[0].0, data: None })]);
+        assert!(app.show_changes && app.show_about);
+        // the version at the foot of Settings (the whole of it) opens About too
+        let bar = hit[0].0;
+        (app.show_about, app.show_changes, app.show_settings) = (false, false, true);
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        let foot: Vec<_> = said.iter().filter(|(id, r, l)| *l == format!("Camset Editor {}", version_words()) && *r == Role::Button && *id != bar).collect();
+        assert_eq!(foot.len(), 1, "the foot of Settings: {said:?}");
+        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: foot[0].0, data: None })]);
+        assert!(app.show_about, "the version at the foot of Settings opens About");
+    }
+
     /// Compare's setting names are links, "Open … in Edit": Edit then shows that setting in file A's set (the live
     /// settings for one the memories do not keep; a family's member in its family's table) with "← Back to Compare",
     /// which returns to Compare with that row under the difference cursor. Once the person goes elsewhere it is gone.

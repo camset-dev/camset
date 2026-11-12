@@ -229,8 +229,56 @@ pub(crate) mod dialog_tests {
         let hash = env!("CAMSET_GIT_HASH");
         assert!(hash.chars().all(|c| c.is_ascii_alphanumeric()));
         assert_eq!(v.contains(" (build "), !hash.is_empty(), "{v}");
+        // in the same form as ever ("0.2.0" or "0.2.0 (build 1a2b3c4)"), made of its two parts; the short one alone
+        // in the window's title
+        let whole = if hash.is_empty() { env!("CARGO_PKG_VERSION").to_string() } else { format!("{} (build {hash})", env!("CARGO_PKG_VERSION")) };
+        assert_eq!(v, whole);
+        assert_eq!(version_short(), env!("CARGO_PKG_VERSION"));
+        assert!(!version_short().contains("(build") && !version_short().contains(' '));
+        assert_eq!(build_hash(), (!hash.is_empty()).then_some(hash));
+        assert_eq!(window_title(), format!("Camset Editor {}", env!("CARGO_PKG_VERSION")));
         let app = App::new(vec![], Prefs::default());
-        assert_eq!(app.web_state(0)["version"], serde_json::Value::String(v));
+        let st = app.web_state(0);
+        assert_eq!(st["version"], serde_json::Value::String(v));
+        assert_eq!(st["version_short"], version_short());
+        assert_eq!(st["build"], build_hash().map_or(serde_json::Value::Null, |h| h.into()));
+    }
+
+    /// On Windows the release app opens with no console window behind it, but the tests' build keeps its console
+    /// (`cargo test --release`, as CI runs it), so it prints its results and names a failing test.
+    #[test]
+    fn windows_tests_keep_their_console() {
+        let main = include_str!("../main.rs");
+        assert!(main.lines().any(|l| l == "#![cfg_attr(all(not(debug_assertions), not(test)), windows_subsystem = \"windows\")]"));
+        assert_eq!(main.matches("windows_subsystem").count(), 1);
+    }
+
+    /// macOS's own About panel (the application menu's "About Camset Editor") shows the app's name, its version and
+    /// a copyright line from the Info.plist the Mac package writes: the version is Cargo.toml's, the line the licence's
+    /// copyright holders and the not-affiliated words, so none of them can go stale.
+    #[test]
+    fn mac_about_panel_names_the_version() {
+        let mac = include_str!("../../packaging/build_macos_app.sh");
+        let plist = include_str!("../../packaging/macos/Info.plist");
+        assert!(mac.contains("VERSION=$(sed -n 's/^version = \"\\(.*\\)\"/\\1/p' Cargo.toml | head -1)"));
+        assert!(mac.contains("COPYRIGHT=$(sed -n 's/^Copyright (c) //p' ../LICENSE | head -1)"));
+        assert!(mac.contains("-e \"s/@VERSION@/$VERSION/g\"") && mac.contains("-e \"s|@COPYRIGHT@|$COPYRIGHT|g\" packaging/macos/Info.plist > \"$APP/Contents/Info.plist\""));
+        // what the script's sed finds: the package's own version, the first line of Cargo.toml that names one
+        let cargo = include_str!("../../Cargo.toml");
+        let first = cargo.lines().find_map(|l| l.strip_prefix("version = \"").and_then(|r| r.strip_suffix('"')));
+        assert_eq!(first, Some(env!("CARGO_PKG_VERSION")));
+        // the line goes into a sed replacement and the plist's XML as it is: the script refuses one that is empty or holds
+        // & | \ < >, and the project's own holds none of them
+        assert!(mac.contains("case \"$COPYRIGHT\" in\n  \"\"|*[\\&\\|\\\\\\<\\>]*) echo \"LICENSE needs a"), "the script refuses a line it cannot write");
+        let refused = mac.find("case \"$COPYRIGHT\" in").unwrap();
+        assert!(refused < mac.find("cargo build --release").unwrap(), "before anything is built");
+        let licence = include_str!("../../../LICENSE");
+        let holders = licence.lines().find_map(|l| l.strip_prefix("Copyright (c) ")).expect("LICENSE names its copyright holders");
+        assert!(!holders.trim().is_empty() && !holders.contains(['&', '|', '\\', '<', '>']), "{holders}");
+        for (key, value) in [("CFBundleName", "Camset Editor"), ("CFBundleShortVersionString", "@VERSION@"), ("CFBundleVersion", "@VERSION@"),
+            ("NSHumanReadableCopyright", &format!("Copyright (c) @COPYRIGHT@. {NOT_SONY}"))] {
+            assert!(plist.contains(&format!("<key>{key}</key>\n\t<string>{value}</string>")), "{key}");
+        }
     }
 
     /// Settings > Changes reads the changelog built in: releases and their parts as headings, each point whole (its
