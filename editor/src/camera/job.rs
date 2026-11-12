@@ -123,6 +123,22 @@ const HELPER_GRACE: std::time::Duration = std::time::Duration::from_secs(2);
 /// report finds it (`helper_timeout`) and says what happened in plain words; the line itself shows in Expert mode.
 pub(crate) const HELPER_TIMEOUT: &str = "editor: no answer from the camera link program within ";
 
+/// `cmd`, set to start without a console window of its own. On Windows the released editor has no console (main.rs),
+/// so a console program it starts, such as the camera link program, would get a new console window that shows for as
+/// long as it runs: a window that flashes up on every search, read and write. CREATE_NO_WINDOW starts it without one;
+/// what it prints still reaches the editor through the pipes `run_helper` gives it, and it can still be stopped. A
+/// windowed program it is given to starts as before. Elsewhere it changes nothing. Every program the editor starts goes
+/// through it (the test `every_program_started_has_no_console_window` holds to that).
+pub(crate) fn no_console(cmd: &mut std::process::Command) -> &mut std::process::Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 /// Run the camera link program as `cmd` says: its exit code (None when it was stopped) and its output, standard
 /// output then standard error. Each stream is read on a thread of its own, so a helper that fills one never waits on
 /// the other. A helper still running after `limit` is stopped (killed, then waited for), and the output it gave so far
@@ -150,7 +166,7 @@ pub(crate) fn run_helper(cmd: &mut std::process::Command, limit: std::time::Dura
         });
         got
     }
-    let mut child = cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
+    let mut child = no_console(cmd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn()?;
     let (done_tx, done_rx) = mpsc::channel();
     let (out, err) = (pump(child.stdout.take(), &done_tx), pump(child.stderr.take(), &done_tx));
     drop(done_tx);
@@ -978,6 +994,47 @@ mod helper_limit_tests {
         let none = run_helper(&mut std::process::Command::new(dir.join("no_such_program")), limit);
         assert!(none.is_err(), "a helper that is not there does not start");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Every program the editor starts goes through `no_console`, so none opens a console window on Windows: in the
+    /// code of every source under src/ (comments and strings left out, tests in), a program is started only on a line
+    /// that has `no_console` on it, and only in two places, the camera link program's (`run_helper`, which every
+    /// search, read and write goes through) and the file manager's.
+    #[test]
+    fn every_program_started_has_no_console_window() {
+        let mut files = Vec::new();
+        crate::no_camera_facts::rust_files(&Path::new(env!("CARGO_MANIFEST_DIR")).join("src"), &mut files);
+        let (mut starts, mut flags) = (Vec::new(), 0);
+        for f in &files {
+            let name = f.file_name().unwrap().to_string_lossy().into_owned();
+            for l in crate::no_camera_facts::rust_lines(&std::fs::read_to_string(f).unwrap()) {
+                let code: String = l.code.chars().filter(|c| !c.is_whitespace()).collect();
+                flags += code.matches("creation_flags(").count();
+                if [".spawn()", ".output()", ".status()", "::exec("].iter().any(|s| code.contains(s)) {
+                    assert!(code.contains("no_console("), "{name}:{} starts a program without no_console", l.no);
+                    starts.push(name.clone());
+                }
+            }
+        }
+        starts.sort();
+        assert_eq!(starts, ["files.rs", "job.rs"], "the places that start a program");
+        assert_eq!(flags, 1, "the Windows creation flags are set in no_console alone");
+    }
+
+    /// On Windows, a console program started as the camera link program is (`run_helper`, through `no_console`) still
+    /// gives its exit code and its output through the pipes, and one that hangs is still stopped at the limit.
+    #[cfg(windows)]
+    #[test]
+    fn a_console_program_without_a_window_answers_and_can_be_stopped() {
+        let limit = std::time::Duration::from_secs(10);
+        assert_eq!(run_helper(std::process::Command::new("cmd").args(["/c", "exit", "3"]), limit).unwrap().0, Some(3));
+        assert_eq!(run_helper(std::process::Command::new("cmd").args(["/c", "echo", "ready"]), limit).unwrap(), (Some(0), "ready\r\n".to_string()));
+        let limit = std::time::Duration::from_secs(1);
+        let t = std::time::Instant::now();
+        let (code, text) = run_helper(std::process::Command::new("ping").args(["-n", "30", "127.0.0.1"]), limit).unwrap();
+        assert!(t.elapsed() < limit + HELPER_GRACE + std::time::Duration::from_secs(3), "stopped in {:?}", t.elapsed());
+        assert_eq!(code, None, "stopped, so no exit code");
+        assert!(text.ends_with(&format!("{HELPER_TIMEOUT}1 s: the editor stopped it.\n")), "{text:?}");
     }
 
     /// The whole way, as the window runs it: a read whose helper hangs ends at the limit, and the report and the

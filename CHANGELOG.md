@@ -14,6 +14,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
 - On Windows, the editor's tests built in release mode (`cargo test --release`) print their results in the console;
   only the app itself opens without a console window.
+- On Windows, no console window flashes up when the editor talks to a camera: searching for cameras, reading and
+  writing start the camera helper without one.
 
 ### The web page
 

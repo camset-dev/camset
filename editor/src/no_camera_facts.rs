@@ -18,16 +18,17 @@ const ALLOWED: &[(&str, &str, &str)] = &[
 const MODELS: &[&str] = &["ILCE", "ILME", "ZV-E", "DSC-RX", "a1 II", "a7 IV", "a7 V", "a7R", "a7S", "a7C", "a9 III"];
 
 /// One line of a source: its number, its code with every string literal emptied and comments left out, and the
-/// contents of its string literals.
-struct Line {
-    no: usize,
-    code: String,
-    strings: Vec<String>,
+/// contents of its string literals. The test that every program the editor starts has no console window on Windows
+/// (camera/job.rs) reads the sources with it too.
+pub(crate) struct Line {
+    pub(crate) no: usize,
+    pub(crate) code: String,
+    pub(crate) strings: Vec<String>,
 }
 
 /// A Rust source read into lines (`Line`): comments (`//`, `/* */`, nested) left out, string literals (plain, byte,
 /// raw) and char literals told apart from code, lifetimes left in the code.
-fn rust_lines(text: &str) -> Vec<Line> {
+pub(crate) fn rust_lines(text: &str) -> Vec<Line> {
     let c: Vec<char> = text.chars().collect();
     let mut out = vec![Line { no: 1, code: String::new(), strings: Vec::new() }];
     let newline = |out: &mut Vec<Line>| {
@@ -276,7 +277,7 @@ fn camera_names_in(text: &str, files: &[String]) -> Vec<String> {
 }
 
 /// Every `.rs` file under `dir`.
-fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
+pub(crate) fn rust_files(dir: &Path, out: &mut Vec<PathBuf>) {
     for e in std::fs::read_dir(dir).unwrap().flatten() {
         let p = e.path();
         if p.is_dir() {

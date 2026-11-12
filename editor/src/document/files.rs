@@ -320,7 +320,8 @@ pub(crate) fn open_in_file_manager(path: &Path) {
     #[cfg(not(any(target_os = "macos", target_os = "windows")))]
     let cmd = "xdg-open";
 
-    let _ = std::process::Command::new(cmd).arg(path).spawn();
+    // Explorer is a windowed program, so no console would show; it goes through `no_console` as every start does
+    let _ = no_console(&mut std::process::Command::new(cmd)).arg(path).spawn();
 }
 
 /// A log of `max` bytes or more becomes <name>.1 (replacing the one before), so the next line starts a new one.
