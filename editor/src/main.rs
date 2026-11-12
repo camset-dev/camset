@@ -34,6 +34,9 @@ mod web;
 pub(crate) mod test_support;   // the helpers several test modules share
 #[cfg(test)]
 mod no_camera_facts;   // the guard for decision 20: the editor's code names no camera
+#[cfg(test)]
+#[path = "../packaging/windows/resources.rs"]
+mod windows_resources;   // the Windows program's icon and version details, which build.rs links: tested on every system
 
 // what the modules define beside `App`'s methods, named here once so every module (`use crate::*`) has it at hand
 use camera::*;

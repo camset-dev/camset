@@ -22,6 +22,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   only the app itself opens without a console window.
 - On Windows, no console window flashes up when the editor talks to a camera: searching for cameras, reading and
   writing start the camera helper without one.
+- On Windows, `camset_editor.exe` carries the editor's icon, so Explorer, shortcuts and a pinned taskbar button show
+  it instead of Windows' plain program icon, and Properties > Details names Camset Editor, its version and its
+  copyright line. A Windows build makes both itself, from the same picture the window and the macOS app use;
+  nothing more needs installing.
 
 ### The web page
 

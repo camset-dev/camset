@@ -1,6 +1,7 @@
 """Offline tests of the kit's CI workflow (.github/workflows/kit-ci.yml): what it runs agrees with the commit hooks'
 pins and with kit/setup.py, which a contributor runs instead of it; and of the editor's release workflow
-(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows package holds."""
+(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows package holds; and of
+the editor's CI (.github/workflows/editor-ci.yml): that its Windows build is checked as the release's is."""
 import ast
 import re
 import shlex
@@ -11,6 +12,19 @@ from camkit import ROOT
 
 WORKFLOW = ROOT / ".github" / "workflows" / "kit-ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "editor-release.yml"
+EDITOR_CI = ROOT / ".github" / "workflows" / "editor-ci.yml"
+
+# The check on the built Windows program, the same lines in both editor workflows: its version details (which build.rs
+# links with the icon, from one .res file; a build that cannot make it only warns) name Camset Editor and Cargo.toml's
+# version, printed to the log, or the step fails.
+DETAILS_CHECK = [
+    "$v = (Select-String -Path Cargo.toml -Pattern '^version = \"(.*)\"').Matches[0].Groups[1].Value",
+    "$info = (Get-Item target/release/camset_editor.exe).VersionInfo",
+    '"ProductName: $($info.ProductName); FileDescription: $($info.FileDescription); ProductVersion: $($info.ProductVersion)"',
+    "if ($info.ProductName -cne 'Camset Editor' -or $info.FileDescription -cne 'Camset Editor' -or $info.ProductVersion -cne $v) "
+    '{ throw "camset_editor.exe lacks its icon and version details (Camset Editor $v): build.rs did not link them; '
+    'its warning in the build\'s log says why" }',
+]
 
 
 def workflow() -> dict:
@@ -96,6 +110,9 @@ def test_release_builds_a_windows_zip_of_one_folder_the_editor_runs_from():
     ]
     at = [lines.index(w) for w in want]
     assert at == sorted(at), "staged in this order, and zipped last"
+    # the program's details are checked after the build and before anything is staged
+    check = [lines.index(w) for w in DETAILS_CHECK]
+    assert check == list(range(check[0], check[0] + len(check))) and at[1] < check[0] and check[-1] < at[2]
     # the licences page is written before any package is made
     steps = [s.get("name") or "" for s in build["steps"]]
     assert steps.index(next(n for n in steps if n.startswith("Third-party licences"))) < steps.index("Windows zip")
@@ -107,3 +124,17 @@ def test_release_builds_a_windows_zip_of_one_folder_the_editor_runs_from():
     assert download["with"]["pattern"] == "camset-editor-*" and download["with"]["merge-multiple"] is True
     attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
     assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip"]
+
+
+def test_editor_ci_checks_the_windows_program_s_details():
+    """Editor CI builds the program in release mode on Windows too, and checks on Windows, after that build and before
+    the tests, that the program carries its version details (and so its icon), as the release's Windows zip step does."""
+    job = yaml.safe_load(EDITOR_CI.read_text(encoding="utf-8"))["jobs"]["editor"]
+    assert "windows-latest" in job["strategy"]["matrix"]["os"] and job["defaults"]["run"]["working-directory"] == "editor"
+    names = [s.get("name") or "" for s in job["steps"]]
+    assert step(job, "Build")["run"] == "cargo build --release"
+    check = step(job, "Windows program's version details")
+    assert check["if"] == "runner.os == 'Windows'" and check["shell"] == "pwsh"
+    assert check["run"].splitlines() == DETAILS_CHECK
+    at = names.index(check["name"])
+    assert names.index("Build") < at < names.index("Test")

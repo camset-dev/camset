@@ -51,6 +51,15 @@ jobs:
             editor-${{ runner.os }}-
       - name: Build
         run: cargo build --release
+      - name: The Windows program's version details (build.rs links them and the icon from one .res file; a build that could not make it only warns)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Windows shows no icon to a script (any exe gets one), so the details stand for both
+        run: |
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $info = (Get-Item target/release/camset_editor.exe).VersionInfo
+          "ProductName: $($info.ProductName); FileDescription: $($info.FileDescription); ProductVersion: $($info.ProductVersion)"
+          if ($info.ProductName -cne 'Camset Editor' -or $info.FileDescription -cne 'Camset Editor' -or $info.ProductVersion -cne $v) { throw "camset_editor.exe lacks its icon and version details (Camset Editor $v): build.rs did not link them; its warning in the build's log says why" }
       - name: Test
         run: cargo test --release
       - name: Clippy

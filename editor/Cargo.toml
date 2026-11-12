@@ -17,6 +17,13 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 libc = "0.2"
 
+# Windows only (a Windows computer builds the Windows program): build.rs draws the program's icon from assets/icon.png
+# with it, for the icon and version details the linker puts into camset_editor.exe (packaging/windows/resources.rs).
+# The same crate as above, so nothing new is fetched. Cargo matches this table to the computer that builds, so a
+# macOS or Linux build does not compile it for build.rs.
+[target.'cfg(windows)'.build-dependencies]
+image = { version = "0.25", default-features = false, features = ["png"] }
+
 [[bin]]
 name = "camset_editor"
 path = "src/main.rs"
