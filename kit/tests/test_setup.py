@@ -98,19 +98,28 @@ class Builder:
     def __init__(self):
         self.calls, self.changed = [], set()
 
+    @staticmethod
+    def write(program: Path) -> None:
+        """The program written anew, with a time later than the one it had: two writes within one tick of the clock
+        (Windows' is coarse) would leave the time as it was, and the setup tells a build by the program's time."""
+        before = program.stat().st_mtime_ns if program.exists() else None
+        program.write_bytes(b"new")
+        if before is not None and program.stat().st_mtime_ns <= before:
+            os.utime(program, ns=(before + 1_000_000_000, before + 1_000_000_000))
+
     def __call__(self, cmd, cwd=None):
         cmd = [str(c) for c in cmd]
         self.calls.append(cmd)
         if cmd[:2] == ["cmake", "--build"]:
             folder = cmd[2][:-len("/build")]
             if folder in self.changed or "--clean-first" in cmd:
-                (Path(cwd) / cmd[2] / self.PROGRAMS[folder]).write_bytes(b"new")
+                self.write(Path(cwd) / cmd[2] / self.PROGRAMS[folder])
         elif cmd[:2] == ["cargo", "clean"]:
             self.changed.add("editor")
         elif cmd[:3] == ["cargo", "build", "--release"] and "editor" in self.changed:
-            (Path(cwd) / "target" / "release" / "camset_editor").write_bytes(b"new")
+            self.write(Path(cwd) / "target" / "release" / "camset_editor")
         elif cmd[0] == "swiftc":
-            (Path(cwd) / cmd[-1]).write_bytes(b"new")
+            self.write(Path(cwd) / cmd[-1])
         return 0, ""
 
     def builds(self) -> list:
