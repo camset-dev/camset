@@ -12,15 +12,18 @@ file means.
 ## Use the editor
 
 The editor is on the project's [Releases page](https://github.com/camset-dev/camset/releases): the app in a `.dmg`
-for macOS on Apple silicon and a tarball for Linux. Windows has no package yet, so build it from source there
-([The editor from source](#the-editor-from-source)). Take 0.2.0 or later: 0.1.0 is withdrawn, and its editor does not
-open today's camera definitions.
+for macOS on Apple silicon, a tarball for Linux and, from 0.2.1, a zip for Windows; before 0.2.1, build it from source
+on Windows ([The editor from source](#the-editor-from-source)). Take 0.2.0 or later: 0.1.0 is withdrawn, and its
+editor does not open today's camera definitions.
 
 - **macOS:** open the disk image and drag Camset Editor onto Applications. The app is not notarized, so macOS
   refuses to open it the first time. Then open System Settings > Privacy & Security and click Open Anyway (on macOS
   14 and earlier, right-click the app > Open instead). Not yet tried on a downloaded copy.
-- **Windows:** the release workflow is written to build it, but it has not been built or tried yet. The program is
-  not signed, so Windows may warn before it runs.
+- **Windows** (64-bit Windows 10 or 11, on Intel or AMD): unpack the zip anywhere and run `camset_editor.exe` in the
+  folder it makes; keep that folder's files together, as the editor reads its camera definitions from beside it. The
+  program is not signed, so the first time Windows may say "Windows protected your PC": click More info, then Run
+  anyway. The camera helper is not in it, as in the other packages ([The camera helper](#the-camera-helper)). The
+  editor was built and used on a Windows 11 PC; the downloaded zip not yet tried.
 
 Then open a settings file from your camera's card, or the built-in sample to look around without a camera. The
 downloaded editor works with the files on the card:
@@ -58,7 +61,8 @@ If the editor does not know your camera yet, you can map it yourself with an AI 
 - the SDK, which you download from Sony yourself and drop into `kit/sdk/` for `python3 kit/setup.py` to set up
   ([The camera helper](#the-camera-helper) says where);
 - a Mac; or a Linux PC (the setup, the tests and the editor's camera helper checked on Ubuntu 26.04, the kit's camera
-  runs not yet); or a Windows 11 PC on Intel or AMD (not yet tried); and a USB-C data cable to the camera;
+  runs not yet); or a Windows 11 PC on Intel or AMD (the setup, the tests and the editor's camera helper tried, the
+  kit's camera runs not yet); and a USB-C data cable to the camera;
 - an AI agent that works in a terminal, such as Claude Code, Codex or Gemini CLI;
 - a vision-language model (VLM) to read the camera's screen, since OCR alone misreads icons and short words: one on
   your own computer or server if it can run one (this project used Qwen3.8 27B), a smaller local model if not, or a

@@ -1,6 +1,5 @@
-# Builds the editor for macOS and Linux (Windows comes back once its package has been checked, docs/RELEASING.md)
-# and keeps the packages as build artifacts. On a version tag (v0.2.0, say) pushed to GitHub, a fourth job also publishes
-# a Release for that tag with the packages attached
+# Builds the editor for macOS, Linux and Windows and keeps the packages as build artifacts. On a version tag (v0.2.0,
+# say) pushed to GitHub, the release job also publishes a Release for that tag with the packages attached
 # (each carries the project's LICENSE and its own third-party licences page); run by hand (workflow_dispatch) it
 # keeps the artifacts only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
 # skips itself there. Pull requests and main are checked by kit-ci.yml and editor-ci.yml; this workflow runs their
@@ -44,7 +43,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest]   # windows-latest once its package has been checked (docs/RELEASING.md)
+        os: [macos-latest, ubuntu-latest, windows-latest]   # Windows since 2026-11-12: built, tested and used on a Windows 11 PC first (docs/RELEASING.md)
     runs-on: ${{ matrix.os }}
     permissions:
       contents: read
@@ -78,13 +77,29 @@ jobs:
       - name: Windows zip
         if: runner.os == 'Windows'
         shell: pwsh
+        # one folder zipped, as the Linux tarball is one folder, so unpacking spills nothing loose: the program, the
+        # camera definitions (each with its sample) in definitions/ beside it, where the editor looks for them, the
+        # project's licence as LICENSE.txt (as on the macOS disk image; it opens with a double-click) and the
+        # licences page beside the program, where Settings > Third-party licences looks
         run: |
           cargo build --release
-          New-Item -ItemType Directory -Force target/dist | Out-Null
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
-          $files = @("target/release/camset_editor.exe", "definitions", "../LICENSE")
-          if (Test-Path target/dist/THIRD_PARTY_LICENSES.html) { $files += "target/dist/THIRD_PARTY_LICENSES.html" }
-          Compress-Archive -Path $files -DestinationPath "target/dist/camset-editor-$v-windows-x64.zip" -Force
+          $name = "camset-editor-$v-windows-x64"
+          $dir = "target/dist/$name"
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          if (-not (Test-Path definitions/*.json)) { throw "definitions/ holds no camera definition" }
+          Copy-Item target/release/camset_editor.exe $dir
+          Copy-Item -Recurse definitions "$dir/definitions"
+          Copy-Item ../LICENSE "$dir/LICENSE.txt"
+          Copy-Item target/dist/THIRD_PARTY_LICENSES.html $dir
+          Compress-Archive -LiteralPath $dir -DestinationPath "target/dist/$name.zip" -Force
+          # what the zip holds, in the log
+          Add-Type -AssemblyName System.IO.Compression.FileSystem
+          $zip =[System.IO.Compression.ZipFile]::OpenRead("$PWD/target/dist/$name.zip")
+          $zip.Entries.FullName
+          $zip.Dispose()
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: camset-editor-${{ runner.os }}

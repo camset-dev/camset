@@ -1,5 +1,6 @@
 """Offline tests of the kit's CI workflow (.github/workflows/kit-ci.yml): what it runs agrees with the commit hooks'
-pins and with kit/setup.py, which a contributor runs instead of it."""
+pins and with kit/setup.py, which a contributor runs instead of it; and of the editor's release workflow
+(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows package holds."""
 import ast
 import re
 import shlex
@@ -9,6 +10,7 @@ import yaml
 from camkit import ROOT
 
 WORKFLOW = ROOT / ".github" / "workflows" / "kit-ci.yml"
+RELEASE = ROOT / ".github" / "workflows" / "editor-release.yml"
 
 
 def workflow() -> dict:
@@ -61,3 +63,47 @@ def test_ci_builds_the_ocr_helper_on_macos_as_setup_does():
     script = next(s for s in diff["steps"] if s.get("id") == "diff")["run"]
     assert "-- kit/ocr .github/workflows/kit-ci.yml" in script and "workflow_dispatch" in script
     assert next(s for s in diff["steps"] if "uses" in s)["with"]["fetch-depth"] == 0
+
+
+def test_release_builds_a_windows_zip_of_one_folder_the_editor_runs_from():
+    """The release builds on Windows too (since 2026-11-12), and its zip is one folder, as the Linux tarball is:
+    camset_editor.exe with definitions/ beside it (where shipped_dirs looks), the licence as LICENSE.txt (as on the
+    macOS disk image) and the licences page beside the program (where licences_page looks), each staged before the
+    folder is zipped; a failed build stops the step; the release attaches the zip with the other packages."""
+    wf = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))
+    build = wf["jobs"]["build"]
+    assert build["strategy"]["matrix"]["os"] == ["macos-latest", "ubuntu-latest", "windows-latest"]
+    assert build["defaults"]["run"]["working-directory"] == "editor"
+    # every step written in sh syntax runs only on macOS or Linux, or in bash: Windows runs pwsh by default
+    for s in build["steps"]:
+        if "run" in s and s.get("shell") not in ("bash", "pwsh"):
+            assert s.get("if") in ("runner.os == 'macOS'", "runner.os == 'Linux'") or s["run"] == "cargo test --release", s
+    win = step(build, "Windows zip")
+    assert win["if"] == "runner.os == 'Windows'" and win["shell"] == "pwsh"
+    lines = win["run"].splitlines()
+    want = [
+        "cargo build --release",
+        "if ($LASTEXITCODE) { exit $LASTEXITCODE }",
+        '$name = "camset-editor-$v-windows-x64"',
+        '$dir = "target/dist/$name"',
+        "if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }",
+        'if (-not (Test-Path definitions/*.json)) { throw "definitions/ holds no camera definition" }',
+        "Copy-Item target/release/camset_editor.exe $dir",
+        'Copy-Item -Recurse definitions "$dir/definitions"',
+        'Copy-Item ../LICENSE "$dir/LICENSE.txt"',
+        "Copy-Item target/dist/THIRD_PARTY_LICENSES.html $dir",
+        'Compress-Archive -LiteralPath $dir -DestinationPath "target/dist/$name.zip" -Force',
+    ]
+    at = [lines.index(w) for w in want]
+    assert at == sorted(at), "staged in this order, and zipped last"
+    # the licences page is written before any package is made
+    steps = [s.get("name") or "" for s in build["steps"]]
+    assert steps.index(next(n for n in steps if n.startswith("Third-party licences"))) < steps.index("Windows zip")
+    upload = next(s for s in build["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert upload["with"]["name"] == "camset-editor-${{ runner.os }}"           # Linux, macOS, Windows: one each
+    assert "editor/target/dist/*.zip" in upload["with"]["path"].split()
+    release = wf["jobs"]["release"]
+    download = next(s for s in release["steps"] if s.get("uses", "").startswith("actions/download-artifact@"))
+    assert download["with"]["pattern"] == "camset-editor-*" and download["with"]["merge-multiple"] is True
+    attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip"]

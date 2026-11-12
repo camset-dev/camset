@@ -13,9 +13,9 @@ The editor's own packages for the three systems are in `RELEASING.md`, "Installe
 | Piece | Mac | Windows | Linux |
 |---|---|---|---|
 | **camlink** (`kit/link/`, C++, Sony SDK) | built and used every day | code ready: SDK strings converted (`toCr`/`fromCr` in `kit/common/sdk_session.h`, shared with the camera helper, since Windows builds with `UNICODE`), home from `%USERPROFILE%`; the wide-string build compiles; not yet built with MSVC | built on Ubuntu 26.04 (libxml2: see Setup per OS); not yet run against a camera |
-| **The editor and its camera helper** (`editor/`; `camset_probe`, `kit/probe/`) | built and used every day | not yet built | built and run on Ubuntu 26.04: the helper found an a1 II over the network and over USB (2026-11-05, "Seen on Windows / Linux" below) |
+| **The editor and its camera helper** (`editor/`; `camset_probe`, `kit/probe/`) | built and used every day | built on Windows 11 with Visual Studio 2022 Build Tools, its tests passed and the editor used: the helper found a camera over the network and read it (2026-11-12, "Seen on Windows / Linux" below) | built and run on Ubuntu 26.04: the helper found an a1 II over the network and over USB (2026-11-05, "Seen on Windows / Linux" below) |
 | **Build of camlink and the camera helper** (`kit/common/sdk_program.cmake`, which `kit/link/CMakeLists.txt` and `kit/probe/CMakeLists.txt` include) | as before | follows Sony's samples: `UNICODE`, static MSVC runtime, SDK DLLs copied next to the `.exe` | follows Sony's samples: threads, `-fsigned-char`, `$ORIGIN` rpath, `-rpath-link` to the SDK folder |
-| **Setup** (`kit/setup.py`) | run on a Mac and on a fresh clone of the repository (2026-11-04) | not yet run | run on Ubuntu 26.04 after the by-hand steps (2026-11-05): --check and --editor both clean, tests 164 passed and 139 skipped; a fresh clone not yet |
+| **Setup** (`kit/setup.py`) | run on a Mac and on a fresh clone of the repository (2026-11-04) | run on a Windows 11 PC with Sony's Win64 zip (2026-11-12): everything in place, tests 1951 passed and 236 skipped | run on Ubuntu 26.04 after the by-hand steps (2026-11-05): --check and --editor both clean, tests 164 passed and 139 skipped; a fresh clone not yet |
 | **Finding camlink** (`camkit.built`) | `build/camlink` | `build/camlink.exe` or `build/Release/camlink.exe` | `build/camlink` |
 | **HDMI capture** (`frames.capture_input`) | ffmpeg avfoundation, live-checked after the change | ffmpeg DirectShow (`video=NAME`); not yet run | ffmpeg V4L2 (`/dev/videoN`, found by name in `/sys/class/video4linux`); not yet run |
 | **No capture at all** (`"eyes": "osd"`) | tested in Movie mode ([the a1 II's page](models/ILCE-1M2_fw4.00.md)) | same code: the SDK sends the screen | same code |
@@ -275,3 +275,6 @@ Add a dated line for each difference found: the step, the message, the fix.
   - not possible on Windows, so skipped there with the reason: a file name holding a newline in git's index (git for
     Windows refuses it; the guard's refusal of such a name is still tested there by handing it git's listing) and Unix
     permission bits. The kit's CI now runs the tests on Windows too (`kit-windows` in `.github/workflows/kit-ci.yml`).
+- 2026-11-12, Windows 11 (Visual Studio 2022 Build Tools), the editor: built, its tests run (56 and 229 passed) and
+  used; it "compiled and worked great". Connect to the camera searched the network, found the camera and connected to
+  it through the camera helper. The release workflow now builds a Windows zip as well (`RELEASING.md`, "Installers").

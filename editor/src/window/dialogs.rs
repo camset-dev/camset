@@ -258,8 +258,10 @@ pub(crate) mod dialog_tests {
     /// copyright holders and the not-affiliated words, so none of them can go stale.
     #[test]
     fn mac_about_panel_names_the_version() {
-        let mac = include_str!("../../packaging/build_macos_app.sh");
-        let plist = include_str!("../../packaging/macos/Info.plist");
+        // read with LF line ends, as git checks it out with CRLF on Windows (the release workflow's Windows build runs
+        // these tests too)
+        let mac = include_str!("../../packaging/build_macos_app.sh").replace("\r\n", "\n");
+        let plist = include_str!("../../packaging/macos/Info.plist").replace("\r\n", "\n");
         assert!(mac.contains("VERSION=$(sed -n 's/^version = \"\\(.*\\)\"/\\1/p' Cargo.toml | head -1)"));
         assert!(mac.contains("COPYRIGHT=$(sed -n 's/^Copyright (c) //p' ../LICENSE | head -1)"));
         assert!(mac.contains("-e \"s/@VERSION@/$VERSION/g\"") && mac.contains("-e \"s|@COPYRIGHT@|$COPYRIGHT|g\" packaging/macos/Info.plist > \"$APP/Contents/Info.plist\""));

@@ -53,7 +53,7 @@ None of them holds help text or a value from anyone's camera.
 |---|---|---|
 | macOS | `sh packaging/build_macos_app.sh` (from `editor/`): `Camset Editor.app` and a `.dmg` (the app beside a shortcut to Applications, to drag it onto) in `editor/target/dist`, with only the tools macOS ships; the bundle identifier is `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Built and launched by Finder's route (`open`) on the Mac that built it, 2026-10-29: Apple silicon, ad-hoc signed. A downloaded copy, which macOS marks as from the internet, not yet tried. |
 | Linux | `sh packaging/build_linux.sh` (from `editor/`): a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | `build_linux.sh` written, not yet run. The editor itself was built and run on Ubuntu 26.04 (`PORTING.md`, "Seen on Windows / Linux"). |
-| Windows | The workflow zips `camset_editor.exe`; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results) | Not yet built. The exe has no embedded icon yet (the window and taskbar show it). |
+| Windows | The workflow (`Windows zip`) puts `camset_editor.exe`, `definitions/` (each definition with its sample), the project's licence as `LICENSE.txt` and the third-party licences page into one folder, `camset-editor-<version>-windows-x64`, and zips that folder; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results) | The editor was built (Visual Studio 2022 Build Tools), its tests run (56 and 229 passed) and the program used on a Windows 11 PC, 2026-11-12, reading a camera over the network with the camera helper (`PORTING.md`, "Seen on Windows / Linux"). The workflow's zip step itself first runs with the next tag; a downloaded zip not yet tried. The exe has no embedded icon yet (the window and taskbar show it) and is not signed. |
 
 **Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.0 now), add the release's section to `CHANGELOG.md`,
 commit, then tag that commit `v<version>` (for example `v0.2.0`) and push the tag to GitHub only. The release is
@@ -64,7 +64,7 @@ workflow_dispatch):
 
 1. **test:** the kit's tests, `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any
    package is built (pull requests and main are checked by `kit-ci.yml` and `editor-ci.yml`);
-2. **build:** on macOS and Linux (Windows once its package has been checked), the editor's tests, its third-party licences page (`cargo about`: the
+2. **build:** on macOS, Linux and Windows, the editor's tests, its third-party licences page (`cargo about`: the
    crates, and the fonts egui builds in, from `editor/about.hbs`), and the package for that system, which carries the
    project's `LICENSE` and that page, kept as a build artifact;
 3. **release:** on a version tag pushed to GitHub only, a GitHub Release for the tag with the packages attached
@@ -94,7 +94,7 @@ is not signed off (`git commit -s`; the repository's CONTRIBUTING.md). Written 2
 
 Not yet done for a public release:
 - **macOS:** the app is ad-hoc signed only: no Developer ID signature, no notarization (both need an Apple Developer account), and no universal (Intel + Apple silicon) build.
-- **Windows:** no icon resource in the exe, and no code signing. What users meet until then is in the README, "Use the editor".
+- **Windows:** no icon resource in the exe, and no code signing, so Windows SmartScreen warns ("Windows protected your PC") the first time the program runs. What users meet until then is in the README, "Use the editor".
 - **Proper installers** (`.msi`/NSIS, `.deb`, AppImage), for example with cargo-packager, once the plain packages work.
 - **File types:** none are claimed. `.DAT` is used by many apps (decided 2026-10-22).
 - **The docs site's links to the README, CONTRIBUTING and the Releases page.** `repo_url` and `site_url` in

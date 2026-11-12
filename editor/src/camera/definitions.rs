@@ -458,7 +458,8 @@ pub(crate) mod definitions_tests {
     }
 
     /// The packages carry the shipped definitions beside the program: inside the macOS app (before it is signed),
-    /// in the Linux tarball, and kept beside the program by the Linux install.
+    /// in the Linux tarball, kept beside the program by the Linux install, and in the Windows zip's folder, staged
+    /// before it is zipped.
     #[test]
     fn packages_carry_the_definitions() {
         let mac = include_str!("../../packaging/build_macos_app.sh");
@@ -468,6 +469,10 @@ pub(crate) mod definitions_tests {
         assert!(linux.contains("cp -R definitions \"$DIR/\""));
         let install = include_str!("../../packaging/linux/install.sh");
         assert!(install.contains("cp -R \"$here/definitions\" \"$share/definitions\"") && install.contains("ln -sf \"$share/camset_editor\" \"$HOME/.local/bin/camset_editor\""));
+        let release = include_str!("../../../.github/workflows/editor-release.yml");
+        let exe = release.find("Copy-Item target/release/camset_editor.exe $dir").expect("the Windows zip carries the program");
+        let defs = release.find("Copy-Item -Recurse definitions \"$dir/definitions\"").expect("and the definitions beside it");
+        assert!(exe < defs && defs < release.find("Compress-Archive -LiteralPath $dir").unwrap(), "staged before the folder is zipped");
         assert!(shipped().join("ILCE-1M2_fw4.00.json").is_file());
     }
 
@@ -476,7 +481,9 @@ pub(crate) mod definitions_tests {
     /// made from it.
     #[test]
     fn the_disk_image_offers_drag_to_install() {
-        let mac = include_str!("../../packaging/build_macos_app.sh");
+        // read with LF line ends, as git checks it out with CRLF on Windows (the release workflow's Windows build runs
+        // these tests too)
+        let mac = include_str!("../../packaging/build_macos_app.sh").replace("\r\n", "\n");
         let fresh = mac.find("rm -rf \"$STAGE\"\nmkdir -p \"$STAGE\"\n").expect("the image's folder is made afresh");
         let staged = mac.find("ditto \"$APP\" \"$STAGE/Camset Editor.app\"").expect("the app goes into the image's folder");
         let link = mac.find("ln -s /Applications \"$STAGE/Applications\"").expect("the image holds the Applications shortcut");
@@ -511,7 +518,8 @@ pub(crate) mod definitions_tests {
         for package in ["sh packaging/build_macos_app.sh", "sh packaging/build_linux.sh", "Compress-Archive"] {
             assert!(written < release.find(package).unwrap(), "written before {package}");
         }
-        assert!(release.contains("$files += \"target/dist/THIRD_PARTY_LICENSES.html\""), "the Windows zip carries it beside the program");
+        let page = release.find("Copy-Item target/dist/THIRD_PARTY_LICENSES.html $dir").expect("the Windows zip carries it beside the program");
+        assert!(page < release.find("Compress-Archive").unwrap(), "staged before the folder is zipped");
         let mac = include_str!("../../packaging/build_macos_app.sh");
         assert!(mac.contains("LICENSES=target/dist/THIRD_PARTY_LICENSES.html"));
         let copy = mac.find("cp \"$LICENSES\" \"$APP/Contents/Resources/\"").expect("the app carries the licences page");

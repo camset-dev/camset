@@ -22,9 +22,9 @@ check yours.
 ## Get it
 
 The editor is on the [Releases page](https://github.com/camset-dev/camset/releases): a disk image for macOS on Apple
-silicon and a tarball for Linux. Windows has no package yet, so build the editor from source there. The README's
-[Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the macOS app the
-first time.
+silicon, a tarball for Linux and, from 0.2.1, a zip for Windows (before 0.2.1, build the editor from source there).
+The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the
+macOS app or the Windows program the first time.
 
 1. **Save the settings on the camera:** MENU > Setup > Reset/Save Settings > Save/Load Settings > Save. The camera
    writes a `CAMSET*.DAT` file into the card's `PRIVATE/SONY/CAMSET` folder. Copy it to your computer and keep it:
