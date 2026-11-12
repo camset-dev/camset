@@ -105,7 +105,7 @@ def test_a_camlink_that_does_not_take_the_hash_is_refused_when_the_link_opens(sp
         assert again.call("ping")["ok"]
 
 
-@pytest.mark.parametrize("said", ["", "0" * 64])
+@pytest.mark.parametrize("said", ["none", "0" * 64])          # "none": the reply carries no "sha256"
 def test_an_upload_answered_without_the_checked_hash_is_not_taken_as_done(spaced, monkeypatch, said):
     """camlink's reply names the SHA-256 of the bytes it sent. A reply with none, or with another, means they were not
     checked against the kit's: Link.upload says so, and that the camera may have taken them, instead of returning."""
@@ -216,9 +216,20 @@ def test_the_stand_in_parses_as_documented():
 
 MAIN = r'''
 #include "protocol.h"
+#include <cstdio>
 #include <iostream>
 #include <sstream>
+#ifdef _WIN32
+#include <fcntl.h>
+#include <io.h>
+#endif
 int main() {
+#ifdef _WIN32
+    // the bytes as they are, as on every other OS: in text mode Windows would turn stdin's "\r\n" into "\n" before the
+    // parser sees it, and stdout's "\n" into "\r\n"
+    _setmode(_fileno(stdin), _O_BINARY);
+    _setmode(_fileno(stdout), _O_BINARY);
+#endif
     std::string line;
     while (protocol::readLine(std::cin, line)) {
         std::istringstream in(line);
@@ -298,14 +309,16 @@ def test_replies_are_matched_by_their_id_past_stray_lines(spaced, monkeypatch):
     assert [e["id"] for e in events if e["kind"] == "cmd"] == [1, 2, 3, 4]
 
 
-def test_stderr_lines_of_any_shape_never_stop_the_link(spaced, monkeypatch):
+def test_stderr_lines_of_any_shape_never_stop_the_link(spaced, monkeypatch, tmp_path):
     """camlink's stderr carries its events as objects; a library can print anything there. A line that parses as
     JSON but is no object ("0", "null"), or an object with the log's own keys, used to kill the thread that drains
     stderr (TypeError), after which camlink blocked on a full pipe and every reply stopped. 100 KB more after them
     must still be drained and the link answer."""
     run, _ = spaced
     lines = ["0", "null", "[1, 2]", json.dumps({"event": "note", "kind": "theirs", "t": 5})] + ["x" * 99] * 1000
-    monkeypatch.setenv("FAKE_CAMLINK_STDERR", json.dumps(lines))
+    sent = tmp_path / "stderr_lines.json"          # 100 KB: more than Windows lets an environment variable hold
+    sent.write_text(json.dumps(lines), encoding="utf-8")
+    monkeypatch.setenv("FAKE_CAMLINK_STDERR_FILE", str(sent))
     import time
     with Link(run, ip="192.0.2.10", binary=CAMLINK, catch_signals=False) as link:
         assert link.call("ping")["cmd"] == "ping"          # the stand-in wrote all 100 KB before its ready line

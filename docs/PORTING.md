@@ -49,8 +49,11 @@ unconfirmed, against 12 before. No settled label changed on any of the four scan
 
 **One command does this section:** put Sony's SDK zip for the OS into `kit/sdk/` and run `python3 kit/setup.py` from
 the clone's root (`py kit\setup.py` on Windows; `--check` only reports). It never runs sudo or an installer: for what
-is missing it prints the command, and it checks again on the next run. The steps below are what it runs, for doing
-them by hand or for when it stops.
+is missing it prints the command (as numbered steps when it needs another window or administrator rights), and it
+checks again on the next run. It never waits for those: it carries on, and its last lines list what is left, in order.
+Each long step says roughly how long it takes and shows a progress line; Ctrl+C stops it safely. On Windows it first
+checks Python's UTF-8 mode (`PYTHONUTF8=1`, or unset on Python 3.15 and newer) and stops there until it is on, since
+no kit program starts without it. The steps below are what it runs, for doing them by hand or for when it stops.
 
 **Every OS:**
 
@@ -119,10 +122,19 @@ in `kit/ocr/` is macOS only), and the reader generated from the Kaitai spec is c
   or later (4.2 for VS 2026). With VS 2022, add `-A x64 -T v143,host=x64` to the
   `cmake -S` line of each build.
   ffmpeg: `winget install Gyan.FFmpeg`.
+- **Python's UTF-8 mode:** `setx PYTHONUTF8 1` once, then a new terminal (the setting reaches only windows opened
+  afterwards; `echo %PYTHONUTF8%` in Command Prompt or `echo $env:PYTHONUTF8` in PowerShell prints 1). Python 3.15
+  and newer have it on by default, unless `PYTHONUTF8` is 0. Every kit program refuses to start without it, so
+  `kit/setup.py` stops at this step until it is on for the Python that runs the kit (.venv's).
 - **USB needs Sony's driver,** once per PC. In the SDK's `Driver` folder, right-click
-  `srcameradriver.inf` and choose Install, or in a prompt run as administrator (the line `kit/setup.py`
-  prints): `pnputil /add-driver kit\sdk\Driver\srcameradriver.inf /install`. Device Manager should then list
-  "Sony Remote Control Camera" under "libusbK Usb Devices". (Sony's sample manual, "Installation of device driver".)
+  `srcameradriver.inf` and choose Install, or in a terminal run as administrator (Start, type Terminal, right-click,
+  Run as administrator; `kit/setup.py` prints the line with the whole path, as that window opens in
+  `C:\Windows\System32`): `pnputil /add-driver <clone>\kit\sdk\Driver\srcameradriver.inf /install`. Device Manager
+  should then list "Sony Remote Control Camera" under "libusbK Usb Devices". (Sony's sample manual, "Installation of
+  device driver".) `kit/setup.py` finds it installed with `pnputil /enum-drivers` (no administrator rights needed:
+  it looks for `srcameradriver.inf` in the list) and then says OK.
+- **After a winget install** (CMake, Rust, ffmpeg), open a new terminal: what winget installs reaches only windows
+  opened afterwards.
 - **LAN without administrator rights:** turn on network discovery and file sharing.
 - **Paths:** the credentials file is `%USERPROFILE%\.config\camset\network.json`, written by the
   owner as on the Mac.
@@ -246,3 +258,20 @@ Add a dated line for each difference found: the step, the message, the fix.
   every search row carries the raw bytes in `id_hex`, shown with the whole search output in the editor's Expert mode;
   after a connect the probe says in a `note:` line when the camera did not list its serial number property and when
   the serial number came from the id instead (not yet re-checked on the PC).
+- 2026-11-12, Windows 11 (Python 3.12, PowerShell, `PYTHONUTF8=1`), step 1 (Tests): the kit's tests were run on
+  Windows for the first time: 10 failed, 1886 passed, 233 skipped. Fixed, each by what it was (not yet re-run on the
+  PC):
+  - in the kit: a result file naming a download by a POSIX path (`/tmp/...`) was refused by `make_sample.py` only by a
+    later check, since pathlib on Windows takes no such path for absolute; it now refuses a path that is absolute on
+    any OS (a POSIX one, a drive, a network share, a leading slash or backslash) on every OS, and `..` between
+    backslashes as outside the result's folder. A chain file with a Windows path in double quotes (TOML reads its
+    backslashes as escapes) now stops in plain words. A results file that is read-only no longer leaves its
+    temporary file behind when Windows refuses to replace it;
+  - in the tests, which assumed Unix: a chain test that ran `sh` and wrote Windows paths into TOML as escapes, and
+    needed a camera named on the computer; the capture test faking the OS by halves; a camlink stand-in told "no
+    hash" by an empty environment variable (Windows passes none on to a child) and given 100 KB in one variable
+    (Windows allows 32767 characters); a path compared with backslashes against a message that shows forward
+    slashes; git's read-only object files deleted without clearing the bit;
+  - not possible on Windows, so skipped there with the reason: a file name holding a newline in git's index (git for
+    Windows refuses it; the guard's refusal of such a name is still tested there by handing it git's listing) and Unix
+    permission bits. The kit's CI now runs the tests on Windows too (`kit-windows` in `.github/workflows/kit-ci.yml`).

@@ -1808,6 +1808,44 @@ def test_a_forged_result_is_refused(tmp_path, root, forge, said):
         take(tmp_path, s, m)
 
 
+@pytest.mark.parametrize("download", [
+    "/tmp/elsewhere/00003_reset-PP1.DAT", "\\elsewhere\\00003_reset-PP1.DAT", "C:\\Users\\you\\00003_reset-PP1.DAT",
+    "C:/Users/you/00003_reset-PP1.DAT", "C:00003_reset-PP1.DAT", "\\\\server\\share\\00003_reset-PP1.DAT",
+    "//server/share/00003_reset-PP1.DAT", "\\\\?\\C:\\elsewhere\\00003_reset-PP1.DAT"],
+    ids=["posix", "backslash", "drive", "drive-slashes", "drive-relative", "unc", "unc-slashes", "long-path"])
+def test_a_download_named_by_an_absolute_path_of_any_os_is_refused(tmp_path, root, download):
+    """A result may be written on one OS and read on another: a download named by a path that is absolute on either
+    (a POSIX one, a drive, a network share, a leading slash or backslash) is refused as one, on every OS, before its
+    folder is looked at."""
+    s, m = two_runs(tmp_path, root)
+    edit(s, lambda r: r["profiles"][0].__setitem__("download", download))
+    with pytest.raises(SystemExit, match="absolute path"):
+        take(tmp_path, s, m)
+
+
+def test_a_name_windows_reads_as_a_drive_is_refused_in_true_words(tmp_path, root):
+    """"C:x" is a plain file name to macOS and Linux, though Windows reads it as on drive C: refused there too, with
+    words that are true there."""
+    s, m = two_runs(tmp_path, root)
+    edit(s, lambda r: r["profiles"][0].__setitem__("download", "C:00003_reset-PP1.DAT"))
+    with pytest.raises(SystemExit) as e:
+        take(tmp_path, s, m)
+    said = str(e.value)
+    assert "is an absolute path" in said and "C:00003_reset-PP1.DAT" in said
+    assert ("or a name Windows reads as a drive" in said) == (sys.platform != "win32")
+
+
+@pytest.mark.parametrize("start", ["..\\run_m\\dat\\00001_before.DAT", "dat\\..\\..\\run_m\\dat\\00001_before.DAT"],
+                         ids=["up", "down-and-up"])
+def test_a_download_reached_by_backslashes_out_of_the_folder_is_refused(tmp_path, root, start):
+    """`..` between backslashes leaves the folder on Windows; it is refused as outside on every OS (the kit writes
+    a result's paths with forward slashes, camkit's in_run)."""
+    s, m = two_runs(tmp_path, root)
+    edit(s, lambda r: r.__setitem__("start", start))
+    with pytest.raises(SystemExit, match="outside the result's own folder"):
+        take(tmp_path, s, m)
+
+
 def test_last_pointing_outside_the_folder_is_refused_even_when_it_is_the_last_profiles(tmp_path, root):
     s, m = two_runs(tmp_path, root)
     out = str(last_of(m))

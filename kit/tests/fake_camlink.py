@@ -14,14 +14,16 @@ listed one whose read fails ({"ok": false, "error": "unknown property NAME"}). A
 request's id, protocol::command) is echoed as "id": N. With $FAKE_CAMLINK_STRAY set, every reply comes after two
 stray lines, as an SDK or a library may print them: a line of text and a reply with another id. Every line
 received, as raw bytes, goes to the file $FAKE_CAMLINK_LOG (one repr per line). $FAKE_CAMLINK_STDERR (a JSON list of
-lines) is written to stderr before the ready line, as camlink's events and a library's prints would be; with
+lines; $FAKE_CAMLINK_STDERR_FILE names a file holding that list instead, for more than Windows lets one environment
+variable carry, 32767 characters) is written to stderr before the ready line, as camlink's events and a library's prints would be; with
 $FAKE_CAMLINK_EXIT naming a command, the stand-in exits on it without a reply, as a camlink that crashed. A request
 id is read as camlink reads it: "@007" echoes 7, and an id with no command gets an error reply. upload PATH [SHA256]
 reads the file once, as camlink does, and answers with its "sha256"; one whose bytes do not have the SHA256 given
 gets camlink's refusal ({"ok": false, "cause": "hash_mismatch"}), and a file that is not there "no such file". The
 ready line says "upload_sha256": true, as camlink's does; $FAKE_CAMLINK_READY_OMIT (names, comma-separated) leaves
 those out of it, as an older camlink would, and $FAKE_CAMLINK_UPLOAD_SHA256, when set, is what a sent upload's reply
-gives as its "sha256" instead (empty: none), as a camlink that did not check the bytes would.
+gives as its "sha256" instead ("none": no "sha256" at all; Windows passes no variable set to the empty string on to
+a child, so the empty value cannot say it), as a camlink that did not check the bytes would.
 
 Start it as COMMAND does: with -X utf8, since it imports camkit, which on Windows needs Python's UTF-8 mode, and a
 "-X utf8" given to the test run is not passed on to the processes it starts (PYTHONUTF8=1 is).
@@ -45,7 +47,10 @@ COMMAND = [sys.executable, "-X", "utf8", str(Path(__file__).resolve())]       # 
 def main():
     log = os.environ.get("FAKE_CAMLINK_LOG")
     out = sys.stdout
-    for line in json.loads(os.environ.get("FAKE_CAMLINK_STDERR") or "[]"):
+    lines = os.environ.get("FAKE_CAMLINK_STDERR")
+    if os.environ.get("FAKE_CAMLINK_STDERR_FILE"):
+        lines = Path(os.environ["FAKE_CAMLINK_STDERR_FILE"]).read_text(encoding="utf-8")
+    for line in json.loads(lines or "[]"):
         sys.stderr.write(line + "\n")
     sys.stderr.flush()
     ready = {"ok": True, "ready": "ILCE-1M2", "connection": "lan 192.0.2.10", "login": "none", "upload_sha256": True}
@@ -117,7 +122,7 @@ def upload(path, expected=""):
     said = os.environ.get("FAKE_CAMLINK_UPLOAD_SHA256")
     if said is None:
         return {"result": "read ok", "sha256": digest}
-    return {"result": "read ok", **({"sha256": said} if said else {})}
+    return {"result": "read ok", **({"sha256": said} if said and said != "none" else {})}
 
 
 if __name__ == "__main__":

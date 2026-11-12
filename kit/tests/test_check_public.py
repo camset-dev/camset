@@ -6,6 +6,7 @@ The made-up values are put together at run time, so this file itself holds none 
 import json
 import os
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -653,13 +654,29 @@ def test_a_reset_file_not_lean_is_refused_naming_the_move(tmp_path, monkeypatch)
 
 
 def _staged_blob(tmp_path, git, path: str, data: bytes):
-    """`data` added to the index at `path` straight from git's objects (a name the file system may not hold)."""
+    """`data` added to the index at `path` straight from git's objects (a name the file system may not hold). Git for
+    Windows refuses a name holding a control character in its index (core.protectNTFS, on there by default): there
+    the test is skipped, and the guard's reading of such a name is covered by the tests that hand it git's listing
+    (..._in_gits_listing_..., ..._in_the_trees_listing_...), which run on every OS."""
     f = tmp_path / ".blob"
     f.write_bytes(data)
     oid = git("hash-object", "-w", str(f))
     f.unlink()
-    git("update-index", "--add", "--cacheinfo", f"100644,{oid},{path}")
+    try:
+        git("update-index", "--add", "--cacheinfo", f"100644,{oid},{path}")
+    except subprocess.CalledProcessError:
+        if sys.platform == "win32" and C.CONTROL_RE.search(path):
+            pytest.skip("git for Windows will not put a name holding a newline in its index; the guard's reading of "
+                        "such a name is tested by handing it git's listing")
+        raise
     return oid
+
+
+def _unlink_read_only(p: Path):
+    """Deletes a file git made read-only (its objects): Windows will not delete a read-only file, so the bit is
+    cleared first."""
+    os.chmod(p, stat.S_IWRITE | stat.S_IREAD)
+    p.unlink()
 
 
 def test_a_name_holding_a_newline_hides_no_leak_and_is_refused(tmp_path):
@@ -679,7 +696,29 @@ def test_a_name_holding_a_newline_hides_no_leak_and_is_refused(tmp_path):
     assert any(x.startswith(f"{added} {odd!r}: ") and "control character" in x for x in found), found
 
 
-@pytest.mark.parametrize("name", ["docs/a\tb.md", "docs/a\rb.md", "docs/a\x1bb.md", "docs/a\x85b.md", "docs/a\x7fb.md"])
+def test_a_name_holding_a_newline_in_gits_listing_hides_no_leak(tmp_path, monkeypatch):
+    """The same on every OS, Windows too, where git keeps no such name in its index: the commit holds the definition
+    under a plain name and git's listings (diff-tree, ls-tree) hand the guard the name with a newline, as git on
+    Linux or macOS would list it. The leak beside it is still found, and the name refused."""
+    git = _scratch_repo(tmp_path)
+    base = git("rev-parse", "HEAD")
+    plain, odd = "editor/definitions/a_b.json", "editor/definitions/a\nb.json"
+    _staged_blob(tmp_path, git, plain, b"{}")
+    _staged_blob(tmp_path, git, "zz.md", ("mail me at someone@" + "camset-owner.net\n").encode())
+    git("commit", "-q", "-m", "add")
+    added = git("rev-parse", "HEAD")[:12]
+    real_changed, real_tree = C._changed, C._tree_blobs
+    monkeypatch.setattr(C, "_changed", lambda c, repo: [(odd if f == plain else f, m, b) for f, m, b in
+                                                        real_changed(c, repo)])
+    monkeypatch.setattr(C, "_tree_blobs", lambda c, folder, repo: [(odd if f == plain else f, b) for f, b in
+                                                                    real_tree(c, folder, repo)])
+    found = C.commit_problems(f"{base}..HEAD", repo=tmp_path)
+    assert any(x.startswith(f"{added} zz.md: ") and "e-mail address" in x for x in found), found
+    assert any(x.startswith(f"{added} {odd!r}: ") and "control character" in x for x in found), found
+
+
+@pytest.mark.parametrize("name", ["docs/a\tb.md", "docs/a\rb.md", "docs/a\x1bb.md", "docs/a\x85b.md", "docs/a\x7fb.md",
+                                  "docs/a\nb.md"])
 def test_a_tracked_path_with_a_control_character_is_refused(name):
     found = C.path_problems([name, "docs/plain.md"], [], {})
     assert len(found) == 1 and "control character" in found[0], found
@@ -691,13 +730,25 @@ def test_a_name_with_a_control_character_is_refused_on_the_tree_too(repo):
     assert any("control character" in x for x in C.problems(everything=True))
 
 
+def test_a_name_with_a_newline_in_the_trees_listing_is_refused(repo, monkeypatch):
+    """The same on every OS, Windows too: git ls-files -z handing the guard a name with a newline (as git on Linux or
+    macOS lists one) is refused, the name read whole from the NUL-separated list."""
+    (repo / "docs").mkdir()
+    (repo / "docs" / "plain.md").write_text("x\n", encoding="utf-8")
+    subprocess.run(["git", "add", "docs/plain.md"], cwd=repo, check=True)
+    real = C.git
+    monkeypatch.setattr(C, "git", lambda *a: real(*a) + (["docs/a\nb.md"] if a == ("ls-files", "-z") else []))
+    found = C.problems(everything=True)
+    assert any(x.startswith(repr("docs/a\nb.md")) and "control character" in x for x in found), found
+
+
 def test_a_blob_git_does_not_hold_is_a_finding_not_a_pass(tmp_path):
     """Fix round 7: a version git does not hold (a shallow or partial clone) was judged as nothing and passed."""
     git = _scratch_repo(tmp_path)
     base = git("rev-parse", "HEAD")
     oid = _staged_blob(tmp_path, git, "docs/notes.md", ("mail me at someone@" + "camset-owner.net\n").encode())
     git("commit", "-q", "-m", "add")
-    (tmp_path / ".git" / "objects" / oid[:2] / oid[2:]).unlink()
+    _unlink_read_only(tmp_path / ".git" / "objects" / oid[:2] / oid[2:])
     found = C.commit_problems(f"{base}..HEAD", repo=tmp_path)
     assert any(x.startswith(f"{git('rev-parse', 'HEAD')[:12]} docs/notes.md: not readable") and "full history" in x
                for x in found), found

@@ -5,6 +5,45 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ## Unreleased
 
+### The editor
+
+- The editor's version is easy to find: in the window's title, at the right end of the status bar and on the welcome
+  page. A click on it opens the new About Camset Editor window, with the version and build, the cameras the editor
+  works with, Changes, the third-party licences and Copy version, for a message about a problem. The macOS app's own
+  About panel shows its version and copyright line.
+- The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
+- On Windows, the editor's tests built in release mode (`cargo test --release`) print their results in the console;
+  only the app itself opens without a console window.
+
+### The web page
+
+- The page names the editor's version at the right end of its status bar and on the welcome page. A click on it, or
+  on the one at the foot of Settings, opens About Camset Editor, with the version and build, the cameras the editor
+  works with and Changes, which shows what changed, release by release; Settings' foot has Changes too. The
+  third-party licences are opened from the desktop app.
+
+### The mapping kit
+
+- `kit/setup.py` on Windows, after its first run on a Windows 11 PC: it finds Sony's USB driver once it is installed
+  (`pnputil /enum-drivers`, no administrator rights needed) and says OK, where the reminder used to come back
+  forever; until then it gives the install as numbered steps, with the driver's whole path, as the administrator
+  window opens elsewhere. Without Python's UTF-8 mode it stops at once with the three steps that turn it on (`setx
+  PYTHONUTF8 1`, a new terminal, the same command again there) instead of going on to steps that would fail. Every
+  step that needs another window or administrator rights comes as numbered steps, and Windows commands are in
+  Windows' words (`move`, backslashes, a new terminal after a winget install).
+- `kit/setup.py` on every system: it says that it does not wait for a DO and carries on; each long step says roughly
+  how long it takes (the tests: about 3 minutes on a fast Mac, not "under a minute") and shows a progress line while
+  it runs (the tests' percentage, the build's count, the package pip is fetching), says so when a step takes
+  unusually long, and stops cleanly on Ctrl+C. Its last lines, after the table, say that everything is in place or
+  list what is left for you, numbered in order, ending "Then run ... again".
+- The kit's tests, first run on a Windows 11 PC (10 of 2129 failed there), are fixed for Windows, and the kit's CI
+  now runs them on Windows too, for every pull request and push to main. In the kit: `kit/tools/make_sample.py` refuses a result that names a
+  download by a path absolute on any system (a POSIX one, a drive, a network share, a leading slash or backslash),
+  on every system; a chain file with a Windows path in double quotes stops with the way to write it; a read-only
+  results file that Windows will not replace leaves no temporary file. The other failures were the tests' own Unix
+  habits, and two things Windows cannot hold (a file name with a newline in git, Unix permission bits) are skipped
+  there with the reason (docs/PORTING.md, "Seen on Windows / Linux").
+
 ## 0.2.0 (2026-11-11)
 
 The editor for macOS and Linux, the mapping kit, the docs and the ILCE-1M2 (a1 II) firmware 4.00 definition, in the

@@ -640,6 +640,8 @@ def write_text(path, text: str) -> None:
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
+            os.chmod(tmp, stat.S_IREAD | stat.S_IWRITE)          # Windows will not delete a read-only file
+        with contextlib.suppress(OSError):
             os.unlink(tmp)
         raise
 

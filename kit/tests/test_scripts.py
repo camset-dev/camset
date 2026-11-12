@@ -573,7 +573,10 @@ def test_a_symbolic_link_is_written_through(tmp_path):
     target = tmp_path / "real.json"
     target.write_text("{}", encoding="utf-8")
     link = tmp_path / "link.json"
-    link.symlink_to(target)
+    try:
+        link.symlink_to(target)
+    except OSError:                  # Windows without Developer Mode or administrator rights makes no links
+        pytest.skip("no symbolic links here")
     runner.write_json(link, {"written": True})
     assert link.is_symlink() and json.loads(target.read_text(encoding="utf-8")) == {"written": True}
 
@@ -597,6 +600,8 @@ def test_a_results_file_is_written_whole_or_left_as_it_was(tmp_path, monkeypatch
     assert [x.name for x in tmp_path.iterdir()] == ["tables.json"]
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows has no Unix permission bits: a file there is read-only or "
+                    "not, and the one mkstemp makes is writable as any other, so there is no owner-only file to undo")
 def test_a_file_written_whole_keeps_its_permissions(tmp_path):
     """mkstemp makes its file 0600 and the rename kept that, so every results file turned owner-only (review 1)."""
     import os
@@ -611,6 +616,35 @@ def test_a_file_written_whole_keeps_its_permissions(tmp_path):
     mask = os.umask(0o022)
     os.umask(mask)
     assert stat.S_IMODE(os.stat(new).st_mode) == 0o666 & ~mask
+
+
+def test_a_read_only_file_refused_leaves_no_temporary_file(tmp_path, monkeypatch):
+    """Windows, faked: a read-only file is not replaced (os.replace refuses) and a read-only file is not deleted. The
+    temporary file, made read-only as the file it stands in for, has its bit cleared before it is deleted, so nothing
+    is left beside the file, which keeps its contents."""
+    import os
+    import stat
+    p = tmp_path / "axes.json"
+    p.write_text("{}", encoding="utf-8")
+    os.chmod(p, 0o444)
+    real_unlink = runner.os.unlink
+
+    def replace(src, dst):
+        raise PermissionError(5, "Access is denied", str(dst))
+
+    def unlink(f):
+        if not os.stat(f).st_mode & stat.S_IWRITE:
+            raise PermissionError(5, "Access is denied", str(f))
+        real_unlink(f)
+    monkeypatch.setattr(runner.os, "replace", replace)
+    monkeypatch.setattr(runner.os, "unlink", unlink)
+    try:
+        with pytest.raises(PermissionError):
+            runner.write_json(p, {"Drive Mode": {}})
+    finally:
+        monkeypatch.undo()
+        os.chmod(p, 0o644)
+    assert [x.name for x in tmp_path.iterdir()] == ["axes.json"] and p.read_text(encoding="utf-8") == "{}"
 
 
 def test_pass_one_steps_stop_without_their_input(tmp_path, monkeypatch):

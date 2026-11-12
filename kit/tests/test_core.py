@@ -2116,8 +2116,10 @@ def test_rapidocr_lines_in_reading_order(monkeypatch):
 
 
 def test_capture_input_per_os(monkeypatch):
+    """Each OS faked whole (sys.platform and os.name both), so the answer never depends on the OS the tests run on."""
     from camkit import frames
     monkeypatch.setattr(frames.sys, "platform", "darwin")
+    monkeypatch.setattr(frames.os, "name", "posix")
     assert frames.capture_input("Cam Link 4K", (1920, 1080), 59.94)[-2:] == ["-i", "Cam Link 4K:none"]
     monkeypatch.setattr(frames.sys, "platform", "linux")
     args = frames.capture_input("/dev/video2", (1920, 1080), 60)
@@ -2542,35 +2544,65 @@ def test_option_key_folds_cyrillic_lookalikes():
 
 
 def test_chain_runner_steps_stop_files_and_failures(tmp_path):
-    # no camera: shell steps only, no end file (2026-10-31)
+    # no camera: steps of this Python only (no shell, so on Windows too), no end file (2026-10-31). Every string is
+    # written as a TOML basic string by json.dumps, so a Windows path's backslashes stay a path and are never read as
+    # TOML escapes. The camera is named and its runs are in tmp_path, so the chain runs in a clone that has mapped
+    # nothing (no private/config.json, no runs/) as in one that has
+    import os
     import subprocess
+    q = json.dumps
+    env = {**os.environ, "CAMSET_CAMERA": "ILCE-1M2_fw4.00", "CAMSET_RUNS": str(tmp_path / "runs"), "PYTHONUTF8": "1"}
     stop = tmp_path / "STEP_STOP"
     chain = tmp_path / "c.toml"
+    waits = f"import os, time\nwhile not os.path.exists({str(stop)!r}): time.sleep(0.2)\nprint('stopped')"
     chain.write_text(f'''name = "t"
 [[step]]
 title = "one"
-run = ["sh", "-c", "echo one; echo two"]
-log = "{tmp_path / 'one.log'}"
+run = [{q(sys.executable)}, "-c", "print('one'); print('two')"]
+log = {q(str(tmp_path / 'one.log'))}
 show = "one"
 [[step]]
 title = "waits for its stop file"
-run = ["sh", "-c", "while [ ! -e {stop} ]; do sleep 0.2; done; echo stopped"]
+run = [{q(sys.executable)}, "-c", {q(waits)}]
 limit = 1
-stop = "{stop}"
+stop = {q(str(stop))}
 [[step]]
 title = "fails"
-run = ["sh", "-c", "exit 3"]
-''')
+run = [{q(sys.executable)}, "-c", "raise SystemExit(3)"]
+''', encoding="utf-8")
     py = sys.executable
     out = subprocess.run([py, str(ROOT / "kit" / "tools" / "chain.py"), str(chain), "--stop", str(tmp_path / "STOP_CHAIN")],
-                         capture_output=True, text=True, timeout=60).stdout
+                         capture_output=True, text=True, timeout=60, env=env).stdout
     assert "   one" in out and "   two" not in out          # the log's matching lines only
     assert "asked it to stop" in out and not stop.exists()  # touched past its limit, removed after
     assert "step 3 exited 3" in out and "steps that failed: [3]" in out
     (tmp_path / "STOP_CHAIN").touch()
     r = subprocess.run([py, str(ROOT / "kit" / "tools" / "chain.py"), str(chain), "--stop", str(tmp_path / "STOP_CHAIN")],
-                       capture_output=True, text=True, timeout=30)
+                       capture_output=True, text=True, timeout=30, env=env)
     assert r.returncode != 0 and "remove it" in r.stderr
+
+
+def test_a_chain_file_toml_cannot_read_says_why_in_plain_words(tmp_path):
+    """A Windows path in double quotes ("C:\\Users\\you\\...") is a TOML escape error: the chain stops naming the
+    file and how to write the path, not with tomllib's traceback; the same path in single quotes is read as it is."""
+    import chain as CH
+    bad = tmp_path / "bad.toml"
+    bad.write_text('name = "t"\n[[step]]\nrun = ["x"]\nlog = "C:\\Users\\you\\one.log"\n', encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"bad\.toml: not a chain file TOML can read .*single quotes"):
+        CH.load(bad)
+    good = tmp_path / "good.toml"
+    good.write_text("name = \"t\"\n[[step]]\nrun = [\"x\"]\nlog = 'C:\\Users\\you\\one.log'\n", encoding="utf-8")
+    assert CH.load(good)["step"][0]["log"] == "C:\\Users\\you\\one.log"
+    # a file saved as Windows' "ANSI" (cp1252), not UTF-8: plain words too, not tomllib's traceback
+    ansi = tmp_path / "ansi.toml"
+    ansi.write_bytes('name = "Café"\n'.encode("cp1252"))
+    with pytest.raises(SystemExit, match=r"ansi\.toml: not a chain file TOML can read: it is not saved as UTF-8 text"):
+        CH.load(ansi)
+
+
+def test_the_chains_paths_are_shown_from_the_root_with_forward_slashes():
+    import chain as CH
+    assert CH.rel(ROOT / "runs" / "x" / "STOP") == "runs/x/STOP"
 
 
 # every option slip the a1 II produced: (reading, label, should match)

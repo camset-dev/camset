@@ -11,8 +11,14 @@ RUNS = ROOT / "runs"          # the camera folders' parent: a camera's runs are 
 # Windows: Python 3.11-3.14 reads and writes text as cp1252 unless UTF-8 mode is on, and the kit's labels and data
 # hold ★, →, Cyrillic look-alikes and Sony's names. kit/setup.py says how to turn it on (PYTHONUTF8=1).
 if os.name == "nt" and not sys.flags.utf8_mode:
-    raise SystemExit("The kit needs Python's UTF-8 mode on Windows: run  setx PYTHONUTF8 1  once, open a new "
-                     "terminal, and run the command again (or run it as  python -X utf8 ...).")
+    raise SystemExit("The kit needs Python's UTF-8 mode on Windows, and it is not on in this window. Once per PC:\n"
+                     "  1. In this window, run: setx PYTHONUTF8 1   (it answers that the value was saved)\n"
+                     "  2. Open a new terminal and keep this window open for now: the setting reaches only windows "
+                     "opened after it. To check the new window, run echo %PYTHONUTF8% in Command Prompt, or "
+                     "echo $env:PYTHONUTF8 in PowerShell: it prints 1.\n"
+                     f'  3. In the new window, go to the camset folder (in Command Prompt: cd /d "{ROOT}"; in '
+                     f'PowerShell: cd "{ROOT}") and run the same command again.\n'
+                     "Once it runs there, you can close this window.")
 
 
 def built(folder: Path, name: str) -> Path:

@@ -31,6 +31,19 @@ def test_ci_runs_ruff_at_the_version_the_hook_pins():
     assert re.search(r"^python -m pip install uv==\d+\.\d+\.\d+$", run, re.M)          # uv itself pinned
 
 
+def test_ci_runs_the_kits_tests_on_windows_in_utf8_mode():
+    """The kit's tests run on Windows too (first run there 2026-11-12), with PYTHONUTF8 set for the job, as the kit
+    needs on Windows, and with the actions pinned as the Linux job's are."""
+    jobs = workflow()["jobs"]
+    win = jobs["kit-windows"]
+    assert win["runs-on"] == "windows-latest" and win["env"]["PYTHONUTF8"] == "1"
+    assert step(win, "tests")["run"] == "python -m pytest -q kit/tests"
+    # a hung test stops the job, rather than running for GitHub's default 6 hours
+    assert win["timeout-minutes"] == 30 and 0 < jobs["kit"]["timeout-minutes"] <= 30
+    pins = {s["uses"] for s in jobs["kit"]["steps"] if "uses" in s}
+    assert {s["uses"] for s in win["steps"] if "uses" in s} <= pins
+
+
 def test_ci_builds_the_ocr_helper_on_macos_as_setup_does():
     """The OCR helper (kit/ocr/ocr.swift) is built on macOS with the line kit/setup.py runs, into the runner's temp
     folder, when a change touches kit/ocr/ or this workflow (or by hand); the Linux job runs whatever changed."""

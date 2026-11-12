@@ -61,12 +61,26 @@ python3 kit/setup.py              # on Windows: py kit\setup.py; --check only re
 
 It unpacks the SDK, checks the tools, makes `.venv` and the hooks, builds the camera link, the camera helper and
 (macOS) the OCR helper, and runs the tests, which must pass before any camera work. A DO line is yours to do, with its
-command; run it again until it says "The kit is set up". By hand: PORTING.md, "Setup per OS".
+command; one that needs another window or administrator rights comes as numbered steps. The setup does not wait for
+a DO: it carries on with the other steps, and its last lines, after the table, list what is left for you, in order,
+ending "Then run ... again". A step that takes a while says roughly how long before it starts and shows a progress
+line while it runs (the tests take some minutes); Ctrl+C stops it safely, and the next run goes on from there. Run it
+again until it says "the kit is set up". By hand: PORTING.md, "Setup per OS".
 
 With an HDMI capture dongle, also install ffmpeg (`brew install ffmpeg`; Windows, Linux: PORTING.md).
 
-On Windows the kit runs only in Python's UTF-8 mode: run `setx PYTHONUTF8 1` once and open a new terminal (setup.py
-says so on a DO line).
+On Windows the kit runs only in Python's UTF-8 mode, and the setup stops until it is on: with `PYTHONUTF8` set to 1,
+or not set at all when the kit's Python is 3.15 or newer, which has it on by default (`PYTHONUTF8=0` turns it off).
+Once per PC:
+
+1. Run `setx PYTHONUTF8 1` (it answers that the value was saved).
+2. Open a new terminal and keep the first one open for now: the setting reaches only windows opened afterwards. To
+   check the new window, `echo %PYTHONUTF8%` in Command Prompt or `echo $env:PYTHONUTF8` in PowerShell prints 1.
+3. In the new window, go to the clone's folder (Command Prompt: `cd /d "<clone>"`; PowerShell: `cd "<clone>"`) and
+   run `py kit\setup.py` again. Once it runs there, the first window can be closed.
+
+Sony's USB driver is installed once per PC, as administrator; the setup finds it once it is installed (it asks
+`pnputil /enum-drivers`, which needs no administrator rights) and prints the steps until then.
 
 On macOS:
 - Run from Terminal.app, not tmux: Local Network privacy blocks the camera otherwise.

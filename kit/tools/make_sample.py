@@ -78,7 +78,7 @@ import os
 import re
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, definitions, match, paths, provenance, safety  # noqa: E402
@@ -475,6 +475,14 @@ def one_session(files: list, folder: Path, root: Path) -> str:
     return why
 
 
+def anchored(rel: str) -> bool:
+    """True for a path that is absolute on any OS, whichever OS reads it (a result may be written on one and read on
+    another): a POSIX one (/tmp/x), a drive (C:\\x, C:/x, and C:x, which is on that drive's current folder), a
+    network share (\\\\server\\share), a leading slash or backslash. Windows' reading of a path finds them all, a
+    POSIX path's leading slash included, and pathlib on POSIX takes none but the leading slash for absolute."""
+    return bool(PureWindowsPath(rel).anchor)
+
+
 def check_result(p: Path, result: dict, doc: dict, prefix: str, root: Path, allow_no_notice: bool = False,
                  base=None) -> dict:
     """A reset run's result checked (the module's words: which claims are recomputed from the run's own downloads,
@@ -549,11 +557,14 @@ def check_result(p: Path, result: dict, doc: dict, prefix: str, root: Path, allo
     def inside(rel, what) -> Path:
         if not isinstance(rel, str) or not rel.strip():
             no(f"{what}: the result names no download")
+        if anchored(rel):
+            # "C:x" is a plain name to macOS and Linux, but Windows reads it as a drive: refused all the same
+            drive = os.name != "nt" and re.match(r"^[A-Za-z]:", rel)
+            no(f"{what} is an absolute path{', or a name Windows reads as a drive' if drive else ''} ({rel}): a result "
+               "names its downloads inside its own folder")
         q = Path(rel)
-        if q.is_absolute():
-            no(f"{what} is an absolute path ({rel}): a result names its downloads inside its own folder")
         full = (folder / q).resolve()
-        if folder not in full.parents:
+        if folder not in full.parents or ".." in PureWindowsPath(rel).parts:
             no(f"{what} ({rel}) is outside the result's own folder")
         if not full.is_file():
             no(f"{what}: no such file {full}")

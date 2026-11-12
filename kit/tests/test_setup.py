@@ -679,3 +679,774 @@ def test_windows_finds_the_cpp_tools_through_vswhere(tmp_path, monkeypatch, caps
     assert asked and asked[0][0] == str(vswhere) and "-latest" in asked[0]
     row = next(r for r in env.rows if r.piece == "C++ compiler")
     assert row.state == "OK" and "C:\\VS\\2022\\Community" in row.what and env.tools["cxx"] is True
+
+
+# ---------------------------------------------------------------- Windows: the USB driver, UTF-8 mode, the wording
+
+# pnputil /enum-drivers as Windows prints it, made up: one entry per driver in the store
+PNPUTIL_WITH = """Microsoft PnP Utility
+
+Published Name:     oem7.inf
+Original Name:      examplenet.inf
+Provider Name:      Example Corp
+Class Name:         Network adapters
+Driver Version:     01/01/2025 1.0.0.0
+Signer Name:        Microsoft Windows Hardware Compatibility Publisher
+
+Published Name:     oem42.inf
+Original Name:      srcameradriver.inf
+Provider Name:      Sony
+Class Name:         libusbK Usb Devices
+Driver Version:     01/01/2024 3.1.0.0
+Signer Name:        Microsoft Windows Hardware Compatibility Publisher
+"""
+PNPUTIL_WITHOUT = PNPUTIL_WITH.split("\nPublished Name:     oem42.inf")[0] + "\n"
+# the same on a German Windows: the labels change, the file name does not
+PNPUTIL_GERMAN = """Microsoft-PnP-Dienstprogramm
+
+Veröffentlichter Name:   oem42.inf
+Originalname:            SRCameraDriver.inf
+Anbietername:            Sony
+Klassenname:             libusbK Usb Devices
+"""
+
+
+def test_the_driver_is_found_in_pnputils_list_in_any_language():
+    assert kitsetup.driver_installed(PNPUTIL_WITH)
+    assert not kitsetup.driver_installed(PNPUTIL_WITHOUT)
+    assert not kitsetup.driver_installed("")
+    assert kitsetup.driver_installed(PNPUTIL_GERMAN)                  # localised labels, the name in another case
+
+
+def windows(root: Path, **kw):
+    return env_for(root, "Windows", "AMD64", **kw)
+
+
+def test_an_installed_driver_is_ok_on_windows(tmp_path, monkeypatch):
+    """2026-11-12, the first run on a Windows 11 PC: the DO for the driver came back after it was installed, as the
+    setup never looked. pnputil /enum-drivers lists it, without administrator rights."""
+    monkeypatch.setattr(kitsetup, "driver_listing", lambda: (PNPUTIL_WITH, ""))
+    env = windows(tmp_path)
+    kitsetup.step_access(env)
+    row = env.rows[-1]
+    assert (row.piece, row.state) == ("camera access", "OK")
+    assert row.what == "Sony's USB driver is installed (srcameradriver.inf)"
+
+
+def test_a_missing_driver_is_numbered_steps_as_administrator(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(kitsetup, "driver_listing", lambda: (PNPUTIL_WITHOUT, ""))
+    env = windows(tmp_path)
+    inf = env.sdk / "Driver" / "srcameradriver.inf"
+    inf.parent.mkdir(parents=True)
+    inf.write_text("; inf")
+    kitsetup.step_access(env)
+    row = env.rows[-1]
+    assert row.state == "DO" and row.yours and not row.blocking and kitsetup.exit_code(env.rows, False) == 0
+    assert "not installed yet" in row.what and "administrator" in row.what and "could not check" not in row.what
+    assert "Run as administrator" in row.steps[0]
+    assert f'pnputil /add-driver "{inf}" /install' in row.steps[1]  # the whole path: an administrator window opens elsewhere
+    out = capsys.readouterr().out
+    assert "     1. Open a terminal as administrator" in out and "     4. Then run py kit\\setup.py again." in out
+    assert "does not wait for you" in out
+
+
+def test_a_driver_that_cannot_be_checked_is_still_a_reminder(tmp_path, monkeypatch):
+    monkeypatch.setattr(kitsetup, "driver_listing", lambda: (None, "pnputil could not be started (not found)"))
+    env = windows(tmp_path)
+    kitsetup.step_access(env)                                        # and no Driver\ folder either
+    row = env.rows[-1]
+    assert row.state == "DO" and not row.blocking and kitsetup.exit_code(env.rows, False) == 0
+    assert "is not in kit\\sdk\\Driver\\" in row.what
+    assert "could not check whether it is installed: pnputil could not be started (not found)" in row.what
+    assert "Win64 SDK zip" in row.steps[0] and str(env.sdk) in row.steps[0]
+
+
+def test_pnputil_that_fails_or_hangs_is_no_crash(monkeypatch):
+    monkeypatch.setattr(kitsetup, "which", lambda name: None)
+
+    def answer(result):
+        def fake(cmd, **kw):
+            assert cmd[1:] == ["/enum-drivers"] and kw["timeout"] == 60
+            if isinstance(result, BaseException):
+                raise result
+            return result
+        return fake
+    cases = [(FileNotFoundError(2, "No such file"), "could not be started"),
+             (kitsetup.subprocess.TimeoutExpired("pnputil", 60), "no answer within 60 s"),
+             (kitsetup.subprocess.CompletedProcess([], 5, "Access denied\n"), "failed (exit 5)"),
+             (kitsetup.subprocess.CompletedProcess([], 0, "\n"), "printed nothing")]
+    for result, why in cases:
+        monkeypatch.setattr(kitsetup.subprocess, "run", answer(result))
+        listing, said = kitsetup.driver_listing()
+        assert listing is None and why in said, said
+    monkeypatch.setattr(kitsetup.subprocess, "run", answer(kitsetup.subprocess.CompletedProcess([], 0, PNPUTIL_WITH)))
+    assert kitsetup.driver_listing() == (PNPUTIL_WITH, "")
+
+
+def test_without_utf8_mode_a_windows_run_stops_with_the_three_steps(tmp_path, monkeypatch, capsys, no_tools):
+    """2026-11-12: "it asked me to open a new terminal and set it but after that it wasn't clear". Without PYTHONUTF8
+    no kit program starts, so the tests and the proof viewer would fail after minutes of work: the run stops at once,
+    and its last words are the steps, in order."""
+    monkeypatch.delenv("PYTHONUTF8", raising=False)
+    monkeypatch.setattr(kitsetup, "kit_python_version", lambda env: (3, 12))   # whichever Python runs the tests
+    monkeypatch.setattr(kitsetup, "started_in_utf8_mode", lambda: False)
+    sdk_zip(tmp_path / "kit" / "sdk", "Win64")
+    code = kitsetup.main([], windows(tmp_path))
+    out = capsys.readouterr().out
+    assert code == 1 and no_tools == [] and not (tmp_path / "kit" / "sdk" / "SimpleCli").exists()
+    assert "SDK zip" not in out and "does not wait" not in out and "The setup stops here" in out
+    tail_lines = out.rstrip().splitlines()[-6:]
+    assert tail_lines[0] == "1 thing is left for you to do:"
+    assert tail_lines[1] == "  1. UTF-8 mode: the kit runs only in Python's UTF-8 mode on Windows, which is not on in this window"
+    assert tail_lines[2].startswith("     1. In this window, run: setx PYTHONUTF8 1") and "(it answers that the value was saved)" in tail_lines[2]
+    # the new window is opened first and this one kept, as it holds the steps: the folder and the command come after
+    assert tail_lines[3].startswith("     2. Open a new terminal (Command Prompt or PowerShell) and keep this window open "
+                                    "for now: the setting reaches only windows opened after it.")
+    assert "echo %PYTHONUTF8%" in tail_lines[3] and "echo $env:PYTHONUTF8" in tail_lines[3]
+    assert tail_lines[4] == (f'     3. In the new window, go to the camset folder (in Command Prompt: cd /d "{tmp_path}"; '
+                             f'in PowerShell: cd "{tmp_path}") and run py kit\\setup.py again.')
+    assert tail_lines[5] == "Once it runs there, you can close this window."
+    # the same three numbered steps as the run printed them at the UTF-8 line
+    for line in tail_lines[2:5]:
+        assert out.count(line + "\n") == 2, line
+    # --check only reports, so it goes on; with PYTHONUTF8=1 the line is OK
+    kitsetup.main(["--check"], windows(tmp_path))
+    out = capsys.readouterr().out
+    assert "DO   UTF-8 mode" in out and "SDK zip" in out
+    monkeypatch.setenv("PYTHONUTF8", "1")
+    env = windows(tmp_path)
+    assert kitsetup.step_utf8(env) is False and env.rows[-1].state == "OK"
+    mac = env_for(tmp_path)
+    assert kitsetup.step_utf8(mac) is False and mac.rows == []
+
+
+def test_the_end_lists_what_is_left_in_order(tmp_path, capsys):
+    env = windows(tmp_path)
+    env.add("cmake", "DO", "not found; install it: winget install Kitware.CMake", "winget install Kitware.CMake",
+            blocking=True, **kitsetup.new_window(env, "winget install Kitware.CMake"))
+    env.add("link", "FAIL", "not built: it needs cmake (above)", "the lines above")
+    env.add("tests", "--", "not run", env.me)
+    env.add("camera access", "DO", "Sony's USB driver is not installed yet", "the steps below the table",
+            steps=["Open a terminal as administrator.", "Run the command."])
+    out = capsys.readouterr().out
+    assert out.count("does not wait for you") == 1                    # said once, at the first DO
+    lines = kitsetup.ending(env, kitsetup.exit_code(env.rows, False))
+    assert lines == [
+        "1 step failed: link (FAIL above, with its reason, and the last lines of a tool's output where it printed any).",
+        "2 things are left for you to do, in this order:",
+        "  1. cmake: not found; install it: winget install Kitware.CMake",
+        "     1. Run: winget install Kitware.CMake",
+        "     2. When it has finished, open a new terminal and keep this window open for now: what winget installs "
+        "reaches only windows opened after it.",
+        "  2. camera access: Sony's USB driver is not installed yet",
+        "     1. Open a terminal as administrator.",
+        "     2. Run the command.",
+        f'In the new window, go to the camset folder (in Command Prompt: cd /d "{tmp_path}"; in PowerShell: cd '
+        f'"{tmp_path}") and run py kit\\setup.py again.',          # after both: the last thing to do
+        "Once it runs there, you can close this window."]
+    done = env_for(tmp_path)
+    done.add("cmake", "OK", "found")
+    assert kitsetup.ending(done, 0)[-1].startswith("Everything is in place: the kit is set up.")
+    reminder = env_for(tmp_path)
+    reminder.add("hooks", "DO", "pre-commit install failed", ".venv/bin/pre-commit install")
+    assert kitsetup.ending(reminder, 0)[:2] == ["The kit is set up, but 1 thing is left for you to do:",
+                                                "  1. hooks: pre-commit install failed"]
+    assert kitsetup.ending(reminder, 0)[-1] == "Then run python3 kit/setup.py again."
+    check = env_for(tmp_path, check=True)
+    check.add("link", "DO", "would build kit/link/build/camlink: python3 kit/setup.py", "python3 kit/setup.py")
+    assert not check.rows[-1].yours
+    assert kitsetup.ending(check, 0)[0] == "Nothing was changed (--check). A run of python3 kit/setup.py would see to: link."
+
+
+def test_windows_commands_are_in_windows_words(tmp_path, monkeypatch):
+    """No mv, no forward slashes in a path to type into Command Prompt, and a winget install says to open a new
+    window, as winget's programs reach only the windows opened after it."""
+    env = windows(tmp_path)
+    (tmp_path / ".venv").mkdir()
+    kitsetup.step_venv(env)
+    assert env.rows[-1].next == "move .venv .venv.old" and "(move .venv .venv.old)" in env.rows[-1].what
+    assert env_for(tmp_path).move_aside == "mv .venv .venv.old"
+    assert env.native(env.rel(env.venv_bin("pre-commit"))) == ".venv\\Scripts\\pre-commit.exe"
+    assert env_for(tmp_path).native("kit/sdk/") == "kit/sdk/"
+    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: (0, ""))
+    monkeypatch.setattr(kitsetup, "which", lambda name: None)
+    monkeypatch.setattr(kitsetup, "vswhere_path", lambda: tmp_path / "none" / "vswhere.exe")
+    tools = windows(tmp_path)
+    kitsetup.step_tools(tools)
+    cmake = next(r for r in tools.rows if r.piece == "cmake")
+    assert cmake.steps[0] == "Run: winget install Kitware.CMake" and "open a new terminal" in cmake.steps[1]
+    assert cmake.again.startswith("In the new window, go to the camset folder")
+    cxx = next(r for r in tools.rows if r.piece == "C++ compiler")
+    assert "administrator permission" in cxx.steps[1] and cxx.blocking
+    mac = env_for(tmp_path)
+    kitsetup.step_tools(mac)
+    assert all(not r.steps for r in mac.rows)
+
+
+# ---------------------------------------------------------------- progress
+
+def test_elapsed_time_reads_plainly():
+    assert kitsetup.elapsed_text(0) == "0 s" and kitsetup.elapsed_text(45.9) == "45 s"
+    assert kitsetup.elapsed_text(65) == "1 min 05 s" and kitsetup.elapsed_text(600) == "10 min 00 s"
+    assert kitsetup.elapsed_text(3720) == "1 h 02 min"
+
+
+def test_how_far_a_tool_is_is_read_from_its_output():
+    dots = "." * 72
+    assert kitsetup.pytest_progress(f"{dots} [  3%]\n{dots} [ 43%]\n....") == "43 % done"
+    assert kitsetup.pytest_progress(f"{dots} [100%]\n\n2132 passed in 191.80s\n") == "100 % done"
+    assert kitsetup.pytest_progress("") == "" and kitsetup.pytest_progress("collecting ...") == ""
+    assert kitsetup.build_progress("[ 12%] Building CXX object x.o\n[ 45%] Linking CXX executable camlink\n") == "45 % done"
+    assert kitsetup.build_progress("[3/40] Building CXX object a.o\n[12/40] Building CXX object b.o\n") == "step 12 of 40"
+    assert kitsetup.build_progress("   Compiling serde v1.0.219\n   Compiling egui v0.31.1\n") == "2 crates compiled"
+    assert kitsetup.build_progress("  camlink.cpp\n  camlink.vcxproj -> C:\\x\\camlink.exe\n") == ""   # MSBuild: no count
+    assert kitsetup.pip_progress("Collecting numpy\n  Downloading numpy-2.3.0.whl (13 MB)\n") == "fetching numpy"
+    assert kitsetup.pip_progress("Collecting numpy\nInstalling collected packages: numpy\n") == "installing the packages"
+    assert kitsetup.pip_progress("Requirement already satisfied: numpy in ./.venv\n") == "checking the packages already there"
+
+
+class Stream(io.StringIO):
+    def __init__(self, tty):
+        super().__init__()
+        self.tty = tty
+
+    def isatty(self):
+        return self.tty
+
+
+def test_a_terminal_gets_one_line_rewritten_and_a_pipe_plain_lines():
+    assert kitsetup.live_line(Stream(True), {}) and not kitsetup.live_line(Stream(False), {})
+    assert not kitsetup.live_line(Stream(True), {"TERM": "dumb"})
+    assert not kitsetup.live_line(object(), {})                       # no isatty at all
+    pipe = Stream(False)
+    p = kitsetup.Progress("the kit's tests", "about 3 minutes", 600, "py kit\\setup.py", kitsetup.pytest_progress,
+                          stream=pipe)
+    for second in range(1, 70):
+        p.tick(second)
+    assert pipe.getvalue().splitlines() == ["     ... the kit's tests: still running (30 s)",
+                                            "     ... the kit's tests: still running (1 min 00 s)"]
+    p.feed("." * 72 + " [ 43%]\n")
+    p.tick(90)
+    assert pipe.getvalue().splitlines()[-1] == "     ... the kit's tests: 43 % done (1 min 30 s)"
+    term = Stream(True)
+    t = kitsetup.Progress("building kit/link", "1 to 3 minutes", 600, "python3 kit/setup.py", stream=term,
+                          columns=lambda: 200)                         # whatever this terminal's width
+    t.tick(1)
+    assert term.getvalue() == ""                                      # a quick step shows nothing
+    t.tick(3)
+    t.detail = "made by hand"
+    t.tick(4)
+    first = "     ... building kit/link: still running (3 s)"
+    assert term.getvalue() == ("\r" + first + "\r     ... building kit/link: made by hand (4 s) ")   # padded over the longer one
+    t.clear()
+    assert term.getvalue().endswith("\r" + " " * len(first) + "\r")
+
+
+def test_a_step_far_beyond_its_time_says_so_once():
+    pipe = Stream(False)
+    p = kitsetup.Progress("the kit's tests", "about 3 minutes", 1800, "py kit\\setup.py", stream=pipe)
+    p.tick(1799)
+    assert "longer than usual" not in pipe.getvalue()
+    p.tick(1800)
+    p.tick(1830)
+    said = pipe.getvalue()
+    assert said.count("This is taking longer than usual (about 3 minutes). You may keep waiting") == 1
+    assert "press Ctrl+C: nothing is lost, and py kit\\setup.py picks up again" in said
+    assert "send the last lines shown here" in said
+
+
+def test_a_long_tools_output_reaches_the_progress_line_as_it_comes(tmp_path):
+    """run() inside a Progress reads the tool's output as it arrives (a real Python here) and still gives the whole
+    output and the exit code, for the FAIL lines."""
+    script = "import sys\nprint('. [ 50%]', flush=True)\nprint('. [100%]')\nsys.exit(3)\n"
+    pipe = Stream(False)
+    with kitsetup.Progress("a tool", "seconds", 60, "python3 kit/setup.py", kitsetup.pytest_progress, stream=pipe) as p:
+        assert kitsetup.PROGRESS is p
+        code, out = kitsetup.run([sys.executable, "-c", script], cwd=tmp_path)
+    assert kitsetup.PROGRESS is None
+    assert code == 3 and out == ". [ 50%]\n. [100%]\n" and kitsetup.pytest_progress("".join(p.chunks)) == "100 % done"
+    with kitsetup.Progress("a tool", "seconds", 60, "python3 kit/setup.py", stream=pipe):
+        assert kitsetup.run([str(tmp_path / "no-such-tool")])[0] == 127
+
+
+def test_the_long_steps_say_how_long_before_they_start(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: (0, "2132 passed in 191.80s\n"))
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    kitsetup.step_tests(env)
+    out = capsys.readouterr().out
+    assert f"running the kit's tests ({kitsetup.TESTS_TIME}) ..." in out and "under a minute" not in out
+    assert env.rows[-1].what == "2132 passed"
+
+
+def test_a_narrow_terminal_gets_a_line_one_column_short_of_its_width():
+    """A line as wide as the terminal, or wider, wraps, and the carriage return then rewrites only its last part: the
+    line is cut to the width asked at each tick, less one, so a window narrowed while a step runs stays clean."""
+    term, cols = Stream(True), [30]
+    t = kitsetup.Progress("the kit's tests", "minutes", 600, "python3 kit/setup.py", stream=term,
+                          columns=lambda: cols[0])
+    t.tick(3)
+    assert term.getvalue() == "\r" + "     ... the kit's tests: still running (3 s)"[:29]
+    cols[0] = 20                                                      # narrowed while it runs
+    t.tick(4)
+    assert term.getvalue().split("\r")[-1] == "     ... the kit's tests: still running (4 s)"[:19]
+    assert t.width == 19
+    t.clear()
+    assert term.getvalue().endswith("\r" + " " * 19 + "\r")
+
+
+# ---------------------------------------------------------------- Ctrl+C: the tool stopped, the progress line quiet
+
+class FakeOut:
+    """A tool's output pipe that gives nothing until the tool ends."""
+    def __init__(self, ended):
+        self.ended, self.closed = ended, False
+
+    def read1(self, n):
+        self.ended.wait(10)
+        return b""
+
+    def close(self):
+        self.closed = True
+
+
+class StubbornTool:
+    """A tool that does not stop on Ctrl+C. second_ctrl_c: a second Ctrl+C comes while the setup waits for it."""
+    pid = 4321
+
+    def __init__(self, progress, second_ctrl_c):
+        self.progress, self.second = progress, second_ctrl_c
+        self.ended = kitsetup.threading.Event()
+        self.stdout, self.returncode, self.seen = FakeOut(self.ended), None, {}
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        if self.returncode is None and timeout == kitsetup.STOP_GRACE:          # the moment it is given to stop
+            self.seen["ticking"] = self.progress._thread.is_alive()
+            if self.second:
+                raise KeyboardInterrupt
+            raise kitsetup.subprocess.TimeoutExpired("tool", timeout)
+        return self.returncode
+
+    def kill(self):
+        self.returncode = -9
+        self.ended.set()
+
+
+@pytest.mark.parametrize("second_ctrl_c", [False, True], ids=["one-ctrl-c", "second-ctrl-c-in-the-wait"])
+def test_ctrl_c_stops_the_progress_line_and_always_ends_the_tool(monkeypatch, second_ctrl_c):
+    """On Ctrl+C the progress line stops before the wait (no "still running" while the tool stops), and a tool still
+    running after it is ended, even when a second Ctrl+C cuts the wait short; its pipe is closed."""
+    pipe = Stream(False)
+    progress = kitsetup.Progress("a tool", "seconds", 60, "python3 kit/setup.py", stream=pipe)
+    tools = []
+
+    def popen(cmd, **kw):
+        tools.append(StubbornTool(progress, second_ctrl_c))
+        return tools[-1]
+    monkeypatch.setattr(kitsetup.subprocess, "Popen", popen)
+    stopped = []
+    monkeypatch.setattr(kitsetup, "stop_tree", lambda p: (stopped.append(p), p.kill()))
+    sleeps = []
+
+    def sleep(seconds):                                               # Ctrl+C while the setup waits for the tool
+        sleeps.append(seconds)
+        raise KeyboardInterrupt
+    with progress:
+        monkeypatch.setattr(kitsetup.time, "sleep", sleep)
+        with pytest.raises(KeyboardInterrupt):
+            kitsetup.watched(["tool"], None, progress)
+        monkeypatch.undo()
+    tool = tools[0]
+    assert sleeps and tool.seen == {"ticking": False} and progress._stop.is_set()
+    assert stopped == [tool] and tool.returncode == -9 and tool.stdout.closed
+
+
+def test_a_tool_that_stops_on_ctrl_c_is_not_killed(monkeypatch):
+    pipe = Stream(False)
+    progress = kitsetup.Progress("a tool", "seconds", 60, "python3 kit/setup.py", stream=pipe)
+
+    class Polite(StubbornTool):
+        def wait(self, timeout=None):
+            self.kill()                                               # it stops on the Ctrl+C it got too
+            return self.returncode
+    monkeypatch.setattr(kitsetup.subprocess, "Popen", lambda cmd, **kw: Polite(progress, False))
+    monkeypatch.setattr(kitsetup, "stop_tree", lambda p: pytest.fail("it stopped on its own"))
+    with progress:
+        monkeypatch.setattr(kitsetup.time, "sleep", lambda s: (_ for _ in ()).throw(KeyboardInterrupt()))
+        with pytest.raises(KeyboardInterrupt):
+            kitsetup.watched(["tool"], None, progress)
+
+
+class Ended:
+    """A tool for stop_tree: alive until killed, or until taskkill has ended it (gone_after_taskkill)."""
+    pid = 4321
+
+    def __init__(self):
+        self.returncode, self.killed = None, False
+
+    def poll(self):
+        return self.returncode
+
+    def kill(self):
+        self.killed, self.returncode = True, -9
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+
+def test_windows_ends_the_whole_tree_and_falls_back_to_the_tool_itself(monkeypatch):
+    """Windows: taskkill /T /F ends the tool and what it started (pytest's stand-ins, MSBuild's compilers), which
+    would hold files and temporary folders; where taskkill is missing or hangs, the tool itself is ended. Elsewhere
+    the tool alone (the programs it started got the terminal's Ctrl+C)."""
+    assert kitsetup.tree_kill_command(4321) == ["taskkill", "/T", "/F", "/PID", "4321"]
+    calls = []
+
+    def taskkill(result):
+        def run(cmd, **kw):
+            calls.append((cmd, kw.get("timeout")))
+            if isinstance(result, BaseException):
+                raise result
+            tool.returncode = 1                                       # taskkill ended it
+            return kitsetup.subprocess.CompletedProcess(cmd, 0)
+        return run
+    tool = Ended()
+    monkeypatch.setattr(kitsetup.subprocess, "run", taskkill(None))
+    kitsetup.stop_tree(tool, windows=True)
+    assert calls == [(["taskkill", "/T", "/F", "/PID", "4321"], 10)] and not tool.killed
+    for failure in (FileNotFoundError(2, "taskkill"), kitsetup.subprocess.TimeoutExpired("taskkill", 10)):
+        tool = Ended()
+        monkeypatch.setattr(kitsetup.subprocess, "run", taskkill(failure))
+        kitsetup.stop_tree(tool, windows=True)
+        assert tool.killed
+    calls.clear()
+    tool = Ended()
+    kitsetup.stop_tree(tool, windows=False)
+    assert tool.killed and calls == []
+
+
+# ---------------------------------------------------------------- .venv stopped half way
+
+def test_ctrl_c_while_venv_is_made_leaves_no_half_made_venv(tmp_path, monkeypatch, capsys):
+    """2026-11-12 review: a .venv whose making was stopped had its Python but no pip, the next run called it OK and
+    pip then failed with no remedy, though the Ctrl+C message said nothing was lost."""
+    env = env_for(tmp_path)
+    monkeypatch.setattr(kitsetup, "venv_python", lambda env: (sys.executable, ""))
+
+    def run(cmd, cwd=None):
+        py = env.venv_bin("python")
+        py.parent.mkdir(parents=True)
+        py.write_text("")                                             # Python copied, pip not yet
+        raise KeyboardInterrupt
+    monkeypatch.setattr(kitsetup, "run", run)
+    with pytest.raises(KeyboardInterrupt):
+        kitsetup.step_venv(env)
+    assert not (tmp_path / ".venv").exists()
+
+
+def venv_without_pip(tmp_path, monkeypatch, ensurepip_ok: bool):
+    """A .venv with its Python but a pip that does not start, and the calls made."""
+    venv_python(tmp_path)
+    calls, repaired = [], []
+
+    def run(cmd, cwd=None):
+        cmd = [str(c) for c in cmd]
+        calls.append(cmd[1:])
+        if cmd[1:] == ["-c", "import sys; print('%d.%d.%d' % sys.version_info[:3])"]:
+            return 0, "3.12.4\n"
+        if cmd[1:] == ["-m", "pip", "--version"]:
+            return (0, "pip 25.0\n") if repaired else (1, "No module named pip\n")
+        if cmd[1:3] == ["-m", "ensurepip"]:
+            if ensurepip_ok:
+                repaired.append(True)
+                return 0, "Successfully installed pip-25.0\n"
+            return 1, "ensurepip is disabled\n"
+        return 0, ""
+    monkeypatch.setattr(kitsetup, "run", run)
+    return calls
+
+
+def test_a_venv_without_a_working_pip_is_repaired(tmp_path, monkeypatch, capsys):
+    calls = venv_without_pip(tmp_path, monkeypatch, ensurepip_ok=True)
+    env = env_for(tmp_path)
+    kitsetup.step_venv(env)
+    assert ["-m", "ensurepip", "--upgrade", "--default-pip"] in calls
+    assert ["-u", "-m", "pip", "install", "-r", "kit/requirements.txt"] in calls
+    rows = {r.piece: r for r in env.rows}
+    assert rows["venv"].state == "OK" and rows["packages"].state == "OK"
+    assert "pip was put back into .venv" in capsys.readouterr().out
+
+
+def test_a_venv_whose_pip_cannot_be_put_back_is_moved_aside_by_hand(tmp_path, monkeypatch):
+    calls = venv_without_pip(tmp_path, monkeypatch, ensurepip_ok=False)
+    env = env_for(tmp_path)
+    kitsetup.step_venv(env)
+    row = env.rows[-1]
+    assert (row.piece, row.state) == ("venv", "DO") and row.blocking and row.next == "mv .venv .venv.old"
+    assert "has no working pip" in row.what and "(mv .venv .venv.old)" in row.what
+    assert not any(c[:2] == ["-u", "-m"] for c in calls)              # no pip install with no pip
+    assert kitsetup.exit_code(env.rows, False) == 1
+
+
+def test_check_only_says_a_venv_without_pip_would_be_repaired(tmp_path, monkeypatch):
+    calls = venv_without_pip(tmp_path, monkeypatch, ensurepip_ok=True)
+    env = env_for(tmp_path, check=True)
+    kitsetup.step_venv(env)
+    rows = {r.piece: r for r in env.rows}
+    assert rows["venv"].state == "DO" and not rows["venv"].yours and "puts it back" in rows["venv"].what
+    assert rows["hooks"].state == "--"                               # its row too, as when there is no .venv yet
+    assert not any("ensurepip" in c for call in calls for c in call)
+
+
+# ---------------------------------------------------------------- UTF-8 mode: what reaches the kit's programs
+
+def utf8_row(tmp_path, monkeypatch, value, kit_version=(3, 12), started=False, check=False):
+    if value is None:
+        monkeypatch.delenv("PYTHONUTF8", raising=False)
+    else:
+        monkeypatch.setenv("PYTHONUTF8", value)
+    asked = []
+    monkeypatch.setattr(kitsetup, "kit_python_version", lambda env: asked.append(1) or kit_version)
+    monkeypatch.setattr(kitsetup, "started_in_utf8_mode", lambda: started)
+    env = windows(tmp_path, check=check)
+    stop = kitsetup.step_utf8(env)
+    return stop, env.rows[-1], asked
+
+
+def test_utf8_mode_is_on_by_default_from_python_3_15(tmp_path, monkeypatch):
+    """PEP 686: Python 3.15 and newer have UTF-8 mode on unless PYTHONUTF8 is 0, and camkit asks sys.flags.utf8_mode,
+    so a kit Python that new needs no PYTHONUTF8."""
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, None, kit_version=(3, 15))
+    assert not stop and row.state == "OK"
+    assert row.what == "on by default in Python 3.15, which runs the kit (PYTHONUTF8 is not set in this window)"
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, "", kit_version=(3, 16))      # set but empty: as not set
+    assert not stop and row.state == "OK"
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, None, kit_version=(3, 14))
+    assert stop and row.state == "DO" and row.blocking and "not on in this window" in row.what
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, None, kit_version=None)       # the kit's Python could not say
+    assert stop and row.state == "DO"
+    stop, row, asked = utf8_row(tmp_path, monkeypatch, "1", kit_version=(3, 12))
+    assert not stop and row.what == "PYTHONUTF8 is 1 in this window" and asked == []
+
+
+def test_pythonutf8_0_is_off_on_every_python(tmp_path, monkeypatch):
+    stop, row, asked = utf8_row(tmp_path, monkeypatch, "0", kit_version=(3, 15))
+    assert stop and row.state == "DO" and asked == []
+    assert row.what.startswith("PYTHONUTF8 is set to 0 in this window, which turns off Python's UTF-8 mode")
+    assert "set it to 1" in row.what and row.steps[0].startswith("In this window, run: setx PYTHONUTF8 1")
+
+
+def test_a_setup_started_with_x_utf8_still_stops_and_says_why(tmp_path, monkeypatch):
+    """py -X utf8 kit\\setup.py with PYTHONUTF8 unset on Python 3.14: the setup itself is in UTF-8 mode, the kit's
+    programs it starts are not, so it stops, in words that are true for it."""
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, None, kit_version=(3, 14), started=True)
+    assert stop and row.state == "DO" and row.blocking
+    assert row.what.startswith("this setup was started in Python's UTF-8 mode (-X utf8), but the kit's programs")
+    stop, row, _ = utf8_row(tmp_path, monkeypatch, None, kit_version=(3, 14), started=True, check=True)
+    assert not stop and row.state == "DO"                             # --check reports and goes on
+
+
+def test_the_kits_python_is_venvs_else_the_one_the_venv_would_be_made_with(tmp_path, monkeypatch):
+    env = windows(tmp_path)
+    answers = {}
+
+    def run(cmd, cwd=None):
+        return answers.get(str(cmd[0]), (1, "not found"))
+    monkeypatch.setattr(kitsetup, "run", run)
+    monkeypatch.setattr(kitsetup, "venv_python", lambda env: ("C:\\Python314\\python.exe", "Python 3.14: ..."))
+    answers["C:\\Python314\\python.exe"] = (0, "3.14\n")
+    assert kitsetup.kit_python_version(env) == (3, 14)                # no .venv yet
+    py = env.venv_bin("python")
+    py.parent.mkdir(parents=True)
+    py.write_text("")
+    answers[str(py)] = (0, "3.15\n")
+    assert kitsetup.kit_python_version(env) == (3, 15)                # .venv's
+    answers[str(py)] = (1, "broken")
+    assert kitsetup.kit_python_version(env) == (3, 14)                # a broken one: the one a new .venv gets
+    monkeypatch.setattr(kitsetup, "venv_python", lambda env: (sys.executable, ""))
+    assert kitsetup.kit_python_version(env) == tuple(sys.version_info[:2])
+
+
+def test_the_new_window_step_works_in_both_windows_terminals(tmp_path):
+    """Command Prompt's cd changes drive (D:\\camset from C:\\) only with /d, PowerShell's always: both are named, so
+    the person need not know which terminal they have."""
+    env = windows(tmp_path)
+    for again in (kitsetup.utf8_steps(env)["again"], kitsetup.new_window(env, "winget install Kitware.CMake")["again"]):
+        assert f'in Command Prompt: cd /d "{tmp_path}"' in again and f'in PowerShell: cd "{tmp_path}"' in again
+    camkit = (KIT / "camkit" / "__init__.py").read_text(encoding="utf-8")
+    assert 'in Command Prompt: cd /d "{ROOT}"' in camkit and 'PowerShell: cd "{ROOT}"' in camkit
+    assert "SUCCESS" not in camkit and "(it answers that the value was saved)" in camkit
+
+
+# ---------------------------------------------------------------- the driver, when pnputil cannot be asked
+
+def test_a_driver_that_could_not_be_checked_may_not_be_installed(tmp_path, monkeypatch):
+    monkeypatch.setattr(kitsetup, "driver_listing", lambda: (None, "pnputil /enum-drivers failed (exit 5)"))
+    env = windows(tmp_path)
+    inf = env.sdk / "Driver" / "srcameradriver.inf"
+    inf.parent.mkdir(parents=True)
+    inf.write_text("; inf")
+    kitsetup.step_access(env)
+    row = env.rows[-1]
+    assert row.state == "DO" and not row.blocking
+    assert row.what.startswith("Sony's USB driver may not be installed yet;") and "is not installed" not in row.what
+    assert row.what.endswith("pnputil /enum-drivers failed (exit 5); if you have installed it already, you can ignore "
+                             "this line)")
+    assert f'pnputil /add-driver "{inf}" /install' in row.steps[1]
+    assert "(or Command Prompt, on Windows 10)" in row.steps[0]
+
+
+# ---------------------------------------------------------------- the tests' own temporary folder
+
+def test_the_tests_run_in_a_temporary_folder_of_the_setups_own(tmp_path, monkeypatch):
+    """pytest's own numbered folders and their pytest-current link crashed its clean-up on Windows after a stopped run
+    (PermissionError): the setup's run of the tests gets a folder of its own, emptied first."""
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    base = tmp_path / "temp" / "camset-kit-tests"
+    (base / "pytest-old").mkdir(parents=True)
+    (base / "pytest-old" / "left.txt").write_text("from a stopped run")
+    calls = []
+
+    def run(cmd, cwd=None):
+        calls.append([str(c) for c in cmd])
+        return 0, "2132 passed in 191.80s\n"
+    monkeypatch.setattr(kitsetup, "run", run)
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    kitsetup.step_tests(env)
+    assert calls[0][-1] == f"--basetemp={base}" and calls[0][-4:-1] == ["pytest", "kit/tests", "-q"]
+    assert not base.exists() and env.rows[-1].state == "OK"           # emptied first (pytest makes it again)
+
+
+def test_a_temporary_folder_that_cannot_be_emptied_is_named_and_another_used(tmp_path, monkeypatch, capsys):
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    monkeypatch.setattr(kitsetup.tempfile, "tempdir", str(tmp_path / "temp"))
+    base = tmp_path / "temp" / "camset-kit-tests"
+    base.mkdir(parents=True)
+
+    def locked(path, *a, **kw):
+        raise PermissionError(13, "The process cannot access the file because it is being used by another process")
+    real_rmtree = kitsetup.shutil.rmtree
+    used = []
+
+    def run(cmd, cwd=None):
+        used.append(Path(str(cmd[-1]).split("=", 1)[1]))
+        assert used[-1].is_dir()
+        return 0, "2132 passed in 191.80s\n"
+    monkeypatch.setattr(kitsetup, "run", run)
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    monkeypatch.setattr(kitsetup.shutil, "rmtree", lambda p, ignore_errors=False: (
+        real_rmtree(p, ignore_errors=ignore_errors) if ignore_errors else locked(p)))
+    kitsetup.step_tests(env)
+    out = capsys.readouterr().out
+    assert f"The folder {base} could not be emptied" in out and "Closing other terminals that run the kit" in out
+    assert used[0] != base and used[0].name.startswith("camset-kit-tests-") and str(used[0]) in out
+    assert not used[0].exists() and env.rows[-1].state == "OK"        # the fresh one removed after the run
+
+
+def test_tests_that_did_not_finish_say_so_plainly(tmp_path, monkeypatch, capsys):
+    """2026-11-12: pytest crashed in its own clean-up and the setup said "FAIL tests: no summary" under a long
+    traceback."""
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    crash = "....\nTraceback (most recent call last):\nPermissionError: [WinError 5] Access is denied: 'pytest-current'\n"
+    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: (1, crash))
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    kitsetup.step_tests(env)
+    row = env.rows[-1]
+    assert row.state == "FAIL" and "no summary" not in row.what
+    assert row.what == ("the tests did not finish (exit 1): pytest stopped before it could count them, and its last "
+                        "lines, below, say why")
+    assert "     | PermissionError: [WinError 5] Access is denied: 'pytest-current'" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- the last words
+
+def test_the_last_words_read_true_for_one_failure_and_for_check(tmp_path):
+    one = env_for(tmp_path)
+    one.add("link", "FAIL", "cmake failed", "the output above")
+    assert kitsetup.ending(one, 1) == [
+        "1 step failed: link (FAIL above, with its reason, and the last lines of a tool's output where it printed any).",
+        "When it is fixed, run python3 kit/setup.py again."]
+    two = env_for(tmp_path)
+    two.add("link", "FAIL", "cmake failed", "the output above")
+    two.add("probe", "FAIL", "cmake failed", "the output above")
+    assert kitsetup.ending(two, 1) == [
+        "2 steps failed: link, probe (FAIL above, each with its reason, and the last lines of a tool's output where it "
+        "printed any).", "When they are fixed, run python3 kit/setup.py again."]
+    check = env_for(tmp_path, check=True)
+    check.add("cmake", "OK", "found")
+    assert kitsetup.ending(check, 0) == [
+        "Nothing was changed (--check).",
+        "Nothing is missing that you need to do by hand. Run python3 kit/setup.py to finish the setup: it also installs "
+        "the packages and runs the tests, which --check does not."]
+
+
+def test_a_junction_named_as_the_tests_folder_is_removed_not_followed(tmp_path, monkeypatch):
+    """Windows: a directory junction is no symlink to is_symlink, and rmtree refuses it, so every later run would take
+    a fresh folder with an untrue note. Faked here with a link that only is_junction owns to (Python 3.12's
+    Path.is_junction; the kit's 3.11 has none, which the setup allows for)."""
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    base = tmp_path / "temp" / "camset-kit-tests"
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "keep.txt").write_text("not the setup's")
+    base.parent.mkdir()
+    base.symlink_to(target, target_is_directory=True)
+    real = kitsetup.Path.is_symlink
+    monkeypatch.setattr(kitsetup.Path, "is_symlink", lambda self: False if self == base else real(self))
+    monkeypatch.setattr(kitsetup.Path, "is_junction", lambda self: self == base, raising=False)
+    assert kitsetup.tests_folder() == (base, False)                  # the usual folder, no fallback
+    assert not os.path.lexists(base) and (target / "keep.txt").read_text() == "not the setup's"
+
+
+def test_a_link_named_as_the_tests_folder_is_removed_not_followed(tmp_path, monkeypatch):
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    base = tmp_path / "temp" / "camset-kit-tests"
+    target = tmp_path / "elsewhere"
+    target.mkdir()
+    (target / "keep.txt").write_text("not the setup's")
+    base.parent.mkdir()
+    try:
+        base.symlink_to(target, target_is_directory=True)
+    except OSError:
+        pytest.skip("this Windows account may not make symbolic links")
+    assert kitsetup.tests_folder() == (base, False)
+    assert not os.path.lexists(base) and (target / "keep.txt").read_text() == "not the setup's"
+
+
+@pytest.mark.parametrize("ending", ["ctrl-c", "failed"])
+def test_the_fresh_tests_folder_is_removed_however_the_tests_end(tmp_path, monkeypatch, capsys, ending):
+    """The new folder taken when the usual one cannot be emptied is the run's own: removed after an interrupted or a
+    failed run too, not left to pile up."""
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+    monkeypatch.setattr(kitsetup.tempfile, "tempdir", str(tmp_path / "temp"))
+    (tmp_path / "temp" / "camset-kit-tests").mkdir(parents=True)
+    real_rmtree = kitsetup.shutil.rmtree
+    used = []
+
+    def rmtree(p, ignore_errors=False):
+        if not ignore_errors:
+            raise PermissionError(13, "in use")                       # the usual folder is held by a leftover program
+        real_rmtree(p, ignore_errors=True)
+
+    def run(cmd, cwd=None):
+        used.append(Path(str(cmd[-1]).split("=", 1)[1]))
+        assert used[-1].is_dir()
+        if ending == "ctrl-c":
+            raise KeyboardInterrupt
+        return 1, "F.\n1 failed, 1 passed in 1.00s\n"
+    monkeypatch.setattr(kitsetup, "run", run)
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    monkeypatch.setattr(kitsetup.shutil, "rmtree", rmtree)
+    if ending == "ctrl-c":
+        with pytest.raises(KeyboardInterrupt):
+            kitsetup.step_tests(env)
+    else:
+        kitsetup.step_tests(env)
+        assert env.rows[-1].state == "FAIL" and env.rows[-1].what == "1 failed, 1 passed (exit 1)"
+    assert used and used[0].name.startswith("camset-kit-tests-") and not used[0].exists()

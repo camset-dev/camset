@@ -838,7 +838,7 @@ def test_runs_at_the_top_stop_the_build_with_the_move(clone, monkeypatch, capsys
     monkeypatch.setattr(sys, "argv", ["proof_viewer.py"])
     with pytest.raises(paths.Leftovers) as e:
         pv.main()
-    said = str(e.value).replace(str(clone / "runs"), "runs")
+    said = str(e.value).replace(paths.shown(clone / "runs"), "runs")          # outside the clone: shown whole, with /
     assert said == (f"runs/kit2_pass2 sits at the top of runs/; run `python3 kit/tools/migrate_runs.py --camera {A1}` "
                     f"to move the {A1}'s runs under runs/{A1}/ (--dry-run shows the plan first). Until then the kit "
                     "does not use them.")

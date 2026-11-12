@@ -78,7 +78,25 @@ def at(p) -> Path:
 
 
 def rel(p: Path) -> str:
-    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+    """A path as the chain's output shows it: from the clone's root when under it, with forward slashes on every OS
+    (camkit.paths.shown)."""
+    return paths.shown(p)
+
+
+def load(chain_file) -> dict:
+    """The chain file read; a file TOML cannot read stops in plain words. A Windows path written in double quotes
+    ("C:\\runs\\my.log") is the usual cause: TOML reads a backslash in them as an escape. A file saved in another
+    encoding than UTF-8 (an older Notepad's "ANSI") is the other."""
+    try:
+        with open(chain_file, "rb") as f:
+            return tomllib.load(f)
+    except UnicodeDecodeError as e:
+        sys.exit(f"{chain_file}: not a chain file TOML can read: it is not saved as UTF-8 text ({e}). Save it again "
+                 "as UTF-8 (in Notepad: File, Save as, Encoding: UTF-8) and run the chain again")
+    except tomllib.TOMLDecodeError as e:
+        sys.exit(f"{chain_file}: not a chain file TOML can read ({e}). A path with backslashes (a Windows path) goes in "
+                 "single quotes ('C:\\runs\\my.log') or with forward slashes (\"C:/runs/my.log\"). A relative path "
+                 "(my.log) needs neither: the chain reads it from the camera's runs folder")
 
 
 def say(msg: str):
@@ -145,8 +163,7 @@ def main():
     a = ap.parse_args()
     global RUN_ROOT
     RUN_ROOT = paths.run_root()
-    with open(a.chain, "rb") as f:
-        chain = tomllib.load(f)
+    chain = load(a.chain)
     steps = chain.get("step", [])
     # the end file as an absolute path now: --end names an existing file as given (relative to this folder), which the
     # upload step would otherwise take for one in the camera's runs, after every step had run
