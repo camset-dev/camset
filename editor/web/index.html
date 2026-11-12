@@ -1,0 +1,693 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Camset Editor</title>
+<link rel="icon" href="/icon.png">
+<style>
+/* Laid out and coloured like the editor's window. The colours are egui 0.31's Visuals::light() and
+   Visuals::dark() with the editor's own text colour (set_visuals in main.rs: update), darker where the
+   light ones would be hard to read; the sizes its text styles (Small 12, Body 14, Heading 19) and
+   spacing; 1rem is egui's 14 px body text, so the A−/A+ control scales the page the way the editor's
+   zoom scales the window. */
+@font-face { font-family: "egui Ubuntu"; src: url("/font-ubuntu.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "egui Hack"; src: url("/font-hack.ttf") format("truetype"); font-weight: 100 900; font-display: swap; }
+/* The colours, each written once with its light and its dark value: `var(--if-light, L) var(--if-dark, D)` gives L
+   in the light theme and D in the dark one, because the theme switches below set the one in use to `initial` (its
+   fallback is used) and the other to a blank. The browser's theme decides unless the page's Settings forces one
+   (html.theme-light / html.theme-dark). Text colours keep 4.5:1 against the panel, the stripes, the fields and the
+   cards (WCAG AA), the outline of a checkbox 3:1; where egui's light colours fall short, the page's own darker ones. */
+:root, html.theme-light { color-scheme: light; --if-light: initial; --if-dark: ; }
+@media (prefers-color-scheme: dark) { :root:not(.theme-light) { color-scheme: dark; --if-light: ; --if-dark: initial; } }
+html.theme-dark { color-scheme: dark; --if-light: ; --if-dark: initial; }
+:root {
+  --panel:     var(--if-light, #f8f8f8) var(--if-dark, #1b1b1b);   /* panel_fill, window_fill */
+  --text:      var(--if-light, #555a64) var(--if-dark, #afb4be);   /* the editor's text, (85, 90, 100) and (175, 180, 190) */
+  --weak:      var(--if-light, #63666d) var(--if-dark, #8e9198);   /* hints, notes and subtitles */
+  --strong:    var(--if-light, #000000) var(--if-dark, #ffffff);   /* strong text */
+  --sep:       var(--if-light, #bebebe) var(--if-dark, #3c3c3c);   /* separators and indent lines */
+  --w-bg:      var(--if-light, #e6e6e6) var(--if-dark, #3c3c3c);   /* a button: background and text */
+  --w-fg:      var(--if-light, #3c3c3c) var(--if-dark, #b4b4b4);
+  --h-bg:      var(--if-light, #dcdcdc) var(--if-dark, #464646);   /* hovered */
+  --h-fg:      var(--if-light, #000000) var(--if-dark, #f0f0f0);
+  --h-line:    var(--if-light, #696969) var(--if-dark, #969696);
+  --a-bg:      var(--if-light, #a5a5a5) var(--if-dark, #373737);   /* pressed */
+  --a-fg:      var(--if-light, #000000) var(--if-dark, #ffffff);
+  --a-line:    var(--if-light, #000000) var(--if-dark, #ffffff);
+  --d-bg:      var(--if-light, #efefef) var(--if-dark, #2b2b2b);   /* disabled */
+  --d-fg:      var(--if-light, #6b6b6b) var(--if-dark, #939393);
+  --check-line: var(--if-light, #767676) var(--if-dark, #8c8c8c);  /* the outline of a checkbox or radio button */
+  --sel-bg:    var(--if-light, #90d1ff) var(--if-dark, #005c80);   /* selection */
+  --sel-fg:    var(--if-light, #00537d) var(--if-dark, #c0deff);
+  --field:     var(--if-light, #ffffff) var(--if-dark, #0a0a0a);   /* text fields, progress bars */
+  --stripe:    var(--if-light, #fdfdfd) var(--if-dark, #202020);   /* striped grids */
+  --win-line:  var(--if-light, #bebebe) var(--if-dark, #3c3c3c);   /* window_stroke */
+  --shadow:    var(--if-light, rgba(0, 0, 0, 0.1)) var(--if-dark, rgba(0, 0, 0, 0.376));
+  --backdrop:  var(--if-light, rgba(0, 0, 0, 0.25)) var(--if-dark, rgba(0, 0, 0, 0.5));   /* behind a question */
+  --link:      var(--if-light, #0062ad) var(--if-dark, #5aaaff);
+  --card:      var(--if-light, #ebebf0) var(--if-dark, #26262a);   /* the cards, Main tiles and job frame */
+  --card-cap:  var(--if-light, #5d5d67) var(--if-dark, #a0a0aa);
+  --focus-tile: var(--if-light, #aa3c14) var(--if-dark, #aa3c14);  /* the Main tile last clicked, its rows */
+  --focus-name: var(--if-light, #a8461a) var(--if-dark, #ff8c3c);
+  --main-mark: var(--if-light, #c8c8d0) var(--if-dark, #e6e6eb);   /* Main's mark in the Menu */
+  --edit:      var(--if-light, #965700) var(--if-dark, #ffa500);   /* edited values: the editor's orange, (255, 165, 0) on dark */
+  --ok:        var(--if-light, #287436) var(--if-dark, #5abe6e);
+  --bad:       var(--if-light, #c0392b) var(--if-dark, #f06a57);
+  --warn:      var(--if-light, #925a14) var(--if-dark, #eba03c);
+  --proof-ok:  var(--if-light, #287436) var(--if-dark, #78c88c);
+  --proof-na:  var(--if-light, #4a6396) var(--if-dark, #8ca0c8);
+  --banner-bg: var(--if-light, #c0392b) var(--if-dark, #8c2a1f);   /* the editor-closed notice */
+  --banner-fg: var(--if-light, #ffffff) var(--if-dark, #ffffff);
+  /* lines the window paints in fixed colours on both themes (modes 170,190,220; menu refusals 200,180,120; unmapped
+     records 230,190,90; the raw-edit warning 230,120,80; file B light blue): darker on the light panel */
+  --modes:     var(--if-light, #4b6594) var(--if-dark, #aabedc);
+  --blocked:   var(--if-light, #76632a) var(--if-dark, #c8b478);
+  --unmapped:  var(--if-light, #7f600f) var(--if-dark, #e6be5a);
+  --um-warn:   var(--if-light, #ac4822) var(--if-dark, #e67850);
+  --file-b:    var(--if-light, #256e88) var(--if-dark, #add8e6);
+  /* Compare: the base file (LIGHT_BLUE), the fills of a cell that differs and of an edited one, the difference
+     cursor, the three-way tags and the change map */
+  --cmp-base:  var(--if-light, #6d4fb3) var(--if-dark, #beaae6);
+  --cmp-diff:  var(--if-light, #f3e3c8) var(--if-dark, #5c4014);
+  --cmp-edited: var(--if-light, #f6d9b0) var(--if-dark, #633600);
+  --cmp-cursor: var(--if-light, #000000) var(--if-dark, #e6e6e6);
+  --cmp-tag-a: var(--if-light, #505050) var(--if-dark, #dcdcdc);
+  --cmp-tag-both: var(--if-light, #287436) var(--if-dark, #8cc88c);
+  --cmp-tag-conflict: var(--if-light, #c0392b) var(--if-dark, #f06e64);
+  --cmp-map:   var(--if-light, #e6e6e6) var(--if-dark, #262626);
+  --cmp-map-frame: var(--if-light, rgba(0, 0, 0, 0.11)) var(--if-dark, rgba(255, 255, 255, 0.11));
+  --cmp-map-line: var(--if-light, rgba(0, 0, 0, 0.47)) var(--if-dark, rgba(255, 255, 255, 0.47));
+  /* the Exposure page: YOU (235, 235, 235) for a value you set, CAMERA (120, 180, 255) for one the camera sets */
+  --ex-you:    var(--if-light, #3c3c3c) var(--if-dark, #ebebeb);
+  --ex-camera: var(--if-light, #1f66b5) var(--if-dark, #78b4ff);
+}
+* { box-sizing: border-box; }
+html { font-size: 14px; -webkit-text-size-adjust: 100%; }
+html, body { margin: 0; background: var(--panel); color: var(--text); }
+body { font: 1rem/1.3 "egui Ubuntu", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-synthesis: none; }
+[hidden] { display: none !important; }
+/* egui draws no bold: strong text is the strong colour */
+b, strong, th, .strong { font-weight: normal; color: var(--strong); }
+h1 { font-size: 1.357rem; font-weight: normal; margin: 0; }
+p { margin: 6px 0; }
+hr { border: 0; border-top: 1px solid var(--sep); margin: 6px 0; }
+pre, code { font-family: "egui Hack", ui-monospace, Menlo, Consolas, monospace; font-size: 0.929rem; }
+.small { font-size: 0.857rem; }
+.weak { color: var(--weak); }
+.italic { font-style: italic; }
+.ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); } .edit { color: var(--edit); }
+
+/* buttons: egui's widget visuals; .sel is a selectable label (no frame until hovered or selected) */
+button {
+  font: inherit; color: var(--w-fg); background: var(--w-bg); border: 1px solid transparent; border-radius: 2px;
+  padding: 3px 7px; min-height: 24px; display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+  cursor: pointer; white-space: nowrap; text-align: left;
+}
+button:hover:not(:disabled) { background: var(--h-bg); color: var(--h-fg); border-color: var(--h-line); border-radius: 3px; }
+button:active:not(:disabled) { background: var(--a-bg); color: var(--a-fg); border-color: var(--a-line); }
+button:disabled, button.off, button.off:hover, button.off:active { background: var(--d-bg); color: var(--d-fg); border-color: transparent; cursor: default; }
+.tip[role=button] { cursor: help; }
+button.sel { background: transparent; }
+button.sel:disabled { background: transparent; }
+button.on, button.on:hover:not(:disabled) { background: var(--sel-bg); color: var(--sel-fg); }
+button.small { font-size: 0.857rem; min-height: 0; padding: 0 6px; }
+button:focus-visible, select:focus-visible, input:focus-visible, span[role=button]:focus-visible { outline: 1px solid var(--sel-fg); outline-offset: 1px; }
+input, select { font: inherit; color: inherit; }
+/* text fields: egui's TextEdit */
+input[type=text], input[type=search], input:not([type]) {
+  background: var(--field); color: var(--text); border: 1px solid transparent; border-radius: 2px; padding: 3px 6px; min-height: 24px; max-width: 100%;
+  -webkit-appearance: none; appearance: none;
+}
+input[type=text]:hover, input[type=search]:hover, input:not([type]):hover { border-color: var(--h-line); }
+input[type=text]:focus, input[type=search]:focus, input:not([type]):focus { border-color: var(--sel-fg); outline: none; }
+input[type=search]::-webkit-search-cancel-button { -webkit-appearance: none; }
+/* a list of values: egui's ComboBox (a button with a small triangle at the right) */
+.combo { position: relative; display: block; width: 15.7rem; max-width: 100%; }
+:where(.combo) select {
+  -webkit-appearance: none; appearance: none; width: 100%; min-height: 24px; padding: 3px 24px 3px 7px; margin: 0;
+  background: var(--w-bg); color: var(--w-fg); border: 1px solid transparent; border-radius: 2px; cursor: pointer; text-overflow: ellipsis;
+}
+.combo::after { content: ""; position: absolute; right: 8px; top: 50%; margin-top: -2px; border: 4.5px solid transparent; border-top: 5px solid var(--w-fg); border-bottom: 0; pointer-events: none; }
+.combo:hover select:not(:disabled) { background: var(--h-bg); color: var(--h-fg); border-color: var(--h-line); }
+.combo select:disabled { background: var(--d-bg); color: var(--d-fg); cursor: default; }
+.combo.off::after { border-top-color: var(--d-fg); }
+.combo.narrow { width: auto; display: inline-block; }
+/* the choice of the main option chosen in an option tree, under it, as the camera opens it */
+.combo.sub { margin: 4px 0 0 1rem; width: 14.7rem; }
+select option { background: var(--panel); color: var(--text); }
+/* a number: egui's DragValue */
+.drag { display: flex; gap: 4px; align-items: center; width: 15.7rem; max-width: 100%; }
+:where(.drag) input { flex: 1; min-width: 0; min-height: 24px; text-align: center; background: var(--w-bg); color: var(--w-fg); border: 1px solid transparent; border-radius: 2px; padding: 2px 4px; -moz-appearance: textfield; }
+.drag input:hover { border-color: var(--h-line); }
+.drag input:focus { border-color: var(--sel-fg); outline: none; }
+.drag input::-webkit-inner-spin-button, .drag input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+.drag input:disabled { background: var(--d-bg); color: var(--d-fg); }
+.textset { display: flex; gap: 4px; align-items: center; width: 15.7rem; max-width: 100%; }
+.textset input { flex: 1; min-width: 0; }
+/* a checkbox: egui's */
+.check { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--w-fg); white-space: nowrap; }
+/* an outline the light theme needs (egui's box alone is too faint on the light panel); a disabled box keeps a fainter one */
+.check input { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin: 0; flex: none; background: var(--w-bg); border: 1px solid var(--check-line); border-radius: 2px; position: relative; cursor: pointer; }
+.check:hover input:not(:disabled) { background: var(--h-bg); border-color: var(--h-line); }
+.check input:disabled { background: var(--d-bg); border-color: var(--sep); cursor: default; }
+.check input:checked::after { content: ""; position: absolute; left: 3px; top: 0; width: 4px; height: 8px; border: solid var(--w-fg); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.check input:disabled:checked::after { border-color: var(--d-fg); }
+.vsep { display: inline-block; width: 1px; align-self: stretch; min-height: 18px; background: var(--sep); margin: 0 3px; flex: none; }
+.badge { display: inline-block; background: #ffa500; color: #000; border-radius: 8px; padding: 0 6px; font-size: 0.857rem; line-height: 1.35; }
+.spinner { width: 18px; height: 18px; border: 2.5px solid var(--strong); border-left-color: transparent; border-radius: 50%; display: inline-block; flex: none; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: var(--weak); margin-right: 6px; }
+.dot.up { background: var(--ok); } .dot.down { background: var(--bad); }
+
+/* the window: top panel, Menu column, page, status bar; on a wide screen the column and the page scroll on their own */
+#app { display: grid; grid-template-columns: 13.6rem minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; height: 100vh; height: 100dvh; }
+#app.nofile #side { display: none; }
+#app.nofile #central { grid-column: 1 / -1; }
+#top { grid-column: 1 / -1; border-bottom: 1px solid var(--sep); padding: 4px 8px; }
+.bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; padding: 2px 0; }
+:where(#bar1) button { min-height: 26px; padding: 4px 8px; }
+/* one row: what does not fit folds into More (the script's .folded, lowest data-fold first); the row wraps only when
+   even the buttons kept do not fit (.wrap) */
+#bar1 { flex-wrap: nowrap; }
+#bar1.wrap { flex-wrap: wrap; }
+/* nothing in the row shrinks (it would squeeze the buttons' words together): it overflows, and the script folds */
+#bar1 > *, #bar1 .right > *, #bar1 .mode > * { flex-shrink: 0; }
+#bar1 .right > #link { flex-shrink: 1; }
+#bar1 .right { flex-wrap: nowrap; min-width: 0; }
+#bar1 .folded, #bar1 .vsep.lone { display: none !important; }
+#bar1:not(.fold) #b-more { display: none; }
+#bar1 #link { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mode { display: inline-flex; gap: 4px; }
+.font-scale { display: inline-flex; align-items: center; gap: 4px; }
+#font-scale-pct { min-width: 3.2em; text-align: center; }
+/* the pop-ups over the page, each open until a choice, a tap elsewhere or Escape: More (.popmenu), a compare cell's or
+   column's menu and its picker, and My Menu's items and item picker; framed as egui's, kept inside the screen and
+   scrolling when taller than it (a long menu on a phone); the script narrows it to the height the browser leaves */
+.popmenu, .cmp-menu, .cmp-picker, #mymenu { position: fixed; z-index: 6; pointer-events: auto; display: flex; flex-direction: column; align-items: stretch;
+  max-width: calc(100vw - 8px); max-height: calc(100vh - 16px); max-height: calc(100dvh - 16px); overflow: auto; background: var(--panel);
+  border: 1px solid var(--win-line); border-radius: 6px; box-shadow: 6px 10px 8px var(--shadow); }
+.popmenu { gap: 1px; min-width: 12rem; padding: 4px; }
+.cmp-menu { gap: 1px; min-width: 11rem; padding: 4px; }
+.cmp-picker { gap: 4px; min-width: 18rem; max-width: min(30rem, calc(100vw - 8px)); padding: 8px; }
+#mymenu { gap: 3px; min-width: 12rem; padding: 6px; }
+:is(.popmenu, .cmp-menu) button { justify-content: flex-start; background: transparent; }
+:is(.popmenu, .cmp-menu) hr { margin: 3px 0; }
+.bar .right { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+#targets { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#targets .tsel { display: none; }
+#foot-file { display: none; }
+.search { position: relative; display: inline-flex; align-items: center; }
+.search svg { position: absolute; left: 6px; width: 13px; height: 13px; stroke: var(--weak); fill: none; stroke-width: 2; pointer-events: none; }
+.search input { width: 17.5em; padding-left: 24px; }
+#memnote { padding: 2px 0; }
+#file strong { white-space: nowrap; }
+#side { border-right: 1px solid var(--sep); overflow: auto; padding: 8px; }
+#side .menu-title { margin-bottom: 6px; }
+.mi { display: flex; align-items: center; gap: 6px; margin: 5px 0; }
+.mi .mark { width: 6px; height: 20px; border-radius: 2px; flex: none; }
+.mi button { white-space: pre-wrap; }
+.mi button .badge { margin-left: 6px; }
+#side .foot { margin-top: 2px; }
+#central { overflow: auto; padding: 8px; min-width: 0; }
+#statusbar { grid-column: 1 / -1; border-top: 1px solid var(--sep); padding: 4px 8px; display: flex; gap: 8px; align-items: center; white-space: nowrap; overflow: hidden; background: var(--panel); }
+#statusbar #status { overflow: hidden; text-overflow: ellipsis; }
+
+/* the page */
+.head { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 0 0 8px; }
+.head h1 { margin-right: 10px; }
+.frame { background: var(--card); border-radius: 6px; padding: 12px; margin-bottom: 6px; }
+.frame .jt { display: flex; align-items: center; gap: 8px; font-size: 1.143rem; color: var(--strong); }
+.pbar { position: relative; height: 18px; border-radius: 9px; background: var(--field); overflow: hidden; margin-top: 8px; }
+.pbar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--sel-bg); }
+.pbar span { position: relative; padding: 0 9px; line-height: 18px; white-space: nowrap; }
+/* Main: the tiles */
+.tiles { display: grid; grid-template-columns: repeat(4, minmax(0, 12.15rem)); gap: 6px; }
+.tile { position: relative; background: var(--card); border-radius: 4px; padding: 6px 10px; min-height: 4.7rem; cursor: pointer; min-width: 0; }
+.tile .cap { font-size: 0.857rem; color: var(--card-cap); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 10px; }
+.tile .val { font-size: 1.286rem; color: var(--strong); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+.tile .cap .edited, .tile.changed .val { color: var(--edit); }
+.tile.focus { background: var(--focus-tile); }
+.tile.focus .val { color: #fff; } .tile.focus .cap { color: #f0d2c3; }
+.tile.can::after { content: ""; position: absolute; right: 6px; top: 7px; border: 4px solid transparent; border-top: 5px solid var(--weak); border-bottom: 0; pointer-events: none; }
+:where(.tile) select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; margin: 0; }
+.tile:focus-within { outline: 1px solid var(--sel-fg); outline-offset: 1px; }
+.sub { margin: 8px 0 4px; }
+/* the rows: egui's striped Grid, the name at the left and the control in a fixed column */
+.grid { display: grid; grid-template-columns: fit-content(22rem) 15.7rem minmax(0, 1fr); column-gap: 18px; }
+.row { grid-column: 1 / -1; display: grid; grid-template-columns: subgrid; align-items: center; padding: 2px 2px; min-height: 28px; }
+.grid > .row:nth-child(even) { background: var(--stripe); }
+@supports not (grid-template-columns: subgrid) {
+  .row { grid-template-columns: minmax(8rem, 22rem) 15.7rem minmax(0, 1fr); column-gap: 18px; }
+}
+.row .name { overflow-wrap: anywhere; }
+.row .ctl { min-width: 0; }
+.row .more { display: flex; flex-wrap: wrap; gap: 3px 10px; align-items: center; font-size: 0.857rem; min-width: 0; }
+.row .under { grid-column: 1 / -1; font-size: 0.857rem; padding: 0 0 3px; display: flex; flex-direction: column; gap: 2px; }
+.row .under .note { color: var(--weak); }
+.row .shown { padding: 3px 0; display: inline-block; }
+.row.changed .name, .row.changed .shown, .row.changed :where(.combo, .drag) :is(select, input) { color: var(--edit); }
+.row.inactive .name, .row.inactive .shown { color: var(--weak); }
+.row.focus .name { color: var(--focus-name); }
+/* "As on the camera": a submenu's rows indented under the row that opens it; a row of the camera with no setting of
+   its own a heading that folds what is under it, as the window's; the settings the definition does not place last */
+.layout-switch { display: inline-flex; flex-wrap: wrap; gap: 2px; }
+.row[data-depth] > .name { padding-left: calc(var(--depth, 0) * 14px); }
+.row.rowhead > .name { color: var(--strong); cursor: pointer; }
+.row.rowhead > .name::before { content: "\23F7\00a0"; }
+.row.rowhead.folded > .name::before { content: "\23F5\00a0"; }
+.row.rowmore > .name { color: var(--weak); }
+.row .detail .subs { display: flex; flex-direction: column; gap: 3px; }
+.row .detail .subs .grid { padding: 4px 6px; border: 1px solid var(--sep); border-radius: 4px; }
+.row .detail .subs .grid.focus { border-color: var(--focus-name); border-width: 2px; }
+.proof.ok { color: var(--proof-ok); } .proof.na { color: var(--proof-na); } .proof.no { color: var(--weak); }
+/* a tab's groups: egui's CollapsingHeader, headed in the tab's colour, the body indented with a line */
+details.grp { margin: 1px 0; }
+details.grp > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 3px 0; color: var(--c, var(--text)); }
+details.grp > summary::-webkit-details-marker { display: none; }
+details.grp > summary::before { content: ""; flex: none; width: 0; height: 0; margin: 0 2px; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 9px solid var(--w-fg); transition: transform 0.1s; }
+details.grp > summary:hover::before { border-left-color: var(--h-fg); }
+details.grp[open] > summary::before { transform: rotate(90deg); }
+details.grp > .grid { margin-left: 6px; padding: 2px 0 6px 11px; border-left: 1px solid var(--sep); }
+/* tables (All edits, the write check): egui's striped Grid with a header */
+table.egrid { border-collapse: collapse; }
+.egrid td, .egrid th { text-align: left; padding: 3px 18px 3px 0; vertical-align: top; }
+.egrid tr:nth-child(even) td { background: var(--stripe); }
+.egrid td.now { color: var(--edit); }
+.scrollx { overflow-x: auto; }
+/* the wide tables (Compare, Memories, Picture Profiles and Creative Looks) keep the setting's name in view while
+   they scroll sideways; a heading row keeps its words in view */
+:is(.cmp-scroll, .mem-scroll, .fam .scrollx) :is(td, th):first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); }
+:is(.cmp-scroll, .mem-scroll, .fam .scrollx) tr:nth-child(even) > td:first-child { background: var(--stripe); }
+:is(.cmp-scroll, .mem-scroll, .fam .scrollx) td[colspan]:first-child { position: static; background: none; }
+:is(.cmp-scroll, .mem-scroll) td[colspan] > :first-child { position: sticky; left: 4px; display: inline-block; }
+/* compare mode: the A / B / Base bar, the column picker, the matrix (the window's fills for a cell
+   that differs from the baseline and for an edited one, the copy arrows between the columns, the
+   three-way tags), a cell's or a column header's menu, and the change map at the right. The
+   window's colours; where egui keeps its dark-theme colour on light, a darker counterpart */
+/* the window in Compare mode: no Menu column, no Editing row; the top row keeps the mode switch and
+   (as a phone has no Cmd/Ctrl+Z) Undo and Redo, the files are on the Compare bar below it */
+#app.compare #side, #app.compare #bar2, #app.compare #memnote { display: none; }
+#app.compare #central { grid-column: 1 / -1; padding-right: 30px; }
+#app.compare #bar1 > :not(#mode, #b-undo, #b-redo, #b-more, .right, .vsep) { display: none; }
+#app.compare #bar1 > .vsep:not(#mode + .vsep) { display: none; }
+.cmp-src-a { color: var(--strong); } .cmp-src-b { color: var(--file-b); } .cmp-src-base { color: var(--cmp-base); }
+.cmp-file { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; }
+#cmp-letters > span { margin-right: 12px; }
+.cmp-pick, .cmp-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 3px 0; }
+.cmp-tools { gap: 6px 8px; }
+.cmp-scroll { margin-top: 4px; }
+table.egrid.cmp td, table.egrid.cmp th { padding: 2px 4px; vertical-align: middle; }
+table.egrid.cmp th { vertical-align: bottom; }
+.egrid.cmp .cmp-name { min-width: 9.3rem; max-width: 24rem; overflow-wrap: anywhere; }
+.egrid.cmp th.cmp-col { min-width: 9.3rem; }
+/* a column's header: a button that opens the column's menu, the header row one Tab stop that the arrows move along */
+button.cmp-head { display: block; width: 100%; padding: 1px 4px; background: transparent; color: inherit; text-align: left; white-space: normal; }
+button.cmp-head .cmp-count { display: block; }
+table.egrid.cmp .cmp-gap { padding: 0; white-space: nowrap; }
+.cmp-v, .cmp-col { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.cmp-v > span { display: block; max-width: 300px; padding: 1px 4px; border-radius: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* a value of file A that a click changes (the compare's picker), and the picker under it: the setting as a page's row */
+.cmp-v.take { cursor: pointer; }
+.cmp-v.take:hover > span, .cmp-v.take:focus-visible > span { outline: 1px solid var(--win-line); }
+.cmp-picker .row { display: flex; flex-direction: column; align-items: stretch; gap: 4px; }
+.cmp-v.diff > span { background: var(--cmp-diff); }
+.cmp-v.edited > span { background: var(--cmp-edited); }
+button.cmp-arrow, span.cmp-arrow { display: inline-flex; align-items: center; justify-content: center; width: 14px; height: 16px; min-height: 0; padding: 0; border: 0; border-radius: 3px; background: transparent; color: var(--weak); font-size: 11px; vertical-align: middle; }
+button.cmp-arrow:hover:not(:disabled) { background: var(--h-bg); color: var(--strong); border: 0; border-radius: 3px; }
+.cmp-fold { cursor: pointer; color: var(--c, var(--text)); white-space: pre-wrap; }
+tr.cmp-tabhead .cmp-fold { font-size: 1.071rem; }
+tr.cmp-grouphead .cmp-fold { padding-left: 1.4em; }
+tr.cmp-cursor { outline: 1.5px solid var(--cmp-cursor); outline-offset: -1px; }
+tr.cmp-cursor .cmp-name { color: var(--cmp-cursor); }
+.cmp-tag.a { color: var(--cmp-tag-a); } .cmp-tag.b { color: var(--file-b); } .cmp-tag.both { color: var(--cmp-tag-both); } .cmp-tag.conflict { color: var(--cmp-tag-conflict); }
+.cmp-mono { font-family: "egui Hack", ui-monospace, Menlo, Consolas, monospace; font-size: 0.929rem; }
+.cmp-amber { color: var(--unmapped); }
+.cmp-link { cursor: pointer; }
+.cmp-link:hover { color: var(--strong); text-decoration: underline; }
+.cmp-menu .cmp-menu-label { padding: 2px 4px; }
+#cmp-map { position: fixed; right: 5px; top: 0; width: 14px; height: 0; background: var(--cmp-map); border-radius: 2px; cursor: pointer; z-index: 2; touch-action: none; }
+#cmp-map i, #cmp-map b, #cmp-map span { position: absolute; left: 0; right: 0; display: block; }
+#cmp-map i.differs { background: #be8228; } #cmp-map i.edited { background: #ffa500; } #cmp-map i.conflict { background: #f06e64; }
+#cmp-map span { background: var(--cmp-map-frame); outline: 1px solid var(--cmp-map-line); outline-offset: -1px; }
+#cmp-map b { left: -2px; right: -2px; background: var(--strong); }
+/* a phone: the matrix scrolls sideways in its own box, the change map is narrower */
+@media (max-width: 699px) {
+  #app.compare #central { padding-right: 20px; }
+  #cmp-map { right: 3px; width: 10px; }
+  .cmp-scroll { overflow-x: auto; }
+  .egrid.cmp .cmp-name { min-width: 7rem; max-width: 12rem; }
+  .egrid.cmp th.cmp-col { min-width: 6rem; }
+  .cmp-v > span { max-width: 13rem; }
+}
+/* welcome (no file open) */
+.welcome { padding: 32px 32px 0; }
+.welcome h1 { font-size: 2.143rem; color: var(--strong); }
+.welcome .lead { font-size: 1.071rem; margin: 6px 0 24px; }
+.cards { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 20px; }
+button.card { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 8px; width: 18.6rem; max-width: 100%; min-height: 8.6rem; padding: 16px; border-radius: 6px; background: var(--card); color: var(--text); white-space: normal; }
+button.card:hover:not(:disabled) { border-radius: 6px; }
+button.card .ct { font-size: 1.429rem; color: var(--strong); }
+button.card .weak { max-width: 100%; overflow-wrap: anywhere; }   /* a card path (PRIVATE/SONY/…) breaks inside the card */
+/* memories, exposure. The exposure page's colours are the window's (pages/exposure.rs): YOU (235, 235, 235)
+   for a value you set and CAMERA (120, 180, 255) for one the camera sets, darker on light where those
+   would not show (the window draws the same on both) */
+.mem-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 6px 0 10px; }
+table.egrid.mem td, table.egrid.mem th { padding: 2px 16px 2px 0; vertical-align: middle; white-space: nowrap; }
+table.egrid.mem tbody td:first-child:not([colspan]) { white-space: normal; min-width: 10rem; max-width: 22rem; overflow-wrap: anywhere; }
+.mem-cell { display: inline-flex; align-items: center; gap: 6px; }
+.mem-v { display: inline-block; padding: 1px 4px; border-radius: 3px; }
+.mem-v.diff { background: var(--cmp-diff); }
+.mem-v.edited { color: var(--edit); box-shadow: inset 0 0 0 1px var(--edit); }
+.mem-arrows { display: inline-flex; gap: 2px; }
+.mem-arrows button.small { padding: 0 4px; }
+/* the exposure page: egui's striped Grid (spacing 18 × 8), a cell at most 250 px (CELL_W) wide */
+.ex-wrap { padding-bottom: 4px; }
+.ex-grid { display: grid; column-gap: 18px; align-items: start; }
+.ex-stripe { grid-column: 1 / -1; align-self: stretch; background: var(--stripe); }
+.ex-head, .ex-colname, .ex-cell { padding: 4px 0; min-width: 0; }
+.ex-cell { display: flex; flex-direction: column; gap: 2px; }
+.ex-lab { display: none; }
+.ex-chip { display: flex; align-items: center; gap: 8px; font-size: 0.857rem; }
+.ex-dot { width: 8px; height: 8px; margin: 1px; border-radius: 50%; flex: none; box-sizing: border-box; }
+.ex-chip.ex-you { color: var(--ex-you); } .ex-chip.ex-you .ex-dot { background: var(--ex-you); }
+.ex-chip.ex-camera { color: var(--ex-camera); } .ex-chip.ex-camera .ex-dot { border: 1.5px solid var(--ex-camera); }
+.ex-chip.ex-unknown { color: var(--weak); } .ex-chip.ex-unknown .ex-dot { border: 1px solid var(--weak); }
+.ex-strip { display: block; width: 15rem; height: 2.143rem; max-width: 100%; overflow: visible; }
+.ex-strip .ex-axis { stroke: var(--weak); stroke-width: 1; }
+.ex-strip .ex-band { fill: var(--ex-camera); fill-opacity: 0.25; }
+.ex-strip .ex-bound { stroke: var(--ex-camera); stroke-width: 2; }
+.ex-strip .ex-at.ex-you { fill: var(--ex-you); }
+.ex-strip .ex-at.ex-camera { fill: none; stroke: var(--ex-camera); stroke-width: 2; }
+.ex-strip .ex-at.ex-unknown { fill: none; stroke: var(--weak); stroke-width: 1.5; }
+.ex-whats { margin-top: 10px; }
+details.grp.ex > .ex-decides { margin-left: 6px; padding: 2px 0 6px 11px; border-left: 1px solid var(--sep); display: flex; flex-direction: column; gap: 2px; }
+.ex-set { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 8px; }
+.ex-proved { color: var(--proof-ok); }
+/* a phone: each column of the exposure page stacks under its name, each cell named */
+@media (max-width: 699px) {
+  .ex-grid { display: block; }
+  .ex-grid .ex-stripe, .ex-grid .ex-head { display: none; }
+  .ex-grid .ex-colname { font-size: 1.143rem; margin-top: 12px; border-bottom: 1px solid var(--sep); }
+  .ex-grid .ex-cell { padding: 6px 0; }
+  .ex-grid .ex-lab { display: block; }
+  .ex-strip { width: 100%; max-width: 21rem; height: auto; aspect-ratio: 7 / 1; }
+}
+/* windows: egui's Window, floating over the page */
+#windows { position: fixed; top: 68px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 0 16px; pointer-events: none; z-index: 4; }
+#backdrop { position: fixed; inset: 0; background: var(--backdrop); pointer-events: auto; }
+.window { position: relative; overscroll-behavior: contain; pointer-events: auto; width: min(640px, 100%); background: var(--panel); border: 1px solid var(--win-line); border-radius: 6px; box-shadow: 10px 20px 15px var(--shadow); max-height: calc(100vh - 90px); max-height: calc(100dvh - 90px); overflow: auto; }
+.window > .title { padding: 6px 8px; font-size: 1.357rem; border-bottom: 1px solid var(--win-line); }
+.window > .wbody { padding: 8px; }
+.window .big { font-size: 1.286rem; color: var(--strong); margin-bottom: 6px; }
+.window.alarm { border-color: var(--bad); }
+.buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.window pre { white-space: pre-wrap; overflow-wrap: anywhere; margin: 4px 0; }
+#login { margin: 12vh auto 0; width: min(420px, calc(100% - 32px)); }
+#login form { display: flex; gap: 8px; margin-top: 8px; }
+#login input { flex: 1; min-width: 0; font-family: "egui Hack", ui-monospace, Menlo, Consolas, monospace; letter-spacing: 1px; text-transform: uppercase; }
+/* the editor out of reach: a notice over the top of the page, the page faded and out of use behind it */
+#offline { position: fixed; top: 0; left: 0; right: 0; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 12px;
+  background: var(--banner-bg); color: var(--banner-fg); box-shadow: 0 4px 8px var(--shadow); }
+#offline > div { flex: 1 1 16rem; }
+#offline strong { color: inherit; }
+#app.away :is(#top, #side, #central) { opacity: 0.45; }
+#toast { display: flex; align-items: center; gap: 10px; position: fixed; left: 50%; bottom: 40px; transform: translateX(-50%); max-width: calc(100% - 32px); background: var(--panel); color: var(--text); border: 1px solid var(--win-line); border-radius: 6px; box-shadow: 6px 10px 8px var(--shadow); padding: 7px 12px; z-index: 5; }
+/* settings, backups, history, record map, connect. The window paints a few lines in fixed colours on both themes
+   (modes 170,190,220; menu refusals 200,180,120; unmapped records 230,190,90; the raw-edit warning 230,120,80; file
+   B light blue); on the light panel the page darkens them, as it does the orange of an edit. */
+/* the page's row spacing, as the window's Compact / Comfortable (the page as drawn above) / Spacious */
+body.density-0 .row { min-height: 24px; padding-top: 1px; padding-bottom: 1px; }
+body.density-0 .egrid td { padding-top: 1px; padding-bottom: 1px; }
+body.density-2 .row { min-height: 34px; padding-top: 4px; padding-bottom: 4px; }
+body.density-2 .egrid td { padding-top: 5px; padding-bottom: 5px; }
+.mono { font-family: "egui Hack", ui-monospace, Menlo, Consolas, monospace; font-size: 0.857rem; overflow-wrap: anywhere; }
+.check.wrap { white-space: normal; }
+.check:has(input:disabled) { color: var(--d-fg); cursor: default; }
+.check input[type=radio] { border-radius: 50%; }
+.check input[type=radio]:checked::after { left: 3px; top: 3px; width: 6px; height: 6px; border: 0; border-radius: 50%; background: var(--w-fg); transform: none; }
+/* the editor's windows on the page: a title bar with its ✖ */
+.window > .title.wtitle { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* Settings and Connect to the camera, as wide as the window's, and their cards */
+.window.wide { width: min(860px, 100%); }
+.set-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.set-tabs button { padding: 5px 8px; color: var(--strong); }
+/* one scroll per window: the window's own */
+.set-card { border: 1px solid var(--sep); border-radius: 6px; padding: 12px; margin-bottom: 8px; }
+.set-card > .ct, details.set-card > summary { color: var(--strong); margin-bottom: 6px; }
+.set-row { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 4px 0; }
+.set-indent { margin-left: 18px; }
+.set-foot { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; }
+.http-warn { color: var(--blocked); }
+/* a setting's details (the window's detail panel), unfolded by a click on its name */
+.row .name.dt { cursor: pointer; }
+.row .name.dt::after { content: " \25B8"; color: var(--weak); }
+.row.open .name.dt::after { content: " \25BE"; }
+.row .detail { grid-column: 1 / -1; font-size: 0.857rem; padding: 0 0 5px; display: flex; flex-direction: column; gap: 3px; }
+.row .detail .help { font-size: 1rem; color: var(--text); }
+.row .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; }
+.row .meta .modes { color: var(--modes); }
+.row .cmpval { color: var(--file-b); }
+/* Picture Profiles and Creative Looks: one table, a column per profile, a changed cell outlined */
+.fam .combo, .fam .drag { width: 7.9rem; }
+td.fam-changed :is(select, input) { outline: 1.5px solid var(--edit); outline-offset: 1px; }
+/* the record map and the unmapped records */
+table.rm td { font-family: "egui Hack", ui-monospace, Menlo, Consolas, monospace; font-size: 0.929rem; white-space: nowrap; }
+table.rm td.rm-setting { font-family: inherit; font-size: inherit; cursor: pointer; white-space: normal; }
+table.rm td.rm-shape.big { cursor: pointer; }
+tr.rm-edited td { color: var(--edit); }
+tr.rm-unmapped td, td.rm-unmapped { color: var(--unmapped); }
+pre.rm-dump { margin: 0; white-space: pre; font-size: 0.857rem; }
+.um-warn { color: var(--um-warn); }
+td.hist-after { color: var(--edit); }
+/* the My Menu page: each page's places, an edited place in the edit colour, a place's buttons on one line */
+.mm-page { margin: 14px 0 4px; }
+table.egrid.mm td { vertical-align: middle; }
+tr.mm-edited td.mm-item, tr.mm-edited td.mm-item :is(a, i) { color: var(--edit); }
+td.mm-do { white-space: nowrap; }
+td.mm-do button + button { margin-left: 4px; }
+/* My Menu's item picker: the filter over a list of the items that scrolls */
+.mm-pick-list { display: flex; flex-direction: column; align-items: stretch; max-height: min(22rem, 60vh); overflow-y: auto; width: min(26rem, calc(100vw - 32px)); }
+.mm-pick-list button.mm-pick { text-align: left; border: none; background: none; }
+.mm-pick-list button.mm-pick:not(:disabled):hover { background: var(--h-bg); color: var(--h-fg); }
+/* the camera cards: the tables of found and known cameras, their name boxes as wide as the window's (160 points) */
+.conn-table td { vertical-align: middle; }
+.conn-name { width: 11.4rem; max-width: none; }
+/* the found cameras' "Use this one", first, stays in place while a narrow screen scrolls the table sideways */
+.conn-found :is(td, th):first-child { position: sticky; left: 0; z-index: 1; background: var(--panel); white-space: nowrap; }
+.conn-found tr:nth-child(even) > td:first-child { background: var(--stripe); }
+@media (max-width: 699px) {
+  .window.wide { width: 100%; }
+  .conn-name { width: 10rem; }
+}
+
+/* a tablet held upright: a narrower Menu column, three tiles a row */
+@media (max-width: 899px) {
+  #app { grid-template-columns: 12.5rem minmax(0, 1fr); }
+  .tiles { grid-template-columns: repeat(3, minmax(0, 12.15rem)); }
+  .grid { grid-template-columns: fit-content(14rem) 13rem minmax(0, 1fr); column-gap: 12px; }
+  .combo, .drag, .textset { width: 13rem; }
+}
+/* a phone: the page scrolls as one, the Menu folds into a strip, rows stack the name over the control */
+@media (max-width: 699px) {
+  #app { display: flex; flex-direction: column; height: auto; min-height: 100vh; min-height: 100dvh; }
+  #app > #central { flex: 1 0 auto; }
+  #top .vsep { display: none; }
+  #top { padding: 4px 6px; }
+  #bar1 { gap: 4px; }
+  #bar1 > button, #bar1 .mode > button { padding: 4px 9px; }
+  #b-more .lbl { display: none; }
+  /* the Editing row: the set as a list, the search taking the rest, Only edited; it wraps only when it must */
+  #bar2 { gap: 6px; }
+  #bar2 .editing-lbl { display: none; }
+  #targets > button, #targets > .combo:not(.tsel) { display: none; }
+  #targets .tsel { display: inline-block; }
+  #bar2 .search { flex: 1 1 8rem; min-width: 8rem; }
+  .search input { width: 100%; }
+  #bar2 #file { flex: 1 1 100%; justify-content: flex-start; }
+  #bar2 #file:empty, #bar2 #file:not(.warn) { display: none; }
+  #bar2 #file > strong { display: none; }
+  /* the status bar: one line, all of it (the file's name first) when tapped */
+  #statusbar { cursor: pointer; }
+  #statusbar.open { flex-wrap: wrap; white-space: normal; }
+  #statusbar.open #status { overflow: visible; }
+  #statusbar.open #foot-file { display: block; flex: 1 1 100%; }
+  #foot-file:empty { display: none !important; }
+  #bar-compare .search { flex: 1 1 100%; }
+  #side { display: flex; align-items: center; gap: 4px; overflow-x: auto; white-space: nowrap; border-right: 0; border-bottom: 1px solid var(--sep); padding: 4px 8px;
+    scrollbar-width: none; }
+  #side::-webkit-scrollbar { display: none; }
+  /* more of the Menu strip off to a side: that edge fades */
+  #side.more-right { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 48px), transparent); }
+  #side.more-left { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 48px), transparent); }
+  #side.more-left.more-right { -webkit-mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); mask-image: linear-gradient(to right, transparent, #000 48px, #000 calc(100% - 48px), transparent); }
+  #side .mi + .mi, #side hr + .mi { margin-left: 6px; }
+  .egrid.mem tbody td:first-child:not([colspan]) { min-width: 7.5rem; max-width: 11rem; }
+  .fam .scrollx :is(td, th):first-child { min-width: 7rem; max-width: 10rem; white-space: normal; overflow-wrap: anywhere; }
+  #side .menu-title, #side hr { display: none; }
+  #side .mi { margin: 0; flex: none; }
+  #side .mi button { white-space: pre; }
+  #side .foot { flex: none; padding: 0 8px; }
+  #side .foot > div { display: inline; margin-right: 8px; }
+  #central { overflow: visible; padding: 8px 8px 16px; }
+  #statusbar { position: sticky; bottom: 0; z-index: 3; }
+  .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .grid { display: block; }
+  details.grp > .grid { padding-left: 8px; }
+  .row { display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; padding: 6px 2px; }
+  .combo, .drag, .textset { width: 100%; }
+  .welcome { padding: 16px 0 0; }
+  #windows { top: 8px; padding: 0 8px; }
+}
+@media (pointer: coarse) {
+  /* a fingertip needs about 44 px (Apple's and Google's guides); the mouse keeps the small sizes. A checkbox or a
+     radio button stays a small square or circle, as the window draws it: its label is the 44 px target */
+  button, select, input:not([type=file]):not([type=checkbox]):not([type=radio]) { min-height: 44px; }
+  button { min-width: 44px; }
+  button.small { min-height: 44px; min-width: 44px; padding: 4px 12px; justify-content: center; }
+  .check { min-height: 44px; }
+  .check input { width: 18px; height: 18px; }
+  .check input:checked::after { left: 5px; top: 1px; width: 5px; height: 10px; }
+  .check input[type=radio]:checked::after { left: 4px; top: 4px; width: 8px; height: 8px; }
+  details > summary, .cmp-fold, .row .name.dt, .rm-setting, .cmp-link, .tip[role=button] { min-height: 44px; }
+  .tip[role=button] { display: inline-flex; align-items: center; }
+  details > summary, .row .name.dt { display: flex; align-items: center; }
+  .cmp-fold { display: inline-flex; align-items: center; }
+  .welcome a { display: inline-flex; align-items: center; min-height: 44px; }
+  /* Compare's arrows: a full fingertip each, apart enough not to tap the wrong way */
+  button.cmp-arrow, span.cmp-arrow { width: 44px; height: 44px; min-height: 44px; min-width: 0; font-size: 16px; }
+  td.cmp-gap > .cmp-arrow + .cmp-arrow { margin-left: 12px; }
+  /* a phone zooms into a field whose text is smaller than 16 px */
+  select, input { font-size: max(16px, 1rem); }
+}
+</style>
+</head>
+<body>
+<section id="login" class="window" hidden>
+  <div class="title">Camset Editor</div>
+  <div class="wbody">
+    <p class="weak">Enter the access code shown in the editor under <span id="login-where">Settings</span>.</p>
+    <form id="login-form">
+      <input id="code" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="ABCD-EFGH" aria-label="Access code">
+      <button>Connect</button>
+    </form>
+    <p id="login-msg" class="bad"></p>
+  </div>
+</section>
+
+<div id="app" hidden>
+  <header id="top">
+    <!-- one row: what does not fit folds into More, in the order of data-fold (the lowest first) -->
+    <div class="bar" id="bar1" role="toolbar" aria-label="Toolbar">
+      <span id="mode" class="mode" data-fold="12">
+        <button id="b-edit" class="on" aria-pressed="true" title="Edit the open file">Edit</button>
+        <button id="b-compare" aria-pressed="false" title="Compare file A with file B (and a base file) side by side">Compare</button>
+      </span>
+      <span class="vsep"></span>
+      <button id="b-open" data-fold="10" title="Open a settings file the camera saved to a card">Open…</button>
+      <button id="b-download" data-fold="7" title="Download the open file with its edits">Download file</button>
+      <span class="combo narrow" id="b-recent-box" data-fold="3" hidden><select id="b-recent" aria-label="Recent files" title="Open a file opened before"></select></span>
+      <button id="b-csv" data-fold="4" title="The settings of this set as a spreadsheet (export only)" hidden>Export CSV…</button>
+      <button id="b-backups" data-fold="5" title="Every settings file as first opened, and the camera's settings at each read and around each write">📂 Backups</button>
+      <span class="vsep"></span>
+      <button id="b-undo" title="Undo the last edit (Cmd/Ctrl+Z)">↺&#xFE0E; Undo</button>
+      <button id="b-redo" data-fold="9" title="Redo (Shift+Cmd/Ctrl+Z)">↻&#xFE0E; Redo</button>
+      <button id="b-history" data-fold="6" title="Every edit of this session, with its before and after, each one revertable" hidden>🕓 History</button>
+      <span class="vsep"></span>
+      <button id="b-camera" data-fold="11" title="Click to open Connect to the camera">📷 Camera Setup…</button>
+      <button id="b-read" title="Read the camera's current settings over USB or the network">⬇&#xFE0E; Read</button>
+      <button id="b-send" title="Write this file to the camera after an acceptance check. The camera's settings are read and kept first; the camera restarts">⬆&#xFE0E; Write…</button>
+      <!-- seen only: the status bar says in words what the camera is doing, so this says nothing to a screen reader -->
+      <span id="busy" class="spinner" aria-hidden="true" hidden></span>
+      <button id="b-more" aria-haspopup="menu" aria-expanded="false" aria-controls="moremenu" title="The toolbar's other buttons" aria-label="More">⋯<span class="lbl">&nbsp;More</span></button>
+      <div class="right">
+        <button id="b-settings" data-fold="8" title="Camera definitions, camera link program, startup and recent files">⚙&#xFE0E; Settings</button>
+        <span id="link" data-fold="2"></span>
+        <span class="vsep"></span>
+        <span class="font-scale" id="font-scale" data-fold="1">
+          <button id="b-font-dec" class="small" title="Smaller text (Cmd/Ctrl −)" aria-label="Smaller text">A−</button>
+          <span id="font-scale-pct" class="small weak">100%</span>
+          <button id="b-font-inc" class="small" title="Larger text (Cmd/Ctrl +)" aria-label="Larger text">A+</button>
+        </span>
+      </div>
+    </div>
+    <input id="f-open" type="file" accept=".dat,.DAT" hidden>
+    <input id="f-open-a" type="file" accept=".dat,.DAT" hidden>
+    <input id="f-open-b" type="file" accept=".dat,.DAT" hidden>
+    <input id="f-open-base" type="file" accept=".dat,.DAT" hidden>
+    <div class="bar" id="bar2" hidden>
+      <span class="editing-lbl" id="editing-lbl">Editing:</span>
+      <span id="targets" role="group" aria-labelledby="editing-lbl"></span>
+      <span class="vsep"></span>
+      <span class="search">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4.5 4.5"/></svg>
+        <input id="search" type="search" placeholder="Search settings, groups or values" aria-label="Search settings, groups or values" autocomplete="off">
+      </span>
+      <button id="b-clear" class="small" title="Clear the search" aria-label="Clear the search" hidden>✖&#xFE0E;</button>
+      <label class="check"><input id="only" type="checkbox"> Only edited</label>
+      <div class="right" id="file"></div>
+    </div>
+    <div id="bar-compare" hidden>
+      <div class="bar" role="group" aria-label="Files compared">
+        <span class="cmp-file"><strong class="cmp-src-a">A:</strong>
+          <button id="b-open-a" title="File A: the one you can edit" aria-label="Open file A…">Open…</button>
+          <span id="cmp-a" class="cmp-file"></span></span>
+        <span class="vsep"></span>
+        <span class="cmp-file"><strong class="cmp-src-b">B:</strong>
+          <button id="b-open-b" title="File B: compared against A" aria-label="Open file B…">Open…</button>
+          <span id="cmp-b" class="cmp-file"></span></span>
+        <span class="vsep cmp-base"></span>
+        <span class="cmp-file cmp-base"><strong class="cmp-src-base">Base:</strong>
+          <button id="b-open-base" title="Three-way compare: the file A and B both started from. Rows are then tagged as changed in A, changed in B, the same change, or a conflict, and B's changes can be merged into A." aria-label="Open a base file…">Open…</button>
+          <span id="cmp-base" class="cmp-file"></span>
+          <button id="b-close-base" class="small" title="Close the base file (back to a two-way compare)" aria-label="Close the base file">✖&#xFE0E;</button></span>
+      </div>
+      <div class="bar" role="group" aria-label="Comparison">
+        <button id="b-swap" title="Swap A and B (download or revert the edits first)">Swap A/B</button>
+        <button id="b-download-a" title="Download file A with its edits">Download A</button>
+        <button id="b-csv-cmp" title="The comparison as shown, as a spreadsheet (export only)">Export CSV…</button>
+        <span class="vsep"></span>
+        <span class="search">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10 10l4.5 4.5"/></svg>
+          <input id="cmp-q" type="search" placeholder="Search settings or values" aria-label="Search settings or values" autocomplete="off">
+        </span>
+        <span class="combo narrow"><select id="cmp-tab" aria-label="Tab shown"></select></span>
+        <label class="check"><input id="cmp-only" type="checkbox"> Only rows that differ</label>
+        <label class="check"><input id="cmp-raw" type="checkbox"> Show raw values</label>
+        <label class="check" title="Every record in file order, mapped or not, so unmapped records can be compared next to their neighbours"><input id="cmp-records" type="checkbox"> Record map</label>
+      </div>
+      <div class="bar" id="cmp-letters" hidden></div>
+      <!-- for the pointer: Previous and Next, F3 and Alt+arrows step through the differences from the keyboard -->
+      <div id="cmp-map" title="Change map: every row of the comparison, differences in orange, your edits brighter, conflicts red. Click to jump." aria-hidden="true" hidden></div>
+    </div>
+    <div id="memnote" class="small italic" hidden></div>
+  </header>
+  <nav id="side" aria-label="Menu"></nav>
+  <main id="central">
+    <div id="job" class="frame" hidden></div>
+    <div id="content"></div>
+  </main>
+  <footer id="statusbar" title="Tap for the whole message"><span id="foot-file"></span><span id="edits" aria-live="polite">No edits</span><span class="vsep"></span><span id="status" role="status"></span></footer>
+</div>
+<div id="windows">
+  <div id="backdrop" hidden></div>
+  <section id="ask" class="window" hidden></section>
+  <section id="send" class="window" hidden></section>
+  <section id="report" class="window" hidden></section>
+  <section id="settings" class="window wide" hidden></section>
+  <section id="connect" class="window wide" hidden></section>
+  <section id="backups" class="window" hidden></section>
+  <section id="history" class="window" hidden></section>
+  <div id="mymenu" role="dialog" aria-label="My Menu" hidden></div>
+  <div id="moremenu" class="popmenu" role="menu" aria-label="More" hidden></div>
+</div>
+<div id="offline" role="alert" hidden>
+  <div><strong>The editor has closed or is unreachable.</strong> <span id="offline-why" class="small"></span></div>
+  <div class="small">Nothing on this page is sent until it answers again. Start the editor, with its web page on, or check the network.</div>
+  <button id="b-retry">Retry</button>
+</div>
+<div id="toast" role="status" aria-live="polite" hidden></div>
+<script src="/app.js"></script>
+</body>
+</html>

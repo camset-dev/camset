@@ -1,0 +1,85 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Accepted open questions (private/evidence/<model>_fw<firmware>/accepted_<model>_fw<firmware>.json)",
+ "description": "What pass 2's report holds that kit/schema_update.py --write does not settle, each looked at by a person and accepted with why: the mapper's own file, private whole, for each entry is a ruling on one mapping's report (docs/decisions/0016); the pull request carries the gate's count. --write refuses while the report holds a conflict the writer leaves standing, a new record it does not add, a record not one to one, a name dispute or a carried-over value that no entry here covers; --force writes anyway, never for a submission.",
+ "type": "object",
+ "required": [
+  "model",
+  "firmware",
+  "accepted"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "model": {
+   "type": "string",
+   "description": "The model, as the definition names it, for example ILCE-1M2."
+  },
+  "firmware": {
+   "type": "string",
+   "description": "The firmware of the definition's layout, for example 4.00."
+  },
+  "about": {
+   "type": "string",
+   "description": "What the file is, in a sentence."
+  },
+  "accepted": {
+   "type": "array",
+   "description": "One entry per accepted question. An entry covers the report's questions of its kind and key, and of its value and label where it names them: without a value it covers every value of the record.",
+   "items": {
+    "type": "object",
+    "required": [
+     "kind",
+     "key",
+     "why",
+     "date"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "kind": {
+      "enum": [
+       "conflict",
+       "new",
+       "not one to one",
+       "name dispute",
+       "carried over"
+      ],
+      "description": "conflict: the writer kept a label against the camera's reading (a hand rule, or a reading not sure); new: a record the report proved that the writer does not add; not one to one: a label wrote two values, or two labels one value (the record is marked disputed); name dispute: the bar's OCR or the vision model read another name than the map's; carried over: a record kept the option before's value while others moved."
+     },
+     "key": {
+      "type": "string",
+      "pattern": "^(global|set\\d*):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+      "description": "The record, as the definition keys it."
+     },
+     "value": {
+      "description": "The stored value the question is about, when it is about one; never for a carried-over value, which may be the camera's own setting (decision 16).",
+      "type": [
+       "integer",
+       "string"
+      ]
+     },
+     "label": {
+      "type": "string",
+      "description": "The definition's label of the value (conflict, name dispute) or the option chosen (carried over)."
+     },
+     "camera": {
+      "type": "string",
+      "description": "What the camera's screen read, for the record (not matched)."
+     },
+     "why": {
+      "type": "string",
+      "description": "Why it stands: the proof, the hand rule or the reason, in a sentence or two."
+     },
+     "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+      "description": "When it was accepted."
+     }
+    }
+   }
+  }
+ },
+ "additionalProperties": false
+}

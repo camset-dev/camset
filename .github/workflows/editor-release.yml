@@ -1,0 +1,113 @@
+# Builds the editor for macOS and Linux (Windows comes back once its package has been checked, docs/RELEASING.md)
+# and keeps the packages as build artifacts. On a version tag (v0.2.0, say) pushed to GitHub, a fourth job also publishes
+# a Release for that tag with the packages attached
+# (each carries the project's LICENSE and its own third-party licences page); run by hand (workflow_dispatch) it
+# keeps the artifacts only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
+# skips itself there. Pull requests and main are checked by kit-ci.yml and editor-ci.yml; this workflow runs their
+# tests again only as the gate before a release's packages are built.
+#
+# Every action is pinned to a full commit, its version in the comment beside it (looked up 2026-11-09), so a tag
+# moved upstream cannot change what builds or publishes a release; move a pin to a newer release by its commit.
+# The internal macOS build (CAMSET_INTERNAL=1) is never made here: build_macos_app.sh refuses it in CI.
+name: Editor packages
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install the kit's Python packages (pinned, kit/requirements.txt)
+        run: python -m pip install -r kit/requirements.txt
+      - name: Python tests
+        run: |
+          python -m pytest -q kit/tests
+          python kit/tools/check_public.py --all
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
+      - name: Linux libraries
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
+      - name: Rust tests
+        working-directory: editor
+        run: cargo test --release
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]   # windows-latest once its package has been checked (docs/RELEASING.md)
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
+      - name: Linux libraries (windowing; the file dialogs use the desktop portal)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
+      - name: Tests
+        run: cargo test --release
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-about@0.9.3
+      - name: Third-party licences (the crates built for this system and the fonts egui builds in; every package below carries the page)
+        shell: bash
+        run: |
+          mkdir -p target/dist
+          cargo about generate --locked --target "$(rustc -vV | sed -n 's/^host: //p')" -o target/dist/THIRD_PARTY_LICENSES.html about.hbs
+      - name: macOS app and disk image
+        if: runner.os == 'macOS'
+        run: sh packaging/build_macos_app.sh
+      - name: Linux tarball
+        if: runner.os == 'Linux'
+        run: sh packaging/build_linux.sh
+      - name: Windows zip
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          cargo build --release
+          New-Item -ItemType Directory -Force target/dist | Out-Null
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $files = @("target/release/camset_editor.exe", "definitions", "../LICENSE")
+          if (Test-Path target/dist/THIRD_PARTY_LICENSES.html) { $files += "target/dist/THIRD_PARTY_LICENSES.html" }
+          Compress-Archive -Path $files -DestinationPath "target/dist/camset-editor-$v-windows-x64.zip" -Force
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: camset-editor-${{ runner.os }}
+          path: |
+            editor/target/dist/*.dmg
+            editor/target/dist/*.tar.gz
+            editor/target/dist/*.zip
+
+  release:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: camset-editor-*
+          merge-multiple: true
+          path: dist
+      - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.tar.gz
+            dist/*.zip

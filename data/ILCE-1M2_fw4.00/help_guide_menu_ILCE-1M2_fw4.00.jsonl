@@ -1,0 +1,319 @@
+{"tab":"Shooting","group":"Image Quality/Rec","item":"JPEG/HEIF Switch","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: File Format","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: RAW File Type","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: JPEG Quality","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: HEIF Quality","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: JPEG Image Size","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Image Quality Settings: HEIF Image Size","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Aspect Ratio","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"File Format","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Movie Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"S&Q Settings","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Time-lapse Settings","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Log Shooting Setting","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Proxy Settings","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Shooting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Long Exposure NR","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"High ISO NR","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"HLG Still Image","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Color Space","modes":"still image"}
+{"tab":"Shooting","group":"Image Quality/Rec","item":"Lens Compensation","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Format","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Rec. Media Settings: Recording Media","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Rec. Media Settings: Recording Media","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Rec. Media Settings: Auto Switch Media Card","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Recover Image DB","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Media","item":"Display Media Info.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"File","item":"File/Folder Settings","modes":"still image"}
+{"tab":"Shooting","group":"File","item":"Select REC Folder","modes":"still image"}
+{"tab":"Shooting","group":"File","item":"Create New Folder","modes":"still image"}
+{"tab":"Shooting","group":"File","item":"IPTC Information","modes":"still image"}
+{"tab":"Shooting","group":"File","item":"Copyright Info","modes":"still image"}
+{"tab":"Shooting","group":"File","item":"Write Serial Number","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"File","item":"File Settings","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Exposure Ctrl Type","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Recall Camera Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Camera Set. Memory","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Shoot Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Shoot Mode","modes":""}
+{"tab":"Shooting","group":"Shooting Mode","item":"Memory/Recall Media","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Mode","item":"Reg. Custom Shoot Set","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Drive Mode","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Drive Mode Limit","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Cont. Shooting Speed","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Cnt Sht Spd Bst Settings","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Pre-Capture Settings","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Self-timer Type","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Bracket Settings","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Interval Shoot Func.","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"Composite RAW Sht.","modes":""}
+{"tab":"Shooting","group":"Drive Mode","item":"Pixel Shift Multi Shoot.","modes":"still image"}
+{"tab":"Shooting","group":"Drive Mode","item":"NR Shooting Settings","modes":"still image"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Silent Mode Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Shutter Type","modes":"still image"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Release Lag/Start Disp.","modes":"still image"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Release w/o Lens","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Release w/o Card","modes":"still image"}
+{"tab":"Shooting","group":"Shutter/Silent","item":"Anti-flicker Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Audio Recording","item":"Audio Recording","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Audio Recording","item":"Audio Rec Level","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Audio Recording","item":"Audio Out Timing","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Audio Recording","item":"Wind Noise Reduct.","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Audio Recording","item":"Shoe Audio Set.","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"Time Code Preset","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"User Bit Preset","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"Time Code Format","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"Time Code Run","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"Time Code Make","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"TC/UB","item":"User Bit Time Rec","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Stabilization","item":"SteadyShot","modes":"still image"}
+{"tab":"Shooting","group":"Image Stabilization","item":"SteadyShot","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Stabilization","item":"SteadyShot Adjust.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Stabilization","item":"Focal Length","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Image Stabilization","item":"Framing Stabilizer","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Zoom","item":"Zoom","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Zoom","item":"Zoom Range","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Zoom","item":"Custom Key Z. Speed","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Zoom","item":"Remote Zoom Speed","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Display","item":"Grid Line Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Display","item":"Grid Line Type","modes":"still image, movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Display","item":"Live View Display Set.","modes":"still image"}
+{"tab":"Shooting","group":"Shooting Display","item":"Emphasized REC Display","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Marker Display","item":"Aspect Marker","modes":"still image"}
+{"tab":"Shooting","group":"Marker Display","item":"Aspect Marker Type","modes":"still image"}
+{"tab":"Shooting","group":"Marker Display","item":"Aspect Marker Level","modes":"still image"}
+{"tab":"Shooting","group":"Marker Display","item":"Marker Display","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Marker Display","item":"Center Marker","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Marker Display","item":"Aspect Marker","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Marker Display","item":"Safety Zone","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Marker Display","item":"Guideframe","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Option","item":"Self-timer","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Option","item":"Auto Framing Settings","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Option","item":"AutoCreateStillImage","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Option","item":"after still img crt","modes":"movie, slow&quick motion"}
+{"tab":"Shooting","group":"Shooting Option","item":"Selection/Memo Shot","modes":"still image"}
+{"tab":"Exposure/Color","group":"Exposure","item":"BULB Timer Settings","modes":"still image"}
+{"tab":"Exposure/Color","group":"Exposure","item":"Auto Slow Shutter","modes":"movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure","item":"ISO","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure","item":"ISO Range Limit","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure","item":"ISO AUTO Min. SS","modes":"still image"}
+{"tab":"Exposure/Color","group":"Exposure","item":"Auto/Manual Swt. Set.","modes":"movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure Comp.","item":"Exposure Comp.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure Comp.","item":"Exposure step","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Exposure Comp.","item":"Exposure Std. Adjust","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Metering","item":"Metering Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Metering","item":"Face Priority in Multi Metering","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Metering","item":"Spot Metering Point","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Metering","item":"AEL w/ Shutter","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Flash Mode","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Flash Comp.","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Exp.comp.set","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Wireless Flash","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Flash Sync Spd. Prty.","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Red Eye Reduction","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"External Flash Set.","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Sync Terminal Settings","modes":"still image"}
+{"tab":"Exposure/Color","group":"Flash","item":"Reg. Flash Shooting Set","modes":"still image"}
+{"tab":"Exposure/Color","group":"White Balance","item":"White Balance","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"White Balance","item":"Priority Set in AWB","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"White Balance","item":"Shutter AWB Lock","modes":"still image"}
+{"tab":"Exposure/Color","group":"White Balance","item":"Shockless WB","modes":"movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"White Balance","item":"WB Capt. Frame Size","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"D-Range Optimizer","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"Creative Look","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"Picture Profile","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"Select LUT","modes":"movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"Manage User LUTs","modes":"movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Color/Tone","item":"Soft Skin Effect","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Zebra Display","item":"Zebra Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Exposure/Color","group":"Zebra Display","item":"Zebra Level","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"AF/MF","item":"Focus Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"AF/MF","item":"Priority Set in AF-S","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"Priority Set in AF-C","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"AF Lvl for Crossing","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"AF Trk for Spd Chng","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"AF Illuminator","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"Aperture Drive in AF","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"Preset Focus/Zoom","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"AF/MF","item":"AF w/ Shutter","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"Full Time DMF","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"Pre-AF","modes":"still image"}
+{"tab":"Focus","group":"AF/MF","item":"AF Transition Speed","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"AF/MF","item":"AF Subj. Shift Sensitivity","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"AF/MF","item":"AF Assist","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Area","item":"Focus Area","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Area","item":"Focus Area Limit","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Area","item":"Switch V/H AF Area","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"Focus Area Color","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Area","item":"AF Area Registration","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"Del. Regist. AF Area","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"AF Area Auto Clear","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"Area Disp. dur Tracking","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"AF-C Area Display","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"Phase Detect. Area","modes":"still image"}
+{"tab":"Focus","group":"Focus Area","item":"Circ. of Focus Point","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Area","item":"AF Frame Move Amt","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Subject Recog in AF","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Recognition Target","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Recog Trgt Select Set","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Right/Left Eye Select","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Sbj Recog Frm Disp.","modes":"still image"}
+{"tab":"Focus","group":"Subject Recognition","item":"Sbj Recog Frm Disp.","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Face Memory","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Subject Recognition","item":"Regist. Face Priority","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Assistant","item":"Focus Map","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Assistant","item":"Auto Magnifier in MF","modes":"still image"}
+{"tab":"Focus","group":"Focus Assistant","item":"Focus Magnifier","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Assistant","item":"Focus Magnif. Time","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Focus Assistant","item":"Initial Focus Mag.","modes":"still image"}
+{"tab":"Focus","group":"Focus Assistant","item":"AF in Focus Mag.","modes":"still image"}
+{"tab":"Focus","group":"Focus Assistant","item":"Initial Focus Mag.","modes":"movie, slow&quick motion"}
+{"tab":"Focus","group":"Peaking Display","item":"Peaking Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Peaking Display","item":"Peaking Level","modes":"still image, movie, slow&quick motion"}
+{"tab":"Focus","group":"Peaking Display","item":"Peaking Color","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Target","item":"Play Set of Multi. Media","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Target","item":"Disp Set of Multi Media","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Target","item":"Playback Filter Condition","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Target","item":"Image Order","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Magnification","item":"Enlarge Image","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Magnification","item":"Enlarge Initial Mag.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Magnification","item":"Enlarge Initial Position","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Protect","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Rating","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Rating Set(Custom Key)","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Clip Flag","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Voice Memo","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Selection/Memo","item":"Voice Memo Play Vol.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Delete","item":"Delete","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Delete","item":"Delete pressing twice","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Delete","item":"Delete confirm.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Delete","item":"Delete Slot1/2","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Delete","item":"Initial Pos. When Exec","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"Crop","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"Rotate","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"Copy","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"Photo Capture","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"Create Still Image","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"after still img crt","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Edit","item":"JPEG/HEIF Switch","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Viewing","item":"Cont. Play for Interval","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Viewing","item":"Play Speed for Interval","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Viewing","item":"Slide Show","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Image Index","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Display as Group","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Display Rotation","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Focus Frame Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Aspect Marker Disp.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Disp Specified Time Img.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Playback","group":"Playback Option","item":"Image Jump Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Smartphone Connection","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Remote Shoot Function","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Select on Cam & Send","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Reset Transfer Status","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Cnct. while Power OFF","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Remote Shoot Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Cnct./Remote Sht.","item":"Wake On LAN","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"FTP Transfer","item":"FTP Transfer","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Streaming","item":"Network Streaming","modes":"movie, slow&quick motion"}
+{"tab":"Network","group":"Streaming","item":"USB Streaming","modes":"movie, slow&quick motion"}
+{"tab":"Network","group":"Creators' Cloud","item":"Cloud Connection","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Creators' Cloud","item":"Cloud Information","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"Wi-Fi Connect","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"WPS Push","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"Access Point Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"Wi-Fi Frequency Band","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"Display Wi-Fi Info.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wi-Fi","item":"SSID/PW Reset","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Bluetooth","item":"Bluetooth Function","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Bluetooth","item":"Pairing","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Bluetooth","item":"Manage Paired Device","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Bluetooth","item":"Bluetooth Rmt Ctrl","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Bluetooth","item":"Disp Device Address","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wired LAN","item":"Wired LAN Connect","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wired LAN","item":"IP Address Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Wired LAN","item":"Display Wired LAN Info.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Tethering Connection","item":"Tethering Connection","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Tethering Connection","item":"Tethering Disconnection","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Airplane Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Edit Device Name","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Import Root Certificate","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Access Authen. Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Access Authen. Info","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Wi-Fi Direct Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Network","group":"Network Option","item":"Reset Network Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Area/Date","item":"Language","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Area/Date","item":"Area/Date/Time Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Area/Date","item":"NTSC/PAL Selector","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Reset/Save Settings","item":"Setting Reset","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Reset/Save Settings","item":"Save/Load Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Custom Key/Dial Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Custom Key/Dial Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Custom Key Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Fn Menu Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Fn Menu Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Different Set for Still/Mv","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"DISP (Screen Disp) Set","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"REC w/ Shutter","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"with Shutter Button","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Operation Customize","item":"Zoom Ring Rotate","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"Custom Key/Dial Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"Custom Key/Dial Set.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"My Dial Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"Av/Tv Rotate","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"Function Ring(Lens)","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Dial Customize","item":"Lock Operation Parts","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Touch Operation","item":"Touch Operation","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Touch Operation","item":"Touch Panel/Pad","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Touch Operation","item":"Touch Panel Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Touch Operation","item":"Touch Pad Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Touch Operation","item":"Touch Sensitivity","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Accessibility","item":"Screen Reader","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Accessibility","item":"Enlarge Screen","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Accessibility","item":"Mode Dial Control Set","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Select Finder/Monitor","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Monitor Brightness","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Viewfinder Bright.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Finder Color Temp.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Viewfinder Magnifi.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Display Quality","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Finder Frame Rate","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Monitor Flip Direction","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Finder/Monitor","item":"Vertical Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"TC/UB Disp. Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Gamma Display Assist","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Gamma Disp. Assist Typ.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Display LUT","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Shoot. Timing Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Remain Shoot Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Auto Review","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Display Option","item":"Shoot Mode Sel. Screen","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Power Setting Option","item":"Auto Monitor OFF","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Power Setting Option","item":"Power Save Start Time","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Power Setting Option","item":"Power Save by Monitor","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Power Setting Option","item":"Auto Power OFF Temp.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Sound Option","item":"Playback/Monitor. Vol.","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Sound Option","item":"4ch Audio Monitoring","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Sound Option","item":"Audio Signal(Shooting)","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Sound Option","item":"Audio Signal(Start/End)","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Sound Option","item":"Audio Signal Volume","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"USB","item":"USB Connection Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"USB","item":"USB LUN Setting","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"USB","item":"USB Power Supply","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"External Output","item":"HDMI Resolution","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"External Output","item":"HDMI Output Settings","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"External Output","item":"HDMI Info. Display","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"External Output","item":"CTRL FOR HDMI","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Video Light Mode","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Anti-dust Function","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Auto Pixel Mapping","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Pixel Mapping","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Version","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Display Serial Number","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Privacy Notice","modes":"still image, movie, slow&quick motion"}
+{"tab":"Setup","group":"Setup Option","item":"Certification Logo","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Add Item","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Sort Item","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Delete Item","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Delete Page","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Delete All","modes":"still image, movie, slow&quick motion"}
+{"tab":"My Menu","group":"My Menu Setting","item":"Display From My Menu","modes":"still image, movie, slow&quick motion"}

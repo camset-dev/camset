@@ -1,0 +1,19 @@
+# cargo about: the licences of the crates built into the editor, written as THIRD_PARTY_LICENSES.html (with
+# about.hbs) by .github/workflows/editor-release.yml into target/dist/, which every package then carries.
+# By hand, from editor/:   cargo about generate about.hbs -o target/dist/THIRD_PARTY_LICENSES.html
+#
+# The licences Cargo.lock's crates use, read 2026-11-04. Where a crate offers a choice ("MIT OR Apache-2.0"),
+# the first one listed here that it offers is the one shown. A new crate under any other licence stops the
+# generation: read that licence, then add it here.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Zlib",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "BSL-1.0",
+    "Unicode-3.0",
+    "OFL-1.1",
+    "Ubuntu-font-1.0",
+]

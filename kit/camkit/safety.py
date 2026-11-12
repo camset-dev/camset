@@ -1,0 +1,781 @@
+"""What the kit may never do on the camera.
+
+The guards:
+  check_input(name, allow)   inputs outside the menu allow-list need an explicit, named allowance;
+                             some are never sent at all (they record, light up, or act).
+  name_refused(name)         a key's name as the link takes it: lower case, unpadded, unquoted, no look-alikes.
+  check_property(name)       camera properties the link may set through the SDK: the live exposure only, and never
+                             one that makes sound, light or motion, holds credentials or identity, or acts.
+  never_open(label)          menu rows the walker must not enter: actions, credentials, identity/connection/region
+                             settings, and anything that makes sound, light or motion (user rules).
+  confirmation(text)         dialog text asking to execute something; never press Enter on it.
+  fold(text)                 a reading as the checks compare it: Unicode look-alikes, dashes and spacing mended.
+  readings(text)             every reading a guard judges (as read, folded, slips undone): any one matching refuses.
+  owner_may_approve(reason)  whether a dated owner decision can lift a never_open reason for one row (sound, light
+                             or motion: decision 2); actions and credentials never.
+  allow_refused(label)       why a run's --allow cannot name a row: the cards, Initialize, Reset Network Set.,
+                             credentials, and the camera's identity, a connection or its region (decision 8).
+  shooting_refused(key, kind, named)  a key on the shooting screen: MENU only, unless the caller names it (decision 21).
+  profile_reset_row(lit, title, profile)   why the lit row is not a Picture Profile's own Reset row, or "".
+  profile_reset_dialog(text, profile)      why a screen is not that row's own "Reset PPn to the default setting?".
+
+The button lists and the never-set properties are also compiled into both C++ programs (camlink and the editor's
+camera helper), which refuse them on their own: kit/tools/build_docs.py writes them into kit/common/never_touch.h
+from this file, so they are edited here only (docs/decisions/0014).
+
+Actions match whole labels only, so settings that merely contain the word ("File Format",
+"Focus Area", "Delete confirm.") are still walked. Review the exclusions with:
+    .venv/bin/python -m camkit.safety
+
+Every label and screen text is judged as read, with the usual OCR slips undone (deslip), and folded too (fold): the
+readers return Cyrillic look-alikes ("С.Temp", camkit.match), a vision reader writes "Wi‑Fi" with a non-breaking
+hyphen, OCR doubles a space or adds a full stop. The folded readings are judged beside the others, never instead of
+them (readings): folding can also turn a character into letters that hide a slip ("①lnitialize" folds to
+"1lnitialize", where deslip's word-start rule no longer sees the "l"), so a guard refuses when any reading matches,
+and a fold only adds refusals.
+"""
+import re
+import unicodedata
+
+from .match import LOOKALIKES
+
+# Moving around menus and dialogs: always allowed.
+MENU_INPUTS = {
+    "up", "down", "left", "right", "enter", "menu",
+    "ms_up", "ms_down", "ms_left", "ms_right", "ms_enter",
+    "ms_right_up", "ms_right_down", "ms_left_up", "ms_left_down",
+    "wheel", "front", "rear_l", "rear_r",
+}
+# Allowed only when the caller names them (Playback for the playback crawl, Fn for the Fn menu crawl).
+# C4 is the trash button: on a menu or option screen whose footer draws the help button it opens the
+# In-Camera Guide (the SDK's Delete key does nothing there, 2026-11-01); callers check screen.help_glyph first
+# (drive.py help_refused). Since 2026-11-02 also Focus Area's SET with a Custom box lit, which opens the box's size
+# editor (drive.py c4set_refused), and since 2026-11-03 a Creative Look panel's Reset (c4reset_refused).
+GUARDED_INPUTS = {"fn", "playback", "delete", "display", "back", "c4"}
+# C4's guard is the screen (decision 7, 2026-11-06). In Playback, or wherever a picture is displayed, C4 is the trash
+# button and deletes it; on the shooting screen it does whatever the body assigns to it, a change the kit must not
+# make. So C4 goes out only on the menu, option, panel and editor screens below, whose footer draws what C4 does there:
+# the help button (C4_HELP_SCREENS), Focus Area's SET (a dialog) or a Creative Look panel's Reset ("look"); drive.py
+# checks the footer itself. Link.press refuses C4 on any other screen, and while the camera says it is in Playback.
+C4_HELP_SCREENS = frozenset({"menu", "submenu", "dialog", "list", "sidelist", "checklist", "picker", "fields"})
+C4_SCREENS = C4_HELP_SCREENS | {"look"}
+# Never sent: Movie records (tally lamp), AF-On drives the lens, C1-C3/C5-C7/AEL do whatever they are
+# assigned to, Mode/Home/Thumbnail leave the menu system in ways the walker does not model.
+NEVER_INPUTS = {"movie", "af_on", "ael", "mode", "home", "thumbnail", "c1", "c2", "c3", "c5", "c6", "c7"}
+# The shooting screen is the guard for every key but MENU (decision 21, 2026-11-10). There a key does what the body
+# makes of it, never what it does in a menu: in the shipped definition the control wheel's Center, Left, Right and Down
+# buttons and the multi-selector's centre are Custom Keys, whose lists hold Movie Shooting, Wireless Test Flash, FEL
+# Lock, AF On, FTP Transfer, Send and Interval Shooting; the multi-selector's four directions move the focus frame; a
+# dial changes the live exposure, which no settings file holds. A Right meant for a menu once landed there and opened
+# ISO (2026-10-29, kit/proving/nav.py to_row). Which keys a body lets its owner assign differs by body, so the guard does
+# not rest on it: on a screen read as the shooting screen only these go out, and any other key only when the caller
+# names it for that press (shooting_refused's `named`: Link.press's and Link.dial's on_shooting), where pressing it
+# there is the point (the focus frame's moves, the Fn hold that registers an area); with no screen given, only these,
+# named or not. C4's own guard (c4_refused) stands beside it: naming C4 never sends it there. What this does not cover:
+# a shooting screen the reader takes for another kind (a DISP mode that draws no battery reads "unknown", and the kit
+# presses on unknown screens on purpose: the memory slots read as one); camkit.live asks the camera's own picture only
+# when the frame is black (HDMI blanked).
+SHOOTING_FREE = frozenset({"menu"})
+# A press holds its button this long at most: a Down accepted and an Up refused would leave it held (2026-11-06)
+MAX_HOLD_MS = 2000
+MIN_HOLD_MS = 20
+
+# Camera properties never set through the SDK (the link's set and setstr, camlink's and the camera helper's own), by
+# the SDK's property name (CrDeviceProperty.h, "CrDeviceProperty_" left off), each a regular expression searched in
+# the name as written, written so that Python and C++ (ECMAScript) read it alike. The playbook's rules 1-4 and
+# decisions 2-9 name what they cover; a name the SDK's table does not hold is never set either.
+# The case counts (2026-11-08): the SDK's names are CamelCase and every pattern starts with its capital, so a pattern
+# matches where a word of the name starts. Matched with case ignored, 23 of the a1 II's 475 names were refused by
+# accident inside other words: FocusBracket* ("usB"), ContinuousShooting* and FlickerLessShooting* ("sSh"),
+# LensInformationEnableStatus ("format"), CameraOperatingMode ("rating"), CameraSetting_ReadOperationEnableStatus
+# ("eraSe"), the *Preset names ("reset"), TimeShiftPreShootingTimeSetting ("ftP"); the 194 true refusals all stay
+# (kit/tests/test_guards.py). The C++ programs match the same way: kit/common/never_touch.h compiles each pattern
+# ECMAScript with no icase ("Case matters", its comment says), as build_docs.py writes it from this list.
+NEVER_PROPERTIES = {
+    # lens motors, the shutter curtain, stabilisation and a pan/tilt head (decision 2; the playbook's rule 1)
+    "sound, light or motion: motion": [
+        r"Pre_?AF", r"Eye_?Start", r"Focus_?Operation", r"FocusDriv", r"FocusPositionSetting", r"FollowFocus",
+        r"PushAuto", r"Zoom", r"Iris_?Drive", r"IrisClose", r"NDFilterPosition", r"Pan_?Tilt", r"PanLimit",
+        r"PanPosition", r"TiltLimit", r"TiltPosition", r"PTZF", r"ShutterWhenPower", r"SteadyShot",
+        r"ImageStabilization"],
+    # anything that lights up: the AF illuminator, the tally lamps, the flash on the shoe and its light (rule 1)
+    "sound, light or motion: light": [
+        r"Illuminator", r"Tally", r"Lamp", r"FlashMode", r"WirelessFlash", r"RedEye", r"TestFlash", r"Modell?ing",
+        r"Video_?Light"],
+    # sound (a run woke people at night, 2026-10-25) and the screen reader (decision 3)
+    "sound, light or motion: sound": [
+        r"Volume", r"AudioSignal", r"Beep", r"Speaker", r"Headphone", r"Sound", r"ScreenReader"],
+    # credentials and the network, USB and remote session settings: by hand only (decisions 8 and 9)
+    "credentials or connection": [
+        r"Password", r"SSH", r"User_?Name", r"Authen", r"Fingerprint", r"Network", r"Wired", r"Wireless", r"Wi_?Fi",
+        r"Bluetooth", r"WakeOnLAN", r"IPSetup", r"IP_?Address", r"MAC_?Address", r"SSID", r"FTP", r"Stream",
+        r"Pairing", r"Tether", r"USB", r"Remote", r"Remocon", r"Monitoring", r"SdkControlMode", r"DebugMode"],
+    # region, language, date and power, and what a person types about themselves: by hand only (decision 8)
+    "by hand only": [
+        r"DateTime", r"TimeZone", r"Language", r"Power", r"Copyright", r"Photographer", r"Artist", r"Owner",
+        r"Camera_?Name", r"Device_?Name", r"Serial", r"IPTC", r"ImageID"],
+    # actions, and whatever records, plays or works on the cards (decisions 4 and 5)
+    "action": [
+        r"Format", r"Delete", r"Erase", r"Reset", r"Initiali[sz]", r"Cleaning", r"PixelMapping", r"Firmware",
+        r"UpdateBody", r"CreateNewFolder", r"FileNumber", r"Copy", r"_Save", r"_Load", r"Upload", r"Download",
+        r"Import", r"Embed", r"Capture", r"Snapshot", r"SceneFile", r"Media", r"Slot", r"Playback", r"MoviePlay",
+        r"MovieRec", r"RecorderStart", r"RecorderControl", r"RecordingState", r"TimeShiftShooting", r"Interval_?Rec",
+        r"SelfTimer", r"ContentsTransfer", r"PostView", r"Touch", r"Protect", r"Rating"],
+    # buttons, dials and levers go only through press and dial, which the input lists above guard
+    "a button, dial or lever": [
+        r"Button", r"Dial", r"Lever", r"^S1$", r"^S2$", r"^AEL$", r"^FEL$", r"^AWBL?$"],
+}
+# What the link may set: the live exposure, which no settings file holds (kit/tools/sdk_set.py puts it back after a
+# run). Values are the SDK's (ShutterSpeed: numerator << 16 | denominator; FNumber: F x 100).
+SET_PROPERTIES = frozenset({"ShutterSpeed", "FNumber", "ExposureBiasCompensation", "FlashCompensation",
+                            "IsoSensitivity"})
+_PROPERTY_RES = [(why, re.compile("|".join(pats))) for why, pats in NEVER_PROPERTIES.items()]     # case counts
+
+
+class Refused(Exception):
+    pass
+
+
+def check_input(name: str, allow: frozenset | set = frozenset()):
+    """Returns when the input may be sent, raises Refused when not. `allow` names guarded inputs; one name given as a
+    string is that name, never the names it contains ("playback" does not allow "back")."""
+    allow = {allow} if isinstance(allow, str) else allow
+    if name in MENU_INPUTS:
+        return
+    if name in GUARDED_INPUTS and name in allow:
+        return
+    if name in NEVER_INPUTS:
+        raise Refused(f"input {name!r} is never sent")
+    if name in GUARDED_INPUTS:
+        raise Refused(f"input {name!r} needs an explicit allowance")
+    raise Refused(f"unknown input {name!r}")
+
+
+# quotation marks a caller or a reader can put round a key's name
+QUOTES = "'\"`\u2018\u2019\u201c\u201d"
+KEY_NAME = re.compile(r"[a-z0-9_]+")
+
+
+def canonical_input(name) -> str:
+    """A button's or dial's name as the guards read it and camlink would: the spaces and quotation marks round it left
+    out (camlink's parser drops them), look-alike letters as the Latin ones they are drawn as (fold), the case folded.
+    " Enter", '"right"' and a Cyrillic "rіght" are all read as enter and right (kit/drive.py canonical_key reads its
+    --press keys so)."""
+    return fold(str(name)).strip().strip(QUOTES).strip().casefold()
+
+
+def name_refused(name) -> str:
+    """Why a button's or dial's name may not go to the link, or "": it must be written as the guards read it
+    (canonical_input) and be lower-case letters, digits and "_" only. A padded, quoted, upper-case or look-alike
+    spelling is refused rather than mended: a check made on the name as given (LiveCamera's never-open check on Right
+    and Enter) would otherwise judge one key while camlink presses another."""
+    canon = canonical_input(name)
+    if isinstance(name, str) and name == canon and KEY_NAME.fullmatch(name):
+        return ""
+    return (f"the key {name!r} is not written as the guards read it ({canon!r}): keys are named in lower-case letters, "
+            f"digits and _ only")
+
+
+def c4_refused(kind) -> str:
+    """Why C4 may not be pressed on a screen the reader read as `kind`, or "" when it may (C4_SCREENS)."""
+    if kind in C4_SCREENS:
+        return ""
+    if kind is None:
+        return "C4 is pressed only on a screen just read, and none was given"
+    if kind == "shooting":
+        return ("the screen is the shooting screen, where C4 does whatever the body assigns to it: a change the kit "
+                "must not make")
+    return (f"the screen reads as {kind!r}, not a menu, option or panel screen: in Playback, or wherever a picture is "
+            "displayed, C4 deletes it")
+
+
+def shooting_refused(key, kind, named=frozenset()) -> str:
+    """Why `key` (a button pressed, or a dial turned) may not go out on a screen the reader read as `kind`, or "" when
+    it may (decision 21): MENU always; on the shooting screen any other key only when the caller names it (`named`, the
+    keys named for this press; one name given as a string is that name, as check_input's allow); with no screen given
+    at all (kind None), no key but MENU, since nothing says it is not the shooting screen. Any other kind, "unknown"
+    among them, is not judged here (SHOOTING_FREE's comment says what that leaves)."""
+    named = {named} if isinstance(named, str) else named
+    if key in SHOOTING_FREE:
+        return ""
+    if kind is None:
+        return "a key is pressed only on a screen just read, and none was given: unseen, only MENU goes out"
+    if kind == "shooting" and key not in named:
+        return (f"the screen is the shooting screen, where {key!r} does what the body makes of it (a Custom Key, the "
+                "focus frame, or the live exposure on a dial): only MENU goes out there, unless the caller names the key")
+    return ""
+
+
+def check_hold(hold_ms) -> int:
+    """A press's hold time in ms, between MIN_HOLD_MS and MAX_HOLD_MS; Refused otherwise."""
+    ms = int(hold_ms)
+    if not MIN_HOLD_MS <= ms <= MAX_HOLD_MS:
+        raise Refused(f"a press holds its button {MIN_HOLD_MS}-{MAX_HOLD_MS} ms, not {ms}")
+    return ms
+
+
+def never_property(name: str) -> str | None:
+    """Why a camera property is never set through the SDK, or None. A code ("0x1234") has no name to judge it by, so
+    it is never set either."""
+    bare = (name or "").strip().removeprefix("CrDeviceProperty_")
+    if not re.fullmatch(r"[A-Za-z][A-Za-z0-9_]*", bare):
+        return "no property name: a code or an empty name is never set"
+    for why, rx in _PROPERTY_RES:
+        m = rx.search(bare)
+        if m:
+            return f"{why}: {m.group(0)}"
+    return None
+
+
+def check_property(name: str, allowed=SET_PROPERTIES):
+    """A property the link may set: never one never_property names, and only one `allowed` names (the live exposure,
+    SET_PROPERTIES)."""
+    why = never_property(name)
+    if why:
+        raise Refused(f"property {name!r} is never set: {why}")
+    if name.removeprefix("CrDeviceProperty_") not in allowed:
+        raise Refused(f"property {name!r} is not one the kit sets (only {', '.join(sorted(allowed)) or 'none'})")
+
+
+# Rows whose label IS one of these (after icon noise is stripped): actions and editors.
+_ACTIONS = [
+    r"format", r"deleter", r"recover image db", r"protect", r"rating", r"delete", r"delete all",
+    r"delete item", r"delete page", r"delete slot ?1/2", r"crop", r"rotate", r"copy", r"photo capture",
+    r"create still image", r"create new folder", r"setting reset", r"camera settings reset",
+    r"initialize", r"factory reset", r"reset network set\.?", r"series counter reset",
+    r"reset transfer status", r"ssid/pw reset", r"save/load settings", r"camera set\. memory",
+    r"recall camera setting", r"reg\. custom shoot set", r"del\. regist\. af area", r"focus magnifier",
+    r"enlarge image", r"enlarge screen", r"slide show", r"image index", r"add item", r"sort item",
+    r"face memory", r"preset focus/zoom", r"lock operation parts", r"cleaning mode", r"pixel mapping",
+    r"auto pixel mapping", r"anti-dust function", r"version", r"certification logo", r"privacy notice",
+    r"display serial number", r"select rec folder", r"update", r"firmware update",
+    # found 2026-10-28 in the old runs' labels: the first opens with OK preselected and creates a folder
+    r"forced file number reset", r"send",
+    # Playback rows that act on images rather than set something (2026-10-29)
+    r"clip flag", r"disp specified time img\.?",
+    # FTP Transfer Func. (opened for mapping 2026-10-29, user: "we could do it without a server"):
+    # the rows that send images or load/save the FTP file
+    r"ftp transfer", r"save/load ftp settings",
+]
+# Rows containing any of these: by hand only. The first part, the camera's identity, its connections and its region
+# (USB, language, NTSC/PAL, area and date, network identity: decision 8, and what a person types about themselves),
+# is _IDENTITY: no allowance lets a run open or set one of them (identity_row, which never_lifted, allow_refused and
+# screen_refused take in, so drive.py's, card_actions.py's and every prover's --allow and path_refused refuse them
+# too); the rest a dated owner's word may open
+_IDENTITY = [
+    # identity, connection, region
+    r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
+    r"usb streaming", r"wired lan connect", r"wi-?fi connect", r"ip address", r"ssid", r"\bwps\b",
+    r"access point", r"access authen", r"pairing", r"paired", r"bluetooth function", r"airplane mode",
+    r"cloud", r"streaming", r"tether", r"device name", r"root certif",
+    # FTP: the server and its login stay by hand, FTP Function starts a connection to that server
+    # (asked separately), and the Display rows are reports, not settings
+    r"ftp function", r"server setting", r"save/load ftp", r"display ftp",
+    r"remote shoot function", r"cnct\. while", r"wake on lan", r"smartphone", r"copyright", r"iptc",
+    r"select on cam",   # Select on Cam & Send: sends images to a phone
+]
+_ANYWHERE = _IDENTITY + [
+    r"auto power off temp",
+    # sound and light (a run woke people on 2026-10-25), and the screen reader
+    r"screen reader", r"accessib", r"long press", r"illuminator", r"tally", r"\blamp\b", r"beep",
+    r"sound", r"speaker", r"headphone", r"volume", r"play vol", r"\bvol\.", r"voice memo", r"audio signal",
+    r"video light",
+    # the flash on the shoe (attached 2026-10-28): anything that fires it or lights it
+    r"test flash", r"\btest\b", r"modell?ing", r"\bfire\b", r"\bled\b",
+]
+# Credentials and the screens that show them: never opened, and no allowance lifts it (decision 9). Wi-Fi Direct
+# Info. shows the camera's Wi-Fi Direct SSID and password on screen, which every saved frame, the OCR output and a
+# hosted reader's request would then hold (2026-11-05, the kit review).
+_CREDENTIALS = [r"access authen", r"wi-?\s?fi direct", r"password", r"\bpw\b"]
+# Motion (decision 2; the playbook's rule 1): lens motors (Pre-AF, Eye-Start AF), the shutter curtain (Shutter When
+# Pwr OFF) and SteadyShot. By hand only, unless a dated owner decision names the row (the a1 II's owner allowed
+# Shutter When Pwr OFF and SteadyShot from the menu on 2026-10-29). Added 2026-11-05.
+_MOTION = [r"pre-?\s?af\b", r"eye-?\s?start", r"shutter when pwr", r"steady\s?shot"]
+# a whole label, with any stop, colon or question mark a reader puts after it ("Format.", "Copy?")
+_ACTION_RE = re.compile(r"^(" + "|".join(_ACTIONS) + r")[\s.:;,!?…]*$")
+# Words that make a row an action wherever they appear: every row named with "reset" is one
+# (Setting Reset, SSID/PW Reset, Forced File Number Reset...), and Picture Profile's settings have a
+# bare "Reset" row (2026-10-28)
+_ACTION_WORD_RE = re.compile(r"\breset\b")
+_ANYWHERE_RE = re.compile("|".join(_ANYWHERE))
+_IDENTITY_RE = re.compile("|".join(_IDENTITY))
+_CREDENTIALS_RE = re.compile("|".join(_CREDENTIALS))
+_MOTION_RE = re.compile("|".join(_MOTION))
+MOTION = "sound, light or motion"          # the reason's prefix a dated owner decision can lift for one row
+
+
+# Look-alikes of Latin letters beyond camkit.match's table, for the guards only (an extra one only adds a refusal):
+# Ukrainian and Serbian letters, Greek capitals and the Greek small letters drawn as Latin ones, the lower case of
+# the Cyrillic letters drawn as small capitals
+_GUARD_LOOKALIKES = {**LOOKALIKES, **str.maketrans("ІіЈјЅѕԁԛԝΑΒΕΖΗΙΚΜΝΟΡΤΥΧαοιρνκмтвн",
+                                                   "IiJjSsdqwABEZHIKMNOPTYXaoipvkmtbh")}
+_DASHES = re.compile(r"[\u2010-\u2015\u2212\ufe58\ufe63]")
+
+
+def fold(text) -> str:
+    """A reading as the guards compare it: compatibility forms as their plain letters (full-width "ＦＯＲＭＡＴ",
+    a no-break space), format characters (zero-width spaces, joiners) left out, every dash a hyphen ("Wi‑Fi", "Pre–AF"),
+    Cyrillic and Greek look-alikes as the Latin letters they are drawn as, and each run of spacing one space."""
+    t = unicodedata.normalize("NFKC", str(text or ""))
+    t = "".join(c for c in t if unicodedata.category(c) != "Cf")
+    t = _DASHES.sub("-", t).translate(_GUARD_LOOKALIKES)
+    return re.sub(r"\s+", " ", t)
+
+
+def deslip(t: str) -> str:
+    """The usual OCR slips undone, for the never-open check only: "rn" read for "m" ("Forrnat"), a zero or a one
+    inside a word ("F0rmat", "De1ete"), and a lower-case L for a capital I at a word's start ("lnitialize"). The text
+    is not folded here: readings() judges the folded text as one more reading."""
+    t = t.replace("|", "l").replace("rn", "m")
+    t = re.sub(r"(?<=[a-z])0|0(?=[a-z])", "o", t)
+    t = re.sub(r"(?<=[a-z])1(?=[a-z])", "l", t)
+    return re.sub(r"\bl(?=[bcdfghjkmnpqrstvwxz])", "i", t)
+
+
+def clean_label(text: str) -> str:
+    """Strip the icon glyphs OCR puts in front of labels ("S Focus Area" -> "focus area")."""
+    t = re.sub(r"^[^A-Za-z0-9(]+", "", (text or "").strip())
+    t = re.sub(r"^(?:[A-Za-z0-9]{1,2}\s+)(?=[A-Z(])|^[a-z](?=[A-Z])", "", t)
+    return t.strip().lower()
+
+
+def _capital_i(text: str) -> str:
+    """OCR's capital I for a lower-case L inside a word ("Delete AII"), as an L: one more reading to judge."""
+    return re.sub(r"(?<=[A-Za-z])I", "l", text)
+
+
+def _sources(text) -> list:
+    """The text as read, folded, and folded with OCR's capital I read as an l: in their own case, which clean_label
+    needs to tell an icon from a label."""
+    folded = fold(text)
+    return list(dict.fromkeys((str(text or ""), folded, _capital_i(folded))))
+
+
+def readings(text) -> list:
+    """Every reading of a text the guards judge, in lower case: as read, folded (fold) and folded with OCR's capital I
+    read as an l, each also with the usual OCR slips undone (deslip). A guard refuses when any of them matches, so
+    another reading only ever adds a refusal (never_lifted; drive.py's Enter guard once it takes it)."""
+    out = []
+    for s in _sources(text):
+        low = s.lower()
+        out += [low, deslip(low)]
+    return list(dict.fromkeys(out))
+
+
+def never_open(label: str) -> str | None:
+    """Reason the row must not be entered, or None. A label that carries its breadcrumb
+    ("Playback > Delete > Delete Slot1/2") is judged by its last part too, and an OCR reading also as it
+    reads with the usual slips undone ("lnitialize", "Forrnat"), folded ("Fоrmat", "Wi‑Fi Direct"), with a capital I
+    read for an l ("Delete AII"), and with a stop or a colon after it ("Format."): a slip never opens a row. Each
+    reading is judged beside the others (readings), so none takes another's refusal away."""
+    pairs = []
+    for s in _sources(label):
+        text, raw = clean_label(s), s.lower()
+        pairs += [(text, raw), (deslip(text), deslip(raw))]
+    for text, raw in dict.fromkeys(pairs):
+        last = clean_label(text.rsplit(">", 1)[-1])
+        m = _ACTION_RE.search(text) or _ACTION_RE.search(last) or _ACTION_WORD_RE.search(text)
+        if m:
+            return f"action: {m.group(m.lastindex or 0)}"     # the label as the camera writes it, stop and all
+        m = _CREDENTIALS_RE.search(text) or _CREDENTIALS_RE.search(raw)
+        if m:
+            return f"credentials: {m.group(0)}"
+        m = _ANYWHERE_RE.search(text) or _ANYWHERE_RE.search(raw)
+        if m:
+            return f"by hand only: {m.group(0)}"
+        m = _MOTION_RE.search(text) or _MOTION_RE.search(raw)
+        if m:
+            return f"{MOTION}: {m.group(0)}"
+    return None
+
+
+# Never entered whatever a run is allowed (drive.py --allow, an owner decision): anything on the cards, settings
+# included (decision 4), Initialize and Reset Network Set. (decision 5), and credentials (decision 9); never_lifted adds
+# the camera's identity, its connections and its region (decision 8: identity_row)
+_NEVER_LIFTED_RE = re.compile(r"\b(?:format|delete)\b|initiali[sz]e|reset network|" + "|".join(_CREDENTIALS))
+
+
+def identity_row(label: str) -> str | None:
+    """Why no allowance may let a run set this row, or None: the camera's identity, a connection or the region (USB,
+    language, NTSC/PAL, area and date, network identity: decision 8), every reading judged, as in never_open. A by-hand
+    row of sound or light (a volume) is not one: the owner's word for the row may open it."""
+    for text in readings(label):
+        m = _IDENTITY_RE.search(text)
+        if m:
+            return f"by hand only, whatever is allowed: {m.group(0)} (docs/decisions/0008)"
+    return None
+
+
+def never_lifted(label: str) -> str | None:
+    """Why no allowance may open this row, or None (every reading judged, as in never_open): anything on the cards,
+    Initialize, Reset Network Set. and credentials (decisions 4, 5 and 9), and the camera's identity, a connection or
+    its region (decision 8: identity_row). live.open_refused, drive.py's path check and allow_refused take it, so no
+    name a run was given opens one of these rows."""
+    for text in readings(label):
+        m = _NEVER_LIFTED_RE.search(text)
+        if m:
+            return f"never, whatever is allowed: {m.group(0)} (docs/decisions/0004, 0005, 0009)"
+    return identity_row(label)
+
+
+# an action's name anywhere in a screen's text, as a word ("Camera Set. Memory" in a title, "Delete" on a button):
+# screen_refused judges a whole screen with it, where never_open judges one row's label whole
+_ACTION_ANY_RE = re.compile(r"(?<![a-z])(" + "|".join(_ACTIONS) + r")(?![a-z])")
+
+
+def screen_refused(text: str, allow=()) -> str | None:
+    """Why a press nobody could read the target of may not be sent on a screen whose whole text is `text` (drive.py's
+    enter!:REGEX, the operator vouching for Enter where nothing lit can be read), or None: any reading of the text
+    names, anywhere, what the never-open list holds (an action's name as a word, credentials, a by-hand row, sound,
+    light or motion, "reset"). A name the run was given (drive.py --allow) lifts its own words on the screen, never what
+    never_lifted names (the cards, Initialize, Reset Network Set., credentials, and the camera's identity, a connection
+    or its region: decision 8). Fails closed: a word in a footer or a description refuses too."""
+    for r in readings(text):
+        m = _NEVER_LIFTED_RE.search(r)
+        if m:
+            return f"the screen reads {m.group(0)!r}: never, whatever is allowed"
+        m = _IDENTITY_RE.search(r)
+        if m:
+            return f"the screen reads {m.group(0)!r}: by hand only, whatever is allowed (docs/decisions/0008)"
+    names = [n for n in (clean_label(fold(m)) for m in allow) if n]
+    for r in readings(text):
+        for n in names:
+            r = r.replace(n, " ")
+        for why, rx in (("action", _ACTION_ANY_RE), ("action", _ACTION_WORD_RE), ("credentials", _CREDENTIALS_RE),
+                        ("by hand only", _ANYWHERE_RE), (MOTION, _MOTION_RE)):
+            m = rx.search(r)
+            if m:
+                return f"the screen reads {m.group(0)!r} ({why})"
+    return None
+
+
+def owner_may_approve(reason: str | None) -> bool:
+    """A never_open reason a dated owner decision may lift for the one row it names (decision 2: "the owner may
+    approve one change at a time when it is harmless"). Actions, credentials and identity rows never."""
+    return bool(reason) and reason.startswith(MOTION + ":")
+
+
+def approved_rows(scope: dict) -> set:
+    """The rows a dated owner decision in a reviewed scope names: {"date": "YYYY-MM-DD", "rows": [...], "why"}."""
+    out = set()
+    for d in scope.get("decisions") or []:
+        if isinstance(d, dict) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(d.get("date", ""))):
+            out |= {str(r) for r in d.get("rows") or []}
+    return out
+
+
+def allow_refused(label: str) -> str | None:
+    """Why `--allow LABEL` cannot name this row, or None: anything on the cards, Initialize, Reset Network Set. and
+    credentials (decisions 4, 5 and 9), and the camera's identity, a connection or its region (decision 8), whatever the
+    owner said: never_lifted. drive.py and card_actions.py judge their --allow so, and every prover through
+    runner.allowed_or_exit, before anything connects; path_refused, live.open_refused and screen_refused refuse those
+    rows however a run named them."""
+    if re.search(r"\b(format|delete)\b", label, re.I):
+        return "nothing on the cards is formatted or deleted remotely, not even its settings (docs/decisions/0004)"
+    hard = never_lifted(label)
+    return f"{hard}; no --allow opens it" if hard else None
+
+
+def named(label: str, allow) -> bool:
+    """Whether a run's --allow words (`allow`) name `label` itself, for a run that opens that one row only with its
+    owner's word: compared folded (fold), case and spacing aside, or as the guards clean a reading (clean_label, as
+    live.open_refused compares them), so "reg. custom shoot set" names Reg. Custom Shoot Set."""
+    def said(x) -> str:
+        return " ".join(fold(x).casefold().split())
+    want = {said(label), clean_label(fold(label))} - {""}
+    return any({said(x), clean_label(fold(x))} & want for x in allow or ())
+
+
+def allowance(labels, today: str | None = None) -> str:
+    """The words a proof line carries for the never-open rows the owner allowed this run ("" when none)."""
+    import datetime
+    day = today or datetime.date.today().isoformat()
+    return "; ".join(f"the owner allowed {x} remotely, {day}" for x in labels)
+
+
+def path_refused(path: list, approved: set = frozenset(), allowed=()) -> str | None:
+    """Why a row (its path of labels) is not opened, or None: never_open on any label of the path, except a
+    sound/light/motion reason for a row a dated owner decision names ("Silent Mode Settings > ... > Shutter When
+    Pwr OFF"), or a label the run was given with --allow (never what allow_refused refuses)."""
+    name = " > ".join(path)
+    for label in path:
+        why = never_open(label)
+        if why and label in allowed and not allow_refused(label):
+            continue
+        if why and not (owner_may_approve(why) and name in approved):
+            return why
+    return None
+
+
+# The one reset an owner's word lets a run open (decision 5; the a1 II's owner, 2026-11-11, for the public sample): a
+# Picture Profile's own Reset, the last row of the profile's settings panel, whose title is the profile's name ("PP1",
+# runs/ILCE-1M2_fw4.00/kit2_panels 02353_down.png) and which asks "Reset PPn to the default setting?". Only
+# kit/provers/pp_reset_run.py opens it, only with --allow PROFILE_RESET, and only where profile_reset_row says the lit
+# row is that row and profile_reset_dialog says the screen after it is that question. Nothing else changes: the
+# never-open list keeps "reset" for every row (_ACTION_WORD_RE: Setting Reset, Camera Settings Reset, Reset Network
+# Set., this Reset too, for every other run), PROFILE_RESET lifts no row in drive.py or a LiveCamera (it names no
+# row's own label), and never_lifted, allow_refused and drive.py's Enter guards are as they were.
+PROFILE_RESET = "Picture Profile Reset"
+PROFILE_NAME = re.compile(r"PP(\d{1,2})")
+# words a profile's reset question never holds: another reset's (the camera's settings, the network, everything)
+_NOT_PROFILE_RESET = re.compile(r"\b(?:all|camera|network|initiali[sz]e|format|delete|setting reset)\b")
+
+
+def _profile_number(profile) -> str | None:
+    m = PROFILE_NAME.fullmatch(fold(profile).strip())
+    return m.group(1) if m else None
+
+
+def profile_reset_row(lit: str, title: str, profile: str, second: str | None = None) -> str:
+    """Why the lit row is not `profile`'s own Reset row, or "" when it is: the profile is named as the camera names one
+    (PP and its number), every reading of the lit row's text is "Reset" alone (a stop after it aside: never "Setting
+    Reset", "Camera Settings Reset", "Reset Network Set."), and the panel's title is that profile's (the profile's own
+    settings, not another profile's or another menu's) by profile_reset_title: OCR's title as read (profile_title), or,
+    where the vision model's reading `second` is given, OCR's and the vision model's agreeing (profile_title_agreed); a
+    vision reading that names another profile refuses either way. Fails closed: a title or a row nobody could read is
+    no Reset row."""
+    n = _profile_number(profile)
+    if n is None:
+        return f"{profile!r} is not a Picture Profile's name (PP and its number)"
+    lit_readings = [clean_label(s) for s in _sources(lit)] + [deslip(clean_label(s)) for s in _sources(lit)]
+    if not (lit or "").strip() or not all(re.fullmatch(r"reset[\s.:;,!?…]*", r) for r in lit_readings):
+        return f"the lit row reads {str(lit or '').strip()!r}, not Reset alone"
+    if never_lifted(lit):
+        return f"the lit row reads {str(lit).strip()!r}: {never_lifted(lit)}"
+    return profile_reset_title(title, profile, second)[0]
+
+
+def profile_reset_title(title: str, profile: str, second: str | None = None) -> tuple:
+    """(why the panel's title is not `profile`'s, or "", the way it was accepted: "title" or "both readers", or None).
+    The vision model's reading `second` (None: not asked or not reachable; "": it read nothing) is judged first: one
+    that names another profile anywhere in its text ("Picture Profile PP10" for PP1; the digits' look-alikes read as
+    digits: profile_names_in) refuses, whatever OCR read; so does OCR's title naming another profile anywhere. Then the
+    first way, OCR's title as read
+    (profile_title, strict), and the second, OCR's title naming the profile alone once folded and its digits'
+    look-alikes read as digits (profile_title_names: "PРЗ" is PP3) and the vision model's reading the profile's name
+    alone (profile_title_agreed): two readers agreeing. Anything else refuses."""
+    t = str(title or "").strip()
+    other = [n for n in profile_names_in(second) if n != profile] if second else []
+    if other:
+        return (f"the vision model reads the panel's title as {str(second).strip()!r}, naming {', '.join(other)}, not "
+                f"{profile}"), None
+    other = [n for n in profile_names_in(t) if n != profile]
+    if other:
+        return f"the panel's title reads {t!r}, naming {', '.join(other)}, not {profile}", None
+    if profile_title(t, profile):
+        return "", "title"
+    if second is not None and profile_title_agreed(t, second, profile):
+        return "", "both readers"
+    said = ("" if second is None else f"; the vision model reads {str(second).strip()!r}" if second.strip()
+            else "; the vision model read no title")
+    return f"the panel's title reads {t!r}, not {profile} alone{said}", None
+
+
+def profile_title(title: str, profile: str) -> bool:
+    """Whether a panel's title (its top line, as read) is `profile`'s name alone in every reading ("PP1", "PP 1"; never
+    "PP10" for PP1): the profile's own settings panel. A title nobody could read is not."""
+    n = _profile_number(profile)
+    rs = [r for r in readings(title) if r.strip()]
+    return bool(n and rs) and all(re.fullmatch(rf"\W*pp\s*{n}\W*", r) for r in rs)
+
+
+# Letters and signs OCR reads for digits, judged only in a profile's number (after "PP" or "User"). fold already turns
+# the Cyrillic and Greek letters drawn as Latin ones into those ("PР3" is PP3), but no letter read for a digit: the
+# a1 II's PP3 read as "PРЗ", a Cyrillic Р and a Cyrillic З, on the carousel and the panel's title (2026-11-11). Taken
+# only where a second reading must agree (profile_title_agreed) or where no press follows (the carousel's list, the
+# check after a panel is left): never alone for a guard.
+_PROFILE_DIGITS = {"0": "OoОоΟο", "1": "lI|!іІ", "2": "Zz", "3": "ЗзƷʒ", "5": "SsЅѕ", "6": "бb", "8": "BВ"}
+PROFILE_DIGIT_LOOKALIKES = str.maketrans({c: d for d, cs in _PROFILE_DIGITS.items() for c in cs})
+# a name the carousel shows: PP or User, then its number in one or two characters (look-alikes among them), then the
+# label's end or a sign ("User1: (No Import)"); an icon read in front as signs is let through, a letter is not
+PROFILE_OPTION = re.compile(r"\W*(PP|User)\s*([0-9A-Za-z|!" + "".join(sorted({c for cs in _PROFILE_DIGITS.values()
+                                                                             for c in cs}))
+                            + r"]{1,2})(?![0-9A-Za-z])(?!\s*[0-9])", re.I)   # "PP 1 0" is not PP1
+_PROFILE_OFF = re.compile(r"\W*[O0]ff\W*", re.I)
+
+
+def profile_label_kind(label) -> tuple:
+    """What a Picture Profile carousel option's label is, after fold and the digits' look-alikes: ("off", "Off");
+    ("profile", "PP3"); ("other", "User1"), a Movie mode's User1-User4 (profiles that apply an imported LUT); or
+    ("unread", None), a label no rule reads."""
+    t = fold(label or "").strip()
+    if _PROFILE_OFF.fullmatch(t):
+        return "off", "Off"
+    m = PROFILE_OPTION.match(t)
+    if m:
+        num = m.group(2).translate(PROFILE_DIGIT_LOOKALIKES)
+        if re.fullmatch(r"[0-9]{1,2}", num) and int(num) >= 1:
+            return ("profile", f"PP{int(num)}") if m.group(1).upper() == "PP" else ("other", f"User{int(num)}")
+    return "unread", None
+
+
+def profile_title_names(text) -> str | None:
+    """The profile a panel's title names when its whole text, after fold and the digits' look-alikes
+    (profile_label_kind), is that profile's name alone ("PРЗ" is PP3; "PP3 Gamma", "Picture Profile" and "User1" name
+    none). Never a guard alone: profile_title_agreed takes it only with a second reader's agreeing."""
+    t = fold(text or "").strip()
+    m = PROFILE_OPTION.match(t)
+    if not m or not re.fullmatch(r"\W*", t[m.end():]):
+        return None
+    kind, name = profile_label_kind(t)
+    return name if kind == "profile" else None
+
+
+# a profile's name anywhere in a text: PP not after a letter or digit ("Apps" holds none), its number in one or two
+# characters (look-alikes among them), not followed by a letter, a digit or a spaced digit
+_PROFILE_ANYWHERE = re.compile(r"(?<![0-9A-Za-z])PP\s*([0-9A-Za-z|!" + "".join(sorted({c for cs in _PROFILE_DIGITS.values()
+                                                                                    for c in cs}))
+                               + r"]{1,2})(?![0-9A-Za-z])(?!\s*[0-9])", re.I)
+
+
+def profile_names_in(text) -> list:
+    """Every profile (PP and a number) a text names anywhere, each once, after fold and the digits' look-alikes ("PРЗ"
+    is PP3, "PP1O" PP10): a veto's reading, never a permission. "Picture Profile PP10" names PP10; "Picture Profile",
+    "User1" and "Apps" name none."""
+    out = []
+    for m in _PROFILE_ANYWHERE.finditer(fold(text or "")):
+        num = m.group(1).translate(PROFILE_DIGIT_LOOKALIKES)
+        if re.fullmatch(r"[0-9]{1,2}", num) and int(num) >= 1:
+            out.append(f"PP{int(num)}")
+    return list(dict.fromkeys(out))
+
+
+def profile_title_agreed(title: str, second: str, profile: str) -> bool:
+    """The second way a panel's title is `profile`'s (pp_reset_run's guard before Reset, after the strict
+    profile_title): OCR's title names the profile alone once folded and its digits' look-alikes read as digits
+    (profile_title_names), AND the vision model's reading, independently, is the profile's name alone in every reading
+    (profile_title). Two readers agreeing on the name; either one alone is not enough."""
+    return bool(_profile_number(profile)) and profile_title_names(title) == profile and profile_title(second, profile)
+
+
+def profile_reset_dialog(text: str, profile: str) -> str:
+    """Why a screen's whole text is not `profile`'s own reset question, or "" when it is: the kit's confirmation check
+    takes it for a confirmation (confirmation), some reading of it says reset, the profile's name and default in that
+    order ("Reset PP1 to the default setting?"), every profile it names is that one (PP1, never PP10 or PP11 for it), and
+    no reading names what no allowance opens (never_lifted: the cards, Initialize, Reset Network Set., credentials, the
+    camera's identity) or another reset's words (all, camera, network, Setting Reset). Anything else is no permission."""
+    n = _profile_number(profile)
+    if n is None:
+        return f"{profile!r} is not a Picture Profile's name (PP and its number)"
+    if not (text or "").strip():
+        return "no text could be read on the screen"
+    if not confirmation(text):
+        return "the screen does not read as a confirmation"
+    if never_lifted(text):
+        return f"the screen reads {never_lifted(text)}"
+    rs = readings(text)
+    for r in rs:
+        m = _NOT_PROFILE_RESET.search(r)
+        if m:
+            return f"the screen reads {m.group(0)!r}: not a Picture Profile's own reset"
+        named = re.findall(r"\bpp\s*(\d{1,2})\b", r)
+        if any(x != n for x in named):
+            return f"the screen names {', '.join(f'PP{x}' for x in dict.fromkeys(named))}, not {profile} alone"
+    other = [x for x in profile_names_in(text) if x != profile]
+    if other:
+        return f"the screen names {', '.join(other)} (the digits' look-alikes read as digits), not {profile} alone"
+    if not any(re.search(rf"\breset\b.*\bpp\s*{n}\b.*\bdefault\b", r, re.S) for r in rs):
+        return f"the screen does not read as 'Reset {profile} to the default setting?'"
+    return ""
+
+
+# The notice a profile's Reset ends with on the a1 II, after OK on its question: "Complete." over one lit button, OK
+# (runs/ILCE-1M2_fw4.00/kit2_pp_reset_trial 00043_enter.png, 2026-11-11). The whole text, OK aside, is that word alone,
+# a stop after it and spacing aside: no question, no Cancel, no other word.
+_PROFILE_COMPLETE = re.compile(r"\s*complete\s*\.?\s*ok\s*\.?\s*")
+_PROFILE_COMPLETE_SECOND = re.compile(r"\s*complete\s*\.?\s*(?:ok\s*\.?\s*)?")
+
+
+def profile_reset_complete(text: str, lit: str, second: str | None = None) -> str:
+    """Why the screen after OK on a profile's reset question is not the camera's completion notice, or "" when it is:
+    every reading of its whole text (readings) is "Complete." and "OK" and nothing else, the lit button reads OK alone,
+    nothing in it reads as a confirmation (confirmation), a question, Cancel or what no allowance opens (never_lifted),
+    and, where the vision model's reading `second` is given (its text and buttons as one text; None: not reachable),
+    that reading is "Complete." alone too, OK aside. Anything else ("This function is currently disabled.", "Unable
+    to...", another question) is not, nor is a reading with one word more: the run stops on it."""
+    t = str(text or "")
+    if not t.strip():
+        return "no text could be read on the screen"
+    for what, said in ((t, "the screen"), (second, "the vision model's reading")):
+        if what is None:
+            continue
+        if "?" in what:
+            return f"{said} holds a question ({' '.join(what.split())!r})"
+        if any(re.search(r"\bcancel\b", r) for r in readings(what)):
+            return f"{said} offers Cancel ({' '.join(what.split())!r})"
+        if never_lifted(what):
+            return f"{said} reads {never_lifted(what)}"
+        if confirmation(what):
+            return f"{said} reads as a confirmation ({confirmation(what)})"
+    if not all(_PROFILE_COMPLETE.fullmatch(r) for r in readings(t)):
+        return f"the screen reads {' '.join(t.split())!r}, not 'Complete.' and OK alone"
+    if not all(re.fullmatch(r"\s*ok\s*\.?\s*", r) for r in readings(lit)) or not str(lit or "").strip():
+        return f"the lit button reads {str(lit or '').strip()!r}, not OK"
+    if second is not None and not all(_PROFILE_COMPLETE_SECOND.fullmatch(r) for r in readings(second)):
+        said = " ".join(second.split())
+        return f"the vision model reads {said!r}, not 'Complete.' alone" if said else "the vision model read no text"
+    return ""
+
+
+_CONFIRM_RE = re.compile(
+    r"\b(execute|format|delete|erase|initiali[sz]e|resets?|restore|update|clean|overwrite|"
+    r"all data|will be lost|are you sure|new folder|send|fire|test flash)\b", re.I)
+
+
+# Quotation marks, paired in order. A pair holds a menu item's name when what is between is a name's length (Sony's
+# longest are about 30 characters) with no question or exclamation mark in it (_names_left_out).
+_QUOTED = re.compile(r"[\"“”]([^\"“”]*)[\"“”]")
+# a mark right after a digit is a seconds mark (30", 2″), never a quotation
+_SECONDS = re.compile(r"(?<=\d)[\"“”]")
+
+
+def _names_left_out(t: str) -> str:
+    """The text with each quoted menu item name left out; a quoted span that is no name (a sentence, a question, a
+    long passage) stays whole, and seconds marks pair with nothing."""
+    t = _SECONDS.sub("″", t)
+    return _QUOTED.sub(lambda m: " " if len(m[1]) <= 40 and not re.search(r"[?!\n]", m[1]) else m[0], t)
+
+
+def confirmation(text: str) -> str | None:
+    """Reason a screen looks like a confirmation of an action, or None. A blocker notice ("This
+    operation or setting not available as follows" + the blocking setting and its value) is judged
+    by its own sentence only: the setting it names can hold an action word ("File Format", 2026-10-29).
+    A menu item named in quotation marks is a name too ('... through MENU button - "Select on Cam &
+    Send".', 2026-10-29), but only a name's length (_names_left_out): two seconds marks, or a reading the reader put
+    in quotation marks whole, hide no sentence. The text is also judged with every pair of marks left out, as the kit
+    did before 2026-11-07, so a dialog that reading caught is still caught. "File Format" is a setting's name, on its
+    own list too (the 8K drive was refused on it, 2026-10-31). Delete pressing twice On answers with a warning about
+    the setting and only OK (frame 37079, 2026-10-31): that whole sentence, word for word, is no confirmation. The
+    text is judged as read and folded (fold)."""
+    for t in dict.fromkeys((text or "", fold(text))):
+        why = _confirms(t)
+        if why:
+            return why
+    return None
+
+
+def _confirms(text: str) -> str | None:
+    t = re.split(r"not\s+available\s+as\s+follows", text, flags=re.I)[0]
+    t = re.sub(r"\bfile\s+format\b", " ", t, flags=re.I)
+    t = re.sub(r"if\s+the\s+delete\s+button\s+is\s+pressed\s+in\s+the\s+delete\s+confirmation\s+screen,?\s+"
+               r"the\s+target\s+image\s+is\s+deleted\.\s*be\s+careful\s+not\s+to\s+accident(?:al)?ly\s+delete\.?",
+               " ", t, flags=re.I)
+    t = t.strip()
+    if len(t) > 1 and t[0] in "\"“”" and t[-1] in "\"“”" and not re.search(r"[\"“”]", t[1:-1]):
+        t = t[1:-1]                      # the whole reading in quotation marks: a reader's quoting, not a name
+    for judged in (_names_left_out(t), _QUOTED.sub(" ", t)):
+        m = _CONFIRM_RE.search(judged)
+        if m:
+            return f"confirmation text: {m.group(0)}"
+    return None
+
+
+if __name__ == "__main__":
+    from . import ROOT, jsonl
+
+    labels = set()
+    for f in sorted((ROOT / "data").glob("*/help_guide_menu_*.jsonl")):
+        labels |= {r["item"] for r in jsonl.read(f) if r.get("item")}
+    for t in sorted(labels):
+        why = never_open(t)
+        print(f"{'EXCLUDED' if why else 'walked  '}  {t}" + (f"   ({why})" if why else ""))

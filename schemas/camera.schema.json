@@ -1,0 +1,1005 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Camera facts (data/<model>_fw<fw>/camera_<model>_fw<fw>.json, a definition's camera section)",
+ "description": "Camera-specific facts the editor reads, the file's container among them (docs/decisions/0020): edited in data/<model>_fw<fw>/camera_<model>_fw<fw>.json, copied into the definition (editor/definitions/<model>_fw<fw>.json) by kit/schema_update.py. Every key but the required ones is optional: a definition without one words things plainly or hides what it drives.",
+ "type": "object",
+ "required": [
+  "model",
+  "section_counts",
+  "tab_colors"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "_comment": {
+   "type": "string",
+   "description": "Words for whoever edits the file; nothing reads them."
+  },
+  "model": {
+   "type": "string",
+   "description": "The model the camera's files name in their header (ILCE-1M2)."
+  },
+  "display_name": {
+   "type": "string",
+   "minLength": 1,
+   "description": "The name photographers know the camera by (\"\u03b11 II\"), which the editor shows beside the model code wherever it names the camera (\"ILCE-1M2 \u00b7 \u03b11 II\"). Without it the model code stands alone."
+  },
+  "section_counts": {
+   "type": "array",
+   "items": {
+    "type": "integer"
+   },
+   "description": "The record count of every section: the live settings first, then each memory set."
+  },
+  "file": {
+   "$ref": "#/$defs/file_block",
+   "description": "The container the camera writes its settings in: where the header's parts sit, the checksums and the record framing (docs/DATA_CONTRACTS.md, \"The container block\")."
+  },
+  "main_tiles": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "name": {
+      "type": "string",
+      "description": "The page's name (Stills, Movie, S&Q)."
+     },
+     "tiles": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "properties": {
+        "caption": {
+         "type": "string",
+         "description": "The tile's label."
+        },
+        "kind": {
+         "enum": [
+          "keys",
+          "live_or_memory",
+          "fraction"
+         ],
+         "description": "keys: the settings in keys, in every set; live_or_memory: keys in the live settings, memory_keys in a memory; fraction: a time stored in the memories only, numerator_key over denominator_key (n/d, or n\" when d is 1). Default keys."
+        },
+        "keys": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "description": "The settings (keys) the tile shows."
+        },
+        "memory_keys": {
+         "type": "array",
+         "items": {
+          "type": "string"
+         },
+         "description": "The settings the tile shows in a memory (live_or_memory)."
+        },
+        "numerator_key": {
+         "type": "string",
+         "description": "The setting that holds the fraction's numerator (fraction)."
+        },
+        "denominator_key": {
+         "type": "string",
+         "description": "The setting that holds the fraction's denominator (fraction)."
+        },
+        "live_text": {
+         "type": "string",
+         "description": "What a tile shows in the live settings when they hold no value for it."
+        }
+       }
+      }
+     }
+    }
+   },
+   "description": "The camera's Main pages (Stills, Movie, S&Q), each with its tiles left to right and top to bottom, and which settings each tile shows. Without it, no Main page."
+  },
+  "my_menu": {
+   "type": "object",
+   "properties": {
+    "records": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+     },
+     "description": "The live record of each My Menu page, in page order: an array of the item codes in its places."
+    },
+    "empty": {
+     "type": "integer",
+     "description": "The code of an empty place."
+    },
+    "max_items": {
+     "type": "integer",
+     "minimum": 0,
+     "description": "How many items My Menu holds in all."
+    },
+    "packed": {
+     "type": "boolean",
+     "description": "The camera keeps My Menu's items packed from the top: adding fills the first empty slot, removing closes the gap. Default true."
+    }
+   },
+   "description": "My Menu: the live records that hold its pages, the code of an empty place, how many items it holds and whether the camera keeps them packed. Without it, no My Menu page."
+  },
+  "memory_sets": {
+   "type": "object",
+   "properties": {
+    "dial": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     }
+    },
+    "modes": {
+     "type": "object",
+     "description": "The memory sets of each shooting mode, by mode, in order (each mode's own Camera Set. Memory slots); the proof viewer compares a set with its mode's first.",
+     "additionalProperties": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1
+      }
+     }
+    },
+    "names": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     }
+    },
+    "other_prefix": {
+     "type": "string"
+    },
+    "short_names": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "string"
+     },
+     "description": "Short column labels by section (\"1\": \"M1\"); a section left out is M<n> on the dial, S<n> off it."
+    },
+    "default_columns": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "description": "The sections Compare starts with (0 = the live settings)."
+    }
+   },
+   "description": "The memory sets: the sections the mode dial recalls, each shooting mode's sets, their names and short column labels, and the sections Compare starts with."
+  },
+  "live_mode": {
+   "type": "object",
+   "required": [
+    "key",
+    "modes"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "key": {
+     "type": "string",
+     "pattern": "^global:0x[0-9a-f]{4}$",
+     "description": "The live settings' record that says which shooting mode the file was saved in."
+    },
+    "modes": {
+     "type": "object",
+     "propertyNames": {
+      "pattern": "^-?[0-9]+$"
+     },
+     "additionalProperties": {
+      "type": "string"
+     },
+     "description": "The mode each of its values means, named as memory_sets.modes names the modes (\"Stills\", \"Movie\", \"S&Q\", \"Time-lapse\")."
+    }
+   },
+   "description": "The mode of the live settings, as the definition's copy_for needs it to check a file: the live record that says the mode the file was saved in, and the mode each of its values means. A memory set's mode is the one memory_sets.modes lists it under. kit/schema_update.py checks it against the camera's downloads with the copies (kit/writer/copies.py) at every write: in each section, a setting with copies equals the copy for that section's mode (docs/DATA_CONTRACTS.md, \"A value kept in more than one record\"). It decides nothing of what follows an edit."
+  },
+  "mirrors": {
+   "type": "array",
+   "description": "Records the camera keeps as copies of each other: a live record holding one element per memory set, and the same block in each set. A write to either is made to the other; a file whose records are not shaped so keeps them apart.",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "live_record",
+     "set_record",
+     "first_section",
+     "sections"
+    ],
+    "properties": {
+     "what": {
+      "type": "string"
+     },
+     "live_record": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+     },
+     "set_record": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535
+     },
+     "element_bytes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Bytes per element; left out: the live record's element size in the file."
+     },
+     "first_section": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "The section the live record's first element is the copy of."
+     },
+     "sections": {
+      "type": "array",
+      "items": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "minItems": 1
+     }
+    }
+   }
+  },
+  "link_records": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "record": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 65535,
+      "description": "The live record's id."
+     },
+     "name": {
+      "type": "string",
+      "description": "The setting's name, as the warning says it."
+     },
+     "link": {
+      "enum": [
+       "network",
+       "usb"
+      ],
+      "description": "The link the record can cut."
+     },
+     "ok_values": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      },
+      "description": "The values that keep the link (the camera's own value for it may be another)."
+     },
+     "group": {
+      "type": "string",
+      "description": "Records that keep one link between them (a wired and a wireless connection): the warning is shown only when every record of the group is outside its values."
+     },
+     "message": {
+      "type": "string",
+      "description": "The warning shown before a file that cuts the link is written."
+     }
+    }
+   },
+   "description": "Live records that can cut the link the editor uses (a network connection or the USB mode turned off): the values that keep it and the warning shown before a file that loses it is written. Records sharing a group warn only when all of them are outside their values."
+  },
+  "volatile_records": {
+   "type": "array",
+   "items": {
+    "type": "integer"
+   },
+   "description": "Live record ids the camera changes on every save or load, or that follow the camera rather than the file: left out when a read-back or a proof is compared."
+  },
+  "picture_profile_in_use": {
+   "type": "object",
+   "required": [
+    "live",
+    "stills",
+    "movie"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "live": {
+     "type": "string",
+     "pattern": "^0x[0-9a-fA-F]{4}$",
+     "description": "The live record of the Picture Profile in use (1-11: PP1-PP11), as a record key writes it (\"0x0053\")."
+    },
+    "stills": {
+     "type": "string",
+     "pattern": "^0x[0-9a-fA-F]{4}$",
+     "description": "The Picture Profile the stills mode keeps (1-11: PP1-PP11)."
+    },
+    "movie": {
+     "type": "string",
+     "pattern": "^0x[0-9a-fA-F]{4}$",
+     "description": "The Picture Profile the movie mode keeps (1-11: PP1-PP11)."
+    }
+   },
+   "description": "The live records that say which Picture Profile is in use, hex record ids as the kit's record keys write them. kit/tools/upload_check.py reads them to warn of a file that would change a profile in use (an ILCE-1M2 restarted again and again in Movie mode from such a file, 2026-11-01); the editor does not read them. Optional: without it the check is passed over, and upload_check says so."
+  },
+  "link_timing": {
+   "type": "object",
+   "additionalProperties": false,
+   "description": "How long the camera link usually takes, in seconds. read_s: a read, until the editor has timed reads on its own computer (it then names the median of its last ones). restart_s: how long after an upload the camera is usually back; the first try to read it back starts then. poll_s: after a try that failed, the next starts once this has passed since that one began (at once when the try took longer). timeout_s: when to give up reading it back, counted from the end of the upload. Without it, the editor's own times (5, 30, 8 and 180).",
+   "properties": {
+    "read_s": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "A read of the camera's settings, named until the editor has timed its own reads."
+    },
+    "restart_s": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "How long after an upload the camera is usually back: the first try to read it back starts then."
+    },
+    "poll_s": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "After a try to read it back that failed, the next starts once this has passed since that one began."
+    },
+    "timeout_s": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "When to give up reading the camera back, counted from the end of the upload."
+    }
+   }
+  },
+  "tab_colors": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "array",
+    "items": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 255
+    },
+    "minItems": 3,
+    "maxItems": 3
+   },
+   "description": "Each menu tab's colour, [r, g, b] by tab name, as the camera draws it (grey when missing)."
+  },
+  "families": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "properties": {
+     "prefix": {
+      "type": "string"
+     },
+     "kind": {
+      "type": "string"
+     },
+     "title": {
+      "type": "string"
+     },
+     "column_label": {
+      "enum": [
+       "group_suffix",
+       "group"
+      ],
+      "description": "Each column's title: the last word of its group's name, or the whole name."
+     },
+     "note": {
+      "type": "string",
+      "description": "A line under the table."
+     }
+    }
+   },
+   "description": "Array settings shown as one table each (Picture Profiles, Creative Looks): the groups whose name starts with prefix, a column each."
+  },
+  "text": {
+   "type": "object",
+   "description": "Camera wording the editor shows; every key is optional and the editor words things plainly without it.",
+   "properties": {
+    "memories_title": {
+     "type": "string",
+     "description": "The Memories page's title; {list} stands for the dial's memories."
+    },
+    "memories_intro": {
+     "type": "string",
+     "description": "What the Memories page says the memories are."
+    },
+    "read_failed_usb": {
+     "type": "string",
+     "description": "What to check after a read over USB failed, when the camera link names no cause."
+    },
+    "read_failed_network": {
+     "type": "string",
+     "description": "What to check after a read over the network failed, when the camera link names no cause."
+    },
+    "volatile_note": {
+     "type": "string",
+     "description": "Said when only the records the camera changes on every load differ after a write; {n} stands for how many."
+    },
+    "modes_source": {
+     "type": "string",
+     "description": "Where a setting's shooting modes come from, for its hover text."
+    },
+    "main_title": {
+     "type": "string",
+     "description": "The Main page's name (\"Main\" without it)."
+    },
+    "my_menu_name": {
+     "type": "string",
+     "description": "My Menu's name (\"My Menu\" without it)."
+    },
+    "off_menu_name": {
+     "type": "string",
+     "description": "The name of the editor's Menu entry for the settings the camera's menus do not hold (\"Not in the menus\" without it)."
+    },
+    "save_load_path": {
+     "type": "string",
+     "description": "The camera's menu path that saves a settings file to the card."
+    },
+    "card_folder": {
+     "type": "string",
+     "description": "The folder on the card that holds the settings files, with / between folders (the editor's own: PRIVATE/SONY/CAMSET)."
+    },
+    "settings_file_name": {
+     "type": "string",
+     "description": "How the camera names a settings file, nn standing for its two-digit number (the editor's own: CAMSETnn.DAT)."
+    },
+    "max_settings_files_on_card": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "How many settings files the camera's Load list shows: after a Save As into a card folder that holds more, the editor warns."
+    },
+    "mymenu_excluded_tab": {
+     "type": "string",
+     "description": "A menu tab whose items cannot be added to My Menu."
+    },
+    "mymenu_excluded_reason": {
+     "type": "string",
+     "description": "Why the items of mymenu_excluded_tab cannot be added to My Menu, in the camera's words."
+    },
+    "memory_register_menu": {
+     "type": "string",
+     "description": "The camera's menu item that registers the live settings into a memory."
+    },
+    "memory_dial_hint": {
+     "type": "string",
+     "description": "What recalls memory {m} on the camera (\"turning the dial to {m}\")."
+    },
+    "connect_usb_steps": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Connect to the camera: what to set on the camera for a USB link, a step each; without them, generic steps."
+    },
+    "connect_network_steps": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Connect to the camera: what to set on the camera for a network link, a step each; without them, generic steps."
+    },
+    "connect_network_note": {
+     "type": "string",
+     "description": "Connect to the camera: a line under the network link's steps."
+    },
+    "address_hint": {
+     "type": "string",
+     "description": "Where the camera's menu shows its network address."
+    }
+   }
+  },
+  "exposure": {
+   "type": "object",
+   "properties": {
+    "title": {
+     "type": "string",
+     "description": "The page's title."
+    },
+    "mode_key": {
+     "type": "string",
+     "description": "The setting that holds the exposure mode in the live settings."
+    },
+    "memory_mode_key": {
+     "type": "string",
+     "description": "The setting that holds the exposure mode in a memory."
+    },
+    "mode_note": {
+     "type": "string",
+     "description": "What the live mode record holds, shown under it (the mode dial's position)."
+    },
+    "control": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "properties": {
+       "aperture": {
+        "enum": [
+         "you",
+         "camera"
+        ],
+        "description": "Who sets the aperture in this mode."
+       },
+       "shutter": {
+        "enum": [
+         "you",
+         "camera"
+        ],
+        "description": "Who sets the shutter speed in this mode."
+       },
+       "iso": {
+        "enum": [
+         "you",
+         "camera"
+        ],
+        "description": "Who sets ISO in this mode; left out: the camera when ISO holds its AUTO value."
+       }
+      }
+     },
+     "description": "Who sets the aperture, the shutter and ISO in each exposure mode, by the mode record's label."
+    },
+    "aperture": {
+     "type": "object",
+     "properties": {
+      "key": {
+       "type": "string",
+       "description": "The setting that holds this side in the live settings; left out: the file holds none there (live_note says why)."
+      },
+      "memory_key": {
+       "type": "string",
+       "description": "The setting that holds this side in a memory."
+      },
+      "memory_numerator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the numerator's setting (seconds = numerator / denominator)."
+      },
+      "memory_denominator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the denominator's setting (seconds = numerator / denominator)."
+      },
+      "scale_key": {
+       "type": "string",
+       "description": "The setting whose labels span the side's scale, its lowest and highest stops."
+      },
+      "auto_value": {
+       "type": "integer",
+       "description": "The value that hands this side to the camera (ISO AUTO)."
+      },
+      "limits": {
+       "type": "array",
+       "description": "Limits on what the camera may choose for this side.",
+       "items": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "The limit's name, as the camera's menu says it."
+         },
+         "min_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its lowest value."
+         },
+         "max_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its highest value."
+         },
+         "key": {
+          "type": "string",
+          "description": "One bound: the setting that holds it."
+         },
+         "applies": {
+          "enum": [
+           "always",
+           "camera",
+           "camera_iso_auto"
+          ],
+          "description": "When it is in force: always; while the camera sets the side; or while it does and ISO is on AUTO."
+         },
+         "bound": {
+          "type": "string",
+          "description": "How a single bound reads on the scale (\"slowest\")."
+         }
+        }
+       }
+      },
+      "live_note": {
+       "type": "string",
+       "description": "Why the live settings hold no value for this side."
+      }
+     },
+     "description": "The aperture side: where it is stored, its scale and its limits."
+    },
+    "shutter": {
+     "type": "object",
+     "properties": {
+      "key": {
+       "type": "string",
+       "description": "The setting that holds this side in the live settings; left out: the file holds none there (live_note says why)."
+      },
+      "memory_key": {
+       "type": "string",
+       "description": "The setting that holds this side in a memory."
+      },
+      "memory_numerator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the numerator's setting (seconds = numerator / denominator)."
+      },
+      "memory_denominator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the denominator's setting (seconds = numerator / denominator)."
+      },
+      "scale_key": {
+       "type": "string",
+       "description": "The setting whose labels span the side's scale, its lowest and highest stops."
+      },
+      "auto_value": {
+       "type": "integer",
+       "description": "The value that hands this side to the camera (ISO AUTO)."
+      },
+      "limits": {
+       "type": "array",
+       "description": "Limits on what the camera may choose for this side.",
+       "items": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "The limit's name, as the camera's menu says it."
+         },
+         "min_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its lowest value."
+         },
+         "max_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its highest value."
+         },
+         "key": {
+          "type": "string",
+          "description": "One bound: the setting that holds it."
+         },
+         "applies": {
+          "enum": [
+           "always",
+           "camera",
+           "camera_iso_auto"
+          ],
+          "description": "When it is in force: always; while the camera sets the side; or while it does and ISO is on AUTO."
+         },
+         "bound": {
+          "type": "string",
+          "description": "How a single bound reads on the scale (\"slowest\")."
+         }
+        }
+       }
+      },
+      "live_note": {
+       "type": "string",
+       "description": "Why the live settings hold no value for this side."
+      }
+     },
+     "description": "The shutter side: where it is stored, its scale and its limits."
+    },
+    "iso": {
+     "type": "object",
+     "properties": {
+      "key": {
+       "type": "string",
+       "description": "The setting that holds this side in the live settings; left out: the file holds none there (live_note says why)."
+      },
+      "memory_key": {
+       "type": "string",
+       "description": "The setting that holds this side in a memory."
+      },
+      "memory_numerator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the numerator's setting (seconds = numerator / denominator)."
+      },
+      "memory_denominator_key": {
+       "type": "string",
+       "description": "A time stored as a fraction in a memory: the denominator's setting (seconds = numerator / denominator)."
+      },
+      "scale_key": {
+       "type": "string",
+       "description": "The setting whose labels span the side's scale, its lowest and highest stops."
+      },
+      "auto_value": {
+       "type": "integer",
+       "description": "The value that hands this side to the camera (ISO AUTO)."
+      },
+      "limits": {
+       "type": "array",
+       "description": "Limits on what the camera may choose for this side.",
+       "items": {
+        "type": "object",
+        "properties": {
+         "name": {
+          "type": "string",
+          "description": "The limit's name, as the camera's menu says it."
+         },
+         "min_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its lowest value."
+         },
+         "max_key": {
+          "type": "string",
+          "description": "A range: the setting that holds its highest value."
+         },
+         "key": {
+          "type": "string",
+          "description": "One bound: the setting that holds it."
+         },
+         "applies": {
+          "enum": [
+           "always",
+           "camera",
+           "camera_iso_auto"
+          ],
+          "description": "When it is in force: always; while the camera sets the side; or while it does and ISO is on AUTO."
+         },
+         "bound": {
+          "type": "string",
+          "description": "How a single bound reads on the scale (\"slowest\")."
+         }
+        }
+       }
+      },
+      "live_note": {
+       "type": "string",
+       "description": "Why the live settings hold no value for this side."
+      }
+     },
+     "description": "The ISO side: where it is stored, its scale and its limits."
+    },
+    "comp_key": {
+     "type": "string",
+     "description": "The setting that holds exposure compensation."
+    },
+    "step_key": {
+     "type": "string",
+     "description": "The setting that holds the exposure step."
+    },
+    "sections": {
+     "type": "array",
+     "items": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "description": "The page's columns; left out: the live settings and the dial's memories."
+    }
+   },
+   "description": "The Exposure page: which records hold the exposure mode, the aperture, the shutter speed and ISO in the live settings and the memories, the scales they are drawn on, who sets each side in each mode and the limits on what the camera may choose. Without it, no Exposure page."
+  },
+  "sample": {
+   "type": "string",
+   "pattern": "^[^/\\\\]+\\.DAT$",
+   "description": "A settings file of this camera, beside the definition, with personal values removed: Explore a sample opens it."
+  },
+  "save_name": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "stem_chars",
+    "suffix"
+   ],
+   "description": "The name Save As offers when no free name of the camera's is found: the opened file's name cut to stem_chars characters, upper case, then suffix. Left out: the file's own name.",
+   "properties": {
+    "stem_chars": {
+     "type": "integer",
+     "minimum": 1
+    },
+    "suffix": {
+     "type": "string"
+    }
+   }
+  }
+ },
+ "$defs": {
+  "offset": {
+   "type": "string",
+   "pattern": "^(0x[0-9a-f]{1,8}|end-[0-9]{1,9})$",
+   "description": "A place in the file: \"0x\" and lower-case hex counts from its start, \"end-N\" counts N bytes back from its end."
+  },
+  "text_field": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "at",
+    "to",
+    "text"
+   ],
+   "properties": {
+    "at": {
+     "$ref": "#/$defs/offset"
+    },
+    "to": {
+     "$ref": "#/$defs/offset"
+    },
+    "text": {
+     "enum": [
+      "ascii_nul"
+     ]
+    }
+   }
+  },
+  "checksum": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "kind",
+    "over",
+    "at"
+   ],
+   "properties": {
+    "kind": {
+     "enum": [
+      "shift_sum",
+      "byte_sum"
+     ],
+     "description": "shift_sum: the low byte of the sum of each byte shifted left by its offset mod 8; byte_sum: a u32 sum of the bytes."
+    },
+    "over": {
+     "type": "array",
+     "prefixItems": [
+      {
+       "$ref": "#/$defs/offset"
+      },
+      {
+       "$ref": "#/$defs/offset"
+      }
+     ],
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "The bytes summed, from the first offset up to, not including, the second."
+    },
+    "at": {
+     "$ref": "#/$defs/offset"
+    }
+   }
+  },
+  "file_block": {
+   "type": "object",
+   "description": "The container the camera writes its settings in (docs/decisions/0020): where its parts sit and which of the editor's known kinds apply. A range runs from its first offset up to, not including, its second. A kind or key the editor does not know refuses the definition; a new algorithm or framing is a change to the program.",
+   "additionalProperties": false,
+   "required": [
+    "magic",
+    "model",
+    "saved",
+    "firmware",
+    "header_checksum",
+    "sections_start",
+    "records",
+    "trailer_checksum",
+    "signature"
+   ],
+   "properties": {
+    "magic": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "at",
+      "bytes"
+     ],
+     "properties": {
+      "at": {
+       "$ref": "#/$defs/offset"
+      },
+      "bytes": {
+       "type": "string",
+       "minLength": 1
+      }
+     },
+     "description": "The bytes every such file starts with, and where."
+    },
+    "model": {
+     "$ref": "#/$defs/text_field",
+     "description": "Where the model text sits and how it is written (ascii_nul: NUL-padded ASCII)."
+    },
+    "saved": {
+     "$ref": "#/$defs/text_field",
+     "description": "Where the save time sits, as text."
+    },
+    "firmware": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "at",
+      "to",
+      "decode"
+     ],
+     "properties": {
+      "at": {
+       "$ref": "#/$defs/offset"
+      },
+      "to": {
+       "$ref": "#/$defs/offset"
+      },
+      "decode": {
+       "enum": [
+        "major_minor",
+        "major_minor3"
+       ],
+       "description": "major_minor: two bytes, the major version then the minor, shown with two digits (04 00 = 4.00, 02 01 = 2.01). major_minor3: three bytes, the major version then the minor's two digits (04 00 00 = 4.00), the reading the ILCE-1M2's block held until 2026-11-06, kept for a block that names it."
+      }
+     },
+     "description": "The firmware that saved the file. A file is read with the definition of its model and this firmware, and the layout signature feeds its first two bytes."
+    },
+    "video_system": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "at",
+      "names"
+     ],
+     "properties": {
+      "at": {
+       "$ref": "#/$defs/offset",
+       "description": "The byte that holds it, in the header: apart from the firmware's bytes and the header checksum's site."
+      },
+      "names": {
+       "type": "object",
+       "minProperties": 1,
+       "propertyNames": {
+        "pattern": "^(0|[1-9][0-9]?|1[0-9][0-9]|2[0-4][0-9]|25[0-5])$"
+       },
+       "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+       },
+       "description": "What each value of the byte is called, as the camera's menu says it, by the value in decimal (\"0\": \"NTSC\", \"1\": \"PAL\"). A value with no name is shown as its number, with a note that the definition has no name for it."
+      }
+     },
+     "description": "Optional: the video system the camera was set to when it saved the file (NTSC or PAL), where the header holds it. The editor says it beside the firmware, and writes a file only to a camera set to the same one (docs/EDITOR.md, \"The camera link\"); the kit reads files of one firmware under either as the same camera and firmware. A block without it reads as before."
+    },
+    "header_checksum": {
+     "$ref": "#/$defs/checksum",
+     "description": "The header's checksum: its kind, the bytes it sums and where it is stored."
+    },
+    "sections_start": {
+     "$ref": "#/$defs/offset",
+     "description": "Where the first section's record count is."
+    },
+    "records": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "count",
+      "framing",
+      "marker",
+      "endian"
+     ],
+     "properties": {
+      "count": {
+       "enum": [
+        "u32"
+       ]
+      },
+      "framing": {
+       "enum": [
+        "id_marker_size_count"
+       ],
+       "description": "A record count per section, then records of u16 id, u16 marker, u16 element size, u16 element count and the value bytes."
+      },
+      "marker": {
+       "type": "string",
+       "pattern": "^0x[0-9a-f]{1,4}$"
+      },
+      "endian": {
+       "enum": [
+        "le"
+       ]
+      }
+     },
+     "description": "How each section frames its records: the count's width, the framing, the marker every record carries and the byte order."
+    },
+    "trailer_checksum": {
+     "$ref": "#/$defs/checksum",
+     "description": "The checksum over the sections, stored at the end of the file."
+    },
+    "signature": {
+     "enum": [
+      "fnv1a64"
+     ],
+     "description": "The project's layout signature: FNV-1a 64 over the model, the first two firmware bytes, and each section's record count and each record's id and shape."
+    }
+   }
+  }
+ }
+}

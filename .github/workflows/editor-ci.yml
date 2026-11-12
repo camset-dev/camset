@@ -1,0 +1,57 @@
+# Builds, tests and lints the editor on Linux, macOS and Windows for every pull request and every push to main, in
+# release mode as the packages are built: cargo build, cargo test, and clippy over the program and its tests with its
+# warnings as errors. Nothing here talks to a camera, and nothing touches Sony's Camera Remote SDK: the editor needs
+# none, and kit/sdk/ is never in the repository. The packages themselves are built by editor-release.yml.
+#
+# Every action is pinned to a full commit, its version in the comment beside it: checkout and rust-toolchain as in
+# editor-release.yml, actions/cache looked up 2026-11-06. Move a pin to a newer release by its commit.
+name: Editor CI
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+concurrency:
+  # a pull request's newer push cancels its older run; a push to main is a group of its own (its run id), so every
+  # commit on main keeps a finished check: in a shared group a waiting run is dropped for the next one, even without
+  # cancel-in-progress
+  group: editor-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  editor:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
+        with:
+          components: clippy
+      - name: Linux libraries (windowing; the file dialogs use the desktop portal), as the README names them
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
+      - name: Cargo cache (the crates downloaded and the editor's build, per system and lock file)
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            editor/target/
+          key: editor-${{ runner.os }}-${{ hashFiles('editor/Cargo.lock') }}
+          restore-keys: |
+            editor-${{ runner.os }}-
+      - name: Build
+        run: cargo build --release
+      - name: Test
+        run: cargo test --release
+      - name: Clippy
+        run: cargo clippy --release --all-targets -- -D warnings

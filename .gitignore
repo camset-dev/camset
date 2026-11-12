@@ -1,0 +1,36 @@
+# tools and caches
+.venv/
+.DS_Store
+__pycache__/
+.pytest_cache/
+# Zensical's build cache; also kit/tools/sdk_support.py's table when private/ is absent
+.cache/
+# build outputs
+editor/target/
+kit/probe/build/
+kit/link/build/
+kit/ocr/build/
+# the docs site, built by Zensical (mkdocs.yml)
+site/
+# the Sony Camera Remote SDK: each contributor downloads it from Sony into kit/sdk/, where kit/setup.py unpacks it and
+# keeps its own builds (kit/sdk/.build/); it is never shared (docs/RELEASING.md). Only the folder's README is tracked.
+kit/sdk/*
+!kit/sdk/README.md
+# the SDK's zip dropped into kit/ itself by mistake
+kit/CrSDK_*.zip
+# agent worktrees
+.claude/worktrees/
+# camera runs: local only
+runs/
+# the camera helper writes its output here, in whatever folder it runs from
+probe_out/
+# vendor LUT packs, re-downloadable and unreferenced by kit/ or editor/; kept on disk, not versioned
+lut/
+# settings files saved by cameras (ours and other owners'): real people's settings, kept in one's own private/
+# (private/camsets) since 2026-11-03; still ignored here, so a copy dropped in is never versioned
+data/camsets/
+data/samples/
+/*.DAT
+# your own folder (config, camera files, the help text read off your camera, the SDK table): never published; keep it
+# in a repository of your own if you like (docs/decisions/0018)
+private/

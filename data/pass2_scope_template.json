@@ -1,0 +1,51 @@
+{
+ "note": "Template for a new body's reviewed scope (copy to runs/kit2_pass1/pass2_scope_draft.json and review it): the exclusion groups and the a1 II's rows in them, which use Sony's menu names and so mostly carry over. 'prove' is empty: a pass-1 map's rows are its scope. Write each decision, dated, under 'decisions'.",
+ "prove": [],
+ "exclude": {
+  "governs the remote session itself": [
+   "Remote Shoot Setting > Still Img. Save Dest.",
+   "Remote Shoot Setting > Save Image Size",
+   "Remote Shoot Setting > Save JPEG Size"
+  ],
+  "could take the menus off HDMI or blank a screen": [
+   "Select Finder/Monitor",
+   "Auto Monitor OFF",
+   "HDMI Resolution",
+   "HDMI Output Settings > Rec. Media dur HDMI Output",
+   "HDMI Output Settings > Output Resolution",
+   "HDMI Output Settings > Time Code Output",
+   "HDMI Output Settings > REC Control",
+   "HDMI Output Settings > 4ch Audio Output",
+   "HDMI Info. Display",
+   "CTRL FOR HDMI",
+   "File Format",
+   "Movie Settings > Rec Frame Rate",
+   "Framing Stabilizer",
+   "Auto Framing Settings > HDMI Output",
+   "Auto Framing Settings > Auto Framing",
+   "S&Q Shoot Mode"
+  ],
+  "changes screen light (monitor brightness)": [
+   "Monitor Brightness > Brightness Setup"
+  ],
+  "power / sleep": [
+   "Power Save by Monitor"
+  ],
+  "sound": [
+   "4ch Audio Monitoring"
+  ],
+  "connection, by hand only": [
+   "Bluetooth Rmt Ctrl"
+  ]
+ },
+ "ask_user": {
+  "sound, light or motion: changing them is silent and dark, and the kit never shoots": []
+ },
+ "special": {
+  "checklists: toggle one box, OK, diff, toggle back; DISP rows last, since they can change the shooting screen": [
+   "DISP (Screen Disp) Set > Monitor",
+   "DISP (Screen Disp) Set > Finder"
+  ]
+ },
+ "decisions": []
+}

@@ -1,0 +1,106 @@
+# 2026-10-31, Stills (the still/movie switch on Stills): the Recall Custom holds' bracket records and
+# the live bracket settings. Run with the owner's file as --end:
+#   .venv/bin/python -u kit/tools/chain.py kit/chains/stills_brackets.toml --end kit2_pass2/dat/<owner>.DAT
+# Its paths are in the camera's runs/<model>_fw<fw>/ (the a1 II's, runs/ILCE-1M2_fw4.00/).
+# Every start file is a quiet one (Audio Signals off); each prover restores its own start.
+name = "stills_brackets"
+
+[[step]]
+title = "quiet Stills start file"
+upload = "kit2_pass2/start_reg_stills_2026-10-30.DAT"
+
+[[step]]
+title = "hold 3 Focus Area again (stopped by an unpacking slip in the prover, fixed)"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "3", "--items", "Focus Area", "--counted"]
+log = "kit2_pass2/customshoot_values3_area.log"
+show = "options|stopped|Enter on|records differ|restore"
+limit = 2400
+
+[[step]]
+title = "hold 2 AF Lvl for Crossing again (its own 4 had read '4 O')"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "2", "--items", "AF Lvl for Crossing"]
+log = "kit2_pass2/customshoot_values2_aflvl.log"
+show = "options|stopped|Enter on|records differ|restore"
+limit = 1800
+
+# Does a hold's bracket record (0x0e80 Cont., 0x0e84 Single) store the live setting (0x04c6 / 0x04c8)
+# as its place in the live list, counting from 0 (the live codes skip 13, 20, 42 and 60)? So far
+# 3->2, 10->9, 23->20, 24->21. Predictions: brk2 14->12, 64->59; brk3 19->17, 21->18; brk4 43->39, 1->0.
+[[step]]
+title = "live Cont. 14, Single 64"
+upload = "kit2_pass2/start_reg_stills_brk2_2026-10-31.DAT"
+
+[[step]]
+title = "hold 1 brackets (live 14 / 64)"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "1", "--items", "Drive Mode", "--labels", "Cont. Bracket,Single Bracket",
+       "--context", "live Cont. Bracket setting 0x04c6 / Single Bracket 0x04c8 = 14 / 64, by a file"]
+log = "kit2_pass2/customshoot_drive_brk2.log"
+show = "Bracket|Lo  |differ"
+limit = 1800
+
+[[step]]
+title = "live Cont. 19, Single 21"
+upload = "kit2_pass2/start_reg_stills_brk3_2026-10-31.DAT"
+
+[[step]]
+title = "hold 1 brackets (live 19 / 21)"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "1", "--items", "Drive Mode", "--labels", "Cont. Bracket,Single Bracket",
+       "--context", "live Cont. Bracket setting 0x04c6 / Single Bracket 0x04c8 = 19 / 21, by a file"]
+log = "kit2_pass2/customshoot_drive_brk3.log"
+show = "Bracket|Lo  |differ"
+limit = 1800
+
+[[step]]
+title = "live Cont. 43, Single 1"
+upload = "kit2_pass2/start_reg_stills_brk4_2026-10-31.DAT"
+
+[[step]]
+title = "hold 1 brackets (live 43 / 1)"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "1", "--items", "Drive Mode", "--labels", "Cont. Bracket,Single Bracket",
+       "--context", "live Cont. Bracket setting 0x04c6 / Single Bracket 0x04c8 = 43 / 1, by a file"]
+log = "kit2_pass2/customshoot_drive_brk4.log"
+show = "Bracket|Lo  |differ"
+limit = 1800
+
+[[step]]
+title = "every hold on Manual (by a file)"
+upload = "kit2_pass2/start_reg_stills_holdsM_2026-10-31.DAT"
+
+[[step]]
+title = "hold 1 Aperture again ('F2.8' had read 'F2.o', now read by the vision model)"
+run = ["kit/provers/customshoot_values.py", "--allow", "Reg. Custom Shoot Set", "--hold", "1", "--items", "Aperture", "--sample", "6",
+       "--context", "the hold's Shoot Mode Manual Exposure, by a file"]
+log = "kit2_pass2/customshoot_m1b.log"
+show = "options|stopped|Enter on|records differ|restore"
+limit = 1800
+
+# WB / DRO Bracket Lo had only been the held value (a two-value axis): hold Hi, prove Lo by a change
+[[step]]
+title = "WB and DRO Bracket held on Hi"
+upload = "kit2_pass2/start_reg_stills_wbdrohi_2026-10-31.DAT"
+
+[[step]]
+title = "Drive Mode's WB / DRO Bracket axes from Hi"
+run = ["kit/prove_run.py", "--rows", "Drive Mode / White Balance Bracket", "--rows", "Drive Mode / DRO Bracket",
+       "--context", "WB and DRO Bracket held on Hi, by a file"]
+log = "kit2_pass2/prove_wbdro_hi.log"
+show = "holds|proving|->|no change|stopped|differ|restore"
+limit = 1800
+stop = "kit2_pass2/STOP"
+
+# A look at Cont. Bracket's field strip ([step] [images] [>]): one Right, then Down twice, then MENU.
+# Never a second Right here: Right across the strip once reached the > and opened Bracket Settings,
+# which wrote five records (2026-10-28). The diff after must be empty.
+[[step]]
+title = "quiet Stills start file"
+upload = "kit2_pass2/start_reg_stills_2026-10-30.DAT"
+
+[[step]]
+title = "look: Drive Mode, Cont. Bracket's strip (Right once, Down twice, MENU)"
+run = ["kit/drive.py", "--path", "Drive Mode", "--press", "enter:Drive Mode",
+       "--press", "down", "--press", "down", "--press", "down", "--press", "down",
+       "--press", "right:Bracket", "--press", "down:Bracket", "--press", "down:Bracket", "--wait", "2",
+       "--run", "kit2_drive_bracket", "--note", "look only: Cont. Bracket's strip, Right once then Down twice, then MENU"]
+log = "kit2_pass2/drive_bracket_look1.log"
+limit = 900
+stop = "kit2_drive_bracket/STOP"

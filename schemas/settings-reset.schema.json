@@ -1,0 +1,73 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Settings reset file (data/<model>_fw<firmware>/settings_reset_<model>_fw<firmware>.json)",
+ "description": "Which settings Camera Settings Reset and Initialize put back on one model and firmware, written by hand by the mapper from the downloads before and after each reset the owner ran (docs/REMAPPING_PLAYBOOK.md, Phase 5), and edited there: the one file the kit reads, public, the same for any owner who tests the same settings. It holds what each reset does to each setting a test could tell, and nothing about the tests themselves: a setting whose test value might have been the value the reset gives is left out, as one not tested is, and the tests' dates, counts and notes go in the mapper's own private notes (docs/decisions/0016). kit/schema_update.py --write refreshes each setting's name and tab from the definition and touches nothing else; a file in the older whole shape is refused, and kit/tools/move_evidence.py keeps it once in private/evidence/<model>_fw<firmware>/ and writes this lean shape in its place.",
+ "type": "object",
+ "required": [
+  "about",
+  "records"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "about": {
+   "type": "string",
+   "description": "What the file is, in a sentence or two: the kit's words (camkit.datafiles.RESET_ABOUT) or your own; no date, count or run."
+  },
+  "records": {
+   "type": "object",
+   "description": "By setting key, as the definition keys it: what each reset does to the setting. A setting no test could tell, or none tested, is not listed.",
+   "propertyNames": {
+    "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/record"
+   }
+  }
+ },
+ "$defs": {
+  "record": {
+   "type": "object",
+   "additionalProperties": false,
+   "anyOf": [
+    {
+     "required": [
+      "result"
+     ]
+    },
+    {
+     "required": [
+      "initialize"
+     ]
+    }
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "The setting's name, as the definition has it (kit/schema_update.py --write keeps it so)."
+    },
+    "tab": {
+     "type": "string",
+     "description": "The setting's tab, as the definition has it (kept so by kit/schema_update.py --write)."
+    },
+    "result": {
+     "enum": [
+      "resets",
+      "keeps"
+     ],
+     "description": "Camera Settings Reset: resets, it puts the setting back; keeps, it leaves it as it was."
+    },
+    "initialize": {
+     "enum": [
+      "resets",
+      "keeps"
+     ],
+     "description": "Initialize, the same way; only where the owner allowed it to be run."
+    }
+   }
+  }
+ }
+}

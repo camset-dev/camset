@@ -1,0 +1,698 @@
+{
+  "$schema": "../../schemas/camera.schema.json",
+  "_comment": "Camera-specific facts the editor reads from its definition's \"camera\" section (editor/definitions/ILCE-1M2_fw4.00.json). Edit them here: kit/schema_update.py copies this file there whenever it writes the definition. Record ids are decimal numbers, but picture_profile_in_use's, which only the kit reads, are hex strings as its record keys write them; the offsets in \"file\" are hex strings, as the docs write them (docs/decisions/0020).",
+  "model": "ILCE-1M2",
+  "display_name": "α1 II",
+  "section_counts": [
+    1415,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057,
+    1057
+  ],
+  "file": {
+    "magic": {
+      "at": "0x00",
+      "bytes": "SONY1"
+    },
+    "model": {
+      "at": "0x05",
+      "to": "0x15",
+      "text": "ascii_nul"
+    },
+    "saved": {
+      "at": "0x15",
+      "to": "0x35",
+      "text": "ascii_nul"
+    },
+    "firmware": {
+      "at": "0x36",
+      "to": "0x38",
+      "decode": "major_minor"
+    },
+    "video_system": {
+      "at": "0x38",
+      "names": {
+        "0": "NTSC",
+        "1": "PAL"
+      }
+    },
+    "header_checksum": {
+      "kind": "shift_sum",
+      "over": ["0x00", "0x39"],
+      "at": "0x39"
+    },
+    "sections_start": "0x3c",
+    "records": {
+      "count": "u32",
+      "framing": "id_marker_size_count",
+      "marker": "0x02cf",
+      "endian": "le"
+    },
+    "trailer_checksum": {
+      "kind": "byte_sum",
+      "over": ["0x3c", "end-4"],
+      "at": "end-4"
+    },
+    "signature": "fnv1a64"
+  },
+  "main_tiles": [
+    {
+      "name": "Stills",
+      "tiles": [
+        {
+          "caption": "Shutter Speed",
+          "kind": "fraction",
+          "numerator_key": "set:0x0180@290",
+          "denominator_key": "set:0x0180@292",
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "Aperture",
+          "kind": "live_or_memory",
+          "keys": [],
+          "memory_keys": [
+            "set:0x0180@288"
+          ],
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "Exposure Comp.",
+          "kind": "keys",
+          "keys": [
+            "global:0x0340"
+          ]
+        },
+        {
+          "caption": "ISO",
+          "kind": "keys",
+          "keys": [
+            "global:0x0df2"
+          ]
+        },
+        {
+          "caption": "Slot 1",
+          "kind": "keys",
+          "keys": [
+            "global:0x01e6",
+            "global:0x01e8"
+          ]
+        },
+        {
+          "caption": "Slot 2",
+          "kind": "keys",
+          "keys": [
+            "global:0x01f2",
+            "global:0x01f6",
+            "global:0x01fa"
+          ]
+        },
+        {
+          "caption": "Aspect Ratio",
+          "kind": "keys",
+          "keys": [
+            "global:0x01fe"
+          ]
+        },
+        {
+          "caption": "Recording Media",
+          "kind": "keys",
+          "keys": [
+            "global:0x0298"
+          ]
+        },
+        {
+          "caption": "Shoot Mode",
+          "kind": "live_or_memory",
+          "keys": [
+            "global:0x10b6"
+          ],
+          "memory_keys": [
+            "set:0x11ad"
+          ]
+        },
+        {
+          "caption": "Focus Area",
+          "kind": "keys",
+          "keys": [
+            "global:0x0f46"
+          ]
+        },
+        {
+          "caption": "Flash Mode",
+          "kind": "keys",
+          "keys": [
+            "global:0x0357"
+          ]
+        },
+        {
+          "caption": "Flash Comp.",
+          "kind": "keys",
+          "keys": [
+            "global:0x0359"
+          ]
+        },
+        {
+          "caption": "Wireless Flash",
+          "kind": "keys",
+          "keys": [
+            "global:0x035d"
+          ]
+        },
+        {
+          "caption": "White Balance",
+          "kind": "keys",
+          "keys": [
+            "global:0x0e0e"
+          ]
+        },
+        {
+          "caption": "Focus Mode",
+          "kind": "keys",
+          "keys": [
+            "global:0x037b"
+          ]
+        },
+        {
+          "caption": "Drive Mode",
+          "kind": "keys",
+          "keys": [
+            "global:0x1486"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Movie",
+      "tiles": [
+        {
+          "caption": "Rec Frame Rate",
+          "kind": "keys",
+          "keys": [
+            "global:0x0206"
+          ]
+        },
+        {
+          "caption": "Shutter Speed",
+          "kind": "fraction",
+          "numerator_key": "set:0x0180@290",
+          "denominator_key": "set:0x0180@292",
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "Aperture",
+          "kind": "live_or_memory",
+          "keys": [],
+          "memory_keys": [
+            "set:0x0180@288"
+          ],
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "ISO",
+          "kind": "keys",
+          "keys": [
+            "global:0x0df4"
+          ]
+        },
+        {
+          "caption": "White Balance",
+          "kind": "keys",
+          "keys": [
+            "global:0x0e10"
+          ]
+        },
+        {
+          "caption": "Picture Profile",
+          "kind": "keys",
+          "keys": [
+            "global:0x0e14"
+          ]
+        },
+        {
+          "caption": "File Format",
+          "kind": "keys",
+          "keys": [
+            "global:0x0200"
+          ]
+        },
+        {
+          "caption": "Record Setting",
+          "kind": "keys",
+          "keys": [
+            "global:0x0218"
+          ]
+        },
+        {
+          "caption": "Gamma Disp. Assist",
+          "kind": "keys",
+          "keys": [
+            "global:0x0482"
+          ]
+        },
+        {
+          "caption": "Proxy Recording",
+          "kind": "keys",
+          "keys": [
+            "global:0x0280"
+          ]
+        },
+        {
+          "caption": "Audio Rec Level",
+          "kind": "keys",
+          "keys": [
+            "global:0x0018"
+          ]
+        },
+        {
+          "caption": "SteadyShot",
+          "kind": "keys",
+          "keys": [
+            "global:0x02f9"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "S&Q",
+      "tiles": [
+        {
+          "caption": "S&Q Frame Rate",
+          "kind": "keys",
+          "keys": [
+            "global:0x0248"
+          ]
+        },
+        {
+          "caption": "Rec Frame Rate (S&Q)",
+          "kind": "keys",
+          "keys": [
+            "global:0x0240"
+          ]
+        },
+        {
+          "caption": "Shutter Speed",
+          "kind": "fraction",
+          "numerator_key": "set:0x0180@290",
+          "denominator_key": "set:0x0180@292",
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "Aperture",
+          "kind": "live_or_memory",
+          "keys": [],
+          "memory_keys": [
+            "set:0x0180@288"
+          ],
+          "live_text": "on the camera"
+        },
+        {
+          "caption": "ISO",
+          "kind": "keys",
+          "keys": [
+            "global:0x0df4"
+          ]
+        },
+        {
+          "caption": "White Balance",
+          "kind": "keys",
+          "keys": [
+            "global:0x0e10"
+          ]
+        },
+        {
+          "caption": "Picture Profile",
+          "kind": "keys",
+          "keys": [
+            "global:0x0e14"
+          ]
+        },
+        {
+          "caption": "File Format",
+          "kind": "keys",
+          "keys": [
+            "global:0x0200"
+          ]
+        },
+        {
+          "caption": "Record Setting (S&Q)",
+          "kind": "keys",
+          "keys": [
+            "global:0x0254"
+          ]
+        },
+        {
+          "caption": "Gamma Disp. Assist",
+          "kind": "keys",
+          "keys": [
+            "global:0x0482"
+          ]
+        },
+        {
+          "caption": "Proxy Recording",
+          "kind": "keys",
+          "keys": [
+            "global:0x0280"
+          ]
+        },
+        {
+          "caption": "Audio Rec Level",
+          "kind": "keys",
+          "keys": [
+            "global:0x0018"
+          ]
+        },
+        {
+          "caption": "SteadyShot",
+          "kind": "keys",
+          "keys": [
+            "global:0x02f9"
+          ]
+        }
+      ]
+    }
+  ],
+  "my_menu": {
+    "records": [
+      3210,
+      3217,
+      3224,
+      3231,
+      3238,
+      3245
+    ],
+    "empty": 2,
+    "max_items": 42,
+    "packed": true
+  },
+  "memory_sets": {
+    "dial": [
+      1,
+      2,
+      3
+    ],
+    "modes": {
+      "Stills": [1, 2, 3],
+      "Movie": [4, 5, 6],
+      "S&Q": [7, 8, 9],
+      "Time-lapse": [10, 11, 12]
+    },
+    "names": {
+      "1": "Memory 1",
+      "2": "Memory 2",
+      "3": "Memory 3",
+      "4": "Movie Memory 1",
+      "5": "Movie Memory 2",
+      "6": "Movie Memory 3",
+      "7": "S&Q Memory 1",
+      "8": "S&Q Memory 2",
+      "9": "S&Q Memory 3",
+      "10": "Time-lapse Memory 1",
+      "11": "Time-lapse Memory 2",
+      "12": "Time-lapse Memory 3"
+    },
+    "other_prefix": "Memory set",
+    "short_names": {
+      "1": "M1",
+      "2": "M2",
+      "3": "M3",
+      "4": "S4",
+      "5": "S5",
+      "6": "S6",
+      "7": "S7",
+      "8": "S8",
+      "9": "S9",
+      "10": "S10",
+      "11": "S11",
+      "12": "S12"
+    },
+    "default_columns": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  "live_mode": {
+    "key": "global:0x13bf",
+    "modes": {
+      "0": "Stills",
+      "1": "Movie",
+      "2": "S&Q",
+      "3": "Time-lapse"
+    }
+  },
+  "mirrors": [
+    {
+      "what": "The exposure block of each memory set (aperture, shutter speed, ISO and the like)",
+      "live_record": 396,
+      "set_record": 384,
+      "element_bytes": 320,
+      "first_section": 1,
+      "sections": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12
+      ]
+    }
+  ],
+  "link_records": [
+    {
+      "record": 4655,
+      "name": "Wired LAN Connect",
+      "link": "network",
+      "ok_values": [
+        0
+      ],
+      "group": "lan",
+      "message": "⚠ This file turns both Wired LAN Connect and Wi-Fi Connect off. After the restart the camera will be off the network, and the read-back will fail until you switch one of them on at the camera."
+    },
+    {
+      "record": 4654,
+      "name": "Wi-Fi Connect",
+      "link": "network",
+      "ok_values": [
+        0
+      ],
+      "group": "lan",
+      "message": "⚠ This file turns both Wired LAN Connect and Wi-Fi Connect off. After the restart the camera will be off the network, and the read-back will fail until you switch one of them on at the camera."
+    },
+    {
+      "record": 1008,
+      "name": "Remote Shooting",
+      "link": "network",
+      "ok_values": [
+        0
+      ],
+      "message": "⚠ This file turns Remote Shooting off. After the restart the camera will not accept network remote control, and the read-back will fail until you switch Remote Shooting on at the camera."
+    },
+    {
+      "record": 1166,
+      "name": "USB Connection Mode",
+      "link": "usb",
+      "ok_values": [
+        0,
+        5
+      ],
+      "message": "⚠ This file sets USB Connection Mode to something other than PC Remote or Sel. When Connect. After the restart the USB link will not work until you change it at the camera."
+    }
+  ],
+  "volatile_records": [
+    1250,
+    3142,
+    5746
+  ],
+  "picture_profile_in_use": {
+    "live": "0x0053",
+    "stills": "0x0e12",
+    "movie": "0x0e14"
+  },
+  "link_timing": {
+    "read_s": 5,
+    "restart_s": 30,
+    "poll_s": 8,
+    "timeout_s": 180
+  },
+  "tab_colors": {
+    "Shooting": [
+      214,
+      69,
+      80
+    ],
+    "Exposure/Color": [
+      155,
+      89,
+      182
+    ],
+    "Focus": [
+      46,
+      160,
+      67
+    ],
+    "Playback": [
+      52,
+      120,
+      220
+    ],
+    "Network": [
+      26,
+      160,
+      160
+    ],
+    "Setup": [
+      220,
+      160,
+      40
+    ]
+  },
+  "families": [
+    {
+      "prefix": "Picture Profile PP",
+      "kind": "table",
+      "title": "Picture Profiles (PP1–PP11)",
+      "column_label": "group_suffix",
+      "note": "Each column is one profile."
+    },
+    {
+      "prefix": "Picture Profile default PP",
+      "kind": "table",
+      "title": "Picture Profile factory defaults (PP1–PP11, view-only)",
+      "column_label": "group_suffix",
+      "note": "Each column is one profile."
+    },
+    {
+      "prefix": "Creative Look ",
+      "kind": "table",
+      "title": "Creative Looks",
+      "column_label": "group_suffix",
+      "note": "Each column is one profile."
+    }
+  ],
+  "text": {
+    "mymenu_excluded_tab": "Playback",
+    "mymenu_excluded_reason": "The camera does not allow Playback items in My Menu",
+    "memory_register_menu": "Camera Set. Memory",
+    "memory_dial_hint": "turning the dial to {m}",
+    "memories_title": "Memories {list}",
+    "memories_intro": "The camera's mode-dial memories. Each holds a copy of the shooting settings registered into it.",
+    "save_load_path": "MENU > Setup > Reset/Save Settings > Save/Load Settings > Save",
+    "max_settings_files_on_card": 10,
+    "connect_network_steps": [
+      "Unplug any USB cable between the camera and a computer: while one is in, the camera does not answer on the network.",
+      "Wired: MENU > Network > Wired LAN > Wired LAN Connect: On. Wi-Fi: MENU > Network > Wi-Fi > Wi-Fi Connect: On, joined to the same network as this computer.",
+      "MENU > Network > Cnct./Remote Sht. > Remote Shoot Function: On.",
+      "MENU > Network > Network Option > Access Authen. Settings: On, with a user name and password. Enter the same pair once in the desktop app's Connect to the camera; it is kept in a private file on that computer, never in the settings file.",
+      "Leave the camera on the shooting screen: it refuses while in playback, in a menu dialog, or with the mode dial on 1, 2 or 3."
+    ],
+    "connect_network_note": "Careful: loading a settings file in which Wired LAN Connect or Wi-Fi Connect is Off drops the camera off the network. The editor warns before sending such a file.",
+    "connect_usb_steps": [
+      "MENU > Setup > USB > USB Connection Mode: PC Remote (with Sel. When Connect, choose PC Remote on the camera's screen when the cable goes in). Mass Storage and MTP do not work.",
+      "A memory card must be in the camera.",
+      "Connect the cable; the camera shows the remote-shooting screen. Quit Image Capture, Photos, Lightroom or anything else that may hold the camera.",
+      "Leave the camera on the shooting screen: it refuses while in playback or with the mode dial on 1, 2 or 3."
+    ],
+    "address_hint": "MENU > Network > Wired LAN > Display Wired LAN Info., or Wi-Fi > Display Wi-Fi Info.",
+    "read_failed_usb": "Check the camera is on, joined by a cable that carries data, with USB Connection Mode on PC Remote (MENU > Setup > USB), and on the shooting screen, not with the mode dial on 1, 2 or 3. The steps are in Connect to the camera.",
+    "read_failed_network": "Check the camera is on and on the same network as this computer, with Wired LAN Connect or Wi-Fi Connect on, Remote Shoot Function on and Access Authen. Settings set, on the shooting screen (not with the mode dial on 1, 2 or 3), and with no USB cable to a computer: while one is in, the camera does not answer on the network. The steps are in Connect to the camera.",
+    "volatile_note": "Only the {n} load toggle flag(s) differ, which flip on every load: the camera holds what was written.",
+    "modes_source": "Sony's Help Guide menu list",
+    "main_title": "Main",
+    "my_menu_name": "My Menu"
+  },
+  "exposure": {
+    "title": "Exposure (stills)",
+    "mode_key": "global:0x10b6",
+    "memory_mode_key": "set:0x0b8d",
+    "mode_note": "The live mode is the mode dial's position, which the camera writes on load.",
+    "control": {
+      "Intelligent Auto": {
+        "aperture": "camera",
+        "shutter": "camera"
+      },
+      "P": {
+        "aperture": "camera",
+        "shutter": "camera"
+      },
+      "A": {
+        "aperture": "you",
+        "shutter": "camera"
+      },
+      "S": {
+        "aperture": "camera",
+        "shutter": "you"
+      },
+      "M": {
+        "aperture": "you",
+        "shutter": "you"
+      }
+    },
+    "aperture": {
+      "memory_key": "set:0x0180@288",
+      "scale_key": "set:0x0180@288",
+      "live_note": "on the camera's dials, not in the file"
+    },
+    "shutter": {
+      "memory_numerator_key": "set:0x0180@290",
+      "memory_denominator_key": "set:0x0180@292",
+      "scale_key": "global:0x0be5[0]",
+      "limits": [
+        {
+          "name": "ISO AUTO Min. SS",
+          "key": "global:0x0336",
+          "applies": "camera_iso_auto",
+          "bound": "slowest"
+        }
+      ],
+      "live_note": "on the camera's dials, not in the file"
+    },
+    "iso": {
+      "key": "global:0x0334",
+      "scale_key": "global:0x0334",
+      "auto_value": 0,
+      "limits": [
+        {
+          "name": "ISO AUTO range",
+          "min_key": "global:0x0dfa",
+          "max_key": "global:0x0e00",
+          "applies": "camera"
+        },
+        {
+          "name": "ISO Range Limit",
+          "min_key": "global:0x0b65",
+          "max_key": "global:0x0b63",
+          "applies": "always"
+        }
+      ]
+    },
+    "comp_key": "global:0x0340",
+    "step_key": "global:0x0344",
+    "sections": [
+      0,
+      1,
+      2,
+      3
+    ]
+  },
+  "sample": "ILCE-1M2_fw4.00.DAT",
+  "save_name": {
+    "stem_chars": 6,
+    "suffix": "E1.DAT"
+  }
+}

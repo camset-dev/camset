@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Camset Editor
+Comment=Read, compare and edit Sony camera settings files
+Exec=camset_editor %f
+Icon=camset-editor
+Terminal=false
+Categories=Graphics;Photography;
+StartupWMClass=app.camset.editor

@@ -1,0 +1,74 @@
+{
+  "camera_ip": "192.168.1.50",
+  "hdmi": {
+    "device": "Cam Link 4K",
+    "size": [
+      1920,
+      1080
+    ],
+    "fps": 59.94,
+    "crop": [
+      150,
+      0,
+      1620,
+      1080
+    ]
+  },
+  "readers": [
+    {
+      "name": "vllm",
+      "url": "http://192.168.1.100:8080/v1",
+      "model": "RedHatAI/Qwen3.8-27B-INT4",
+      "parallel": 8
+    },
+    {
+      "name": "omlx",
+      "url": "http://127.0.0.1:8000/v1",
+      "model": "Qwen3.8-27B-4bit",
+      "parallel": 1
+    }
+  ],
+  "eyes": "osd",
+  "_camera": "Which camera the kit works on; its runs go to runs/<model>_fw<firmware>/. With one camera nothing is needed: kit/tools/identify.py --camera starts its folder, and the kit takes the one camera in runs/; or name it, \"camera\": \"<model>_fw<firmware>\" as identify.py prints it. With more than one, \"cameras\" lists them, each {\"model\", \"firmware\"} with its own camera_ip, camera_model, hdmi or eyes where they differ, and \"camera\" names the one in use. --camera <model>_fw<firmware> or CAMSET_CAMERA on a command overrides it. \"cameras_example\" is not read by the kit (docs/QUICKSTART.md, step 3).",
+  "cameras_example": [
+    {
+      "model": "ILCE-1M2",
+      "firmware": "4.00"
+    },
+    {
+      "model": "ILCE-7M5",
+      "firmware": "1.00",
+      "camera_ip": "192.168.1.60"
+    }
+  ],
+  "_comment": "\"readers_examples\" is not read by the kit: copy the entries you choose into \"readers\" (docs/QUICKSTART.md, \"Choosing a reader\"). Ollama, OpenAI and Gemini are untested here, and their \"model\" is a placeholder for a vision model that server or service offers. \"api_key_env\" names the environment variable holding a hosted service's key; the key itself never goes in this file.",
+  "readers_examples": [
+    {
+      "name": "ollama",
+      "url": "http://127.0.0.1:11434/v1",
+      "model": "a vision model you have pulled",
+      "parallel": 1
+    },
+    {
+      "name": "claude",
+      "kind": "anthropic",
+      "model": "claude-opus-5-5",
+      "parallel": 4,
+      "effort": "medium"
+    },
+    {
+      "name": "openai",
+      "url": "https://api.openai.com/v1",
+      "model": "a vision model the service offers",
+      "parallel": 4,
+      "api_key_env": "OPENAI_API_KEY"
+    },
+    {
+      "name": "gemini",
+      "url": "https://generativelanguage.googleapis.com/v1beta/openai",
+      "model": "a vision model the service offers",
+      "parallel": 4,
+      "api_key_env": "GEMINI_API_KEY"
+    }
+  ]
+}

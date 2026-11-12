@@ -1,0 +1,2494 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proof Viewer</title>
+<style>
+/* the page for kit/tools/proof_viewer.py, drawn like the editor (egui's dark theme, its menu view): the menu's tabs with
+   their colours | the tab's groups | every row of the group and its value | the chosen row. Narrower windows
+   follow Material 3's window size classes: the tabs go to a strip on top under 1440 px, the groups to a list
+   above the rows under 1100 px, and under 760 px one pane shows at a time (Back returns). */
+:root {
+  --bg: #1b1b1b; --side: #202020; --ink: #d2d2d2; --strong: #f0f0f0; --muted: #8c8c8c; --rule: #3a3a3a;
+  --sel: #005c80; --sel-ink: #ffffff; --hover: #2c2c2c; --field: #2a2a2a;
+  /* the hex's chosen bytes and the item lit in a list (apart from --sel, which the lists and chips keep): ink on
+     the highlight 4.5:1 or more; --hexrec, faint, the record or block around them */
+  --hexsel: #19e0ff; --hexsel-ink: #04151c; --hexrec: rgba(25, 224, 255, .15);
+  --ok: #5abe6e; --warn: #eba03c; --accent: #ff8a3d; --shade: rgba(8, 8, 10, .95);
+  --body: "Ubuntu", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --mono: ui-monospace, Menlo, Consolas, monospace;
+  --top: 0px;
+  color-scheme: dark;
+}
+/* the system's light theme (the page has no switch of its own, so no data-theme override either) */
+@media (prefers-color-scheme: light) { :root {
+  --bg: #f4f4f4; --side: #ebebeb; --ink: #2a2a2a; --strong: #000; --muted: #6b6b6b; --rule: #d0d0d0;
+  --sel: #90d1ff; --sel-ink: #000; --hover: #e2e2e2; --field: #fff; --ok: #2f7d43; --warn: #9a5f00; --accent: #c84d0a;
+  --hexsel: #0b63c7; --hexsel-ink: #ffffff; --hexrec: rgba(11, 99, 199, .14);
+  color-scheme: light } }
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.4 var(--body); }
+button { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--sel); outline-offset: 1px; }
+
+/* the editor's top bar */
+header.top { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 12px; border-bottom: 1px solid var(--rule); }
+header.top h1 { font-size: 1.15rem; font-weight: 500; margin: 0; color: var(--strong); }
+.file { font-size: .86rem; color: var(--muted); }
+.file b { color: var(--ink); font-weight: 500; }
+.file .warn { color: var(--warn); }
+#file { transition: background-color 1.2s ease-out; border-radius: 4px; }
+#file.flash { background: rgba(255, 200, 0, .45); transition: none; }
+@media (prefers-reduced-motion: reduce) { #file { transition: none; } }
+.find { flex: 1 1 300px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.find input { flex: 1 1 240px; min-width: 0; font: .92rem var(--body); color: var(--ink); background: var(--field); border: 1px solid var(--rule);
+  border-radius: 3px; padding: 5px 8px; min-height: 32px; }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chips button { font-size: .82rem; cursor: pointer; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 3px 9px; min-height: 30px; color: var(--ink); }
+.chips button[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); border-color: var(--sel); }
+.tabstrip { display: none; gap: 2px; overflow-x: auto; padding: 4px 8px; border-bottom: 1px solid var(--rule); }
+
+.cols { display: grid; grid-template-columns: 200px 270px minmax(340px, 1fr) minmax(380px, 1.15fr); height: calc(100vh - var(--top)); }
+.col { overflow-y: auto; min-width: 0; padding: 10px 10px 40px; border-right: 1px solid var(--rule); }
+.col:last-child { border-right: 0; }
+.col h2 { font-size: 1.05rem; font-weight: 500; margin: 0 0 8px; padding: 0 4px 6px; border-bottom: 1px solid var(--rule); color: var(--strong); display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.back { display: none; }
+.sel { background: none; border: 0; text-align: left; cursor: pointer; border-radius: 3px; padding: 3px 6px; width: 100%; display: flex; gap: 8px; align-items: baseline; min-height: 28px; }
+.sel:hover { background: var(--hover); }
+.sel[aria-current="true"] { background: var(--sel); color: var(--sel-ink); }
+.sel .n { color: var(--muted); font-size: .85rem; }
+.sel[aria-current="true"] .n { color: inherit; opacity: .8; }
+.list { list-style: none; margin: 0; padding: 0; }
+
+/* column 1: the tabs, each with its colour bar as in the editor */
+#menu h2 { color: var(--muted); font-size: 1.2rem; border: 0; }
+.bar { width: 7px; align-self: stretch; border-radius: 2px; flex: 0 0 auto; }
+#menu .sel { font-size: 1rem; padding: 5px 6px; }
+
+/* column 2: groups, numbered as the camera numbers them */
+#groups h2 { border-bottom-color: currentColor; }
+#groups .num { font: .75rem var(--mono); color: var(--muted); min-width: 1.5em; text-align: right; }
+#groups .sel[aria-current="true"] .num { color: inherit; }
+#groups .gmode { color: var(--muted); font-size: .8em; }
+.sep { margin: 12px 4px 4px; padding-top: 8px; border-top: 1px solid var(--rule); font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+/* column 3: every row of the group and its value, the camera's submenus indented */
+.items { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr) auto; }
+.item { display: contents; cursor: pointer; }
+.item > * { padding: 3px 6px; min-height: 27px; display: flex; align-items: center; gap: 6px; }
+.item > :first-child { border-radius: 3px 0 0 3px; } .item > :last-child { border-radius: 0 3px 3px 0; }
+.item:hover > * { background: var(--hover); }
+.item[aria-current="true"] > * { background: var(--sel); color: var(--sel-ink); }
+.item .nm, .item .vl { overflow-wrap: anywhere; }
+.item .mk { font: .74rem var(--mono); color: var(--muted); white-space: nowrap; justify-content: flex-end; }
+/* comparing: a second value column, the rows that differ in magenta */
+.items.cmp { grid-template-columns: minmax(0, 1.15fr) minmax(0, .9fr) minmax(0, .9fr) auto; }
+.item .cv { overflow-wrap: anywhere; color: var(--muted); }
+.item.dif .cv, .item.dif .vl { color: #f07ae6; }
+.item[aria-current="true"] .cv, .item.dif[aria-current="true"] .vl { color: inherit; }
+.cmpbar { display: inline-flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cmpbar select { font: inherit; font-size: .84rem; background: var(--field); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; min-height: 30px; max-width: 220px; }
+.opts li.cmpv { box-shadow: inset 3px 0 0 #f07ae6; }
+.meta .dif { color: #f07ae6; }
+.opts .cmptag { font-size: .74rem; color: #f07ae6; }
+.item[aria-current="true"] .mk { color: inherit; }
+.item.off .nm, .item.off .vl { color: var(--muted); }
+.item.d1 .nm { padding-left: 22px; } .item.d2 .nm { padding-left: 38px; } .item.d3 .nm { padding-left: 54px; } .item.d4 .nm { padding-left: 70px; }
+.item.parent .nm::after { content: " ›"; color: var(--muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--rule); display: inline-block; }
+.dot.yes { background: var(--ok); } .dot.part { background: var(--warn); } .dot.na { background: #7d8db3; }
+.meta .na { color: #9fb0d6; }
+.tag-filter { margin-left: 10px; font-size: .78rem; background: var(--warn); color: #000; border: 0; border-radius: 3px; padding: 1px 8px; cursor: pointer; }
+.ihead { grid-column: 1 / -1; font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 12px 6px 3px; border-bottom: 1px solid var(--rule); margin-bottom: 2px; }
+
+/* column 4: the chosen row */
+.crumb { font-size: .82rem; margin-bottom: 2px; }
+.title { font-size: 1.6rem; color: var(--strong); margin: 0 0 4px; line-height: 1.2; overflow-wrap: anywhere; }
+.help { color: var(--ink); margin: 0 0 6px; max-width: 75ch; }
+/* help text: the camera's guide frames it was read from (▣ guide), and both readings where the readers differed */
+.help .guide, .ohelp .guide { font-size: .78rem; white-space: nowrap; }
+details.readings { font-size: .8rem; color: var(--muted); margin: 3px 0 0; }
+details.readings > summary { cursor: pointer; color: var(--warn); width: fit-content; }
+details.readings .rd { margin: 4px 0 6px 14px; overflow-wrap: anywhere; }
+details.readings .rd b { color: var(--ink); font-weight: 500; }
+.opts li .ohelp { flex: 1 0 100%; font-size: .86rem; padding: 2px 0 4px calc(2.2em + 10px); cursor: auto; max-width: 75ch; }
+.opts li.cur .ohelp details.readings, .opts li.cur .ohelp details.readings > summary { color: inherit; }
+.opts li .hq { font: .76rem var(--mono); color: var(--muted); }
+.opts li.cur .hq { color: inherit; }
+.lhelp { font-size: .86rem; margin: 4px 0 8px; }
+.dinsp .dhelp { grid-column: 1 / -1; margin-top: 4px; color: var(--ink); font-family: var(--body); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.tilev { font-size: 1.3rem; color: var(--strong); }
+.meta { font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0; }
+.meta .ok { color: var(--ok); } .meta .warn { color: var(--warn); }
+.note { font-size: .84rem; color: var(--muted); margin: 6px 0; max-width: 80ch; }
+.why { color: var(--warn); font-size: .86rem; margin: 2px 0 6px; }
+.opts { list-style: none; margin: 8px 0; padding: 0; }
+.opts li { display: flex; flex-wrap: wrap; gap: 0 10px; align-items: baseline; padding: 3px 8px; border-radius: 3px; min-height: 28px; }
+.opts li .v { font: .76rem var(--mono); color: var(--muted); min-width: 2.2em; text-align: right; }
+.opts li .lab { flex: 1; overflow-wrap: anywhere; }
+.opts li .pf { font-size: .76rem; color: var(--muted); white-space: nowrap; }
+.opts li .pf.yes { color: var(--ok); }
+.opts li.has { cursor: pointer; } .opts li.has:hover { background: var(--hover); }
+.opts li .pics { font: .76rem var(--mono); color: var(--accent); white-space: nowrap; }
+.opts li.cur { background: var(--sel); color: var(--sel-ink); }
+.opts li.cur .v, .opts li.cur .pf, .opts li.cur .pics { color: inherit; }
+.opts li.on { outline: 2px solid var(--accent); outline-offset: -2px; }
+.rec { border-top: 1px solid var(--rule); margin-top: 14px; padding-top: 10px; }
+.rec:first-of-type { border-top: 0; margin-top: 4px; }
+.rec h3 { margin: 0; font-size: 1.05rem; font-weight: 500; color: var(--strong); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.key { font: .78rem var(--mono); color: var(--muted); }
+.tools { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0; font-size: .82rem; color: var(--muted); }
+.tools button { font-size: .84rem; cursor: pointer; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 3px 10px; min-height: 30px; color: var(--ink); }
+.gallery:empty { display: none; }
+.ev { border-left: 3px solid var(--accent); padding: 2px 0 8px 10px; margin: 10px 0 0; }
+.ev .what { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+.ev .what b { color: var(--strong); font-weight: 500; }
+.ev .where { font-size: .76rem; color: var(--muted); overflow-wrap: anywhere; }
+/* a value's gallery: one line saying what the pictures are, the proofs first (green: they prove the value), the
+   rest folded under a summary each (grey: extra evidence) */
+.gnote { font-size: .8rem; color: var(--muted); margin: 8px 0 0; max-width: 80ch; }
+.ev.proof { border-left-color: var(--ok); }
+.ev.side { border-left-color: var(--rule); }
+.ev .sub { margin-top: 8px; }
+details.more { margin: 10px 0 0; }
+details.more > summary { cursor: pointer; font-size: .84rem; color: var(--ink); padding: 3px 0; overflow-wrap: anywhere; }
+details.more > summary:hover { color: var(--strong); }
+/* frames are 640 x 480: as many columns as fit at 300 px or more, each growing to its own 640 pixels */
+.thumbs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 640px)); gap: 8px; margin-top: 6px; }
+.thumbs figure { margin: 0; max-width: 640px; }
+.thumbs img { width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border-radius: 3px; border: 1px solid var(--rule); cursor: zoom-in; background: #000; display: block; }
+.thumbs figcaption { font-size: .76rem; line-height: 1.3; color: var(--muted); overflow-wrap: anywhere; margin-top: 2px; }
+.reclist { list-style: none; margin: 6px 0; padding: 0; }
+.reclist button { background: none; border: 0; cursor: pointer; color: var(--ink); padding: 3px 6px; border-radius: 3px; text-align: left; width: 100%; display: flex; gap: 8px; align-items: baseline; }
+.reclist button:hover { background: var(--hover); }
+.empty { color: var(--muted); }
+
+.box { position: fixed; inset: 0; background: var(--shade); z-index: 20; display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px; }
+.box.open { display: flex; }
+.box img { width: min(100%, calc((100vh - 130px) * 4 / 3)); height: auto; border-radius: 3px; background: #000; }
+.box .cap { color: #eee; font: .85rem var(--mono); margin-top: 10px; text-align: center; max-width: 90ch; overflow-wrap: anywhere; }
+.box .bar2 { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 10px; }
+.box button, .box a { font-size: .88rem; background: #2c2c2c; color: #eee; border: 1px solid #555; border-radius: 3px; padding: 6px 14px; min-height: 36px; cursor: pointer; text-decoration: none; display: inline-flex; align-items: center; }
+
+/* the view switch, like the editor's Edit | Compare */
+.modes { display: inline-flex; }
+.modes button { cursor: pointer; background: var(--field); border: 1px solid var(--rule); padding: 4px 14px; min-height: 32px; font-size: .95rem; }
+.modes button:first-child { border-radius: 3px 0 0 3px; } .modes button:last-child { border-radius: 0 3px 3px 0; border-left: 0; }
+.modes button[aria-pressed="true"] { background: var(--sel); color: var(--sel-ink); border-color: var(--sel); }
+body.layout .tabstrip { display: none !important; }
+body.layout .find { display: none; }
+.laytools { display: none; gap: 8px; align-items: center; flex-wrap: wrap; }
+body.layout .laytools { display: inline-flex; }
+.laytools input { font: inherit; font-size: .84rem; background: var(--field); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; min-height: 30px; padding: 2px 6px; }
+/* the bytes: the whole file in the middle, the byte map as a strip beside it; two dumps side by side; the map */
+#lcenter { display: flex; flex-direction: column; overflow: hidden; }
+#lcenter .cpane { flex: 1 1 auto; min-height: 0; }
+#lcenter .cpane[hidden] { display: none; }
+#lcenter .cpane.scrolls { overflow: auto; }
+.hexwrap { display: flex; gap: 8px; height: 100%; }
+#bigHex { flex: 1 1 auto; min-width: 0; height: 100%; }
+#strip { flex: 0 0 34px; width: 34px; height: 100%; cursor: pointer; border-radius: 3px; }
+.vhex.fill { height: 100%; margin: 0; font-size: .78rem; }
+#pane-diff { display: flex; flex-direction: column; }
+.diffhead { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: .82rem; color: var(--muted); padding: 0 0 4px; }
+.diffwrap { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.diffwrap .vhex { height: 100%; margin: 0; font-size: .78rem; }
+.ctabs button { font-size: .84rem; }
+.vhex { user-select: none; outline: 0; }
+.dinsp { display: grid; grid-template-columns: auto 1fr; gap: 1px 10px; font-size: .82rem; margin: 0 0 10px; padding: 6px 8px; background: var(--side); border-radius: 3px; }
+.dinsp .k { color: var(--muted); } .dinsp .m { font-family: var(--mono); overflow-wrap: anywhere; }
+.dinsp h3 { grid-column: 1 / -1; margin: 0 0 3px; font-size: .8rem; font-weight: 500; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+
+/* the file layout view: structure | byte map | the chosen bytes, with a divider to drag between each two */
+.lay { display: grid; grid-template-columns: var(--lw1, 520px) 7px minmax(240px, 1fr) 7px var(--lw3, 360px); height: calc(100vh - var(--top)); }
+.lay[hidden], .cols[hidden] { display: none; }
+.lay .col { border-right: 0; }
+.split { cursor: col-resize; touch-action: none; background: linear-gradient(var(--rule), var(--rule)) center / 1px 100% no-repeat; }
+.split:hover, .split:focus-visible, .split.drag { background: linear-gradient(var(--sel), var(--sel)) center / 3px 100% no-repeat; outline: 0; }
+/* the structure: the file's parse tree as the format spec names it, with columns (as 010 Editor's Template
+   Results and ImHex's Pattern Data show one) */
+#ltree { overflow-x: auto; }
+.tt { --tc1: 130px; --tc2: 62px; --tc3: 42px; --tc4: 64px; --tc5: 80px; --tc6: 70px;
+  min-width: calc(var(--tc1) + var(--tc2) + var(--tc3) + var(--tc4) + var(--tc5) + var(--tc6) + 52px); font-size: .86rem; }
+.tt .row { display: grid; grid-template-columns: var(--tc1) var(--tc2) var(--tc3) var(--tc4) var(--tc5) minmax(var(--tc6), 1fr);
+  gap: 0 8px; align-items: baseline; width: 100%; background: none; border: 0; border-radius: 3px; padding: 2px 6px;
+  min-height: 24px; text-align: left; cursor: pointer; color: inherit; font: inherit; }
+.tt .row:hover { background: var(--hover); }
+.tt .row[aria-current="true"] { background: var(--sel); color: var(--sel-ink); }
+.tt .head { position: sticky; top: -10px; z-index: 1; background: var(--bg); color: var(--muted); font-size: .76rem;
+  cursor: default; border-bottom: 1px solid var(--rule); border-radius: 0; }
+.tt .head:hover { background: var(--bg); }
+.tt .head > span { position: relative; overflow: visible; }
+.tt .colgrip { position: absolute; top: -2px; right: -7px; width: 9px; height: calc(100% + 4px); cursor: col-resize; z-index: 2; }
+.tt .colgrip:hover, .tt .colgrip.drag { background: linear-gradient(var(--sel), var(--sel)) center / 2px 100% no-repeat; }
+.tt .row > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tt .m { font: .78rem var(--mono); }
+.tt .n { text-align: right; }
+.tt .tw { display: inline-block; width: 14px; color: var(--muted); }
+.tt .row[aria-current="true"] .tw, .tt .row[aria-current="true"] .k { color: inherit; }
+.tt .k { color: var(--muted); }
+.tt .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.tt .dif { color: #f07ae6; margin-left: 6px; }
+.cov { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: .8rem; color: var(--muted); margin: 0 0 8px; }
+.cov span { display: inline-flex; gap: 5px; align-items: center; }
+.cov i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+.cov b { color: var(--strong); font-weight: 500; }
+.covbar { display: flex; height: 10px; border-radius: 3px; overflow: hidden; width: 100%; margin: 2px 0 4px; }
+.maptools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 0 0 8px; }
+.button { cursor: pointer; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 3px 10px; min-height: 30px; font-size: .84rem; display: inline-flex; align-items: center; }
+.maprow { margin: 0 0 10px; }
+.maprow.tight { margin: 0 0 3px; }
+.maprow .lab { font-size: .8rem; color: var(--muted); margin: 0 0 3px; display: flex; justify-content: space-between; gap: 8px; }
+.maprow canvas { display: block; max-width: 100%; cursor: crosshair; }
+.maptools select { font: inherit; font-size: .84rem; background: var(--field); color: var(--ink); border: 1px solid var(--rule); border-radius: 3px; min-height: 30px; }
+.hover { font: .78rem var(--mono); color: var(--muted); min-height: 1.4em; overflow-wrap: anywhere; position: sticky; bottom: 0; background: var(--bg); padding: 4px 0; }
+.hex { font: .84rem/1.5 var(--mono); white-space: pre; overflow-x: auto; margin: 8px 0; padding: 6px 8px; background: var(--side); border-radius: 3px; }
+.hex .o { color: var(--muted); } .hex .a { color: var(--muted); }
+.hex .bh { color: #8fb4ff; } .hex .bv { color: var(--strong); } .hex .bo { color: #555; }
+/* a byte's marks, a later one over an earlier where two meet: the record or block around the chosen bytes (faint),
+   a range dragged, what differs (magenta), the chosen bytes (--hexsel; a range dragged in them inverted, what differs
+   underlined), the setting the menu sent here or a match found (yellow), the cursor's byte (ringed, over its
+   neighbours) */
+.hex .hrec { background: var(--hexrec); }
+.hex .rng { background: rgba(255, 255, 255, .2); }
+.hex .df { background: #8a2580; color: #fff; }
+.hex .hsel { background: var(--hexsel); color: var(--hexsel-ink); }
+.hex .hsel.df { box-shadow: inset 0 -3px 0 #e83ad8; }
+.hex .hsel.rng { background: var(--hexsel-ink); color: var(--hexsel); }
+.hex .hl { background: rgba(255, 213, 74, .3); box-shadow: 0 0 0 1px #ffd54a; }
+.hex .hsel.hl { background: #ffd54a; color: #000; }
+.hex .cur { outline: 2px solid var(--strong); outline-offset: 0; box-shadow: inset 0 0 0 1.5px var(--bg); border-radius: 2px; }
+.hex .twin { box-shadow: 0 0 0 1px var(--muted); border-radius: 2px; }
+/* a file's or a section's bytes, drawn a screenful at a time, above its items */
+.vhex { position: relative; height: clamp(160px, 36vh, 460px); overflow: auto; }
+.vhex .vin { position: relative; }
+.vhex .vin > div { position: absolute; left: 8px; height: 19px; line-height: 19px; }
+.vhex [data-p] { cursor: pointer; }
+.items-t { table-layout: fixed; }
+.items-t td, .items-t th { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.items-t tr { scroll-margin-top: calc(clamp(160px, 36vh, 460px) + 70px); }
+.items-t tr.pick { cursor: pointer; }
+.items-t tr.pick:hover td { background: var(--hover); }
+.items-t .go { padding: 0 4px; }
+/* the item lit in a list, and a record's elements chosen: the hex's selection colour */
+.insp tr.on td, .insp tr.on:hover td { background: var(--hexsel); color: var(--hexsel-ink); }
+.insp tr.on td .dif, .insp tr.on td .linkish, .insp tr.on td .key { color: var(--hexsel-ink); }
+details.explain { margin-top: 12px; }
+details.explain summary { cursor: pointer; color: var(--muted); font-size: .86rem; }
+.linked { border-left: 3px solid #ffd54a; background: var(--side); padding: 5px 9px; margin: 6px 0; font-size: .86rem; border-radius: 0 3px 3px 0; }
+.insp { border-collapse: collapse; width: 100%; font-size: .84rem; margin: 6px 0; }
+.insp th, .insp td { text-align: left; padding: 3px 6px; border-top: 1px solid var(--rule); vertical-align: top; }
+.insp th { color: var(--muted); font-weight: 500; font-size: .78rem; }
+.insp td.m { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
+.insp td.dif { color: #f07ae6; }
+.insp a, .linkish { color: #6cb6ff; cursor: pointer; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; }
+.explain { font-size: .88rem; max-width: 80ch; }
+.explain table { border-collapse: collapse; margin: 8px 0; }
+.explain td, .explain th { border-top: 1px solid var(--rule); padding: 3px 8px; text-align: left; font-size: .84rem; }
+.explain td:first-child { font-family: var(--mono); white-space: nowrap; color: var(--muted); }
+
+/* large (1100-1439): the tabs move to a strip on top */
+@media (max-width: 1439px) {
+  .tabstrip { display: flex; }
+  #menu { display: none; }
+  .cols { grid-template-columns: 250px minmax(300px, 1fr) minmax(340px, 1.1fr); }
+  .tabstrip .sel { width: auto; white-space: nowrap; }
+}
+/* expanded (760-1099): groups above the rows, the chosen row beside them */
+@media (max-width: 1099px) {
+  .cols { grid-template-columns: minmax(300px, 1fr) minmax(320px, 1.1fr); grid-template-rows: auto minmax(0, 1fr); }
+  #groups { grid-row: 1; grid-column: 1; max-height: 32vh; border-bottom: 1px solid var(--rule); }
+  #items { grid-row: 2; grid-column: 1; }
+  #detail { grid-row: 1 / 3; grid-column: 2; }
+}
+/* stacked: the byte map above the chosen bytes, both beside the structure; the divider between them drags up and down */
+.lay.stacked { grid-template-columns: var(--lw1, 600px) 7px minmax(0, 1fr); grid-template-rows: var(--mh, 52%) 7px minmax(0, 1fr); }
+.lay.stacked #ltree, .lay.stacked .split[data-col="1"] { grid-row: 1 / 4; }
+.lay.stacked #lcenter { grid-column: 3; grid-row: 1; }
+.lay.stacked .split[data-col="3"] { grid-column: 3; grid-row: 2; cursor: row-resize; background: linear-gradient(var(--rule), var(--rule)) center / 100% 1px no-repeat; }
+.lay.stacked .split[data-col="3"]:hover, .lay.stacked .split[data-col="3"]:focus-visible, .lay.stacked .split[data-col="3"].drag { background: linear-gradient(var(--sel), var(--sel)) center / 100% 3px no-repeat; }
+.lay.stacked #lhex { grid-column: 3; grid-row: 3; }
+.arrange { display: inline-flex; }
+.arrange button { font-size: .78rem; padding: 2px 8px; min-height: 26px; }
+@media (max-width: 1439px) { .lay { grid-template-columns: var(--lw1, 440px) 7px minmax(220px, 1fr) 7px var(--lw3, 340px); }
+  .lay.stacked { grid-template-columns: var(--lw1, 540px) 7px minmax(0, 1fr); } }
+@media (max-width: 1099px) { .lay { display: block; height: auto; } .lay .col { border: 0; overflow: visible; } .split, .arrange { display: none; }
+  #lcenter { display: block; } .hexwrap { height: 60vh; } }
+/* compact and medium (under 760): one pane at a time */
+@media (max-width: 759px) {
+  .cols { display: block; height: auto; }
+  .col { border: 0; overflow: visible; max-height: none !important; }
+  .cols[data-show="groups"] #items, .cols[data-show="groups"] #detail,
+  .cols[data-show="items"] #groups, .cols[data-show="items"] #detail,
+  .cols[data-show="detail"] #groups, .cols[data-show="detail"] #items { display: none; }
+  .back { display: inline-flex; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 2px 9px; cursor: pointer; font-size: .82rem; min-height: 32px; align-items: center; white-space: nowrap; }
+}
+@media (pointer: coarse) { .sel, .item > * { min-height: 44px; } .opts li { min-height: 40px; } .chips button, .tools button { min-height: 40px; } details.more > summary { padding: 10px 0; } }
+</style>
+</head>
+<body>
+<header class="top" id="top">
+  <h1>Proof Viewer</h1>
+  <div class="modes" role="group" aria-label="View"><button id="m-menu" aria-pressed="true">Menu</button><button id="m-layout" aria-pressed="false">File layout</button></div>
+  <span class="file" id="file"></span>
+  <label class="button" title="Show another camera settings file's values here (read in the browser; nothing is sent anywhere)">Open settings file…<input type="file" id="mainfile" accept=".dat,.DAT" hidden></label>
+  <span class="file" id="mainmsg"></span>
+  <span class="cmpbar" title="Which section's values the page shows, and what it compares them with (the menu view's second column, the file layout's magenta)"><label class="key">Show <select id="cmp-show"></select></label><label class="key">compared with <select id="cmp-with"></select></label></span>
+  <span class="laytools"><label class="key">Go to <input id="goto" placeholder="0x1a33, or id 0334" size="15" autocomplete="off"></label>
+    <label class="key">Find <input id="findq" placeholder="bytes 34 03 cf 02, or a setting's name" size="26" autocomplete="off"></label><span class="key" id="findn"></span>
+    <button class="button" id="findprev" title="Previous match (Shift+Enter)">⏶</button><button class="button" id="findnext" title="Next match (Enter)">⏷</button>
+    <label class="button" title="Compare this file with another camera file">Open another file…<input type="file" id="other" accept=".dat,.DAT" hidden></label><span id="othermsg" class="key"></span></span>
+  <div class="find">
+    <input id="q" type="search" placeholder="🔍 Search every setting, group or value" aria-label="Search" autocomplete="off">
+    <div class="chips" id="chips" role="group" aria-label="Show"></div>
+  </div>
+</header>
+<nav class="tabstrip" id="tabstrip" aria-label="Tabs"></nav>
+<div class="cols" id="cols" data-show="items">
+  <section class="col" id="menu" aria-label="Menu"><h2>Menu</h2><ul class="list" id="tabs"></ul></section>
+  <section class="col" id="groups" aria-label="Groups"><h2 id="gtitle"></h2><ul class="list" id="glist"></ul></section>
+  <section class="col" id="items" aria-label="Rows"><h2><button class="back" id="back-groups">← Groups</button><span id="ititle"></span><span class="key" id="icount"></span></h2><div class="items" id="ilist"></div></section>
+  <section class="col" id="detail" aria-label="The chosen row"><h2><button class="back" id="back-items">← Rows</button><span></span></h2><div id="dbody"></div></section>
+</div>
+<div class="lay" id="lay" hidden>
+  <section class="col" id="ltree" aria-label="Structure"><h2><span>Structure</span><span class="key">as the definition's container block places it</span></h2><div class="tt" id="tree" role="tree" aria-label="The file's structure"></div></section>
+  <div class="split" data-col="1" role="separator" aria-orientation="vertical" tabindex="0" title="Drag, or ← →, to resize; double-click to reset" aria-label="Resize the structure column"></div>
+  <section class="col" id="lcenter" aria-label="Bytes"><h2><span class="modes ctabs" role="group" aria-label="Show the bytes as"><button id="cv-hex" aria-pressed="true" title="The whole file's bytes, the byte map as a strip beside them">Hex</button><button id="cv-diff" aria-pressed="false" title="The two sections or files compared at the top, side by side">Side by side</button><button id="cv-map" aria-pressed="false" title="The byte map: every byte by its settings' state">Map</button></span><span class="key" id="mapinfo"></span>
+    <span class="modes arrange" role="group" aria-label="Arrange the bytes and the inspector"><button id="ar-side" aria-pressed="true" title="The inspector beside the bytes">Side by side</button><button id="ar-stack" aria-pressed="false" title="The inspector below the bytes">Stacked</button></span></h2>
+    <div class="cov" id="cov"></div>
+    <div class="cpane" id="pane-hex"><div class="hexwrap"><div id="bigHex"></div><canvas id="strip" title="The whole file by its settings' state: click or drag to go there"></canvas></div></div>
+    <div class="cpane" id="pane-diff" hidden><div class="diffhead"><span id="dA"></span><span id="dB"></span></div><div class="diffwrap" id="diffwrap"></div></div>
+    <div class="cpane scrolls" id="pane-map" hidden>
+      <div class="maptools"><label class="key">Bytes a row <select id="rowbytes"><option value="0">fit</option><option>256</option><option>512</option><option>1024</option><option>2048</option></select></label>
+        <label class="key"><input type="checkbox" id="whole"> whole file</label></div>
+      <div id="maps"></div><div class="hover" id="hover">&nbsp;</div></div></section>
+  <div class="split" data-col="3" role="separator" aria-orientation="vertical" tabindex="0" title="Drag, or ← →, to resize; double-click to reset" aria-label="Resize the inspector column"></div>
+  <section class="col" id="lhex" aria-label="Inspector"><h2><span id="htitle">Inspector</span></h2><div id="insp-data"></div><div id="hbody"></div></section>
+</div>
+<div class="box" id="box" role="dialog" aria-modal="true" aria-label="Frame">
+  <img id="big" alt="">
+  <div class="cap" id="cap"></div>
+  <div class="bar2"><button id="prev">← Prev</button><a id="file-link" target="_blank" rel="noopener">Open file</a><button id="next">Next →</button><button id="close">Close</button></div>
+</div>
+<script>
+"use strict";
+const DATA = /*DATA*/null;
+// The template itself opened in a browser (kit/tools/proof_viewer.py has not filled it): say so, and stop.
+if (DATA === null) {
+  const p = (...kids) => { const e = document.createElement("p"); e.append(...kids); return e; };
+  const code = (t) => { const e = document.createElement("code"); e.textContent = t; e.style.fontFamily = "var(--mono)"; return e; };
+  const box = document.createElement("main");
+  box.style.cssText = "max-width: 40rem; margin: 3rem auto; padding: 0 16px;";
+  const h = document.createElement("h1");
+  h.textContent = "Proof Viewer";
+  box.append(h,
+    p("This is the proof viewer's template, not the viewer. Build the viewer with ", code("python3 kit/tools/proof_viewer.py"),
+      " on the computer that holds the camera runs (", code("runs/<model>_fw<fw>/"), "); it writes ", code("runs/<model>_fw<fw>/_viewer/index.html"),
+      ", which is the page to open."));
+  document.body.replaceChildren(box);
+  throw new Error("proof_viewer.html is the template; build the viewer with kit/tools/proof_viewer.py");
+}
+const $ = (id) => document.getElementById(id);
+// the row marked chosen in a list (the tree, the groups, the rows) brought into view
+const intoView = (id, block = "nearest") => $(id).querySelector('[aria-current="true"]')?.scrollIntoView({ block });
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v === undefined || v === null || v === false) continue;
+    if (k === "class") e.className = v;
+    else if (k.startsWith("on")) e.addEventListener(k.slice(2), v);
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const k of kids.flat()) if (k !== null && k !== undefined && k !== false) e.append(k);
+  return e;
+}
+// what this browser keeps between visits (the map's row length, the column widths, the view): nothing when storage is
+// off, and a value it does not know is the default
+const store = { get(k) { try { return localStorage.getItem(k); } catch { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch { /* not kept */ } } };
+const storedJson = (k) => { try { return JSON.parse(store.get(k) || "{}") || {}; } catch { return {}; } };
+const R = DATA.records;
+for (const r of Object.values(R)) {
+  r.pics = r.ev.reduce((n, e) => n + e.frames.length, 0);
+  r.text = [r.n, r.k, r.g, ...r.menu, ...r.vals.map((v) => v[1])].join(" ").toLowerCase();
+}
+const color = (tab) => { const c = DATA.colors[tab]; return c ? `rgb(${c.join(",")})` : "var(--muted)"; };
+// the Main entry at the top of the Menu column (camera.main_tiles: each mode a group, its tiles the rows) and My Menu
+// made whole (camera.my_menu: the file's pages and the item names by code, beside its stray settings); a definition
+// without either has neither
+if (DATA.main && DATA.main.modes.length)
+  DATA.menu.unshift({ tab: DATA.main.title, kind: "main", groups: [], others: [],
+    special: DATA.main.modes.map((m, i) => ({ name: m.name, num: i + 1, kind: "main", mode: m })) });
+if (DATA.my_menu) {
+  let t = DATA.menu.find((x) => x.tab === DATA.my_menu.title);
+  if (!t) DATA.menu.push(t = { tab: DATA.my_menu.title, groups: [], others: [] });
+  t.special = [{ name: "Pages", num: 1, kind: "mmpages" }, { name: "Item names", num: 2, kind: "mmnames" }];
+}
+const label = (r, v) => { if (v === null || v === undefined) return ""; const x = r.vals.find((p) => p[0] === v); return x ? x[1] : String(v); };
+
+// "Not proved" leaves out what no proof can reach (not on this camera, or skipped by the owner's choice)
+const FILTERS = [["all", "All", null], ["proved", "Proved", (r) => r.proved], ["unproved", "Not proved", (r) => !r.proved && !r.why],
+  ["cant", "Can't be proved", (r) => !r.proved && !!r.why], ["pics", "With pictures", (r) => r.pics > 0], ["differs", "Differs", (r) => differs(r)]];
+// why no proof can reach a setting, by its kind: the editor's words (editor/src/schema.rs, unproved_words)
+const WHY = { not_on_camera: "Not on this camera", skipped: "Not proved (skipped)",
+  state: "Not a menu setting: the camera keeps it", camera_only: "Written only by the camera's own saves",
+  equipment: "Not proved (needs equipment)", network: "Not proved (network, by hand only)",
+  unknown: "Not proved (nothing tried moved it)" };
+// ---- what the page shows and compares: one choice for the menu view and the file layout (the owner's, 2026-11-03).
+// "show" is a section (0 the live settings, 1-12 the memory sets); "with" is "none", "base" (each memory set with its
+// mode's first memory), a section, or "other" (the same section of a file opened beside this one)
+const CMP = { show: 0, with: "base" };
+// the section a section is compared with in this file, or null
+function partnerOf(sec) {
+  if (CMP.with === "base") return baseOf(sec) || null;
+  if (typeof CMP.with === "number") return sec === CMP.show ? CMP.with : sec === CMP.with ? CMP.show : null;
+  return null;
+}
+const partnerLabel = (sec) => (CMP.with === "other" ? L.otherName : setName(partnerOf(sec)));
+// whether the menu view has a second value to show
+const comparing = () => (CMP.with === "other" ? !!L.other : partnerOf(CMP.show) !== null);
+const cmpName = () => (CMP.with === "other" ? `${L.otherName} (${setName(CMP.show)})` : setName(partnerOf(CMP.show)));
+function cmpLegend() {
+  if (CMP.with === "none") return "differs (choose what to compare with at the top)";
+  if (CMP.with === "base") return "differs from its mode's first memory";
+  if (CMP.with === "other") return `differs from ${L.otherName}`;
+  return `differs between ${setName(CMP.show)} and ${setName(CMP.with)}`;
+}
+// a file's records by id, per section (live and memory records are matched by id: their places differ)
+function byId(f, sec) {
+  if (!f.byId) f.byId = [];
+  if (!f.byId[sec]) f.byId[sec] = new Map((f.sections[sec] ? f.sections[sec].recs : []).map((r) => [r.id, r]));
+  return f.byId[sec];
+}
+// a setting's value in one section of a file: a number, the bytes of an unmapped record, or undefined where the
+// section holds no such setting (a live-only one in a memory set, a memory-only one in the live settings)
+function valueIn(f, sec, k) {
+  const r = R[k], m = k.match(/^(global|set):0x([0-9a-f]+)(?:\[(\d+)\]|@(\d+))?$/);
+  if (!f || !m || !r || !f.sections[sec]) return undefined;
+  if (sec === 0 ? m[1] !== "global" : m[1] === "global" && !r.is) return undefined;
+  const rec = byId(f, sec).get(parseInt(m[2], 16));
+  if (!rec) return undefined;
+  const ints = [1, 2, 4, 8].includes(rec.size), at = rec.off + 8;
+  if (m[4] !== undefined) return +m[4] + 2 <= rec.end - at ? f.dv.getInt16(at + +m[4], true) : undefined;
+  if (m[3] !== undefined) return ints && +m[3] < rec.count ? elem(f, at + +m[3] * rec.size, rec.size) : undefined;
+  if (rec.count === 1 && ints && r.raw === undefined) return elem(f, at, rec.size);
+  const vals = ints ? [...Array(rec.count)].map((_, i) => elem(f, at + i * rec.size, rec.size)) : [...f.u8.slice(at, rec.end)];
+  return vals.length === 1 ? String(vals[0]) : vals.slice(0, 16).join(" ") + (vals.length > 16 ? " …" : "");
+}
+const shownVal = (r) => valueIn(L.f, CMP.show, r.k);
+const cmpVal = (r) => (CMP.with === "other" ? valueIn(L.other, CMP.show, r.k) : partnerOf(CMP.show) !== null ? valueIn(L.f, partnerOf(CMP.show), r.k) : undefined);
+function differs(r) {
+  if (!comparing()) return false;
+  const a = shownVal(r), b = cmpVal(r);
+  return a !== undefined && b !== undefined && a !== b;
+}
+// a value as the rows show it; "—" where the section holds no such setting
+function fmt(r, v) {
+  if (v === undefined) return L.f ? "—" : "";
+  return typeof v === "number" ? label(r, v) : v;
+}
+// the bytes that differ under the comparison chosen: each memory set from its mode's first, two sections record by
+// record (the same id and shape), or the file from the file opened beside it
+function diffMask(f) {
+  const key = `${CMP.show}|${CMP.with}|${L.otherName}`;
+  if (L.maskFile === f && L.maskKey === key) return L.mask;
+  let m = null;
+  if (CMP.with === "other") m = L.diff;
+  else if (CMP.with === "base") { m = new Uint8Array(f.size); for (const s of f.sections.slice(1)) setDiff(f, s.index, m); }
+  else if (typeof CMP.with === "number") {
+    m = new Uint8Array(f.size);
+    const other = byId(f, CMP.with);
+    for (const ra of f.sections[CMP.show].recs) {
+      const rb = other.get(ra.id);
+      if (!rb || rb.size !== ra.size || rb.count !== ra.count) continue;
+      for (let k = 8; k < ra.end - ra.off; k++) if (f.u8[ra.off + k] !== f.u8[rb.off + k]) { m[ra.off + k] = 1; m[rb.off + k] = 1; }
+    }
+  }
+  Object.assign(L, { mask: m, maskKey: key, maskFile: f });
+  return m;
+}
+// the two menus in the top bar
+function cmpOptions() {
+  const f = L.f, n = f ? f.sections.length : 13;
+  const opt = (v, t, on) => el("option", { value: String(v), selected: on || undefined }, t);
+  $("cmp-show").replaceChildren(...[...Array(n)].map((_, i) => opt(i, setName(i), CMP.show === i)));
+  $("cmp-with").replaceChildren(opt("none", "nothing", CMP.with === "none"), opt("base", "its mode's first memory", CMP.with === "base"),
+    ...[...Array(n)].map((_, i) => i).filter((i) => i !== CMP.show).map((i) => opt(i, setName(i), CMP.with === i)),
+    L.other ? opt("other", L.otherName, CMP.with === "other") : null);
+}
+function setCompare(show, wth) {
+  CMP.show = show; CMP.with = wth === CMP.show ? "none" : wth;
+  if (CMP.show) L.set = CMP.show; else if (typeof CMP.with === "number" && CMP.with) L.set = CMP.with;
+  L.mask = null; L.maskKey = null; C.diffKey = "";
+  cmpOptions(); chips(); draw();
+  if (!$("lay").hidden) drawLayout();
+}
+$("cmp-show").addEventListener("change", (e) => setCompare(+e.target.value, CMP.with));
+$("cmp-with").addEventListener("change", (e) => { const v = e.target.value; setCompare(CMP.show, /^\d+$/.test(v) ? +v : v); });
+
+// every visit starts on All: a filter kept from the last visit hid most of the page (2026-11-03)
+const state = { tab: (DATA.menu.find((t) => t.kind !== "main") || DATA.menu[0]).tab, group: null, item: null, filter: "all", q: "", open: new Set() };
+function fileLabel(name) {
+  $("file").replaceChildren(el("b", {}, DATA.model || ""), ` · values from ${name || "no file"} · made ${DATA.made}`
+    + (DATA.pictures === 0 ? " · no pictures on this computer" : "") + helpSource(),
+    // a run log with damaged lines: those proofs' frames are missing, and the build said which log (proof_viewer.py)
+    DATA.damaged ? el("span", { class: "warn" }, ` · ${DATA.damaged} damaged log line${DATA.damaged === 1 ? "" : "s"} left out (the build named the logs)`) : "");
+}
+// where the help text comes from, said once: the camera's own guide read off its screen (the private help file and
+// the help runs), the project's own words, or both
+function helpSource() {
+  const s = DATA.help_source || {}, cam = s.camera || 0, own = s.own || 0;
+  return cam && own ? " · help: the camera's own guide, read off its screen, and Camset's own words where it has none"
+    : cam ? " · help: the camera's own guide, read off its screen" : own ? " · help: Camset's own words" : "";
+}
+fileLabel(DATA.values);
+
+// what the search and the filter keep: records, and rows (a row stays when it or one of its records does)
+function keepRec(r) {
+  const f = FILTERS.find((x) => x[0] === state.filter)[2];
+  const q = state.q.trim().toLowerCase();
+  return (!f || f(r)) && (!q || r.text.includes(q));
+}
+function recsOf(node) { return [...node.recs, ...node.subs.flatMap((s) => s.keys)].map((k) => R[k]).filter(Boolean); }
+function keepNode(node) {
+  const q = state.q.trim().toLowerCase();
+  if (recsOf(node).some(keepRec) || node.kids.some(keepNode)) return true;
+  if (state.filter !== "all") return false;
+  return !q || node.l.toLowerCase().includes(q) || node.opts.some((o) => String(o).toLowerCase().includes(q));
+}
+// settings counted as the editor counts them (records), each once
+function countNodes(rows) { return rows.reduce((n, x) => n + recsOf(x).filter(keepRec).length + countNodes(x.kids), 0); }
+function groupsOf(t) {
+  const gs = t.groups.map((g) => ({ id: "g:" + g.name, name: g.name, num: g.num, rows: g.rows, extra: g.extra, mode: g.mode,
+    n: countNodes(g.rows) + g.extra.filter((k) => R[k] && keepRec(R[k])).length }));
+  const os = t.others.map((o) => ({ id: "o:" + o.name, name: o.name, num: null, rows: [], extra: o.keys,
+    n: o.keys.filter((k) => R[k] && keepRec(R[k])).length }));
+  const xs = (t.special || []).map((s) => ({ id: "x:" + s.name, name: s.name, num: s.num, rows: [], extra: [], kind: s.kind, spec: s,
+    n: specialLines(s).filter((x) => x.id).length }));
+  return [...xs, ...gs, ...os];
+}
+function tabCount(t) { return groupsOf(t).reduce((n, g) => n + g.n, 0); }
+function rowsOf(rs) {
+  const rows = [];
+  for (const r of rs) { const row = rows.find((x) => x[0].n === r.n); if (row) row.push(r); else rows.push([r]); }
+  return rows;
+}
+
+function chips() {
+  if (state.filter === "differs" && !comparing()) state.filter = "all";
+  const shown = ([id]) => (id !== "differs" || comparing()) && (id !== "pics" || DATA.pictures !== 0);
+  $("chips").replaceChildren(...FILTERS.filter(shown).map(([id, lab]) => el("button", { "aria-pressed": String(state.filter === id),
+    onclick: () => { state.filter = id; chips(); draw(); } }, lab)));
+}
+
+// the heading over the rows only another shooting mode's menu has, as the editor words it (menu_rows::mode_words)
+const modeWords = (mode) => `In ${mode} mode`;
+// column 3's lines: the camera's rows, a submenu's rows indented, the records on each row beneath it, a
+// family's profiles or looks as folded subsections, then each other shooting mode's rows under its heading ("In
+// Movie mode", after the Stills rows, in that mode's order: the build puts them there), then the group's records no
+// row names. It touches no page but through keepNode and keepRec, so a check runs it on its own (node).
+function linesOf(group) {
+  const lines = [];
+  const walk = (node, depth) => {
+    if (!keepNode(node)) return;
+    const own = node.recs.map((k) => R[k]).filter(Boolean);
+    // the row is its setting (one record, or copies of one name): one line, as in the editor
+    const single = own.length > 0 && !node.subs.length && own.every((r) => r.n.toLowerCase() === node.l.toLowerCase());
+    lines.push({ id: node.id, node, depth, rec: single ? own[0] : null, same: single ? own : null, rs: recsOf(node), parent: node.kids.length > 0 || node.subs.length > 0 || (own.length > 0 && !single) });
+    if (!single) for (const row of rowsOf(own.filter(keepRec))) lines.push({ id: row[0].k, rec: row[0], same: row, under: node, depth: depth + 1, rs: row });
+    for (const s of node.subs) {
+      const rs = s.keys.map((k) => R[k]).filter((r) => r && keepRec(r));
+      if (!rs.length) continue;
+      const sid = node.id + ":" + s.name;
+      const open = state.open.has(sid) || !!state.q;
+      lines.push({ id: sid, sub: s, node, depth: depth + 1, rs, toggle: sid, open });
+      if (open) for (const row of rowsOf(rs)) lines.push({ id: row[0].k, rec: row[0], same: row, under: node, depth: depth + 2, rs: row });
+    }
+    for (const k of node.kids) walk(k, depth + 1);
+  };
+  let mode = null;
+  for (const node of group.rows) {
+    const at = lines.length;
+    walk(node, 0);
+    if (lines.length > at && (node.mode || null) !== mode) {          // the first row of a mode's kept: its heading
+      mode = node.mode || null;
+      if (mode) lines.splice(at, 0, { head: modeWords(mode), mode });
+    }
+  }
+  const extra = group.extra.map((k) => R[k]).filter((r) => r && keepRec(r));
+  if (extra.length && group.rows.length) lines.push({ head: "More settings in this group" });
+  for (const row of rowsOf(extra)) lines.push({ id: row[0].k, rec: row[0], same: row, depth: 0, rs: row });
+  return lines;
+}
+
+function draw() {
+  const tab = DATA.menu.find((t) => t.tab === state.tab) || DATA.menu[0];
+  state.tab = tab.tab;
+  const tabButton = (t) => el("button", { class: "sel", "aria-current": String(t.tab === state.tab),
+    onclick: () => { state.tab = t.tab; state.group = state.item = null; show("groups"); draw(); } },
+    el("span", { class: "bar", style: `background:${color(t.tab)}` }), el("span", {}, t.tab), el("span", { class: "n" }, `(${tabCount(t)})`));
+  $("tabs").replaceChildren(...DATA.menu.map((t) => el("li", {}, tabButton(t))));
+  $("tabstrip").replaceChildren(...DATA.menu.map(tabButton));
+
+  const groups = groupsOf(tab).filter((g) => g.n > 0 || (!state.q && state.filter === "all" && g.num !== null && g.rows.length));
+  if (!groups.some((g) => g.id === state.group)) { state.group = groups[0] ? groups[0].id : null; state.item = null; }
+  const group = groups.find((g) => g.id === state.group);
+  $("gtitle").textContent = tab.tab; $("gtitle").style.color = color(tab.tab);
+  const off = groups.findIndex((g) => g.num === null);
+  $("glist").replaceChildren(...groups.flatMap((g, i) => [
+    i === off ? el("li", { class: "sep" }, "Not in the Stills menu") : null,
+    el("li", {}, el("button", { class: "sel", "aria-current": String(g.id === state.group),
+      onclick: () => { state.group = g.id; state.item = null; show("items"); draw(); } },
+      el("span", { class: "num" }, g.num ?? ""), el("span", {}, g.name, g.mode ? el("span", { class: "gmode" }, ` · ${modeWords(g.mode)}`) : ""),
+      el("span", { class: "n" }, `(${g.n})`)))]).filter(Boolean));
+
+  const lines = group ? (group.spec ? specialLines(group.spec) : linesOf(group)) : [];
+  if (!lines.some((x) => x.id === state.item)) state.item = (lines.find((x) => x.id) || {}).id || null;
+  $("ititle").replaceChildren(group ? group.name : "Nothing matches", state.filter !== "all" ? el("button", { class: "tag-filter",
+    onclick: () => { state.filter = "all"; chips(); draw(); } }, `only ${FILTERS.find((f) => f[0] === state.filter)[1].toLowerCase()} · show all`) : "");
+  $("icount").textContent = group ? String(lines.filter((x) => x.id).length) : "";
+  const cmpOn = comparing();
+  $("ilist").classList.toggle("cmp", cmpOn);
+  const recs = lines.flatMap((x) => x.rec ? [x.rec] : []);
+  const tiles = group && group.kind === "main" ? lines.filter((x) => x.id) : null;
+  const cmpHead = !cmpOn || (group && group.spec && !tiles) ? null : el("div", { class: "ihead" }, `${setName(CMP.show)} → ${cmpName()} · `
+    + (tiles ? `${tiles.filter((x) => x.dif).length} of ${tiles.length} tiles differ` : `${recs.filter(differs).length} of ${recs.length} differ`));
+  $("ilist").replaceChildren(...(cmpHead ? [cmpHead] : []), ...lines.map((it) => {
+    if (it.head) return el("div", { class: "ihead" }, it.head);
+    if (it.special) return specialItem(it, cmpOn);
+    const proved = it.rs.filter((r) => r.proved).length, pics = it.rs.reduce((n, r) => n + r.pics, 0);
+    const na = it.rs.length && it.rs.every((r) => r.proved || r.why) && it.rs.some((r) => r.why);
+    const st = it.node && !it.rec && !it.sub ? it.node.st : "";
+    const off = ["greyed", "never", "button", "info"].includes(st) || (!!it.node && !it.sub && !it.rs.length);
+    const name = it.sub ? `${it.open ? "▾" : "▸"} ${it.sub.name}` : it.rec && it.rec.n !== (it.node && it.node.l) && !it.node ? it.rec.n : (it.node ? it.node.l : it.rec.n);
+    const value = it.rec ? fmt(it.rec, shownVal(it.rec)) : it.node && !it.sub && !it.rs.length ? ({ never: "action or by hand", greyed: "greyed", info: "notice" }[st] || "") : "";
+    const d = cmpOn && it.rs.some(differs);
+    return el("div", { class: `item d${Math.min(it.depth, 4)}${it.parent ? " parent" : ""}${off ? " off" : ""}${d ? " dif" : ""}`,
+      "aria-current": String(it.id === state.item), tabindex: "0", role: "button", title: lineTip(it),
+      onclick: () => { if (it.toggle) { if (state.open.has(it.toggle)) state.open.delete(it.toggle); else state.open.add(it.toggle); } state.item = it.id; show("detail"); draw(); } },
+      el("span", { class: "nm" }, name), el("span", { class: "vl" }, value),
+      // a row of linked records shows the first one's values; when only another of them differs, it says so
+      cmpOn ? el("span", { class: "cv" }, it.rec ? `${differs(it.rec) ? "→ " : ""}${fmt(it.rec, cmpVal(it.rec))}${d && !differs(it.rec) ? " · a linked record differs" : ""}` : "") : null,
+      el("span", { class: "mk" }, pics ? `▣ ${pics}` : "", it.rs.length ? el("span", { class: "dot " + (proved === it.rs.length ? "yes" : na && !proved ? "na" : proved ? "part" : "") }) : ""));
+  }));
+  detail(lines.find((x) => x.id === state.item), tab.tab, group);
+  if (first && window.innerWidth >= 760) {
+    first = false;
+    for (const id of ["glist", "ilist"]) intoView(id, "center");
+  }
+  if ($("lay").hidden) location.replace("#" + encodeURIComponent([state.tab, state.group, state.item].join("|")));
+}
+let first = true;
+
+// column 4: the row as the editor's detail shows it, then its frames
+const STATES = { greyed: "Greyed", never: "Not opened by the kit (an action, or by hand only)", info: "A notice comes first",
+  button: "A button", unhandled: "Not read by the walk", seen: "Seen on the page, not walked",
+  proof: "Known from the proofs' menu paths only: the walk never read this row" };
+function detail(it, tab, group) {
+  const body = $("dbody");
+  if (!it) { body.replaceChildren(el("p", { class: "empty" }, "Choose a row.")); return; }
+  if (it.special) { body.replaceChildren(...specialDetail(it, tab, group).flat().filter(Boolean)); return; }
+  const md = (it.node || it.under || {}).mode;          // a row only another shooting mode's menu has
+  const out = [el("div", { class: "crumb", style: `color:${color(tab)}` }, [tab, group && group.name, it.under && it.under.l].filter(Boolean).join(" > ")
+    + (md ? ` · ${modeWords(md)}` : ""))];
+  if (it.sub || (it.node && !it.rec)) {
+    const node = it.node;
+    out.push(el("div", { class: "title" }, it.sub ? `${node.l}: ${it.sub.name}` : node.l));
+    if (!it.sub && node.st && !["walked", "submenu"].includes(node.st)) out.push(el("div", { class: "why" }, STATES[node.st] || node.st, node.why ? `: ${node.why}` : ""));
+    if (!it.sub && node.help) out.push(helpBlock(node.help, node.hg, node.hs));
+    if (!it.sub && node.opts.length) out.push(walkBlock(node));
+    const rs = it.sub ? it.rs : node.recs.map((k) => R[k]).filter((r) => r && keepRec(r));
+    if (rs.length) {
+      out.push(el("div", { class: "meta" }, `${rs.length} setting${rs.length === 1 ? "" : "s"} here; choose one:`));
+      out.push(el("ul", { class: "reclist" }, rowsOf(rs).map((row) => el("li", {}, el("button", {
+        onclick: () => { if (it.toggle) state.open.add(it.toggle); state.item = row[0].k; draw(); } },
+        el("span", { class: "dot " + (row.every((r) => r.proved) ? "yes" : row.some((r) => r.proved) ? "part" : "") }), row[0].n,
+        el("span", { class: "key" }, row.map((r) => r.k).join(" · ")))))));
+    } else if (!node.kids.length && !node.subs.length) out.push(el("p", { class: "empty" }, "No setting in the file belongs to this row."));
+  } else {
+    const rs = it.same || [it.rec];
+    out.push(el("div", { class: "title" }, it.rec.n));
+    if (it.node && it.node.help && !rs.some((r) => r.hs === "camera")) out.push(helpBlock(it.node.help, it.node.hg, it.node.hs));
+    if (it.node && it.node.opts.length) out.push(walkBlock(it.node));
+    for (const r of rs) out.push(record(r, rs.length > 1));
+  }
+  body.replaceChildren(...out);
+}
+
+function walkBlock(node) {
+  const g = el("div", { class: "gallery" });
+  const seq = node.walk.map(([src, lab]) => ({ src, cap: `pass 1 walk · ${src.split("/").pop()} · ${lab}` }));
+  return el("div", {}, el("div", { class: "meta" }, `The camera lists: ${node.opts.join(" · ")}`),
+    node.walk.length ? el("div", { class: "tools" }, el("button", { onclick: () => {
+      if (g.childElementCount) { g.replaceChildren(); return; }
+      g.replaceChildren(el("div", { class: "ev" }, el("div", { class: "what" }, el("b", {}, "The walk"), " · each option with the cursor on it (pass 1)"),
+        el("div", { class: "thumbs" }, node.walk.map(([src, lab], i) => el("figure", {}, el("img", { src, loading: "lazy", alt: lab, onclick: () => big(seq, i) }), el("figcaption", {}, lab))))));
+    } }, `The walk's pictures (${node.walk.length})`)) : null, g);
+}
+
+// one record: the editor's option list with the file's value lit, the proof state, and the frames by value
+function record(r, several) {
+  const g = el("div", { class: "gallery" });
+  const oh = new Map((r.oh || []).map(([v, t, gs, who]) => [v, [t, gs, who]]));          // each option's text, its guides, whose
+  let open;
+  // an option chosen: its pictures below the list, its help under it (a click in the help stays in it)
+  const choose = (value, li) => {
+    for (const x of box.querySelectorAll(".opts li.on")) x.classList.remove("on");
+    for (const x of box.querySelectorAll(".opts .ohelp")) x.remove();
+    if (open === value) { g.replaceChildren(); open = undefined; return; }
+    open = value; g.replaceChildren(...(value === "all" || counts[value] ? gallery(r, value === "all" ? undefined : value) : []));
+    if (!li) return;
+    li.classList.add("on");
+    const h = oh.get(value), hb = h && helpBlock(h[0], h[1], h[2], "ohelp");
+    if (hb) { for (const ev of ["click", "keydown"]) hb.addEventListener(ev, (e) => e.stopPropagation()); li.append(hb); }
+  };
+  const counts = {};
+  for (const e of r.ev) counts[e.v] = (counts[e.v] || 0) + e.frames.length;
+  const proved = new Set(r.pv || []);
+  const labelled = new Set(r.vals.map((x) => x[0]));
+  // number records carry no labels: their list is the values the proofs wrote and the file's
+  const cur = shownVal(r), cv = comparing() ? cmpVal(r) : undefined;
+  const extra = [...new Set([...(r.pv || []), ...r.ev.map((e) => e.v), cur, cv])]
+    .filter((v) => typeof v === "number" && !labelled.has(v)).sort((a, b) => a - b).map((v) => [v, ""]);
+  for (const e of r.ev) if (typeof e.v === "number" && !labelled.has(e.v)) proved.add(e.v);
+  const all = [...r.vals, ...extra];
+  const np = r.vals.filter((v) => proved.has(v[0])).length;
+  const spot = spotOf(r.k), back = mmBack(r);
+  const bytes = spot ? el("button", { class: "linkish", title: "The record's bytes in the file layout view, this setting's lit",
+    onclick: () => showInLayout(r.k) }, `0x${hexOff(spot.rec.off + 8 + spot.part[0])} in the file layout →`) : null;
+  const box = el("div", { class: "rec" },
+    several ? el("h3", {}, r.n, el("span", { class: "key" }, r.k)) : null,
+    helpBlock(r.help, r.hg, r.hs),
+    el("div", { class: "meta" },
+      r.proved ? el("span", { class: "ok" }, `Proved on the camera${r.vals.length ? ` (${np}/${r.vals.length})` : r.sampled ? " (sampled)" : ""}`)
+        : r.why ? el("span", { class: "na", title: r.why.why }, `${WHY[r.why.kind] || r.why.kind}: ${r.why.why}`) : el("span", { class: "warn" }, "Not proved"),
+      el("span", {}, `In ${setName(CMP.show)}: ${fmt(r, cur)}`),
+      comparing() ? el("span", { class: differs(r) ? "dif" : "" }, `in ${cmpName()}: ${fmt(r, cv)}`) : null,
+      bytes,
+      r.menu.length ? el("span", {}, r.menu[0]) : null),
+    r.us ? el("div", { class: "meta" }, el("span", { class: "na", title: r.us.why },
+      `${WHY[r.us.kind] || r.us.kind} in ${setList(r.us.sets)}: ${r.us.why}`)) : null,
+    all.length ? el("ul", { class: "opts" }, all.map(([v, lab]) => {
+      const n = counts[v] || 0, h = oh.get(v), can = n || h;
+      const li = el("li", { class: [v === cur ? "cur" : "", v === cv && cv !== cur ? "cmpv" : "", can ? "has" : ""].join(" ").trim() || undefined, tabindex: can ? "0" : undefined,
+          title: h ? helpTip(h[0], h[2]) : undefined },
+        el("span", { class: "v" }, String(v)), el("span", { class: "lab" }, lab || String(v)),
+        el("span", { class: "pf" + (proved.has(v) ? " yes" : "") }, proved.has(v) ? "✓ proved" : "", v === cv && cv !== cur ? el("span", { class: "cmptag" }, ` ◆ ${cmpName()}`) : ""),
+        n ? el("span", { class: "pics" }, `▣ ${n}`) : null, h ? el("span", { class: "hq", title: "Help: click the option to read it here" }, "?") : null);
+      if (can) {
+        li.addEventListener("click", () => choose(v, li));
+        li.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); choose(v, li); } });
+      }
+      return li;
+    })) : null,
+    el("div", { class: "tools" }, r.pics ? [el("button", { onclick: () => choose("all", null) }, `All pictures (${r.pics})`), `or click a value marked ▣${oh.size ? " (? for its help)" : ""}`]
+      : oh.size ? "Click an option marked ? for its help." : (r.proved && !back ? "Proved without menu frames (a camera-written file, a registration or a fixed cell)." : "")),
+    back,
+    g,
+    r.note ? el("div", { class: "note" }, r.note) : null,
+    el("div", { class: "meta" }, `Record ${r.k}${r.run ? ` · ${r.run}` : ""}${r.date ? ` · ${r.date}` : ""}`));
+  return box;
+}
+
+// memory sets by name, a run of them as one ("Movie Memory 1 to Time-lapse Memory 3")
+function setList(sets) {
+  const runs = [];
+  for (const n of sets) { const last = runs[runs.length - 1]; if (last && n === last[1] + 1) last[1] = n; else runs.push([n, n]); }
+  return runs.map(([a, b]) => (a === b ? setName(a) : `${setName(a)} to ${setName(b)}`)).join(", ");
+}
+
+// ---- a value's pictures (the owner, 2026-11-05: "there can be several pictures, so which are not correct?"): a
+// value is proved by two frames, the row after OK and the option lit before OK; every other frame is the way there
+// (a drive's screens) or a screen the owner captured by hand. The gallery says so once, draws the proofs first and
+// folds the rest, so nothing reads as a contradiction.
+const known = (v) => v !== null && v !== undefined;
+// what the orange bar and the round dot are, one plain sentence each (2026-11-06, the owner chose HEIF(4:2:0) and saw
+// a picture "with JPEG selected": before OK the bar is on the option being chosen while the dot still marks the old one)
+const BAR_DOT = "The orange bar is the cursor: it sits on the option being chosen. The round dot marks the value the camera holds, so it moves only once OK is pressed.";
+// a proof's two frames in the order a person reads them, the screen after OK first, each with its caption in words
+// (`name`: the value's name, or the option's as the proof read it); a frame of another step keeps its own word. It
+// touches no page, so a check runs it on its own (node).
+function proofShots(frames, name) {
+  const rank = { "after OK": 0, "option lit": 1 }, of = (s) => (s in rank ? rank[s] : 2);
+  const words = (step) => (step === "after OK" ? `1 of 2 · after OK: ${name ? `${name} is set, so ` : "the value is set, so "}the row shows it or the round dot is on it`
+    : step === "option lit" ? `2 of 2 · before OK: the orange bar is on ${name || "the option being chosen"}, and the round dot still marks the value before` : step);
+  return frames.map((f, n) => [f, n]).sort((a, b) => of(a[0][1]) - of(b[0][1]) || a[1] - b[1]).map(([[src, step]]) => [src, step, words(step)]);
+}
+// the pictures a proof is missing of its two ("after OK", "before OK"): a caption is exactly its step's word
+function proofLost(frames) {
+  return [["after OK", "after OK"], ["option lit", "before OK"]].filter(([s]) => !frames.some((f) => f[1] === s)).map((x) => x[1]);
+}
+// the options a table cell's list showed when the proof chose one (e.seen, 2026-11-08: one slot's File Format offers
+// RAW & JPEG, which the two-slot walk never saw), in words, or "" when the proof kept none
+function listSeen(e) {
+  return e.seen && e.seen.length ? `The list showed: ${e.seen.join(" · ")}` : "";
+}
+// a record's evidence for one value (or for all of them) in the gallery's four groups: proofs whose value was read,
+// a drive's screens, the owner's screens, and changes whose value was not read from the screen (folded, never first).
+// It touches no page, so a check runs it on its own (node).
+function galleryParts(r, value) {
+  const evs = value === undefined ? r.ev : r.ev.filter((e) => e.v === value);
+  const parts = { proofs: [], drive: [], hand: [], changed: [] };
+  for (const e of evs) parts[!known(e.v) ? "changed" : e.how === "proof" ? "proofs" : e.how === "hand" ? "hand" : "drive"].push(e);
+  console.assert(parts.proofs.length + parts.drive.length + parts.hand.length + parts.changed.length === evs.length,
+    `the gallery of ${r.k} left a picture out`);
+  return parts;
+}
+// values in the option list's order, numbers it does not label after them
+function byValue(r) {
+  const pos = (v) => { const i = r.vals.findIndex((p) => p[0] === v); return i < 0 ? Infinity : i; };
+  return (a, b) => pos(a) - pos(b) || (typeof a === "number" && typeof b === "number" ? a - b : 0);
+}
+// a value's proofs: one shown, the others folded under it. kit2_* run names carry no date, so which run is newest
+// cannot be told: the one shown is the one with the most of its two frames kept, the run the settings definition's
+// proof names (r.run) first among equals, and among those the LAST in the data's order: within a run the proofs file
+// is in the order they were made, so a value proved again (after a prover fix, 2026-11-06) shows its newest proof;
+// the others keep the data's order
+function proofSets(r, proofs) {
+  const by = new Map();
+  for (const e of proofs) { if (!by.has(e.v)) by.set(e.v, []); by.get(e.v).push(e); }
+  const order = byValue(r), score = (e) => 2 * e.frames.length + (e.run === r.run ? 1 : 0);
+  return [...by].map(([v, es]) => {
+    const i = es.reduce((best, e, j) => (score(e) >= score(es[best]) ? j : best), 0);
+    return { v, lead: es[i], others: es.filter((_, j) => j !== i) };
+  }).sort((a, b) => order(a.v, b.v));
+}
+// a screen on the way in words, numbered: the drive's key and the text it looked for, its pattern read out
+// ("enter:jpeg/heif switch[\s\S]*heif" is Enter, looking for "jpeg/heif switch … heif"; a "not followed by" part is
+// left out); the owner's screens by their kind
+function stepWords(how, step, n, of) {
+  const at = `${n + 1} of ${of}`;
+  if (how === "hand") return `${at} · ${!step || step === "unknown" ? "a screen" : `a ${step} screen`}`;
+  if (!step) return `${at} · a screen`;
+  const i = step.indexOf(":"), key = i < 0 ? step : step.slice(0, i);
+  const want = i < 0 ? "" : step.slice(i + 1)
+    .replace(/\(\?<?!(?:[^()]|\([^()]*\))*\)/g, "")
+    .replace(/\((?:\?:)?\[\\s\\S\]\)[*+]\??|\[\\s\\S\][*+]\??|\.[*+]\??/g, " … ")
+    .replace(/\(\?:/g, "(").replace(/\\[a-zA-Z][*+?]?|[\^$]/g, " ").replace(/\\(.)|\?/g, (m, c) => c || "").replace(/\|/g, " or ").replace(/\(\s*(?:or\s*)*\)/g, " ")
+    .replace(/\s+/g, " ").replace(/(?: …)+/g, " …").trim();
+  return `${at} · after ${({ wait: "a wait", menu: "MENU", enter: "Enter" })[key] || key}${want ? `, looking for "${want}"` : ""}`;
+}
+const PICS = (n) => `${n} picture${n === 1 ? "" : "s"}`;
+const HOW = { proof: "proof", drive: "on the way", hand: "by hand" };
+
+function gallery(r, value) {
+  const parts = galleryParts(r, value), all = value === undefined, seq = [];
+  const name = (v) => `${v} = ${label(r, v)}`;
+  // the thumbnails: a caption in words, the file name on hover and in the lightbox, which walks every thumbnail of
+  // the gallery in the order drawn (the folded ones too)
+  const thumbs = (e, words) => el("div", { class: "thumbs" }, (e.how === "proof" ? proofShots(e.frames, proofName(e)) : e.frames).map(([src, step, said], n) => {
+    const i = seq.length, file = src.split("/").pop(), cap = said || words(step, n, e.frames.length);
+    seq.push({ src, cap: `${e.run} · ${file} · ${cap}${known(e.v) ? " · value " + e.v : ""}` });
+    return el("figure", { title: file }, el("img", { src, loading: "lazy", alt: cap, onclick: () => big(seq, i) }), el("figcaption", {}, cap));
+  }));
+  const proofName = (e) => (known(e.v) ? label(r, e.v) : e.label || "");
+  const otherWords = (e) => (step, n, of) => stepWords(e.how, step, n, of);          // a proof's own come from proofShots
+  // one proof: the run, the option chosen, the row it went through, its two frames
+  const proof = (e, cls, head) => {
+    const lost = proofLost(e.frames), seen = listSeen(e);
+    return el("div", { class: cls },
+      el("div", { class: "what" }, head ? [head, " · "] : null, el("b", {}, "Proof"), ` · ${e.run}`, e.label ? ` · option "${e.label}"` : ""),
+      e.row ? el("div", { class: "where" }, e.row) : null,
+      thumbs(e, otherWords(e)),
+      seen ? el("div", { class: "where" }, seen) : null,
+      lost.length ? el("div", { class: "where" }, lost.length === 2 ? "No pictures kept for this proof." : `No picture ${lost[0]} kept for this proof.`) : null);
+  };
+  const out = [el("p", { class: "gnote" }, "A value is proved by two pictures: first the screen after OK, showing the value set; then the option list before OK. "
+    + BAR_DOT + " The other pictures show the way there or screens captured by hand; they are extra evidence, not contradictions.")];
+  const sets = proofSets(r, parts.proofs);
+  if (!sets.length) out.push(el("p", { class: "gnote" }, all ? "No proof pictures here: the pictures below are the way there or by hand."
+    : "No proof pictures for this value: its pictures below are the way there or by hand."));
+  for (const s of sets) {
+    const head = all ? el("b", {}, name(s.v)) : null;
+    if (!s.others.length) { out.push(proof(s.lead, "ev proof", head)); continue; }
+    const n = s.others.length + 1, sameRun = s.others.some((e) => e.run === s.lead.run);
+    out.push(el("div", { class: "ev proof" },
+      el("div", { class: "what" }, head ? [head, " · "] : null, el("b", {}, `Proved ${n} times`)),
+      proof(s.lead, "sub"),
+      el("details", { class: "more" }, el("summary", {}, `${sameRun ? "other proofs" : "other runs"} (${n - 1})`),
+        s.others.map((e) => proof(e, "sub")))));
+  }
+  // the rest, folded: each entry headed by its value ("Changed …" where the value was not read), the run, the row
+  const order = byValue(r);
+  const fold = (es, summary) => {
+    if (!es.length) return null;
+    const n = es.reduce((k, e) => k + e.frames.length, 0);
+    return el("details", { class: "more" }, el("summary", {}, summary(n)), es.slice().sort((a, b) => order(a.v, b.v)).map((e) => el("div", { class: "ev side" },
+      el("div", { class: "what" }, el("b", {}, known(e.v) ? name(e.v) : "Changed (value not read from the screen)"),
+        known(e.v) ? "" : ` · ${HOW[e.how] || e.how}`, ` · ${e.run}`, e.how === "proof" && e.label ? ` · option "${e.label}"` : ""),
+      e.row && e.row !== "by hand" ? el("div", { class: "where" }, e.row) : null,
+      e.how !== "proof" && e.label ? el("div", { class: "where" }, e.label) : null,
+      thumbs(e, otherWords(e)))));
+  };
+  out.push(fold(parts.drive, (n) => `On the way (${PICS(n)}): the screens the kit went through to set ${all ? "these values" : "this value"}`),
+    fold(parts.hand, (n) => `By hand (${PICS(n)}): screens captured by the owner`),
+    fold(parts.changed, (n) => `Changed (${PICS(n)}): the setting changed, its value not read from the screen`));
+  return out.filter(Boolean);
+}
+
+// ---- help text (the owner, 2026-11-06: "when an item is selected or hovered, can we get the help text"): a setting's,
+// an option's or a row's, with the camera's guide screens it was read from where the runs are here (▣ guide, opened
+// like any frame), and where the two readers' words differed, both readings and which was kept. It touches no page,
+// so a check runs it on its own (node).
+// whose words a text is, per text: a setting's help can be the camera's and an option's the project's own, or the reverse
+const HELP_FROM = { camera: "The camera's own In-Camera Guide, read off its screen", own: "Camset's own words, not the camera's guide" };
+// a help text as hover text, with whose words it is
+const helpTip = (text, who) => (HELP_FROM[who] ? `${text}\n\n(${HELP_FROM[who]})` : text);
+// a line's hover in the rows: its setting's help, the row's own guide before the project's words where the row has one
+function lineTip(it) {
+  const r = it.rec && it.rec.help ? it.rec : null, n = it.node && !it.sub && it.node.help ? it.node : null;
+  const x = r && r.hs === "camera" ? r : n || r;
+  return x ? helpTip(x.help, x.hs) : undefined;
+}
+const READ_HOW = { "two vision readers": "a second vision reader agreed with the first, whose words are kept",
+  "OCR and the second reader": "a second vision reader agreed with the OCR, whose words are kept",
+  "OCR (digits)": "the same words with other digits: the OCR's are kept, as it reads digits one by one",
+  review: "no two readers agreed: the first vision reader's words are kept, to be checked" };
+function helpParts(gids) {
+  const gs = (gids || []).map((i) => DATA.guides[i]).filter(Boolean);
+  return { gs, seq: gs.flatMap((g) => g.frames.map(([src, cap]) => ({ src, cap }))), differ: gs.filter((g) => g.ocr !== undefined) };
+}
+function helpBlock(text, gids, who, cls = "help") {
+  if (!text) return null;
+  // only the camera's words were read off a guide screen: the project's own never get a guide link or a readings mark
+  const { gs, seq, differ } = helpParts(who === "camera" ? gids : []);
+  return el("div", { class: cls, title: HELP_FROM[who] || undefined }, text,
+    seq.length ? [" ", el("button", { class: "linkish guide", title: `The camera's guide screen${seq.length > 1 ? "s" : ""} this text was read from`,
+      onclick: (e) => { e.stopPropagation(); big(seq, 0); } }, `▣ guide${seq.length > 1 ? ` (${seq.length})` : ""}`)] : null,
+    differ.length ? el("details", { class: "readings" },
+      el("summary", {}, `≠ the two readers differed${gs.length > 1 ? ` on ${differ.length} of ${gs.length} screens` : ""}`),
+      differ.map((g) => el("div", { class: "rd" }, el("div", { class: "where" }, `${g.ctx} · ${g.where}`),
+        el("div", {}, el("b", {}, "OCR: "), g.ocr), el("div", {}, el("b", {}, "Vision reader: "), g.vlm),
+        el("div", { class: "where" }, READ_HOW[g.how] || g.how || "")))) : null);
+}
+
+// ---- the Main entry and My Menu (2026-11-06): the definition's camera section beside the frames of the camera's own
+// screens. Each special group's lines are made here and drawn by specialItem and specialDetail; the search keeps a
+// line whose name or value matches, a filter one whose records (or its own proof or difference) pass it.
+function specialLines(s) {
+  const q = state.q.trim().toLowerCase(), f = FILTERS.find((x) => x[0] === state.filter)[2];
+  const keep = (x) => (!q || `${x.name} ${x.value}`.toLowerCase().includes(q)) && (!f || (x.rs || []).some(f)
+    || (state.filter === "pics" && x.pics > 0) || (state.filter === "proved" && x.dot === "yes") || (state.filter === "differs" && !!x.dif));
+  const lines = (s.kind === "main" ? mainLines(s.mode) : s.kind === "mmpages" ? mmPageLines() : mmNameLines()).filter((x) => x.head || keep(x));
+  // a heading with nothing kept under it goes too
+  return lines.filter((x, i) => !x.head || (lines[i + 1] && !lines[i + 1].head));
+}
+function specialItem(it, cmpOn) {
+  return el("div", { class: `item d${Math.min(it.depth || 0, 4)}${it.off ? " off" : ""}${it.dif ? " dif" : ""}`, "aria-current": String(it.id === state.item),
+    tabindex: "0", role: "button", title: it.title || undefined, onclick: () => { state.item = it.id; show("detail"); draw(); } },
+    el("span", { class: "nm" }, it.name), el("span", { class: "vl" }, it.value || ""), cmpOn ? el("span", { class: "cv" }, it.cv || "") : null,
+    el("span", { class: "mk" }, it.pics ? `▣ ${it.pics}` : "", it.dot === null || it.dot === undefined ? "" : el("span", { class: "dot " + it.dot })));
+}
+function specialDetail(it, tab, group) {
+  const crumb = el("div", { class: "crumb", style: `color:${color(tab)}` }, [tab, group && group.name].filter(Boolean).join(" > "));
+  if (it.special === "tile") return tileDetail(it, crumb);
+  if (it.special === "mmnofile") return [crumb, el("div", { class: "title" }, "No settings file"),
+    el("p", { class: "note" }, `This page was built without a camera download, so it has no ${DATA.my_menu.title} pages to show. Open a settings file (Open settings file… at the top) to see its pages; the item names by code are under Item names.`)];
+  if (it.special === "mmempty") return [crumb, el("div", { class: "title" }, `${DATA.my_menu.title} ${it.page + 1}`),
+    el("p", { class: "note" }, it.name === "(no items)" ? `This file's ${DATA.my_menu.title} ${it.page + 1} holds no items: every slot is empty.`
+      : `This file holds no record for ${DATA.my_menu.title} ${it.page + 1} (record 0x${hex4(DATA.my_menu.records[it.page])}): it may be another camera's file.`)];
+  return mmDetail(it, crumb);
+}
+// a thumbnail that opens a list of frames in the lightbox at its first
+function shotOf(seq, cap) {
+  return el("div", { class: "thumbs" }, el("figure", {}, el("img", { src: seq[0].src, loading: "lazy", alt: cap, onclick: () => big(seq, 0) }), el("figcaption", {}, cap)));
+}
+// a setting as a link to its row, with its value in the section shown
+function recLink(k, sec) {
+  const r = R[k];
+  if (!r) return el("li", { class: "empty" }, `${k}: not in this definition`);
+  const v = L.f ? describeV(r, valueIn(L.f, sec, k)) : "";
+  return el("li", {}, el("button", { title: "Open its row", onclick: () => openInMenu(k) }, el("span", { class: "dot " + (r.proved ? "yes" : r.why ? "na" : "") }),
+    r.n, el("span", { class: "key" }, [v, k].filter(Boolean).join(" · "))));
+}
+
+// the Main page: the records a tile shows in a section, as the editor's Tile::keys_for (0 the live settings)
+function tileKeys(t, sec) {
+  if (t.kind === "live_or_memory") return (sec === 0 ? t.keys : t.memory_keys) || [];
+  if (t.kind === "fraction") return sec === 0 ? [] : [t.numerator_key, t.denominator_key].filter(Boolean);
+  return t.keys || [];
+}
+// a value as the editor's describe writes it: its name, a number with its unit, else the number and that it has no name
+function describeV(r, v) {
+  if (v === undefined || v === null) return "—";
+  if (typeof v !== "number") return v;
+  const x = r.vals.find((p) => p[0] === v);
+  return x ? x[1] : r.rg ? `${v}${r.u ? ` ${r.u}` : ""}` : `${v} (no name yet)`;
+}
+// what a tile shows for one section of a file, as the editor's tile_text: a fraction n/d (n" when d is 1) from a memory
+// set, the definition's words where the section holds none ("on the camera"), else its settings' values joined by " · "
+function tileText(t, f, sec) {
+  if (!f || sec === null || sec === undefined) return "";
+  const live = t.live_text || "on the camera";
+  if (t.kind === "fraction") {
+    if (sec === 0) return live;
+    const n = valueIn(f, sec, t.numerator_key), d = valueIn(f, sec, t.denominator_key);
+    return typeof n !== "number" || typeof d !== "number" ? "—" : d > 1 ? `${n}/${d}` : d === 1 ? `${n}"` : "—";
+  }
+  const ks = tileKeys(t, sec).filter((k) => R[k]);
+  return ks.length ? ks.map((k) => describeV(R[k], valueIn(f, sec, k))).join(" · ") : live;
+}
+// a tile's "—", explained (the editor draws it so)
+const DASH = "— stands where the section shown holds no value for a setting (a memory set keeps no live-only setting) or a stored time has no denominator";
+function mainLines(mode) {
+  const cmpOn = comparing();
+  return mode.tiles.map((t, i) => {
+    const ks = [...new Set([...(t.keys || []), ...(t.memory_keys || []), t.numerator_key, t.denominator_key].filter(Boolean))];
+    const rs = ks.map((k) => R[k]).filter(Boolean), proved = rs.filter((r) => r.proved).length, v = tileText(t, L.f, CMP.show);
+    const cv = !cmpOn ? "" : CMP.with === "other" ? tileText(t, L.other, CMP.show) : tileText(t, L.f, partnerOf(CMP.show));
+    return { id: `main:${mode.name}:${i}`, special: "tile", name: t.caption, value: v, cv, dif: cmpOn && cv !== v, rs, tile: t, mode,
+      dot: rs.length ? (proved === rs.length ? "yes" : proved ? "part" : "") : null,
+      title: `${t.caption}: ${tileKeys(t, CMP.show).map((k) => (R[k] ? R[k].n : k)).join(" · ") || `the file holds none here (${t.live_text || "on the camera"})`}`
+        + (v.includes("—") ? `. ${DASH}` : "") };
+  });
+}
+function tileDetail(it, crumb) {
+  const t = it.tile, m = it.mode, sec = CMP.show, live = t.live_text || "on the camera", title = DATA.main.title;
+  const seq = m.frames.map(([src, cap]) => ({ src, cap }));
+  const shot = seq.length ? shotOf(seq, `The camera's own ${title} page in ${m.name} (${m.run})${seq.length > 1 ? `: ${seq.length} frames, one per row of tiles lit` : ""}. It shows what the camera held when it was scanned, not this file.`)
+    : el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer." : `No frame of the camera's ${title} page in ${m.name} in these runs.`);
+  const list = (ks) => (ks && ks.length ? el("ul", { class: "reclist" }, ks.map((k) => recLink(k, sec))) : null);
+  const parts = t.kind === "live_or_memory" ? [el("div", { class: "meta" }, "In the live settings:"),
+    list(t.keys) || el("p", { class: "note" }, `none: the tile shows “${live}”`), el("div", { class: "meta" }, "In a memory set:"), list(t.memory_keys) || el("p", { class: "note" }, "none")]
+    : t.kind === "fraction" ? [el("div", { class: "meta" }, `In a memory set, a fraction: the numerator, then the denominator (n/d, or n" when it is 1). The live settings hold none: the tile shows “${live}” there.`),
+      list([t.numerator_key, t.denominator_key].filter(Boolean))]
+    : [el("div", { class: "meta" }, (t.keys || []).length > 1 ? `Built from ${t.keys.length} settings, their values joined by “·”:` : "Built from:"), list(t.keys)];
+  return [crumb, el("div", { class: "title" }, t.caption),
+    el("div", { class: "meta" }, `In ${setName(sec)}: `, el("span", { class: "tilev" }, it.value || (L.f ? "" : "no settings file here"))),
+    it.value && it.value.includes("—") ? el("div", { class: "note" }, DASH) : null,
+    shot, ...parts,
+    el("p", { class: "note" }, `Each setting is proved on its own row (click one to go there). Which settings a tile shows is the definition's (its camera section's main_tiles), worked out here as the editor does; the frame is the camera's own ${title} page to compare it with.`)];
+}
+
+// My Menu: its names by code, the frame that proved each name (the read-back: a file with known codes loaded, the
+// pages then read on the camera), and the slot each read-back proved; made once, when first asked for
+let MMI = null;
+function mmInfo() {
+  if (MMI) return MMI;
+  const M = DATA.my_menu, names = new Map(M.names.map(([c, n]) => [c, n])), shot = new Map(), slot = new Map();
+  for (const p of M.read) {
+    if (!p.in_order) continue;
+    p.slots.forEach(([c, n], i) => {
+      const at = { page: p.page, slot: i, read: n, frames: p.frames, run: p.run, code: c };
+      if (p.frames.length && !shot.has(c)) shot.set(c, at);
+      slot.set(`global:0x${hex4(M.records[p.page - 1])}[${i}]`, at);
+    });
+  }
+  return (MMI = { names, shot, slot });
+}
+const mmName = (c) => (mmInfo().names.has(c) ? mmInfo().names.get(c) : `code ${c} (no name in the definition)`);
+// a file's My Menu pages: [[code, ...] per page], read from its live settings
+function mmPagesOf(f) {
+  const M = DATA.my_menu, by = byId(f, 0);
+  return M.records.map((id) => {
+    const rec = by.get(id);
+    return rec && [1, 2, 4, 8].includes(rec.size) ? [...Array(rec.count)].map((_, i) => elem(f, rec.off + 8 + i * rec.size, rec.size)) : null;
+  });
+}
+function mmPageLines() {
+  const M = DATA.my_menu, f = L.f;
+  if (!f) return [{ id: "mm:nofile", special: "mmnofile", name: "No settings file here", value: "", off: true, rs: [] }];
+  const out = [];
+  mmPagesOf(f).forEach((codes, p) => {
+    const n = codes ? codes.filter((c) => c !== M.empty).length : 0;
+    out.push({ head: codes ? `${M.title} ${p + 1} · ${n} of ${codes.length} items` : `${M.title} ${p + 1}` });
+    // a page with nothing to list says so, as a line of its own
+    if (!codes || (!n && M.packed)) out.push({ id: `mm:${p}:none`, special: "mmempty", name: codes ? "(no items)" : "(not in this file)", value: "", depth: 1, off: true, page: p, rs: [] });
+    (codes || []).forEach((c, i) => {
+      if (c === M.empty && M.packed) return;
+      const key = `global:0x${hex4(M.records[p])}[${i}]`, opens = (M.opens[String(c)] || []).filter((k) => R[k]), shot = mmInfo().shot.has(c);
+      out.push({ id: `mm:${p}:${i}`, special: "mmitem", name: c === M.empty ? "(empty)" : mmName(c), value: opens[0] ? fmt(R[opens[0]], valueIn(f, 0, opens[0])) : "",
+        depth: 1, off: c === M.empty, pics: shot ? 1 : 0, dot: c === M.empty ? null : shot ? "yes" : "", page: p, slot: i, code: c, key, opens,
+        rs: [R[key], ...opens.map((k) => R[k])].filter(Boolean), title: opens.length ? `Opens ${opens.map((k) => R[k].n).join(", ")}` : undefined });
+    });
+  });
+  return out;
+}
+function mmNameLines() {
+  const M = DATA.my_menu, info = mmInfo(), names = M.names.filter(([c]) => c !== M.empty);
+  const n = names.filter(([c]) => info.shot.has(c)).length;
+  const out = [{ head: `${n} of ${names.length} names with a picture of the camera's page, ${names.length - n} without${!n && DATA.pictures === 0 ? " (no pictures on this computer)" : ""}` }];
+  for (const [c, name] of names) {
+    const opens = (M.opens[String(c)] || []).filter((k) => R[k]);
+    out.push({ id: `mmn:${c}`, special: "mmname", name, value: `code ${c}`, code: c, opens, rs: opens.map((k) => R[k]),
+      pics: info.shot.has(c) ? 1 : 0, dot: info.shot.has(c) ? "yes" : "", title: opens.length ? `Opens ${opens.map((k) => R[k].n).join(", ")}` : undefined });
+  }
+  return out;
+}
+// where a code sits in the shown file's pages: [page, slot], both from 0, or null
+function mmWhere(c) {
+  if (!L.f) return null;
+  const pages = mmPagesOf(L.f);
+  for (let p = 0; p < pages.length; p++) { const i = pages[p] ? pages[p].indexOf(c) : -1; if (i >= 0) return [p, i]; }
+  return null;
+}
+function mmDetail(it, crumb) {
+  const M = DATA.my_menu, info = mmInfo(), c = it.code, shot = info.shot.get(c), where = it.special === "mmitem" ? [it.page, it.slot] : mmWhere(c);
+  const out = [crumb, el("div", { class: "title" }, it.name),
+    el("div", { class: "meta" }, `Menu-item code ${c} · ${where ? `in this file: ${M.title} ${where[0] + 1}, item ${where[1] + 1}` : L.f ? `not in this file's ${M.title}` : "no settings file here"}`)];
+  if (c === M.empty) {
+    out.push(el("p", { class: "note" }, `An empty slot (code ${c}).${M.packed ? ` The camera keeps each page's items packed from the top.` : ""}`));
+    return out;
+  }
+  out.push(it.opens.length ? [el("div", { class: "meta" }, `It opens ${it.opens.length === 1 ? "this setting" : "these settings"} (click to go to its row):`),
+    el("ul", { class: "reclist" }, it.opens.map((k) => recLink(k, 0)))]
+    : el("p", { class: "note" }, `No setting in the definition carries menu-item code ${c}: on the camera it opens a submenu or an action, or a setting the definition has no record for.`));
+  if (shot) {
+    const seq = shot.frames.map(([src, cap]) => ({ src, cap: `${cap} · item ${shot.slot + 1}: ${shot.read}` }));
+    out.push(el("div", { class: "ev proof" }, el("div", { class: "what" }, el("b", {}, "The name, read back on the camera"), ` · ${shot.run}`),
+      el("div", { class: "where" }, `A file with code ${c} in ${M.title} ${shot.page}, item ${shot.slot + 1}, was loaded into the camera; its page then showed “${shot.read}” there.`
+        + (shot.read !== mmName(c) ? ` The definition names it “${mmName(c)}”.` : "")),
+      shotOf(seq, `${M.title} ${shot.page} on the camera, item ${shot.slot + 1}`)));
+  } else out.push(el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer."
+    : `No frame in these runs shows this name: it is the definition's. The read-back proved ${info.shot.size} of the names.`));
+  if (it.key && R[it.key]) out.push(el("div", { class: "meta" }, "The slot's record: ", el("button", { class: "linkish", onclick: () => openInMenu(it.key) }, `${R[it.key].n} (${it.key})`)));
+  return out;
+}
+// a My Menu slot setting's read-back: the code the camera showed in it, with the frame of its page
+function mmBack(r) {
+  const at = DATA.my_menu && mmInfo().slot.get(r.k);
+  if (!at || !at.frames.length) return null;
+  const seq = at.frames.map(([src, cap]) => ({ src, cap: `${cap} · item ${at.slot + 1}: ${at.read}` }));
+  return el("div", { class: "ev proof" }, el("div", { class: "what" }, el("b", {}, "Read back on the camera"), ` · ${at.run}`),
+    el("div", { class: "where" }, `This slot held code ${at.code} in a file loaded into the camera; ${DATA.my_menu.title} ${at.page} then showed “${at.read}” as item ${at.slot + 1}.`),
+    shotOf(seq, `${DATA.my_menu.title} ${at.page} on the camera`));
+}
+
+function show(which) { $("cols").dataset.show = which; if (window.innerWidth < 760) window.scrollTo(0, 0); }
+$("back-groups").onclick = () => show("groups");
+$("back-items").onclick = () => show("items");
+
+let seqNow = [], at = 0;
+function big(l, i) { seqNow = l; at = i; paint(); $("box").classList.add("open"); $("close").focus(); }
+function paint() { const f = seqNow[at]; $("big").src = f.src; $("big").alt = f.cap; $("cap").textContent = `${at + 1} / ${seqNow.length} · ${f.cap}`; $("file-link").href = f.src; }
+function step(d) { if (!seqNow.length) return; at = (at + d + seqNow.length) % seqNow.length; paint(); }
+function hide() { $("box").classList.remove("open"); $("big").removeAttribute("src"); }
+$("prev").onclick = () => step(-1); $("next").onclick = () => step(1); $("close").onclick = hide;
+$("box").addEventListener("click", (e) => { if (e.target === $("box")) hide(); });
+document.addEventListener("keydown", (e) => {
+  if ($("box").classList.contains("open")) {
+    if (e.key === "Escape") hide(); else if (e.key === "ArrowLeft") step(-1); else if (e.key === "ArrowRight") step(1);
+    return;
+  }
+  // Up/Down walk the rows, as on the camera and in the editor, when no field has the keys
+  if ((e.key === "ArrowDown" || e.key === "ArrowUp") && !e.target.closest("input") && !$("cols").hidden) {
+    const items = [...$("ilist").querySelectorAll(".item")];
+    const i = items.findIndex((b) => b.getAttribute("aria-current") === "true");
+    const next = items[Math.max(0, Math.min(items.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))];
+    if (next && next !== items[i]) { e.preventDefault(); next.click(); intoView("ilist"); }
+  }
+});
+
+// ---- the file layout view: the download's structure | a map of every byte | the chosen bytes in hex ----
+// The page reads the file as kit/camkit/camset.py and the editor do, through the definition's container block
+// (DATA.format, its camera section's "file"; docs/decisions/0020): the magic, the model, the save time, the
+// firmware and the video system where the block puts them, the header checksum at its site, then the sections from
+// sections_start (a u32 record count, then records: u16 id, u16 marker, u16 element size, u16 element count, the value
+// bytes) up to the trailer checksum's site. The ILCE-1M2's: 'SONY1', the model at 0x05, the firmware at 0x36-0x37, the
+// video system at 0x38 (0 NTSC, 1 PAL), the header checksum at 0x39, the sections from 0x3c, the marker 0x02cf, and a
+// u32 byte sum of 0x3c .. end-4 as the last four bytes.
+const FMT = DATA.format || null;
+// a place in the file as the block writes it: "0x3c" from the start, "end-4" back from the end
+const placeOf = (t, size) => (t.startsWith("end-") ? size - Number(t.slice(4)) : parseInt(t.slice(2), 16));
+const SUM_WIDTH = { shift_sum: 1, byte_sum: 4 };
+const SUM_DOC = { shift_sum: "the low byte of the sum of each byte shifted left by its offset mod 8", byte_sum: "a u32 sum of the bytes" };
+// a checksum as stored at its site, and as the bytes it sums give it
+function checksumOf(f, c) {
+  const a = placeOf(c.over[0], f.size), b = placeOf(c.over[1], f.size), at = placeOf(c.at, f.size), w = SUM_WIDTH[c.kind];
+  let s = 0;
+  if (c.kind === "shift_sum") { for (let p = a; p < b; p++) s += f.u8[p] << (p & 7); s &= 0xff; }
+  else for (let p = a; p < b; p++) s = (s + f.u8[p]) >>> 0;
+  return { at, w, kind: c.kind, from: c.over[0], to: c.over[1], stored: w === 1 ? f.u8[at] : f.dv.getUint32(at, true), computed: s };
+}
+const sumHex = (s, v) => `0x${v.toString(16).padStart(s.w * 2, "0")}`;
+const sumText = (s) => `${sumHex(s, s.stored)} ${s.stored === s.computed ? "✓" : `✗ (${sumHex(s, s.computed)})`}`;
+const sumBoth = (s) => `stored ${sumHex(s, s.stored)} · computed ${sumHex(s, s.computed)} ${s.stored === s.computed ? "✓" : "✗"}`;
+const CLS = ["structure", "proved", "partly proved", "named, not proved", "not in the schema", "can't be proved"];
+const CLS_COLOR = ["#4a7fd6", "#5abe6e", "#2fa39b", "#eba03c", "#5c5c5c", "#7d8db3"];
+const DIFF = "#e83ad8";      // magenta: apart from every status colour, amber above all
+// the state a group of bytes shows (a map cell, a line of the strip), from how many bytes are in each: the least proved
+// among its value bytes (named, not in the schema, partly, can't, proved), so green means all of them are proved;
+// structure only where it holds no value byte
+const leastProved = (cnt) => [3, 4, 2, 5, 1].find((x) => cnt[x]) || 0;
+function parseCamset(buf) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), size = u8.length, B = FMT;
+  if (!B) throw new Error("this page's definition holds no container block (camera.file), so no file can be read");
+  const P = (t) => placeOf(t, size);
+  const str = (a, b) => { let s = ""; for (let i = a; i < b && u8[i]; i++) s += String.fromCharCode(u8[i]); return s; };
+  const m0 = P(B.magic.at);
+  if (str(m0, m0 + B.magic.bytes.length) !== B.magic.bytes)
+    throw new Error(`not a settings file this definition describes (it does not start with '${B.magic.bytes}')`);
+  const start = P(B.sections_start), end = P(B.trailer_checksum.at), marker = parseInt(B.records.marker, 16);
+  if (!(end >= start && size >= start)) throw new Error("shorter than its header and trailer");
+  const f = { u8, dv, size, model: str(P(B.model.at), P(B.model.to)), saved: str(P(B.saved.at), P(B.saved.to)), sections: [],
+    start, end, marker, fw: [P(B.firmware.at), P(B.firmware.to)], vs: B.video_system ? P(B.video_system.at) : null };
+  let off = start;
+  while (off < end) {
+    if (end - off < 4) throw new Error(`${end - off} stray bytes before the checksum`);
+    const sec = { off, n: dv.getUint32(off, true), recs: [], index: f.sections.length };
+    off += 4;
+    for (let j = 0; j < sec.n; j++) {
+      if (off + 8 > end) throw new Error(`the file ends early at 0x${off.toString(16)}`);
+      const m = dv.getUint16(off + 2, true);
+      if (m !== marker) throw new Error(`not a settings file this definition describes (record marker 0x${m.toString(16)} at 0x${(off + 2).toString(16)})`);
+      const es = dv.getUint16(off + 4, true), count = dv.getUint16(off + 6, true), n = es * count;
+      if (off + 8 + n > end) throw new Error(`the record at 0x${off.toString(16)} runs past the checksum`);
+      sec.recs.push({ id: dv.getUint16(off, true), size: es, count, off, end: off + 8 + n, sec: sec.index });
+      off += 8 + n;
+    }
+    sec.end = off; f.sections.push(sec);
+  }
+  if (off !== end) throw new Error(`${end - off} stray bytes before the checksum`);
+  f.headerSum = checksumOf(f, B.header_checksum);
+  f.bodySum = checksumOf(f, B.trailer_checksum);
+  return f;
+}
+const hex2 = (n) => n.toString(16).padStart(2, "0"), hex4 = (n) => n.toString(16).padStart(4, "0");
+const hexOff = (n) => n.toString(16).padStart(8, "0");
+// the firmware that saved a file, from the block's firmware bytes, as the editor reads it: major_minor 04 00 is 4.00,
+// major_minor3 04 00 00 is 4.00 too (the ILCE-1M2's reading until its third byte proved to be the video system)
+const firmware = (f) => `${f.u8[f.fw[0]]}.${String(FMT.firmware.decode === "major_minor" ? f.u8[f.fw[0] + 1]
+  : f.u8[f.fw[0] + 1] * 10 + f.u8[f.fw[0] + 2]).padStart(2, "0")}`;
+// the video system the camera was set to, where the block says where it is: its name, or the value the block names
+// nothing for, said so; "" when the block does not say
+const videoSystem = (f) => (f.vs === null ? "" : (FMT.video_system.names[String(f.u8[f.vs])]
+  || `video system ${f.u8[f.vs]}, which the definition names nothing for`));
+// the header's parts in file order, as the block places them, with the bytes it names no part for
+function headerParts(f) {
+  const B = FMT, P = (t) => placeOf(t, f.size), hs = f.headerSum;
+  const parts = [
+    { id: "magic", a: P(B.magic.at), b: P(B.magic.at) + B.magic.bytes.length, type: "magic", doc: "The bytes every such file starts with.", value: B.magic.bytes },
+    { id: "model", a: P(B.model.at), b: P(B.model.to), type: B.model.text, doc: "The model, NUL padded.", value: f.model },
+    { id: "saved", a: P(B.saved.at), b: P(B.saved.to), type: B.saved.text, doc: "The save time, YYYYMMDD_HHMMSS, NUL padded.", value: f.saved },
+    B.firmware.decode === "major_minor"
+      ? { id: "firmware", a: f.fw[0], b: f.fw[1], type: B.firmware.decode, value: firmware(f), kids: ["major", "minor"],
+        doc: "The firmware of the camera that saved the file: the major version, then the minor, shown with two digits (04 00 is 4.00). The layout signature feeds these two bytes." }
+      : { id: "firmware", a: f.fw[0], b: f.fw[1], type: B.firmware.decode, value: firmware(f), kids: ["major", "minor_tens", "minor_ones"],
+        doc: "The firmware of the camera that saved the file: the major version, then the minor's two digits (04 00 00 is 4.00). The layout signature feeds the first two bytes." },
+    ...(f.vs === null ? [] : [{ id: "video_system", a: f.vs, b: f.vs + 1, type: "u1", value: videoSystem(f),
+      doc: `The video system the camera was set to when it saved the file (${Object.entries(B.video_system.names).map(([v, n]) => `${v} ${n}`).join(", ")}). Not part of the firmware: one firmware's files under each share a definition.` }]),
+    { id: "header_checksum", a: hs.at, b: hs.at + hs.w, type: hs.kind, doc: `${SUM_DOC[hs.kind]}, over ${hs.from} up to ${hs.to}.`, value: sumText(hs) }]
+    .sort((x, y) => x.a - y.a);
+  const gap = (a, b) => ({ id: `reserved_${a.toString(16)}`, a, b, type: `bytes(${b - a})`, doc: "No part of the definition's block names these bytes.",
+    value: [...f.u8.slice(a, b)].map(hex2).join(" ") });
+  const out = [];
+  let at = 0;
+  for (const p of parts) { if (p.a > at) out.push(gap(at, p.a)); out.push(p); at = Math.max(at, p.b); }
+  if (at < f.start) out.push(gap(at, f.start));
+  return out;
+}
+// a record's eight header bytes, as the block's one framing (id_marker_size_count) lays them out
+const RECORD_HEAD = [["id", "u2", "The record's id."], ["marker", "u2", "The marker every record header carries."],
+  ["elem_size", "u2", "The size of one element, in bytes."], ["num_elements", "u2", "How many elements the record holds."]];
+function elem(f, at, size) {
+  const dv = f.dv;
+  return size === 1 ? dv.getInt8(at) : size === 2 ? dv.getInt16(at, true) : size === 4 ? dv.getInt32(at, true) : size === 8 ? Number(dv.getBigInt64(at, true)) : null;
+}
+// the schema's records by section kind and id: "g:01d8" live, "s:01d8" memory sets (a set falls back on the live keys
+// a record keeps in every set, as the editor's schema.find does)
+const KEYS = new Map();
+for (const k of Object.keys(R)) {
+  const m = k.match(/^(global|set):0x([0-9a-f]+)/);
+  if (!m) continue;
+  const kk = (m[1] === "global" ? "g:" : "s:") + m[2];
+  if (!KEYS.has(kk)) KEYS.set(kk, []);
+  KEYS.get(kk).push(k);
+}
+function keysFor(sec, id) {
+  const h = hex4(id), live = KEYS.get("g:" + h) || [];
+  if (sec === 0) return live;
+  const set = KEYS.get("s:" + h) || [];
+  return set.some((k) => R[k].raw === undefined) ? set : live.filter((k) => R[k].raw === undefined).length ? live.filter((k) => R[k].raw === undefined) : set;
+}
+// a set setting no proof can reach in this memory set (the raw stops in the Movie, S&Q and Time-lapse memories)
+const cantIn = (k, sec) => !!(sec > 0 && R[k] && R[k].us && R[k].us.sets.includes(sec));
+function statusOfKeys(keys, sec) {
+  const named = keys.filter((k) => R[k] && R[k].raw === undefined);
+  if (!named.length) return 4;
+  // what no proof can reach (PP7-PP9, the skipped memories) counts for nothing either way
+  const real = named.filter((k) => !cantIn(k, sec) && (R[k].proved || !R[k].why));
+  if (!real.length) return 5;
+  const p = real.filter((k) => R[k].proved).length;
+  return p === real.length ? 1 : p ? 2 : 3;
+}
+function statusOf(sec, id) {
+  return statusOfKeys(keysFor(sec, id), sec);
+}
+function nameOf(sec, id) {
+  const real = keysFor(sec, id).filter((k) => R[k].raw === undefined);
+  if (!real.length) return "";
+  const names = [...new Set(real.map((k) => R[k].n))];
+  return names.length > 2 ? `${names[0]}, ${names[1]} +${names.length - 2}` : names.join(", ");
+}
+function classes(f) {
+  const c = new Uint8Array(f.size);     // 0 everywhere: the header, counts, record headers, the checksum
+  for (const s of f.sections) {
+    for (const r of s.recs) {
+      const ks = keysFor(s.index, r.id);
+      const named = ks.filter((k) => R[k] && R[k].raw === undefined);
+      if (!named.length) {
+        c.fill(4, r.off + 8, r.end);
+      } else if (named.some((k) => k.includes("@"))) {
+        c.fill(4, r.off + 8, r.end);
+        for (const k of named) {
+          if (k.includes("@")) {
+            const off = +k.split("@")[1];
+            const sz = R[k].size || 2;
+            const st = statusOfKeys([k], s.index);
+            const a = r.off + 8 + off;
+            c.fill(st, a, Math.min(r.end, a + sz));
+          }
+        }
+      } else if (named.some((k) => R[k].index != null || k.includes("["))) {
+        for (let i = 0; i < r.count; i++) {
+          const elKeys = named.filter((k) => (R[k].index != null ? R[k].index === i : k.endsWith(`[${i}]`)));
+          const st = statusOfKeys(elKeys, s.index);
+          c.fill(st, r.off + 8 + i * r.size, r.off + 8 + (i + 1) * r.size);
+        }
+      } else {
+        c.fill(statusOfKeys(named, s.index), r.off + 8, r.end);
+      }
+    }
+  }
+  return c;
+}
+function sameLayout(a, b) {
+  if (a.size !== b.size || a.sections.length !== b.sections.length) return false;
+  return a.sections.every((s, i) => s.recs.length === b.sections[i].recs.length && s.recs.every((r, j) => r.id === b.sections[i].recs[j].id && r.off === b.sections[i].recs[j].off));
+}
+
+const L = { f: null, cls: null, set: 1, other: null, otherName: "", diff: null, sel: { kind: "file" }, open: new Set() };
+function initLayout() {
+  if (L.f || !DATA.file || !DATA.file.b64) return;
+  const bin = atob(DATA.file.b64), buf = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+  L.f = parseCamset(buf.buffer); L.cls = classes(L.f);
+}
+function recAt(f, at) {
+  for (const s of f.sections) {
+    if (at < s.off || at >= s.end) continue;
+    if (at < s.off + 4) return { kind: "count", sec: s.index };
+    let lo = 0, hi = s.recs.length - 1;
+    while (lo <= hi) { const m = (lo + hi) >> 1, r = s.recs[m]; if (at < r.off) hi = m - 1; else if (at >= r.end) lo = m + 1; else return { kind: "rec", rec: r }; }
+  }
+  if (at < f.start) return { kind: "header" };
+  if (at >= f.end) return { kind: "sum" };
+  return null;
+}
+// the bytes a selection covers: the file, a section, a block of records or of a record's elements ("range", a to b),
+// a record, a field, or one of a record's elements or 16-bit fields (part, in its value bytes; all of them is the record)
+function selRange(sel) {
+  const f = L.f;
+  if (sel.kind === "rec") {
+    const r = sel.rec, p = sel.part;
+    return p && (p[0] > 0 || p[1] < r.end - r.off - 8) ? [r.off + 8 + p[0], r.off + 8 + p[1]] : [r.off, r.end];
+  }
+  if (sel.kind === "field" || sel.kind === "range") return [sel.a, sel.b];
+  if (sel.kind === "file") return [0, f.size];
+  if (sel.kind === "header") return [0, f.start];
+  if (sel.kind === "count") return [f.sections[sel.sec].off, f.sections[sel.sec].off + 4];
+  if (sel.kind === "section") return [f.sections[sel.sec].off, f.sections[sel.sec].end];
+  if (sel.kind === "sum") return [f.end, f.size];
+  return null;
+}
+// the memory a set is compared with: its mode's first (Movie Memory 1 for Movie Memory 2 and 3), and each mode's
+// first with Memory 1 (data/<model>_fw<fw>/camera_<model>_fw<fw>.json memory_sets.modes); Memory 1 and the live settings with none
+function baseOf(n) {
+  if (!n) return 0;
+  const mode = Object.values(DATA.memory_modes || {}).find((sets) => sets.includes(n)), first = mode ? mode[0] : 1;
+  return n !== first ? first : n !== 1 ? 1 : 0;
+}
+// bytes of a memory set that differ from its baseline memory (one layout: the same place in each), into m when given
+function setDiff(f, s, m = new Uint8Array(f.size)) {
+  const b0 = baseOf(s);
+  if (!b0) return m;
+  const a = f.sections[b0], b = f.sections[s];
+  a.recs.forEach((ra, i) => { const rb = b.recs[i]; for (let k = 8; k < ra.end - ra.off; k++) if (f.u8[ra.off + k] !== f.u8[rb.off + k]) m[rb.off + k] = 1; });
+  return m;
+}
+
+function coverage() {
+  const f = L.f, n = [0, 0, 0, 0, 0, 0];
+  const cls = L.cls || classes(f);
+  for (const s of f.sections.slice(0, 2))          // the live settings and one memory set, when the file has one
+    for (const r of s.recs)
+      for (let p = r.off + 8; p < r.end; p++)
+        n[cls[p]]++;
+  const total = n.slice(1).reduce((a, b) => a + b, 0);
+  const pct = (x) => `${(100 * x / total).toFixed(1)}%`;
+  $("cov").replaceChildren(
+    el("div", { class: "covbar", title: "value bytes of the live settings and one memory set" }, [1, 2, 3, 5, 4].map((c) => el("i", { style: `background:${CLS_COLOR[c]};width:${100 * n[c] / total}%` }))),
+    ...[1, 2, 3, 5, 4].map((c) => el("span", {}, el("i", { style: `background:${CLS_COLOR[c]}` }), `${CLS[c]} `, el("b", {}, pct(n[c])))),
+    el("span", {}, el("i", { style: `background:${CLS_COLOR[0]}` }), "structure"),
+    el("span", {}, el("i", { style: `background:${DIFF}` }), cmpLegend()));
+}
+
+// the outline of a set of map cells (indices in a strip of cols cells a row): an edge wherever a cell's neighbour is
+// not in the set, on the lines between the cells, so the edges join into closed shapes. It touches no page, so a
+// check runs it on its own (node)
+function outlineEdges(cells, cols, pitch, gap, left) {
+  const edges = [];
+  for (const c of cells) {
+    const col = c % cols, x0 = left + col * pitch - gap, y0 = Math.floor(c / cols) * pitch - gap, x1 = x0 + pitch, y1 = y0 + pitch;
+    if (col === 0 || !cells.has(c - 1)) edges.push([x0, y0, x0, y1]);
+    if (col === cols - 1 || !cells.has(c + 1)) edges.push([x1, y0, x1, y1]);
+    if (!cells.has(c - cols)) edges.push([x0, y0, x1, y0]);
+    if (!cells.has(c + cols)) edges.push([x0, y1, x1, y1]);
+  }
+  return edges;
+}
+function drawMaps() {
+  const f = L.f, box = $("maps");
+  const last = f.sections.length - 1, name = (i) => (i ? setName(i) : "the live settings");
+  // the header and the live settings follow each other, so they share a strip; one memory set has the others
+  // around it, and the checksum follows the last set, so those strips stand apart unless the whole file is drawn
+  // a strip's rows: "file" on the file's offsets (ending 00), "set" from the set's own start (+0000), "own" from
+  // the section's start with the file's offsets beside them
+  const rows = L.whole
+    // the whole file, each section on a new row so that the memory sets line up, in file order
+    ? [["", 0, f.sections[0].end, "file"], ...f.sections.slice(1).map((x) => ["", x.off, x.end, "own", `M${x.index}`]), ["", f.end, f.size, "own", "Sum"]]
+    : [["Header and live settings · section 0", 0, f.sections[0].end, "file"],
+      // one memory set counts from its own start: every set holds the same records at the same place in it (a file
+      // with no memory set has no such strip)
+      ...(last ? [[`${setName(L.set)} · sections[${L.set}], between ${name(L.set - 1)} and ${L.set < last ? name(L.set + 1) : "the checksum"} · offsets inside the set`, f.sections[L.set].off, f.sections[L.set].end, "set"]] : []),
+      [last ? `Checksum · after Memory ${last}` : "Checksum · after the live settings", f.end, f.size, "file"]];
+  // where each part starts, drawn as a line through the map and named by the row's offset
+  const starts = [[f.start, "Live"], ...f.sections.slice(1).map((x) => [x.off, `M${x.index}`]), [f.end, "Sum"]];
+  const sdiff = diffMask(f);
+  // a cell is 16 bytes, one line of the hex dump, and a row a whole multiple of 256 bytes, so each row starts at an
+  // offset ending 00; "fit" takes the most bytes a row whose cells are still 10 px or more
+  const GUT = 88, BPC = 16, width = Math.max(160, (box.clientWidth || 600) - GUT);
+  const cols = L.rowBytes ? L.rowBytes / BPC : Math.max(16, Math.floor(width / 10 / 16) * 16);
+  const pitch = Math.max(3, Math.floor(width / cols)), rb = cols * BPC, gap = pitch > 6 ? 1 : 0;
+  // the chosen bytes, outlined whatever they are (the whole file, a section, a block of records, a record, a field,
+  // an element); yellow, the setting the menu sent here or an item picked from the inspector's list
+  const range = selRange(L.sel), part = L.sel.menu && L.sel.part ? [L.sel.rec.off + 8 + L.sel.part[0], L.sel.rec.off + 8 + L.sel.part[1]]
+    : L.pick && L.pick.sel === L.sel ? [L.pick.a, L.pick.b] : null;
+  const css = getComputedStyle(document.documentElement);
+  const muted = css.getPropertyValue("--muted").trim() || "#8c8c8c", strong = css.getPropertyValue("--strong").trim() || "#f0f0f0";
+  let hit = null;
+  const strips = rows.map(([lab, a, b, mode, tag]) => {
+    const base = mode === "file" ? a - (a % rb) : a, cells = Math.ceil((b - base) / BPC), lines = Math.ceil(cells / cols), h = lines * pitch;
+    const cv = el("canvas", { width: (GUT + cols * pitch) * devicePixelRatio, height: h * devicePixelRatio, style: `width:${GUT + cols * pitch}px;height:${h}px` });
+    const g = cv.getContext("2d"); g.scale(devicePixelRatio, devicePixelRatio);
+    // each row's offset down the left, as the hex dump has it (every row when they are tall enough to read)
+    g.fillStyle = muted; g.font = `${Math.min(11, Math.max(8, pitch))}px ui-monospace, Menlo, monospace`; g.textBaseline = "middle";
+    const every = Math.ceil(11 / pitch);
+    for (let l = 0; l < lines; l += every) g.fillText(mode === "set" ? `+${hex4(l * rb)}` : hexOff(base + l * rb), 0, l * pitch + pitch / 2);
+    if (tag) { g.fillStyle = strong; g.fillText(tag, GUT - 30, pitch / 2); g.fillStyle = muted; }
+    const parts = starts.filter(([p]) => p > a && p < b), chosen = new Set(), lits = [];
+    for (let c = Math.floor((a - base) / BPC); c < cells; c++) {
+      const s = Math.max(a, base + c * BPC), e = Math.min(b, base + (c + 1) * BPC), cnt = [0, 0, 0, 0, 0, 0];
+      let dif = false;
+      for (let p = s; p < e; p++) { cnt[L.cls[p]]++; if (sdiff && sdiff[p]) dif = true; }
+      // the least-proved state (a one-byte record sharing a cell with proved ones had vanished: 6 of the live
+      // settings' 18 not proved)
+      const k = leastProved(cnt);
+      const x = GUT + (c % cols) * pitch, y = Math.floor(c / cols) * pitch;
+      g.fillStyle = dif ? DIFF : CLS_COLOR[k];
+      g.fillRect(x, y, pitch - gap, pitch - gap);
+      // the chosen bytes, and the setting the menu sent here: outlined below, once every cell is drawn
+      const lit = part && s < part[1] && e > part[0];
+      if (range && s < range[1] && e > range[0]) chosen.add(c);
+      if (lit) lits.push([x, y]);
+      // the cell to bring into view: the first of the setting the menu sent here, else the first chosen
+      if ((lit || chosen.has(c)) && (!hit || (lit && !hit.lit))) hit = { cv, y, h: pitch, lit };
+    }
+    // a part's start: a step line between the cell it starts in and the cells before it
+    g.strokeStyle = strong; g.lineWidth = 2;
+    for (const [p, nm] of parts) {
+      const c = Math.floor((p - base) / BPC), x0 = GUT + (c % cols) * pitch - 1, y0 = Math.floor(c / cols) * pitch - 1;
+      g.beginPath(); g.moveTo(GUT + cols * pitch, y0); g.lineTo(x0, y0); g.lineTo(x0, y0 + pitch); g.lineTo(GUT - 2, y0 + pitch); g.stroke();
+      g.fillStyle = strong; g.fillText(nm, GUT - 30, y0 + 1 + pitch / 2);
+    }
+    // the chosen cells outlined as one shape, 2 px in bright cyan on a 1 px dark halo (clamped to the canvas); a
+    // range over many rows gets the envelope that wraps across them
+    if (chosen.size) {
+      const W = GUT + cols * pitch, X = (v) => Math.min(W - 1, v), Y = (v) => Math.max(1, Math.min(h - 1, v));
+      const edges = outlineEdges(chosen, cols, pitch, gap, GUT);
+      g.lineCap = "square";
+      for (const [w, colour] of [[4, "rgba(0, 0, 0, .85)"], [2, "#19e0ff"]]) {
+        g.strokeStyle = colour; g.lineWidth = w; g.beginPath();
+        for (const [x0, y0, x1, y1] of edges) { g.moveTo(X(x0), Y(y0)); g.lineTo(X(x1), Y(y1)); }
+        g.stroke();
+      }
+      g.lineCap = "butt";
+    }
+    // the setting the menu sent here, yellow, over the outline
+    g.strokeStyle = "#ffd54a"; g.lineWidth = 2;
+    for (const [x, y] of lits) g.strokeRect(x + .75, y + .75, pitch - gap - 1.5, pitch - gap - 1.5);
+    const at = (ev) => {
+      const r = cv.getBoundingClientRect(), cx = ev.clientX - r.left - GUT;
+      if (cx < 0 || cx >= cols * pitch) return -1;
+      const p = base + (Math.floor((ev.clientY - r.top) / pitch) * cols + Math.floor(cx / pitch)) * BPC;
+      return p + BPC <= a || p >= b ? -1 : Math.max(a, p);
+    };
+    cv.addEventListener("mousemove", (ev) => { const p = at(ev); if (p >= 0) $("hover").textContent = describe(recAt(f, p), p); });
+    cv.addEventListener("click", (ev) => {
+      const p = at(ev), x = p < 0 ? null : recAt(f, p);
+      if (!x) return;
+      const sec = x.kind === "rec" ? x.rec.sec : x.kind === "count" ? x.sec : 0;
+      if (sec) L.set = sec;
+      if (x.kind === "rec") { L.sel = { kind: "rec", rec: x.rec }; reveal(x.rec, null); } else L.sel = x;
+      drawLayout();
+      intoView("tree");
+    });
+    return el("div", { class: lab ? "maprow" : "maprow tight" }, lab ? el("div", { class: "lab" }, el("span", {}, lab), el("span", {}, `0x${hexOff(a)}–0x${hexOff(b - 1)} · ${(b - a).toLocaleString()} bytes`)) : null, cv);
+  });
+  box.replaceChildren(...(L.whole ? [el("div", { class: "maprow tight" }, el("div", { class: "lab" },
+    el("span", {}, `The whole file · each section starts a new row, so the memory sets line up (M1-M${last}); the offsets are the file's`),
+    el("span", {}, `0x${hexOff(0)}–0x${hexOff(f.size - 1)} · ${f.size.toLocaleString()} bytes`)))] : []), ...strips);
+  $("mapinfo").textContent = `16 bytes a cell · ${rb.toLocaleString()} a row`;
+  // the chosen cells into view, centred: when the columns stand side by side, the map's pane scrolls when brought
+  // here from the menu (L.scrollMap) or when a new choice (a record's field in the structure, another set, an item
+  // picked) lies out of sight; a redraw for its own sake (a resize, a divider dragged) leaves the scroll be. Stacked
+  // (under 1100 px) the page scrolls, only when brought here from the menu, so a row chosen in the structure stays
+  // in sight
+  const fresh = L.mapSel !== L.sel || L.mapSet !== L.set || L.mapPick !== L.pick;
+  L.mapSel = L.sel; L.mapSet = L.set; L.mapPick = L.pick;
+  if (hit) {
+    const grid = getComputedStyle($("lay")).display === "grid", pane = $("pane-map");
+    const top = hit.cv.getBoundingClientRect().top + hit.y, view = grid ? pane.getBoundingClientRect() : { top: 0, height: innerHeight };
+    const away = top < view.top || top + hit.h > view.top + view.height;
+    if (L.scrollMap || (grid && fresh && away)) {
+      const d = top + hit.h / 2 - view.top - view.height / 2;
+      if (grid) pane.scrollTop += d; else window.scrollBy(0, d);
+    }
+  }
+  L.scrollMap = false;
+}
+// the map's row length, chosen by hand or fitted to the column (kept in this browser when it can be)
+const ROWBYTES = "camset-viewer-row-bytes";
+L.rowBytes = [...$("rowbytes").options].some((o) => o.value === store.get(ROWBYTES)) ? +store.get(ROWBYTES) : 0;
+$("rowbytes").value = String(L.rowBytes);
+$("rowbytes").addEventListener("change", (e) => { L.rowBytes = +e.target.value; store.set(ROWBYTES, String(L.rowBytes)); drawMaps(); });
+const WHOLE = "camset-viewer-whole-file";
+L.whole = store.get(WHOLE) === "1";
+$("whole").checked = L.whole;
+$("whole").addEventListener("change", (e) => { L.whole = e.target.checked; store.set(WHOLE, L.whole ? "1" : "0"); drawMaps(); });
+let mapFrame = 0;
+function redrawMaps() {
+  if (!mapFrame) mapFrame = requestAnimationFrame(() => {
+    mapFrame = 0;
+    if ($("lay").hidden || !L.f) return;
+    if (C.view === "map") drawMaps(); else if (C.view === "hex") { C.hex && C.hex.paint(); drawStrip(); } else if (C.diff) { C.diff.A.paint(); C.diff.B.paint(); }
+  });
+}
+
+// the three columns' widths: drag a divider, or focus it and press ← →; double-click puts it back
+const WIDTHS = "camset-viewer-layout-widths";
+function setWidth(n, px) {
+  // the middle keeps 240 px; past that, the other side column gives way down to 180 px
+  const lay = $("lay"), o = n === 1 ? 3 : 1, other = (n === 1 ? $("lhex") : $("ltree")).getBoundingClientRect().width;
+  const room = lay.clientWidth - 14 - 240, w = Math.round(Math.max(180, Math.min(px, room - 180)));
+  lay.style.setProperty(`--lw${n}`, `${w}px`);
+  if (w + other > room) lay.style.setProperty(`--lw${o}`, `${Math.round(Math.max(180, room - w))}px`);
+}
+// stacked, the map's height (the bytes take the rest)
+function setHeight(px) {
+  const lay = $("lay");
+  lay.style.setProperty("--mh", `${Math.round(Math.max(120, Math.min(px, lay.clientHeight - 7 - 140)))}px`);
+}
+function keepWidths() {
+  const lay = $("lay");
+  store.set(WIDTHS, JSON.stringify({ 1: lay.style.getPropertyValue("--lw1"), 3: lay.style.getPropertyValue("--lw3"), mh: lay.style.getPropertyValue("--mh") }));
+}
+{ const w = storedJson(WIDTHS); for (const [n, v] of [[1, "--lw1"], [3, "--lw3"], ["mh", "--mh"]]) if (typeof w[n] === "string" && w[n]) $("lay").style.setProperty(v, w[n]); }
+const stacked = () => $("lay").classList.contains("stacked");
+for (const sp of document.querySelectorAll("#lay .split")) {
+  const n = +sp.dataset.col, width = () => (n === 1 ? $("ltree") : $("lhex")).getBoundingClientRect().width;
+  const rows = () => n === 3 && stacked();
+  sp.addEventListener("pointerdown", (e) => {
+    e.preventDefault(); sp.setPointerCapture(e.pointerId); sp.classList.add("drag");
+    const x0 = e.clientX, w0 = width(), y0 = e.clientY, h0 = $("lcenter").getBoundingClientRect().height;
+    const move = (ev) => { if (rows()) setHeight(h0 + ev.clientY - y0); else setWidth(n, n === 1 ? w0 + ev.clientX - x0 : w0 - (ev.clientX - x0)); redrawMaps(); };
+    const up = () => { sp.removeEventListener("pointermove", move); sp.classList.remove("drag"); keepWidths(); redrawMaps(); };
+    sp.addEventListener("pointermove", move);
+    sp.addEventListener("pointerup", up, { once: true }); sp.addEventListener("pointercancel", up, { once: true });
+  });
+  sp.addEventListener("keydown", (e) => {
+    const d = (rows() ? { ArrowUp: -24, ArrowDown: 24 } : { ArrowLeft: -24, ArrowRight: 24 })[e.key];
+    if (!d) return;
+    e.preventDefault();
+    if (rows()) setHeight($("lcenter").getBoundingClientRect().height + d); else setWidth(n, width() + (n === 1 ? d : -d));
+    keepWidths(); redrawMaps();
+  });
+  sp.addEventListener("dblclick", () => { $("lay").style.removeProperty(rows() ? "--mh" : `--lw${n}`); keepWidths(); redrawMaps(); });
+}
+// side by side or stacked (kept in this browser when it can be)
+const ARRANGE = "camset-viewer-stacked";
+function arrange(stack) {
+  $("lay").classList.toggle("stacked", stack);
+  $("ar-side").setAttribute("aria-pressed", String(!stack)); $("ar-stack").setAttribute("aria-pressed", String(stack));
+  const sp = document.querySelector('#lay .split[data-col="3"]');
+  sp.setAttribute("aria-orientation", stack ? "horizontal" : "vertical");
+  sp.setAttribute("aria-label", stack ? "Resize the map's height" : "Resize the bytes column");
+  sp.title = stack ? "Drag, or ↑ ↓, to resize; double-click to reset" : "Drag, or ← →, to resize; double-click to reset";
+  store.set(ARRANGE, stack ? "1" : "0");
+  redrawMaps();
+}
+$("ar-side").onclick = () => arrange(false);
+$("ar-stack").onclick = () => arrange(true);
+if (store.get(ARRANGE) === "1") arrange(true);
+function describe(x, p) {
+  if (!x) return `0x${hexOff(p)}`;
+  if (x.kind === "rec") { const r = x.rec; const nm = nameOf(r.sec, r.id); return `0x${hexOff(p)}${r.sec ? ` (+0x${hex4(p - L.f.sections[r.sec].off)} in the set)` : ""} · ${setName(r.sec)} · record 0x${hex4(r.id)} ${nm || "(not in the schema)"} · ${CLS[statusOf(r.sec, r.id)]}`; }
+  return `0x${hexOff(p)} · ${{ header: "the header", count: "a section's record count", sum: "the body checksum" }[x.kind]}`;
+}
+
+// ---- the structure: the file's parse tree, every part named and placed as the definition's container block says
+// (DATA.format), in file order, with its offset, size, type, value and setting
+const INT = { u1: 1, s1: 1, u2: 2, s2: 2, u4: 4, s4: 4, u8: 8, s8: 8 };
+// one of a record's header fields, read
+function recordHeadValue(f, r, id) {
+  return id === "id" ? `0x${hex4(r.id)}` : id === "marker" ? `0x${hex4(f.marker)}` : id === "elem_size" ? String(r.size) : String(r.count);
+}
+// the trailer checksum, and any bytes after it the block names no part for
+function trailerParts(f) {
+  const s = f.bodySum, out = [{ id: "trailer_checksum", a: f.end, b: f.end + s.w, type: s.kind, doc: `${SUM_DOC[s.kind]}, over ${s.from} up to ${s.to}.`, value: sumText(s) }];
+  if (f.end + s.w < f.size) out.push({ id: `reserved_${(f.end + s.w).toString(16)}`, a: f.end + s.w, b: f.size, type: `bytes(${f.size - f.end - s.w})`, doc: "No part of the definition's block names these bytes.", value: "" });
+  return out;
+}
+// the schema key of one element of a record: its own ("[i]", "@n") or the record's
+function elemKey(r, i) {
+  const ks = keysFor(r.sec, r.id), real = ks.filter((k) => R[k].raw === undefined);
+  const base = `${r.sec ? (ks[0] || "").split(":")[0] : "global"}:0x${hex4(r.id)}`;
+  return [`${base}[${i}]`, `${base}@${i * r.size}`, base].find((k) => R[k]) || (real.length === 1 ? real[0] : null);
+}
+const setName = (i) => (i ? DATA.memory_names[String(i)] || `Memory ${i}` : "Live settings");
+// a record whose value bytes differ under the comparison chosen
+function recDiffers(f, r) {
+  const m = diffMask(f);
+  if (!m) return false;
+  for (let p = r.off + 8; p < r.end; p++) if (m[p]) return true;
+  return false;
+}
+// open the tree down to a record, and with part (bytes of its values) down to that element or field
+function reveal(r, part) {
+  L.open.add(`s${r.sec}`); L.open.add(`b${r.sec}:${r.id & 0xff00}`);
+  if (!part) return;
+  const i = Math.floor(part[0] / Math.max(1, r.size));
+  L.open.add(`r${r.sec}:${r.id}`); L.open.add(`e${r.sec}:${r.id}`);
+  if (r.count > 100) L.open.add(`e${r.sec}:${r.id}:${Math.floor(i / 100) * 100}`);
+  if (r.size > 8) L.open.add(`f${r.sec}:${r.id}:${i}`);
+}
+// a selection in a memory set makes that set the one the map shows
+function showSetOf(sel) {
+  const sec = sel.rec ? sel.rec.sec : sel.sec;
+  if (sec) L.set = sec;
+}
+function sameSel(a, b) {
+  if (a.kind !== b.kind) return false;
+  if (a.kind === "rec") {
+    const whole = (s) => !s.part || (s.part[0] === 0 && s.part[1] === s.rec.end - s.rec.off - 8);
+    return a.rec === b.rec && (whole(a) && whole(b) || (!!a.part && !!b.part && a.part[0] === b.part[0] && a.part[1] === b.part[1]));
+  }
+  if (a.kind === "field") return a.a === b.a && a.b === b.b;
+  if (a.kind === "range") return a.a === b.a && a.b === b.b && a.lab === b.lab;
+  if (a.kind === "count" || a.kind === "section") return a.sec === b.sec;
+  return true;
+}
+
+// the tree's keys, as a tree has them: ↑ ↓ move, → opens (or goes in), ← closes (or goes out), Enter chooses
+function refocus(k) { [...$("tree").querySelectorAll(".row[data-k]")].find((b) => b.dataset.k === k)?.focus({ preventScroll: false }); }
+$("tree").addEventListener("keydown", (e) => {
+  const rows = [...$("tree").querySelectorAll(".row[data-k]")], i = rows.indexOf(document.activeElement);
+  if (i < 0 || !["ArrowDown", "ArrowUp", "ArrowRight", "ArrowLeft", "Home", "End"].includes(e.key)) return;
+  e.preventDefault();
+  const row = rows[i], level = +row.getAttribute("aria-level"), open = row.getAttribute("aria-expanded");
+  const go = (j) => { rows[Math.max(0, Math.min(rows.length - 1, j))].focus(); rows[Math.max(0, Math.min(rows.length - 1, j))].scrollIntoView({ block: "nearest" }); };
+  const fold = () => { const k = row.dataset.k; if (L.open.has(row.dataset.fold)) L.open.delete(row.dataset.fold); else L.open.add(row.dataset.fold); drawTree(); refocus(k); };
+  if (e.key === "ArrowDown") go(i + 1);
+  else if (e.key === "ArrowUp") go(i - 1);
+  else if (e.key === "Home") go(0);
+  else if (e.key === "End") go(rows.length - 1);
+  else if (e.key === "ArrowRight") { if (open === "false") fold(); else if (open === "true") go(i + 1); }
+  else if (e.key === "ArrowLeft") {
+    if (open === "true") fold();
+    else for (let j = i - 1; j >= 0; j--) if (+rows[j].getAttribute("aria-level") < level) { go(j); break; }
+  }
+});
+
+// the structure's column widths: a heading's grip drags one, a double-click fits the column to its longest text
+const TCOLS = "camset-viewer-tree-columns";
+for (const [k, v] of Object.entries(storedJson(TCOLS))) if (/^[1-6]$/.test(k) && typeof v === "string") $("tree").style.setProperty(`--tc${k}`, v);
+function keepCols() {
+  const w = {};
+  for (let i = 1; i <= 6; i++) { const v = $("tree").style.getPropertyValue(`--tc${i}`); if (v) w[i] = v; }
+  store.set(TCOLS, JSON.stringify(w));
+}
+$("tree").addEventListener("pointerdown", (e) => {
+  const g = e.target.closest(".colgrip");
+  if (!g) return;
+  e.preventDefault(); e.stopPropagation();
+  const i = +g.dataset.col, cell = g.parentElement, x0 = e.clientX, w0 = cell.getBoundingClientRect().width;
+  g.classList.add("drag"); g.setPointerCapture(e.pointerId);
+  const move = (ev) => $("tree").style.setProperty(`--tc${i}`, `${Math.max(36, Math.round(w0 + ev.clientX - x0))}px`);
+  const up = () => { g.removeEventListener("pointermove", move); g.classList.remove("drag"); keepCols(); };
+  g.addEventListener("pointermove", move);
+  g.addEventListener("pointerup", up, { once: true }); g.addEventListener("pointercancel", up, { once: true });
+});
+$("tree").addEventListener("dblclick", (e) => {
+  const g = e.target.closest(".colgrip");
+  if (!g) return;
+  const i = +g.dataset.col;
+  // the widest cell of the column as drawn (its text is cut with an ellipsis, so its scroll width is the whole)
+  const cells = [...$("tree").querySelectorAll(`.row:not(.head) > span:nth-child(${i})`)];
+  const w = Math.max(40, ...cells.map((c) => c.scrollWidth + 4));
+  $("tree").style.setProperty(`--tc${i}`, `${Math.min(900, w)}px`);
+  keepCols();
+});
+$("tree").addEventListener("click", (e) => { if (e.target.closest(".colgrip")) e.stopPropagation(); }, true);
+
+function drawTree() {
+  const f = L.f, out = [];
+  const head = el("div", { class: "row head", role: "presentation" }, ...["Name", "Offset", "Size", "Type", "Value", "Setting"].map((t, i) =>
+    el("span", { class: i === 2 ? "n" : "" }, t, el("span", { class: "colgrip", "data-col": String(i + 1), title: "Drag to resize the column; double-click to fit its longest text" }))));
+  // one row: name (indented, with its fold), offset, size, type, value, setting
+  const row = (depth, o) => {
+    const isOpen = o.fold && L.open.has(o.fold);
+    const k = `${o.name}|${o.off ?? ""}|${depth}`;
+    out.push(el("button", { class: "row", role: "treeitem", "aria-level": String(depth + 1), "aria-current": String(!!(o.sel && sameSel(o.sel, L.sel))),
+      "aria-expanded": o.fold ? String(isOpen) : undefined, title: o.tip || undefined, "data-k": k, "data-fold": o.fold || undefined,
+      onclick: () => {
+        if (o.fold) { if (L.open.has(o.fold)) L.open.delete(o.fold); else L.open.add(o.fold); }
+        if (!o.sel) { drawTree(); refocus(k); return; }
+        L.sel = o.sel; L.pick = null; C.cursor = null; C.range = null;
+        showSetOf(o.sel);
+        drawLayout(); refocus(k);
+      } },
+      el("span", { style: `padding-left:${depth * 14}px`, title: o.name }, el("span", { class: "tw" }, o.fold ? (isOpen ? "▾" : "▸") : ""), o.name),
+      el("span", { class: "m" }, o.off === undefined ? "" : `0x${o.off.toString(16).padStart(6, "0")}`),
+      el("span", { class: "m n" }, o.size === undefined ? "" : o.size.toLocaleString()),
+      el("span", { class: "m k", title: o.type || undefined }, o.type || ""),
+      el("span", { class: "m", title: o.value === undefined || o.value === "" ? undefined : String(o.value) }, o.value ?? ""),
+      el("span", { title: [o.set, o.dif].filter(Boolean).join(" · ") || undefined }, o.cls !== undefined ? el("span", { class: "sw", style: `background:${CLS_COLOR[o.cls]}` }) : null, o.set || "", o.dif ? el("span", { class: "dif" }, o.dif) : null)));
+    return isOpen;
+  };
+  const record = (depth, r, j) => {
+    const nm = nameOf(r.sec, r.id), value = recValue(f, r);
+    const dif = recDiffers(f, r) ? `≠ ${partnerLabel(r.sec)}` : "";
+    if (!row(depth, { name: `records[${j}]`, off: r.off, size: r.end - r.off, type: "record", value, cls: statusOf(r.sec, r.id),
+      set: `0x${hex4(r.id)} · ${nm || "not in the schema"}`, dif, sel: { kind: "rec", rec: r }, fold: `r${r.sec}:${r.id}` })) return;
+    const path = `sections[${r.sec}].records[${j}]`;
+    let at = r.off;
+    // a record's own fields (id, marker, element size and count) carry its record and set, so that choosing one
+    // shows that set's strip on the map
+    for (const [id, type, doc] of RECORD_HEAD) {
+      row(depth + 1, { name: id, off: at, size: 2, type, tip: doc,
+        value: recordHeadValue(f, r, id), sel: { kind: "field", a: at, b: at + 2, lab: `${path}.${id}`, rec: r, sec: r.sec } });
+      at += 2;
+    }
+    const etype = INT[`s${r.size}`] ? `s${r.size}` : `raw_element(${r.size})`;
+    const element = (d, i) => {
+      const a = r.off + 8 + i * r.size, k = elemKey(r, i), own = !!k && /\[|@/.test(k);
+      const ev = INT[etype] ? elem(f, a, r.size) : null;
+      // a 16-bit field's key names its byte in the record's values ("@n"): an element holds the ones whose byte is in it
+      const fields = r.size > 8 ? Object.keys(R).filter((x) => x.startsWith(`${(keysFor(r.sec, r.id)[0] || "").split("@")[0].split("[")[0]}@`)
+        && +x.split("@")[1] >= i * r.size && +x.split("@")[1] < (i + 1) * r.size) : [];
+      const open = row(d, { name: `elements[${i}]`, off: a, size: r.size, type: etype,
+        value: ev !== null ? `${ev}${k && R[k].vals.length ? ` = ${label(R[k], ev)}` : ""}` : `${r.size} bytes`,
+        set: own ? R[k].n : fields.length ? `${fields.length} fields named` : "", fold: fields.length ? `f${r.sec}:${r.id}:${i}` : undefined,
+        sel: { kind: "rec", rec: r, part: [i * r.size, (i + 1) * r.size] } });
+      // a structured element's fields as the schema names them (a 16-bit field at byte n of the values: "@n")
+      if (open) for (const fk of fields.sort((p, q) => +p.split("@")[1] - +q.split("@")[1])) {
+        const n = +fk.split("@")[1], fv = f.dv.getInt16(r.off + 8 + n, true);
+        row(d + 1, { name: `@${n}`, off: r.off + 8 + n, size: 2, type: "s2", value: `${fv}${R[fk].vals.length ? ` = ${label(R[fk], fv)}` : ""}`,
+          cls: cantIn(fk, r.sec) || (!R[fk].proved && R[fk].why) ? 5 : R[fk].proved ? 1 : 3, set: R[fk].n, sel: { kind: "rec", rec: r, part: [n, n + 2], key: fk } });
+      }
+    };
+    // the elements, and a long array's hundreds: a range of the record's value bytes
+    const elems = (lab, i, j) => ({ kind: "range", a: r.off + 8 + i * r.size, b: r.off + 8 + j * r.size, sec: r.sec, rec: r, lab });
+    if (row(depth + 1, { name: "elements", off: r.off + 8, size: r.size * r.count, type: `${etype}[${r.count}]`, fold: `e${r.sec}:${r.id}`, sel: elems("elements", 0, r.count) })) {
+      if (r.count <= 100) for (let i = 0; i < r.count; i++) element(depth + 2, i);
+      // a long array a hundred at a time
+      else for (let c = 0; c < r.count; c += 100) {
+        const last = Math.min(r.count, c + 100) - 1;
+        if (row(depth + 2, { name: `elements[${c}–${last}]`, off: r.off + 8 + c * r.size, size: (last - c + 1) * r.size, fold: `e${r.sec}:${r.id}:${c}`,
+          sel: elems(`elements[${c}–${last}]`, c, last + 1) }))
+          for (let i = c; i <= last; i++) element(depth + 3, i);
+      }
+    }
+  };
+  // the file, and before it the differences from a file opened beside it (not part of the format)
+  if (L.other && L.diffRecs && row(0, { name: `Differences from ${L.otherName}`, value: `${L.diffRecs.length} records`, fold: "diffs" }))
+    for (const r of L.diffRecs) row(1, { name: `sections[${r.sec}].records[${f.sections[r.sec].recs.indexOf(r)}]`, off: r.off, size: r.end - r.off,
+      type: "record", cls: statusOf(r.sec, r.id), set: `0x${hex4(r.id)} · ${nameOf(r.sec, r.id) || "not in the schema"}`, sel: { kind: "rec", rec: r } });
+  row(0, { name: DATA.file.name, off: 0, size: f.size, type: "settings file", value: `${f.model}, ${firmware(f)}${videoSystem(f) ? ", " + videoSystem(f) : ""}`, sel: { kind: "file" } });
+  for (const p of headerParts(f)) {
+    const open = row(1, { name: p.id, off: p.a, size: p.b - p.a, type: p.type, tip: p.doc, value: p.value,
+      sel: { kind: "field", a: p.a, b: p.b, lab: p.id }, fold: p.kids ? `h:${p.id}` : undefined });
+    if (open && p.kids) p.kids.forEach((id, i) => row(2, { name: id, off: p.a + i, size: 1, type: "u1", value: String(f.u8[p.a + i]),
+      sel: { kind: "field", a: p.a + i, b: p.a + i + 1, lab: `${p.id}.${id}` } }));
+  }
+  f.sections.forEach((sec, i) => {
+    const difs = diffMask(f) ? sec.recs.filter((r) => recDiffers(f, r)).length : 0;
+    if (!row(1, { name: `sections[${i}]`, off: sec.off, size: sec.end - sec.off, type: "section", value: `${sec.recs.length.toLocaleString()} records`,
+      set: setName(i), dif: difs ? `≠ ${partnerLabel(i)} in ${difs}` : "", sel: { kind: "section", sec: i }, fold: `s${i}` })) return;
+    row(2, { name: "num_records", off: sec.off, size: 4, type: "u4", value: sec.recs.length.toLocaleString(), sel: { kind: "count", sec: i } });
+    // every row chooses its bytes, these too: the section's records, and a block of them (a click on a row that
+    // folds also opens or closes it, as on a section or a record)
+    row(2, { name: "records", off: sec.off + 4, size: sec.end - sec.off - 4, type: `record[${sec.recs.length}]`,
+      sel: { kind: "range", a: sec.off + 4, b: sec.end, sec: i, lab: "every record" } });
+    // the records by id block of 256: ids rise through a section, so the blocks follow the file
+    const blocks = new Map();
+    sec.recs.forEach((r, j) => { const b = r.id & 0xff00; if (!blocks.has(b)) blocks.set(b, []); blocks.get(b).push([r, j]); });
+    for (const [b, rs] of blocks) {
+      const proved = rs.filter(([r]) => statusOf(r.sec, r.id) === 1).length, from = rs[0][0].off, to = rs[rs.length - 1][0].end;
+      if (row(3, { name: `0x${hex4(b)}–0x${hex4(b + 0xff)}`, off: from, size: to - from, value: `${rs.length} records`,
+        set: `${proved} of ${rs.length} proved`, fold: `b${i}:${b}`, sel: { kind: "range", a: from, b: to, sec: i, lab: `records 0x${hex4(b)}–0x${hex4(b + 0xff)}` } }))
+        for (const [r, j] of rs) record(4, r, j);
+    }
+  });
+  for (const p of trailerParts(f))
+    row(1, { name: p.id, off: p.a, size: p.b - p.a, type: p.type, tip: p.doc, value: p.value,
+      sel: p.id === "trailer_checksum" ? { kind: "sum" } : { kind: "field", a: p.a, b: p.b, lab: p.id } });
+  $("tree").replaceChildren(head, ...out);
+}
+
+// the highlights a byte's text character shares with it (not its structure / value colour)
+const TEXT_MARKS = ["hrec", "hsel", "hl", "cur", "df", "rng"];
+function hexLine(row, a, b, mark, f = L.f) {
+  const line = el("div", {}, el("span", { class: "o" }, (f.size <= 0x1000000 ? row.toString(16).padStart(6, "0") : hexOff(row)) + "  "));
+  const asc = [];
+  for (let i = 0; i < 16; i++) {
+    const p = row + i;
+    if (p >= f.size) { line.append("   "); continue; }
+    const inside = p >= a && p < b, c = inside ? mark(p) : "bo";
+    line.append(el("span", inside ? { class: c, "data-p": String(p) } : { class: c }, hex2(f.u8[p])), i === 7 ? "  " : " ");
+    const ch = f.u8[p] >= 32 && f.u8[p] < 127 ? String.fromCharCode(f.u8[p]) : ".";
+    asc.push(inside ? el("span", { class: c.split(" ").filter((x) => TEXT_MARKS.includes(x)).join(" ") || undefined, "data-p": String(p) }, ch) : ch);
+  }
+  line.append(el("span", { class: "a" }, " |", ...asc, "|"));
+  return line;
+}
+// a hex dump of a long range (a section's 25 KB, the whole file's 191 KB), drawn a screenful at a time
+function hexScroller(a, b, mark, onPick, f = L.f, fill = false) {
+  const LH = 19, lo = a & ~15, lines = Math.ceil((b - lo) / 16);
+  const box = el("div", { class: "hex vhex" + (fill ? " fill" : "") }), inner = el("div", { class: "vin", style: `height:${lines * LH}px` });
+  box.append(inner);
+  const paint = () => {
+    const first = Math.max(0, Math.floor(box.scrollTop / LH) - 2), last = Math.min(lines, first + Math.ceil((box.clientHeight || 460) / LH) + 4);
+    const rows = [];
+    for (let i = first; i < last; i++) { const line = hexLine(lo + i * 16, a, b, mark, f); line.style.top = `${i * LH}px`; rows.push(line); }
+    inner.replaceChildren(...rows);
+  };
+  let frame = 0;
+  box.addEventListener("scroll", () => {
+    if (!frame) frame = requestAnimationFrame(() => { frame = 0; paint(); });
+    // a scroll this box was told to make (following the other side) is not passed on: passing it back drifted
+    // the two sides a line each way, as their sections start at different places in a line
+    if (box.followed !== undefined && Math.abs(box.scrollTop - box.followed) < 1) { box.followed = undefined; return; }
+    if (box.onscrolled) box.onscrolled();
+  });
+  const pAt = (e) => { const p = e.target.dataset ? e.target.dataset.p : undefined; return p === undefined ? undefined : +p; };
+  let drag = null, hover = null;
+  inner.addEventListener("pointerdown", (e) => {
+    const p = pAt(e);
+    if (p === undefined || e.button !== 0) return;
+    e.preventDefault(); box.focus({ preventScroll: true });
+    drag = { from: p, moved: false };
+    // the drag ends wherever the button comes up; one listener per drag (one per scroller stayed on the window for
+    // every file opened and every comparison drawn)
+    window.addEventListener("pointerup", () => { if (drag && !drag.moved) onPick(drag.from); drag = null; }, { once: true });
+  });
+  inner.addEventListener("pointermove", (e) => {
+    const p = pAt(e);
+    if (p !== hover) {
+      inner.querySelectorAll(".twin").forEach((x) => x.classList.remove("twin"));
+      if (p !== undefined) inner.querySelectorAll(`[data-p="${p}"]`).forEach((x) => x.classList.add("twin"));
+      hover = p;
+    }
+    if (!drag || p === undefined) return;
+    if (p !== drag.from) drag.moved = true;
+    if (drag.moved) onRange(Math.min(drag.from, p), Math.max(drag.from, p) + 1, f);
+  });
+  inner.addEventListener("pointerleave", () => { inner.querySelectorAll(".twin").forEach((x) => x.classList.remove("twin")); hover = null; });
+  box.tabIndex = 0;
+  box.addEventListener("keydown", (e) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "c" && C.range && C.range.f === f) {
+      e.preventDefault();
+      const hex = [...f.u8.slice(C.range[0], C.range[1])].map(hex2).join(" ");
+      try { navigator.clipboard.writeText(hex).then(() => { $("findn").textContent = `copied ${C.range[1] - C.range[0]} bytes`; }); } catch { /* no clipboard here */ }
+    }
+  });
+  box.paint = paint;
+  box.range = [a, b];
+  // the offset of the first line in view; scroll a line to the top, or a few lines down (goTo)
+  box.topOffset = () => lo + Math.floor(box.scrollTop / LH) * 16;
+  box.scrollToOffset = (p) => {
+    const top = Math.max(0, Math.min(box.scrollHeight - box.clientHeight, Math.floor((p - lo) / 16) * LH));
+    if (Math.abs(top - box.scrollTop) >= 1) { box.followed = top; box.scrollTop = top; }
+    paint();
+  };
+  box.goTo = (p) => { box.scrollTop = Math.max(0, Math.floor((p - lo) / 16) * LH - LH * 3); paint(); };
+  box.visible = () => [box.topOffset(), lo + Math.ceil((box.scrollTop + box.clientHeight) / LH) * 16];
+  paint();
+  return box;
+}
+// a file's or a section's items: an item picked lights its bytes in the middle (and its cells on the map), a byte
+// clicked there picks its item; "open ›" goes to the item in the structure
+function itemsPanel(a, b, items) {
+  // a section's items are all records (and its count): no type column for them
+  const typed = items.some((it) => it.type && it.type !== "record" && it.name !== "num_records");
+  let picked = L.pick && L.pick.sel === L.sel ? L.pick.i : -1;
+  const pick = (i, scroll) => {
+    if (picked >= 0) trs[picked].classList.remove("on");
+    picked = i; trs[i].classList.add("on");
+    L.pick = { sel: L.sel, i, a: items[i].off, b: items[i].off + items[i].size };
+    C.cursor = items[i].off;
+    drawCenter(scroll ? items[i].off : null); drawData();
+  };
+  // a byte clicked in the middle picks the item holding it
+  C.items = {
+    a, b, pickAt: (p) => {
+      let lo = 0, hi = items.length - 1;
+      while (lo <= hi) { const m = (lo + hi) >> 1; if (p < items[m].off) hi = m - 1; else if (p >= items[m].off + items[m].size) lo = m + 1; else { pick(m, false); trs[m].scrollIntoView({ block: "nearest" }); return; } }
+    } };
+  const trs = items.map((it, i) => el("tr", { class: "pick" + (i === picked ? " on" : ""), tabindex: "0", title: it.tip || undefined,
+      onclick: () => pick(i, true), onkeydown: (e) => { if (e.key === "Enter") pick(i, true); } },
+    el("td", {}, it.name), el("td", { class: "m" }, `0x${it.off.toString(16).padStart(6, "0")}`), el("td", { class: "m" }, it.size.toLocaleString()),
+    typed ? el("td", { class: "m" }, it.type || "") : null, el("td", { class: "m", title: it.value ?? "" }, it.value ?? ""),
+    el("td", { title: [it.set, it.dif].filter(Boolean).join(" ") || undefined }, it.cls !== undefined ? el("span", { class: "sw", style: `background:${CLS_COLOR[it.cls]}` }) : null, it.set || "", it.dif ? el("span", { class: "dif" }, ` ${it.dif}`) : null),
+    el("td", {}, it.sel ? el("button", { class: "linkish go", title: "Open it in the structure", onclick: (e) => {
+      e.stopPropagation(); L.sel = it.sel; L.pick = null;
+      showSetOf(it.sel);
+      if (it.sel.rec) reveal(it.sel.rec, null); else if (it.sel.kind === "section") L.open.add(`s${it.sel.sec}`);
+      drawLayout(); intoView("tree");
+    } }, "open ›") : null)));
+  const cols = el("colgroup", {}, ...["7.5em", "6.5em", "4.5em", typed ? "6em" : null, "", "", "4.2em"].filter((w) => w !== null).map((w) => el("col", w ? { style: `width:${w}` } : {})));
+  return [el("div", { class: "meta" }, `${items.length.toLocaleString()} items: click one to light its bytes, or a byte for its item`),
+    el("table", { class: "insp items-t" }, cols, el("tr", {}, ...["Name", "Offset", "Size", typed ? "Type" : null, "Value", "Setting", ""].filter((t) => t !== null).map((t) => el("th", {}, t))), trs)];
+}
+// a record's value as the structure shows it: the value (and its label) of a one-element record, else its shape
+function recValue(f, r) {
+  const one = r.count === 1 && INT[`s${r.size}`];
+  if (!one) return `${r.count} × ${INT[`s${r.size}`] ? "s" + r.size * 8 : r.size + " B"}`;
+  const v = elem(f, r.off + 8, r.size), k0 = elemKey(r, 0);
+  return `${v}${k0 && R[k0].vals.length ? ` = ${label(R[k0], v)}` : ""}`;
+}
+
+// a section's records from a up to b, as a list's items
+function recItems(f, sec, a, b) {
+  return sec.recs.flatMap((r, j) => (r.off < a || r.end > b ? [] : [{ name: `records[${j}]`, off: r.off, size: r.end - r.off, type: "record", value: recValue(f, r),
+    cls: statusOf(r.sec, r.id), set: `0x${hex4(r.id)} · ${nameOf(r.sec, r.id) || "not in the schema"}`,
+    dif: recDiffers(f, r) ? `≠ ${partnerLabel(r.sec)}` : "", sel: { kind: "rec", rec: r } }]));
+}
+
+function drawHex() {
+  const f = L.f, sel = L.sel, body = $("hbody");
+  C.items = null;     // a list (the file's, a section's, a block's) sets it again
+  if (sel.kind === "file") {
+    $("htitle").textContent = `${DATA.file.name} · the whole file`;
+    const part = (p, sel) => ({ name: p.id, off: p.a, size: p.b - p.a, type: p.type, value: p.value, tip: p.doc, sel });
+    const items = [...headerParts(f).map((p) => part(p, { kind: "field", a: p.a, b: p.b, lab: p.id })),
+      ...f.sections.map((sc, i) => ({ name: `sections[${i}]`, off: sc.off, size: sc.end - sc.off, type: "section",
+        value: `${sc.recs.length.toLocaleString()} records`, set: setName(i), sel: { kind: "section", sec: i } })),
+      ...trailerParts(f).map((p) => part(p, p.id === "trailer_checksum" ? { kind: "sum" } : { kind: "field", a: p.a, b: p.b, lab: p.id }))];
+    const last = f.sections.length - 1, stride = last > 1 ? f.sections[2].off - f.sections[1].off : 0, ts = f.bodySum;
+    body.replaceChildren(el("div", { class: "meta" }, `${f.model}, firmware ${firmware(f)}${videoSystem(f) ? ", " + videoSystem(f) : ""}, saved ${f.saved} · ${f.size.toLocaleString()} bytes · ${f.sections.length} sections`),
+      ...itemsPanel(0, f.size, items),
+      el("details", { class: "explain" }, el("summary", {}, "About the format, the colours and this view"),
+      el("p", {}, `${DATA.file.name}: ${f.model}, saved ${f.saved}, ${f.size.toLocaleString()} bytes, ${f.sections.length} sections. Little-endian throughout.`),
+      el("table", {}, el("tr", {}, el("th", {}, "Bytes"), el("th", {}, "Holds")),
+        [...headerParts(f).map((p) => [p.b - p.a > 1 ? `0x${hex2(p.a)}-0x${hex2(p.b - 1)}` : `0x${hex2(p.a)}`, `${p.id}: ${p.doc}${p.value ? ` (${p.value})` : ""}`]),
+          [`0x${hex2(f.start)}…`, "sections: a u32 record count, then the records"], ["section 0", `the live settings, ${f.sections[0].recs.length} records`],
+          ...(last ? [[last > 1 ? `sections 1-${last}` : "section 1", `the memory sets, ${f.sections[1].recs.length} records each, one layout`]] : []),
+          ["a record", `u16 id · u16 0x${hex4(f.marker)} · u16 element size · u16 element count · size × count value bytes`],
+          [FMT.trailer_checksum.at, `trailer checksum: ${SUM_DOC[ts.kind]}, over ${ts.from} up to ${ts.to} (stored ${sumHex(ts, ts.stored)}, computed ${sumHex(ts, ts.computed)} ${ts.stored === ts.computed ? "✓" : "✗"})`]]
+          .map(([a, b]) => el("tr", {}, el("td", {}, a), el("td", {}, b)))),
+      el("p", {}, "Colours: blue is structure (the header, counts, each record's eight header bytes, the checksum); the value bytes are green when the schema's settings for them are proved on the camera, teal when partly, amber when named but not proved, blue-grey when no proof can reach them (not on this camera, or skipped), grey when no setting covers them; a map cell takes the least-proved state among its bytes, so a green cell is proved throughout (the percentages above count every byte). Magenta marks bytes that differ under the comparison chosen at the top (Show … compared with …): each memory set from its mode's first memory (Movie Memory 2 and 3 from Movie Memory 1, each mode's first from Memory 1), two sections record by record (the live settings and a memory set are matched by record id), or the file from a file opened beside it. The menu view shows the same comparison as a second value column, with a Differs filter. A bright cyan outline, on a dark edge, goes round whatever is chosen in the structure (the file, a section, a block of records, a record, a field, an element); yellow is the setting you came from in the menu view (each setting there links here), or an item picked from the inspector's list."),
+      el("p", {}, `Each map cell is 16 bytes, one line of the hex dump, and each row a multiple of 256 bytes (choose how many above the map). The header and the live settings share a strip, as they follow each other in the file, and their rows start at file offsets ending 00. A memory set's strip counts from the set's own start (+0000), because every set holds the same records at the same place in it${stride ? `, ${stride.toLocaleString()} bytes after the one before` : ""}: a record sits in the same cell in every set. \u201cWhole file\u201d draws every section in one strip on the file's offsets, a step line and a name (Live, M1-M12, Sum) where each part starts. Drag the dividers between the columns to resize them; Stacked, at the top of the map, puts the bytes below the map.`),
+      el("p", {}, `The structure is the file's parse tree, every part placed and named as the definition's container block says (its camera section's "file", which the editor and the kit read the file with; the page takes it from the definition when it is built), in file order, as 010 Editor's template results and ImHex's pattern data show a file: the header's fields, sections[0] (the live settings) and sections[1]-[${last}] (the memory sets), each section's records by id block of 256, and each record's header fields and elements. Every part's row chooses its bytes, outlined on the map and lit in the hex (the whole file's and a section's are listed in the inspector instead); a click on a row that folds also opens or closes it. For the ILCE-1M2, docs/formats/sony_camset.ksy describes the same container for Kaitai's tools and ImHex.`),
+      el("p", {}, "The view is laid out as 010 Editor and ImHex lay out a file: the structure, the whole file's bytes in the middle (the byte map as a strip beside them: click or drag it to go somewhere), and this inspector, with the bytes at the cursor read every way a value is stored. A byte clicked chooses its item; choosing the file or a section lists its items here, each tied to its bytes. Side by side shows the two sections or files compared at the top, scrolling together, the differences in magenta in both (the live settings and a memory set matched record by record); Map is the byte map at full size."),
+      el("p", {}, "In the bytes, the chosen ones are lit (cyan in the dark theme, blue in the light), as is the item picked in a list here and its row, with the record or block around them faintly; yellow is the setting you came from in the menu view or a match found, and the cursor's byte is ringed. Each text character shares its byte's highlights; a byte and its character outline each other under the pointer, a click on either is the same, and a drag over either selects a range in both (⌘C or Ctrl+C copies it as hex)."),
+      el("p", {}, "Go to takes an offset (0x1a33) or a record (id 0334); Find takes bytes (34 03 cf 02) or a setting's name, Enter for the next match. In the structure, ↑ ↓ move, → opens, ← closes, Enter chooses. Its columns resize from their headings' edges (a double-click fits the longest text), every cut cell shows its whole text on hover, and its divider can widen it until the bytes and the inspector are at their narrowest.")));
+    return;
+  }
+  if (sel.kind === "section") {
+    const sec = f.sections[sel.sec], difs = diffMask(f) ? sec.recs.filter((r) => recDiffers(f, r)).length : 0;
+    $("htitle").textContent = `sections[${sel.sec}] · ${setName(sel.sec)}`;
+    body.replaceChildren(el("div", { class: "meta" }, `0x${hexOff(sec.off)}–0x${hexOff(sec.end - 1)} · ${(sec.end - sec.off).toLocaleString()} bytes · ${sec.recs.length.toLocaleString()} records`
+      + (sel.sec ? ` · every memory set holds the same records in the same order, ${(sec.end - sec.off).toLocaleString()} bytes apart` : "")
+      + (difs ? ` · ${difs} records differ from ${partnerLabel(sel.sec)}` : "")),
+      ...itemsPanel(sec.off, sec.end, [
+        { name: "num_records", off: sec.off, size: 4, type: "u4", value: sec.recs.length.toLocaleString(), sel: { kind: "count", sec: sel.sec } },
+        ...recItems(f, sec, sec.off, sec.end)]));
+    return;
+  }
+  // a block of records by id, or a section's every record: named, and its records listed as a section's are
+  if (sel.kind === "range" && !sel.rec) {
+    const sec = f.sections[sel.sec], items = recItems(f, sec, sel.a, sel.b);
+    const proved = items.filter((it) => it.cls === 1).length, difs = items.filter((it) => it.dif).length;
+    $("htitle").textContent = `sections[${sel.sec}] · ${setName(sel.sec)} · ${sel.lab}`;
+    body.replaceChildren(el("div", { class: "meta" }, `${sel.lab}, ${items.length.toLocaleString()} records, ${(sel.b - sel.a).toLocaleString()} bytes`
+      + ` · 0x${hexOff(sel.a)}–0x${hexOff(sel.b - 1)}${sel.sec ? ` (+0x${hex4(sel.a - sec.off)} in the set)` : ""} · ${proved} of ${items.length} proved`
+      + (difs ? ` · ${difs} differ from ${partnerLabel(sel.sec)}` : "")),
+      ...itemsPanel(sel.a, sel.b, items));
+    return;
+  }
+  if (sel.kind !== "rec" && sel.kind !== "range") {
+    const [a, b] = selRange(sel);
+    $("htitle").textContent = sel.lab || { header: "Header", count: "Record count", sum: "Trailer checksum" }[sel.kind];
+    const v = sel.kind === "count" ? `${f.dv.getUint32(a, true)} records` : sel.kind === "sum" ? sumBoth(f.bodySum)
+      : sel.a === f.fw[0] && sel.b === f.fw[1] ? `firmware ${firmware(f)}`
+      : f.vs !== null && sel.a === f.vs && sel.b === f.vs + 1 ? videoSystem(f)
+      : sel.a === f.headerSum.at ? sumBoth(f.headerSum)
+      : [...f.u8.slice(a, b)].map((x) => (x >= 32 && x < 127 ? String.fromCharCode(x) : "")).join("") || [...f.u8.slice(a, b)].map(hex2).join(" ");
+    body.replaceChildren(el("div", { class: "meta" }, `0x${hexOff(a)}–0x${hexOff(b - 1)} · ${b - a} bytes · ${v}`));
+    return;
+  }
+  // a record, one of its elements or 16-bit fields (part), or a range of its elements (lab)
+  const r = sel.rec, ks = keysFor(r.sec, r.id), real = ks.filter((k) => R[k].raw === undefined);
+  $("htitle").textContent = `${setName(r.sec)} · record 0x${hex4(r.id)}${sel.kind === "range" ? ` · ${sel.lab}` : ""}`;
+  const pr = CMP.with === "other" ? (L.other && sameLayout(L.f, L.other) ? { f: L.other, rec: r } : null)
+    : partnerOf(r.sec) !== null ? { f, rec: byId(f, partnerOf(r.sec)).get(r.id) } : null;
+  const other = pr && pr.rec && pr.rec.size === r.size && pr.rec.count === r.count ? pr : null;
+  const head = [["id", 0, 2, `0x${hex4(r.id)}`], ["marker", 2, 4, `0x${hex4(f.marker)}`], ["element size", 4, 6, String(r.size)], ["element count", 6, 8, String(r.count)]];
+  const keyOf = (i) => elemKey(r, i);
+  // the elements or the field chosen (or the setting the menu sent here): lit in the table
+  const part = sel.kind === "range" ? [sel.a - r.off - 8, sel.b - r.off - 8] : sel.part, pa = part ? r.off + 8 + part[0] : -1, pb = part ? r.off + 8 + part[1] : -1;
+  const n = Math.min(r.count, Math.max(64, part ? Math.ceil(part[1] / Math.max(1, r.size)) : 0));
+  const rows = [];
+  for (let i = 0; i < n; i++) {
+    const at = r.off + 8 + i * r.size, v = elem(f, at, r.size), k = keyOf(i), rec = k ? R[k] : null;
+    const ov = other ? elem(other.f, other.rec.off + 8 + i * r.size, r.size) : null;
+    // a blob's one element: its first bytes (the dump above has them all)
+    rows.push(el("tr", { class: part && at < pb && at + r.size > pa ? "on" : undefined }, el("td", { class: "m" }, `[${i}]`), el("td", { class: "m" }, `0x${hexOff(at)}`),
+      el("td", { class: "m" }, [...f.u8.slice(at, at + Math.min(r.size, 8))].map(hex2).join(" ") + (r.size > 8 ? " …" : "")),
+      el("td", { class: "m" + (other && ov !== v ? " dif" : "") }, v === null ? "" : String(v) + (other && ov !== v ? ` → ${ov}` : "")),
+      el("td", {}, rec && rec.raw === undefined ? [rec.n, rec.vals.length ? ` = ${label(rec, v)}` : "", " ", el("button", { class: "linkish", onclick: () => openInMenu(k) }, "open")] : el("span", { class: "key" }, "not in the schema"))));
+  }
+  const from = part && R[sel.key] ? R[sel.key] : null;
+  const fv = !from ? null : sel.key.includes("@") ? f.dv.getInt16(pa, true) : pb - pa === r.size ? elem(f, pa, r.size) : null;
+  const hk = (from && sel.key) || (part && pb - pa <= r.size ? keyAt(r, pa) : null) || (real.length === 1 ? real[0] : null);
+  body.replaceChildren(...[
+    el("div", { class: "title" }, nameOf(r.sec, r.id) || `Record 0x${hex4(r.id)}`),
+    el("div", { class: "meta" }, el("span", { class: statusOf(r.sec, r.id) === 1 ? "ok" : "warn" }, CLS[statusOf(r.sec, r.id)]),
+      `0x${hexOff(r.off)}–0x${hexOff(r.end - 1)}${r.sec ? ` (+0x${hex4(r.off - f.sections[r.sec].off)} in the set, the same place in every set)` : ""} · ${r.end - r.off} bytes (8 header + ${r.size} × ${r.count})`),
+    sel.kind === "range" ? el("div", { class: "meta" }, `${sel.lab}, ${((pb - pa) / Math.max(1, r.size)).toLocaleString()} elements, ${(pb - pa).toLocaleString()} bytes · 0x${hexOff(pa)}–0x${hexOff(pb - 1)}`) : null,
+    from ? el("div", { class: "linked" }, el("b", {}, from.n), ` · ${sel.key} · `,
+      pb - pa > 1 ? `0x${hexOff(pa)}–0x${hexOff(pb - 1)}, ${pb - pa} bytes` : `0x${hexOff(pa)}, 1 byte`,
+      fv !== null && fv !== undefined ? ` · ${fv}${from.vals.some((x) => x[0] === fv) ? ` = ${label(from, fv)}` : ""}` : "", " · ",
+      cantIn(sel.key, r.sec) ? [el("span", { class: "na", title: from.us.why }, `${WHY[from.us.kind] || from.us.kind} in this memory set`), " · "] : "",
+      el("button", { class: "linkish", onclick: () => openInMenu(sel.key) }, "← back to the menu")) : null,
+    hk && R[hk] && R[hk].help ? helpBlock(`${R[hk].n}: ${R[hk].help}`, R[hk].hg, R[hk].hs, "help lhelp") : null,
+    el("table", { class: "insp" }, el("tr", {}, el("th", {}, "Header"), el("th", {}, "Offset"), el("th", {}, "Bytes"), el("th", {}, "Value")),
+      head.map(([lab, a, b, v]) => el("tr", {}, el("td", {}, lab), el("td", { class: "m" }, `0x${hexOff(r.off + a)}`), el("td", { class: "m" }, [...f.u8.slice(r.off + a, r.off + b)].map(hex2).join(" ")), el("td", { class: "m" }, v)))),
+    el("table", { class: "insp" }, el("tr", {}, el("th", {}, "Element"), el("th", {}, "Offset"), el("th", {}, "Bytes"), el("th", {}, other ? `Value → ${partnerLabel(r.sec)}` : "Value"), el("th", {}, "Setting")), rows),
+    r.count > n ? el("div", { class: "meta" }, `${r.count - n} more elements`) : null,
+    ...ks.filter((k) => R[k].raw !== undefined).map((k) => el("div", { class: "note" }, R[k].note))].filter(Boolean));
+}
+
+// ---- the middle column: the whole file's hex (the byte map as a strip beside it), two dumps side by side, or the map
+const VIEWS = ["hex", "diff", "map"], CENTER = "camset-viewer-center";
+// a view an older page kept that this one does not have is the hex: none would show every pane hidden
+const C = { view: VIEWS.includes(store.get(CENTER)) ? store.get(CENTER) : "hex", hex: null, hexFile: null, cursor: null, mark: null, items: null, diff: null, diffKey: "", syncing: false };
+// where the selection's bytes start (the middle goes there when the selection changes)
+function selStart() {
+  const f = L.f, sel = L.sel;
+  if (L.pick && L.pick.sel === sel) return L.pick.a;
+  if (sel.kind === "rec") return sel.rec.off + (sel.part ? 8 + sel.part[0] : 0);
+  if (sel.kind === "field" || sel.kind === "range") return sel.a;
+  if (sel.kind === "count" || sel.kind === "section") return f.sections[sel.sec].off;
+  if (sel.kind === "sum") return f.end;
+  return null;
+}
+// a range dragged over the bytes or their text: both show it, the inspector reads from its start
+function onRange(a, b, f) {
+  C.range = Object.assign([a, b], { f }); C.cursor = a;
+  if (C.hex) C.hex.paint();
+  if (C.diff) { C.diff.A.paint(); C.diff.B.paint(); }
+  drawData();
+}
+// a byte as the middle draws it: structure or value, what differs, the chosen bytes and (faintly) the record or block
+// around them, the setting the menu sent here or a match found, the cursor. The chosen bytes are an item picked from
+// a list (the file's, a section's, a block's), else the selection's own; never the whole file or a section, which
+// their list stands for
+function centerMark(f) {
+  const m = diffMask(L.f), sel = L.sel, pick = L.pick && L.pick.sel === sel ? [L.pick.a, L.pick.b] : null;
+  const own = ["file", "section"].includes(sel.kind) ? null : selRange(sel), range = pick || own;
+  const wide = pick ? own : sel.rec ? [sel.rec.off, sel.rec.end] : null;
+  const around = range && wide && (wide[0] < range[0] || wide[1] > range[1]) ? wide : null;
+  const lit = sel.menu && sel.part ? [sel.rec.off + 8 + sel.part[0], sel.rec.off + 8 + sel.part[1]] : null;
+  return (p) => (m && m[p] ? "df" : f === L.f && L.cls[p] === 0 ? "bh" : "bv")
+    + (f === L.f && around && p >= around[0] && p < around[1] ? " hrec" : "")
+    + (f === L.f && range && p >= range[0] && p < range[1] ? " hsel" : "")
+    + (f === L.f && ((lit && p >= lit[0] && p < lit[1]) || (C.mark && p >= C.mark[0] && p < C.mark[1])) ? " hl" : "")
+    + (f === L.f && p === C.cursor ? " cur" : "")
+    + (C.range && C.range.f === f && p >= C.range[0] && p < C.range[1] ? " rng" : "");
+}
+// a header byte's part, as the block places it
+function headerField(p) {
+  const x = headerParts(L.f).find((h) => p >= h.a && p < h.b);
+  return x ? { kind: "field", a: x.a, b: x.b, lab: x.id } : { kind: "header" };
+}
+// what holds byte p chosen: its record, opened in the structure (its memory set the one the map shows), a header
+// byte's field, a section's count or the checksum
+function selectAt(p) {
+  const x = recAt(L.f, p);
+  if (!x) return;
+  if (x.kind === "rec") { L.sel = { kind: "rec", rec: x.rec }; reveal(x.rec, null); if (x.rec.sec) L.set = x.rec.sec; }
+  else L.sel = x.kind === "header" ? headerField(p) : x;
+}
+// a byte clicked: the cursor goes there, and its item is chosen (in the list when the file or a section is shown)
+function onByte(p) {
+  C.cursor = p; C.range = null;
+  if (C.items && p >= C.items.a && p < C.items.b) { C.items.pickAt(p); return; }
+  selectAt(p);
+  drawLayout(false);
+  intoView("tree");
+}
+function drawCenter(goto) {
+  const f = L.f;
+  for (const v of VIEWS) { $(`pane-${v}`).hidden = C.view !== v; $(`cv-${v}`).setAttribute("aria-pressed", String(C.view === v)); }
+  if (C.view === "map") { drawMaps(); return; }
+  if (C.view === "diff") { drawDiff(goto); return; }
+  C.markNow = centerMark(f);
+  if (!C.hex || C.hexFile !== f) {
+    C.hex = hexScroller(0, f.size, (p) => C.markNow(p), onByte, f, true);
+    C.hex.onscrolled = () => paintStrip();
+    C.hexFile = f; C.strip = null;
+    $("bigHex").replaceChildren(C.hex);
+  }
+  if (goto !== null && goto !== undefined) C.hex.goTo(goto); else C.hex.paint();
+  drawStrip();
+  $("mapinfo").textContent = `${f.size.toLocaleString()} bytes`;
+}
+// the byte map as a strip beside the hex: the whole file top to bottom, each line of pixels the least-proved state
+// of its bytes (magenta where they differ), a line where each part starts, and the part on screen framed
+function drawStrip() {
+  const cv = $("strip"), f = L.f, h = Math.max(100, cv.clientHeight), w = Math.max(20, cv.clientWidth), m = diffMask(f);
+  const cols = [];
+  for (let y = 0; y < h; y++) {
+    const a = Math.floor(y * f.size / h), b = Math.max(a + 1, Math.floor((y + 1) * f.size / h)), cnt = [0, 0, 0, 0, 0, 0];
+    let dif = false;
+    for (let p = a; p < b; p++) { cnt[L.cls[p]]++; if (m && m[p]) dif = true; }
+    cols.push(dif ? DIFF : CLS_COLOR[leastProved(cnt)]);
+  }
+  C.strip = { cols, h, w };
+  paintStrip();
+}
+function paintStrip() {
+  const cv = $("strip"), f = L.f, st = C.strip;
+  if (!st || !C.hex) return;
+  cv.width = st.w * devicePixelRatio; cv.height = st.h * devicePixelRatio;
+  const g = cv.getContext("2d"); g.scale(devicePixelRatio, devicePixelRatio);
+  st.cols.forEach((c, y) => { g.fillStyle = c; g.fillRect(0, y, st.w, 1); });
+  const css = getComputedStyle(document.documentElement), strong = css.getPropertyValue("--strong").trim() || "#fff";
+  g.fillStyle = strong;
+  for (const s of f.sections) g.fillRect(0, Math.floor(s.off * st.h / f.size), st.w, 1);
+  const [a, b] = C.hex.visible();
+  g.strokeStyle = strong; g.lineWidth = 2;
+  g.strokeRect(1, a * st.h / f.size, st.w - 2, Math.max(4, (b - a) * st.h / f.size));
+}
+{
+  const at = (e) => { const r = $("strip").getBoundingClientRect(); return Math.max(0, Math.min(L.f.size - 1, Math.floor((e.clientY - r.top) / r.height * L.f.size))); };
+  let dragging = false;
+  $("strip").addEventListener("pointerdown", (e) => { dragging = true; $("strip").setPointerCapture(e.pointerId); C.hex && C.hex.goTo(at(e)); paintStrip(); });
+  $("strip").addEventListener("pointermove", (e) => {
+    const p = at(e); $("strip").title = describe(recAt(L.f, p), p);
+    if (dragging && C.hex) { C.hex.goTo(p); paintStrip(); }
+  });
+  $("strip").addEventListener("pointerup", () => { dragging = false; });
+}
+// the two sides compared: the section shown and what it is compared with (the same section of the other file)
+function diffPair() {
+  const f = L.f, s = CMP.show;
+  if (CMP.with === "other") {
+    if (!L.other || !sameLayout(f, L.other)) return null;
+    const sec = f.sections[s];
+    return { fa: f, fb: L.other, a: [sec.off, sec.end], b: [sec.off, sec.end], sa: s, sb: s, same: true,
+      na: `${DATA.file.name} · ${setName(s)}`, nb: `${L.otherName} · ${setName(s)}` };
+  }
+  const t = partnerOf(s);
+  if (t === null) return null;
+  const A = f.sections[s], B = f.sections[t];
+  return { fa: f, fb: f, a: [A.off, A.end], b: [B.off, B.end], sa: s, sb: t, same: s > 0 && t > 0, na: setName(s), nb: setName(t) };
+}
+// an offset on one side, on the other: the same place in the section when the two share a layout (the memory sets,
+// another file), else the same record by id
+function across(d, p, toB) {
+  const [fa, fb, ra, rb, sa, sb] = toB ? [d.fa, d.fb, d.a, d.b, d.sa, d.sb] : [d.fb, d.fa, d.b, d.a, d.sb, d.sa];
+  if (d.same) return p - ra[0] + rb[0];
+  const x = recAt(fa, p);
+  const other = x && x.kind === "rec" ? byId(fb, sb).get(x.rec.id) : null;
+  return other ? other.off + Math.min(p - x.rec.off, other.end - other.off - 1) : rb[0] + Math.min(p - ra[0], rb[1] - rb[0] - 1);
+}
+function drawDiff(goto) {
+  const d = diffPair();
+  if (!d) {
+    $("dA").textContent = "Choose a comparison at the top (Show … compared with …) to see two dumps side by side.";
+    $("dB").textContent = ""; $("diffwrap").replaceChildren(); C.diff = null; C.diffKey = ""; return;
+  }
+  const key = `${d.na}|${d.nb}|${CMP.with}`;
+  const mark = centerMark(L.f), markB = d.fb === L.f ? mark : centerMark(d.fb);
+  C.diffMark = { a: mark, b: (p) => {
+    // the other file has no structure classes of its own: the same place in this file says (one layout)
+    const m = diffMask(L.f);
+    return d.fb === L.f ? markB(p) : (m && m[p] ? "df" : L.cls[p] === 0 ? "bh" : "bv");
+  } };
+  if (C.diffKey !== key || !C.diff) {
+    const A = hexScroller(d.a[0], d.a[1], (p) => C.diffMark.a(p), onByte, d.fa, true);
+    const B = hexScroller(d.b[0], d.b[1], (p) => C.diffMark.b(p), (p) => onByte(d.fb === L.f ? p : p), d.fb, true);
+    const sync = (from, to, toB) => () => {
+      if (C.syncing) return;
+      C.syncing = true; to.scrollToOffset(across(d, from.topOffset(), toB)); C.syncing = false;
+    };
+    A.onscrolled = sync(A, B, true); B.onscrolled = sync(B, A, false);
+    C.diff = { A, B, d }; C.diffKey = key;
+    $("diffwrap").replaceChildren(A, B);
+  }
+  $("dA").textContent = d.na; $("dB").textContent = `${d.nb}${d.same ? "" : " · matched record by record"}`;
+  const at = goto ?? selStart();
+  if (at !== null && at !== undefined && at >= d.a[0] && at < d.a[1]) { C.diff.A.goTo(at); C.diff.B.scrollToOffset(across(d, C.diff.A.topOffset(), true)); }
+  else if (at !== null && at !== undefined && d.fb === L.f && at >= d.b[0] && at < d.b[1]) { C.diff.B.goTo(at); C.diff.A.scrollToOffset(across(d, C.diff.B.topOffset(), false)); }
+  else { C.diff.A.paint(); C.diff.B.paint(); }
+  $("mapinfo").textContent = "magenta: the bytes that differ";
+}
+for (const v of VIEWS) $(`cv-${v}`).onclick = () => { C.view = v; store.set(CENTER, v); drawCenter(selStart()); };
+// the data inspector: the bytes at the cursor read every way a value is stored
+function drawData() {
+  const f = L.f, p = C.cursor ?? selStart();
+  if (p === null || p === undefined || !f) { $("insp-data").replaceChildren(); return; }
+  const dv = f.dv, n = f.size - p, x = recAt(f, p), rows = [];
+  const add = (k, v) => rows.push(el("span", { class: "k" }, k), el("span", { class: "m" }, v));
+  add("offset", `0x${hexOff(p)}${x && x.kind === "rec" && x.rec.sec ? ` (+0x${hex4(p - f.sections[x.rec.sec].off)} in the set)` : ""}`);
+  if (C.range && C.range.f === f && C.range[1] - C.range[0] > 1) add("range", `${(C.range[1] - C.range[0]).toLocaleString()} bytes, 0x${hexOff(C.range[0])}–0x${hexOff(C.range[1] - 1)} (⌘C / Ctrl+C copies them as hex)`);
+  add("in", describe(x, p).replace(/^0x[0-9a-f]+(\s\([^)]*\))? · /, ""));
+  if (n >= 1) { add("u8 · s8", `${dv.getUint8(p)} · ${dv.getInt8(p)}`); add("bits", dv.getUint8(p).toString(2).padStart(8, "0")); }
+  if (n >= 2) add("u16 · s16", `${dv.getUint16(p, true)} · ${dv.getInt16(p, true)}`);
+  if (n >= 4) add("u32 · s32", `${dv.getUint32(p, true)} · ${dv.getInt32(p, true)}`);
+  if (n >= 2) add("u16 BE", String(dv.getUint16(p, false)));
+  add("text", [...f.u8.slice(p, p + 16)].map((c) => (c >= 32 && c < 127 ? String.fromCharCode(c) : "·")).join(""));
+  const k = x && x.kind === "rec" ? keyAt(x.rec, p) : null, h = k && R[k] && R[k].help ? R[k] : null;
+  $("insp-data").replaceChildren(el("div", { class: "dinsp" }, el("h3", {}, "At the cursor · little-endian"), ...rows,
+    h ? el("div", { class: "dhelp", title: helpTip(`${h.n}: ${h.help}`, h.hs) }, el("b", {}, h.n), `: ${h.help}`) : null));
+}
+// the setting whose bytes hold p in a record: a 16-bit field's ("@n"), else its element's or the record's
+function keyAt(r, p) {
+  if (p < r.off + 8 || p >= r.end) return null;
+  const at = p - r.off - 8, base = (keysFor(r.sec, r.id)[0] || "").split("@")[0].split("[")[0];
+  const field = base && Object.keys(R).find((k) => k.startsWith(`${base}@`) && at >= +k.split("@")[1] && at < +k.split("@")[1] + (R[k].size || 2));
+  return field || elemKey(r, Math.floor(at / Math.max(1, r.size)));
+}
+function drawLayout(goto = true) {
+  if (!L.f) return;
+  coverage(); drawTree(); drawCenter(goto ? selStart() : null); drawHex(); drawData();
+}
+// a file opened beside the download: what differs, byte by byte, when the layout is the same
+$("other").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  try {
+    const o = parseCamset(await file.arrayBuffer());
+    if (!sameLayout(L.f, o)) { $("othermsg").textContent = `${file.name}: another record layout (${o.model}, ${o.size.toLocaleString()} bytes); nothing to compare byte for byte`; return; }
+    L.other = o; L.otherName = file.name; L.diff = new Uint8Array(L.f.size);
+    L.diffRecs = [];
+    for (const s of L.f.sections) for (const r of s.recs) {
+      let d = false; for (let p = r.off + 8; p < r.end; p++) if (L.f.u8[p] !== o.u8[p]) { L.diff[p] = 1; d = true; }
+      if (d) L.diffRecs.push(r);
+    }
+    for (let p = 0; p < L.f.start; p++) if (L.f.u8[p] !== o.u8[p]) L.diff[p] = 1;
+    $("othermsg").textContent = `${file.name}: ${L.diffRecs.length} records differ (magenta)`;
+    CMP.with = "other"; L.mask = null; C.diffKey = ""; cmpOptions(); chips(); draw(); drawLayout();
+    L.open.add("diffs"); drawLayout();
+  } catch (err) { $("othermsg").textContent = `${file.name}: ${err.message}`; }
+});
+// where a setting's bytes are, for the menu view's link to the layout view: its record (the live section, or the
+// memory set the layout view shows) and its bytes in the record's values (an element "[i]", a 16-bit field "@n", or all)
+function spotOf(key) {
+  initLayout();
+  const m = key.match(/^(global|set):0x([0-9a-f]+)(?:\[(\d+)\]|@(\d+))?$/);
+  if (!L.f || !m) return null;
+  // a live setting the memories store too opens in the memory set the page shows, when it shows one
+  // (a memory-set setting in a file with no memory set: nowhere, L.set being 0)
+  const sec = m[1] === "global" ? (CMP.show && R[key] && R[key].is ? CMP.show : 0) : L.set || -1, id = parseInt(m[2], 16);
+  const rec = ((L.f.sections[sec] || {}).recs || []).find((r) => r.id === id);
+  if (!rec) return null;
+  const len = rec.end - rec.off - 8;
+  const part = m[3] !== undefined ? [+m[3] * rec.size, (+m[3] + 1) * rec.size] : m[4] !== undefined ? [+m[4], +m[4] + 2] : [0, len];
+  return part[1] <= len ? { kind: "rec", rec, part, key } : null;
+}
+function showInLayout(key, push = true) {
+  const sel = spotOf(key);
+  if (!sel) return;
+  L.sel = Object.assign(sel, { menu: true }); L.scrollMap = true; L.pick = null; C.cursor = sel.rec.off + 8 + sel.part[0]; C.mark = null;
+  if (sel.rec.sec) L.set = sel.rec.sec;
+  reveal(sel.rec, sel.part[0] > 0 || sel.part[1] < sel.rec.end - sel.rec.off - 8 ? sel.part : null);
+  history[push ? "pushState" : "replaceState"](null, "", "#" + encodeURIComponent("layout|" + key));
+  setMode("layout");
+  intoView("tree", "center");
+  // the columns scroll on their own when side by side; stacked (under 1100 px), the page goes to the bytes
+  $("hbody").querySelector(".linked")?.scrollIntoView({ block: getComputedStyle($("lay")).display === "grid" ? "nearest" : "start" });
+}
+function openInMenu(key) {
+  const spot = locate(key);
+  setMode("menu");
+  if (spot) { Object.assign(state, spot.state); if (spot.open) state.open.add(spot.open); }
+  first = true; draw();
+}
+// where a record sits in the menu view: its tab, group and line
+function locate(key) {
+  for (const t of DATA.menu) {
+    const hit = (g, gid) => {
+      const seek = (nodes) => {
+        for (const n of nodes) {
+          if (n.recs.includes(key)) return { state: { tab: t.tab, group: gid, item: n.recs.every((k) => R[k] && R[k].n.toLowerCase() === n.l.toLowerCase()) ? n.id : key } };
+          for (const s of n.subs) if (s.keys.includes(key)) return { state: { tab: t.tab, group: gid, item: key }, open: n.id + ":" + s.name };
+          const x = seek(n.kids); if (x) return x;
+        }
+        return null;
+      };
+      return seek(g.rows || []) || ((g.extra || g.keys || []).includes(key) ? { state: { tab: t.tab, group: gid, item: key } } : null);
+    };
+    for (const g of t.groups) { const x = hit(g, "g:" + g.name); if (x) return x; }
+    for (const o of t.others) { const x = hit({ rows: [], extra: o.keys }, "o:" + o.name); if (x) return x; }
+  }
+  return null;
+}
+// the section shown and compared with, and the map's memory set, kept to a file of n sections: one with fewer than the
+// section chosen (another body's) had the map and the comparison reach past its last section and stop. A file with no
+// memory set has none for the map (0: the map draws no set strip). It touches no page, so a check runs it on its own
+// (node).
+function fitSections(n) {
+  if (CMP.show >= n) CMP.show = 0;
+  if (typeof CMP.with === "number" && (CMP.with >= n || CMP.with === CMP.show)) CMP.with = "base";
+  L.set = n > 1 ? Math.max(1, Math.min(L.set, n - 1)) : 0;
+}
+// another settings file as the one the page shows: its values in the rows, its bytes in the layout view
+function useFile(f, name) {
+  const s0 = f.sections[0], s1 = f.sections[1], cur = new Map(), raw = new Map();
+  const ints = (r) => [1, 2, 4, 8].includes(r.size);
+  for (const [s, area] of [[s0, "global"], [s1, "set"]]) {
+    if (!s) continue;
+    for (const r of s.recs) {
+      const k = `${area}:0x${hex4(r.id)}`, els = [];
+      for (let i = 0; i < r.count && ints(r); i++) els.push(elem(f, r.off + 8 + i * r.size, r.size));
+      const bytes = ints(r) ? els : [...f.u8.slice(r.off + 8, r.end)];
+      raw.set(k, bytes.length === 1 ? String(bytes[0]) : bytes.slice(0, 16).join(" ") + (bytes.length > 16 ? " …" : ""));
+      if (area !== "global" || !ints(r)) continue;
+      if (r.count === 1) cur.set(k, els[0]); else els.forEach((v, i) => cur.set(`${k}[${i}]`, v));
+    }
+  }
+  for (const r of Object.values(R)) {
+    if (r.raw !== undefined) r.raw = raw.get(r.k) ?? "";
+    else r.cur = cur.has(r.k) ? cur.get(r.k) : null;
+  }
+  L.f = f; L.cls = classes(f); L.other = null; L.diff = null; L.diffRecs = null; L.sel = { kind: "file" }; L.mask = null;
+  C.hex = null; C.diff = null; C.diffKey = ""; C.cursor = null; C.mark = null; FIND.q = "";
+  if (CMP.with === "other") CMP.with = "base";
+  fitSections(f.sections.length);
+  cmpOptions();
+  DATA.file = { name }; DATA.values = name;
+  fileLabel(name); $("othermsg").textContent = "";
+  $("mainmsg").textContent = f.model !== DATA.model ? `Showing ${name}, but it is from ${f.model}: this schema is ${DATA.model}'s, so values may mean something else` : `Showing ${name}: ${f.model}, saved ${f.saved}`;
+  const t = $("file"); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash");
+  setTimeout(() => t.classList.remove("flash"), 1500);
+  draw(); if (!$("lay").hidden) drawLayout();
+}
+$("mainfile").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  $("mainmsg").textContent = `Reading ${file.name}…`;
+  try {
+    const buf = await file.arrayBuffer();
+    if (!buf.byteLength) throw new Error(`${file.name} is empty (0 bytes): if it was picked straight from the camera over USB, copy it to this computer first`);
+    initLayout(); useFile(parseCamset(buf), file.name);
+  } catch (err) {
+    $("mainmsg").textContent = err.message.startsWith(file.name) ? err.message : `${file.name}: ${err.message}`;
+  }
+  e.target.value = "";
+});
+function setMode(m) {
+  $("m-menu").setAttribute("aria-pressed", String(m === "menu")); $("m-layout").setAttribute("aria-pressed", String(m === "layout"));
+  $("cols").hidden = m !== "menu"; $("lay").hidden = m !== "layout"; document.body.classList.toggle("layout", m === "layout");
+  if (m === "layout") { initLayout(); fit(); drawLayout(); }
+  fit();
+}
+$("m-menu").onclick = () => { setMode("menu"); draw(); };
+$("m-layout").onclick = () => setMode("layout");
+window.addEventListener("resize", redrawMaps);
+
+function fit() { document.documentElement.style.setProperty("--top", ($("top").offsetHeight + ($("lay").hidden ? $("tabstrip").offsetHeight : 0)) + "px"); }
+window.addEventListener("resize", fit);
+let timer = null;
+$("q").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { state.q = $("q").value; draw(); }, 150); });
+function fromHash() {
+  try {
+    const [t, g, i] = decodeURIComponent(location.hash.slice(1)).split("|");
+    if (DATA.menu.some((x) => x.tab === t)) Object.assign(state, { tab: t, group: g || null, item: i || null });
+  } catch { /* a plain address */ }
+}
+// ---- go to an offset or a record; find bytes or a setting's name (the layout view's own top-bar tools)
+function choose(p, len) {
+  C.cursor = p; C.mark = len ? [p, p + len] : null; L.pick = null; C.range = null;
+  selectAt(p);
+  drawLayout(false);
+  if (C.view === "hex" && C.hex) C.hex.goTo(p); else drawCenter(p);
+  intoView("tree");
+}
+$("goto").addEventListener("keydown", (e) => {
+  if (e.key !== "Enter" || !L.f) return;
+  const q = e.target.value.trim(), f = L.f;
+  let m = q.match(/^(?:id|r|#)\s*(?:0x)?([0-9a-f]{1,4})$/i);
+  if (m) {
+    const rec = byId(f, CMP.show).get(parseInt(m[1], 16));
+    $("findn").textContent = rec ? "" : `no record 0x${m[1]} in ${setName(CMP.show)}`;
+    if (rec) choose(rec.off, rec.end - rec.off);
+    return;
+  }
+  m = q.match(/^(?:0x)?([0-9a-f]+)$/i);
+  const at = m ? parseInt(m[1], 16) : NaN;
+  $("findn").textContent = at < f.size ? "" : "an offset (0x1a33) or a record (id 0334)";
+  if (at < f.size) choose(at, 0);
+});
+const FIND = { q: "", hits: [], i: -1 };
+function runFind(q) {
+  const f = L.f, hits = [];
+  const bytes = /^[0-9a-f]{2}(\s+[0-9a-f]{2})*$/i.test(q) ? q.split(/\s+/).map((x) => parseInt(x, 16)) : null;
+  if (bytes) {
+    for (let p = 0; p + bytes.length <= f.size && hits.length < 5000; p++) {
+      let ok = true;
+      for (let k = 0; k < bytes.length; k++) if (f.u8[p + k] !== bytes[k]) { ok = false; break; }
+      if (ok) hits.push([p, bytes.length]);
+    }
+  } else if (q) {
+    // a setting's name: its records in the section the page shows
+    const want = q.toLowerCase();
+    for (const r of f.sections[CMP.show].recs) if ((nameOf(r.sec, r.id) || "").toLowerCase().includes(want) || keysFor(r.sec, r.id).some((k) => R[k].n.toLowerCase().includes(want))) hits.push([r.off, r.end - r.off]);
+  }
+  Object.assign(FIND, { q, hits, i: -1 });
+}
+function findStep(d) {
+  if (!L.f) return;
+  const q = $("findq").value.trim();
+  if (q !== FIND.q) runFind(q);
+  if (!FIND.hits.length) { $("findn").textContent = q ? "no match" : ""; C.mark = null; return; }
+  FIND.i = (FIND.i + d + FIND.hits.length) % FIND.hits.length;
+  const [p, len] = FIND.hits[FIND.i];
+  $("findn").textContent = `${FIND.i + 1} of ${FIND.hits.length}${FIND.hits.length >= 5000 ? "+" : ""}`;
+  choose(p, len);
+}
+$("findq").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); findStep(e.shiftKey ? -1 : 1); } });
+$("findnext").onclick = () => findStep(1);
+$("findprev").onclick = () => findStep(-1);
+
+// "#layout|<key>": a setting's bytes in the layout view (Back returns to the menu view)
+const layoutKey = () => { try { const h = decodeURIComponent(location.hash.slice(1)); return h.startsWith("layout|") ? h.slice(7) : null; } catch { return null; } };
+window.addEventListener("hashchange", () => {
+  const k = layoutKey();
+  if (k) { showInLayout(k, false); return; }
+  if (!$("lay").hidden) setMode("menu");
+  let hash;
+  try { hash = decodeURIComponent(location.hash.slice(1)); } catch { return; }          // a plain address
+  const [t, g, i] = hash.split("|");
+  if (t !== state.tab || g !== state.group || i !== state.item) { fromHash(); draw(); }
+});
+const startKey = layoutKey();
+initLayout(); cmpOptions(); fromHash(); chips(); draw(); fit();
+if (startKey) showInLayout(startKey, false);
+</script>
+</body>
+</html>

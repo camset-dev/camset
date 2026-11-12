@@ -1,0 +1,71 @@
+# Run by git before each commit (installed with: .venv/bin/pre-commit install, .venv\Scripts\pre-commit install on
+# Windows). The hooks keep the committed generated files in step with their sources, check the data files against
+# their JSON Schemas, keep what is private out (docs/decisions/0018) and build the docs site (docs/decisions/0014).
+# Run them all by hand with: .venv/bin/pre-commit run --all-files
+# Every hook goes through kit/tools/hook.py, which runs it with the kit's own venv on macOS, Linux and Windows
+# ("language: python" gives pre-commit's own interpreter, which every OS calls python).
+repos:
+  - repo: local
+    hooks:
+      # never with --write-schema or --definitions: a definition (editor/definitions/<model>_fw<fw>.json) is written by
+      # kit/schema_update.py --write on the machine that holds its camera's runs, its parts from data/ by
+      # build_docs.py --definitions, never by a commit (kit/tools/build_docs.py says why; kit/tests/test_build_docs.py
+      # checks this line)
+      - id: build-generated
+        name: rebuild the generated files (record names, the reader, the C++ safety lists, the decisions table, the nav's model pages; never a definition)
+        entry: python kit/tools/hook.py python kit/tools/build_docs.py --no-viewer
+        language: python
+        pass_filenames: false
+        # the files whose edits change what build_docs.py writes (the reference definition and where camkit finds it,
+        # the safety lists, the records, the model pages, the .ksy), and what it writes (a generated file edited by hand
+        # is written over); CI's build_docs.py --check catches anything this misses
+        files: ^(kit/(tools/camset_ksy|tools/build_docs|camkit/safety|camkit/definitions|camkit/paths|camkit/__init__)\.py$|kit/common/never_touch\.h$|docs/decisions/|docs/models/|mkdocs\.yml$|docs/formats/sony_camset[^/]*\.ksy$|editor/definitions/[^/]+\.json$|kit/camkit/formats/)
+      # every file of a kind is checked when one of them or its JSON Schema changes (hook.py expands the wildcard)
+      - id: definition-json
+        name: every definition matches its JSON Schema
+        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/definition.schema.json "editor/definitions/*.json"
+        language: python
+        pass_filenames: false
+        files: ^(editor/definitions/[^/]+\.json$|schemas/)
+      - id: camera-json
+        name: the camera files match their JSON Schema
+        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/camera.schema.json "data/*/camera_*_fw*.json"
+        language: python
+        pass_filenames: false
+        files: ^(data/[^/]+/camera_[^/]*_fw[^/]*\.json$|schemas/)
+      - id: help-file-json
+        name: the help files match their JSON Schema
+        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/help-file.schema.json "data/*/help_*_fw*.json"
+        language: python
+        pass_filenames: false
+        files: ^(data/[^/]+/help_[^/]*_fw[^/]*\.json$|schemas/)
+      - id: settings-reset-json
+        name: the settings reset files match their JSON Schema (the lean shape)
+        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/settings-reset.schema.json "data/*/settings_reset_*_fw*.json"
+        language: python
+        pass_filenames: false
+        files: ^(data/[^/]+/settings_reset_[^/]*_fw[^/]*\.json$|schemas/)
+      - id: nothing-private
+        name: nothing private is published (private/, runs/, the SDK, addresses, the camera's help text)
+        entry: python kit/tools/hook.py python kit/tools/check_public.py
+        language: python
+        pass_filenames: false
+        always_run: true
+      - id: docs-site
+        name: the docs site builds without a warning
+        entry: python kit/tools/hook.py zensical build --strict
+        language: python
+        pass_filenames: false
+        # the pages, the snippet the editor's guide takes from the README, the macros and what they import, the
+        # definitions and data they render, and the builder's own pin (.github/workflows/docs.yml lists the same paths)
+        files: ^(docs/|mkdocs\.yml$|README\.md$|kit/tools/(docs_macros|build_docs|model_appendix|camset_ksy)\.py$|kit/camkit/(__init__|camset|definitions|paths)\.py$|kit/requirements\.txt$|schemas/|editor/definitions/|data/)
+  # ruff over kit/ by the rules in pyproject.toml ([tool.ruff]: F, E9, B, UP, SIM on Python 3.11), the same check as
+  # uvx ruff check kit. The one hook not run through kit/tools/hook.py: pre-commit installs this pinned ruff for it
+  # itself, on every OS. It reports and never rewrites (no --fix); --force-exclude keeps the generated readers out
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.17.4
+    hooks:
+      - id: ruff-check
+        name: ruff check (kit/, by the rules in pyproject.toml)
+        entry: ruff check --force-exclude
+        files: ^kit/

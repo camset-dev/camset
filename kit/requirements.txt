@@ -1,0 +1,17 @@
+# Pinned to the versions the kit was last tested with (2026-11-05; the supply chain stays the one that passed the
+# tests: docs/RELEASING.md). Raise a pin on purpose, run the tests, and commit the new number.
+numpy==2.5.4; python_version >= "3.12"
+numpy==2.4.6; python_version < "3.12"    # the newest numpy for Python 3.11
+opencv-python-headless==5.0.0.93
+pillow==13.0.0
+pytest==9.2.0
+anthropic==2.4.0
+rapidocr_onnxruntime==1.2.3    # OCR on Windows and Linux; on macOS a second OCR vote beside Apple Vision
+kaitaistruct==0.11           # the runtime of the reader generated from docs/formats/sony_camset.ksy (a test's)
+pyyaml==6.0.3
+# the docs and their checks (kit/tools/build_docs.py, mkdocs.yml, .pre-commit-config.yaml)
+zensical==0.0.74              # the docs site (reads mkdocs.yml; macros built in)
+jsonschema==4.26.0
+check-jsonschema==0.39.0
+pre-commit==4.7.0
+# not pip: kaitai-struct-compiler 0.11 (brew install kaitai-struct-compiler), to rebuild that reader

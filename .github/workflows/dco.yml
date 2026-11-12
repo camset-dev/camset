@@ -1,0 +1,25 @@
+# Checks that every commit of a pull request is signed off (git commit -s): the Developer Certificate of Origin,
+# the project's stand-in for a contributor licence agreement (CONTRIBUTING.md). dco-check reads the pull request's
+# base and head from the GitHub Actions environment and fails on a commit without a matching Signed-off-by: line.
+# The actions are pinned by commit, with the release tag beside each, and dco-check to a version (PyPI, 2026-05-21).
+name: Sign-offs
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  dco:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install dco-check
+        run: python -m pip install dco-check==0.5.1
+      - name: Every commit signed off
+        run: dco-check --verbose

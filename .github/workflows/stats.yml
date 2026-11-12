@@ -1,0 +1,58 @@
+# Records, once a day, the numbers GitHub's Insights page keeps for only 14 days: stars, forks, watchers, open issues,
+# each release asset's download count and, when the STATS_TOKEN secret is set, the repository's views, clones,
+# referrers and popular paths. The rows are appended to CSV files on the `stats` branch (an orphan branch, made on the
+# first run), which holds nothing else. The public series need only the workflow's own token; the traffic endpoints
+# need Administration: read on this repository, which that token lacks, so without STATS_TOKEN they are skipped and
+# the log says so. The sign-off check (dco.yml) runs on pull requests only, so the bot's plain commit is fine.
+# The actions are pinned by commit, with the release tag beside each.
+name: Statistics
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: stats
+  cancel-in-progress: false
+jobs:
+  stats:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Fetch the stats branch, or start it
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if git ls-remote --exit-code --heads "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" stats >/dev/null; then
+            git fetch --depth=1 "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" stats:stats
+            git worktree add "$RUNNER_TEMP/stats" stats
+          else
+            git worktree add --detach "$RUNNER_TEMP/stats"
+            git -C "$RUNNER_TEMP/stats" checkout --orphan stats
+            git -C "$RUNNER_TEMP/stats" rm -rf --quiet . || true
+          fi
+      - name: Record the numbers
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          STATS_TOKEN: ${{ secrets.STATS_TOKEN }}
+        run: python .github/scripts/repo_stats.py --out "$RUNNER_TEMP/stats/stats"
+      - name: Commit and push to the stats branch
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        working-directory: ${{ runner.temp }}/stats
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add stats
+          if git diff --cached --quiet; then
+            echo "Nothing new to record."
+            exit 0
+          fi
+          git commit -m "Statistics for $(date -u +%F)"
+          git push "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" stats

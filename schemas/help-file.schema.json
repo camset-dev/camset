@@ -1,0 +1,64 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Help text file (data/<model>_fw<firmware>/help_<model>_fw<firmware>.json, private/help/help_<model>_fw<firmware>.json)",
+ "description": "Each setting's help for one model and firmware, by setting key: the project's own words in data/ (published, merged into the definition, editor/definitions/<model>_fw<firmware>.json, by kit/schema_update.py), or the camera's In-Camera Guide text in private/help/ (Sony's, never published; the editor and the proof viewer show it in place of the definition's when they find it). A file is used only for the camera it says it is for: its own model and firmware must be the definition's, whatever the file is named, or the kit, the editor and the proof viewer refuse it and say why (setting keys can be the same on two bodies). docs/decisions/0018.",
+ "type": "object",
+ "required": [
+  "model",
+  "firmware",
+  "source",
+  "settings"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "model": {
+   "type": "string",
+   "minLength": 1,
+   "description": "The model the settings belong to, as the definition names it, for example ILCE-1M2: the file is used only for a definition of this model."
+  },
+  "firmware": {
+   "type": "string",
+   "minLength": 1,
+   "description": "The firmware of the definition's layout, for example 4.00: the file is used only for a definition of this firmware, never for another firmware of the same model."
+  },
+  "source": {
+   "type": "string",
+   "description": "Who wrote the text, and how it may be used."
+  },
+  "settings": {
+   "type": "object",
+   "description": "Help by setting key (the definition's settings[].key).",
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "help": {
+      "type": "string",
+      "description": "Help for the setting's menu item."
+     },
+     "option_help": {
+      "type": "array",
+      "description": "Help for each option, by stored value.",
+      "items": {
+       "type": "array",
+       "prefixItems": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "string"
+        }
+       ],
+       "minItems": 2,
+       "maxItems": 2
+      }
+     }
+    }
+   }
+  }
+ },
+ "additionalProperties": false
+}

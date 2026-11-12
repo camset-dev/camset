@@ -1,0 +1,64 @@
+# Builds the docs site (Zensical reads mkdocs.yml; docs/decisions/0017) and publishes it to GitHub Pages, on a push
+# to main that touches what the site is built from (the paths are the pre-commit docs-site hook's, and this file) or
+# run by hand.
+# Pages must be enabled for the repository first: Settings > Pages > Source: GitHub Actions (docs/RELEASING.md).
+# Gitea Actions reads this folder too and has no Pages, so the deploy job skips itself there. The actions are pinned
+# by commit, with the release tag beside each.
+name: Docs site
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - "README.md"
+      - "kit/tools/docs_macros.py"
+      - "kit/tools/build_docs.py"
+      - "kit/tools/model_appendix.py"
+      - "kit/tools/camset_ksy.py"
+      - "kit/camkit/__init__.py"
+      - "kit/camkit/camset.py"
+      - "kit/camkit/definitions.py"
+      - "kit/camkit/paths.py"
+      - "kit/requirements.txt"
+      - ".github/workflows/docs.yml"
+      - "editor/definitions/**"
+      - "data/**"
+      - "schemas/**"
+  workflow_dispatch:
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install Python dependencies
+        run: pip install -r kit/requirements.txt
+      - name: Build the site
+        run: zensical build --strict
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.server_url == 'https://github.com'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

@@ -1,0 +1,1829 @@
+{
+ "about": "Which settings Camera Settings Reset (result) and Initialize (initialize) put back on this model and firmware: resets, the reset puts the setting back; keeps, it leaves it as it was. A setting no test could tell, or none tested, is not listed (docs/decisions/0016).",
+ "records": {
+  "global:0x01d8": {
+   "name": "JPEG/HEIF Switch",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01da": {
+   "name": "File Format (one slot)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01fe": {
+   "name": "Aspect Ratio",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0286": {
+   "name": "APS-C/Super 35mm",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0288": {
+   "name": "Long Exposure NR",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x028a": {
+   "name": "High ISO NR",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x028e": {
+   "name": "Color Space",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02b5": {
+   "name": "Drive Mode",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1486": {
+   "name": "Drive Mode",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x140b": {
+   "name": "Drive Mode Limit: Cont. Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1401": {
+   "name": "Drive Mode Limit: Continuous Shooting: Hi",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x13ff": {
+   "name": "Drive Mode Limit: Continuous Shooting: Hi+",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1405": {
+   "name": "Drive Mode Limit: Continuous Shooting: Lo",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1403": {
+   "name": "Drive Mode Limit: Continuous Shooting: Mid",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1413": {
+   "name": "Drive Mode Limit: DRO Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x140f": {
+   "name": "Drive Mode Limit: Focus Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1409": {
+   "name": "Drive Mode Limit: Self-timer (Cont)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1407": {
+   "name": "Drive Mode Limit: Self-timer (Single)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x140d": {
+   "name": "Drive Mode Limit: Single Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x13fd": {
+   "name": "Drive Mode Limit: Single Shooting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1411": {
+   "name": "Drive Mode Limit: WB Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12dd": {
+   "name": "Cnt Sht Spd Bst Settings",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02d1": {
+   "name": "Pixel Shift Multi Shoot.",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02dd": {
+   "name": "Shutter Type",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x13bd": {
+   "name": "Release Lag/Start Disp.",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02e1": {
+   "name": "Release w/o Lens",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x02e3": {
+   "name": "Release w/o Card",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0068": {
+   "name": "Grid Line Display",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x006c": {
+   "name": "Grid Line Type",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1472": {
+   "name": "Aspect Marker",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1474": {
+   "name": "Aspect Marker Type",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02d5": {
+   "name": "Silent Mode Aperture Drive In AF",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04c4": {
+   "name": "Drive memory - continuous self-timer variant",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04ba": {
+   "name": "Drive memory - continuous shooting speed",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04c0": {
+   "name": "Drive memory - self-timer delay",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02eb": {
+   "name": "Audio Out Timing",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02e9": {
+   "name": "Audio Recording",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02ed": {
+   "name": "Wind Noise Reduct.",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04ce": {
+   "name": "Interval",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x14cc": {
+   "name": "Comp RAW Shooting NR",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x14ce": {
+   "name": "Comp RAW Shooting NR File Compression Type",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x14d0": {
+   "name": "Comp RAW Shooting NR Number Of Sheets",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10a6": {
+   "name": "Focus Bracket Interval Until Next Shot",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10a8": {
+   "name": "Focus Brckt Saving Dest",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02b7": {
+   "name": "Hi(E-Shutter)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12d5": {
+   "name": "Hi+(E-Shutter)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02c7": {
+   "name": "Interval Rec AE Tracking Sensitivity",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02c5": {
+   "name": "Interval Rec Mode",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c3f": {
+   "name": "Interval Rec Number Of Shots",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c3d": {
+   "name": "Interval Rec Shooting Interval",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c41": {
+   "name": "Interval Rec Shooting Start Time",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02cd": {
+   "name": "Interval Rec Shutter Type",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02b9": {
+   "name": "Mid(E-Shutter)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12d7": {
+   "name": "Pre-Capture",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12d9": {
+   "name": "Pre-Capture Rec Time",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02c1": {
+   "name": "Selftimer during Bracket",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12db": {
+   "name": "Time Shift Trigger Setting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x029e": {
+   "name": "File Number",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x02a4": {
+   "name": "File Number",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x029f": {
+   "name": "Folder Name",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0296": {
+   "name": "Lens Compensation Breathing",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x101f": {
+   "name": "Log Shooting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0280": {
+   "name": "Proxy Recording",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0256": {
+   "name": "Record Setting (S&Q, XAVC S 4K, 30p)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01fa": {
+   "name": "JPEG/HEIF Image Size (Slot 2)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01fc": {
+   "name": "JPEG/HEIF Image Size (Slot 2, copy)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01f6": {
+   "name": "JPEG/HEIF Quality (Slot 2)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01f8": {
+   "name": "JPEG/HEIF Quality (Slot 2, copy)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0292": {
+   "name": "Lens Compensation Chromatic Aberration",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0290": {
+   "name": "Lens Compensation Shading",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1137": {
+   "name": "Movie Interval Rec Frame Rate Setting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x113f": {
+   "name": "Movie Interval Rec Interval Time",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1145": {
+   "name": "Movie Interval Rec Recording Setting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x01e8": {
+   "name": "RAW File Type (Slot 1)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0206": {
+   "name": "Rec Frame Rate (XAVC S 4K)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0218": {
+   "name": "Record Setting (XAVC S 4K, 60p)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0248": {
+   "name": "SQ Frame Rate",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0240": {
+   "name": "SQ Recording Frame Rate Setting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x116a": {
+   "name": "Framing Stabilizer",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0324": {
+   "name": "Center Marker",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x032a": {
+   "name": "Guideframe",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0322": {
+   "name": "Marker Display",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0328": {
+   "name": "Safety Zone",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0320": {
+   "name": "Emphasized REC Display",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0318": {
+   "name": "Exposure Effect",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x031a": {
+   "name": "Frame Rate Low Limit",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12d2": {
+   "name": "Pre-Capture Shutter Rel",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1012": {
+   "name": "Recording Self Timer",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12d0": {
+   "name": "Top Image",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x116e": {
+   "name": "Auto Framing",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1170": {
+   "name": "Crop Level",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1174": {
+   "name": "Framing Tracking Speed",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1178": {
+   "name": "HDMI Output",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02e5": {
+   "name": "Anti-flicker Shoot.",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02e7": {
+   "name": "High Resolution Shutter Speed Setting",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02d3": {
+   "name": "Silent Mode",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02f5": {
+   "name": "Time Code Make",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x16aa": {
+   "name": "Time Code Make",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x02f4": {
+   "name": "Time Code Run",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x16ab": {
+   "name": "Time Code Run",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x02f6": {
+   "name": "User Bit Time Rec",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x16ac": {
+   "name": "User Bit Time Rec",
+   "tab": "Shooting",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x02c3": {
+   "name": "Bracket Order",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0334": {
+   "name": "ISO",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0df2": {
+   "name": "ISO (stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0b65": {
+   "name": "ISO Range Limit",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0b69": {
+   "name": "ISO Range Limit",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0b6d": {
+   "name": "ISO Range Limit",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0344": {
+   "name": "Exposure step",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0350": {
+   "name": "Metering Mode",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e06": {
+   "name": "Metering Mode (stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0354": {
+   "name": "Spot Metering Point",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0356": {
+   "name": "AELw/ Shutter",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0367": {
+   "name": "White Balance",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e0e": {
+   "name": "White Balance (stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0369": {
+   "name": "Priority Set in AWB",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x13ee": {
+   "name": "Custom WB Size Setting",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x036f": {
+   "name": "D-Range Optimizer",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04d6": {
+   "name": "D-Range Optimizer",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0371": {
+   "name": "Creative Look",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0053": {
+   "name": "Picture Profile",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e12": {
+   "name": "Picture Profile (stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10cc": {
+   "name": "Bulb Exposure Time Setting",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0332": {
+   "name": "Auto Slow Shutter",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1034": {
+   "name": "Bulb Timer Setting",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0df4": {
+   "name": "ISO (movie)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e08": {
+   "name": "Metering Mode (movie)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x036d": {
+   "name": "Shockless WB",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c4d": {
+   "name": "WB fine-tune A-B (AWB)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e99": {
+   "name": "WB fine-tune A-B (AWB, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c4f": {
+   "name": "WB fine-tune A-B (Daylight)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e9d": {
+   "name": "WB fine-tune A-B (Daylight, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c59": {
+   "name": "WB fine-tune A-B (Fluor.: Cool White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0eb1": {
+   "name": "WB fine-tune A-B (Fluor.: Cool White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c5b": {
+   "name": "WB fine-tune A-B (Fluor.: Day White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0eb5": {
+   "name": "WB fine-tune A-B (Fluor.: Day White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c5d": {
+   "name": "WB fine-tune A-B (Fluor.: Daylight)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0eb9": {
+   "name": "WB fine-tune A-B (Fluor.: Daylight, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c57": {
+   "name": "WB fine-tune A-B (Fluor.: Warm White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ead": {
+   "name": "WB fine-tune A-B (Fluor.: Warm White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c55": {
+   "name": "WB fine-tune A-B (Incandescent)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ea9": {
+   "name": "WB fine-tune A-B (Incandescent, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c51": {
+   "name": "WB fine-tune A-B (Shade)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ea1": {
+   "name": "WB fine-tune A-B (Shade, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c61": {
+   "name": "WB fine-tune A-B (Underwater Auto)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c6b": {
+   "name": "WB fine-tune G-M (AWB)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ed1": {
+   "name": "WB fine-tune G-M (AWB, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1006": {
+   "name": "WB fine-tune G-M (Custom 1)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1008": {
+   "name": "WB fine-tune G-M (Custom 2)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x100a": {
+   "name": "WB fine-tune G-M (Custom 3)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c6d": {
+   "name": "WB fine-tune G-M (Daylight)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ed5": {
+   "name": "WB fine-tune G-M (Daylight, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c77": {
+   "name": "WB fine-tune G-M (Fluor.: Cool White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ee9": {
+   "name": "WB fine-tune G-M (Fluor.: Cool White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c79": {
+   "name": "WB fine-tune G-M (Fluor.: Day White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0eed": {
+   "name": "WB fine-tune G-M (Fluor.: Day White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c7b": {
+   "name": "WB fine-tune G-M (Fluor.: Daylight)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ef1": {
+   "name": "WB fine-tune G-M (Fluor.: Daylight, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c75": {
+   "name": "WB fine-tune G-M (Fluor.: Warm White)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ee5": {
+   "name": "WB fine-tune G-M (Fluor.: Warm White, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c73": {
+   "name": "WB fine-tune G-M (Incandescent)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ee1": {
+   "name": "WB fine-tune G-M (Incandescent, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c6f": {
+   "name": "WB fine-tune G-M (Shade)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ed9": {
+   "name": "WB fine-tune G-M (Shade, stills)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0c7f": {
+   "name": "WB fine-tune G-M (Underwater Auto)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x02b0": {
+   "name": "Exposure Ctrl Type",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x037d": {
+   "name": "Priority Set in AF-S",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x037f": {
+   "name": "Priority Set in AF-C",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0383": {
+   "name": "AF Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x16b2": {
+   "name": "AF Track For Speed Change",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0387": {
+   "name": "Aperture Drive In AF",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0389": {
+   "name": "AF With Shutter",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1036": {
+   "name": "Full Time DMF",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e68": {
+   "name": "Focus Area remembered (horizontal)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e6a": {
+   "name": "Focus Area remembered (vertical, grip down)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e6c": {
+   "name": "Focus Area remembered (vertical, grip up)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f46": {
+   "name": "Focus Area memory (horizontal)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0fea": {
+   "name": "Focus Area memory (horizontal, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0fec": {
+   "name": "Focus Area memory (horizontal, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0fee": {
+   "name": "Focus Area memory (horizontal, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f48": {
+   "name": "Focus Area memory (horizontal, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f4a": {
+   "name": "Focus Area memory (horizontal, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f4c": {
+   "name": "Focus Area memory (vertical, grip down)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ff0": {
+   "name": "Focus Area memory (vertical, grip down, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ff2": {
+   "name": "Focus Area memory (vertical, grip down, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ff4": {
+   "name": "Focus Area memory (vertical, grip down, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f4e": {
+   "name": "Focus Area memory (vertical, grip down, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f50": {
+   "name": "Focus Area memory (vertical, grip down, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f52": {
+   "name": "Focus Area memory (vertical, grip up)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ff6": {
+   "name": "Focus Area memory (vertical, grip up, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ff8": {
+   "name": "Focus Area memory (vertical, grip up, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ffa": {
+   "name": "Focus Area memory (vertical, grip up, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f54": {
+   "name": "Focus Area memory (vertical, grip up, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f56": {
+   "name": "Focus Area memory (vertical, grip up, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1315": {
+   "name": "Custom area remembered (horizontal)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1317": {
+   "name": "Custom area remembered (horizontal, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1319": {
+   "name": "Custom area remembered (horizontal, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1393": {
+   "name": "Custom area remembered (horizontal, copy 3)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x131b": {
+   "name": "Custom area remembered (vertical, grip down)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x131d": {
+   "name": "Custom area remembered (vertical, grip down, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x131f": {
+   "name": "Custom area remembered (vertical, grip down, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1395": {
+   "name": "Custom area remembered (vertical, grip down, copy 3)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1321": {
+   "name": "Custom area remembered (vertical, grip up)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1323": {
+   "name": "Custom area remembered (vertical, grip up, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1325": {
+   "name": "Custom area remembered (vertical, grip up, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1397": {
+   "name": "Custom area remembered (vertical, grip up, copy 3)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e5c": {
+   "name": "Spot size memory (horizontal)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f5a": {
+   "name": "Spot size memory (horizontal, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f5c": {
+   "name": "Spot size memory (horizontal, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f5e": {
+   "name": "Spot size memory (horizontal, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e5e": {
+   "name": "Spot size memory (vertical, grip down)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f60": {
+   "name": "Spot size memory (vertical, grip down, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f62": {
+   "name": "Spot size memory (vertical, grip down, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f64": {
+   "name": "Spot size memory (vertical, grip down, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e60": {
+   "name": "Spot size memory (vertical, grip up)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f66": {
+   "name": "Spot size memory (vertical, grip up, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f68": {
+   "name": "Spot size memory (vertical, grip up, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f6a": {
+   "name": "Spot size memory (vertical, grip up, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0394": {
+   "name": "Switch V/H AF Area",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e62": {
+   "name": "Tracking start area memory (horizontal)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f6e": {
+   "name": "Tracking start area memory (horizontal, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f70": {
+   "name": "Tracking start area memory (horizontal, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f72": {
+   "name": "Tracking start area memory (horizontal, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e64": {
+   "name": "Tracking start area memory (vertical, grip down)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f74": {
+   "name": "Tracking start area memory (vertical, grip down, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f76": {
+   "name": "Tracking start area memory (vertical, grip down, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f78": {
+   "name": "Tracking start area memory (vertical, grip down, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e66": {
+   "name": "Tracking start area memory (vertical, grip up)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f7a": {
+   "name": "Tracking start area memory (vertical, grip up, alt numbering)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f7c": {
+   "name": "Tracking start area memory (vertical, grip up, alt numbering, copy 1)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0f7e": {
+   "name": "Tracking start area memory (vertical, grip up, alt numbering, copy 2)",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0398": {
+   "name": "AF Area Registration",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0399": {
+   "name": "AF Area Auto Clear",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x039b": {
+   "name": "Area Disp. dur Tracking",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x039d": {
+   "name": "AF-C Area Display",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x039f": {
+   "name": "Phase Detect. Area",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03a1": {
+   "name": "Circ. of Focus Point",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03a5": {
+   "name": "Subject Recog in AF",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x18c8": {
+   "name": "Recog Trgt Select: Airplane",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x117a": {
+   "name": "Face Eye Frame Display",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x03b1": {
+   "name": "Auto Magnifier in MF",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03b3": {
+   "name": "Focus Magnification Time",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0b61": {
+   "name": "Focus Magnification Time",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x03b5": {
+   "name": "Initial Focus Magnifier",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03b7": {
+   "name": "AF In Focus Magnifier",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03bb": {
+   "name": "Peaking Display",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03bd": {
+   "name": "Peaking Level",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03bf": {
+   "name": "Peaking Color",
+   "tab": "Focus",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0390": {
+   "name": "AF Assist",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x038e": {
+   "name": "AF Subj Shift Sens",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x038c": {
+   "name": "AF Transition Speed",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x03a3": {
+   "name": "AF Frame Move Amt",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x03af": {
+   "name": "Focus Map",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10a2": {
+   "name": "Focus Bracket Order",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10e3": {
+   "name": "Subject Recognition Animal Bird Detection Parts",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x103c": {
+   "name": "Subject Recognition Animal Bird Priority",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1044": {
+   "name": "Subject Recognition Animal Detection Parts",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1042": {
+   "name": "Subject Recognition Animal Detection Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1040": {
+   "name": "Subject Recognition Animal Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x103e": {
+   "name": "Subject Recognition Animal Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x104c": {
+   "name": "Subject Recognition Bird Detection Parts",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x104a": {
+   "name": "Subject Recognition Bird Detection Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1048": {
+   "name": "Subject Recognition Bird Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x1046": {
+   "name": "Subject Recognition Bird Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10ef": {
+   "name": "Subject Recognition Car Train Detection Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10ed": {
+   "name": "Subject Recognition Car Train Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10eb": {
+   "name": "Subject Recognition Car Train Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10e9": {
+   "name": "Subject Recognition Insect Detection Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10e7": {
+   "name": "Subject Recognition Insect Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10e5": {
+   "name": "Subject Recognition Insect Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x103a": {
+   "name": "Subject Recognition Person Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10f5": {
+   "name": "Subject Recognition Plane Detection Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10f3": {
+   "name": "Subject Recognition Plane Tracking Sensitivity",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x10f1": {
+   "name": "Subject Recognition Plane Tracking Subject Shift Range",
+   "tab": "Focus",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x12b7": {
+   "name": "Image Order",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03c2": {
+   "name": "Enlarge Initial Mag.",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03c3": {
+   "name": "Enlarge Initial Position",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1720": {
+   "name": "SoS after still img crt",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03c8": {
+   "name": "Play Speed for $ Interval",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x03cd": {
+   "name": "Display Rotation",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1478": {
+   "name": "Aspect Marker Disp.",
+   "tab": "Playback",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x045d": {
+   "name": "REC w/ Shutter",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0481": {
+   "name": "TC/UB Disp. Setting",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0483": {
+   "name": "Gamma Display Assist Type",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0485": {
+   "name": "Shoot. Timing Display",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0486": {
+   "name": "Remain Shoot Display",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0487": {
+   "name": "Auto Review",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x117f": {
+   "name": "Shoot Mode Sel. Screen",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x049d": {
+   "name": "Control For HDMI",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x049c": {
+   "name": "Monitoring Output Display HDMI",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x1032": {
+   "name": "Display LUT",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x049b": {
+   "name": "Movie HDMI Output Audio CH",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0498": {
+   "name": "Movie HDMI Output Time Code",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0499": {
+   "name": "REC Control",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0492": {
+   "name": "Rec. Media dur HDMI Output",
+   "tab": "Setup",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x118b": {
+   "name": "S&Q Shoot Mode: Motion or Time-lapse",
+   "tab": "Setup",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ebd": {
+   "name": "WB fine-tune A-B (Underwater Auto, stills)",
+   "tab": "Setup",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0ef5": {
+   "name": "WB fine-tune G-M (Underwater Auto, stills)",
+   "tab": "Setup",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x04d0": {
+   "name": "Interval (16 shots)",
+   "tab": "Shooting",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0b63": {
+   "name": "ISO Range Limit (upper)",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0b67": {
+   "name": "ISO Range Limit (upper)",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0b6b": {
+   "name": "ISO Range Limit (upper)",
+   "tab": "Exposure/Color",
+   "result": "keeps",
+   "initialize": "resets"
+  },
+  "global:0x0e10": {
+   "name": "White Balance (movie)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  },
+  "global:0x0e14": {
+   "name": "Picture Profile (movie)",
+   "tab": "Exposure/Color",
+   "result": "resets",
+   "initialize": "resets"
+  }
+ }
+}

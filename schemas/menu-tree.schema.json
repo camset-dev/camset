@@ -1,0 +1,141 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "A camera's menus (private/evidence/<model>_fw<firmware>/menu_tree_<model>_fw<firmware>.json)",
+ "description": "Every row of the camera's menus, page by page, as the kit's walk read them: the Stills menu, and the other shooting modes' menus it holds. The mapper's own file, private whole and never submitted (docs/decisions/0016): which rows the walk found greyed or could not read, which option lists it read and where each began, are the state the camera stood in. kit/tools/menu_tree.py writes it; kit/schema_update.py places each setting on its rows, and the definition's menu list and places are what is public of the menus.",
+ "type": "object",
+ "required": [
+  "model",
+  "firmware",
+  "tabs"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "model": {
+   "type": "string",
+   "description": "The camera model, as the definition names it (ILCE-1M2)."
+  },
+  "firmware": {
+   "type": "string",
+   "description": "The firmware the menus were read on (4.00)."
+  },
+  "source": {
+   "type": "string",
+   "description": "How the tree was made: from which runs, or by hand, and when."
+  },
+  "tabs": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/tab"
+   },
+   "description": "The Stills menu: its tabs, each with its pages in the order of their counters."
+  },
+  "modes": {
+   "type": "array",
+   "description": "The menus of the camera's other shooting modes (Movie, S&Q), each written by kit/tools/menu_tree.py --mode from that mode's page scan and crawls; the Stills menu (tabs) is left as it is.",
+   "items": {
+    "type": "object",
+    "required": [
+     "mode",
+     "tabs"
+    ],
+    "properties": {
+     "mode": {
+      "type": "string",
+      "description": "The mode's name, as the camera's Still/Movie/S&Q switch says it and as the proofs' contexts name it (\"[Movie mode]\")."
+     },
+     "source": {
+      "type": "string"
+     },
+     "tabs": {
+      "type": "array",
+      "description": "The mode's menu, in the shape of the Stills menu's tabs.",
+      "items": {
+       "$ref": "#/$defs/tab"
+      }
+     }
+    }
+   }
+  }
+ },
+ "$defs": {
+  "tab": {
+   "type": "object",
+   "required": [
+    "tab",
+    "pages"
+   ],
+   "properties": {
+    "tab": {
+     "type": "string"
+    },
+    "pages": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "page",
+       "group",
+       "rows"
+      ],
+      "properties": {
+       "page": {
+        "type": "string"
+       },
+       "group": {
+        "type": "string"
+       },
+       "rows": {
+        "type": "array",
+        "items": {
+         "$ref": "#/$defs/row"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "row": {
+   "type": "object",
+   "required": [
+    "label"
+   ],
+   "properties": {
+    "label": {
+     "type": "string"
+    },
+    "state": {
+     "type": [
+      "string",
+      "null"
+     ],
+     "description": "What the walk found: walked, submenu, greyed, never, info, button, unhandled, seen."
+    },
+    "why": {
+     "type": "string"
+    },
+    "kind": {
+     "type": "string"
+    },
+    "options": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "fields": {
+     "type": "array"
+    },
+    "children": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/row"
+     }
+    }
+   }
+  }
+ }
+}

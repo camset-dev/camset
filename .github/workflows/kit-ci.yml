@@ -1,0 +1,115 @@
+# The kit's checks on every pull request and every push to main (and by hand): its tests, the publish guard over every
+# tracked file and, for a pull request, over every one of its commits, the camera helpers' network code (its own small
+# test, which needs no SDK), and every definition and every data folder's files against their JSON Schemas
+# (docs/DATA_CONTRACTS.md). A contributor whose commit hooks did
+# not run (git commit --no-verify, or a clone set up before the hooks worked on Windows) is checked here all the same.
+# No camera and no Sony SDK here: the tests that need either skip, and nothing of private/ is present, so the guard runs
+# its generic checks (kit/tools/check_public.py). ruff checks kit/ by pyproject.toml's rules. On macOS, the OCR helper
+# (kit/ocr/ocr.swift, macOS only) is built as kit/setup.py builds it, when a change touches kit/ocr/ or this file. The
+# actions are pinned by commit, with the release tag beside each.
+name: Kit checks
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  # a pull request's newer push cancels its older run; a push to main is a group of its own (its run id), so every
+  # commit on main keeps a finished check: in a shared group a waiting run is dropped for the next one, even without
+  # cancel-in-progress
+  group: kit-ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  kit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0          # every commit of a pull request is checked (check_public.py --commits)
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.11"
+      - name: Install the kit's Python packages (pinned, kit/requirements.txt)
+        run: python -m pip install -r kit/requirements.txt
+      # the same check as the pre-commit ruff hook, at the version its rev pins (kit/tests/test_workflows.py checks that
+      # the two agree); uv pinned as pip installs it
+      - name: ruff over kit/ (the rules in pyproject.toml)
+        run: |
+          python -m pip install uv==0.11.0
+          uvx ruff@0.17.4 check kit
+      - name: The kit's tests
+        run: python -m pytest -q kit/tests
+      - name: Nothing private is published
+        run: python kit/tools/check_public.py --all
+      # a pull request publishes its branch's whole history: every file each of its commits adds or changes is held to
+      # the rules --all holds the tree to (paths, binaries, contents, lean data and definitions), so what a later
+      # commit took out again is refused all the same (docs/UPDATING.md, "Your pull request")
+      - name: No commit of the pull request publishes what is private
+        if: github.event_name == 'pull_request'
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python kit/tools/check_public.py --commits "$BASE..$HEAD"
+      - name: The camera helpers' network code (kit/common/camera_net_test.cpp; no camera, no SDK)
+        run: |
+          c++ -std=c++17 -Wall -Wextra -I kit/common kit/common/camera_net_test.cpp -o "$RUNNER_TEMP/camera_net_test"
+          "$RUNNER_TEMP/camera_net_test"
+      - name: The guards both camera helpers compile in (kit/common/guards_test.cpp; no camera, no SDK)
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -I kit/common kit/common/guards_test.cpp -o "$RUNNER_TEMP/guards_test"
+          "$RUNNER_TEMP/guards_test"
+      - name: The committed generated files are current (kit/tools/build_docs.py --check)
+        run: python kit/tools/build_docs.py --check
+      - name: Every definition and the data files match their JSON Schemas
+        run: |
+          check-jsonschema --schemafile schemas/definition.schema.json editor/definitions/*.json
+          check-jsonschema --schemafile schemas/camera.schema.json data/*/camera_*_fw*.json
+          check-jsonschema --schemafile schemas/help-file.schema.json data/*/help_*_fw*.json
+          check-jsonschema --schemafile schemas/settings-reset.schema.json data/*/settings_reset_*_fw*.json
+
+  # whether the push or pull request changed kit/ocr/ or this file: the macOS job below runs only then, or when run by
+  # hand (a path filter on the workflow would hold back the Linux job too). A base this clone does not hold (a new
+  # branch's first push) counts as changed.
+  ocr-changed:
+    runs-on: ubuntu-latest
+    outputs:
+      changed: ${{ steps.diff.outputs.changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - id: diff
+        name: Files changed under kit/ocr/ or in this workflow
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+        run: |
+          if [ "$EVENT" = workflow_dispatch ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            changed=true
+          elif git diff --name-only "$BASE...$HEAD" -- kit/ocr .github/workflows/kit-ci.yml | grep -q .; then
+            changed=true
+          else
+            changed=false
+          fi
+          echo "changed=$changed" >> "$GITHUB_OUTPUT"
+          echo "kit/ocr/ or this workflow changed: $changed"
+  ocr:
+    needs: ocr-changed
+    if: needs.ocr-changed.outputs.changed == 'true'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: The OCR helper builds (kit/ocr/ocr.swift, with the line kit/setup.py runs; macOS only)
+        run: swiftc -O kit/ocr/ocr.swift -o "$RUNNER_TEMP/ocr"
+      - name: It runs, and answers in JSON for an image it cannot read
+        run: |
+          out=$("$RUNNER_TEMP/ocr" "$RUNNER_TEMP/no-such-image.png")
+          echo "$out"
+          case "$out" in *'"error":"the image could not be read"'*) ;; *) exit 1 ;; esac

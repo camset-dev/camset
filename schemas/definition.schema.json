@@ -1,0 +1,614 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Camset Editor definition (editor/definitions/<model>_fw<firmware>.json)",
+ "description": "What every record of one camera model and firmware's settings file means: the editor's contract, written by kit/schema_update.py, one file per model and firmware (docs/decisions/0019).",
+ "type": "object",
+ "required": [
+  "definition_format",
+  "model",
+  "tabs",
+  "layouts",
+  "settings"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "definition_format": {
+   "type": "integer",
+   "minimum": 2,
+   "description": "The layout of this file: 2, the lean definition (what the camera is; how, when and from which state each thing was proved is the mapping's evidence, kept in the mapper's private overlay, docs/decisions/0016). An editor refuses a newer format with a clear message instead of misreading it, and an editor that reads format 2 refuses format 1, which carried that evidence, saying to write it again with the kit."
+  },
+  "model": {
+   "type": "string",
+   "description": "The camera model the definition is for, as its files' header names it (ILCE-1M2); with the layout's firmware it names the file, <model>_fw<firmware>.json."
+  },
+  "tabs": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "The camera's menu tabs in the camera's order; the editor lists them so, and the settings of a tab not listed here go under Other."
+  },
+  "layouts": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "signature",
+     "model",
+     "firmware"
+    ],
+    "properties": {
+     "signature": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{16}$",
+      "description": "The layout signature of the files this definition reads, 16 hex digits, computed as camera.file.signature names: over the model, the firmware's first two bytes, each section's record count and each record's id and shape."
+     },
+     "model": {
+      "type": "string",
+      "description": "The model the layout was read on, as its files' header names it."
+     },
+     "firmware": {
+      "type": "string",
+      "description": "The firmware the layout was read on, as the files' header gives it (4.00)."
+     },
+     "note": {
+      "type": "string",
+      "description": "What the layout is, in plain words."
+     },
+     "doc": {
+      "type": "string",
+      "description": "The model's page, docs/models/<model>_fw<fw>.md: what was measured on the body and how it behaves."
+     }
+    },
+    "propertyNames": {
+     "not": {
+      "enum": [
+       "note_evidence"
+      ]
+     },
+     "$comment": "How and when the layout was read is evidence, kept in the private evidence file (camkit.definitions)."
+    }
+   },
+   "minItems": 1,
+   "maxItems": 1,
+   "description": "The one record layout (model, firmware, layout signature) this definition was checked on."
+  },
+  "settings": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/setting"
+   },
+   "description": "Every setting the definition knows: one per record, or per element or byte field of a record (docs/DATA_CONTRACTS.md, \"A setting\")."
+  },
+  "menu": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "required": [
+     "tab",
+     "group",
+     "label",
+     "order"
+    ],
+    "properties": {
+     "tab": {
+      "type": "string"
+     },
+     "group": {
+      "type": "string"
+     },
+     "label": {
+      "type": "string"
+     },
+     "order": {
+      "type": "integer"
+     }
+    }
+   },
+   "description": "The camera's top menu rows by tab and group, each with its place (order): kit/schema_update.py writes it from the camera's menu tree (the top rows of its tabs, as the tree labels them, the labels each setting's row begins with; kept as written where the tree is not on the computer) and names each setting's group by the camera's own group names from it. The editor does not read it."
+  },
+  "camera": {
+   "$ref": "camera.schema.json",
+   "description": "The camera section: data/<model>_fw<fw>/camera_<model>_fw<fw>.json as kit/schema_update.py copies it (camera.schema.json)."
+  }
+ },
+ "$defs": {
+  "setting": {
+   "type": "object",
+   "description": "One setting: where it is stored and what its values mean. New fields may be added (the editor ignores fields it does not know), but none of the mapping's evidence (propertyNames).",
+   "required": [
+    "key",
+    "area",
+    "id",
+    "name",
+    "tab",
+    "group"
+   ],
+   "propertyNames": {
+    "not": {
+     "enum": [
+      "observed",
+      "written_with",
+      "source",
+      "note_evidence",
+      "in_sets_proved",
+      "menu_blocked"
+     ]
+    },
+    "$comment": "Refused: observed, the old list of the values camera files held (it came from the camera's downloads, so it carried the owner's own settings); written_with, which records a proof wrote together (it told how the camera was set when the proofs were made); and the mapping's evidence, which two owners mapping the same camera completely would not share: source (how the meaning was first found), note_evidence (what proves the note: runs, days, the owner's word), in_sets_proved (the run, day and slot of a registration) and menu_blocked (refusals the proof runs met in the state the camera stood in). They stay in the mapper's private evidence file and pass 2's report (docs/decisions/0016, camkit.definitions)."
+   },
+   "properties": {
+    "key": {
+     "type": "string",
+     "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+     "description": "The record, live (global) or in the memory sets (set), and an array element [i] or byte offset @n."
+    },
+    "area": {
+     "enum": [
+      "global",
+      "set"
+     ],
+     "description": "Where the record is: global, the live settings (section 0); set, every memory set (sections 1 on)."
+    },
+    "id": {
+     "type": "integer",
+     "minimum": 0,
+     "maximum": 65535,
+     "description": "The record's id in the file, in decimal (key writes it in hex)."
+    },
+    "name": {
+     "type": "string",
+     "description": "The setting's name: the camera's menu row or option where a proof went through one, else a photographer's name for it."
+    },
+    "tab": {
+     "type": "string",
+     "description": "The camera menu tab the setting is listed under; the editor lists one that tabs does not name under Other."
+    },
+    "group": {
+     "type": "string",
+     "description": "Its group in that tab: the camera's own group name, or a screen kept as a group of its own (Fn Menu, Recall Custom hold 1, Picture Profile PP2); a family's groups share the family's prefix (camera.families)."
+    },
+    "order": {
+     "type": "integer",
+     "description": "Where the setting sorts among its tab's settings, smaller first: the editor's flat list follows it. How the kit chooses it: docs/DATA_CONTRACTS.md, \"Where a setting sits on the camera\"."
+    },
+    "row": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string"
+     },
+     "description": "Where the setting sits on the camera's menu: the camera's own row labels from its camera group's top row down to the row it is on (a submenu's rows after the row that opens it), in whichever group of its tab that row is (\"row_group\"), in another tab where its own has none (\"row_tab\") and, for a row only another shooting mode's menu has, in that mode's menu (\"row_mode\"). Written by kit/schema_update.py from the menu tree and the setting's proof paths (camkit.placement); the rows under a row the menu tree does not know come from the proof paths' own submenu steps. Absent when no path reaches a row, and the editor then lists the setting after the camera's rows."
+    },
+    "row_at": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "integer",
+      "minimum": 0
+     },
+     "description": "The sort key of \"row\", one number per label: the top row's position in its tab (page by page, from 0, over the Stills menu's top rows with the rows only another mode's menu has slotted in where that mode's menu has them), then each row's position among its siblings in the camera's menu (rows taken from the proof paths in the order the definition lists the settings proved through them), so an editor orders a tab's groups and a group's rows as the camera does without the menu tree. Present exactly when \"row\" is, as long as it."
+    },
+    "under_option": {
+     "type": "string",
+     "description": "The setting is the choice the camera shows for one option of its row's own setting (the setting named as the row): that option's label as the row's setting lists it in its values (\"Continuous Shooting\" for the continuous shooting speed under Drive Mode). From a proof path naming the option (\"Drive Mode / Continuous Shooting\"); absent otherwise."
+    },
+    "row_tab": {
+     "type": "string",
+     "description": "The tab whose menu holds \"row\", as the menu tree names it, when it is not the setting's own \"tab\": no row of its own tab is reached by its proof paths, and one of another tab is, from that tab's top row (the Custom Key cells a definition keeps in Shooting sit on Setup's Custom Key/Dial Set.). An editor laying the rows out as the camera does shows the setting in this tab, in \"row_group\" there; \"tab\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own tab, or the setting has no \"row\"."
+    },
+    "row_group": {
+     "type": "string",
+     "description": "The camera group whose page holds \"row\", by the definition's name for it, when it is not the setting's own \"group\" (a screen the definition keeps as a group of its own, as Fn Menu or Recall Custom hold 1, sits on its row in Operation Customize or Shooting Mode). An editor laying the rows out as the camera does shows the setting in this group; \"group\" stays what the flat list, comparisons and exports use. Absent when the row is in the setting's own group, or the setting has no \"row\"."
+    },
+    "row_mode": {
+     "type": "string",
+     "description": "The shooting mode whose menu holds \"row\" (\"Movie\"), as the menu tree names it, when the Stills menu has no such row: an editor laying the rows out as the camera does lists these after the group's Stills rows, under the mode's name. Absent for a row of the Stills menu, or a setting with no \"row\"."
+    },
+    "values": {
+     "type": "array",
+     "items": {
+      "type": "array",
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+     },
+     "description": "Stored value and its label, as the camera shows it."
+    },
+    "option_tree": {
+     "type": "array",
+     "minItems": 2,
+     "items": {
+      "type": "object",
+      "properties": {
+       "label": {
+        "type": "string",
+        "description": "The main option as the camera names it (\"Spot\"); for an option with one value, that value's label in \"values\"."
+       },
+       "value": {
+        "type": "integer",
+        "description": "The stored value of an option with no choice of its own: one of \"values\"."
+       },
+       "options": {
+        "type": "array",
+        "minItems": 2,
+        "items": {
+         "type": "array",
+         "prefixItems": [
+          {
+           "type": "integer"
+          },
+          {
+           "type": "string"
+          }
+         ],
+         "minItems": 2,
+         "maxItems": 2
+        },
+        "description": "The choices on the option's own axis, in the camera's order: each stored value (one of \"values\") and its label under the option (\"XL\" for \"Spot: XL\")."
+       }
+      },
+      "required": [
+       "label"
+      ],
+      "oneOf": [
+       {
+        "required": [
+         "value"
+        ]
+       },
+       {
+        "required": [
+         "options"
+        ]
+       }
+      ],
+      "additionalProperties": false
+     },
+     "description": "The setting's options as the camera lays them out, when the camera nests them: its main options in order, each either one value or the choices of its own axis (Focus Area's Spot with its sizes). Every value of \"values\" is in it exactly once and at least one main option has choices; \"values\" stays the flat list, with the flat labels (\"Spot: M\") that comparisons, exports and searches show. Written by kit/schema_update.py from pass 2's dialog and axis proofs (camkit.option_tree) only where the camera showed the nest; absent otherwise, and an editor then lists \"values\" flat."
+    },
+    "note": {
+     "type": "string",
+     "description": "What the setting is and how it behaves, in plain words, shown under it."
+    },
+    "in_sets": {
+     "type": "boolean",
+     "description": "The record is in every memory set too, so registering a memory copies it."
+    },
+    "scalar": {
+     "type": "boolean",
+     "description": "true: the editor reads, compares and edits the setting as one number, by its value names, range or step. false: it shows the stored value as it stands and never edits it on its own: a whole array record, a copy the camera writes together with another setting (the Picture Profile movie copies), a byte field of a record (an index with 0x8000 added), a derived readout. A text record (text) is edited as text either way."
+    },
+    "size": {
+     "type": "integer",
+     "description": "The record's element size in bytes in the layout the definition was made on (0: not known)."
+    },
+    "count": {
+     "type": "integer",
+     "description": "The record's element count in that layout (0: not known)."
+    },
+    "index": {
+     "type": "integer",
+     "description": "Which element of an array record the setting is (0 to 10 for PP1 to PP11); or, with 0x8000 added, a little-endian signed 16-bit field at that byte offset of the record (index 33056 is the field at byte 288, the key's @288), the project's own encoding."
+    },
+    "menu_code": {
+     "type": "integer",
+     "description": "The code My Menu stores for this setting's menu item (camera.my_menu); absent when the item cannot be added or its code was not found."
+    },
+    "refused": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     },
+     "description": "Values that make the camera refuse the whole file, from verification runs: wherever the editor lists them, it marks them in the caution colour, with a hover saying why."
+    },
+    "rewritten": {
+     "type": [
+      "array",
+      "null"
+     ],
+     "description": "Values the camera takes but replaces on load, as [written, stored] pairs, from verification runs."
+    },
+    "display_rule": {
+     "type": "string",
+     "description": "When the camera shows something other than the stored value (a physical dial, a mode, a clamp), in words."
+    },
+    "modes": {
+     "type": "string",
+     "description": "The shooting modes the menu item appears in, from the Help Guide's menu list (\"still image, movie, S&Q\")."
+    },
+    "unit": {
+     "type": "string",
+     "description": "The unit a number is shown with."
+    },
+    "shown_as": {
+     "type": "object",
+     "description": "How the camera shows a number it stores scaled: the stored value divided by divide, with decimals places, then the unit (Knee Point stores 7500 for 75%). Derived from the proofs, where every shown number times one scale was the stored value.",
+     "required": [
+      "divide",
+      "decimals"
+     ],
+     "properties": {
+      "divide": {
+       "type": "integer",
+       "minimum": 2
+      },
+      "decimals": {
+       "type": "integer",
+       "minimum": 0
+      }
+     },
+     "additionalProperties": false
+    },
+    "range": {
+     "type": "array",
+     "items": {
+      "type": "integer"
+     },
+     "minItems": 2,
+     "maxItems": 2,
+     "description": "For a number: its lowest and highest stored values, both allowed."
+    },
+    "step": {
+     "type": "integer",
+     "description": "For a number: the step between the stored values allowed (250 for Knee Point); an edit snaps to it."
+    },
+    "text": {
+     "type": "object",
+     "properties": {
+      "min_len": {
+       "type": "integer"
+      },
+      "max_len": {
+       "type": "integer"
+      },
+      "charset": {
+       "type": "string"
+      },
+      "uppercase": {
+       "type": "boolean"
+      }
+     },
+     "description": "For a text record (the file-name prefix): its length and the characters it allows."
+    },
+    "inactive_when": {
+     "type": "object",
+     "required": [
+      "record",
+      "values"
+     ],
+     "properties": {
+      "record": {
+       "type": "integer"
+      },
+      "name": {
+       "type": "string"
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       }
+      },
+      "except": {
+       "type": "array"
+      },
+      "unlock": {
+       "type": "integer"
+      },
+      "unlock_label": {
+       "type": "string"
+      }
+     },
+     "description": "The camera greys this setting out while another record (record, named name) holds one of values, or any value but those in except; unlock and unlock_label are the value that turns the setting on again, where a proof found it."
+    },
+    "proved": {
+     "type": "object",
+     "description": "Proved on the camera: each option chosen in its own menu and the settings file compared, as a lean definition says it: the values a proof checked (values) or, for a scale proved by samples, whether they lie on one line (sampled). Never the run, the day, the menu rows, where each name came from, nor how many samples: that is the mapping's evidence (docs/decisions/0016).",
+     "properties": {
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "The values a proof on the camera checked: those an option was chosen for, and those named from the camera's own word (read off its screen, a rule over proved values, a hand table checked against the camera, a sampled scale's values between its points); never a name kept from an old schema or counted out by a hand rule. An editor offers these outside Expert mode."
+      },
+      "sampled": {
+       "type": "object",
+       "description": "A scale proved by samples instead of value by value, and whether the samples lie on one straight line through both ends (linear true: every value between is the scale's, and an editor offers them all; values is then absent). Written for a number range, a White Balance grid, a list of numbers in one unit whose samples hold both ends, and a slot proved by a sample of its list (its values then those its list's table names). The sampled values are never listed (docs/decisions/0016).",
+       "properties": {
+        "linear": {
+         "type": [
+          "boolean",
+          "null"
+         ]
+        }
+       },
+       "additionalProperties": false
+      }
+     },
+     "additionalProperties": false
+    },
+    "unproved_reason": {
+     "type": "object",
+     "required": [
+      "kind",
+      "why"
+     ],
+     "description": "Why no proof can be made, by kind: not_on_camera, no menu of this body reaches it; skipped, the owner chose not to prove it; state, a working value the camera keeps for itself, not a menu setting; camera_only, written only by the camera's own saves (a settings file saved from its menu, a memory registration), so a file taken over a remote connection never shows it changed; equipment, greyed without equipment the camera was proved without (a RAW recorder on HDMI); network, a network block, changed by hand only (decision 8); unknown, every candidate row was tried and none moved it. why says it in a photographer's words; the editor shows the kind in a few words and why on hover.",
+     "properties": {
+      "kind": {
+       "enum": [
+        "not_on_camera",
+        "skipped",
+        "state",
+        "camera_only",
+        "equipment",
+        "network",
+        "unknown"
+       ]
+      },
+      "why": {
+       "type": "string"
+      }
+     },
+     "additionalProperties": false
+    },
+    "unproved_sets": {
+     "type": "object",
+     "required": [
+      "sets",
+      "kind",
+      "why"
+     ],
+     "description": "Memory sets (sections) of a set setting where no proof can reach it, and why (its kinds as unproved_reason's); elsewhere it is as proved and unproved_reason say. The raw stop values of 0x0180, which only Stills registrations write.",
+     "properties": {
+      "sets": {
+       "type": "array",
+       "items": {
+        "type": "integer",
+        "minimum": 1
+       }
+      },
+      "kind": {
+       "enum": [
+        "not_on_camera",
+        "skipped",
+        "state",
+        "camera_only",
+        "equipment",
+        "network",
+        "unknown"
+       ]
+      },
+      "why": {
+       "type": "string"
+      }
+     },
+     "additionalProperties": false
+    },
+    "copies": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$"
+     },
+     "minItems": 1,
+     "uniqueItems": true,
+     "description": "The other records the camera keeps at this setting's value, each a setting of its own that names this one in copy_of: a Picture Profile parameter in use and its Stills and Movie copies, the profile in use and its two copies, and the other settings Different Set for Still/Mv keeps per mode. In a file the camera wrote, this setting's value equals at least one of its copies'. An editor writes every copy that held this setting's old value with the new one, in the same step, and flags a file where the value equals none of them. Written by kit/schema_update.py (kit/writer/copies.py) from the camera's hand table, only while the camera's downloads bear the rule out (docs/DATA_CONTRACTS.md, \"A value kept in more than one record\")."
+    },
+    "copy_of": {
+     "type": "string",
+     "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+     "description": "The setting this one is a copy of (it names this one in its copies). An editor lets it be changed outside Expert mode too: changing a copy that was in step with its setting in the file as opened changes the setting and every copy in step with it; changing one that was not in step changes that copy alone (the setting still equals another of its copies)."
+    },
+    "copy_for": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "minItems": 1,
+     "uniqueItems": true,
+     "description": "The shooting modes whose value this copy is, named as camera.memory_sets.modes names them (\"Stills\", \"Movie\", \"S&Q\", \"Time-lapse\"): in a section of that mode (the live settings by camera.live_mode, a memory set by memory_sets.modes) a file the camera wrote holds the same value in the setting it copies and in this copy. It is for checking a file, not for deciding what follows an edit (that is the copies rule: whether a family's modes share a value is the camera's Different Set for Still/Mv box, not proved yet). Written by kit/schema_update.py on every copy of every family whose modes the camera's hand table names, the modes it names for the copy's place (kit/writer/copies.py), and checked against the camera's downloads at every write: a section where the setting is not the copy for its mode stops the write. Absent where the copies' modes are not known yet; an editor then keeps the weaker check."
+    },
+    "not_offered": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "required": [
+       "value",
+       "label",
+       "why"
+      ],
+      "properties": {
+       "value": {
+        "type": "integer"
+       },
+       "label": {
+        "type": "string"
+       },
+       "why": {
+        "type": "string",
+        "description": "Why the camera's menu never offers it, in plain words, as the editor's detail panel says it."
+       },
+       "menu": {
+        "type": "string",
+        "description": "The menu row or screen whose list leaves it out."
+       },
+       "held": {
+        "type": "boolean",
+        "description": "The camera writes it itself although the list cannot choose it back (the factory value, which a file holds until the setting is changed): still offered."
+       }
+      },
+      "additionalProperties": false
+     },
+     "description": "Values the camera's menus never offer, each where its evidence holds: the report's rows the mark names (walks of the whole list, in every state the kit walked it) never wrote it, or a picker list walked round to its start does not hold it (docs/DATA_CONTRACTS.md, \"Values the menus never offer\"). An editor leaves them out, in Expert mode too, unless the open file holds one now, and says why; one marked held stays offered. Written by kit/schema_update.py (kit/writer/offered.py)."
+    },
+    "video_system_values": {
+     "type": "object",
+     "required": [
+      "NTSC",
+      "PAL"
+     ],
+     "properties": {
+      "NTSC": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "uniqueItems": true
+      },
+      "PAL": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "uniqueItems": true
+      }
+     },
+     "additionalProperties": false,
+     "description": "The values the camera's menus offer under one video system only, for the live settings only (a memory set keeps the rates it was registered under, whatever the header says): a value listed under NTSC is offered in the live settings only when the file's header says NTSC (camera.file.video_system), one under PAL only when it says PAL, and a value listed under neither under both. Both keys are present. With the file's video system unknown an editor offers every value. Written by kit/schema_update.py (kit/writer/offered.py) from the rows the kit walked under each system, which video system each row's downloads say in their header, a value proved under both being under neither; else from the camera's hand table where what the camera showed under the other system speaks for it; every write checks it against the camera's downloads, a value listed as one system's never held in a download of the other (docs/DATA_CONTRACTS.md, \"Values offered under one video system\")."
+    },
+    "help": {
+     "type": "string",
+     "description": "Help for the setting's menu item, in the project's own words (data/<model>_fw<firmware>/help_<model>_fw<firmware>.json). The camera's own In-Camera Guide text is Sony's and never goes here: it is kept in a private help file of the same shape, which the editor shows in place of this when it finds one (docs/decisions/0018)."
+    },
+    "option_help": {
+     "type": "array",
+     "description": "Help for each option, by stored value, as [value, text] pairs; the project's own words, as with help.",
+     "items": {
+      "type": "array",
+      "prefixItems": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "string"
+       }
+      ],
+      "minItems": 2,
+      "maxItems": 2
+     }
+    },
+    "expert": {
+     "type": "boolean",
+     "description": "Shown in Expert mode only: a derived working copy, a flag or an alternate numbering rather than a setting of the camera's menus."
+    },
+    "disputed": {
+     "type": "boolean",
+     "description": "pass 2's report found the record not one to one (a label wrote two values, or two labels one value): its proof is taken out until a new one settles it."
+    }
+   }
+  }
+ }
+}
