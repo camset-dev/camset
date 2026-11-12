@@ -46,7 +46,7 @@ struct SystemTime { year: u16, month: u16, day_of_week: u16, day: u16, hour: u16
 
 /// Seconds since 1970 as this computer's local date and time on Windows (year, month, day, hour, minute, second),
 /// with the daylight saving of that day; None where Windows cannot say. By Windows' own time zone setting, not the C
-/// library's `localtime`, which a TZ variable in a zone's name ("America/New_York", as some shells set) turns to UTC.
+/// library's `localtime`, which a TZ variable holding a zone's name (an "Area/City" one, as some shells set) turns to UTC.
 #[cfg(windows)]
 fn windows_local(secs: u64) -> Option<(u16, u16, u16, u16, u16, u16)> {
     // kernel32's two calls, declared here: no crate for them
