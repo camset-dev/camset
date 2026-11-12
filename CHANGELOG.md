@@ -12,6 +12,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   works with, Changes, the third-party licences and Copy version, for a message about a problem. The macOS app's own
   About panel shows its version and copyright line.
 - The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
+- On Windows, the editor takes this computer's time as local time, as the camera's is. It took it as UTC, so a read
+  said the camera's clock and the computer's differed by the time zone's hours when they agreed, and the files the
+  editor keeps were named by UTC.
 - On Windows, the editor's tests built in release mode (`cargo test --release`) print their results in the console;
   only the app itself opens without a console window.
 - On Windows, no console window flashes up when the editor talks to a camera: searching for cameras, reading and

@@ -410,6 +410,35 @@ pub(crate) mod backup_tests {
         assert!(f.len() == 19 && f.bytes().all(|c| c.is_ascii_digit() || c == b'-' || c == b'_'), "{f}");
         assert_eq!(stamp_of(std::time::SystemTime::now()).len(), 15);
     }
+
+    /// The computer's stamp is its local time, as the camera's is, so the two clocks can be compared: on Windows
+    /// (where it was UTC once, and a read said the clocks differed by the time zone's hours) it is the time Windows
+    /// itself gives as local, and with the zone's offset taken off it is the moment it was made from.
+    #[test]
+    fn the_stamp_is_local_time() {
+        #[cfg(windows)]
+        {
+            #[repr(C)]
+            #[derive(Default)]
+            struct Fields { year: u16, month: u16, day_of_week: u16, day: u16, hour: u16, minute: u16, second: u16, milliseconds: u16 }
+            #[link(name = "kernel32")]
+            unsafe extern "system" {
+                fn GetLocalTime(local: *mut Fields);
+            }
+            let mut f = Fields::default();
+            // the stamp between two readings of Windows' local clock, so a second that turns over is no failure
+            // SAFETY: the pointer is to the eight 16-bit fields the call fills
+            let read = |f: &mut Fields| { unsafe { GetLocalTime(f) }; format!("{:04}{:02}{:02}_{:02}{:02}{:02}", f.year, f.month, f.day, f.hour, f.minute, f.second) };
+            let (before, stamp, after) = (read(&mut f), local_stamp(), read(&mut f));
+            assert!(before <= stamp && stamp <= after || before > after, "{before} <= {stamp} <= {after}");
+            let _ = (f.day_of_week, f.milliseconds);
+        }
+        // everywhere: a local stamp is a whole number of quarter hours from UTC, at most 14 hours
+        let secs = 1_800_000_000u64;
+        let at = std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs);
+        let off = stamp_minutes(&stamp_of(at)).unwrap() - (secs / 60) as i64;
+        assert!(off % 15 == 0 && off.abs() <= 14 * 60, "{off} minutes from UTC");
+    }
 }
 
 #[cfg(test)]
