@@ -53,11 +53,12 @@ import re
 import subprocess
 import sys
 import time
-import tomllib
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# camkit before tomllib (Python 3.11): an older Python is told so in plain words (camkit/start.py), not a traceback
 from camkit import ROOT, paths  # noqa: E402
+import tomllib  # noqa: E402
 # a step's exit status when the camera may not be back on its start file, the runners' own: from kit/exit_status.py,
 # which imports nothing (kit/runner.py would bring the camera's screen and frames along)
 from exit_status import EXIT_UNRESTORED  # noqa: E402

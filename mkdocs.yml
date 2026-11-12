@@ -36,6 +36,9 @@ markdown_extensions:
   - pymdownx.snippets: {base_path: [".", "docs"], check_paths: true}
 nav:
   - Home: index.md
+  # not a page of docs/: the docs workflow builds it into site/viewer/ (kit/tools/proof_viewer.py --public), and a
+  # relative entry is taken from the site's root
+  - Definition viewer: viewer/
   - Tutorials:
       - From nothing to a first proved setting: QUICKSTART.md
   - How-to guides:

@@ -63,12 +63,17 @@ and its GitHub Release deleted, because its packages carried a definition in the
 workflow_dispatch):
 
 1. **test:** the kit's tests, `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any
-   package is built (pull requests and main are checked by `kit-ci.yml` and `editor-ci.yml`);
+   package is built (pull requests and main are checked by `kit-ci.yml` and `editor-ci.yml`); and, from 0.2.1, the
+   definition viewer as one file, `camset-viewer.html`, built by `kit/tools/proof_viewer.py --public --single` from
+   the public definitions in `editor/definitions/` alone (each with its sample), kept as a build artifact; it is
+   never committed;
 2. **build:** on macOS, Linux and Windows, the editor's tests, its third-party licences page (`cargo about`: the
    crates, and the fonts egui builds in, from `editor/about.hbs`), and the package for that system, which carries the
    project's `LICENSE` and that page, kept as a build artifact;
 3. **release:** on a version tag pushed to GitHub only, a GitHub Release for the tag with the packages attached
-   (`softprops/action-gh-release`). Run by hand, or on Gitea, which has no GitHub Releases API, this job skips itself.
+   (`softprops/action-gh-release`) and, from 0.2.1, `camset-viewer.html`, always under that one name, so
+   <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest one's address.
+   Run by hand, or on Gitea, which has no GitHub Releases API, this job skips itself.
 
 Each action the workflow uses is pinned to a full commit, with its version in a comment, and `cargo-about` to a
 version, so a tag moved upstream cannot change what builds or publishes a release.
@@ -99,8 +104,8 @@ Not yet done for a public release:
 - **File types:** none are claimed. `.DAT` is used by many apps (decided 2026-10-22).
 - **The docs site's links to the README, CONTRIBUTING and the Releases page.** `repo_url` and `site_url` in
   `mkdocs.yml` point at github.com/camset-dev/camset since 2026-11-09, so the site's header links back to the repository.
-- **Release notes on GitHub:** the workflow attaches the packages and writes no notes. A release's notes are its
-  section of `CHANGELOG.md` (its "Read first" repeats the README's warning, says that the camera helper is not
-  included and, for 0.2.0, that 0.1.0 is withdrawn and its definitions do not open in 0.2.0), copied onto the Release
-  by hand.
+- **Release notes on GitHub:** the workflow attaches the packages and the viewer and writes no notes. A release's
+  notes are its section of `CHANGELOG.md` (its "Read first" repeats the README's warning, says that the camera helper
+  is not included and, for 0.2.0, that 0.1.0 is withdrawn and its definitions do not open in 0.2.0), copied onto the
+  Release by hand.
 - **The camera helper is not in these packages** (the README, "The camera helper"). If an SDK build is ever shipped, it must carry the warranty notice above.

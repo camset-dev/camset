@@ -17,10 +17,10 @@ import re
 import sys
 from pathlib import Path
 
-import yaml
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# camkit before any other package, as in every kit program: a Python without the kit's packages is told so (camkit/start.py)
 from camkit import ROOT, definitions  # noqa: E402
+import yaml  # noqa: E402
 
 SCHEMA = definitions.path(definitions.REFERENCE)          # the definition whose record names the .ksy imports
 FORMATS = ROOT / "docs" / "formats"

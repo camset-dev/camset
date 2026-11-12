@@ -48,10 +48,10 @@ impl App {
         let focused = self.focus == Focus::Tabs && matches!(self.view, View::Tab(_));
         let off = self.schema.camera.text.off_menu_name().to_string();
         for tab in &tabs {
-            let n = self.visible_count(Some(tab));
-            if n == 0 && (tab == OTHER_TAB || *tab == off) {
+            if !self.side_bar_lists(tab) {
                 continue;
             }
+            let n = self.visible_count(Some(tab));
             let edited = self.counts(Some(tab));
             let selected = self.view == View::Tab(tab.clone());
             ui.horizontal(|ui| {

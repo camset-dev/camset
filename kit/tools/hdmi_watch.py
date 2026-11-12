@@ -27,13 +27,13 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# camkit before any other package, as in every kit program: a Python without the kit's packages is told so (camkit/start.py)
 from camkit import camset, ocr, screen  # noqa: E402
 from camkit.frames import HdmiSource, OsdFeed, _small  # noqa: E402
 from camkit.link import Link, LinkError  # noqa: E402
 from camkit.runs import Run  # noqa: E402
+import numpy as np  # noqa: E402
 
 
 def describe(s: screen.Screen) -> str:

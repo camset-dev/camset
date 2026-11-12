@@ -3525,9 +3525,11 @@ function drawSettings() {
     el("hr"),
     el("div", { class: "set-foot small weak" },
       el("span", { title: `Preferences file: ${s.prefs.prefs_path}` }, plain("⚙ Preferences")),
-      el("button", { class: "small sel weak", title: "The editor's version, and the commit it was built from when built from the project's repository. Click for About.",
-        onclick: () => openWindow("about") }, `Camset Editor ${s.version || ""}`),
+      // About as a button of its own, as the window's Settings has it
+      el("button", { class: "small", title: "The version, the system the editor runs on, the cameras it works with, the licence and the project's pages, and Copy details for a message about a problem",
+        onclick: () => openWindow("about") }, "About Camset Editor…"),
       el("button", { class: "small sel", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
+      el("span", { title: "The version, and the commit it was built from when built from the project's repository" }, `Camset Editor ${s.version || ""}`),
       el("span", {}, s.not_sony)));
 }
 
@@ -3856,20 +3858,57 @@ function drawVersion(s) {
 }
 
 /** About Camset Editor, as the window's: which editor this is (its version, and the commit of a build made from the
- *  repository), the cameras it works with, and the ways to what changed and to the licences (those are a page on the
- *  editor's computer, which the desktop app opens). */
+ *  repository), the system the editor runs on, the cameras it works with, whether the camera link program is there,
+ *  the licence, the project's pages, and the ways to what changed, to the licences (a page on the editor's computer,
+ *  which the desktop app opens) and to a copy of the details for a message about a problem. All of it is the editor's
+ *  (`state.about`, `web_about`), so the page and the window say the same. */
 function drawAbout() {
   const s = state;
-  if (drawnFor("about", JSON.stringify([s.version, s.version_short, s.build, s.works_with, s.not_sony]))) return;
+  const a = s.about || {};
+  if (drawnFor("about", JSON.stringify([s.version, s.version_short, s.build, s.works_with, s.not_sony, a]))) return;
   fillWindow("about", "About Camset Editor",
     el("div", { class: "strong", style: { "font-size": "1.429rem" } }, "Camset Editor"),
     el("p", {}, `Version ${s.version_short || s.version || ""}`),
     s.build ? el("p", { title: "The commit it was built from, in the project's repository" }, `Build ${s.build}`) : null,
-    s.works_with && s.works_with.length ? el("p", { class: "weak" }, `Works with: ${s.works_with.join(", ")}`) : null,
+    a.system ? el("p", { title: "The computer the editor runs on, and the processor the program was built for" }, a.system) : null,
+    s.works_with && s.works_with.length ? el("p", { class: "weak", title: "The cameras and firmware the editor has a definition for: built in, or added in Settings > Camera support & web page" }, `Works with: ${s.works_with.join(", ")}`) : null,
+    a.helper ? el("p", { class: "weak", title: "The program that reads and writes a camera over USB or the network; without it the editor opens files only" }, a.helper) : null,
+    a.licence ? el("p", { class: "small weak" }, a.licence) : null,
     el("p", { class: "small weak" }, s.not_sony),
+    // in a new tab, and the project's pages are not told which page sent the reader there
+    el("div", { class: "buttons about-links" }, ...(a.links || []).map((l) =>
+      el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", title: `${l.title}\n${l.url}` }, l.text))),
     el("div", { class: "buttons" },
       el("button", { class: "small", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
-      deskButton("Third-party licences", "In the desktop app: About Camset Editor, or the foot of Settings, opens the licences page on the editor's computer")));
+      deskButton("Third-party licences", "In the desktop app: About Camset Editor, or the foot of Settings, opens the licences page on the editor's computer"),
+      a.details ? el("button", { class: "small", title: `Copies these lines, to paste into a message about a problem:\n${a.details}`,
+        onclick: async () => toast(await copyText(a.details) ? "About's details copied, to paste into a message about a problem"
+          : "This browser did not let the page copy: select the lines above and copy them") }, "Copy details") : null));
+}
+
+/** Put a text on the clipboard of the device the page is on: with the Clipboard API where the browser offers it (on a
+ *  secure page only: localhost or https), else with the older copy command, which also works on the page's plain
+ *  http address on the network. False when neither did; the text box it copies from is always taken away again, and
+ *  the focus goes back where it was. */
+async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch (e) { /* no Clipboard API on an http address: the copy command below */ }
+  const back = document.activeElement;
+  const t = el("textarea", { readonly: true, "aria-hidden": "true", tabindex: "-1", style: { position: "fixed", top: "0", left: "0", opacity: "0" } });
+  t.value = text;
+  try {
+    document.body.append(t);
+    t.select();
+    t.setSelectionRange(0, text.length);   // iOS selects nothing with select() alone
+    return document.execCommand("copy") === true;
+  } catch (e) {
+    return false;
+  } finally {
+    t.remove();
+    if (back && back.focus) back.focus();
+  }
 }
 
 /** Ask the editor for the changelog built into it, for Changes, each time the window opens: a request that failed

@@ -1563,6 +1563,12 @@ def step_viewer(env: Env) -> None:
     if not py.exists():
         env.add("proof viewer", "--", "not built: there is no .venv (above)", "the venv line above")
         return
+    # without the packages proof_viewer.py would only say to run this setup, which is running
+    unready = [r.piece for r in last_rows(env.rows) if r.piece in ("venv", "packages") and r.state in ("FAIL", "DO")]
+    if unready:
+        why = ".venv is not ready" if unready[0] == "venv" else "the kit's packages are not installed"
+        env.add("proof viewer", "--", f"not built: {why} (above)", f"the {unready[0]} line above")
+        return
     with long_step(env, "building the proof viewer page, if the kit has run on a camera here", "the proof viewer",
                    VIEWER_TIME, VIEWER_SLOW):
         code, out = run([py, env.root / "kit" / "tools" / "proof_viewer.py"], cwd=env.root)

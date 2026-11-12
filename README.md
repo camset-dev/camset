@@ -9,6 +9,10 @@ file means.
 
 ![Camset Editor: the Main page of the built-in sample, its tiles and settings, with four edits marked in orange](docs/images/editor-main.png)
 
+To look inside a settings file with nothing to install, open the
+[definition viewer](https://camset-dev.github.io/camset/viewer/) and choose the file: it shows every setting by name
+for each camera Camset knows ([more below](#the-definition-viewer-and-the-proof-viewer)).
+
 ## Use the editor
 
 The editor is on the project's [Releases page](https://github.com/camset-dev/camset/releases): the app in a `.dmg`
@@ -74,15 +78,31 @@ what only a person can do, such as turning a dial. At the end the kit writes you
 support & web page > Add definition… ([decision 19](docs/decisions/0019-definitions-are-files-one-per-model-and-firmware.md)).
 Then send the result back as a pull request, so the next release ships it.
 
-### The proof viewer
+### The definition viewer and the proof viewer
 
-Every value the kit proves is kept with the camera's own screens that proved it, and `kit/tools/proof_viewer.py
---open` lays them out as a local page ([QUICKSTART](docs/QUICKSTART.md#command-cheat-sheet)). It exists only where the
-kit has run, since it shows that camera's own pictures. The Menu view is the camera's menu as the definition places
-it: the tabs, each group's rows with the value the open file holds, and for the chosen row every value with its proof
-and the pictures behind it. The File layout view is the file itself: the container's structure as the definition names
-it, the bytes with the chosen record lit, how much of the file is proved, and what each record decodes to. The
-pictures below show the a1 II's factory sample.
+The **definition viewer**, at <https://camset-dev.github.io/camset/viewer/>, is for anyone: open it in a browser,
+press Open your settings file… and choose a `CAMSET*.DAT`. It finds the file's camera among the definitions Camset
+has and shows every setting by name, in the camera's menu as the editor lays it out (its Expert switch shows every
+setting the definition holds), with whether a proof on the camera checked each value, and the file's layout byte by
+byte. Nothing is installed, and the file is read in your browser and never leaves your computer. Until a file is open
+it shows the camera's sample, not your camera: a file one camera of that model wrote right after Initialize, its
+personal text removed, in which some values are what that camera held, as Initialize does not reset every record. A
+file of another firmware is read with the nearest one's definition, and the page says so. A file of a camera with no
+definition yet opens too, its structure only and nothing named, when it is laid out like the files of a camera the
+viewer knows; any other file is refused. Besides the page on the docs site, each release from 0.2.1 carries it as
+one file, `camset-viewer.html`, to download and open with no internet; the latest is always at
+<https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html>. It is built from the public
+definitions alone, with `kit/tools/proof_viewer.py --public --out site/viewer`, or as that one file with
+`kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html`.
+
+The **proof viewer** is the same page with the camera's own screens: every value the kit proves is kept with the
+screens that proved it, and `kit/tools/proof_viewer.py --open` lays them out as a local page
+([QUICKSTART](docs/QUICKSTART.md#command-cheat-sheet)). It exists only where the kit has run, since it shows that
+camera's own pictures. The Menu view is the camera's menu as the definition places it: the tabs, each group's rows
+with the value the open file holds, and for the chosen row every value with its proof and the pictures behind it. The
+File layout view is the file itself: the container's structure as the definition names it, the bytes with the chosen
+record lit, how much of the file is proved, and what each record decodes to. The pictures below show the a1 II's
+sample file.
 
 ![The proof viewer's Menu view: the Playback tab, the Playback Target group's rows, and the chosen row's two values, each proved, with the camera's screen that proved the first](docs/images/proof-viewer-menu.png)
 
@@ -124,7 +144,7 @@ terms and how a release is made.
 - Serves a small web page, off until turned on, that does what the window does from a browser on a tablet, a phone
   or another computer: the same pages, windows and settings, Compare, Memories and Exposure included. The camera's
   login, and the settings that belong to the editor's own computer, stay in the desktop app.
-- Opens a built-in sample, a file with personal data removed, to explore without a camera.
+- Opens a built-in sample, a file with personal text removed, to explore without a camera.
 
 ## The camera helper
 
@@ -171,7 +191,7 @@ The packages themselves: `sh packaging/build_macos_app.sh` builds `Camset Editor
 
 | Folder | What it holds |
 |---|---|
-| `editor/` | The Rust/egui app. `definitions/` holds the camera definitions it ships with, one per model and firmware (`<model>_fw<fw>.json`, written by `kit/schema_update.py`; today the ILCE-1M2's at firmware 4.00), each with its sample (`<model>_fw<fw>.DAT`, personal values removed): what every record means, plus a `camera` section (the file's container, Main tiles, My Menu, memories, link-critical records, wording) copied from `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`. The editor itself holds no camera-specific facts ([decision 20](docs/decisions/0020-the-editor-holds-no-camera-facts.md)), and reads your own definitions from its settings folder too ([decision 19](docs/decisions/0019-definitions-are-files-one-per-model-and-firmware.md)). |
+| `editor/` | The Rust/egui app. `definitions/` holds the camera definitions it ships with, one per model and firmware (`<model>_fw<fw>.json`, written by `kit/schema_update.py`; today the ILCE-1M2's at firmware 4.00), each with its sample (`<model>_fw<fw>.DAT`, a file the camera wrote, its personal text removed): what every record means, plus a `camera` section (the file's container, Main tiles, My Menu, memories, link-critical records, wording) copied from `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`. The editor itself holds no camera-specific facts ([decision 20](docs/decisions/0020-the-editor-holds-no-camera-facts.md)), and reads your own definitions from its settings folder too ([decision 19](docs/decisions/0019-definitions-are-files-one-per-model-and-firmware.md)). |
 | `kit/` | The mapping kit. At `kit/` itself, the pipeline every camera goes through: page scan, crawl, pass 1's map, the proofs, the report and the definition, each a command at `kit/` (`camkit/` is their library; `prove_run.py`'s parts are in `proving/`, `schema_update.py`'s in `writer/`, with the ILCE-1M2's hand tables in `writer/a1_tables.py`, and what the runners share in `runner.py`). `kit/provers/` proves the screens that need a prover of their own (scales, two-box screens, turned dialogs, checkbox grids, Shoot Mode, Recall Custom holds, bracket fields, My Menu's items, Playback Filter Condition) and takes the camera to another shooting mode through the menu (`mode_switch.py`). `kit/tools/` holds the checks, the camera's identity, uploads, the runner for unattended chains and what builds the docs and the generated files. The camera link (`link/`) and the editor's camera helper (`probe/`) are C++ on Sony's SDK, which each contributor downloads into `kit/sdk/` (it is never in the repository); they share `common/`: the SDK's steps, the network login, what they never send, and the build settings both take (`sdk_program.cmake`). |
 | `data/` | What has been learned: one folder per camera and firmware (`data/<model>_fw<fw>/`), holding, among others, the camera's own facts (`camera_<model>_fw<fw>.json`), which settings each reset puts back, the Help Guide's menu list and the project's own help text; [Data files](docs/DATA_CONTRACTS.md#what-a-mapping-delivers) lists every file and how each is made. Beside them, `data/pass2_scope_template.json`: the prover's exclusion rules for a new machine. |
 | `docs/` | The docs site (Zensical, `mkdocs.yml`): status, how the camera behaves, the memory map, the file format (`docs/formats/sony_camset.ksy`, for Kaitai Struct and ImHex), guides and the decisions (`docs/decisions/`). |

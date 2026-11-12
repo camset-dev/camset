@@ -953,7 +953,7 @@ pub(crate) mod tests {
     fn samples() -> Vec<std::path::PathBuf> {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
         // the files bodies of this model and firmware wrote, in private/ when it is there; the built-in sample (one of
-        // them, personal values removed) always
+        // them, personal text removed) always
         let mut v = private_files(of_the_definition);
         v.push(root.join("editor").join("definitions").join("ILCE-1M2_fw4.00.DAT"));
         // the camera's own downloads, in runs/ILCE-1M2_fw4.00/probe_out/ when runs/ is there (CI has none): the body

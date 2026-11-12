@@ -57,7 +57,8 @@ repos:
         language: python
         pass_filenames: false
         # the pages, the snippet the editor's guide takes from the README, the macros and what they import, the
-        # definitions and data they render, and the builder's own pin (.github/workflows/docs.yml lists the same paths)
+        # definitions and data they render, and the builder's own pin (.github/workflows/docs.yml lists the same paths,
+        # and the definition viewer's sources, which the site's build adds; kit/tests/test_proof_viewer.py checks the viewer)
         files: ^(docs/|mkdocs\.yml$|README\.md$|kit/tools/(docs_macros|build_docs|model_appendix|camset_ksy)\.py$|kit/camkit/(__init__|camset|definitions|paths)\.py$|kit/requirements\.txt$|schemas/|editor/definitions/|data/)
   # ruff over kit/ by the rules in pyproject.toml ([tool.ruff]: F, E9, B, UP, SIM on Python 3.11), the same check as
   # uvx ruff check kit. The one hook not run through kit/tools/hook.py: pre-commit installs this pinned ruff for it

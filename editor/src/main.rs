@@ -270,7 +270,8 @@ struct App {
     recovered: Vec<recovery::Found>,
     /// Settings > Changes: the changelog's window is open.
     show_changes: bool,
-    /// The About window is open (the status bar's version, or the one at the foot of Settings, opens it).
+    /// The About window is open (the status bar's version, or the About Camset Editor… button at the foot of Settings,
+    /// opens it).
     show_about: bool,
 }
 

@@ -3281,7 +3281,7 @@ def test_volatile_records_have_one_source():
 
 def test_reader_follows_the_format(tmp_path):
     """camset.read reads through the camera's container block: the a1 II definition's sample (the reference file,
-    personal values removed) reads whole, and a record with a wrong marker is refused (2026-11-03)."""
+    personal text removed) reads whole, and a record with a wrong marker is refused (2026-11-03)."""
     d = SAMPLE.read_bytes()
     cs = camset.read(SAMPLE)
     assert len(cs.sections) == 13 and len(cs.sections[0]) == 1415 and cs.checksums_ok

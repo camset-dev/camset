@@ -1573,8 +1573,9 @@ def test_changes_says_when_the_editor_could_not_be_asked_and_asks_again(tmp_path
 
 
 @needs_node
-def test_the_version_at_the_foot_of_settings_opens_about(tmp_path):
-    """As in the window: Settings end with the editor's version, which opens About, and Changes, which opens Changes."""
+def test_settings_foot_has_about_changes_and_the_version(tmp_path):
+    """As in the window: Settings end with an About Camset Editor… button, which opens About, Changes, which opens
+    Changes, and the editor's whole version as plain words."""
     got = run(tmp_path, """
 (async () => {
   api = async () => ({ blocks: [] });
@@ -1583,13 +1584,70 @@ def test_the_version_at_the_foot_of_settings_opens_about(tmp_path):
   openWindow("settings");
   const foot = $("settings").querySelector(".set-foot");
   const buttons = foot.querySelectorAll("button");
-  const version = buttons.find((b) => b.textContent === "Camset Editor 0.2.0 (build 1a2b3c4)");
-  version.click();
+  buttons.find((b) => b.textContent === "About Camset Editor…").click();
   const about = xp.windows.about && !$("about").hidden;
   buttons.find((b) => b.textContent === "Changes").click();
   await tick();
-  console.log(JSON.stringify({ words: buttons.map((b) => b.textContent), about, changes: xp.windows.changelog }));
+  console.log(JSON.stringify({ words: buttons.map((b) => b.textContent), spans: foot.querySelectorAll("span").map((n) => n.textContent), about, changes: xp.windows.changelog }));
 })();
 """)
-    assert got["words"] == ["Camset Editor 0.2.0 (build 1a2b3c4)", "Changes"]
+    assert got["words"] == ["About Camset Editor…", "Changes"]
+    assert "Camset Editor 0.2.0 (build 1a2b3c4)" in got["spans"]
     assert got["about"] is True and got["changes"] is True
+
+
+@needs_node
+def test_about_has_the_windows_lines_links_and_copy_details(tmp_path):
+    """The page's About draws what the editor sends (`state.about`, the window's words): the system, the camera link
+    program and the licence lines; the project's pages as links that open in a new tab and tell those pages nothing
+    of the page; and Copy details, which puts the editor's details on the clipboard and says so."""
+    got = run(tmp_path, """
+(async () => {
+  const copied = [];
+  navigator.clipboard.writeText = async (t) => { copied.push(t); };
+  state = { ...state, version: "0.2.0", version_short: "0.2.0", works_with: ["ILCE-1M2 (firmware 4.00)"], not_sony: "Not Sony's.",
+    about: { system: "System: macOS 15.2 (aarch64)", helper: "Camera link program: found", licence: "MIT licence. Copyright (c) X.",
+      links: [{ text: "Project page", url: "https://example.com/p", title: "P" }, { text: "Report a problem", url: "https://example.com/p/issues", title: "R" }],
+      details: "Camset Editor 0.2.0\\nSystem: macOS 15.2 (aarch64)" } };
+  openWindow("about");
+  const about = $("about");
+  const links = about.querySelectorAll("a").map((n) => [n.textContent, n.getAttribute("href"), n.getAttribute("target"), n.getAttribute("rel")]);
+  about.querySelectorAll("button").find((b) => b.textContent === "Copy details").click();
+  await tick(); await tick();
+  console.log(JSON.stringify({ texts: about.querySelectorAll("p").map((n) => n.textContent), links, copied, toast: $("toast").textContent }));
+})();
+""")
+    for line in ["System: macOS 15.2 (aarch64)", "Works with: ILCE-1M2 (firmware 4.00)", "Camera link program: found", "MIT licence. Copyright (c) X."]:
+        assert line in got["texts"], got["texts"]
+    assert got["links"] == [["Project page", "https://example.com/p", "_blank", "noopener noreferrer"],
+                            ["Report a problem", "https://example.com/p/issues", "_blank", "noopener noreferrer"]]
+    assert got["copied"] == ["Camset Editor 0.2.0\nSystem: macOS 15.2 (aarch64)"]
+    assert got["toast"] == "About's details copied, to paste into a message about a problem"
+
+
+@needs_node
+def test_copy_details_falls_back_to_the_copy_command(tmp_path):
+    """On the page's plain http address a browser has no Clipboard API: Copy details then copies with the older copy
+    command from a text box it takes away again, whether the command copies or fails; a failure says to select the
+    lines instead."""
+    got = run(tmp_path, """
+(async () => {
+  Object.defineProperty(navigator, "clipboard", { value: undefined, configurable: true });
+  const make = document.createElement.bind(document);
+  document.createElement = (tag) => { const n = make(tag); if (tag === "textarea") n.setSelectionRange = () => {}; return n; };
+  const ran = [];
+  const before = document.body.children.length;
+  document.execCommand = (c) => { ran.push(c); return true; };
+  const copied = await copyText("details");
+  const kept = document.body.children.length;
+  document.execCommand = () => { throw new Error("refused"); };
+  state = { ...state, version: "0.2.0", version_short: "0.2.0", not_sony: "Not Sony's.", about: { links: [], details: "details" } };
+  openWindow("about");
+  $("about").querySelectorAll("button").find((b) => b.textContent === "Copy details").click();
+  await tick(); await tick();
+  console.log(JSON.stringify({ copied, ran, left: [kept - before, document.body.children.length - before], toast: $("toast").textContent }));
+})();
+""")
+    assert got["copied"] is True and got["ran"] == ["copy"]
+    assert got["left"] == [0, 0], "the text box is taken away both times"
+    assert got["toast"] == "This browser did not let the page copy: select the lines above and copy them"

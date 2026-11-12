@@ -8,6 +8,12 @@ KIT = Path(__file__).resolve().parent.parent
 ROOT = KIT.parent
 RUNS = ROOT / "runs"          # the camera folders' parent: a camera's runs are in camkit.paths.run_root()
 
+from . import start  # noqa: E402  (standard library only, and readable by an old Python, so it can say it is too old)
+
+# A Python too old for the kit, or one without the kit's packages (the system's python3 rather than .venv's), stops the
+# program with what to run instead, not a traceback: camkit/start.py.
+start.watch(ROOT)
+
 # Windows: Python 3.11-3.14 reads and writes text as cp1252 unless UTF-8 mode is on, and the kit's labels and data
 # hold ★, →, Cyrillic look-alikes and Sony's names. kit/setup.py says how to turn it on (PYTHONUTF8=1).
 if os.name == "nt" and not sys.flags.utf8_mode:
@@ -16,8 +22,7 @@ if os.name == "nt" and not sys.flags.utf8_mode:
                      "  2. Open a new terminal and keep this window open for now: the setting reaches only windows "
                      "opened after it. To check the new window, run echo %PYTHONUTF8% in Command Prompt, or "
                      "echo $env:PYTHONUTF8 in PowerShell: it prints 1.\n"
-                     f'  3. In the new window, go to the camset folder (in Command Prompt: cd /d "{ROOT}"; in '
-                     f'PowerShell: cd "{ROOT}") and run the same command again.\n'
+                     f"  3. In the new window, {start.go_to(ROOT, windows=True)} and run the same command again.\n"
                      "Once it runs there, you can close this window.")
 
 

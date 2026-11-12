@@ -339,7 +339,9 @@ Only the records a file cannot set may differ, and the tool names them. Then fol
 ## Command cheat sheet
 
 The steps above show the install and build (step 1), the camera checks (step 6) and a first scan, crawl and proof
-(steps 7 and 8); the rest is here.
+(steps 7 and 8); the rest is here. Every kit command runs with the kit's own Python (`.venv/bin/python`, on Windows
+`.venv\Scripts\python`); one started with another Python that lacks the kit's packages, or older than 3.11, stops and
+prints the command to run instead.
 
 ```sh
 mkdir -p private                                                         # your own folder, git-ignored: config, camera files, help text, SDK table (decision 18)
@@ -360,6 +362,8 @@ python3 kit/tools/migrate_runs.py --dry-run                              # runs 
 .venv/bin/python kit/tools/build_docs.py --definitions                  # every definition's parts from data/ (after editing a camera file), no runs
 .venv/bin/python kit/tools/proof_viewer.py --open                      # definition -> the frames that proved each value, in the browser (your camera's runs only)
 .venv/bin/python kit/tools/proof_viewer.py --pack [--png] [--open]      # the same, with a copy of its frames beside the page
+.venv/bin/python kit/tools/proof_viewer.py --public --out site/viewer   # the definition viewer, for anyone: every definition and its sample, public files only
+.venv/bin/python kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html   # the same as one file that opens from disk
 .venv/bin/zensical serve                                                # the docs site, Status and Memory map rendered from the definitions
 .venv/bin/pre-commit run --all-files                                    # what the pre-commit hook checks before each commit
 ```

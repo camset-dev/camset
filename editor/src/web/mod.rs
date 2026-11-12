@@ -783,7 +783,20 @@ impl App {
         // (null for a build made outside the repository)
         out["version_short"] = json!(version_short());
         out["build"] = json!(build_hash());
+        out["about"] = self.web_about();
         out
+    }
+
+    /// About's other lines, in the window's words (`about_window`): the system the editor runs on, whether the camera
+    /// link program is there, the licence, the project's pages, and the details Copy details copies.
+    fn web_about(&self) -> Value {
+        json!({
+            "system": format!("System: {}", system_words()),
+            "helper": self.helper_words(),
+            "licence": licence_words(),
+            "links": ABOUT_LINKS.iter().map(|(text, url, title)| json!({ "text": text, "url": url, "title": title })).collect::<Vec<_>>(),
+            "details": self.about_details(),
+        })
     }
 
     /// The window's firmware badge beside a file's name (`firmware_badge`), in its words: checked,
@@ -4592,7 +4605,8 @@ pub(crate) mod tests {
         assert!(!app.page_status().contains("http"));
     }
 
-    /// The welcome page and the foot of Settings say what the window's do, word for word.
+    /// The welcome page, the foot of Settings and About say what the window's do, word for word: About's lines, links
+    /// and copied details come with the state, and the page draws them from there, with About a button of Settings' foot.
     #[test]
     fn the_page_has_the_windows_words() {
         let mut app = App::new(vec![], Prefs::default());
@@ -4600,6 +4614,12 @@ pub(crate) mod tests {
         assert_eq!(st["open_sub"], app.open_hint().as_str());
         assert_eq!(st["not_sony"], NOT_SONY);
         assert!(NOT_SONY.contains("not affiliated with or endorsed by Sony"));
+        assert_eq!(st["about"]["details"], app.about_details().as_str());
+        assert_eq!(st["about"]["licence"], licence_words().as_str());
+        assert_eq!(st["about"]["links"][2]["url"], ISSUES_URL);
+        assert!(SCRIPT.contains("const a = s.about || {};") && SCRIPT.contains("(a.links || []).map") && SCRIPT.contains("copyText(a.details)"));
+        assert!(SCRIPT.contains("rel: \"noopener noreferrer\""), "the project's pages open in a new tab, told nothing of the page");
+        assert!(SCRIPT.contains("onclick: () => openWindow(\"about\") }, \"About Camset Editor…\")"), "the page's Settings has About as a button too");
     }
 
     /// A note reaches the page in Expert mode only, as in the window; no evidence goes with it (the lean definition

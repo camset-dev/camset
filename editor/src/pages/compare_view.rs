@@ -770,8 +770,9 @@ pub(crate) mod screen_reader_tests {
     }
 
     /// The status bar names the editor and its short version at its right end, on the welcome page and with a file open;
-    /// a click on it, or on the version at the foot of Settings, opens About, which gives the version (and the build,
-    /// when there is one), the cameras it works with, and the ways to the changes, the licences and a copy of the version.
+    /// a click on it, or on Settings' About Camset Editor… button, opens About, which gives the version (and the build,
+    /// when there is one), the system, the cameras it works with by firmware, the camera link program, the licence, the
+    /// project's pages as links, and the ways to the changes, the licences and a copy of the details.
     #[test]
     fn the_status_bar_version_opens_about() {
         use egui::accesskit::{Action as Ak, ActionRequest};
@@ -783,8 +784,17 @@ pub(crate) mod screen_reader_tests {
         let ctx = egui::Context::default();
         ctx.enable_accesskit();
         let mut frame = eframe::Frame::_new_kittest();
+        // what the window asked the system for: a page opened in the browser, a text put on the clipboard
+        let (opened, copied) = (std::cell::RefCell::new(Vec::new()), std::cell::RefCell::new(Vec::new()));
         let mut run = |app: &mut App, events: Vec<egui::Event>| {
             let out = ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| app.update(ctx, &mut frame));
+            for c in &out.platform_output.commands {
+                match c {
+                    egui::OutputCommand::OpenUrl(o) => opened.borrow_mut().push(o.url.clone()),
+                    egui::OutputCommand::CopyText(t) => copied.borrow_mut().push(t.clone()),
+                    _ => {}
+                }
+            }
             out.platform_output.accesskit_update.map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().or(n.value()).map(|l| (*id, n.role(), l.to_string()))).collect::<Vec<_>>()).unwrap_or_default()
         };
         let _ = run(&mut app, vec![]);
@@ -803,25 +813,96 @@ pub(crate) mod screen_reader_tests {
         let shows = |name: &str| said.iter().any(|(_, _, l)| l == name);
         assert!(shows("About Camset Editor") && shows(&format!("Version {}", version_short())) && shows(NOT_SONY), "{said:?}");
         assert_eq!(build_hash().is_some_and(|h| shows(&format!("Build {h}"))), build_hash().is_some(), "{said:?}");
+        assert!(shows(&format!("System: {}", system_words())) && system_words().contains(std::env::consts::ARCH), "{said:?}");
         let models = app.defs.works_with();
-        assert!(models.is_empty() || shows(&format!("Works with: {}", models.join(", "))), "{said:?}");
-        for b in ["Changes", "Copy version"] {
+        assert!(!models.is_empty() && models.iter().all(|m| m.contains("(firmware ")), "the cameras by model and firmware: {models:?}");
+        assert!(shows(&format!("Works with: {}", models.join(", "))), "{said:?}");
+        assert!(shows(app.helper_words()) && app.helper_words().starts_with("Camera link program: "), "{said:?}");
+        assert!(shows(&licence_words()) && licence_words().starts_with("MIT licence. Copyright (c) "), "{said:?}");
+        for b in ["Changes", "Copy details"] {
             assert!(said.iter().any(|(_, r, l)| l == b && *r == Role::Button), "{b}: {said:?}");
         }
+        assert!(!shows("Copy version"), "one copy button: {said:?}");
         assert!(said.iter().any(|(_, r, l)| l.starts_with("Third-party licences") && *r == Role::Button), "{said:?}");
+        // the project's pages, links a screen reader names as links; one clicked asks for it in the browser
+        for (words, _, _) in ABOUT_LINKS {
+            assert!(said.iter().any(|(_, r, l)| l == words && *r == Role::Link), "{words}: {said:?}");
+        }
+        let report = said.iter().find(|(_, r, l)| l == "Report a problem" && *r == Role::Link).unwrap().0;
+        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: report, data: None })]);
+        assert_eq!(opened.borrow().as_slice(), [ISSUES_URL.to_string()]);
+        // Copy details copies the details and says so
+        let copy = said.iter().find(|(_, r, l)| l == "Copy details" && *r == Role::Button).unwrap().0;
+        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: copy, data: None })]);
+        assert!(app.status.starts_with("About's details copied"), "{}", app.status);
+        assert_eq!(copied.borrow().as_slice(), [app.about_details()]);
         // About's Changes opens the changelog
         let changes: Vec<_> = said.iter().filter(|(_, r, l)| l == "Changes" && *r == Role::Button).collect();
         let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: changes[0].0, data: None })]);
         assert!(app.show_changes && app.show_about);
-        // the version at the foot of Settings (the whole of it) opens About too
-        let bar = hit[0].0;
-        (app.show_about, app.show_changes, app.show_settings) = (false, false, true);
-        let _ = run(&mut app, vec![]);
-        let said = run(&mut app, vec![]);
-        let foot: Vec<_> = said.iter().filter(|(id, r, l)| *l == format!("Camset Editor {}", version_words()) && *r == Role::Button && *id != bar).collect();
-        assert_eq!(foot.len(), 1, "the foot of Settings: {said:?}");
-        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: foot[0].0, data: None })]);
-        assert!(app.show_about, "the version at the foot of Settings opens About");
+        // Settings' About Camset Editor… button opens About too, whichever tab is open; the version is beside it
+        for tab in SettingsTab::ALL {
+            (app.show_about, app.show_changes, app.show_settings, app.settings_tab) = (false, false, true, tab);
+            let _ = run(&mut app, vec![]);
+            let said = run(&mut app, vec![]);
+            let about: Vec<_> = said.iter().filter(|(_, r, l)| l == "About Camset Editor…" && *r == Role::Button).collect();
+            assert_eq!(about.len(), 1, "{tab:?}: {said:?}");
+            // the whole version as words (a label: the status bar's short one is a button, so it cannot stand in)
+            let foot_version = |said: &[(egui::accesskit::NodeId, Role, String)]| said.iter().any(|(_, r, l)| *r == Role::Label && *l == format!("Camset Editor {}", version_words()));
+            assert!(foot_version(&said), "{tab:?}: {said:?}");
+            let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: about[0].0, data: None })]);
+            assert!(app.show_about, "{tab:?}: Settings' button opens About");
+            if tab == SettingsTab::Definitions {
+                // and it is the foot's: gone with Settings closed, while the status bar and About stay (a closed window
+                // fades out for a few frames of egui's own clock, a sixtieth of a second each here)
+                app.show_settings = false;
+                for _ in 0..12 { let _ = run(&mut app, vec![]); }
+                let said = run(&mut app, vec![]);
+                assert!(!foot_version(&said) && said.iter().any(|(_, r, l)| *r == Role::Button && *l == label), "{said:?}");
+            }
+        }
+    }
+
+    /// About's Copy details is a short plain block for a message about a problem: the version and build, the system,
+    /// the cameras by model and firmware, the camera link program; no file, folder, user name, e-mail or network
+    /// address, even with a file open and a camera address and login set.
+    #[test]
+    fn about_copies_details_and_nothing_personal() {
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        app.prefs.camera_ip = "192.168.1.20".into();
+        app.prefs.camera_mac = "AA:BB:CC:DD:EE:FF".into();
+        app.net_user = "someone@example.com".into();
+        let d = app.about_details();
+        let lines: Vec<&str> = d.lines().collect();
+        assert_eq!(lines.len(), 4, "{d}");
+        assert_eq!(lines[0], format!("Camset Editor {}", version_words()));
+        assert_eq!(lines[1], format!("System: {}", system_words()));
+        assert_eq!(lines[2], format!("Works with: {}", app.defs.works_with().join(", ")));
+        assert!(lines[2].contains("(firmware "), "{d}");
+        assert_eq!(lines[3], app.helper_words());
+        for sep in ['/', '\\'] {
+            for home in ["Users", "home"] {
+                assert!(!d.contains(&format!("{sep}{home}")), "{d}");
+            }
+        }
+        assert!(!d.contains('@') && !d.contains(".DAT") && !d.contains("EE:FF"), "{d}");
+        // the home folder, when it is one ("/" or none would be found in any line with a slash, "Debian GNU/Linux")
+        let home = home_folder().display().to_string();
+        assert!(home.len() <= 1 || !d.contains(&home), "{d}");
+        // nothing like an IPv4 address: four numbers joined by dots
+        let ip_like = d.split(|c: char| !(c.is_ascii_digit() || c == '.')).any(|w| {
+            let parts: Vec<&str> = w.split('.').collect();
+            parts.len() == 4 && parts.iter().all(|p| !p.is_empty() && p.parse::<u8>().is_ok())
+        });
+        assert!(!ip_like, "{d}");
+        // the web page's About copies the same block, and has the window's lines and links
+        let about = app.web_state(0)["about"].clone();
+        assert_eq!(about["details"], d.as_str());
+        assert_eq!(about["system"], format!("System: {}", system_words()).as_str());
+        assert_eq!((about["helper"].as_str(), about["licence"].as_str()), (Some(app.helper_words()), Some(licence_words().as_str())));
+        let links: Vec<(String, String)> = about["links"].as_array().unwrap().iter().map(|l| (l["text"].as_str().unwrap().into(), l["url"].as_str().unwrap().into())).collect();
+        assert_eq!(links, ABOUT_LINKS.iter().map(|(w, u, _)| (w.to_string(), u.to_string())).collect::<Vec<_>>());
     }
 
     /// Compare's setting names are links, "Open … in Edit": Edit then shows that setting in file A's set (the live

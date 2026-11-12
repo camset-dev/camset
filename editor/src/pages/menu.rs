@@ -309,6 +309,13 @@ impl App {
             .chain(self.camera_layout().then(|| off.to_string())).collect()
     }
 
+    /// Whether the side bar lists the Menu entry `tab` (`menu_tabs`): every tab the definition lists, but Other and the
+    /// entry for what the camera's menus do not hold only while they show a setting. The golden Menu's test reads the
+    /// entries by it too, so the kit's copy (kit/camkit/menu_rows.py) follows a change here.
+    pub(crate) fn side_bar_lists(&self, tab: &str) -> bool {
+        (tab != OTHER_TAB && tab != self.schema.camera.text.off_menu_name()) || self.visible_count(Some(tab)) > 0
+    }
+
     /// What the entry for the settings the camera's menus do not hold says on hover, window and page alike.
     pub(crate) fn off_menu_hover() -> &'static str {
         "Settings the file holds that Camset can't place in the camera's menus."
@@ -1066,5 +1073,63 @@ mod tests {
         assert_eq!(View::from_key("Records", false, &tabs), None);
         assert_eq!(View::from_key("Unmapped", false, &tabs), None);
         assert_eq!(View::from_key("Gone", true, &tabs), None, "a tab the definition no longer has");
+    }
+
+    /// The shipped ILCE-1M2 definition's default Menu (the live settings, Expert mode's left out, the rows as on the
+    /// camera), as the kit's definition viewer must lay it out too: each entry the side bar lists, its groups as
+    /// `tab_groups` orders them, a family's table by its records' keys, and every other group's lines as `group_lines`
+    /// lays them out (a row by the keys of its linked records). kit/camkit/menu_rows.py, the kit's copy of this layout,
+    /// is compared with the same file by kit/tests/test_menu_rows.py, so either side changed alone fails a test. After
+    /// a change to the definition or to the layout, write the file again with
+    /// `CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one`, and look at its diff.
+    #[test]
+    fn the_default_menu_is_the_golden_one() {
+        use crate::test_support::{done, sample_app};
+        let (app, dir, user) = sample_app("menu_golden", None);
+        let mut groups_text = Vec::new();
+        let mut got = Vec::new();
+        for tab in app.menu_tabs() {
+            if !app.side_bar_lists(&tab) {
+                continue;
+            }
+            let mut groups = Vec::new();
+            for (name, family, rows) in app.tab_groups(&tab) {
+                let keys = |i: usize| rows[i].iter().map(|s| s.key.clone()).collect::<Vec<_>>();
+                let group = if family {
+                    serde_json::json!({ "group": name, "family": true, "keys": keys(0) })
+                } else {
+                    let lines: Vec<serde_json::Value> = app.group_lines(&rows).into_iter().map(|l| match l {
+                        Line::Heading { label, depth, .. } => serde_json::json!(["heading", label, depth]),
+                        Line::Row { index, depth } => serde_json::json!(["row", keys(index), depth]),
+                        Line::Mode(m) => serde_json::json!(["mode", m]),
+                        Line::More => serde_json::json!(["more"]),
+                    }).collect();
+                    serde_json::json!({ "group": name, "family": false, "lines": lines })
+                };
+                groups_text.push((tab.clone(), serde_json::to_string(&group).unwrap()));
+                groups.push(group);
+            }
+            got.push(serde_json::json!({ "entry": tab, "groups": groups }));
+        }
+        done(&dir, &user);
+        let got = serde_json::json!({ "definition": "ILCE-1M2_fw4.00", "entries": got });
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("data").join("menu_ILCE-1M2_fw4.00.json");
+        if std::env::var("CAMSET_BLESS").is_ok_and(|v| v == "1") {
+            // one group a line, so a change reads as a diff of the groups it touched
+            let mut text = String::from("{\"definition\": \"ILCE-1M2_fw4.00\", \"entries\": [\n");
+            let tabs: Vec<String> = got["entries"].as_array().unwrap().iter().map(|e| e["entry"].as_str().unwrap().to_string()).collect();
+            for (n, tab) in tabs.iter().enumerate() {
+                let lines: Vec<&String> = groups_text.iter().filter(|(t, _)| t == tab).map(|(_, g)| g).collect();
+                text += &format!(" {{\"entry\": {}, \"groups\": [\n  {}\n ]}}{}\n", serde_json::to_string(tab).unwrap(),
+                    lines.iter().map(|g| g.as_str()).collect::<Vec<_>>().join(",\n  "), if n + 1 < tabs.len() { "," } else { "" });
+            }
+            text += "]}\n";
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, text).unwrap();
+            return;
+        }
+        let want: serde_json::Value = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or_else(|| panic!("{} is missing or unreadable: write it with CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one", path.display()));
+        assert!(got == want, "the default Menu is not {}: if the definition or the layout changed on purpose, write it again with CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, look at its diff, and make kit/camkit/menu_rows.py lay it out the same (kit/tests/test_menu_rows.py)", path.display());
     }
 }

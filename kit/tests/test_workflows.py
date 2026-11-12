@@ -1,6 +1,7 @@
 """Offline tests of the kit's CI workflow (.github/workflows/kit-ci.yml): what it runs agrees with the commit hooks'
 pins and with kit/setup.py, which a contributor runs instead of it; and of the editor's release workflow
-(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows package holds; and of
+(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows package holds, and that
+it carries the definition viewer as one file; and of
 the editor's CI (.github/workflows/editor-ci.yml): that its Windows build is checked as the release's is."""
 import ast
 import re
@@ -123,7 +124,35 @@ def test_release_builds_a_windows_zip_of_one_folder_the_editor_runs_from():
     download = next(s for s in release["steps"] if s.get("uses", "").startswith("actions/download-artifact@"))
     assert download["with"]["pattern"] == "camset-editor-*" and download["with"]["merge-multiple"] is True
     attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
-    assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip"]
+    assert attach["with"]["files"].split()[:3] == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip"]
+
+
+def test_release_carries_the_definition_viewer_as_one_file():
+    """Each release carries the definition viewer as one file (the owner's, 2026-11-12; never committed): the test job
+    builds it from the public definitions after the tests and check_public, with the tool's own command, under site/;
+    uploads it with the build job's pinned action, failing when it is not there; the release job downloads it by name
+    with its own pinned action and attaches it under its one name, so releases/latest/download/camset-viewer.html is
+    a stable address."""
+    wf = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))
+    test = wf["jobs"]["test"]
+    names = [s.get("name") or "" for s in test["steps"]]
+    built = step(test, "The definition viewer as one file")
+    assert built["run"] == "python kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html"
+    assert names.index("Python tests") + 1 == names.index(built["name"]), "right after the tests and check_public"
+    upload = test["steps"][names.index(built["name"]) + 1]
+    pinned = next(s["uses"] for s in wf["jobs"]["build"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert upload["uses"] == pinned and re.fullmatch(r"actions/upload-artifact@[0-9a-f]{40}", upload["uses"])
+    assert upload["with"] == {"name": "camset-viewer", "path": "site/camset-viewer.html", "if-no-files-found": "error"}
+    assert test["permissions"] == {"contents": "read"}
+    release = wf["jobs"]["release"]
+    downloads = [s for s in release["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
+    assert len(downloads) == 2 and downloads[0]["uses"] == downloads[1]["uses"]
+    assert downloads[1]["with"] == {"name": "camset-viewer", "path": "dist"}
+    assert release["needs"] == "build" and wf["jobs"]["build"]["needs"] == "test", "the release needs the job that built the viewer"
+    attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip", "dist/camset-viewer.html"]
+    assert [s.get("uses", "").split("@")[0] for s in release["steps"]] == ["actions/download-artifact", "actions/download-artifact",
+                                                                           "softprops/action-gh-release"]
 
 
 def test_editor_ci_checks_the_windows_program_s_details():

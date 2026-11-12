@@ -734,7 +734,8 @@ pub struct Camera {
     pub live_mode: Option<LiveMode>,
     /// How long the camera link usually takes with this body.
     pub link_timing: Option<LinkTiming>,
-    /// A settings file of this camera beside the definition, personal values removed: Explore a sample opens it.
+    /// A settings file of this camera beside the definition, one it wrote with its personal text removed: Explore a
+    /// sample opens it.
     pub sample: Option<String>,
     /// The name Save As offers when none of the camera's own is free; None: the file's own name.
     pub save_name: Option<SaveName>,
@@ -1313,7 +1314,7 @@ impl Definitions {
 
     /// Whether `c` is a sample beside a definition, or a file made from one: its header names the model and the save
     /// time one of them names (`sample_marks`). Such a file is never written to a camera: the sample is the camera's
-    /// file with its personal values taken out and a save time of its own put in, so no camera wrote it.
+    /// file with its personal text taken out and a save time of its own put in, so no camera wrote it as it is.
     pub fn is_sample(&self, c: &CamSet) -> bool {
         let (model, saved) = (c.model(), c.timestamp());
         self.sample_marks.iter().any(|(m, s)| *m == model && *s == saved)
@@ -1371,9 +1372,18 @@ impl Definitions {
         }).collect()
     }
 
-    /// "ILCE-1M2 (firmware 4.00)" for each definition in use: what the editor works with.
+    /// "ILCE-1M2 (firmware 4.00)" for each definition in use: what the editor works with. One from the user's folder
+    /// says so, as Settings' list of definitions does: "(firmware 4.00, added by you)", or, used in place of a
+    /// built-in one of the same model and firmware, "(firmware 4.00, yours, in place of the built-in one)".
     pub fn works_with(&self) -> Vec<String> {
-        self.in_use().map(|s| format!("{} (firmware {})", s.model_words(), s.firmware())).collect()
+        self.in_use().map(|s| {
+            let yours = match (&s.origin, s.overrides) {
+                (Origin::User(_), true) => ", yours, in place of the built-in one",
+                (Origin::User(_), false) => ", added by you",
+                _ => "",
+            };
+            format!("{} (firmware {}{yours})", s.model_words(), s.firmware())
+        }).collect()
     }
 
     /// A model code as the window names that camera: with the name a definition of it gives ("ILCE-1M2 · α1 II"),
@@ -2000,6 +2010,7 @@ mod tests {
         assert_eq!(d.list.len(), 1);
         assert!(d.find("ILCE-1M2", "4.00").unwrap().origin.is_shipped());
         assert!(d.rejected.is_empty() && d.misnamed.is_empty());
+        assert_eq!(d.works_with(), vec!["ILCE-1M2 · α1 II (firmware 4.00)".to_string()], "a built-in one by its model and firmware");
         assert_eq!(d.magic_len(), 5, "a file's first bytes read to tell a settings file: SONY1 at 0x00");
         // the user's copy, one setting renamed
         let name = embedded().settings[0].name.clone();
@@ -2015,7 +2026,7 @@ mod tests {
         let built_in = d.shipped("ILCE-1M2", "4.00").unwrap();
         assert!(built_in.overridden && built_in.settings[0].name == name, "the shipped one stays as it was, for the sample");
         assert_eq!(d.in_use().count(), 1);
-        assert_eq!(d.works_with(), vec!["ILCE-1M2 · α1 II (firmware 4.00)".to_string()], "the model code with the name photographers know (camera.display_name)");
+        assert_eq!(d.works_with(), vec!["ILCE-1M2 · α1 II (firmware 4.00, yours, in place of the built-in one)".to_string()], "the model code with the name photographers know (camera.display_name); the user's own in Settings' words");
         assert_eq!((d.model_words("ILCE-1M2"), d.model_words("ILCE-0000")), ("ILCE-1M2 · α1 II".to_string(), "ILCE-0000".to_string()));
         let why = |f: &str| d.rejected.iter().find(|(p, _)| p.ends_with(f)).map(|(_, w)| w.clone()).unwrap_or_default();
         assert!(why("notes.json").contains("no settings list"));
@@ -2025,6 +2036,7 @@ mod tests {
         let d = Definitions::load(None, vec![ship.join("missing")], user.clone(), &[]);
         assert_eq!(d.list.len(), 1);
         assert!(!d.list[0].overrides);
+        assert_eq!(d.works_with(), vec!["ILCE-1M2 · α1 II (firmware 4.00, added by you)".to_string()], "the user's own, with no built-in one");
         // a definition under another name is used, and the name it should have is said
         std::fs::remove_file(user.join("ILCE-1M2_fw4.00.json")).unwrap();
         let d = Definitions::load(None, vec![], user.clone(), &[]);

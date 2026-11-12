@@ -7,6 +7,29 @@ hidden until asked for.
 
 --open opens the page in the default browser; the last line printed is always the page's path.
 
+    .venv/bin/python kit/tools/proof_viewer.py --public --out site/viewer                    # the definition viewer
+    .venv/bin/python kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html    # the same, one file
+
+--public (2026-11-12, the owner: "will a user be able to just open the html and then select the dat file?", and "we
+want the viewer to open more than a1 ii"): the definition viewer, the same page for anyone, from public files only:
+every definition in editor/definitions/ read alone (definitions.load_public, never its evidence) and the sample each
+names beside it (a file the camera wrote after Initialize, personal text removed: make_sample.py), and nothing else:
+no camera named, no runs/, nothing in private/ (the camera's help text, the menu tree, the record shapes, the
+config), so a clone with neither builds the same bytes, and no date. The page (out/index.html) knows each camera's
+model, firmware, name and container block; each camera's data is a script beside it (out/data/<model>_fw<fw>.js),
+loaded with a <script> tag when the camera is shown, so the folder works from a site and from disk alike; --single
+puts every camera's data in the one page. A file opened in it finds its definition as the editor's does (by trial
+with each container block: that model's at that firmware, else the nearest firmware of that model, said so; a model
+no definition covers shows its structure only, named by nothing); the page says it is read in the browser and never
+sent anywhere. The menu is the editor's default one (the live settings without the Expert ones), laid out from each
+setting's place in the definition as the editor lays it out (camkit.menu_rows: the same entries, groups and rows,
+which kit/tests/test_menu_rows.py checks against the editor's own; a setting's choices for an option, which the editor
+shows beside the option, under its row), and with the page's Expert switch every setting; the values are the sample's
+until a file is opened (a sample, not the visitor's camera), each value says whether a proof checked it as the lean
+definition says, and there are no pictures: they exist only for whoever mapped the camera. The docs site's build
+writes it into site/viewer/ (.github/workflows/docs.yml). A definition need not be a tracked file: a mapper's own,
+not yet sent, is shown where the mapper builds the page; CI builds from the tracked ones.
+
 The page is one definition's (editor/definitions/<model>_fw<fw>.json, docs/decisions/0019): --definition names it,
 else it is the definition of the camera the kit works on (camkit.paths: --camera, CAMSET_CAMERA or
 private/config.json), else, with no camera named or none of its own yet, the ILCE-1M2 firmware 4.00's (the
@@ -84,12 +107,13 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, camset, datafiles, definitions, help_files, jsonl, paths, placement  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, help_files, jsonl, menu_rows, paths, placement  # noqa: E402
 from camkit.placement import norm  # noqa: E402
 
 RUN_ROOT = None          # the camera's runs the page reads (runs/<model>_fw<fw>/), or None: set by main(), place()
@@ -1026,6 +1050,318 @@ def page_json(data) -> str:
             .replace("<", "\\u003c").replace(">", "\\u003e").replace("&", "\\u0026"))
 
 
+# ---------------------------------------------------------------- --public: the definition viewer, from public files only
+
+VIEWER_GLOBAL = "CAMSET_VIEWER_DATA"          # what each camera's data script fills: window[VIEWER_GLOBAL][<model>_fw<fw>]
+VIEWER_DATA = "data/"                         # the cameras' data scripts, beside the page (data/<model>_fw<fw>.js)
+SINGLE_NAME = "camset-viewer.html"            # what --single is called in the help and the docs
+
+
+def only(d, keys) -> dict | None:
+    """The fields `keys` of a definition's part, None when it is not one."""
+    return {k: d[k] for k in keys if k in d} if isinstance(d, dict) else None
+
+
+def public_records(doc) -> list:
+    """Each setting of the public definition as the page's records: its name, group and values; its proof as the lean
+    definition says it (which values a proof checked, or that a sampled scale lies on one line: never a run, a day or a
+    menu path, docs/decisions/0016); why no proof can reach it (kind and words, no date); its note; the project's own
+    help words, the definition's help fields (never the camera's In-Camera Guide, decision 13). No value of anyone's
+    camera (no "cur"), no evidence ("ev" empty), and only the fields the page reads."""
+    out = []
+    for s in doc["settings"]:
+        p = s.get("proved") or {}
+        r = {"k": s["key"], "n": s.get("name") or "", "g": s.get("group") or "", "vals": s.get("values") or [],
+             "pv": p.get("values"), "menu": [], "sampled": bool(p.get("sampled")), "proved": bool(p),
+             "why": only(s.get("unproved_reason"), ("kind", "why")), "us": only(s.get("unproved_sets"), ("kind", "why", "sets")),
+             "is": bool(s.get("in_sets")), "note": s.get("note") or "", "ev": [], "help": s.get("help") or ""}
+        if r["help"]:
+            r["hs"], r["hg"] = "own", []
+        opts = {v: t for v, t in s.get("option_help") or [] if t}
+        if opts:
+            r["oh"] = [[v, opts[v], [], "own"] for v in sorted(opts)]
+        if s.get("range"):
+            r["rg"], r["u"] = True, s.get("unit") or ""          # a number's unit, as the editor writes one (the Main tiles)
+        if s.get("expert"):
+            r["x"] = True          # the definition's own mark: Expert mode's in the editor (a working copy, a flag, ...)
+        out.append(r)
+    return out
+
+
+def public_menu(doc, expert: bool = False) -> list:
+    """The page's menu from the definition alone, as the editor lays it out "As on the camera" (camkit.menu_rows: its
+    entries, a tab's groups in the camera's order, a group's rows from each setting's place, the same entries, groups
+    and rows, which kit/tests/test_menu_rows.py checks against the editor's own), for the settings its Menu lists by
+    default (the live settings without the Expert ones), or with `expert` for every setting (the page's Expert switch).
+    In the page's shape: each camera row a node with the records on it, a submenu's rows its kids, a setting alone on
+    its row that row under its own name, the rows only another shooting mode's menu has after the group's Stills rows
+    marked with the mode (the page's "In Movie mode"), and the settings the definition does not place in the group's
+    "extra" (the page's "More settings in this group"). Where the editor shows a setting's sub-choices beside its
+    options in its detail panel (Drive Mode's continuous speed, a Creative Look's parameters: menu_rows.Menu.beside),
+    the page has them under that setting's own row, a heading per option over its choices. A family's settings (Picture Profiles, Creative Looks) are one
+    group first in their tab, as the editor's table, each profile or look a subsection; a profile's page an option
+    opens is its own group too, as in the editor. No numbers (the editor shows none), no walk frames and no row states
+    (the camera's runs have them, not the definition); a node carries only what it has (the page gives the rest its
+    empty value). Every setting listed is on at least one row."""
+    menu, n = menu_rows.Menu(doc), [0]
+    listed = menu_rows.shown(doc, expert)
+    near = collections.defaultdict(list)          # (tab as shown, camera group) -> the settings listed there: beside()'s
+    for o in listed:
+        near[(menu.layout_tab(o), menu_rows.camera_group(o))].append(o)
+
+    def node(label, keys=(), mode=None) -> dict:
+        n[0] += 1
+        x = {"id": f"p{n[0]}", "l": label}
+        if keys:
+            x["recs"] = list(keys)
+        if mode:
+            x["mode"] = mode
+        return x
+    tabs = []
+    for entry, settings in menu.entries(listed):
+        t = {"tab": entry, "groups": [], "others": []}
+        for name, fam, rows in menu.groups(entry, settings):
+            g = {"name": name, "num": "", "rows": [], "extra": []}
+            t["groups"].append(g)
+            if fam:          # its profiles or looks as subsections, in the definition's order of them
+                cut = fam["prefix"].rfind(" ") + 1
+                subs = collections.defaultdict(list)
+                for s in sorted(rows[0], key=lambda s: s.get("order", 0)):
+                    subs[s.get("group", "")[cut:] or s.get("group", "")].append(s["key"])
+                head = node(fam["prefix"][:cut].strip() or name)
+                head["subs"] = [{"name": k, "keys": v} for k, v in subs.items()]
+                g["rows"].append(head)
+                continue
+            stack, mode, more = [], None, False
+            for line in menu_rows.lay_out(rows):
+                if line[0] == "mode":
+                    mode = line[1]
+                    continue
+                if line[0] == "more" or more:
+                    more = True
+                    g["extra"] += [s["key"] for s in rows[line[1]]] if line[0] == "row" else []
+                    continue
+                if line[0] == "heading":
+                    x, depth = node(line[1], (), mode), line[2]
+                else:
+                    (s, *_), depth = rows[line[1]], line[2]
+                    x = node(s.get("name") or "", [y["key"] for y in rows[line[1]]], mode)
+                    # beside its options in the editor's detail panel (menu_rows.Menu.beside, its candidates found once
+                    # above): here a heading per option, its choices under it
+                    there = near[(menu.layout_tab(s), menu_rows.camera_group(s))]
+                    subs = menu_rows.sub_choices(s, there) if menu_rows.is_own(s) else []
+                    for opt in dict.fromkeys(o for _, o in subs):
+                        head = node(opt, (), mode)
+                        head["kids"] = [node(sub.get("name") or "", [y["key"] for y in there if menu_rows.links_with(y, sub)], mode)
+                                        for sub, o in subs if o == opt]
+                        x.setdefault("kids", []).append(head)
+                (stack[depth - 1].setdefault("kids", []) if depth else g["rows"]).append(x)
+                del stack[depth:]
+                stack.append(x)
+            shown = {k for x, _ in menu_nodes([{"groups": [g]}]) for k in x.get("recs", ())} | set(g["extra"])
+            g["extra"] += [s["key"] for r in rows for s in r if s["key"] not in shown]          # none, as the editor lays it out
+        tabs.append(t)
+    return tabs
+
+
+def public_data(doc, where: Path) -> dict:
+    """One camera's data for the definition viewer, from its public definition (`doc`, read from `where` with
+    definitions.load_public) and its sample, when the definition names one beside it (a file the camera wrote after
+    Initialize, its personal text removed: make_sample.py; the only settings file check_public.py lets be published):
+    the page shows the sample's values until a file is opened. Nothing of a camera's runs, the mapper's evidence, the
+    help read off the camera or private/ (docs/decisions/0013, 0016, 0018)."""
+    global RUN_ROOT
+    RUN_ROOT = None          # no camera's runs: My Menu and the Main page from the definition alone
+    recs = public_records(doc)
+    cam = doc.get("camera") or {}
+    sample = public_sample(doc, where)
+    main = main_page(doc, where.parent)
+    for m in (main or {}).get("modes") or []:
+        m.pop("run", None)          # no page scan's run: a mode's frames stay empty
+    helps = sum(1 for r in recs if r["help"])
+    return {"public": True, "model": doc.get("model"), "camera": public_key(doc, where), "pictures": 0,
+            "file": {"name": sample.name, "b64": base64.b64encode(sample.read_bytes()).decode()} if sample else None,
+            "values": sample.name if sample else "",
+            "colors": cam.get("tab_colors") or {}, "format": cam.get("file"),
+            "memory_names": (cam.get("memory_sets") or {}).get("names") or {},
+            "memory_modes": (cam.get("memory_sets") or {}).get("modes") or {},
+            "menu": public_menu(doc), "menu_expert": public_menu(doc, expert=True), "records": {r["k"]: r for r in recs},
+            "my_menu": my_menu(doc, where.parent), "main": main, "guides": [], "help_source": {"own": helps} if helps else {}}
+
+
+def public_sample(doc, where: Path) -> Path | None:
+    """The definition's sample, a file beside it that its camera section names by a bare file name (as the editor
+    takes one, Definitions::samples), else None when it names none or the file is not there. A name that reaches out
+    of the definition's folder ("../x", a folder, an absolute path) is refused: the page publishes the file."""
+    name = (doc.get("camera") or {}).get("sample")
+    if not name:
+        return None
+    p = Path(where).parent / str(name)
+    if Path(str(name)).name != name or p.resolve().parent != Path(where).parent.resolve():
+        raise SystemExit(f"{Path(where).name}: its camera section names its sample {name!r}, which is not a file beside it: a "
+                         "definition names its sample by a bare file name in its own folder (kit/tools/make_sample.py). "
+                         "Nothing was written.")
+    return p if p.is_file() else None
+
+
+def public_key(doc, where: Path) -> str:
+    """The camera a definition is (<model>_fw<fw> of its layouts), checked to be a camera's key: it names the camera's
+    data script."""
+    try:
+        return paths.checked(definitions.key(doc), f"{Path(where).name} (its layouts' model and firmware)")
+    except paths.NoCamera as e:
+        raise SystemExit(f"{e}. Nothing was written.") from None
+
+
+def viewer_camera(doc, data) -> dict:
+    """What the viewer's page knows of a camera before its data is loaded: its key, model, firmware and name, and its
+    container block, with which a file opened finds its definition (as the editor's Definitions::open)."""
+    cam = doc.get("camera") or {}
+    model = doc.get("model") or ""
+    return {"key": data["camera"], "model": model, "firmware": ((doc.get("layouts") or [{}])[0]).get("firmware") or "",
+            "name": f"{model} · {cam['display_name']}" if cam.get("display_name") else model,
+            "file": cam.get("file"), "sample": bool(data["file"])}
+
+
+def site_url() -> str:
+    """The docs site's address (mkdocs.yml's site_url): the page links how a camera gets mapped there."""
+    m = re.search(r"^site_url:\s*(\S+)\s*$", (ROOT / "mkdocs.yml").read_text(encoding="utf-8"), re.M)
+    return m.group(1) if m else ""
+
+
+def data_script(key: str, data) -> str:
+    """A camera's data as a script that fills window[VIEWER_GLOBAL], which the page loads with a <script> tag (from a
+    site or from disk alike) or holds inline (--single)."""
+    return (f"window.{VIEWER_GLOBAL} = window.{VIEWER_GLOBAL} || {{}};\n"
+            f"window.{VIEWER_GLOBAL}[{page_json(key)}] = {page_json(data)};\n")
+
+
+def viewer_page(cams: list, inline: dict = None) -> str:
+    """The definition viewer's page: the template with the cameras it knows and, for --single, every camera's data in
+    the page, before its script."""
+    page = (Path(__file__).with_name("proof_viewer.html").read_text(encoding="utf-8")
+            .replace("<title>Proof Viewer</title>", "<title>Definition viewer</title>", 1)
+            .replace("<h1>Proof Viewer</h1>", "<h1>Definition viewer</h1>", 1)
+            .replace("/*DATA*/null", page_json({"viewer": {"cameras": cams, "docs": site_url(), "global": VIEWER_GLOBAL,
+                                                           "data": VIEWER_DATA}}), 1))
+    if inline:
+        at = page.index('<script type="module">')
+        page = page[:at] + "".join(f"<script>\n{data_script(k, d)}</script>\n" for k, d in inline.items()) + page[at:]
+    return page
+
+
+def write_new(path: Path, text: str) -> None:
+    """A file written whole: into a new file beside it, then moved over it, so a reader never sees half a page, and a
+    link at its place is replaced, never followed to a file elsewhere."""
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".part")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
+        mask = os.umask(0)
+        os.umask(mask)
+        os.chmod(tmp, 0o666 & ~mask)          # as a file written the usual way (mkstemp's is the owner's alone): a site serves it
+        os.replace(tmp, path)
+    except BaseException:
+        Path(tmp).unlink(missing_ok=True)
+        raise
+
+
+def out_refused(out: str, single: bool) -> str | None:
+    """Why --out cannot take the definition viewer, in words, or None: a file where a folder goes or a folder where
+    the single file goes; the repository itself or a place in it but under site/ (the docs site's build, git-ignored),
+    so a build never writes into the clone's own data/ or removes a file there; site/ itself (the docs site's own
+    page). A place outside the clone is fine. Folders are told apart by what they are on disk, not by how a path spells
+    them (another case on a disk that ignores it, a link to the clone, macOS's /System/Volumes/Data/ spelling): from
+    the first folder of the path that is there, each folder up to the disk's top is compared with the clone and its
+    site/ (os.path.samefile); the rest of the path, not made yet, by its names, "site" exactly as .gitignore spells
+    it. site/ is the exception only where it is a folder of its own: a site/ that is a link into the clone (to data/,
+    to the clone itself) is the folder it points at, and a link out of the clone is a place outside it."""
+    p = Path(out)
+    if not single and p.exists() and not p.is_dir():
+        return f"--out {out} is a file: --public writes a folder (the page and its data/); with --single, one file"
+    if single and p.is_dir():
+        return f"--out {out} is a folder: --single writes one file ({SINGLE_NAME}); without --single, a folder"
+
+    def same(a: Path, b: Path) -> bool:
+        try:
+            return os.path.samefile(a, b)
+        except OSError:
+            return False
+
+    def first_there(at: Path) -> Path:
+        while not at.exists() and at != at.parent:
+            at = at.parent
+        return at
+
+    def in_clone(at: Path) -> bool:
+        there = first_there(at)
+        return any(same(folder, ROOT) for folder in [there, *there.parents])
+    site = ROOT / "site"
+    # the docs site's folder, where it is one of the clone's own (not a link back into the clone)
+    site_ok = site.exists() and not (site.is_symlink() and in_clone(site.resolve()))
+    at = p.resolve()
+    there = first_there(at)
+    rest = at.relative_to(there).parts
+    site_itself = (f"--out {out} is the docs site's own folder: give a folder inside site/, such as site/viewer (or "
+                   f"site/{SINGLE_NAME} with --single)")
+    inside = (f"--out {out} is inside the repository: write the viewer under site/ (site/viewer, site/{SINGLE_NAME}: "
+              "git-ignored), or anywhere outside the clone")
+    for i, folder in enumerate([there, *there.parents]):
+        if site_ok and same(folder, site):
+            return site_itself if i == 0 and not rest else None
+        if same(folder, ROOT):
+            if i == 0 and rest and rest[0] == "site" and not site.exists() and not site.is_symlink():          # site/ not made yet
+                return None if len(rest) > 1 else site_itself
+            if i == 0 and rest and rest[0].casefold() == "site" and rest[0] != "site":
+                return f"{inside}: spell it site/, in lower case, as .gitignore does"
+            return inside
+    return None
+
+
+def public_main(out: str, single: bool) -> None:
+    """--public: the definition viewer, every definition in editor/definitions/ read alone (definitions.every with
+    evidence=False), each camera's data beside the page in out/data/ (out/index.html), or with --single all in the one
+    page `out`. Reads no camera, no runs/ and nothing in private/; the same files give the same bytes. A data script of
+    a camera no longer among the definitions is removed from out/data/ (only files named as the build names them)."""
+    found = definitions.every(evidence=False)
+    if not found:
+        raise SystemExit(f"no definition in {paths.shown(definitions.DIR)}: nothing to show")
+    datas, cams = {}, []
+    for p, doc in found:
+        data = public_data(doc, p)
+        if data["camera"] in datas:
+            raise SystemExit(f"two definitions are of {data['camera']} ({p.name} and another): keep one. Nothing was written.")
+        datas[data["camera"]] = data
+        cams.append(viewer_camera(doc, data))
+    out = Path(out)
+    if single:
+        out.parent.mkdir(parents=True, exist_ok=True)
+        write_new(out, viewer_page(cams, datas))
+        page, sizes = out, {}
+    else:
+        folder = out / VIEWER_DATA
+        if folder.is_symlink():
+            raise SystemExit(f"{paths.shown(folder)} is a link: the viewer's data goes in a folder of its own there. Nothing was written.")
+        folder.mkdir(parents=True, exist_ok=True)
+        sizes = {}
+        for key, data in datas.items():
+            write_new(folder / f"{key}.js", data_script(key, data))
+            sizes[key] = (folder / f"{key}.js").stat().st_size
+        for f in folder.glob("*.js"):          # a camera no longer among the definitions: its file, or a link, alone
+            if f.stem not in datas and paths.KEY.match(f.stem) and (f.is_symlink() or f.is_file()):
+                f.unlink()
+        page = out / "index.html"
+        write_new(page, viewer_page(cams))
+    said = []
+    for c in cams:
+        recs = datas[c["key"]]["records"].values()
+        said.append(f"{c['key']} ({sum(1 for r in recs if r['proved'])} of {len(recs)} settings proved, "
+                    + ("its sample" if c["sample"] else "no sample")
+                    + (f", data {size_text(sizes[c['key']])}" if c["key"] in sizes else "") + ")")
+    print(f"wrote the definition viewer: {len(cams)} camera(s), {', '.join(said)}; the page {size_text(page.stat().st_size)}")
+    print(page.resolve())          # always the last line, as the proof viewer's
+
+
 def main():
     global RUN_ROOT
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
@@ -1039,7 +1375,25 @@ def main():
     ap.add_argument("--open", action="store_true", help="open the page in the default browser once it is built")
     ap.add_argument("--definition", default=None, help="the definition's camera, <model>_fw<fw> (default: the camera "
                                                         "the kit works on, else ILCE-1M2_fw4.00)")
+    ap.add_argument("--public", action="store_true", help="the definition viewer instead, for anyone: every definition "
+                    "in editor/definitions/ with its sample, from public files only (no runs, nothing in private/); "
+                    "--out names its folder (the page, index.html, and each camera's data in data/)")
+    ap.add_argument("--single", action="store_true", help=f"with --public: one page with every camera's data in it, "
+                    f"which opens from disk with nothing beside it; --out names the file (site/{SINGLE_NAME})")
     a = ap.parse_args()
+    if a.single and not a.public:
+        ap.error("--single goes with --public")
+    if a.public:
+        mixed = [f"--{n}" for n in ("values", "pack", "png", "open", "definition") if getattr(a, n)]
+        if mixed:
+            ap.error(f"--public reads public files only and shows every definition: {', '.join(mixed)} not with it")
+        if not a.out:
+            ap.error(f"--public needs --out: a folder (site/viewer), or with --single a file (site/{SINGLE_NAME})")
+        why = out_refused(a.out, a.single)
+        if why:
+            ap.error(why)
+        public_main(a.out, a.single)
+        return
     if a.png and not a.pack:
         ap.error("--png goes with --pack")
     if a.pack and a.out:

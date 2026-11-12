@@ -11,7 +11,7 @@
    above the rows under 1100 px, and under 760 px one pane shows at a time (Back returns). */
 :root {
   --bg: #1b1b1b; --side: #202020; --ink: #d2d2d2; --strong: #f0f0f0; --muted: #8c8c8c; --rule: #3a3a3a;
-  --sel: #005c80; --sel-ink: #ffffff; --hover: #2c2c2c; --field: #2a2a2a;
+  --sel: #005c80; --sel-ink: #ffffff; --hover: #2c2c2c; --field: #2a2a2a; --link: #6cb6ff;
   /* the hex's chosen bytes and the item lit in a list (apart from --sel, which the lists and chips keep): ink on
      the highlight 4.5:1 or more; --hexrec, faint, the record or block around them */
   --hexsel: #19e0ff; --hexsel-ink: #04151c; --hexrec: rgba(25, 224, 255, .15);
@@ -24,7 +24,7 @@
 /* the system's light theme (the page has no switch of its own, so no data-theme override either) */
 @media (prefers-color-scheme: light) { :root {
   --bg: #f4f4f4; --side: #ebebeb; --ink: #2a2a2a; --strong: #000; --muted: #6b6b6b; --rule: #d0d0d0;
-  --sel: #90d1ff; --sel-ink: #000; --hover: #e2e2e2; --field: #fff; --ok: #2f7d43; --warn: #9a5f00; --accent: #c84d0a;
+  --sel: #90d1ff; --sel-ink: #000; --hover: #e2e2e2; --field: #fff; --ok: #2f7d43; --warn: #9a5f00; --accent: #c84d0a; --link: #0b5cad;
   --hexsel: #0b63c7; --hexsel-ink: #ffffff; --hexrec: rgba(11, 99, 199, .14);
   color-scheme: light } }
 * { box-sizing: border-box; }
@@ -42,6 +42,15 @@ header.top h1 { font-size: 1.15rem; font-weight: 500; margin: 0; color: var(--st
 #file { transition: background-color 1.2s ease-out; border-radius: 4px; }
 #file.flash { background: rgba(255, 200, 0, .45); transition: none; }
 @media (prefers-reduced-motion: reduce) { #file { transition: none; } }
+/* the definition viewer (proof_viewer.py --public): its one action stands out, and a standing notice says when a file
+   is read with another firmware's definition or with none */
+.button.primary { background: var(--sel); color: var(--sel-ink); border-color: var(--sel); font-weight: 500; }
+.button:disabled, button:disabled, .button[aria-disabled="true"] { opacity: .5; cursor: default; }
+.notice { flex: 1 0 100%; font-size: .86rem; background: var(--side); border-left: 3px solid var(--warn); border-radius: 0 3px 3px 0; padding: 5px 9px; overflow-wrap: anywhere; }
+.notice a, .nodef a { color: var(--link); }
+.notice.intro { border-left-color: var(--sel); }
+#loading { flex: 1 0 100%; margin: 0; }
+.nodef p { max-width: 75ch; }
 .find { flex: 1 1 300px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .find input { flex: 1 1 240px; min-width: 0; font: .92rem var(--body); color: var(--ink); background: var(--field); border: 1px solid var(--rule);
   border-radius: 3px; padding: 5px 8px; min-height: 32px; }
@@ -283,7 +292,7 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
 .insp th { color: var(--muted); font-weight: 500; font-size: .78rem; }
 .insp td.m { font-family: var(--mono); font-size: .8rem; white-space: nowrap; }
 .insp td.dif { color: #f07ae6; }
-.insp a, .linkish { color: #6cb6ff; cursor: pointer; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; }
+.insp a, .linkish { color: var(--link); cursor: pointer; text-decoration: none; background: none; border: 0; padding: 0; font: inherit; }
 .explain { font-size: .88rem; max-width: 80ch; }
 .explain table { border-collapse: collapse; margin: 8px 0; }
 .explain td, .explain th { border-top: 1px solid var(--rule); padding: 3px 8px; text-align: left; font-size: .84rem; }
@@ -325,16 +334,19 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
   .cols[data-show="detail"] #groups, .cols[data-show="detail"] #items { display: none; }
   .back { display: inline-flex; background: var(--field); border: 1px solid var(--rule); border-radius: 3px; padding: 2px 9px; cursor: pointer; font-size: .82rem; min-height: 32px; align-items: center; white-space: nowrap; }
 }
-@media (pointer: coarse) { .sel, .item > * { min-height: 44px; } .opts li { min-height: 40px; } .chips button, .tools button { min-height: 40px; } details.more > summary { padding: 10px 0; } }
+@media (pointer: coarse) { .sel, .item > * { min-height: 44px; } .opts li { min-height: 40px; } .chips button, .tools button { min-height: 40px; } .button { min-height: 44px; } details.more > summary { padding: 10px 0; } }
 </style>
 </head>
 <body>
 <header class="top" id="top">
   <h1>Proof Viewer</h1>
+  <label class="key" id="camlabel" hidden>Camera <select id="camera"></select></label><button class="button" id="camshow" hidden disabled>Show</button>
+  <button class="button" id="expert" aria-pressed="false" hidden title="Expert: every setting the definition holds, the memory sets' and the editor's Expert ones too (a derived working copy, a flag, an alternate numbering). Off, the menu is the editor's own.">Expert</button>
   <div class="modes" role="group" aria-label="View"><button id="m-menu" aria-pressed="true">Menu</button><button id="m-layout" aria-pressed="false">File layout</button></div>
   <span class="file" id="file"></span>
-  <label class="button" title="Show another camera settings file's values here (read in the browser; nothing is sent anywhere)">Open settings file…<input type="file" id="mainfile" accept=".dat,.DAT" hidden></label>
-  <span class="file" id="mainmsg"></span>
+  <label class="button" id="openfile" aria-disabled="true" title="Show another camera settings file's values here (read in the browser; nothing is sent anywhere)">Open settings file…<input type="file" id="mainfile" accept=".dat,.DAT" hidden disabled></label>
+  <span class="key" id="privacy" hidden></span>
+  <span class="file" id="mainmsg" role="status"></span>
   <span class="cmpbar" title="Which section's values the page shows, and what it compares them with (the menu view's second column, the file layout's magenta)"><label class="key">Show <select id="cmp-show"></select></label><label class="key">compared with <select id="cmp-with"></select></label></span>
   <span class="laytools"><label class="key">Go to <input id="goto" placeholder="0x1a33, or id 0334" size="15" autocomplete="off"></label>
     <label class="key">Find <input id="findq" placeholder="bytes 34 03 cf 02, or a setting's name" size="26" autocomplete="off"></label><span class="key" id="findn"></span>
@@ -344,6 +356,9 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
     <input id="q" type="search" placeholder="🔍 Search every setting, group or value" aria-label="Search" autocomplete="off">
     <div class="chips" id="chips" role="group" aria-label="Show"></div>
   </div>
+  <div class="notice" id="notice" role="status" hidden></div>
+  <p class="file" id="loading">Loading… This page needs a current Chrome, Edge, Firefox or Safari (15 or newer) with JavaScript on.</p>
+  <noscript><p class="file">This page needs JavaScript: turn it on, in a current Chrome, Edge, Firefox or Safari (15 or newer).</p></noscript>
 </header>
 <nav class="tabstrip" id="tabstrip" aria-label="Tabs"></nav>
 <div class="cols" id="cols" data-show="items">
@@ -372,11 +387,13 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
   <div class="cap" id="cap"></div>
   <div class="bar2"><button id="prev">← Prev</button><a id="file-link" target="_blank" rel="noopener">Open file</a><button id="next">Next →</button><button id="close">Close</button></div>
 </div>
-<script>
+<script type="module">
 "use strict";
-const DATA = /*DATA*/null;
+// What the build put in the page: one camera's definition with its proofs (kit/tools/proof_viewer.py), or, for the
+// definition viewer (--public), the cameras it knows, each camera's own data loaded when it is shown (boot, below).
+const BUILT = /*DATA*/null;
 // The template itself opened in a browser (kit/tools/proof_viewer.py has not filled it): say so, and stop.
-if (DATA === null) {
+if (BUILT === null) {
   const p = (...kids) => { const e = document.createElement("p"); e.append(...kids); return e; };
   const code = (t) => { const e = document.createElement("code"); e.textContent = t; e.style.fontFamily = "var(--mono)"; return e; };
   const box = document.createElement("main");
@@ -390,6 +407,145 @@ if (DATA === null) {
   document.body.replaceChildren(box);
   throw new Error("proof_viewer.html is the template; build the viewer with kit/tools/proof_viewer.py");
 }
+// ---- the definition viewer (proof_viewer.py --public): BUILT.viewer lists the cameras it knows, each with its model,
+// firmware, name and container block. The page shows one camera's definition: the one a file opened in the page
+// before belongs to (carried over in this tab's session storage while the page starts again with that camera's data),
+// else ?camera=<model>_fw<fw>, else the first. A file finds its definition as the editor's Definitions::open does
+// (editor/src/schema.rs): by trial, each distinct container block's magic first, then the model and the firmware it
+// names, its framing confirmed by the trailer checksum; that model's definition at that firmware, else the nearest
+// firmware of that model (of two as near, the newer); a model no definition covers is read with the first block that
+// frames it, and nothing is named. A camera's data comes from a script beside the page (data/<model>_fw<fw>.js, which
+// fills window[viewer.global]), so the page opens from disk as well as from a site; a single-file build holds them all.
+const VIEWER = BUILT && BUILT.viewer ? BUILT.viewer : null;
+// a plain object's own value for a key a file or a definition gives ("constructor" and "__proto__" are no colours)
+function own(o, k) {
+  return o !== null && o !== undefined && Object.prototype.hasOwnProperty.call(o, k) ? o[k] : undefined;
+}
+const CARRIED = "camset-viewer-file";          // the session storage key of a file carried over to the next start
+let OPENED = null;          // that file read by trial ({f, cam, how, model, fw, block, via, name}), opened once the page is drawn
+const sameBlock = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// a header part's bytes, read before the records are framed: from the start of the file only (null where the block
+// places it from the end, or past the file's end)
+function peekRange(d, at, to) {
+  if (at.startsWith("end-") || to.startsWith("end-")) return null;
+  const a = placeOf(at, d.length), b = placeOf(to, d.length);
+  return a <= b && b <= d.length ? d.subarray(a, b) : null;
+}
+function peekText(d, part) {
+  const v = peekRange(d, part.at, part.to);
+  if (!v) return null;
+  const end = v.indexOf(0);
+  return new TextDecoder("utf-8", { ignoreBOM: true }).decode(end < 0 ? v : v.subarray(0, end));
+}
+function peekFirmware(d, B) {
+  const v = peekRange(d, B.firmware.at, B.firmware.to), mm = B.firmware.decode === "major_minor";
+  return v && v.length >= (mm ? 2 : 3) ? `${v[0]}.${String(mm ? v[1] : v[1] * 10 + v[2]).padStart(2, "0")}` : null;
+}
+function magicMatches(d, B) {
+  if (B.magic.at.startsWith("end-")) return false;
+  const a = placeOf(B.magic.at, d.length);
+  return a + B.magic.bytes.length <= d.length && [...B.magic.bytes].every((ch, i) => d[a + i] === ch.charCodeAt(0));
+}
+// "4.00" as a number to measure firmwares' distance by (the editor's firmware_number), null when it is not one
+const fwNumber = (fw) => { const m = /^(\d+)\.(\d+)$/.exec(fw || ""); return m ? +m[1] * 100 + +m[2] : null; };
+// the camera whose definition reads a file of `model` and firmware `fw` read with block B: [camera, "exact" | "near"],
+// else [null, "none"] (the editor's Definitions::pick)
+function pickCamera(cams, B, model, fw) {
+  const mine = cams.filter((c) => c.model === model && sameBlock(c.file, B));
+  const exact = mine.find((c) => c.firmware === fw);
+  if (exact) return [exact, "exact"];
+  const a = fwNumber(fw), key = (c) => { const b = fwNumber(c.firmware); return [a === null || b === null ? Infinity : Math.abs(a - b), b === null ? Infinity : -b]; };
+  let best = null;
+  for (const c of mine) { const k = key(c), kb = best && key(best); if (!best || k[0] < kb[0] || (k[0] === kb[0] && k[1] < kb[1])) best = c; }
+  return best ? [best, "near"] : [null, "none"];
+}
+// a file read by trial with the cameras' blocks (the editor's Definitions::open); throws, with "matched" when some
+// block's magic and header fitted (the file is then damaged rather than not a settings file)
+function readByTrial(buf, cams) {
+  const d = new Uint8Array(buf), blocks = [], others = [];
+  for (const c of cams) if (c.file && !blocks.some((b) => sameBlock(b, c.file))) blocks.push(c.file);
+  let err = null, matched = false;
+  const frame = (B) => {
+    try {
+      const f = parseCamset(buf, B);
+      if (f.bodySum.stored === f.bodySum.computed) return f;
+      err = new Error(`checksum mismatch (stored 0x${f.bodySum.stored.toString(16)}, computed 0x${f.bodySum.computed.toString(16)})`);
+    } catch (e) { err = e; }
+    return null;
+  };
+  for (const B of blocks) {
+    const model = peekText(d, B.model), fw = peekFirmware(d, B);
+    if (model === null || fw === null || !magicMatches(d, B)) continue;
+    matched = true;
+    const [cam, how] = pickCamera(cams, B, model, fw);
+    if (!cam) { others.push([B, model, fw]); continue; }
+    const f = frame(B);
+    if (f) return { f, cam, how, model, fw, block: B };
+  }
+  for (const [B, model, fw] of others) {          // no definition of its model: the first container that frames it
+    const f = frame(B);
+    if (f) return { f, cam: null, how: "none", model, fw, block: B, via: cams.find((c) => sameBlock(c.file, B)) };
+  }
+  throw Object.assign(err || new Error("not a camera settings file"), { matched });
+}
+// a file kept in this tab's session storage for the next start of the page (false when the browser keeps none), and
+// taken back out at that start
+function carry(buf, name) {
+  const u8 = new Uint8Array(buf);
+  let bin = "";
+  for (let i = 0; i < u8.length; i += 0x8000) bin += String.fromCharCode(...u8.subarray(i, i + 0x8000));
+  try { sessionStorage.setItem(CARRIED, JSON.stringify({ name, b64: btoa(bin) })); return true; } catch { return false; }
+}
+function carried() {
+  try {
+    const kept = sessionStorage.getItem(CARRIED);
+    if (!kept) return null;
+    sessionStorage.removeItem(CARRIED);
+    const { name, b64 } = JSON.parse(kept), bin = atob(b64), u8 = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+    return { name, buf: u8.buffer };
+  } catch { return null; }
+}
+// a camera's data: already in the page (a single-file build), else from its script beside the page
+function cameraData(cam, V) {
+  const have = () => own(window[V.global], cam.key);
+  if (have()) return Promise.resolve(have());
+  return new Promise((ok, fail) => {
+    const s = document.createElement("script");
+    s.src = `${V.data}${encodeURIComponent(cam.key)}.js`;
+    s.onload = () => (have() ? ok(have()) : fail(new Error(`${s.src} holds no data for ${cam.key}`)));
+    s.onerror = () => fail(new Error(`${s.src} could not be loaded`));
+    document.head.append(s);
+  });
+}
+// the page for a file no definition describes: no records, no menu but a panel that says so, the file read with the
+// container block that framed it (DATA.foreign)
+function foreignData(got) {
+  return { public: true, foreign: { firmware: got.fw, via: got.via }, model: got.model, camera: "", pictures: 0, file: null, values: "",
+    colors: {}, format: got.block, memory_names: {}, memory_modes: {}, records: {}, my_menu: null, main: null, guides: [], help_source: {},
+    menu: [{ tab: "This file", groups: [], others: [], special: [{ name: "No definition yet", num: "", kind: "nodef" }] }] };
+}
+async function boot(V) {
+  const ask = new URLSearchParams(location.search).get("camera");
+  let cam = V.cameras.find((c) => c.key === ask) || V.cameras[0];
+  const kept = carried();
+  if (kept) {
+    try { OPENED = { ...readByTrial(kept.buf, V.cameras), name: kept.name }; } catch { OPENED = null; }
+    if (OPENED && !OPENED.cam) return foreignData(OPENED);
+    if (OPENED) cam = OPENED.cam;
+  }
+  if (cam.key !== ask && (ask || OPENED)) history.replaceState(null, "", `?camera=${encodeURIComponent(cam.key)}${location.hash}`);
+  try {
+    return await cameraData(cam, V);
+  } catch (e) {
+    const p = document.createElement("p");
+    p.style.cssText = "max-width: 40rem; margin: 3rem auto; padding: 0 16px;";
+    p.textContent = `The definition viewer could not load ${cam.name}'s definition: ${e.message}. Reload the page; if this was opened from a folder on disk, keep its data folder beside it.`;
+    document.body.replaceChildren(p);
+    throw e;
+  }
+}
+const DATA = VIEWER ? await boot(VIEWER) : BUILT;
 const $ = (id) => document.getElementById(id);
 // the row marked chosen in a list (the tree, the groups, the rows) brought into view
 const intoView = (id, block = "nearest") => $(id).querySelector('[aria-current="true"]')?.scrollIntoView({ block });
@@ -413,18 +569,36 @@ for (const r of Object.values(R)) {
   r.pics = r.ev.reduce((n, e) => n + e.frames.length, 0);
   r.text = [r.n, r.k, r.g, ...r.menu, ...r.vals.map((v) => v[1])].join(" ").toLowerCase();
 }
-const color = (tab) => { const c = DATA.colors[tab]; return c ? `rgb(${c.join(",")})` : "var(--muted)"; };
+const color = (tab) => { const c = own(DATA.colors, tab); return Array.isArray(c) ? `rgb(${c.join(",")})` : "var(--muted)"; };
 // the Main entry at the top of the Menu column (camera.main_tiles: each mode a group, its tiles the rows) and My Menu
 // made whole (camera.my_menu: the file's pages and the item names by code, beside its stray settings); a definition
 // without either has neither
-if (DATA.main && DATA.main.modes.length)
-  DATA.menu.unshift({ tab: DATA.main.title, kind: "main", groups: [], others: [],
-    special: DATA.main.modes.map((m, i) => ({ name: m.name, num: i + 1, kind: "main", mode: m })) });
-if (DATA.my_menu) {
-  let t = DATA.menu.find((x) => x.tab === DATA.my_menu.title);
-  if (!t) DATA.menu.push(t = { tab: DATA.my_menu.title, groups: [], others: [] });
-  t.special = [{ name: "Pages", num: 1, kind: "mmpages" }, { name: "Item names", num: 2, kind: "mmnames" }];
+// The definition viewer has two menus, the editor's own (the live settings without the Expert ones) and, with its
+// Expert switch, every setting (DATA.menu_expert); a node there carries only what it has, the rest its empty value.
+const MENUS = DATA.menu_expert ? { off: DATA.menu, on: DATA.menu_expert } : null;
+for (const menu of MENUS ? [MENUS.off, MENUS.on] : [DATA.menu]) {
+  if (MENUS) {
+    const fill = (rows) => { for (const x of rows) { Object.assign(x, { st: x.st || "", why: x.why || "", opts: x.opts || [], walk: x.walk || [], kids: x.kids || [], recs: x.recs || [], subs: x.subs || [] }); fill(x.kids); } };
+    for (const t of menu) for (const g of t.groups) fill(g.rows);
+  }
+  if (DATA.main && DATA.main.modes.length)
+    menu.unshift({ tab: DATA.main.title, kind: "main", groups: [], others: [],
+      special: DATA.main.modes.map((m, i) => ({ name: m.name, num: i + 1, kind: "main", mode: m })) });
+  if (DATA.my_menu) {
+    let t = menu.find((x) => x.tab === DATA.my_menu.title);
+    if (!t) menu.push(t = { tab: DATA.my_menu.title, groups: [], others: [] });
+    t.special = [{ name: "Pages", num: 1, kind: "mmpages" }, { name: "Item names", num: 2, kind: "mmnames" }];
+  }
 }
+// the Expert switch, kept in this browser as the other preferences are
+const EXPERT = "camset-viewer-expert";
+function setExpert(on, chosen = false) {
+  if (!MENUS) return;
+  DATA.menu = on ? MENUS.on : MENUS.off;
+  $("expert").setAttribute("aria-pressed", String(on));
+  if (chosen) store.set(EXPERT, on ? "1" : "0");          // a click on the switch; not a jump that needed it, nor a start
+}
+if (MENUS) setExpert(store.get(EXPERT) === "1");
 const label = (r, v) => { if (v === null || v === undefined) return ""; const x = r.vals.find((p) => p[0] === v); return x ? x[1] : String(v); };
 
 // "Not proved" leaves out what no proof can reach (not on this camera, or skipped by the owner's choice)
@@ -451,7 +625,7 @@ const comparing = () => (CMP.with === "other" ? !!L.other : partnerOf(CMP.show) 
 const cmpName = () => (CMP.with === "other" ? `${L.otherName} (${setName(CMP.show)})` : setName(partnerOf(CMP.show)));
 function cmpLegend() {
   if (CMP.with === "none") return "differs (choose what to compare with at the top)";
-  if (CMP.with === "base") return "differs from its mode's first memory";
+  if (CMP.with === "base") return DATA.foreign ? "differs from Section 1" : "differs from its mode's first memory";
   if (CMP.with === "other") return `differs from ${L.otherName}`;
   return `differs between ${setName(CMP.show)} and ${setName(CMP.with)}`;
 }
@@ -513,7 +687,7 @@ function cmpOptions() {
   const f = L.f, n = f ? f.sections.length : 13;
   const opt = (v, t, on) => el("option", { value: String(v), selected: on || undefined }, t);
   $("cmp-show").replaceChildren(...[...Array(n)].map((_, i) => opt(i, setName(i), CMP.show === i)));
-  $("cmp-with").replaceChildren(opt("none", "nothing", CMP.with === "none"), opt("base", "its mode's first memory", CMP.with === "base"),
+  $("cmp-with").replaceChildren(opt("none", "nothing", CMP.with === "none"), opt("base", DATA.foreign ? "each section with Section 1" : "its mode's first memory", CMP.with === "base"),
     ...[...Array(n)].map((_, i) => i).filter((i) => i !== CMP.show).map((i) => opt(i, setName(i), CMP.with === i)),
     L.other ? opt("other", L.otherName, CMP.with === "other") : null);
 }
@@ -530,6 +704,15 @@ $("cmp-with").addEventListener("change", (e) => { const v = e.target.value; setC
 // every visit starts on All: a filter kept from the last visit hid most of the page (2026-11-03)
 const state = { tab: (DATA.menu.find((t) => t.kind !== "main") || DATA.menu[0]).tab, group: null, item: null, filter: "all", q: "", open: new Set() };
 function fileLabel(name) {
+  // the definition viewer: the camera, and whose values (the definition's sample until a file is opened); no build
+  // date, no pictures
+  if (DATA.public) {
+    const sample = !!(DATA.file && DATA.file.b64);
+    $("file").replaceChildren(el("b", {}, DATA.foreign ? (DATA.model ? `${DATA.model} (no definition)` : "A camera with no definition") : DATA.model || ""),
+      sample ? " · showing a sample, not your camera" : name ? ` · values from ${name}` : " · no file open", helpSource());
+    $("file").title = sample ? "The definition's sample: a file one camera of this model wrote right after Initialize, its personal text removed. Initialize does not reset every record, so some values are what that camera held then, not factory values. Open your own file to see yours." : "";
+    return;
+  }
   $("file").replaceChildren(el("b", {}, DATA.model || ""), ` · values from ${name || "no file"} · made ${DATA.made}`
     + (DATA.pictures === 0 ? " · no pictures on this computer" : "") + helpSource(),
     // a run log with damaged lines: those proofs' frames are missing, and the build said which log (proof_viewer.py)
@@ -543,6 +726,39 @@ function helpSource() {
     : cam ? " · help: the camera's own guide, read off its screen" : own ? " · help: Camset's own words" : "";
 }
 fileLabel(DATA.values);
+// the definition viewer's own controls: the cameras it knows (choosing one starts the page again with its
+// definition and sample), its one action, said plainly, and that a file never leaves the computer
+if (VIEWER) {
+  const pick = $("camera");
+  pick.replaceChildren(...VIEWER.cameras.map((c) => el("option", { value: c.key, selected: c.key === DATA.camera || undefined }, `${c.name}, firmware ${c.firmware}`)),
+    DATA.foreign ? el("option", { value: "", selected: true, disabled: true }, `${DATA.model || "This file"}, firmware ${DATA.foreign.firmware} (no definition)`) : null);
+  // choosing in the list changes nothing until Show (an arrow key on a closed list is a choice on some systems)
+  pick.addEventListener("change", () => { $("camshow").disabled = !pick.value || pick.value === DATA.camera; });
+  $("camshow").addEventListener("click", () => { if (pick.value && pick.value !== DATA.camera) location.assign(`?camera=${encodeURIComponent(pick.value)}`); });
+  // the list, and its Show, only when there is another camera to choose (or a file no definition describes)
+  $("camlabel").hidden = $("camshow").hidden = VIEWER.cameras.length < 2 && !DATA.foreign;
+  if (MENUS) {
+    $("expert").hidden = false;
+    $("expert").addEventListener("click", () => { setExpert($("expert").getAttribute("aria-pressed") !== "true", true); draw(); });
+  }
+  const open = $("openfile");
+  open.classList.add("primary");
+  const words = [...open.childNodes].find((n) => n.nodeType === 3);          // the label's own words, before its field
+  if (words) words.nodeValue = "Open your settings file…"; else open.prepend("Open your settings file…");
+  open.title = "Show your own camera settings file (CAMSET*.DAT) here. It is read in this browser and never leaves your computer.";
+  $("privacy").textContent = "read in this browser, never sent anywhere";
+  $("privacy").hidden = false;
+  const find = document.querySelector(".find");
+  if (DATA.foreign && find) find.style.display = "none";          // nothing to search or filter
+}
+// the file buttons (a label around a hidden file field) answer Enter and Space as a button does
+for (const lab of document.querySelectorAll("label.button")) {
+  const input = lab.querySelector('input[type="file"]');
+  if (!input) continue;
+  lab.tabIndex = 0;
+  lab.setAttribute("role", "button");
+  lab.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+}
 
 // what the search and the filter keep: records, and rows (a row stays when it or one of its records does)
 function keepRec(r) {
@@ -568,7 +784,18 @@ function groupsOf(t) {
     n: specialLines(s).filter((x) => x.id).length }));
   return [...xs, ...gs, ...os];
 }
-function tabCount(t) { return groupsOf(t).reduce((n, g) => n + g.n, 0); }
+// what a tab's count is, on its hover
+const TAB_COUNT = "The settings in this tab, each counted once: a group counts its own, so a setting shown in two places (a family's setting in its table and on its page, or under its row) counts in each group and once here.";
+const TAB_RECORDS = "The records in this tab, each counted once.";
+// a tab's settings, each once: the definition viewer shows a profile's settings in its family's table and on its page,
+// as the editor does
+function tabCount(t) {
+  const keys = new Set(), add = (r) => { if (r && keepRec(r)) keys.add(r.k); };
+  const walk = (rows) => { for (const x of rows) { recsOf(x).forEach(add); walk(x.kids); } };
+  for (const g of t.groups) { walk(g.rows); g.extra.forEach((k) => add(R[k])); }
+  for (const o of t.others) o.keys.forEach((k) => add(R[k]));
+  return keys.size + groupsOf(t).filter((g) => g.spec).reduce((n, g) => n + g.n, 0);
+}
 function rowsOf(rs) {
   const rows = [];
   for (const r of rs) { const row = rows.find((x) => x[0].n === r.n); if (row) row.push(r); else rows.push([r]); }
@@ -625,7 +852,7 @@ function linesOf(group) {
 function draw() {
   const tab = DATA.menu.find((t) => t.tab === state.tab) || DATA.menu[0];
   state.tab = tab.tab;
-  const tabButton = (t) => el("button", { class: "sel", "aria-current": String(t.tab === state.tab),
+  const tabButton = (t) => el("button", { class: "sel", "aria-current": String(t.tab === state.tab), title: t.tab === "Unmapped records" ? TAB_RECORDS : TAB_COUNT,
     onclick: () => { state.tab = t.tab; state.group = state.item = null; show("groups"); draw(); } },
     el("span", { class: "bar", style: `background:${color(t.tab)}` }), el("span", {}, t.tab), el("span", { class: "n" }, `(${tabCount(t)})`));
   $("tabs").replaceChildren(...DATA.menu.map((t) => el("li", {}, tabButton(t))));
@@ -695,7 +922,7 @@ function detail(it, tab, group) {
   if (it.sub || (it.node && !it.rec)) {
     const node = it.node;
     out.push(el("div", { class: "title" }, it.sub ? `${node.l}: ${it.sub.name}` : node.l));
-    if (!it.sub && node.st && !["walked", "submenu"].includes(node.st)) out.push(el("div", { class: "why" }, STATES[node.st] || node.st, node.why ? `: ${node.why}` : ""));
+    if (!it.sub && node.st && !["walked", "submenu"].includes(node.st)) out.push(el("div", { class: "why" }, own(STATES, node.st) || node.st, node.why ? `: ${node.why}` : ""));
     if (!it.sub && node.help) out.push(helpBlock(node.help, node.hg, node.hs));
     if (!it.sub && node.opts.length) out.push(walkBlock(node));
     const rs = it.sub ? it.rs : node.recs.map((k) => R[k]).filter((r) => r && keepRec(r));
@@ -712,9 +939,12 @@ function detail(it, tab, group) {
     if (it.node && it.node.help && !rs.some((r) => r.hs === "camera")) out.push(helpBlock(it.node.help, it.node.hg, it.node.hs));
     if (it.node && it.node.opts.length) out.push(walkBlock(it.node));
     for (const r of rs) out.push(record(r, rs.length > 1));
+    if (DATA.public && rs.some((r) => r.proved)) out.push(el("p", { class: "note" }, NO_PICTURES));
   }
   body.replaceChildren(...out);
 }
+// the definition viewer carries the definition alone: where a proof's pictures are
+const NO_PICTURES = "The camera's screens that proved these values exist only for whoever mapped the camera with Camset's kit; this page carries the definition alone.";
 
 function walkBlock(node) {
   const g = el("div", { class: "gallery" });
@@ -762,13 +992,14 @@ function record(r, several) {
     helpBlock(r.help, r.hg, r.hs),
     el("div", { class: "meta" },
       r.proved ? el("span", { class: "ok" }, `Proved on the camera${r.vals.length ? ` (${np}/${r.vals.length})` : r.sampled ? " (sampled)" : ""}`)
-        : r.why ? el("span", { class: "na", title: r.why.why }, `${WHY[r.why.kind] || r.why.kind}: ${r.why.why}`) : el("span", { class: "warn" }, "Not proved"),
+        : r.why ? el("span", { class: "na", title: r.why.why }, `${own(WHY, r.why.kind) || r.why.kind}: ${r.why.why}`) : el("span", { class: "warn" }, "Not proved"),
       el("span", {}, `In ${setName(CMP.show)}: ${fmt(r, cur)}`),
       comparing() ? el("span", { class: differs(r) ? "dif" : "" }, `in ${cmpName()}: ${fmt(r, cv)}`) : null,
       bytes,
       r.menu.length ? el("span", {}, r.menu[0]) : null),
+    r.x ? el("div", { class: "note" }, "An Expert setting: a derived working copy, a flag or an alternate numbering, not a setting of the camera's menus; the editor shows it in Expert mode.") : null,
     r.us ? el("div", { class: "meta" }, el("span", { class: "na", title: r.us.why },
-      `${WHY[r.us.kind] || r.us.kind} in ${setList(r.us.sets)}: ${r.us.why}`)) : null,
+      `${own(WHY, r.us.kind) || r.us.kind} in ${setList(r.us.sets)}: ${r.us.why}`)) : null,
     all.length ? el("ul", { class: "opts" }, all.map(([v, lab]) => {
       const n = counts[v] || 0, h = oh.get(v), can = n || h;
       const li = el("li", { class: [v === cur ? "cur" : "", v === cv && cv !== cur ? "cmpv" : "", can ? "has" : ""].join(" ").trim() || undefined, tabindex: can ? "0" : undefined,
@@ -783,7 +1014,7 @@ function record(r, several) {
       return li;
     })) : null,
     el("div", { class: "tools" }, r.pics ? [el("button", { onclick: () => choose("all", null) }, `All pictures (${r.pics})`), `or click a value marked ▣${oh.size ? " (? for its help)" : ""}`]
-      : oh.size ? "Click an option marked ? for its help." : (r.proved && !back ? "Proved without menu frames (a camera-written file, a registration or a fixed cell)." : "")),
+      : oh.size ? "Click an option marked ? for its help." : (r.proved && !back && !DATA.public ? "Proved without menu frames (a camera-written file, a registration or a fixed cell)." : "")),
     back,
     g,
     r.note ? el("div", { class: "note" }, r.note) : null,
@@ -934,7 +1165,7 @@ function gallery(r, value) {
 // whose words a text is, per text: a setting's help can be the camera's and an option's the project's own, or the reverse
 const HELP_FROM = { camera: "The camera's own In-Camera Guide, read off its screen", own: "Camset's own words, not the camera's guide" };
 // a help text as hover text, with whose words it is
-const helpTip = (text, who) => (HELP_FROM[who] ? `${text}\n\n(${HELP_FROM[who]})` : text);
+const helpTip = (text, who) => (own(HELP_FROM, who) ? `${text}\n\n(${HELP_FROM[who]})` : text);
 // a line's hover in the rows: its setting's help, the row's own guide before the project's words where the row has one
 function lineTip(it) {
   const r = it.rec && it.rec.help ? it.rec : null, n = it.node && !it.sub && it.node.help ? it.node : null;
@@ -953,7 +1184,7 @@ function helpBlock(text, gids, who, cls = "help") {
   if (!text) return null;
   // only the camera's words were read off a guide screen: the project's own never get a guide link or a readings mark
   const { gs, seq, differ } = helpParts(who === "camera" ? gids : []);
-  return el("div", { class: cls, title: HELP_FROM[who] || undefined }, text,
+  return el("div", { class: cls, title: own(HELP_FROM, who) || undefined }, text,
     seq.length ? [" ", el("button", { class: "linkish guide", title: `The camera's guide screen${seq.length > 1 ? "s" : ""} this text was read from`,
       onclick: (e) => { e.stopPropagation(); big(seq, 0); } }, `▣ guide${seq.length > 1 ? ` (${seq.length})` : ""}`)] : null,
     differ.length ? el("details", { class: "readings" },
@@ -970,6 +1201,7 @@ function specialLines(s) {
   const q = state.q.trim().toLowerCase(), f = FILTERS.find((x) => x[0] === state.filter)[2];
   const keep = (x) => (!q || `${x.name} ${x.value}`.toLowerCase().includes(q)) && (!f || (x.rs || []).some(f)
     || (state.filter === "pics" && x.pics > 0) || (state.filter === "proved" && x.dot === "yes") || (state.filter === "differs" && !!x.dif));
+  if (s.kind === "nodef") return [{ id: "nodef", special: "nodef", name: "This camera has no definition yet", value: "", rs: [] }];
   const lines = (s.kind === "main" ? mainLines(s.mode) : s.kind === "mmpages" ? mmPageLines() : mmNameLines()).filter((x) => x.head || keep(x));
   // a heading with nothing kept under it goes too
   return lines.filter((x, i) => !x.head || (lines[i + 1] && !lines[i + 1].head));
@@ -983,8 +1215,10 @@ function specialItem(it, cmpOn) {
 function specialDetail(it, tab, group) {
   const crumb = el("div", { class: "crumb", style: `color:${color(tab)}` }, [tab, group && group.name].filter(Boolean).join(" > "));
   if (it.special === "tile") return tileDetail(it, crumb);
+  if (it.special === "nodef") return [crumb, ...nodefDetail()];
   if (it.special === "mmnofile") return [crumb, el("div", { class: "title" }, "No settings file"),
-    el("p", { class: "note" }, `This page was built without a camera download, so it has no ${DATA.my_menu.title} pages to show. Open a settings file (Open settings file… at the top) to see its pages; the item names by code are under Item names.`)];
+    el("p", { class: "note" }, DATA.public ? `No settings file is open, so there are no ${DATA.my_menu.title} pages to show. Open your settings file (at the top) to see its pages; the item names by code are under Item names.`
+      : `This page was built without a camera download, so it has no ${DATA.my_menu.title} pages to show. Open a settings file (Open settings file… at the top) to see its pages; the item names by code are under Item names.`)];
   if (it.special === "mmempty") return [crumb, el("div", { class: "title" }, `${DATA.my_menu.title} ${it.page + 1}`),
     el("p", { class: "note" }, it.name === "(no items)" ? `This file's ${DATA.my_menu.title} ${it.page + 1} holds no items: every slot is empty.`
       : `This file holds no record for ${DATA.my_menu.title} ${it.page + 1} (record 0x${hex4(DATA.my_menu.records[it.page])}): it may be another camera's file.`)];
@@ -1047,7 +1281,7 @@ function tileDetail(it, crumb) {
   const t = it.tile, m = it.mode, sec = CMP.show, live = t.live_text || "on the camera", title = DATA.main.title;
   const seq = m.frames.map(([src, cap]) => ({ src, cap }));
   const shot = seq.length ? shotOf(seq, `The camera's own ${title} page in ${m.name} (${m.run})${seq.length > 1 ? `: ${seq.length} frames, one per row of tiles lit` : ""}. It shows what the camera held when it was scanned, not this file.`)
-    : el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer." : `No frame of the camera's ${title} page in ${m.name} in these runs.`);
+    : DATA.public ? null : el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer." : `No frame of the camera's ${title} page in ${m.name} in these runs.`);
   const list = (ks) => (ks && ks.length ? el("ul", { class: "reclist" }, ks.map((k) => recLink(k, sec))) : null);
   const parts = t.kind === "live_or_memory" ? [el("div", { class: "meta" }, "In the live settings:"),
     list(t.keys) || el("p", { class: "note" }, `none: the tile shows “${live}”`), el("div", { class: "meta" }, "In a memory set:"), list(t.memory_keys) || el("p", { class: "note" }, "none")]
@@ -1058,7 +1292,7 @@ function tileDetail(it, crumb) {
     el("div", { class: "meta" }, `In ${setName(sec)}: `, el("span", { class: "tilev" }, it.value || (L.f ? "" : "no settings file here"))),
     it.value && it.value.includes("—") ? el("div", { class: "note" }, DASH) : null,
     shot, ...parts,
-    el("p", { class: "note" }, `Each setting is proved on its own row (click one to go there). Which settings a tile shows is the definition's (its camera section's main_tiles), worked out here as the editor does; the frame is the camera's own ${title} page to compare it with.`)];
+    el("p", { class: "note" }, `Each setting is proved on its own row (click one to go there). Which settings a tile shows is the definition's (its camera section's main_tiles), worked out here as the editor does${DATA.public ? "." : `; the frame is the camera's own ${title} page to compare it with.`}`)];
 }
 
 // My Menu: its names by code, the frame that proved each name (the read-back: a file with known codes loaded, the
@@ -1097,9 +1331,9 @@ function mmPageLines() {
     if (!codes || (!n && M.packed)) out.push({ id: `mm:${p}:none`, special: "mmempty", name: codes ? "(no items)" : "(not in this file)", value: "", depth: 1, off: true, page: p, rs: [] });
     (codes || []).forEach((c, i) => {
       if (c === M.empty && M.packed) return;
-      const key = `global:0x${hex4(M.records[p])}[${i}]`, opens = (M.opens[String(c)] || []).filter((k) => R[k]), shot = mmInfo().shot.has(c);
+      const key = `global:0x${hex4(M.records[p])}[${i}]`, opens = (own(M.opens, String(c)) || []).filter((k) => R[k]), shot = mmInfo().shot.has(c);
       out.push({ id: `mm:${p}:${i}`, special: "mmitem", name: c === M.empty ? "(empty)" : mmName(c), value: opens[0] ? fmt(R[opens[0]], valueIn(f, 0, opens[0])) : "",
-        depth: 1, off: c === M.empty, pics: shot ? 1 : 0, dot: c === M.empty ? null : shot ? "yes" : "", page: p, slot: i, code: c, key, opens,
+        depth: 1, off: c === M.empty, pics: shot ? 1 : 0, dot: c === M.empty || DATA.public ? null : shot ? "yes" : "", page: p, slot: i, code: c, key, opens,
         rs: [R[key], ...opens.map((k) => R[k])].filter(Boolean), title: opens.length ? `Opens ${opens.map((k) => R[k].n).join(", ")}` : undefined });
     });
   });
@@ -1108,11 +1342,12 @@ function mmPageLines() {
 function mmNameLines() {
   const M = DATA.my_menu, info = mmInfo(), names = M.names.filter(([c]) => c !== M.empty);
   const n = names.filter(([c]) => info.shot.has(c)).length;
-  const out = [{ head: `${n} of ${names.length} names with a picture of the camera's page, ${names.length - n} without${!n && DATA.pictures === 0 ? " (no pictures on this computer)" : ""}` }];
+  const out = [{ head: DATA.public ? `${names.length} item names, as the definition names them`
+    : `${n} of ${names.length} names with a picture of the camera's page, ${names.length - n} without${!n && DATA.pictures === 0 ? " (no pictures on this computer)" : ""}` }];
   for (const [c, name] of names) {
-    const opens = (M.opens[String(c)] || []).filter((k) => R[k]);
+    const opens = (own(M.opens, String(c)) || []).filter((k) => R[k]);
     out.push({ id: `mmn:${c}`, special: "mmname", name, value: `code ${c}`, code: c, opens, rs: opens.map((k) => R[k]),
-      pics: info.shot.has(c) ? 1 : 0, dot: info.shot.has(c) ? "yes" : "", title: opens.length ? `Opens ${opens.map((k) => R[k].n).join(", ")}` : undefined });
+      pics: info.shot.has(c) ? 1 : 0, dot: DATA.public ? null : info.shot.has(c) ? "yes" : "", title: opens.length ? `Opens ${opens.map((k) => R[k].n).join(", ")}` : undefined });
   }
   return out;
 }
@@ -1140,7 +1375,7 @@ function mmDetail(it, crumb) {
       el("div", { class: "where" }, `A file with code ${c} in ${M.title} ${shot.page}, item ${shot.slot + 1}, was loaded into the camera; its page then showed “${shot.read}” there.`
         + (shot.read !== mmName(c) ? ` The definition names it “${mmName(c)}”.` : "")),
       shotOf(seq, `${M.title} ${shot.page} on the camera, item ${shot.slot + 1}`)));
-  } else out.push(el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer."
+  } else if (!DATA.public) out.push(el("p", { class: "gnote" }, DATA.pictures === 0 ? "No pictures on this computer."
     : `No frame in these runs shows this name: it is the definition's. The read-back proved ${info.shot.size} of the names.`));
   if (it.key && R[it.key]) out.push(el("div", { class: "meta" }, "The slot's record: ", el("button", { class: "linkish", onclick: () => openInMenu(it.key) }, `${R[it.key].n} (${it.key})`)));
   return out;
@@ -1189,13 +1424,16 @@ document.addEventListener("keydown", (e) => {
 // video system at 0x38 (0 NTSC, 1 PAL), the header checksum at 0x39, the sections from 0x3c, the marker 0x02cf, and a
 // u32 byte sum of 0x3c .. end-4 as the last four bytes.
 const FMT = DATA.format || null;
-// a place in the file as the block writes it: "0x3c" from the start, "end-4" back from the end
-const placeOf = (t, size) => (t.startsWith("end-") ? size - Number(t.slice(4)) : parseInt(t.slice(2), 16));
-const SUM_WIDTH = { shift_sum: 1, byte_sum: 4 };
+// a place in the file as the block writes it: "0x3c" from the start, "end-4" back from the end. It, checksumOf and
+// parseCamset are declarations (no constants of their own), so the viewer's boot reads a file with them before the
+// page's constants exist
+function placeOf(t, size) {
+  return t.startsWith("end-") ? size - Number(t.slice(4)) : parseInt(t.slice(2), 16);
+}
 const SUM_DOC = { shift_sum: "the low byte of the sum of each byte shifted left by its offset mod 8", byte_sum: "a u32 sum of the bytes" };
 // a checksum as stored at its site, and as the bytes it sums give it
 function checksumOf(f, c) {
-  const a = placeOf(c.over[0], f.size), b = placeOf(c.over[1], f.size), at = placeOf(c.at, f.size), w = SUM_WIDTH[c.kind];
+  const a = placeOf(c.over[0], f.size), b = placeOf(c.over[1], f.size), at = placeOf(c.at, f.size), w = own({ shift_sum: 1, byte_sum: 4 }, c.kind);
   let s = 0;
   if (c.kind === "shift_sum") { for (let p = a; p < b; p++) s += f.u8[p] << (p & 7); s &= 0xff; }
   else for (let p = a; p < b; p++) s = (s + f.u8[p]) >>> 0;
@@ -1211,11 +1449,14 @@ const DIFF = "#e83ad8";      // magenta: apart from every status colour, amber a
 // among its value bytes (named, not in the schema, partly, can't, proved), so green means all of them are proved;
 // structure only where it holds no value byte
 const leastProved = (cnt) => [3, 4, 2, 5, 1].find((x) => cnt[x]) || 0;
-function parseCamset(buf) {
-  const u8 = new Uint8Array(buf), dv = new DataView(buf), size = u8.length, B = FMT;
+// a file read through a container block: this page's definition's (FMT), or another camera's (the viewer's boot)
+function parseCamset(buf, B = FMT) {
+  const u8 = new Uint8Array(buf), dv = new DataView(buf), size = u8.length;
   if (!B) throw new Error("this page's definition holds no container block (camera.file), so no file can be read");
   const P = (t) => placeOf(t, size);
-  const str = (a, b) => { let s = ""; for (let i = a; i < b && u8[i]; i++) s += String.fromCharCode(u8[i]); return s; };
+  // a text part: as far as its first NUL, as UTF-8 (a byte that is none read as the replacement character, a leading
+  // byte-order mark kept), as the editor's from_utf8_lossy reads it
+  const str = (a, b) => { let e = a; while (e < b && e < size && u8[e]) e++; return new TextDecoder("utf-8", { ignoreBOM: true }).decode(u8.subarray(a, e)); };
   const m0 = P(B.magic.at);
   if (str(m0, m0 + B.magic.bytes.length) !== B.magic.bytes)
     throw new Error(`not a settings file this definition describes (it does not start with '${B.magic.bytes}')`);
@@ -1240,6 +1481,7 @@ function parseCamset(buf) {
     sec.end = off; f.sections.push(sec);
   }
   if (off !== end) throw new Error(`${end - off} stray bytes before the checksum`);
+  if (!f.sections.length) throw new Error("it holds no section of settings");
   f.headerSum = checksumOf(f, B.header_checksum);
   f.bodySum = checksumOf(f, B.trailer_checksum);
   return f;
@@ -1252,7 +1494,7 @@ const firmware = (f) => `${f.u8[f.fw[0]]}.${String(FMT.firmware.decode === "majo
   : f.u8[f.fw[0] + 1] * 10 + f.u8[f.fw[0] + 2]).padStart(2, "0")}`;
 // the video system the camera was set to, where the block says where it is: its name, or the value the block names
 // nothing for, said so; "" when the block does not say
-const videoSystem = (f) => (f.vs === null ? "" : (FMT.video_system.names[String(f.u8[f.vs])]
+const videoSystem = (f) => (f.vs === null ? "" : (own(FMT.video_system.names, String(f.u8[f.vs]))
   || `video system ${f.u8[f.vs]}, which the definition names nothing for`));
 // the header's parts in file order, as the block places them, with the bytes it names no part for
 function headerParts(f) {
@@ -1268,7 +1510,7 @@ function headerParts(f) {
         doc: "The firmware of the camera that saved the file: the major version, then the minor's two digits (04 00 00 is 4.00). The layout signature feeds the first two bytes." },
     ...(f.vs === null ? [] : [{ id: "video_system", a: f.vs, b: f.vs + 1, type: "u1", value: videoSystem(f),
       doc: `The video system the camera was set to when it saved the file (${Object.entries(B.video_system.names).map(([v, n]) => `${v} ${n}`).join(", ")}). Not part of the firmware: one firmware's files under each share a definition.` }]),
-    { id: "header_checksum", a: hs.at, b: hs.at + hs.w, type: hs.kind, doc: `${SUM_DOC[hs.kind]}, over ${hs.from} up to ${hs.to}.`, value: sumText(hs) }]
+    { id: "header_checksum", a: hs.at, b: hs.at + hs.w, type: hs.kind, doc: `${own(SUM_DOC, hs.kind)}, over ${hs.from} up to ${hs.to}.`, value: sumText(hs) }]
     .sort((x, y) => x.a - y.a);
   const gap = (a, b) => ({ id: `reserved_${a.toString(16)}`, a, b, type: `bytes(${b - a})`, doc: "No part of the definition's block names these bytes.",
     value: [...f.u8.slice(a, b)].map(hex2).join(" ") });
@@ -1404,7 +1646,14 @@ function setDiff(f, s, m = new Uint8Array(f.size)) {
   const b0 = baseOf(s);
   if (!b0) return m;
   const a = f.sections[b0], b = f.sections[s];
-  a.recs.forEach((ra, i) => { const rb = b.recs[i]; for (let k = 8; k < ra.end - ra.off; k++) if (f.u8[ra.off + k] !== f.u8[rb.off + k]) m[rb.off + k] = 1; });
+  if (!a || !b) return m;
+  // as far as both sets go, and only where the records are the same record (a file no definition describes may hold
+  // sets of other lengths)
+  for (let i = 0; i < Math.min(a.recs.length, b.recs.length); i++) {
+    const ra = a.recs[i], rb = b.recs[i];
+    if (ra.id !== rb.id || ra.size !== rb.size || ra.count !== rb.count) continue;
+    for (let k = 8; k < ra.end - ra.off; k++) if (f.u8[ra.off + k] !== f.u8[rb.off + k]) m[rb.off + k] = 1;
+  }
   return m;
 }
 
@@ -1440,7 +1689,7 @@ function outlineEdges(cells, cols, pitch, gap, left) {
 }
 function drawMaps() {
   const f = L.f, box = $("maps");
-  const last = f.sections.length - 1, name = (i) => (i ? setName(i) : "the live settings");
+  const last = f.sections.length - 1, name = (i) => (i || DATA.foreign ? setName(i) : "the live settings");
   // the header and the live settings follow each other, so they share a strip; one memory set has the others
   // around it, and the checksum follows the last set, so those strips stand apart unless the whole file is drawn
   // a strip's rows: "file" on the file's offsets (ending 00), "set" from the set's own start (+0000), "own" from
@@ -1448,11 +1697,11 @@ function drawMaps() {
   const rows = L.whole
     // the whole file, each section on a new row so that the memory sets line up, in file order
     ? [["", 0, f.sections[0].end, "file"], ...f.sections.slice(1).map((x) => ["", x.off, x.end, "own", `M${x.index}`]), ["", f.end, f.size, "own", "Sum"]]
-    : [["Header and live settings · section 0", 0, f.sections[0].end, "file"],
+    : [[DATA.foreign ? "Header and section 0" : "Header and live settings · section 0", 0, f.sections[0].end, "file"],
       // one memory set counts from its own start: every set holds the same records at the same place in it (a file
       // with no memory set has no such strip)
       ...(last ? [[`${setName(L.set)} · sections[${L.set}], between ${name(L.set - 1)} and ${L.set < last ? name(L.set + 1) : "the checksum"} · offsets inside the set`, f.sections[L.set].off, f.sections[L.set].end, "set"]] : []),
-      [last ? `Checksum · after Memory ${last}` : "Checksum · after the live settings", f.end, f.size, "file"]];
+      [last ? `Checksum · after ${DATA.foreign ? setName(last) : `Memory ${last}`}` : `Checksum · after ${name(0)}`, f.end, f.size, "file"]];
   // where each part starts, drawn as a line through the map and named by the row's offset
   const starts = [[f.start, "Live"], ...f.sections.slice(1).map((x) => [x.off, `M${x.index}`]), [f.end, "Sum"]];
   const sdiff = diffMask(f);
@@ -1646,7 +1895,7 @@ function recordHeadValue(f, r, id) {
 }
 // the trailer checksum, and any bytes after it the block names no part for
 function trailerParts(f) {
-  const s = f.bodySum, out = [{ id: "trailer_checksum", a: f.end, b: f.end + s.w, type: s.kind, doc: `${SUM_DOC[s.kind]}, over ${s.from} up to ${s.to}.`, value: sumText(s) }];
+  const s = f.bodySum, out = [{ id: "trailer_checksum", a: f.end, b: f.end + s.w, type: s.kind, doc: `${own(SUM_DOC, s.kind)}, over ${s.from} up to ${s.to}.`, value: sumText(s) }];
   if (f.end + s.w < f.size) out.push({ id: `reserved_${(f.end + s.w).toString(16)}`, a: f.end + s.w, b: f.size, type: `bytes(${f.size - f.end - s.w})`, doc: "No part of the definition's block names these bytes.", value: "" });
   return out;
 }
@@ -1656,7 +1905,8 @@ function elemKey(r, i) {
   const base = `${r.sec ? (ks[0] || "").split(":")[0] : "global"}:0x${hex4(r.id)}`;
   return [`${base}[${i}]`, `${base}@${i * r.size}`, base].find((k) => R[k]) || (real.length === 1 ? real[0] : null);
 }
-const setName = (i) => (i ? DATA.memory_names[String(i)] || `Memory ${i}` : "Live settings");
+// a file no definition describes has sections, not memories: what each holds is its camera's, which nothing here knows
+const setName = (i) => (DATA.foreign ? `Section ${i}` : i ? own(DATA.memory_names, String(i)) || `Memory ${i}` : "Live settings");
 // a record whose value bytes differ under the comparison chosen
 function recDiffers(f, r) {
   const m = diffMask(f);
@@ -1990,13 +2240,15 @@ function drawHex() {
     body.replaceChildren(el("div", { class: "meta" }, `${f.model}, firmware ${firmware(f)}${videoSystem(f) ? ", " + videoSystem(f) : ""}, saved ${f.saved} · ${f.size.toLocaleString()} bytes · ${f.sections.length} sections`),
       ...itemsPanel(0, f.size, items),
       el("details", { class: "explain" }, el("summary", {}, "About the format, the colours and this view"),
+      // a file no definition describes: what follows is the file layout it was read with, another camera's
+      DATA.foreign ? el("p", {}, `${f.model} has no definition here: the parts below are placed as the ${DATA.foreign.via ? `${DATA.foreign.via.model} firmware ${DATA.foreign.via.firmware}` : "known"} file layout places them, which fits this file, and where they speak of live settings and memory sets they speak of that camera's; what each section of this file holds is its own camera's, which nothing here knows.`) : null,
       el("p", {}, `${DATA.file.name}: ${f.model}, saved ${f.saved}, ${f.size.toLocaleString()} bytes, ${f.sections.length} sections. Little-endian throughout.`),
       el("table", {}, el("tr", {}, el("th", {}, "Bytes"), el("th", {}, "Holds")),
         [...headerParts(f).map((p) => [p.b - p.a > 1 ? `0x${hex2(p.a)}-0x${hex2(p.b - 1)}` : `0x${hex2(p.a)}`, `${p.id}: ${p.doc}${p.value ? ` (${p.value})` : ""}`]),
           [`0x${hex2(f.start)}…`, "sections: a u32 record count, then the records"], ["section 0", `the live settings, ${f.sections[0].recs.length} records`],
           ...(last ? [[last > 1 ? `sections 1-${last}` : "section 1", `the memory sets, ${f.sections[1].recs.length} records each, one layout`]] : []),
           ["a record", `u16 id · u16 0x${hex4(f.marker)} · u16 element size · u16 element count · size × count value bytes`],
-          [FMT.trailer_checksum.at, `trailer checksum: ${SUM_DOC[ts.kind]}, over ${ts.from} up to ${ts.to} (stored ${sumHex(ts, ts.stored)}, computed ${sumHex(ts, ts.computed)} ${ts.stored === ts.computed ? "✓" : "✗"})`]]
+          [FMT.trailer_checksum.at, `trailer checksum: ${own(SUM_DOC, ts.kind)}, over ${ts.from} up to ${ts.to} (stored ${sumHex(ts, ts.stored)}, computed ${sumHex(ts, ts.computed)} ${ts.stored === ts.computed ? "✓" : "✗"})`]]
           .map(([a, b]) => el("tr", {}, el("td", {}, a), el("td", {}, b)))),
       el("p", {}, "Colours: blue is structure (the header, counts, each record's eight header bytes, the checksum); the value bytes are green when the schema's settings for them are proved on the camera, teal when partly, amber when named but not proved, blue-grey when no proof can reach them (not on this camera, or skipped), grey when no setting covers them; a map cell takes the least-proved state among its bytes, so a green cell is proved throughout (the percentages above count every byte). Magenta marks bytes that differ under the comparison chosen at the top (Show … compared with …): each memory set from its mode's first memory (Movie Memory 2 and 3 from Movie Memory 1, each mode's first from Memory 1), two sections record by record (the live settings and a memory set are matched by record id), or the file from a file opened beside it. The menu view shows the same comparison as a second value column, with a Differs filter. A bright cyan outline, on a dark edge, goes round whatever is chosen in the structure (the file, a section, a block of records, a record, a field, an element); yellow is the setting you came from in the menu view (each setting there links here), or an item picked from the inspector's list."),
       el("p", {}, `Each map cell is 16 bytes, one line of the hex dump, and each row a multiple of 256 bytes (choose how many above the map). The header and the live settings share a strip, as they follow each other in the file, and their rows start at file offsets ending 00. A memory set's strip counts from the set's own start (+0000), because every set holds the same records at the same place in it${stride ? `, ${stride.toLocaleString()} bytes after the one before` : ""}: a record sits in the same cell in every set. \u201cWhole file\u201d draws every section in one strip on the file's offsets, a step line and a name (Live, M1-M12, Sum) where each part starts. Drag the dividers between the columns to resize them; Stacked, at the top of the map, puts the bytes below the map.`),
@@ -2071,7 +2323,7 @@ function drawHex() {
     from ? el("div", { class: "linked" }, el("b", {}, from.n), ` · ${sel.key} · `,
       pb - pa > 1 ? `0x${hexOff(pa)}–0x${hexOff(pb - 1)}, ${pb - pa} bytes` : `0x${hexOff(pa)}, 1 byte`,
       fv !== null && fv !== undefined ? ` · ${fv}${from.vals.some((x) => x[0] === fv) ? ` = ${label(from, fv)}` : ""}` : "", " · ",
-      cantIn(sel.key, r.sec) ? [el("span", { class: "na", title: from.us.why }, `${WHY[from.us.kind] || from.us.kind} in this memory set`), " · "] : "",
+      cantIn(sel.key, r.sec) ? [el("span", { class: "na", title: from.us.why }, `${own(WHY, from.us.kind) || from.us.kind} in this memory set`), " · "] : "",
       el("button", { class: "linkish", onclick: () => openInMenu(sel.key) }, "← back to the menu")) : null,
     hk && R[hk] && R[hk].help ? helpBlock(`${R[hk].n}: ${R[hk].help}`, R[hk].hg, R[hk].hs, "help lhelp") : null,
     el("table", { class: "insp" }, el("tr", {}, el("th", {}, "Header"), el("th", {}, "Offset"), el("th", {}, "Bytes"), el("th", {}, "Value")),
@@ -2324,7 +2576,8 @@ function showInLayout(key, push = true) {
   $("hbody").querySelector(".linked")?.scrollIntoView({ block: getComputedStyle($("lay")).display === "grid" ? "nearest" : "start" });
 }
 function openInMenu(key) {
-  const spot = locate(key);
+  let spot = locate(key);
+  if (!spot && MENUS && DATA.menu !== MENUS.on) { setExpert(true); spot = locate(key); }          // only the Expert menu lists it
   setMode("menu");
   if (spot) { Object.assign(state, spot.state); if (spot.open) state.open.add(spot.open); }
   first = true; draw();
@@ -2359,6 +2612,7 @@ function fitSections(n) {
 }
 // another settings file as the one the page shows: its values in the rows, its bytes in the layout view
 function useFile(f, name) {
+  if (DATA.foreign) f.vs = null;          // the video system is where another camera's block puts it: not this file's
   const s0 = f.sections[0], s1 = f.sections[1], cur = new Map(), raw = new Map();
   const ints = (r) => [1, 2, 4, 8].includes(r.size);
   for (const [s, area] of [[s0, "global"], [s1, "set"]]) {
@@ -2383,10 +2637,106 @@ function useFile(f, name) {
   cmpOptions();
   DATA.file = { name }; DATA.values = name;
   fileLabel(name); $("othermsg").textContent = "";
-  $("mainmsg").textContent = f.model !== DATA.model ? `Showing ${name}, but it is from ${f.model}: this schema is ${DATA.model}'s, so values may mean something else` : `Showing ${name}: ${f.model}, saved ${f.saved}`;
+  $("mainmsg").replaceChildren(fileWords(f, name));
+  fileNotice(f, name);
   const t = $("file"); t.classList.remove("flash"); void t.offsetWidth; t.classList.add("flash");
   setTimeout(() => t.classList.remove("flash"), 1500);
   draw(); if (!$("lay").hidden) drawLayout();
+}
+// the definition this page shows names a file's model and firmware, or it says plainly whose the file is (the
+// firmware from the definition's own name, <model>_fw<firmware>)
+const DEF_FW = (/_fw(.+)$/.exec(DATA.camera || "") || [])[1] || "";
+function fileWords(f, name) {
+  const fw = firmware(f);
+  if (!DATA.foreign && !VIEWER && (f.model !== DATA.model || (DEF_FW && fw !== DEF_FW)))
+    return el("span", { class: "warn" }, `${name} is from ${f.model} firmware ${fw}, but this definition is for ${DATA.model} firmware ${DEF_FW}: the names and values shown may be wrong`);
+  return `Showing ${name}: ${f.model}, firmware ${fw}, saved ${f.saved}`;
+}
+// the definition viewer's standing notice, as the editor says it: a file read with the nearest firmware's definition
+// of its model, or one no definition describes, its structure read with a known camera's file layout that fits it
+// a camera as a file's header names it, its model or that it names none
+const cameraWords = (model, fw) => (model ? `${model}, firmware ${fw}` : `a model its file does not name, firmware ${fw}`);
+const viaWords = (via) => (via ? `${via.model} firmware ${via.firmware}` : "a known camera's");
+function fileNotice(f, name) {
+  if (!VIEWER) return;
+  const docs = (path, words) => el("a", { href: `${VIEWER.docs}${path}`, target: "_blank", rel: "noopener" }, words);
+  const via = DATA.foreign && DATA.foreign.via, fw = firmware(f);
+  const words = DATA.foreign ? [`This camera (${cameraWords(f.model, fw)}) is not supported yet: no camera definition describes it, so its settings cannot be named. `
+      + `Its file's structure is read with the ${viaWords(via)} file layout, which fits this file. `, docs("QUICKSTART/", "How a camera gets mapped")]
+    : DEF_FW && fw !== DEF_FW ? [`${name} is read with the ${DATA.model} firmware ${DEF_FW} definition, the nearest this viewer has: the file says firmware ${fw}, so some settings may be named wrongly or be missing.`]
+      : null;
+  $("notice").replaceChildren(...(words || []));
+  $("notice").classList.remove("intro");
+  $("notice").hidden = !words;
+  fit();
+}
+// the first words someone arriving at the definition viewer reads, in the notice's place until a file is opened
+function intro() {
+  const cam = VIEWER.cameras.find((c) => c.key === DATA.camera);
+  $("notice").replaceChildren(`See what is in a Sony camera settings file (CAMSET*.DAT), every setting by name. ${cam ? `The ${cam.name} sample is shown` : "A sample is shown"} `
+    + "until you open your own file, which stays on your computer.");
+  $("notice").classList.add("intro");
+  $("notice").hidden = false;
+}
+// a file the definition viewer cannot read, in the editor's words: not a settings file any definition here
+// describes, or one that is damaged
+function unreadable(err, name) {
+  const known = VIEWER.cameras.map((c) => `${c.name}, firmware ${c.firmware}`).join("; ");
+  return el("span", { class: "warn", title: err.message }, err.matched
+    ? `${name}: this settings file is damaged or incomplete; it may have been cut short when it was copied. Copy it from the card again.`
+    : `${name}: this is not a settings file this viewer can read: it reads files laid out like those of the cameras it knows (${known}).`);
+}
+// the panel the Menu shows for a file no definition describes
+function nodefDetail() {
+  const f = L.f, via = DATA.foreign.via, link = (path, words) => el("a", { href: `${VIEWER.docs}${path}`, target: "_blank", rel: "noopener" }, words);
+  return [el("div", { class: "nodef" }, el("div", { class: "title" }, "No definition for this camera yet"),
+    f ? el("p", {}, `${DATA.file.name} says it is from ${cameraWords(f.model, firmware(f))}, saved ${f.saved || "at a time it does not give"}.`) : null,
+    el("p", {}, "No camera definition describes this model, so its settings cannot be named here, and no other camera's names are put on them. "
+      + `The File layout view shows the file's structure all the same: its header, its sections, every record by id and size, the bytes, the map and the inspector, read with the ${viaWords(via)} file layout, which fits this file.`),
+    el("p", {}, `This viewer knows ${VIEWER.cameras.length === 1 ? "one camera" : `${VIEWER.cameras.length} cameras`}: ${VIEWER.cameras.map((c) => `${c.name}, firmware ${c.firmware}`).join("; ")}.`),
+    el("p", {}, "A camera gets its definition by being mapped with Camset's kit: ", link("QUICKSTART/", "how a camera gets mapped"), " · ", link("CAMERA_SUPPORT/", "which cameras the kit works with"), "."),
+    el("button", { class: "button", onclick: () => setMode("layout") }, "Show the file's structure"))];
+}
+// a file opened in the definition viewer: read by trial with every camera's block; this camera's (or the nearest
+// firmware's of this model, when it is this page's) shown here, another camera's, or none's, by starting the page again
+// with it, the file carried over in this tab
+function openInViewer(buf, name) {
+  let got;
+  try { got = readByTrial(buf, VIEWER.cameras); } catch (err) { $("mainmsg").replaceChildren(unreadable(err, name)); return; }
+  if (got.cam && got.cam.key === DATA.camera) { initLayout(); useFile(got.f, name); return; }
+  const whose = got.cam ? `${got.cam.name}, firmware ${got.cam.firmware}` : `${got.model}, which no definition here describes`;
+  if (carry(buf, name)) {
+    $("mainmsg").textContent = `${name} is from ${got.model} firmware ${got.fw}: opening it with ${got.cam ? `the ${got.cam.model} firmware ${got.cam.firmware} definition` : "no definition"}…`;
+    location.assign(got.cam ? `?camera=${encodeURIComponent(got.cam.key)}` : location.search || "?");
+    return;
+  }
+  if (!got.cam && sameBlock(got.block, FMT)) { becomeForeign(got, name); return; }
+  $("mainmsg").replaceChildren(el("span", { class: "warn" }, got.cam
+    ? `${name} is from ${cameraWords(got.model, got.fw)}, which this viewer reads with the ${got.cam.model} firmware ${got.cam.firmware} definition: choose that camera at the top and Show, then open the file again (this browser keeps no file while the page changes camera).`
+    : `${name} is from ${whose}; this browser keeps no file while the page starts again, and this page reads files laid out another way, so its structure cannot be shown here.`));
+}
+// this page made the one for a file no definition describes, in place (when the browser keeps no file for the next
+// start): every record, menu, name and memory of this camera's definition let go, as foreignData has none, the file
+// read with this page's own container block, which framed it
+function becomeForeign(got, name) {
+  for (const k of Object.keys(R)) delete R[k];
+  KEYS.clear(); MMI = null;
+  Object.assign(DATA, foreignData(got));
+  delete DATA.menu_expert;
+  if (MENUS) MENUS.off = MENUS.on = DATA.menu;
+  history.replaceState(null, "", location.pathname + location.search);          // no #layout|<key> of the camera before
+  $("expert").hidden = true;
+  const find = document.querySelector(".find");
+  if (find) find.style.display = "none";
+  [...$("camera").children].forEach((o) => { o.selected = false; });
+  $("camera").append(el("option", { value: "", selected: true, disabled: true }, `${cameraWords(got.model, got.fw)} (no definition)`));
+  $("camera").value = "";
+  // the way back to a camera the viewer knows, though it knows one only (the list's change turns Show on)
+  $("camlabel").hidden = $("camshow").hidden = false;
+  $("camshow").disabled = true;
+  Object.assign(state, { tab: "This file", group: null, item: null, filter: "all", q: "" });
+  $("q").value = "";
+  useFile(got.f, name);
 }
 $("mainfile").addEventListener("change", async (e) => {
   const file = e.target.files[0];
@@ -2395,7 +2745,7 @@ $("mainfile").addEventListener("change", async (e) => {
   try {
     const buf = await file.arrayBuffer();
     if (!buf.byteLength) throw new Error(`${file.name} is empty (0 bytes): if it was picked straight from the camera over USB, copy it to this computer first`);
-    initLayout(); useFile(parseCamset(buf), file.name);
+    if (VIEWER) openInViewer(buf, file.name); else { initLayout(); useFile(parseCamset(buf), file.name); }
   } catch (err) {
     $("mainmsg").textContent = err.message.startsWith(file.name) ? err.message : `${file.name}: ${err.message}`;
   }
@@ -2488,6 +2838,12 @@ window.addEventListener("hashchange", () => {
 });
 const startKey = layoutKey();
 initLayout(); cmpOptions(); fromHash(); chips(); draw(); fit();
+if (VIEWER && !OPENED) intro();
+if (OPENED) useFile(OPENED.f, OPENED.name);          // the file carried over to this start (the definition viewer)
+$("loading").remove();
+$("mainfile").disabled = false;
+$("openfile").removeAttribute("aria-disabled");
+fit();
 if (startKey) showInLayout(startKey, false);
 </script>
 </body>

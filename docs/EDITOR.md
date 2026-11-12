@@ -1,7 +1,8 @@
 # Using the editor
 
 Camset Editor reads, compares and edits Sony camera settings files (`CAMSET*.DAT`). Building it, the camera
-helper and the supported cameras are in the repository's README.
+helper and the supported cameras are in the repository's README. To only look inside a file, the
+[definition viewer](viewer/) does it in a browser, with nothing to install: the same names, read-only.
 
 !!! warning "At your own risk"
 
@@ -38,7 +39,7 @@ file.
 ### The welcome screen
 
 The editor opens on a welcome screen with three cards, Read from camera, Open a settings file and Explore a
-sample (the file beside the built-in ILCE-1M2 definition, with personal data removed, made by
+sample (the file beside the built-in ILCE-1M2 definition, with personal text removed, made by
 `kit/tools/make_sample.py`, which can be edited but never written to a camera, however it is opened), and the recent
 files below them.
 Under them, "Works with" names each camera a definition covers by its model code and the name photographers know it
@@ -124,11 +125,11 @@ With the sample open, ⬆ Write… is off, and its hover says why: the sample is
 however the sample comes: opened with Open… from beside its definition, edited and saved under another name and opened
 again, or sent up from the web page. The editor knows it by its header, the model and save time of the sample beside a
 definition, which no edit changes, and says so where the write is refused: "This file is the editor's sample, or a file
-saved from it: no camera wrote it…, so it is never written to a camera. Read your camera, or open a settings file
-your camera saved, and make your edits there." The sample may still be saved, as it is there to try the editor: Save
+saved from it: no camera wrote it as it is (its personal text was taken out), so it is never written to a camera.
+Read your camera, or open a settings file your camera saved, and make your edits there." The sample may still be saved, as it is there to try the editor: Save
 As opens the Before saving window to say first, and the status line once saved and the web page's download say again,
-"This is the editor's sample, or a file made from it: no camera wrote it, so never load it into a camera, though a
-camera's Load menu would list it. Saving it is only for trying the editor." The window
+"This is the editor's sample, or a file made from it: no camera wrote it as it is, so never load it into a camera,
+though a camera's Load menu would list it. Saving it is only for trying the editor." The window
 opens where it was closed and at the size it had, unless that place is off the screen it opens on (a second screen no
 longer there, say).
 
@@ -136,20 +137,26 @@ Settings > Appearance > Theme is "Follow the system" for a new user: the window 
 set, and changes when it does. Dark and Light keep it one way; preferences from before the choice keep the theme they
 had.
 
-The foot of Settings, on every tab, names the editor's version ("Camset Editor 0.2.0", with "(build 1a2b3c4)", the
-commit, for a build made from the repository). Changes beside it opens what changed, release by release (the
-project's `CHANGELOG.md`, built into the program), and Third-party licences opens the licences of the crates and fonts
-built into the editor in your browser (`THIRD_PARTY_LICENSES.html`, which the packages carry; a build of your own has
-it only once `cargo about` has written it). The web page's Settings name the same version.
+The foot of Settings, on every tab, has the About Camset Editor… button and names the editor's version ("Camset
+Editor 0.2.0", with "(build 1a2b3c4)", the commit, for a build made from the repository). Changes beside it opens
+what changed, release by release (the project's `CHANGELOG.md`, built into the program), and Third-party licences
+opens the licences of the crates and fonts built into the editor in your browser (`THIRD_PARTY_LICENSES.html`, which
+the packages carry; a build of your own has it only once `cargo about` has written it). The web page's Settings name
+the same version.
 
 The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.0"), at the right end of the
-status bar, and on the welcome page in full. A click on the status bar's version, or on the one at the foot of
-Settings, opens About Camset Editor: the version and the build, the cameras the editor works with, Changes, Third-party
-licences and Copy version (the version in full, for a message about a problem). The web page names the version at
-the right end of its status bar and on its welcome page, and its Settings end with the version and Changes; a click on
-either version opens the page's About, with the version and the build, the cameras and Changes. The page's About has
-no Copy version, and its Third-party licences is greyed out, as the licences page is on the editor's computer. On macOS the application menu's About Camset Editor is the system's own panel: the packaged
-app's name, version and copyright line, from its Info.plist.
+status bar, and on the welcome page in full. A click on the status bar's version, or Settings' About Camset Editor…
+button, opens About Camset Editor, on every system (Windows and Linux have no menu bar): the version and the build,
+the system the editor runs on (its name, its version on macOS and Linux, and the processor the program was built
+for), the cameras it works with by model and firmware (a definition you added says so), whether the camera link
+program is there, the licence and copyright line, links to the project page, the documentation and Report a problem,
+Changes, Third-party licences and Copy details. Copy details copies a short block for a message about a problem: the
+version and build, the system, the cameras and the camera link program, with no file, folder, user name or network
+address. The web page names the version at the right end of its status bar, on its welcome page and at the foot of
+Settings, whose About Camset Editor… button and Changes open the page's About and Changes; the status bar's version
+opens About too. The page's About has the window's lines, links and Copy details, from the editor; its Third-party
+licences is greyed out, as the licences page is on the editor's computer. On macOS the application menu's About
+Camset Editor is the system's own panel: the packaged app's name, version and copyright line, from its Info.plist.
 
 The window describes itself to the computer's screen reader (VoiceOver, Narrator, Orca) through egui's AccessKit
 support: buttons, check boxes and lists by their words, and the controls that show none by a name of their own (the

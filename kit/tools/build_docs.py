@@ -51,9 +51,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import yaml  # noqa: E402
-
+# camkit before any other package, as in every kit program: a Python without the kit's packages is told so (camkit/start.py)
 from camkit import ROOT, camset, definitions, paths  # noqa: E402
+import yaml  # noqa: E402
 import camset_ksy  # noqa: E402
 
 DOCS = ROOT / "docs"

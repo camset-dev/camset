@@ -1,24 +1,29 @@
 """The proof viewer (kit/tools/proof_viewer.py), offline: --pack, the frames' copies beside the page; no page in a
 clone with no runs; --open; the camera's own runs only (runs/<model>_fw<fw>/, camkit.paths); the help text with the
 guide frames it was read from, My Menu and the Main page; a proof's pictures in reading order; the other shooting
-modes' rows, from made-up runs, made-up menus and made-up text.
+modes' rows, from made-up runs, made-up menus and made-up text. And --public, the definition viewer: every definition
+listed, each camera's data apart, nothing but public files in it, the same bytes without private/ and runs/, and a file
+finding its definition as the editor picks it, from a second camera and files made up from the sample in tmp_path.
 
 Run: .venv/bin/python -m pytest kit/tests/test_proof_viewer.py -q
 A tmp_path runs/ILCE-1M2_fw4.00/ with two tiny PNGs stands in for the real runs, and a tmp clone holds only the
 repository's a1 II definition and data/; nothing talks to a camera.
 """
+import base64
 import collections
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import pytest
 from PIL import Image
 
-from camkit import datafiles, definitions, paths, placement
+from camkit import camset, datafiles, definitions, menu_rows, paths, placement
 
 import proof_viewer as pv
 
@@ -505,9 +510,9 @@ def test_refused_before_anything_is_read(args, tmp_path):
 # ---------------------------------------------------------------- no page in a clone with no runs, and --open
 
 def page_data_of(page: Path) -> dict:
-    """The DATA a built page carries."""
+    """The DATA a built page carries (what the build put in place of the template's /*DATA*/null)."""
     html = page.read_text(encoding="utf-8")
-    at = html.index("const DATA = ") + len("const DATA = ")
+    at = html.index("const BUILT = ") + len("const BUILT = ")
     return json.JSONDecoder().raw_decode(html[at:])[0]
 
 
@@ -906,7 +911,7 @@ def test_the_main_tiles_the_help_frames_and_the_setting_at_the_cursor():
     where the section holds none), the guide frames and differing readings of a help text (the camera's words only),
     whose words each text is, and the setting whose bytes hold the file layout's cursor (a 16-bit field's, else its
     element's, none in a record's header)."""
-    code = ("".join(page_function(n) for n in ("tileKeys", "describeV", "tileText", "helpParts", "keyAt", "helpBlock", "helpSource"))
+    code = ("".join(page_function(n) for n in ("own", "tileKeys", "describeV", "tileText", "helpParts", "keyAt", "helpBlock", "helpSource"))
             + page_line("HELP_FROM") + page_line("helpTip") + PAGE_PARTS)
     r = subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
@@ -1035,8 +1040,768 @@ def test_another_file_with_fewer_sections_keeps_the_page_within_them():
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
 def test_the_pages_script_parses(tmp_path):
-    """node --check of the page's whole script, as the template holds it."""
-    script = tmp_path / "page.js"
-    script.write_text(PAGE[PAGE.index("<script>") + len("<script>"):PAGE.rindex("</script>")], encoding="utf-8")
+    """node --check of the page's whole script, as the template holds it: a module (the definition viewer awaits a
+    camera's data before the page is drawn)."""
+    script = tmp_path / "page.mjs"
+    start = PAGE.index('<script type="module">') + len('<script type="module">')
+    script.write_text(PAGE[start:PAGE.rindex("</script>")], encoding="utf-8")
     r = subprocess.run(["node", "--check", str(script)], capture_output=True, text=True, timeout=60)
     assert r.returncode == 0, r.stderr
+
+
+# ---------------------------------------------------------------- --public: the definition viewer, from public files only
+
+OTHER = "ILCE-7M4_fw3.00"          # a second camera, made up in tmp_path from the a1 II's public definition
+ROOT = Path(pv.__file__).resolve().parents[2]
+BLOCK = camset.Block.parse(definitions.load_public(A1)["camera"]["file"])
+# every key the definition viewer's data may hold, at every level (decision 16: anything else is not public until
+# shown to be): an exact set where a key is always there, an allowed set and the ones always there where some may not be
+TOP_KEYS = {"public", "model", "camera", "pictures", "file", "values", "colors", "format", "memory_names", "memory_modes",
+            "menu", "menu_expert", "records", "my_menu", "main", "guides", "help_source"}
+RECORD_KEYS = {"k", "n", "g", "vals", "pv", "menu", "sampled", "proved", "why", "us", "is", "note", "ev", "help"}
+RECORD_MAY = RECORD_KEYS | {"hs", "hg", "oh", "rg", "u", "x"}
+NODE_KEYS, NODE_MAY = {"id", "l"}, {"id", "l", "recs", "kids", "subs", "mode"}
+CAMERA_KEYS = {"key", "model", "firmware", "name", "file", "sample"}
+
+
+def made_file(model: str | bytes = None, fw: tuple = None, d: bytes = None) -> bytes:
+    """The tracked sample (or `d`) with its header's model or firmware changed and both checksums worked out again
+    through the container block (camkit.camset): a test's file, never uploaded anywhere."""
+    d = SAMPLE.read_bytes() if d is None else d
+    if model is not None:
+        d = BLOCK.with_text(d, "model", model)
+    if fw:
+        at = BLOCK.firmware[0].n
+        d = d[:at] + bytes(fw) + d[at + len(fw):]
+    return BLOCK.sealed(d)
+
+
+def reframed(keep) -> bytes:
+    """The sample framed again with only the records keep(section, records) gives each section, both checksums worked
+    out again: a file laid out as no camera's is (a memory set shorter than its base, no section at all)."""
+    d = SAMPLE.read_bytes()
+    start, end = BLOCK.sections_start.n, BLOCK.trailer_site(len(d))
+    out = bytearray(d[:start])
+    for i, recs in enumerate(BLOCK.frame(d)):
+        mine = keep(i, recs)
+        if mine is None:
+            continue
+        out += len(mine).to_bytes(4, "little")
+        for _, size, count, off in mine:
+            out += d[off:off + 8 + size * count]
+    return BLOCK.sealed(bytes(out + d[end:]))
+
+
+def two_definitions(tmp_path) -> Path:
+    """A definitions folder in tmp_path: the a1 II's public definition and its sample, and a second camera made up from
+    them (another model and firmware, its own sample)."""
+    defs = tmp_path / "definitions"
+    defs.mkdir()
+    shutil.copy(definitions.path(A1), defs / f"{A1}.json")
+    shutil.copy(SAMPLE, defs / SAMPLE.name)
+    other = json.loads(definitions.path(A1).read_text(encoding="utf-8"))
+    other["model"] = other["layouts"][0]["model"] = "ILCE-7M4"
+    other["layouts"][0]["firmware"] = "3.00"
+    other["camera"].update(display_name="made up", sample=f"{OTHER}.DAT")
+    (defs / f"{OTHER}.json").write_text(json.dumps(other, indent=1), encoding="utf-8")
+    (defs / f"{OTHER}.DAT").write_bytes(made_file("ILCE-7M4", (3, 0)))
+    return defs
+
+
+def public_build(out: Path, single: bool = False) -> None:
+    pv.public_main(str(out), single)
+
+
+def build_two(tmp: Path) -> Path:
+    """The definition viewer of two cameras, built into tmp: the folder (site/: the page and data/) and the single file
+    (camset-viewer.html)."""
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(definitions, "DIR", two_definitions(tmp))
+        mp.setattr(pv, "RUN_ROOT", None)
+        public_build(tmp / "site")
+        public_build(tmp / "camset-viewer.html", single=True)
+    return tmp
+
+
+@pytest.fixture(scope="module")
+def viewer(tmp_path_factory):
+    """build_two once for the tests that only read what it built (the page tests run in folders of their own in it)."""
+    return build_two(tmp_path_factory.mktemp("viewer"))
+
+
+@pytest.fixture
+def own_viewer(tmp_path):
+    """build_two for a test that changes what it built."""
+    return build_two(tmp_path)
+
+
+def data_scripts(text: str) -> dict:
+    """{camera: its data} of the data scripts in a text (a data/<camera>.js, or the single file's)."""
+    out = {}
+    for m in re.finditer(r'window\.CAMSET_VIEWER_DATA\[("[^"]+")\] = ', text):
+        out[json.loads(m.group(1))] = json.JSONDecoder().raw_decode(text[m.end():])[0]
+    return out
+
+
+def outputs(folder: Path) -> dict:
+    return {p.relative_to(folder).as_posix(): p.read_bytes() for p in sorted(folder.rglob("*")) if p.is_file()}
+
+
+def test_the_viewer_lists_every_definition_each_with_its_own_data(viewer):
+    """The owner's (2026-11-12): one page for every camera with a definition. The page lists each definition's camera
+    with its container block (with which a file finds its definition); each camera's data is a script of its own beside
+    the page, holding that camera's alone; the single file holds them all and the same list."""
+    page = viewer / "site" / "index.html"
+    html = page.read_text(encoding="utf-8")
+    v = page_data_of(page)["viewer"]
+    a1 = definitions.load_public(A1)
+    assert set(v) == {"cameras", "docs", "global", "data"} and all(set(c) == CAMERA_KEYS for c in v["cameras"])
+    assert [(c["key"], c["model"], c["firmware"], c["sample"]) for c in v["cameras"]] == [(A1, "ILCE-1M2", "4.00", True), (OTHER, "ILCE-7M4", "3.00", True)]
+    assert all(c["file"] == a1["camera"]["file"] for c in v["cameras"]) and v["cameras"][1]["name"] == "ILCE-7M4 · made up"
+    assert v["docs"] == pv.site_url() and v["docs"].startswith("https://") and (v["global"], v["data"]) == ("CAMSET_VIEWER_DATA", "data/")
+    assert "<title>Definition viewer</title>" in html and "<h1>Definition viewer</h1>" in html and "Proof Viewer:" not in html
+    assert data_scripts(html) == {}, "the folder's page loads each camera's data when it shows it"
+    each = {}
+    for key in (A1, OTHER):
+        got = data_scripts((viewer / "site" / "data" / f"{key}.js").read_text(encoding="utf-8"))
+        assert list(got) == [key] and got[key]["camera"] == key and got[key]["public"] is True
+        each.update(got)
+    single = (viewer / "camset-viewer.html").read_text(encoding="utf-8")
+    assert data_scripts(single) == each and page_data_of(viewer / "camset-viewer.html") == page_data_of(page)
+    assert single.index("CAMSET_VIEWER_DATA[") < single.index('<script type="module">'), "the data before the page's script"
+    assert len(each[A1]["records"]) == len(a1["settings"]) and each[OTHER]["model"] == "ILCE-7M4"
+
+
+def projection(s: dict) -> dict:
+    """What the viewer's record of a setting must be, from the public definition alone: its key, name, group, values
+    in the definition's order, its lean proof, why no proof reaches it (kind and words), its note, its own help words,
+    its unit, its Expert mark; nothing else."""
+    p = s.get("proved") or {}
+    r = {"k": s["key"], "n": s.get("name") or "", "g": s.get("group") or "", "vals": s.get("values") or [], "pv": p.get("values"),
+         "menu": [], "sampled": bool(p.get("sampled")), "proved": bool(p),
+         "why": {f: s["unproved_reason"][f] for f in ("kind", "why")} if s.get("unproved_reason") else None,
+         "us": {f: s["unproved_sets"][f] for f in ("kind", "why", "sets")} if s.get("unproved_sets") else None,
+         "is": bool(s.get("in_sets")), "note": s.get("note") or "", "ev": [], "help": s.get("help") or ""}
+    if r["help"]:
+        r.update(hs="own", hg=[])
+    opts = {v: t for v, t in s.get("option_help") or [] if t}
+    if opts:
+        r["oh"] = [[v, opts[v], [], "own"] for v in sorted(opts)]
+    if s.get("range"):
+        r.update(rg=True, u=s.get("unit") or "")
+    if s.get("expert"):
+        r["x"] = True
+    return r
+
+
+def check_nodes(rows, keys: set) -> None:
+    for x in rows:
+        assert NODE_KEYS <= set(x) <= NODE_MAY, set(x)
+        assert set(x.get("recs", [])) <= keys and all(set(s) == {"name", "keys"} and set(s["keys"]) <= keys for s in x.get("subs", []))
+        check_nodes(x.get("kids", []), keys)
+
+
+def test_every_cameras_data_holds_nothing_but_its_public_definition_and_sample(viewer):
+    """Decision 16 for a page anyone can open: no network address, MAC, serial, e-mail or home folder (check_public's
+    own patterns), no private/ path, no run's name or folder, no date in any camera's data, no settings file but the
+    definitions' tracked samples; every object only the keys allowed for it, each from the lean definition (its proof
+    as the definition says it, the project's own help words), no evidence, no camera's frames, My Menu read-backs or
+    Main page scans, every record listed on a row of the menu."""
+    import check_public
+    samples = {base64.b64encode(f.read_bytes()).decode() for f in (viewer / "definitions").glob("*.DAT")}
+    for f in [viewer / "site" / "index.html", viewer / "camset-viewer.html", *(viewer / "site" / "data").glob("*.js")]:
+        text = f.read_text(encoding="utf-8")
+        assert check_public.leaks(text) == [] and check_public.private_path_problems(f.name, text) == [], f.name
+        assert set(re.findall(r"[A-Za-z0-9+/]{400,}={0,2}", text)) <= samples, f.name
+    for key, data in data_scripts((viewer / "camset-viewer.html").read_text(encoding="utf-8")).items():
+        said = json.dumps(data, ensure_ascii=False) + json.dumps(page_data_of(viewer / "camset-viewer.html"))
+        assert "kit2_" not in said and "runs/" not in said and not re.search(r"\b20\d\d-\d\d-\d\d\b", said), key
+        doc = definitions.load_public(viewer / "definitions" / f"{key}.json")
+        by = {s["key"]: s for s in doc["settings"]}
+        assert set(data) == TOP_KEYS and data["pictures"] == 0 and data["guides"] == []
+        assert data["file"] == {"name": f"{key}.DAT", "b64": base64.b64encode((viewer / "definitions" / f"{key}.DAT").read_bytes()).decode()}
+        assert set(data["colors"]) <= set(doc["tabs"]) and data["format"] == doc["camera"]["file"]
+        assert data["memory_names"] == doc["camera"]["memory_sets"]["names"] and data["memory_modes"] == doc["camera"]["memory_sets"]["modes"]
+        recs = data["records"]
+        assert set(recs) == set(by)
+        assert data["colors"] == doc["camera"]["tab_colors"] and data["values"] == doc["camera"]["sample"]
+        assert recs == {k: projection(s) for k, s in by.items()}, "each record its setting's own words and values"
+        for k, r in recs.items():
+            assert RECORD_KEYS <= set(r) <= RECORD_MAY, (k, set(r))
+            assert r["ev"] == [] and r["menu"] == [] and r.get("x", False) == bool(by[k].get("expert"))
+            assert r["why"] == ({f: by[k]["unproved_reason"][f] for f in ("kind", "why")} if by[k].get("unproved_reason") else None)
+            assert r["us"] == ({f: by[k]["unproved_sets"][f] for f in ("kind", "why", "sets")} if by[k].get("unproved_sets") else None)
+            assert r["pv"] == (by[k].get("proved") or {}).get("values") and r["proved"] == bool(by[k].get("proved"))
+        assert {k: r["help"] for k, r in recs.items() if r["help"]} == {k: s["help"] for k, s in by.items() if s.get("help")}
+        assert all(r["hs"] == "own" and r["hg"] == [] for r in recs.values() if r["help"]) and data["help_source"] == {"own": sum(1 for s in by.values() if s.get("help"))}
+        assert all(len(o) == 4 and o[3] == "own" and o[2] == [] for r in recs.values() for o in r.get("oh") or [])
+        mm = data["my_menu"]
+        assert set(mm) == {"title", "records", "empty", "max_items", "packed", "names", "opens", "read"} and mm["read"] == []
+        assert all(len(x) == 2 for x in mm["names"]) and all(set(v) <= set(recs) for v in mm["opens"].values())
+        assert set(data["main"]) == {"title", "modes"} and all(set(m) == {"name", "tiles", "frames"} and m["frames"] == [] for m in data["main"]["modes"])
+        assert all(t in doc["camera"]["main_tiles"][i]["tiles"] for i, m in enumerate(data["main"]["modes"]) for t in m["tiles"])
+        for menu, listed in ((data["menu"], {s["key"] for s in menu_rows.shown(doc)}), (data["menu_expert"], set(recs))):
+            for t in menu:
+                assert set(t) == {"tab", "groups", "others"} and t["others"] == []
+                for g in t["groups"]:
+                    assert set(g) == {"name", "num", "rows", "extra"} and g["num"] == "" and set(g["extra"]) <= listed
+                    check_nodes(g["rows"], listed)
+            nodes = [x for x, _ in pv.menu_nodes(menu)]
+            held = {k for x in nodes for k in x.get("recs", []) + [k for s in x.get("subs", []) for k in s["keys"]]} | {k for t in menu for g in t["groups"] for k in g["extra"]}
+            assert held == listed, "every record the menu lists on a row, and no other"
+
+
+def private_canaries(tmp_path, monkeypatch, defs: Path) -> list:
+    """Every private source the private page reads, made up in tmp_path and full of canaries, pointed at as the kit
+    finds them: the mapper's evidence (whole proofs that would change the values a proof checked, a run, a day, a
+    menu row) and the data files kept private beside it (the menu tree, the record shapes, the accepted rulings, a
+    reset file); a camera's runs (page scans with frames, My Menu read-backs, proofs, help runs, its newest download
+    with values the sample has not, its downloads manifest); the camera's own help text; a config naming the second
+    camera, CAMSET_CAMERA naming it too, the evidence named by CAMSET_EVIDENCE_DIR. The canaries' words."""
+    words = ["kit2_canaryrun", "Canaryland Row", "2031-02-03", "CANARY HELP WORDS", "canary_frame.png"]
+    doc = definitions.load_public(defs / f"{A1}.json")
+    whole = {}
+    for s in doc["settings"]:
+        vals = (s.get("proved") or {}).get("values") or []
+        if len(vals) >= 2 and len(whole) < 40:          # a whole proof whose lean form is the public one: merge() takes it
+            whole[s["key"]] = {"proved": {"values": vals[:1], "names": {str(v): "two readers" for v in vals[1:]}, "run": words[0],
+                                          "date": words[2], "menu": [f"{words[1]} > {s['name']}"]}, "source": words[1]}
+    evidence = tmp_path / "evidence"
+    evidence.mkdir()
+    for cam, model, fw in ((A1, "ILCE-1M2", "4.00"), (OTHER, "ILCE-7M4", "3.00")):
+        (evidence / f"{cam}.json").write_text(json.dumps({"evidence_format": 1, "model": model, "firmware": fw, "layouts": {},
+                                                         "settings": whole}), encoding="utf-8")
+    monkeypatch.setattr(definitions, "SHIPPED", defs)
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", evidence)
+    monkeypatch.setenv("CAMSET_EVIDENCE_DIR", str(evidence))
+    # each camera's runs and private data files alike: whichever camera the config names, the kit would find them
+    for cam in (A1, OTHER):
+        runs = tmp_path / "runs" / cam
+        for run, rel, text in (("kit2_page_scan", "scan.jsonl", "".join(json.dumps(scan_line(words[4], k, r, p)) + "\n" for k, r, p in
+                                                                       (("menu", 0, 1), ("tiles", 0, None), ("tiles", 1, None), ("menu", 0, 2)))),
+                               ("kit2_pass2", "proofs.jsonl", json.dumps({"path": [words[1]], "label": "On", "chosen_frame": words[4],
+                                                                          "changes": [{"key": a_key_of(doc), "before": 0, "after": 1}]}) + "\n"),
+                               ("kit2_pass2", "mymenu_readback.json", json.dumps({"1": {"frame": words[4], "in_order": True, "slots": [[9, words[1]]]}})),
+                               ("kit2_help", "help.jsonl", json.dumps({"path": [words[1]], "text": words[3], "frames": [words[4]]}) + "\n")):
+            (runs / run / "shots").mkdir(parents=True, exist_ok=True)
+            Image.new("RGB", (8, 6), (255, 0, 0)).save(runs / run / "shots" / words[4])
+            (runs / run / rel).write_text(text, encoding="utf-8")
+        # a camera's newest download, as the private page shows it, with values the sample has not, and its manifest
+        (runs / "kit2_pass2" / "dat").mkdir(parents=True)
+        d = bytearray(SAMPLE.read_bytes())
+        for at in range(0x200, 0x2000, 0x40):
+            d[at] ^= 0x01
+        (runs / "kit2_pass2" / "dat" / "reference_session_start.DAT").write_bytes(BLOCK.sealed(bytes(d)))
+        (runs / "downloads.jsonl").write_text(json.dumps({"path": "kit2_pass2/dat/reference_session_start.DAT", "sha256": "0" * 64,
+                                                          "run": words[0]}) + "\n", encoding="utf-8")
+        # the mapper's data files kept private whole beside the evidence
+        for kind in ("menu_tree", "record_shapes", "accepted", "settings_reset"):
+            place = evidence / cam / f"{kind}_{cam}.json"
+            place.parent.mkdir(exist_ok=True)
+            place.write_text(json.dumps({"camera": cam, "tabs": [{"tab": "Shooting", "pages": [{"group": words[1], "rows": [{"label": words[1]}]}]}],
+                                         "types": {a_key_of(doc): words[1]}, "entries": [{"why": words[1]}], "run": words[0]}), encoding="utf-8")
+    monkeypatch.setenv("CAMSET_RUNS", str(tmp_path / "runs"))
+    monkeypatch.setenv("CAMSET_CAMERA", OTHER)          # the second camera named: the first stays first
+    config = tmp_path / "private" / "config.json"
+    config.parent.mkdir()
+    config.write_text(json.dumps({"camera": OTHER}), encoding="utf-8")
+    monkeypatch.setattr(sys.modules["camkit"], "CONFIG", config)
+    helps = tmp_path / "private" / "help"
+    helps.mkdir()
+    for model, fw in (("ILCE-1M2", "4.00"), ("ILCE-7M4", "3.00")):
+        (helps / f"help_{model}_fw{fw}.json").write_text(json.dumps({"model": model, "firmware": fw, "source": "canary",
+                                                                     "settings": {s["key"]: {"help": words[3]} for s in doc["settings"]}}), encoding="utf-8")
+    monkeypatch.setattr(pv.help_files, "PRIVATE", helps)
+    return words
+
+
+def a_key_of(doc) -> str:
+    return next(s["key"] for s in doc["settings"] if s["key"].startswith("global:") and "@" not in s["key"] and "[" not in s["key"])
+
+
+def test_the_viewer_reads_nothing_private_even_where_it_is_there(tmp_path, monkeypatch):
+    """With every private source the kit knows of here and full of canaries (private_canaries: the evidence, the runs,
+    the camera's help text, the config and the variables naming the camera), the definition viewer is byte for byte
+    the one built without them, the folder and the single file, and holds none of their words. In CI, where private/
+    and runs/ are not, this is what shows the public build never reads them."""
+    defs = two_definitions(tmp_path)
+    monkeypatch.setattr(definitions, "DIR", defs)
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    monkeypatch.delenv("CAMSET_CAMERA", raising=False)
+    public_build(tmp_path / "clean")
+    public_build(tmp_path / "clean.html", single=True)
+    words = private_canaries(tmp_path, monkeypatch, defs)
+    for cam in (A1, OTHER):
+        assert definitions.load(defs / f"{cam}.json") != definitions.load_public(defs / f"{cam}.json"), "the canaries are there to read"
+    assert paths.run_root(required=False) == tmp_path / "runs" / OTHER and (paths.run_root(required=False) / "downloads.jsonl").exists()
+    public_build(tmp_path / "canaries")
+    public_build(tmp_path / "canaries.html", single=True)
+    assert outputs(tmp_path / "canaries") == outputs(tmp_path / "clean")
+    assert (tmp_path / "canaries.html").read_bytes() == (tmp_path / "clean.html").read_bytes()
+    text = (tmp_path / "canaries.html").read_text(encoding="utf-8")
+    assert not [w for w in words if w in text]
+
+
+@pytest.mark.skipif(not definitions.evidence_path(definitions.path(A1)).exists(), reason="reads the mapper's evidence and help, in private/ (not here)")
+def test_the_viewer_carries_none_of_the_mappers_evidence_nor_the_cameras_guide(tmp_path, monkeypatch):
+    """Where the mapper's private files are here: no text of the evidence file, nor of the camera's In-Camera Guide read
+    off it (private/help/), is in the viewer's data unless the public definition has it too."""
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    public_build(tmp_path / "site")
+    said = (tmp_path / "site" / "data" / f"{A1}.js").read_text(encoding="utf-8")
+    public = definitions.path(A1).read_text(encoding="utf-8")
+
+    def values(x):
+        if isinstance(x, str):
+            yield x
+        elif isinstance(x, dict):
+            for v in x.values():
+                yield from values(v)
+        elif isinstance(x, list):
+            for v in x:
+                yield from values(v)
+    private = [json.loads(definitions.evidence_path(definitions.path(A1)).read_text(encoding="utf-8"))]
+    sony = pv.help_files.PRIVATE / pv.help_files.name(definitions.load_public(A1))
+    if sony.exists():
+        private.append(json.loads(sony.read_text(encoding="utf-8"))["settings"])
+    found = {s for p in private for s in values(p) if len(s) >= 16 and json.dumps(s, ensure_ascii=False)[1:-1] in said
+             and json.dumps(s)[1:-1] not in public and s not in public}
+    assert found == set()
+
+
+def test_the_viewer_is_the_same_built_from_the_public_files_alone(tmp_path):
+    """CI's clone has no private/ and no runs/: the viewer built from a copy of the files a commit holds (no private/,
+    no runs/) is byte for byte the one built here, the folder and the single file, and a second build changes nothing."""
+    if shutil.which("git") is None:
+        pytest.skip("git is not installed")
+    listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "--", "kit/camkit",
+                             "kit/tools/proof_viewer.py", "kit/tools/proof_viewer.html", "editor/definitions", "data", "mkdocs.yml"],
+                            cwd=ROOT, capture_output=True, check=True, timeout=60).stdout.decode("utf-8").split("\0")
+    clone = tmp_path / "clone"
+    for rel in filter(None, listed):
+        if (ROOT / rel).is_file():
+            (clone / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / rel, clone / rel)
+    assert not (clone / "private").exists() and not (clone / "runs").exists()
+    env = {k: v for k, v in os.environ.items() if not k.startswith("CAMSET_")}
+
+    def build(root: Path, *args) -> None:
+        r = subprocess.run([sys.executable, str(root / "kit" / "tools" / "proof_viewer.py"), "--public", *args], cwd=root,
+                           env=env, capture_output=True, text=True, timeout=180)
+        assert r.returncode == 0, r.stderr
+    for name, root in (("here", ROOT), ("there", clone), ("again", ROOT)):
+        build(root, "--out", str(tmp_path / name))
+        build(root, "--single", "--out", str(tmp_path / f"{name}.html"))
+    assert outputs(tmp_path / "here") == outputs(tmp_path / "there") == outputs(tmp_path / "again")
+    assert set(outputs(tmp_path / "here")) == {"index.html"} | {f"data/{p.stem}.js" for p in (clone / "editor" / "definitions").glob("*.json")}
+    assert (tmp_path / "here.html").read_bytes() == (tmp_path / "there.html").read_bytes() == (tmp_path / "again.html").read_bytes()
+
+
+def test_a_definition_names_only_a_sample_beside_it_and_a_cameras_key(tmp_path, monkeypatch):
+    """The page publishes the sample a definition names: one that reaches out of the definition's folder is refused,
+    nothing written; so is a definition whose model and firmware make no camera's key (it names a data script, and the
+    page's script holds it); a key is written into a script as page_json writes text, so no text ends the script."""
+    defs = two_definitions(tmp_path)
+    monkeypatch.setattr(definitions, "DIR", defs)
+    (tmp_path / "outside").mkdir()
+    (tmp_path / "outside" / "secret.bin").write_bytes(b"secret")
+    other = json.loads((defs / f"{OTHER}.json").read_text(encoding="utf-8"))
+    for name in ("../outside/secret.bin", str(tmp_path / "outside" / "secret.bin"), "sub/x.DAT"):
+        (defs / f"{OTHER}.json").write_text(json.dumps({**other, "camera": {**other["camera"], "sample": name}}), encoding="utf-8")
+        with pytest.raises(SystemExit) as e:
+            public_build(tmp_path / "site")
+        assert "is not a file beside it" in str(e.value) and not (tmp_path / "site").exists()
+    bad = json.loads(json.dumps(other))
+    bad["layouts"][0]["model"] = "X</script><script>alert(1)//"
+    (defs / f"{OTHER}.json").write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        public_build(tmp_path / "site")
+    assert "not a camera's key" in str(e.value) and not (tmp_path / "site").exists()
+    assert "</script" not in pv.data_script("a</script>b", {"t": "</script>"})
+
+
+def test_the_folders_old_data_goes_and_a_wrong_out_is_refused(own_viewer, monkeypatch):
+    """A camera no longer among the definitions loses its data script on the next build (only files named as the build
+    names them, never a folder so named); a link where a page or a data script goes is replaced, never followed to the
+    file it points at; a data folder that is a link is refused; --out a file without --single, a folder with it, the
+    repository or a place in it but under site/ are refused in plain words, nothing written."""
+    viewer = own_viewer
+    monkeypatch.setattr(definitions, "DIR", viewer / "definitions")
+    data = viewer / "site" / "data"
+    (data / "ILCE-9M3_fw1.00.js").write_text("old", encoding="utf-8")
+    (data / "notes.js").write_text("someone's", encoding="utf-8")
+    (data / "ILCE-9M2_fw2.00.js").mkdir()
+    outside = viewer / "outside.txt"
+    outside.write_text("not the viewer's", encoding="utf-8")
+    try:
+        (data / f"{A1}.js").unlink()
+        os.symlink(outside, data / f"{A1}.js")
+        (viewer / "site" / "index.html").unlink()
+        os.symlink(outside, viewer / "site" / "index.html")
+        linked = True
+    except (OSError, NotImplementedError):          # Windows without the right to make links
+        linked = False
+    public_build(viewer / "site")
+    assert sorted(p.name for p in data.iterdir()) == sorted([f"{A1}.js", f"{OTHER}.js", "notes.js", "ILCE-9M2_fw2.00.js"])
+    assert outside.read_text(encoding="utf-8") == "not the viewer's"
+    if linked:
+        assert not (data / f"{A1}.js").is_symlink() and not (viewer / "site" / "index.html").is_symlink()
+        assert data_scripts((data / f"{A1}.js").read_text(encoding="utf-8"))[A1]["camera"] == A1
+        (viewer / "site2").mkdir()
+        os.symlink(viewer / "elsewhere", viewer / "site2" / "data", target_is_directory=True)
+        with pytest.raises(SystemExit) as e:
+            public_build(viewer / "site2")
+        assert "is a link" in str(e.value) and not (viewer / "site2" / "index.html").exists()
+    for args in (["--public", "--out", str(viewer / "camset-viewer.html")], ["--public", "--single", "--out", str(viewer / "site")]):
+        r = run(*args)
+        assert r.returncode == 2 and "Traceback" not in r.stderr and ("is a file" in r.stderr or "is a folder" in r.stderr), r.stderr
+    for out in (".", "data", "editor/definitions", "site", "kit/x.html"):
+        r = subprocess.run([sys.executable, str(TOOL), "--public", "--out", out] + (["--single"] if out.endswith(".html") else []),
+                           capture_output=True, text=True, timeout=60, cwd=ROOT)
+        said = "give a folder inside site/, such as site/viewer" if out == "site" else "inside the repository"
+        assert r.returncode == 2 and said in r.stderr and "Traceback" not in r.stderr, (out, r.stderr)
+    assert pv.out_refused(str(ROOT / "site" / "viewer"), False) is None and pv.out_refused(str(ROOT / "site" / "camset-viewer.html"), True) is None
+    assert pv.out_refused(str(viewer / "anywhere"), False) is None
+    assert "give a folder inside site/, such as site/viewer" in pv.out_refused(str(ROOT / "site"), False)
+
+
+def test_the_out_guard_knows_the_clone_however_a_path_spells_it(tmp_path):
+    """The repository is told by what it is on disk, not how --out spells it: in another case where the disk ignores
+    case, through a link to the clone, refused as the clone itself is; site/viewer there accepted, site/ itself not."""
+    alt = ROOT.parent / ROOT.name.swapcase()
+    spellings = [ROOT]
+    if alt != ROOT and alt.exists() and os.path.samefile(alt, ROOT):          # a disk that ignores case (macOS, Windows)
+        spellings.append(alt)
+    try:
+        os.symlink(ROOT, tmp_path / "clone", target_is_directory=True)
+        spellings.append(tmp_path / "clone")
+    except (OSError, NotImplementedError):          # Windows without the right to make links
+        pass
+    for root in spellings:
+        for out in ("", "data", "editor/definitions", "kit/tools"):
+            assert "inside the repository" in (pv.out_refused(str(root / out), False) or ""), (root, out)
+        assert "give a folder inside site/" in pv.out_refused(str(root / "site"), False), root
+        assert pv.out_refused(str(root / "site" / "viewer"), False) is None, root
+
+
+def test_the_out_guard_takes_site_only_as_a_folder_of_its_own(tmp_path, monkeypatch):
+    """site/ is the exception only where it is a folder of the clone's own, or a link out of the clone: a site/ that is
+    a link into it (to data/, to the clone itself) is refused as the folder it points at; a site/ not made yet is taken
+    only as "site", the name .gitignore covers. On a made-up clone, so the repository's own site/ is never touched."""
+    clone = tmp_path / "clone"
+    (clone / "data").mkdir(parents=True)
+    (tmp_path / "away").mkdir()
+    monkeypatch.setattr(pv, "ROOT", clone)
+    assert pv.out_refused(str(clone / "site" / "viewer"), False) is None, "site/ not made yet"
+    assert "spell it site/, in lower case" in pv.out_refused(str(clone / "SITE" / "viewer"), False)
+    assert "give a folder inside site/" in pv.out_refused(str(clone / "site"), False)
+    try:
+        for target, ok in ((clone / "data", False), (clone, False), (tmp_path / "away", True)):
+            if (clone / "site").is_symlink():
+                (clone / "site").unlink()
+            os.symlink(target, clone / "site", target_is_directory=True)
+            said = pv.out_refused(str(clone / "site" / "viewer"), False)
+            assert (said is None) if ok else "inside the repository" in said, (target, said)
+    except (OSError, NotImplementedError):          # Windows without the right to make links
+        pytest.skip("links cannot be made here")
+    assert pv.out_refused(str(clone / "site"), False) is not None, "the linked site's own folder is no place for the page either"
+
+
+@pytest.mark.parametrize("args", [["--single", "--out", "x.html"], ["--public"], ["--public", "--values", "x.DAT", "--out", "x"],
+                                  ["--public", "--pack", "--out", "x"], ["--public", "--definition", A1, "--out", "x"]])
+def test_the_public_viewer_refuses_what_does_not_go_with_it(args, tmp_path):
+    r = subprocess.run([sys.executable, str(TOOL), *args], capture_output=True, text=True, timeout=60, cwd=tmp_path)
+    assert r.returncode == 2 and not any(tmp_path.iterdir()), r.stderr
+
+
+def test_the_menus_are_the_editors_and_the_expert_one(viewer):
+    """The viewer's menu is the editor's default one (camkit.menu_rows, the live settings without the Expert ones, the
+    same entries and groups the editor's test writes), its Expert menu every setting; a definition that places none
+    has no entry for what the menus do not hold, as in the editor."""
+    data = data_scripts((viewer / "camset-viewer.html").read_text(encoding="utf-8"))[A1]
+    doc = definitions.load_public(A1)
+    golden = json.loads((ROOT / "editor" / "tests" / "data" / f"menu_{A1}.json").read_text(encoding="utf-8"))
+    tabs = [t["tab"] for t in data["menu"]]
+    assert tabs[:len(golden["entries"])] == [e["entry"] for e in golden["entries"]]
+    for t, e in zip(data["menu"], golden["entries"], strict=False):
+        assert [g["name"] for g in t["groups"]] == [g["group"] for g in e["groups"]], t["tab"]
+    assert {x["tab"] for x in data["menu_expert"]} >= set(tabs)
+    menu = menu_rows.Menu(doc)
+    listed = menu_rows.shown(doc)
+    beside = {s["key"]: len(dict.fromkeys(o for _, o in menu.beside(s, listed))) for s in listed}
+
+    def flat(rows, depth=0, out=None, mode=None):
+        """A group's nodes as the golden file's lines: a row by its keys, a heading by its label, "mode" where the
+        mode changes; the choices shown beside a row's options (its first kids, an option's heading each) left out."""
+        out = [] if out is None else out
+        for x in rows:
+            if depth == 0 and x.get("mode") != mode:
+                mode = x.get("mode")
+                out.append(["mode", mode])
+            recs = x.get("recs") or []
+            out.append(["row", recs, depth] if recs else ["heading", x["l"], depth])
+            flat((x.get("kids") or [])[beside.get(recs[0], 0) if recs else 0:], depth + 1, out, mode)
+        return out
+    for t, e in zip(data["menu"], golden["entries"], strict=False):
+        for g, want in zip(t["groups"], e["groups"], strict=True):
+            if want["family"]:
+                assert {k for x in g["rows"] for sub in x["subs"] for k in sub["keys"]} == set(want["keys"]), g["name"]
+                continue
+            lines = flat(g["rows"])
+            if g["extra"]:
+                lines.append(["more"])
+            more = [k for ln in want["lines"][want["lines"].index(["more"]) + 1:] for k in ln[1]] if ["more"] in want["lines"] else []
+            assert lines == [ln for ln in want["lines"] if not (ln[0] == "row" and ln[1] and ln[1][0] in more)], f"{t['tab']} > {g['name']}"
+            assert g["extra"] == more, f"{t['tab']} > {g['name']}"
+    bare = json.loads(json.dumps(doc))
+    for s in bare["settings"]:
+        for f in ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode"):
+            s.pop(f, None)
+    menu = pv.public_menu(bare)
+    assert "Not in the menus" not in [t["tab"] for t in menu] and all(not g["rows"] or all("kids" not in x for x in g["rows"]) for t in menu for g in t["groups"])
+
+
+TRIAL = """
+const B = DEFS[0].file;
+const bytes = (k) => { const s = Buffer.from(FILES[k], "base64"); return s.buffer.slice(s.byteOffset, s.byteOffset + s.length); };
+const said = (k, cams) => { try { const g = readByTrial(bytes(k), cams); return [g.cam && g.cam.key, g.how, g.model, g.fw, g.via ? g.via.key : null, g.f.sections.length]; }
+  catch (e) { return ["refused", !!e.matched, e.message]; } };
+const two = [...DEFS, { key: "ILCE-1M2_fw3.00", model: "ILCE-1M2", firmware: "3.00", file: B }];
+console.log(JSON.stringify({ sample: said("sample", DEFS), near: said("near", DEFS), other: said("other", DEFS), foreign: said("foreign", DEFS),
+  garbage: said("garbage", DEFS), damaged: said("damaged", DEFS), short: said("short", DEFS), none: said("none", DEFS),
+  near_of_two: said("near", two), tie: said("tie", two), exact_of_two: said("old", two), utf8: said("utf8", DEFS), lossy: said("lossy", DEFS),
+  bom: said("bom", DEFS) }));
+"""
+
+
+def sample_files(**more) -> dict:
+    """The files the page's tests open: the sample, and files made from it."""
+    good = SAMPLE.read_bytes()
+    return {"sample": good, "near": made_file(fw=(3, 1)), "other": made_file("ILCE-7M4", (3, 0)), "foreign": made_file("ILCE-0X0"),
+            "garbage": b"not a settings file " * 40, "damaged": good[:5000] + bytes([good[5000] ^ 0xFF]) + good[5001:],
+            "short": good[:4000], "tie": made_file(fw=(3, 50)), "old": made_file(fw=(3, 0)), "none": reframed(lambda i, recs: None),
+            "utf8": made_file("ILCE-Ä1".encode()), "lossy": made_file(b"ILCE-\xff\xfe"), "bom": made_file(b"\xef\xbb\xbfILCE-1M2"), **more}
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_a_file_finds_its_definition_as_the_editor_picks_it(viewer):
+    """The page's own trial reading (the editor's Definitions::open and pick, editor/src/schema.rs): a file of a
+    definition's model and firmware takes it; another firmware of a model the nearest one (3.01: 3.00; 3.50, as near to
+    both, the newer); a model no definition covers is read with the first block that frames it and named by nothing; a
+    file no block's magic fits is no settings file, one that fits but does not frame is damaged, and so is one framed
+    with no section; the header's text is UTF-8, a byte that is none the replacement character (from_utf8_lossy)."""
+    cams = page_data_of(viewer / "site" / "index.html")["viewer"]["cameras"]
+    code = (f"const DEFS = {json.dumps(cams)};\nconst FILES = {json.dumps({k: base64.b64encode(v).decode() for k, v in sample_files().items()})};\n"
+            + page_line("sameBlock") + page_line("fwNumber")
+            + "".join(page_function(n) for n in ("own", "peekRange", "peekText", "peekFirmware", "magicMatches", "pickCamera", "readByTrial",
+                                                 "placeOf", "checksumOf", "parseCamset")) + TRIAL)
+    (viewer / "trial.js").write_text(code, encoding="utf-8")          # too long for a command line
+    r = subprocess.run(["node", str(viewer / "trial.js")], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    assert got["sample"] == [A1, "exact", "ILCE-1M2", "4.00", None, 13]
+    assert got["near"] == [A1, "near", "ILCE-1M2", "3.01", None, 13]
+    assert got["other"] == [OTHER, "exact", "ILCE-7M4", "3.00", None, 13]
+    assert got["foreign"] == [None, "none", "ILCE-0X0", "4.00", A1, 13], "read with the a1 II's block, nothing named"
+    assert got["garbage"][:2] == ["refused", False] and got["damaged"][:2] == ["refused", True] and got["short"][:2] == ["refused", True]
+    assert got["none"] == ["refused", True, "it holds no section of settings"]
+    assert got["near_of_two"][:2] == ["ILCE-1M2_fw3.00", "near"] and got["tie"][:2] == [A1, "near"]
+    assert got["exact_of_two"][:2] == ["ILCE-1M2_fw3.00", "exact"]
+    assert got["utf8"][2] == "ILCE-Ä1" and got["lossy"][2] == "ILCE-\ufffd\ufffd"
+    assert got["bom"][:3] == [None, "none", "\ufeffILCE-1M2"], "a byte-order mark kept, as the editor's from_utf8_lossy keeps it"
+
+
+# what kit/tests/page_harness.js's made-up DOM lacks for the viewer: base64, session storage (STORAGE: kept, or off: every
+# call throws), a canvas, the pixel ratio, a select's options, a location.assign that only notes where the page would go,
+# and a document.head that loads a camera's data script from DATA_SCRIPTS (or fails it)
+VIEWER_PREFIX = """
+const B64 = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+window.atob = (s) => { let out = "", buf = 0, n = 0; for (const c of s.replace(/=+$/, "")) { buf = ((buf << 6) | B64.indexOf(c)) & 0xffffff; n += 6; if (n >= 8) { n -= 8; out += String.fromCharCode((buf >> n) & 255); } } return out; };
+window.btoa = (s) => { let out = ""; for (let i = 0; i < s.length; i += 3) { const t = (s.charCodeAt(i) << 16) | ((s.charCodeAt(i + 1) || 0) << 8) | (s.charCodeAt(i + 2) || 0);
+  out += B64[t >> 18 & 63] + B64[t >> 12 & 63] + (i + 1 < s.length ? B64[t >> 6 & 63] : "=") + (i + 2 < s.length ? B64[t & 63] : "="); } return out; };
+const SS = new Map();
+window.sessionStorage = STORAGE ? { getItem: (k) => (SS.has(k) ? SS.get(k) : null), setItem: (k, v) => SS.set(k, String(v)), removeItem: (k) => SS.delete(k) }
+  : { getItem() { throw new Error("off"); }, setItem() { throw new Error("off"); }, removeItem() { throw new Error("off"); } };
+window.devicePixelRatio = 1;
+__Element.prototype.getContext = () => new Proxy({}, { get: (t, k) => (k in t ? t[k] : () => {}) });
+Object.defineProperty(__Element.prototype, "options", { get() { return this.children; } });
+window.__went = [];
+location.assign = (u) => window.__went.push(u);
+location.replace = () => {};
+history.pushState = () => {};
+window.__loaded = [];
+document.head = { append(s) { setTimeout(() => { window.__loaded.push(s.src); if (DATA_SCRIPTS[s.src] === undefined) { s.onerror(); return; } eval(DATA_SCRIPTS[s.src]); s.onload(); }, 0); } };
+"""
+
+# what the page shows once drawn, and what it does with each file opened then
+VIEWER_LOOK = """
+const bytes = (k) => { const s = atob(FILES[k]); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; };
+const look = () => ({ camera: DATA.camera, foreign: !!DATA.foreign, file: $("file").textContent, title: $("file").title, notice: $("notice").textContent,
+  intro: $("notice").classList.contains("intro"), msg: $("mainmsg").textContent, cams: $("camera").children.map((o) => o.textContent),
+  tabs: $("tabs").children.map((li) => li.textContent), detail: $("dbody").textContent, records: Object.keys(R).length, open: $("openfile").textContent,
+  privacy: $("privacy").textContent, ready: !$("mainfile").disabled, expert: $("expert").getAttribute("aria-pressed"), loaded: [...window.__loaded] });
+const out = look();
+out.expert_on = (() => { $("expert").click(); const n = $("tabs").children.map((li) => li.textContent); $("expert").click(); return n; })();
+setMode("layout");
+out.layout = $("tree").textContent + $("cmp-show").textContent + $("cmp-with").textContent;
+out.about = $("hbody").textContent;
+setMode("menu");
+out.tries = {};
+for (const k of OPEN) {
+  window.__went.length = 0;
+  openInViewer(bytes(k), k + ".DAT");
+  out.tries[k] = { msg: $("mainmsg").textContent, went: [...window.__went], kept: STORAGE && SS.has("camset-viewer-file"), after: look() };
+  if (STORAGE) SS.clear();
+  if (out.tries[k].after.foreign) { setMode("layout"); out.tries[k].layout = $("tree").textContent; setMode("menu"); }
+}
+console.log(JSON.stringify(out));
+"""
+
+
+def viewer_look(page: Path, files: dict, carried: str = None, open_: tuple = (), storage: bool = True, data: bool = True,
+                look: str = None) -> dict:
+    """A viewer's page run whole under node in the made-up DOM of kit/tests/page_harness.js: the folder's page (its
+    cameras' data scripts loaded as the page asks for them, or failing when `data` is false) or the single file,
+    started as after a file `carried` was opened before (in this tab's session storage), then each of `open_` opened:
+    what VIEWER_LOOK (or `look`) finds, or {"failed", "body"} when the page stopped."""
+    html = page.read_text(encoding="utf-8")
+    start = html.index('<script type="module">') + len('<script type="module">')
+    run = Path(tempfile.mkdtemp(prefix="node_", dir=page.parent))
+    inline = "".join(m.group(1) for m in re.finditer(r"<script>\n(.*?)</script>", html, re.S))
+    scripts = {f"data/{p.name}": p.read_text(encoding="utf-8") for p in sorted((page.parent / "data").glob("*.js"))} if data and (page.parent / "data").is_dir() else {}
+    keep = (f"sessionStorage.setItem('camset-viewer-file', JSON.stringify({{ name: '{carried}.DAT', b64: FILES['{carried}'] }}));\n" if carried else "")
+    (run / "index.html").write_text(html, encoding="utf-8")          # the harness gives each element its tag from it
+    (run / "app.js").write_text(f"const STORAGE = {json.dumps(storage)}, DATA_SCRIPTS = {json.dumps(scripts)}, OPEN = {json.dumps(list(open_))};\n"
+                                + VIEWER_PREFIX + f"const FILES = {json.dumps({k: base64.b64encode(v).decode() for k, v in files.items()})};\n"
+                                + keep + inline + "globalThis.__run = (async () => { try {\n" + html[start:html.rindex("</script>")] + "\n" + (look or VIEWER_LOOK)
+                                + "\n} catch (e) { console.log(JSON.stringify({ failed: String(e && e.message), body: document.body.textContent })); } })();\n",
+                                encoding="utf-8")
+    (run / "test.js").write_text("__run", encoding="utf-8")
+    r = subprocess.run(["node", str(ROOT / "kit" / "tests" / "page_harness.js"), str(run / "app.js"), str(run / "test.js")],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+needs_node = pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+
+
+@needs_node
+def test_the_viewer_starts_on_the_first_camera_with_its_sample_and_the_editors_menu(viewer):
+    """The page run whole (node, a made-up DOM): it loads the first camera's data script when it starts, shows its
+    sample, said to be a sample and not the visitor's camera (the caveat on hover), a sentence for whoever arrives
+    cold, its one action, and that a file never leaves the computer; its menu the editor's default one until Expert is
+    on; a file no definition here describes is refused naming the cameras it knows, and one of the other camera starts
+    the page again with that camera, the file kept in this tab."""
+    first = viewer_look(viewer / "site" / "index.html", sample_files(), open_=("garbage", "damaged", "other"))
+    assert first["loaded"] == [f"data/{A1}.js"] and first["camera"] == A1 and first["ready"] and first["records"] > 1000
+    assert "showing a sample, not your camera" in first["file"] and "Initialize does not reset every record" in first["title"]
+    assert first["intro"] and first["notice"].startswith("See what is in a Sony camera settings file (CAMSET*.DAT), every setting by name.")
+    assert "ILCE-1M2 · α1 II sample is shown until you open your own file, which stays on your computer" in first["notice"]
+    assert first["cams"] == ["ILCE-1M2 · α1 II, firmware 4.00", "ILCE-7M4 · made up, firmware 3.00"]
+    assert first["open"] == "Open your settings file…" and first["privacy"] == "read in this browser, never sent anywhere"
+    golden = json.loads((ROOT / "editor" / "tests" / "data" / f"menu_{A1}.json").read_text(encoding="utf-8"))
+    assert [t.split("(")[0] for t in first["tabs"][1:len(golden["entries"]) + 1]] == [e["entry"] for e in golden["entries"]]
+    assert first["expert"] == "false" and first["expert_on"] != first["tabs"]
+    assert "exist only for whoever mapped the camera with Camset's kit" in first["detail"]
+    assert first["tries"]["garbage"]["msg"] == ("garbage.DAT: this is not a settings file this viewer can read: it reads files laid out like "
+                                                "those of the cameras it knows (ILCE-1M2 · α1 II, firmware 4.00; ILCE-7M4 · made up, firmware 3.00).")
+    assert first["tries"]["damaged"]["msg"].endswith("Copy it from the card again.") and "0x" not in first["tries"]["damaged"]["msg"]
+    assert first["tries"]["other"]["went"] == [f"?camera={OTHER}"] and first["tries"]["other"]["kept"]
+
+
+@needs_node
+def test_the_viewer_shows_a_file_of_another_firmware_and_one_no_definition_describes(viewer):
+    """A file of another firmware is read with the nearest definition under a standing notice naming both; one of the
+    other camera starts with that camera; a file of a model no definition covers shows its structure, read with the
+    a1 II's file layout which fits it (as the notice and the layout's About say), its sections as sections, no name of
+    any definition's and no fact of the a1 II's block (its video system), the Menu a panel listing the cameras the
+    viewer knows; a model text that is a JavaScript word or empty, and a memory set shorter than its base, are shown
+    the same, not a crash."""
+    files = sample_files(proto=made_file("__proto__"), ctor=made_file("constructor"), blank=made_file(""),
+                       shorter=BLOCK.with_text(reframed(lambda i, recs: recs[:-3] if i == 2 else recs), "model", "ILCE-0X0"))
+    files["shorter"] = BLOCK.sealed(files["shorter"])
+    near = viewer_look(viewer / "site" / "index.html", files, "near")
+    assert near["camera"] == A1 and not near["intro"] and near["notice"] == (
+        "near.DAT is read with the ILCE-1M2 firmware 4.00 definition, the nearest this viewer has: the file says firmware 3.01, so some settings may be named wrongly or be missing.")
+    assert near["msg"] == "Showing near.DAT: ILCE-1M2, firmware 3.01, saved 20260101_000000"
+    other = viewer_look(viewer / "site" / "index.html", files, "other")
+    assert other["camera"] == OTHER and other["notice"] == "" and "values from other.DAT" in other["file"] and other["loaded"] == [f"data/{OTHER}.js"]
+    names = {s["name"] for s in definitions.load_public(A1)["settings"] if len(s["name"]) > 6}
+    for k, model in (("foreign", "ILCE-0X0"), ("proto", "__proto__"), ("ctor", "constructor"), ("blank", ""), ("shorter", "ILCE-0X0")):
+        got = viewer_look(viewer / "site" / "index.html", files, k)
+        assert got["foreign"] and got["camera"] == "" and got["records"] == 0 and got["tabs"] == ["This file(1)"] and got["loaded"] == [], k
+        assert ("read with the ILCE-1M2 firmware 4.00 file layout, which fits this file") in got["notice"] and "How a camera gets mapped" in got["notice"]
+        assert got["notice"].startswith(f"This camera ({model}, firmware 4.00)" if model else "This camera (a model its file does not name, firmware 4.00)")
+        assert "No definition for this camera yet" in got["detail"] and "ILCE-7M4 · made up, firmware 3.00" in got["detail"] and "NTSC" not in got["detail"]
+        assert "sections[12]" in got["layout"] and "Section 1" in got["layout"] and not [n for n in names if n in got["layout"]]
+        assert "Memory 1" not in got["layout"] and "Live settings" not in got["layout"] and "its mode's first memory" not in got["layout"] and "NTSC" not in got["layout"]
+        assert "file layout places them, which fits this file" in got["about"]
+
+
+@needs_node
+def test_the_viewer_without_session_storage_shows_an_unmapped_file_in_place(viewer):
+    """With the browser keeping no file between starts: a file of another camera says to choose that camera and open
+    it again; one no definition describes is shown in place, every name, record and menu of the camera shown before
+    let go."""
+    files = sample_files()
+    got = viewer_look(viewer / "site" / "index.html", files, storage=False, open_=("other", "foreign"))
+    assert got["camera"] == A1 and got["tries"]["other"]["went"] == [] and "choose that camera at the top and Show" in got["tries"]["other"]["msg"]
+    after = got["tries"]["foreign"]["after"]
+    assert got["tries"]["foreign"]["went"] == [] and after["foreign"] and after["records"] == 0 and after["tabs"] == ["This file(1)"]
+    assert after["cams"][-1] == "ILCE-0X0, firmware 4.00 (no definition)" and "not supported yet" in after["notice"]
+    names = {s["name"] for s in definitions.load_public(A1)["settings"] if len(s["name"]) > 6}
+    assert not [n for n in names if n in got["tries"]["foreign"]["layout"]] and "Section 1" in got["tries"]["foreign"]["layout"]
+
+
+WAY_BACK = """
+const bytes = (k) => { const s = atob(FILES[k]); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; };
+const shown = () => [$("camlabel").hidden, $("camshow").hidden, $("camshow").disabled];
+const out = { start: shown() };
+openInViewer(bytes("foreign"), "foreign.DAT");
+out.foreign = !!DATA.foreign; out.after = shown(); out.cams = $("camera").children.map((o) => o.textContent);
+$("camera").value = CAMERA; $("camera").dispatchEvent({ type: "change" });
+out.chosen = shown();
+$("camshow").click();
+out.went = [...window.__went];
+console.log(JSON.stringify(out));
+"""
+
+
+@needs_node
+def test_with_one_camera_an_unmapped_file_shown_in_place_keeps_the_way_back(tmp_path, monkeypatch):
+    """A viewer that knows one camera hides its camera list (nothing to choose); with the browser keeping no file, a
+    file no definition describes is shown in place, and then the list and its Show come back, Show off until the
+    camera is chosen, and on to that camera's page."""
+    defs = tmp_path / "definitions"
+    defs.mkdir()
+    shutil.copy(definitions.path(A1), defs / f"{A1}.json")
+    shutil.copy(SAMPLE, defs / SAMPLE.name)
+    monkeypatch.setattr(definitions, "DIR", defs)
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    public_build(tmp_path / "site")
+    got = viewer_look(tmp_path / "site" / "index.html", {"foreign": made_file("ILCE-0X0")}, storage=False,
+                      look=f"const CAMERA = {json.dumps(A1)};\n" + WAY_BACK)
+    assert got["start"][:2] == [True, True], "one camera: no list to choose from"
+    assert got["foreign"] and got["after"] == [False, False, True] and got["cams"][-1] == "ILCE-0X0, firmware 4.00 (no definition)"
+    assert got["chosen"] == [False, False, False] and got["went"] == [f"?camera={A1}"]
+
+
+@needs_node
+def test_the_viewer_says_plainly_when_its_data_does_not_load_and_the_single_file_works_whole(viewer):
+    """A camera's data script that does not load leaves a page saying so in plain words, not a dead button; the single
+    file, all its cameras' data in it, starts and reads a file of each camera without loading anything."""
+    failed = viewer_look(viewer / "site" / "index.html", sample_files(), data=False)
+    assert failed["failed"] and "could not load ILCE-1M2 · α1 II's definition" in failed["body"] and "keep its data folder beside it" in failed["body"]
+    single = viewer_look(viewer / "camset-viewer.html", sample_files(), "other", open_=("sample", "near"))
+    assert single["camera"] == OTHER and single["loaded"] == [] and single["records"] > 1000
+    assert single["tries"]["sample"]["went"] == [f"?camera={A1}"] and single["tries"]["near"]["went"] == [f"?camera={A1}"]
+
+
+def test_the_pages_html_says_what_it_needs_before_its_script_runs():
+    """Before the script is ready (it loads a camera's data first), and where it never runs (JavaScript off, a browser
+    without modules or top-level await), the page says what it needs, and its file field takes no file."""
+    head = PAGE[PAGE.index('<header class="top"'):PAGE.index("</header>")]
+    assert 'id="loading"' in head and "Chrome, Edge, Firefox or Safari (15 or newer)" in head and "<noscript>" in head
+    assert 'id="mainfile" accept=".dat,.DAT" hidden disabled' in head
+    assert '$("loading").remove();\n$("mainfile").disabled = false;' in PAGE

@@ -33,6 +33,66 @@ pub(crate) fn window_title() -> String {
 /// What the welcome page and the foot of Settings say, in the window and on the web page alike.
 pub(crate) const NOT_SONY: &str = "Independent project; not affiliated with or endorsed by Sony.";
 
+/// The project's pages, from Cargo.toml (`repository`, `homepage`; mkdocs.yml names the same, a test holds them
+/// together): About links to them, in the window and on the web page, and problems are reported on the issues page.
+pub(crate) const PROJECT_URL: &str = env!("CARGO_PKG_REPOSITORY");
+pub(crate) const DOCS_URL: &str = env!("CARGO_PKG_HOMEPAGE");
+pub(crate) const ISSUES_URL: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/issues");
+
+/// About's links, in the window and on the web page alike: (words, address, what it opens).
+pub(crate) const ABOUT_LINKS: [(&str, &str, &str); 3] = [
+    ("Project page", PROJECT_URL, "The editor's source code and releases, on GitHub"),
+    ("Documentation", DOCS_URL, "How to use the editor, and how a camera is mapped"),
+    ("Report a problem", ISSUES_URL, "Tell the project about a problem, on GitHub: Copy details first, to paste into it"),
+];
+
+/// The licence (Cargo.toml's `license`) and LICENSE's copyright line, as About gives them ("MIT licence. Copyright (c)
+/// 2026 Camset contributors."): the macOS app's About panel and the Windows program's details take that same line from
+/// LICENSE when they are built.
+pub(crate) fn licence_words() -> String {
+    const LICENSE: &str = include_str!("../../../LICENSE");
+    let licence = env!("CARGO_PKG_LICENSE");
+    match LICENSE.lines().map(str::trim).find(|l| l.starts_with("Copyright (c) ")) {
+        Some(c) => format!("{licence} licence. {}.", c.trim_end_matches('.')),
+        None => format!("{licence} licence."),
+    }
+}
+
+/// The system the editor runs on, for About and a message about a problem: its name, its version where a file the
+/// system keeps gives it (macOS, Linux; Windows keeps it where only a system call reaches, so it is left out there),
+/// and the processor the program was built for ("macOS 15.2 (aarch64)", "Windows (x86_64)"). Read once.
+pub(crate) fn system_words() -> &'static str {
+    static WORDS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    WORDS.get_or_init(|| {
+        let os = std::env::consts::OS;
+        // cfg! rather than #[cfg], so every system's build compiles all of it; on Linux /usr/lib/os-release when there
+        // is no /etc/os-release, as the os-release specification has it
+        let files: &[&str] = if cfg!(target_os = "macos") { &["/System/Library/CoreServices/SystemVersion.plist"] } else if cfg!(target_os = "linux") { &["/etc/os-release", "/usr/lib/os-release"] } else { &[] };
+        let text = files.iter().find_map(|f| std::fs::read_to_string(f).ok()).unwrap_or_default();
+        format!("{} ({})", system_name(os, &text), std::env::consts::ARCH)
+    })
+}
+
+/// A system's name and version from `std::env::consts::OS` and the file `system_words` read: macOS's
+/// SystemVersion.plist (its ProductVersion), Linux's os-release (its PRETTY_NAME, "Ubuntu 26.04 LTS"); the name alone
+/// when the file says nothing usable. Short and printable only, as it goes into About and a copied report.
+pub(crate) fn system_name(os: &str, text: &str) -> String {
+    let fit = |v: &str| -> Option<String> {
+        let v = v.trim().trim_matches(|c| c == '"' || c == '\'').trim();
+        (!v.is_empty() && v.len() <= 60 && v.chars().all(|c| !c.is_control())).then(|| v.to_string())
+    };
+    match os {
+        "macos" => {
+            let version = text.split_once("<key>ProductVersion</key>").and_then(|(_, rest)| rest.split_once("<string>")).and_then(|(_, rest)| rest.split_once("</string>")).map(|(v, _)| v)
+                .filter(|v| !v.is_empty() && v.chars().all(|c| c.is_ascii_digit() || c == '.'));
+            version.map_or_else(|| "macOS".to_string(), |v| format!("macOS {v}"))
+        }
+        "linux" => text.lines().find_map(|l| l.strip_prefix("PRETTY_NAME=")).and_then(fit).unwrap_or_else(|| "Linux".to_string()),
+        "windows" => "Windows".to_string(),
+        other => other.to_string(),
+    }
+}
+
 /// The third-party licences button of Settings' foot and of About: it opens the licences page the packages carry in
 /// the browser, and says so greyed out in a build that has none.
 fn licences_button(ui: &mut egui::Ui) {
@@ -514,16 +574,23 @@ impl App {
                         ui.label(RichText::new(NOT_SONY).small().color(tone::weak(ui.visuals())));
                     });
                 });
-                // which editor this is (a click opens About), what changed, and the licences of what it is built from
+                // About, as a button of its own: Windows and Linux have no menu bar, and macOS's application menu opens
+                // the system's own About panel, so this (and the status bar's version) is where About is found; then
+                // what changed, the licences of what it is built from, and which editor this is
                 ui.horizontal(|ui| {
-                    if ui.add(egui::Button::new(RichText::new(format!("Camset Editor {}", version_words())).small().color(tone::weak(ui.visuals()))).frame(false))
-                        .on_hover_text("The version, and the commit it was built from when built from the project's repository. Click for About.").clicked() {
+                    if ui.button(RichText::new("About Camset Editor…").small())
+                        .on_hover_text("The version, the system it runs on, the cameras it works with, the licence and the project's pages, and Copy details for a message about a problem").clicked() {
                         self.show_about = true;
                     }
                     if ui.link(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
                         self.show_changes = true;
                     }
                     licences_button(ui);
+                    // cut short rather than over the buttons when the window is narrow (About has it whole)
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.add(egui::Label::new(RichText::new(format!("Camset Editor {}", version_words())).small().color(tone::weak(ui.visuals()))).truncate())
+                            .on_hover_text("The version, and the commit it was built from when built from the project's repository");
+                    });
                 });
             });
         self.show_settings = open;
@@ -579,9 +646,27 @@ impl App {
         w + 2.0 * ui.spacing().button_padding.x + 2.0 * ui.spacing().item_spacing.x
     }
 
+    /// Whether the camera link program is there, in About's words (`have_helper`, which looks again every few seconds).
+    pub(crate) fn helper_words(&self) -> &'static str {
+        if self.have_helper() { "Camera link program: found" } else { "Camera link program: not found (files only)" }
+    }
+
+    /// What About's Copy details copies, for a message about a problem: the editor's version and build, the system,
+    /// the cameras it works with by model and firmware (with the names the definitions in use give them, which for a
+    /// definition the person added are that file's words), and whether the camera link program is there. No file,
+    /// folder, user name, network address or camera serial.
+    pub(crate) fn about_details(&self) -> String {
+        let models = self.defs.works_with();
+        let cameras = if models.is_empty() { "no camera definition".to_string() } else { models.join(", ") };
+        format!("Camset Editor {}\nSystem: {}\nWorks with: {cameras}\n{}", version_words(), system_words(), self.helper_words())
+    }
+
     /// About Camset Editor: which editor this is (its version, and the commit of a build made from the repository),
-    /// the cameras it works with, and the ways to what changed and to the licences. The status bar's version and the
-    /// one at the foot of Settings open it.
+    /// the system it runs on, the cameras it works with, whether the camera link program is there, the licence, the
+    /// project's pages, and the ways to what changed, to the licences and to a copy of these details for a message
+    /// about a problem. Settings' About Camset Editor… button and the status bar's version open it, on every system;
+    /// macOS's application menu opens the system's own About panel instead (the Info.plist's name, version and
+    /// copyright line).
     pub(crate) fn about_window(&mut self, ctx: &egui::Context) {
         if !self.show_about { return; }
         let mut open = true;
@@ -592,21 +677,37 @@ impl App {
             if let Some(hash) = build_hash() {
                 ui.label(format!("Build {hash}")).on_hover_text("The commit it was built from, in the project's repository");
             }
+            ui.label(format!("System: {}", system_words())).on_hover_text("The computer the editor runs on, and the processor the program was built for");
             let models = self.defs.works_with();
             if !models.is_empty() {
-                ui.label(RichText::new(format!("Works with: {}", models.join(", "))).color(weak));
+                ui.label(RichText::new(format!("Works with: {}", models.join(", "))).color(weak))
+                    .on_hover_text("The cameras and firmware the editor has a definition for: built in, or added in Settings > Camera support & web page");
             }
+            ui.label(RichText::new(self.helper_words()).color(weak))
+                .on_hover_text("The program that reads and writes a camera over USB or the network; without it the editor opens files only");
+            ui.add_space(6.0);
+            ui.label(RichText::new(licence_words()).small().color(weak));
             ui.label(RichText::new(NOT_SONY).small().color(weak));
             ui.add_space(6.0);
+            // in the browser (egui opens a link with the system's own handler)
+            ui.horizontal_wrapped(|ui| {
+                // a link whose words can be selected is told to a screen reader as plain text (egui 0.31's text
+                // selection sets its role to Label); not selectable, it is a link, reached with Tab
+                ui.style_mut().interaction.selectable_labels = false;
+                for (words, url, what) in ABOUT_LINKS {
+                    ui.hyperlink_to(words, url).on_hover_text(format!("{what}\n{url}"));
+                }
+            });
+            ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
                 if ui.button(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
                     self.show_changes = true;
                 }
                 licences_button(ui);
-                let words = format!("Camset Editor {}", version_words());
-                if ui.button(RichText::new("Copy version").small()).on_hover_text(format!("Copies \"{words}\", to put in a message about a problem")).clicked() {
-                    ui.ctx().copy_text(words);
-                    self.status = "Version copied".into();
+                let details = self.about_details();
+                if ui.button(RichText::new("Copy details").small()).on_hover_text(format!("Copies these lines, to paste into a message about a problem:\n{details}")).clicked() {
+                    ui.ctx().copy_text(details);
+                    self.status = "About's details copied, to paste into a message about a problem".into();
                 }
             });
         });

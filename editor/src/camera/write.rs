@@ -13,11 +13,11 @@ pub(crate) enum Review {
 
 /// Why a file the sample was made into is not written (`send_blocked`): it came from the sample however it was opened,
 /// as its header says.
-pub(crate) const SAMPLE_NOT_WRITTEN: &str = "This file is the editor's sample, or a file saved from it: no camera wrote it (its personal values were taken out), so it is never written to a camera. Read your camera, or open a settings file your camera saved, and make your edits there.";
+pub(crate) const SAMPLE_NOT_WRITTEN: &str = "This file is the editor's sample, or a file saved from it: no camera wrote it as it is (its personal text was taken out), so it is never written to a camera. Read your camera, or open a settings file your camera saved, and make your edits there.";
 
 /// What the window and the page say when the sample, or a file made from it, is saved or downloaded (`is_sample_doc`):
 /// saving it is for trying the editor, and a camera must never load it, though its Load menu would list it.
-pub(crate) const SAMPLE_NOT_FOR_A_CAMERA: &str = "This is the editor's sample, or a file made from it: no camera wrote it, so never load it into a camera, though a camera's Load menu would list it. Saving it is only for trying the editor.";
+pub(crate) const SAMPLE_NOT_FOR_A_CAMERA: &str = "This is the editor's sample, or a file made from it: no camera wrote it as it is, so never load it into a camera, though a camera's Load menu would list it. Saving it is only for trying the editor.";
 
 /// The Write and Before saving windows' all-clear, the window's and the page's, shown only when every record the
 /// session changed was checked on the camera and passed (`acceptance_issues` empty).
@@ -1202,7 +1202,8 @@ pub(crate) mod safety_tests {
         assert_eq!(app.send_blocked().as_deref(), Some(SAMPLE_NOT_WRITTEN), "a file made from the sample");
         assert!(app.do_send().is_err() && app.sent.is_none());
         // the refusal says the cause, then what to do
-        assert!(SAMPLE_NOT_WRITTEN.contains("no camera wrote it") && SAMPLE_NOT_WRITTEN.contains("Read your camera, or open a settings file your camera saved"));
+        assert!(SAMPLE_NOT_WRITTEN.contains("no camera wrote it as it is") && SAMPLE_NOT_WRITTEN.contains("Read your camera, or open a settings file your camera saved"));
+        assert!(SAMPLE_NOT_FOR_A_CAMERA.contains("no camera wrote it as it is"), "the two say alike what the sample is");
         let mut app = opened(&dir, "OLD.DAT", &other_firmware().to_bytes());
         assert!(!app.editable());
         assert!(app.send_blocked().is_some_and(|w| w.contains("view only")));

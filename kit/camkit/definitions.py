@@ -3,7 +3,7 @@ The one place the kit knows where they are.
 
     editor/definitions/
       ILCE-1M2_fw4.00.json   the definition: what every record means, and its camera section
-      ILCE-1M2_fw4.00.DAT    its sample (the camera section's "sample"): a file that body wrote, personal values removed
+      ILCE-1M2_fw4.00.DAT    its sample (the camera section's "sample"): a file that body wrote, personal text removed
 
 A definition is named as data/<model>_fw<fw>/ and docs/models/<model>_fw<fw>.md are, and as the camera's runs are
 (runs/<model>_fw<fw>/, camkit.paths). kit/schema_update.py writes the definition of the camera the kit works on; the

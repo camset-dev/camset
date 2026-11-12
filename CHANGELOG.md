@@ -7,10 +7,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
-- The editor's version is easy to find: in the window's title, at the right end of the status bar and on the welcome
-  page. A click on it opens the new About Camset Editor window, with the version and build, the cameras the editor
-  works with, Changes, the third-party licences and Copy version, for a message about a problem. The macOS app's own
-  About panel shows its version and copyright line.
+- The editor's version is easy to find: in the window's title, at the right end of the status bar, on the welcome
+  page and at the foot of Settings. About Camset Editor opens from the status bar's version and from the About Camset
+  Editor… button at the foot of Settings, on every tab, so it is found on Windows and Linux too, which have no menu
+  bar. It gives the version and build, the system the editor runs on, the cameras it works with by model and
+  firmware (one you added says so), whether the camera link program is there, the licence and copyright line, links
+  to the project page, the documentation and Report a problem, Changes, the third-party licences and Copy details,
+  which copies those lines for a message about a problem, with no file, folder, name or address of yours. The macOS
+  app's own About panel, in its application menu, shows its version and copyright line.
 - The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
 - A Windows package joins the macOS and Linux ones: a zip for 64-bit Windows 10 and 11 on Intel or AMD. Unpack it
   anywhere and run `camset_editor.exe` in the folder it makes, with the camera definitions and the licences beside
@@ -29,10 +33,31 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The web page
 
-- The page names the editor's version at the right end of its status bar and on the welcome page. A click on it, or
-  on the one at the foot of Settings, opens About Camset Editor, with the version and build, the cameras the editor
-  works with and Changes, which shows what changed, release by release; Settings' foot has Changes too. The
-  third-party licences are opened from the desktop app.
+- The page names the editor's version at the right end of its status bar, on the welcome page and at the foot of
+  Settings. A click on the status bar's version, or on Settings' About Camset Editor… button, opens About Camset
+  Editor, with the window's lines, links and Copy details, and Changes, which shows what changed, release by release;
+  Settings' foot has Changes too. The third-party licences are opened from the desktop app.
+
+### The definition viewer
+
+- A page anyone can open to look inside a settings file, with nothing to install: the definition viewer, on the docs
+  site at <https://camset-dev.github.io/camset/viewer/>. Open your settings file… reads a `CAMSET*.DAT` in the
+  browser, where it stays, finds its camera among every definition Camset has, as the editor does, and shows each
+  setting by name in the camera's menu, the same tabs, groups and rows as the editor's (a setting's choices for an
+  option, which the editor shows beside the option, under its row; an Expert switch shows every setting the
+  definition holds), with whether a proof checked each value, and the file's layout byte by byte. Until a file is
+  open it shows the camera's sample, not your camera. A file of another firmware is read with the nearest one's
+  definition, and says so; one of a camera with no definition yet, laid out like the files of a camera the viewer
+  knows, shows its structure only, with no names, and how a camera gets mapped; any other file is refused, naming the
+  cameras it reads. `kit/tools/proof_viewer.py --public` builds it from the public definitions alone (the docs site's
+  build does), and `--public --single --out site/camset-viewer.html` makes it one file that opens from disk with no
+  network. The proof viewer, with the camera's own screens, stays with whoever mapped the camera.
+- Each release carries the definition viewer as one file, `camset-viewer.html`, to download and open with no
+  internet; the latest is always at <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html>.
+- The proof viewer's Open settings file… also says when a file is of another firmware than its definition, not only
+  of another model; its file buttons answer Enter and Space, and are 44 pixels tall on a touch screen; a tab's count
+  says on hover what it counts; links read on the light theme; a file's header text is read as UTF-8, as the editor
+  reads it; a file framed with no section of settings is refused as damaged.
 
 ### The mapping kit
 
@@ -55,6 +80,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   results file that Windows will not replace leaves no temporary file. The other failures were the tests' own Unix
   habits, and two things Windows cannot hold (a file name with a newline in git, Unix permission bits) are skipped
   there with the reason (docs/PORTING.md, "Seen on Windows / Linux").
+- A kit program started with a Python that cannot run it (macOS's own `python3`, or any Python without the kit's
+  packages) no longer ends in a traceback such as "No module named 'numpy'": it says what is wrong and gives the
+  command to run instead, with the kit's own Python (`.venv/bin/python`, on Windows `.venv\Scripts\python`), from the
+  camset folder, with the same arguments. A program that needs none of the packages runs on the system's Python as
+  before.
 
 ## 0.2.0 (2026-11-11)
 
@@ -311,9 +341,9 @@ firmware 4.00 definition.
 - A [security policy](SECURITY.md), a [code of conduct](CODE_OF_CONDUCT.md) and issue templates for bug reports and
   camera requests. The docs now say the camera must be set to English before mapping; other menu languages are not
   supported yet.
-- The a1 II's sample settings file, which Explore a sample opens, now holds the camera's factory settings: it is
-  made from the file the camera wrote right after Initialize, with the lens list cleared and the save time set to 1
-  January 2026.
+- The a1 II's sample settings file, which Explore a sample opens, is now made from the file the camera wrote right
+  after Initialize, its personal text removed (the lens list cleared, the save time set to 1 January 2026). Initialize
+  does not reset every record, so it is not a list of factory values.
 - The a1 II's menu tree names each carousel's options by their own names ("Spot", "Custom", "Tracking", "Continuous
   Shooting"), no longer by the sub-choice each one was left on when the menus were walked, which was the camera's own
   setting; a test reads every camera's menu tree for such a label.

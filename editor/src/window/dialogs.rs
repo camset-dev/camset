@@ -283,6 +283,44 @@ pub(crate) mod dialog_tests {
         }
     }
 
+    /// About's facts come from one place each: the links from Cargo.toml (the same two pages mkdocs.yml names, and the
+    /// issues page under the repository), the licence from Cargo.toml and the copyright line from LICENSE, as the macOS
+    /// and Windows packages take it (the page's About draws them from the editor's state: `the_page_has_the_windows_words`).
+    #[test]
+    fn about_facts_have_one_source() {
+        let mkdocs = include_str!("../../../mkdocs.yml").replace("\r\n", "\n");
+        assert!(mkdocs.lines().any(|l| l == format!("site_url: {DOCS_URL}")), "the docs site's address");
+        assert!(mkdocs.lines().any(|l| l == format!("repo_url: {PROJECT_URL}")), "the repository's address");
+        assert!(!PROJECT_URL.ends_with('/'), "the issues page is the repository's address and /issues");
+        assert_eq!(ISSUES_URL, format!("{PROJECT_URL}/issues"));
+        assert!([PROJECT_URL, DOCS_URL, ISSUES_URL].iter().all(|u| u.starts_with("https://")));
+        assert_eq!(ABOUT_LINKS.map(|(w, u, _)| (w, u)), [("Project page", PROJECT_URL), ("Documentation", DOCS_URL), ("Report a problem", ISSUES_URL)]);
+        let holders = crate::windows_resources::copyright_holders(include_str!("../../../LICENSE")).expect("LICENSE names its copyright holders");
+        assert_eq!(licence_words(), format!("MIT licence. Copyright (c) {holders}."));
+    }
+
+    /// The system About names: the name and version from the file each system keeps them in (macOS's
+    /// SystemVersion.plist, Linux's os-release), the name alone where there is none or it says nothing usable, and the
+    /// processor the program was built for.
+    #[test]
+    fn about_names_the_system() {
+        let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>15.2</string>\n</dict>";
+        assert_eq!(system_name("macos", plist), "macOS 15.2");
+        assert_eq!(system_name("macos", ""), "macOS");
+        assert_eq!(system_name("macos", "<key>ProductVersion</key><string>/Users/you</string>"), "macOS", "a version is digits and dots");
+        let os_release = "NAME=\"Ubuntu\"\nVERSION_ID=\"26.04\"\nPRETTY_NAME=\"Ubuntu 26.04 LTS\"\nID=ubuntu\n";
+        assert_eq!(system_name("linux", os_release), "Ubuntu 26.04 LTS");
+        assert_eq!(system_name("linux", "PRETTY_NAME='Fedora Linux 44'"), "Fedora Linux 44");
+        assert_eq!(system_name("linux", "ID=arch\n"), "Linux");
+        assert_eq!(system_name("linux", &format!("PRETTY_NAME=\"{}\"", "x".repeat(80))), "Linux", "too long to be a name");
+        assert_eq!(system_name("windows", "anything"), "Windows");
+        assert_eq!(system_name("freebsd", ""), "freebsd");
+        let words = system_words();
+        assert!(words.ends_with(&format!(" ({})", std::env::consts::ARCH)), "{words}");
+        let name = match std::env::consts::OS { "macos" => "macOS", "windows" => "Windows", _ => "" };
+        assert!(words.starts_with(name), "{words}");
+    }
+
     /// Settings > Changes reads the changelog built in: releases and their parts as headings, each point whole (its
     /// following lines joined), Markdown's marks taken out.
     #[test]

@@ -1,7 +1,10 @@
-# Builds the editor for macOS, Linux and Windows and keeps the packages as build artifacts. On a version tag (v0.2.0,
-# say) pushed to GitHub, the release job also publishes a Release for that tag with the packages attached
-# (each carries the project's LICENSE and its own third-party licences page); run by hand (workflow_dispatch) it
-# keeps the artifacts only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
+# Builds the editor for macOS, Linux and Windows and keeps the packages as build artifacts, and the definition viewer
+# as one file (camset-viewer.html: every camera definition with its sample, from the public files alone, a page that
+# opens from disk with no network; kit/tools/proof_viewer.py --public --single). On a version tag (v0.2.0, say)
+# pushed to GitHub, the release job also publishes a Release for that tag with the packages and the viewer attached
+# (each package carries the project's LICENSE and its own third-party licences page; the viewer keeps one name, so
+# releases/latest/download/camset-viewer.html is its address); run by hand (workflow_dispatch) it keeps the artifacts
+# only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
 # skips itself there. Pull requests and main are checked by kit-ci.yml and editor-ci.yml; this workflow runs their
 # tests again only as the gate before a release's packages are built.
 #
@@ -31,6 +34,15 @@ jobs:
         run: |
           python -m pytest -q kit/tests
           python kit/tools/check_public.py --all
+      - name: The definition viewer as one file (a release download)
+        # from editor/definitions/ alone, after the tests and check_public passed; under site/, where the tool writes
+        # inside a clone (git-ignored)
+        run: python kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: camset-viewer
+          path: site/camset-viewer.html
+          if-no-files-found: error
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
       - name: Linux libraries
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
@@ -126,9 +138,15 @@ jobs:
           pattern: camset-editor-*
           merge-multiple: true
           path: dist
+      # the definition viewer the test job built: by its name, so a release without it stops here
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: camset-viewer
+          path: dist
       - uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           files: |
             dist/*.dmg
             dist/*.tar.gz
             dist/*.zip
+            dist/camset-viewer.html

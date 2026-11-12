@@ -7,6 +7,9 @@ rust-version = "1.85"        # the first release with the 2024 edition
 description = "Reads, compares and edits Sony camera settings files (CAMSET .DAT)"
 license = "MIT"
 readme = "../README.md"
+# About links to both, the issues page under the repository (window/settings.rs); mkdocs.yml names the same two
+repository = "https://github.com/camset-dev/camset"
+homepage = "https://camset-dev.github.io/camset/"
 
 [dependencies]
 eframe = "0.31"

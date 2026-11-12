@@ -3,6 +3,10 @@
 Camset opens the settings file a Sony camera saves to its card, shows every setting in it by name, compares files and
 the camera's memories, changes a value and saves a file for the camera to load back.
 
+**Look inside your settings file now, with nothing to install:** the [definition viewer](viewer/) opens a
+`CAMSET*.DAT` of any camera Camset knows and shows every setting in it by name, and the file's layout byte by byte.
+The file is read in your browser and never leaves your computer.
+
 ![Camset Editor: the Main page of the built-in sample, its tiles and settings, with four edits marked in orange](images/editor-main.png)
 
 !!! warning "At your own risk"
@@ -24,7 +28,9 @@ check yours.
 The editor is on the [Releases page](https://github.com/camset-dev/camset/releases): a disk image for macOS on Apple
 silicon, a tarball for Linux and, from 0.2.1, a zip for Windows (before 0.2.1, build the editor from source there).
 The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the
-macOS app or the Windows program the first time.
+macOS app or the Windows program the first time. From 0.2.1 each release also carries the definition viewer as one
+file, [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open
+in a browser with no internet.
 
 1. **Save the settings on the camera:** MENU > Setup > Reset/Save Settings > Save/Load Settings > Save. The camera
    writes a `CAMSET*.DAT` file into the card's `PRIVATE/SONY/CAMSET` folder. Copy it to your computer and keep it:
@@ -42,7 +48,9 @@ has the details and what has not been tried yet.
 The mapping kit changes each setting on the camera itself, downloads the file the camera then saves and sees which
 records changed. What it proves goes into the camera's definition with its proof: which values the camera showed and
 wrote, and when. The proof viewer lays out the camera's own screens beside each value. It exists only where the kit
-has run, since it shows that camera's own pictures; the one below shows the a1 II's factory sample.
+has run, since it shows that camera's own pictures; the one below shows the a1 II's sample file. The
+[definition viewer](viewer/) is the same page without the pictures, for anyone: each value with whether a proof
+checked it.
 
 ![The proof viewer's Menu view: the Playback tab, the Playback Target group's rows, and the chosen row's two values, each proved, with the camera's screen that proved the first](images/proof-viewer-menu.png)
 

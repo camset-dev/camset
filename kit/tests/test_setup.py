@@ -3,6 +3,7 @@ builds (every tool it would run is replaced; the builds' stand-in writes a progr
 
 The script is loaded from its path under the name camset_setup, so it never meets another module called setup.
 """
+import ast
 import importlib.util
 import io
 import os
@@ -663,6 +664,24 @@ def test_the_proof_viewer_waits_for_the_venv_and_is_not_built_with_check(tmp_pat
     assert (env.rows[-1].state, env.rows[-1].what) == ("--", "not built with --check")
 
 
+@pytest.mark.parametrize("piece, state, why", [("packages", "FAIL", "the kit's packages are not installed"),
+                                               ("packages", "DO", "the kit's packages are not installed"),
+                                               ("venv", "DO", ".venv is not ready")])
+def test_the_proof_viewer_waits_for_the_packages(tmp_path, monkeypatch, piece, state, why):
+    """Without the kit's packages proof_viewer.py stops and says to run kit/setup.py (camkit/start.py), which is what
+    is running: its last line as the reason, and its steps in the tail, would send the person round in a circle. The
+    reason is the line above that stopped it: the packages, or a .venv too old or without pip (no packages line then)."""
+    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: pytest.fail("nothing is run"))
+    venv_python(tmp_path)
+    env = env_for(tmp_path)
+    env.add("venv", "OK", ".venv (Python 3.14.3)")
+    env.add(piece, state, "a step that did not go through")
+    kitsetup.step_viewer(env)
+    row = env.rows[-1]
+    assert (row.piece, row.state, row.what) == ("proof viewer", "--", f"not built: {why} (above)")
+    assert row.next == f"the {piece} line above" and kitsetup.exit_code([row], False) == 0
+
+
 def test_windows_finds_the_cpp_tools_through_vswhere(tmp_path, monkeypatch, capsys):
     """Without cl on the PATH (outside a Developer prompt, the usual case), setup asks vswhere.exe under
     %ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer where Visual Studio is. 2026-11-08: a comment cut the path
@@ -1284,9 +1303,16 @@ def test_the_new_window_step_works_in_both_windows_terminals(tmp_path):
     env = windows(tmp_path)
     for again in (kitsetup.utf8_steps(env)["again"], kitsetup.new_window(env, "winget install Kitware.CMake")["again"]):
         assert f'in Command Prompt: cd /d "{tmp_path}"' in again and f'in PowerShell: cd "{tmp_path}"' in again
+    # camkit's UTF-8 message, and its words for a Python without the kit's packages, take the step from camkit.start,
+    # which says the same: this script runs before .venv exists and never imports camkit (camkit stops without UTF-8 mode)
+    from camkit import start
+    assert start.go_to(tmp_path, windows=True) == kitsetup.go_to(tmp_path)
     camkit = (KIT / "camkit" / "__init__.py").read_text(encoding="utf-8")
-    assert 'in Command Prompt: cd /d "{ROOT}"' in camkit and 'PowerShell: cd "{ROOT}"' in camkit
+    assert "{start.go_to(ROOT, windows=True)} and run the same command again" in camkit
     assert "SUCCESS" not in camkit and "(it answers that the value was saved)" in camkit
+    tree = ast.parse((KIT / "setup.py").read_text(encoding="utf-8"))
+    assert not [n for n in ast.walk(tree) if isinstance(n, ast.Import) and any(a.name.startswith("camkit") for a in n.names)
+                or isinstance(n, ast.ImportFrom) and (n.module or "").startswith("camkit")]
 
 
 # ---------------------------------------------------------------- the driver, when pnputil cannot be asked

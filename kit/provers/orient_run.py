@@ -27,14 +27,14 @@ import sys
 import time
 from pathlib import Path
 
-import numpy as np
-from PIL import Image
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+# camkit before any other package, as in every kit program: a Python without the kit's packages is told so (camkit/start.py)
 from camkit import camset, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
+import numpy as np  # noqa: E402
+from PIL import Image  # noqa: E402
 from pass3_run import labels_of  # noqa: E402
 from prove_run import (AXES, LOCK_S, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
                        vlm_option)

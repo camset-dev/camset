@@ -1,6 +1,7 @@
-# Builds the docs site (Zensical reads mkdocs.yml; docs/decisions/0017) and publishes it to GitHub Pages, on a push
-# to main that touches what the site is built from (the paths are the pre-commit docs-site hook's, and this file) or
-# run by hand.
+# Builds the docs site (Zensical reads mkdocs.yml; docs/decisions/0017) and the definition viewer beside it (viewer/:
+# every camera definition with its sample, from public files only, where anyone opens a settings file in the browser),
+# and publishes them to GitHub Pages, on a push to main that touches what they are built from (the paths are the
+# pre-commit docs-site hook's, the viewer's own sources, and this file) or run by hand.
 # Pages must be enabled for the repository first: Settings > Pages > Source: GitHub Actions (docs/RELEASING.md).
 # Gitea Actions reads this folder too and has no Pages, so the deploy job skips itself there. The actions are pinned
 # by commit, with the release tag beside each.
@@ -16,10 +17,9 @@ on:
       - "kit/tools/build_docs.py"
       - "kit/tools/model_appendix.py"
       - "kit/tools/camset_ksy.py"
-      - "kit/camkit/__init__.py"
-      - "kit/camkit/camset.py"
-      - "kit/camkit/definitions.py"
-      - "kit/camkit/paths.py"
+      - "kit/camkit/**"
+      - "kit/tools/proof_viewer.py"
+      - "kit/tools/proof_viewer.html"
       - "kit/requirements.txt"
       - ".github/workflows/docs.yml"
       - "editor/definitions/**"
@@ -45,6 +45,10 @@ jobs:
         run: pip install -r kit/requirements.txt
       - name: Build the site
         run: zensical build --strict
+      - name: Build the definition viewer into the site
+        # kit/tools/proof_viewer.py --public: the page (viewer/index.html) and each camera's data (viewer/data/), from
+        # editor/definitions/ alone; a definition added there needs nothing else here
+        run: python kit/tools/proof_viewer.py --public --out site/viewer
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:
           path: site

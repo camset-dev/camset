@@ -770,7 +770,7 @@
   "sample": {
    "type": "string",
    "pattern": "^[^/\\\\]+\\.DAT$",
-   "description": "A settings file of this camera, beside the definition, with personal values removed: Explore a sample opens it."
+   "description": "A settings file this camera wrote, beside the definition, with its personal text removed: Explore a sample opens it."
   },
   "save_name": {
    "type": "object",
