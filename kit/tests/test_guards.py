@@ -1127,9 +1127,113 @@ def test_the_rows_an_owner_may_still_allow_stay_allowed():
     assert live.open_refused("Audio Signal Volume  3", {"Audio Signal Volume"}) == ""
 
 
+# Wi-Fi and Bluetooth rows that no pattern caught though the playbook's rule 3 names them, and the screens that show
+# the camera's MAC and IP addresses and its Bluetooth device address (a review, 2026-11-13): the a1 II's labels as it
+# draws them, then as a reader returns them (a capital I for an l, zeros, "rn" or "n" for "m", 1, l or | for i or l, 8
+# for B, a letter dropped, a space dropped or put in, Addr. for Address, Freq. for Frequency, Remote for Rmt, Cyrillic
+# and full-width look-alikes, a no-break hyphen or an en dash, a zero-width or no-break space, two spaces, a line
+# break, a stop after the label); and Wi-Fi Connect, which a pattern caught only as written before
+NETWORK_ROWS = ["Bluetooth Rmt Ctrl", "Wi-Fi Frequency Band", "Display Wi-Fi Info.", "Display Wired LAN Info.",
+                "Disp Device Address"]
+NETWORK_READ_AS = [
+    # Bluetooth Rmt Ctrl
+    "BIuetooth Rmt Ctrl", "Bluet00th Rmt Ctrl", "Bluetooth Rrnt Ctrl", "Bluetooth Rnt Ctrl", "Bluetoth Rmt Ctrl",
+    "8luetooth Rmt Ctrl", "\u0412luetooth Rmt Ctrl", "Bluetooth\u00a0Rmt Ctrl", "Bluetooth Rmt Ctrl.",
+    "Bluetooth Remote Ctrl", "Bluetooth Remote Control",
+    # Wi-Fi Frequency Band
+    "Wi\u2011Fi Frequency Band", "Wi\u2013Fi Frequency Band", "WiFi Frequency Band", "Wi-Fi Frequency B\u0430nd",
+    "\uff37\uff49-\uff26\uff49 Frequency Band", "Wi-Fi Frequency\nBand", "Wi-Fl Frequency Band", "Wi-Fi Freq. Band",
+    "Wi-Fl Freq. Band", "W1-Fi Frequency Band",
+    # Display Wi-Fi Info.
+    "Display Wi\u2011Fi Info.", "Display Wi-Fi lnfo.", "Display Wi-Fi Inf0.", "Display Wi\u200b-Fi Info.",
+    "Display Wi-FiInfo.", "Display Wi - Fi Info.", "Display Wi-Fl Info.", "Display Wi-F1 Info.", "Display Wi-Fi 1nfo.",
+    # Display Wired LAN Info., and a reading that lost "Wired" or a LAN Info. row another body may show
+    "Display LAN Info.", "LAN 1nfo.", "Display Wired LAN lnfo.", "Display Wired L\u0410N Info.", "Display Wired LAN\u00a0Info.", "Display Wired LAN  Info.",
+    "Display Wired LANInfo.", "Display WiredLAN Info.", "Display Wired IAN Info.", "Display Wired 1AN Info.",
+    "Display Wired LAN 1nfo.",
+    # Disp Device Address, and a MAC address row another body may show
+    "Disp D\u0435vice Address", "Disp Device\u00a0Address", "Disp Device  Address", "Disp Device Address.",
+    "Disp Dev1ce Address", "Disp Devlce Address", "Disp Device Addr.", "MAC Address", "MAC Addr.", "Disp MAC Address",
+    # Wi-Fi Connect
+    "Wi-Fl Connect", "Wi-FiConnect", "Wi-F1 Connect", "Wi - Fi Connect"]
+
+
+@pytest.mark.parametrize("label", NETWORK_ROWS + NETWORK_READ_AS)
+def test_wifi_and_bluetooth_rows_and_the_address_screens_never_open_whatever_is_allowed(label):
+    why = safety.never_open(label)
+    assert why and why.startswith("by hand only") and not safety.owner_may_approve(why), why
+    assert safety.path_refused([label]) and safety.path_refused(["Network", label])          # no allowance
+    assert live.open_refused(label) and safety.screen_refused(f"{label} MENU OK")
+    assert safety.identity_row(label) and safety.never_lifted(label)                          # an allowance naming it
+    assert "0008" in safety.allow_refused(label) and "no --allow opens it" in safety.allow_refused(label)
+    assert safety.path_refused([label], {label}, allowed=[label])
+    assert safety.path_refused(["Network", label], allowed=["Network", label])
+    assert live.open_refused(label, {label})
+    assert safety.screen_refused(f"{label} MENU OK", allow=[label])
+
+
+# Wi-Fi Direct Info. as a reader returns it: credentials (decision 9) however it is spelt, whatever is allowed
+CREDENTIAL_READ_AS = ["Wi-Fl Direct Info.", "Wi-FiDirect Info.", "Wi-F1 Direct Info.", "Wi - Fi Direct Info.",
+                      "Wi-Fi D1rect Info.", "Wi-Fl Direct Settings"]
+
+
+@pytest.mark.parametrize("label", CREDENTIAL_READ_AS)
+def test_wifi_direct_never_opens_however_a_reader_returns_it(label):
+    why = safety.never_open(label)
+    assert why and why.startswith("credentials") and not safety.owner_may_approve(why), why
+    assert safety.never_lifted(label) and safety.allow_refused(label)
+    assert safety.path_refused([label], {label}, allowed=[label]) and live.open_refused(label, {label})
+    assert safety.screen_refused(f"{label} MENU OK", allow=[label])
+
+
+# The body's serial number on screen: never opened whatever is allowed, since every saved frame would hold it
+# (2026-11-13). Display Serial Number is an action's row still, as before; Write Serial Number, whether pictures carry
+# the number, is walked as before (NETWORK_NEAR_WALKED).
+SERIAL_ROWS = ["Display Serial Number", "Disp. Serial Number", "Disp Serial Number", "Displ\u0430y Serial Number",
+               "Display Serial\u00a0Number", "Display  Serial Number", "Setup > Setup Option > Display Serial Number"]
+
+
+@pytest.mark.parametrize("label", SERIAL_ROWS)
+def test_the_serial_number_screen_never_opens_whatever_is_allowed(label):
+    assert safety.never_open(label) and safety.path_refused([label])                         # no allowance
+    assert safety.identity_row(label) and safety.never_lifted(label)                          # an allowance naming it
+    assert "0008" in safety.allow_refused(label) and "no --allow opens it" in safety.allow_refused(label)
+    assert safety.path_refused([label], allowed=[label]) and live.open_refused(label, {label})
+    assert safety.screen_refused(f"{label} MENU OK", allow=[label])
+
+
+# Rows beside them that the new patterns leave as they were: the Network tab's group names, the other Display rows,
+# the remote shooting rows, Write Serial Number, and Bluetooth Rmt Ctrl's help line in the definition (the pattern
+# takes "Rmt" or "Remote Ctrl", never "remote commander"); a flicker row another body may draw, since no a1 II label
+# but Wi-Fi Frequency Band holds "freq" (a pattern takes Freq. only after Wi-Fi); and the Bluetooth, Wi-Fi and address
+# rows already refused, each for its own words still
+NETWORK_NEAR_WALKED = ["Wi-Fi", "Bluetooth", "Wired LAN", "Network Option", "Display Media Info.", "HDMI Info. Display",
+                       "Display Quality", "Display Rotation", "Display All Info.", "Display as Group", "No Disp. Info.",
+                       "Remote Shoot Setting", "Remote Zoom", "Lets a Bluetooth remote commander control the camera.",
+                       "Write Serial Number", "Flicker Freq."]
+NETWORK_NEAR_REFUSED = {"Bluetooth Function": "by hand only: bluetooth function", "Pairing": "by hand only: pairing",
+                        "Manage Paired Device": "by hand only: paired", "Wi-Fi Connect": "by hand only: wi-fi connect",
+                        "Wired LAN Connect": "by hand only: wired lan connect", "Wi-Fi Direct Info.": "credentials: wi-fi direct",
+                        "IP Address Setting": "by hand only: ip address", "SSID/PW Reset": "action: ssid/pw reset",
+                        "Display Serial Number": "action: display serial number"}
+
+
+@pytest.mark.parametrize("label", NETWORK_NEAR_WALKED)
+def test_the_rows_beside_them_are_walked_as_before(label):
+    assert safety.never_open(label) is None and safety.never_lifted(label) is None
+    assert safety.allow_refused(label) is None and safety.screen_refused(label) is None
+
+
+@pytest.mark.parametrize("label,why", NETWORK_NEAR_REFUSED.items())
+def test_the_rows_beside_them_are_refused_as_before(label, why):
+    assert safety.never_open(label) == why
+
+
 @pytest.mark.parametrize("args", [["--path", "Language", "--allow", "Language"],
                                   ["--path", "Setup", "--allow", "USB Connection Mode"],
-                                  ["--path", "Network", "--path", "Device Name", "--allow", "Device Name"]])
+                                  ["--path", "Network", "--path", "Device Name", "--allow", "Device Name"],
+                                  ["--path", "Network", "--path", "Bluetooth Rmt Ctrl", "--allow", "Bluetooth Rmt Ctrl"],
+                                  ["--path", "Network", "--allow", "Display Wired LAN Info."]])
 def test_drive_refuses_an_identity_row_however_it_is_allowed(args):
     r = subprocess.run([sys.executable, str(ROOT / "kit" / "drive.py"), *args], capture_output=True, text=True, timeout=60)
     assert r.returncode != 0 and "no --allow opens it" in r.stderr and "0008" in r.stderr

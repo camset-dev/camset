@@ -262,10 +262,14 @@ _ACTIONS = [
 # is _IDENTITY: no allowance lets a run open or set one of them (identity_row, which never_lifted, allow_refused and
 # screen_refused take in, so drive.py's, card_actions.py's and every prover's --allow and path_refused refuse them
 # too); the rest a dated owner's word may open
+# "Wi-Fi" as a reader returns it, in lower case as the guards judge it: spaced round its hyphen, without one, run into
+# the next word ("Wi-FiConnect"), its last i read as l, 1, | or ! ("Wi-Fl", "Wi-F1"); the word after it follows
+# (2026-11-13, a review)
+_WIFI = r"wi\s?-?\s?f[il1|!]\s?"
 _IDENTITY = [
     # identity, connection, region
     r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
-    r"usb streaming", r"wired lan connect", r"wi-?fi connect", r"ip address", r"ssid", r"\bwps\b",
+    r"usb streaming", r"wired lan connect", _WIFI + r"connect", r"ip address", r"ssid", r"\bwps\b",
     r"access point", r"access authen", r"pairing", r"paired", r"bluetooth function", r"airplane mode",
     r"cloud", r"streaming", r"tether", r"device name", r"root certif",
     # FTP: the server and its login stay by hand, FTP Function starts a connection to that server
@@ -273,6 +277,17 @@ _IDENTITY = [
     r"ftp function", r"server setting", r"save/load ftp", r"display ftp",
     r"remote shoot function", r"cnct\. while", r"wake on lan", r"smartphone", r"copyright", r"iptc",
     r"select on cam",   # Select on Cam & Send: sends images to a phone
+    # Wi-Fi and Bluetooth settings no pattern above caught, though the playbook's rule 3 names them (2026-11-13, a
+    # review): Bluetooth Rmt Ctrl and Wi-Fi Frequency Band. And the screens that show the camera's addresses (its MAC
+    # and IP addresses, its Bluetooth device address) or its serial number, which every saved frame, the OCR output and
+    # a hosted reader's request would then hold: Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address and
+    # Display Serial Number on the a1 II, and a MAC address row another body may show. Each pattern takes the slips a
+    # reader makes in its row's own words (a space dropped or put in; 1, l or | for i or l; 0 for o; rn or n for m; 8
+    # for B; a letter dropped; Addr. for Address) and names those words only, so the group names (Wi-Fi, Bluetooth,
+    # Wired LAN), the other Display rows and Write Serial Number are walked as before.
+    r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)", _WIFI + r"freq",
+    r"frequency\s?band", _WIFI + r"[il1|]nf", r"(?:wired\s?|(?<![a-z]))[il1|]an\s?[il1|]nf",
+    r"(?:dev[il1|!]ce|mac)\s?addr", r"disp(?:lay|\.)?\s?serial",
 ]
 _ANYWHERE = _IDENTITY + [
     r"auto power off temp",
@@ -285,8 +300,9 @@ _ANYWHERE = _IDENTITY + [
 ]
 # Credentials and the screens that show them: never opened, and no allowance lifts it (decision 9). Wi-Fi Direct
 # Info. shows the camera's Wi-Fi Direct SSID and password on screen, which every saved frame, the OCR output and a
-# hosted reader's request would then hold (2026-11-05, the kit review).
-_CREDENTIALS = [r"access authen", r"wi-?\s?fi direct", r"password", r"\bpw\b"]
+# hosted reader's request would then hold (2026-11-05, the kit review). "Wi-Fi Direct" as a reader returns it too
+# (_WIFI; "Wi-FiDirect", "Wi-Fl Direct", 2026-11-13).
+_CREDENTIALS = [r"access authen", _WIFI + r"d[il1|]rect", r"password", r"\bpw\b"]
 # Motion (decision 2; the playbook's rule 1): lens motors (Pre-AF, Eye-Start AF), the shutter curtain (Shutter When
 # Pwr OFF) and SteadyShot. By hand only, unless a dated owner decision names the row (the a1 II's owner allowed
 # Shutter When Pwr OFF and SteadyShot from the menu on 2026-10-29). Added 2026-11-05.

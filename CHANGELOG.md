@@ -53,6 +53,16 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- The kit never opens Bluetooth Rmt Ctrl or Wi-Fi Frequency Band, Wi-Fi and Bluetooth settings that the playbook's
+  rule 3 keeps for the owner's hand (decision 8's network identity) and that no pattern of the never-open list caught,
+  so the walker opened them and a prover could change them; nor the screens that show the camera's network addresses,
+  Display Wi-Fi Info. and Display Wired LAN Info. (its MAC and IP addresses) and Disp Device Address (its Bluetooth
+  address), which saved frames, the OCR output and a reader's request would have held. As with the camera's other
+  identity and connection rows, no `--allow` opens them (`kit/camkit/safety.py`), and their proofs come from the
+  owner's hand changes. Display Serial Number, refused before as an action that an owner's `--allow` could still open,
+  is now never opened whatever is allowed: the body's serial number would be in every frame. These rows, Wi-Fi Connect
+  and Wi-Fi Direct are refused too as a reader misreads them ("Wi-Fl", "Wi-FiInfo.", "Wired IAN Info.", "Dev1ce
+  Addr.", "Bluetoth Rnt Ctrl"). No other row of the a1 II's menus is refused that was not before.
 - Every camera's definition takes its own hand tables. `kit/schema_update.py` gave the a1 II's hand tables to the a1
   II's definition alone: any other camera took the plain pass, which read none, so a fact found by hand on another
   body (a name or note the camera proved wrong, a record the menus never write, a value no menu offers, the copies it

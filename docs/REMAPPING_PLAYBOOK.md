@@ -87,6 +87,9 @@ and the default is no.
 3. **By hand only:** network identity and connection settings (Wired LAN, Wi-Fi, Bluetooth, access
    authentication, FTP server), USB connection mode, language, NTSC/PAL, area and date, and Auto
    Power OFF Temp. (Decision 8. The a1 II's owner allowed Auto Power OFF Temp. remotely from 2026-11-02; ask yours.)
+   The screens that show the camera's network addresses or its serial number (on the a1 II, Display Wi-Fi Info.,
+   Display Wired LAN Info., Disp Device Address and Display Serial Number) are never opened either, since every frame
+   is kept as evidence.
    No `--allow` opens the camera's identity, its connections or its region, whatever the owner said: `drive.py`,
    `card_actions.py` and every prover refuse such a label before anything connects (`safety.allow_refused`), and the
    checks on the camera refuse the row however a run named it (`safety.never_lifted`).
