@@ -119,10 +119,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the RAW output rows and the Dial/Wheel checkbox no longer speak of one camera or one menu page. Proxy Rec.
   Settings (0x0284) is corrected: its row follows the Proxy File Format, not the main movie File Format (greyed,
   showing 6M 4:2:0 8bit, under XAVC S HD), changing that format does not rewrite the record, and code 3 is what
-  Initialize and Camera Settings Reset write, which no menu choice writes, no longer labelled XAVC S HD. They reach
-  the definition the next time the maintainer writes it with `kit/schema_update.py --write`. The model page's Proxy
-  recording and Focus frame position rows say the same, and Enlarge Screen's help, in the definition now, says it
-  assigns a custom key, Custom Button 2 on the camera tried.
+  Initialize and Camera Settings Reset write, which no menu choice writes, no longer labelled XAVC S HD. The
+  definition carries them. The model page's Proxy recording and Focus frame position rows say the same, and Enlarge
+  Screen's help says it assigns a custom key, Custom Button 2 on the camera tried.
 - The a1 II's hand tables (the names, notes and value tables its mapping found by hand, the values its menus never
   offer, its copies, why a record cannot be proved) were Python code in the kit; they are its data file now,
   `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, edited by hand, with a JSON Schema
