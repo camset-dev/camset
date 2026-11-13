@@ -74,6 +74,25 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   taken by each question to it as no answer, and the run goes on with OCR alone as before; only one that reaches a
   session's own body ends the run, with the menus closed and the start file put back. `pass1_labels.py` and
   `tiebreak.py` say in a sentence when no reader fits.
+- The same runs also check, before the link, that their readers answer: each reader the run can use is asked to read
+  "MENU 42" off a small picture, through the request a run's question makes, the local ones and a paid second reader
+  at once (a few seconds when they are healthy), a paid third reader only when no local one answered, saying so. A
+  reader that does not answer is named with what it read or the error (the HTTP status and the server's own message,
+  "HTTP 507 Insufficient Storage: ...", with any address or key taken out) and skipped for the run: a local reader that
+  answered stands in for it, and a role left with none goes unanswered for the run, its questions taken as no answer at
+  once instead of each waiting out its timeout. With no reader answering, or the second reader not answering and no
+  local reader to stand in, the run stops there, nothing pressed, and says what to do. On 2026-11-13 a session ran with
+  no reader answering (the remote one timed out, the local one listed its models but answered every question with HTTP
+  507), each question going on with OCR alone, and nothing said so. An OCR engine name the kit does not know, a
+  reader entry with no name of its own, or a `private/config.json` that is not valid JSON or not in the shape the kit
+  reads (said in one sentence, the line to fix, no path), stops the run at the same point. A paid reader (Claude, or a service with
+  `api_key_env`) now plays only the roles the config gives it and never stands in for another, at the start or during
+  the run, where a hosted OpenAI-style reader could stand in by itself before. A reader that fails later in a run is
+  said once, on the terminal and in the run's `events.jsonl` (`reader_failing`); its questions are taken as no answer
+  as before. `kit/tools/reader_check.py` asks the same with no camera, printing each reader's kind, model, time to
+  answer or error (`--all`: the paid ones too), and `kit/setup.py` runs it for the local readers once
+  `private/config.json` lists them, failing nothing (docs/QUICKSTART.md, "Choosing a reader"). The restores still
+  need no reader.
 - When the proof viewer is not built (the kit has never run on the camera here, or it works on another camera), its
   message, and `kit/setup.py`'s line for it, also say that the definition viewer needs no runs:
   `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at

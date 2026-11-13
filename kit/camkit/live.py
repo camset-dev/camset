@@ -36,7 +36,7 @@ import numpy as np
 
 from . import ocr, safety, screen
 from .link import LinkError
-from .vlm import PROMPTS, ask_role
+from .vlm import PROMPTS, ask_role, log_to, scrub
 
 
 # Presses that open the row under the cursor, and the screens whose lit bar is a row
@@ -141,7 +141,7 @@ def reader_label(path, timeout: float = READER_TIMEOUT) -> tuple[str, str]:
     try:
         answer = ask_role("second", path.read_bytes(), PROMPTS["menu"], timeout)
     except Exception as e:
-        return "", f"the vision reader failed ({type(e).__name__}: {e})"[:300]
+        return "", scrub(f"the vision reader failed ({type(e).__name__}: {e})"[:300])
     rows = answer.get("rows") if isinstance(answer, dict) else None
     lit = [r for r in rows or [] if isinstance(r, dict) and r.get("highlighted") is True]
     if len(lit) != 1:
@@ -194,6 +194,7 @@ def osd_kind(link) -> str:
 class LiveCamera:
     def __init__(self, link, hdmi, run, may_open=()):
         self.link, self.hdmi, self.run = link, hdmi, run
+        log_to(run)                     # a reader that fails during the run is logged in its events.jsonl (camkit.vlm)
         self.may_open = frozenset(may_open)            # never-open rows this run was told it may open
         # one row lifted for one press (kit/provers/pp_reset_run.py's Reset): a predicate (frame, lit) -> bool, set
         # by the caller for its next press and used up by that press; None (unset) changes nothing
@@ -374,7 +375,7 @@ def submenu_labels(cam, vlm_timeout: float = 25.0):
         vlm_labels = [str(r.get("label") or "") for r in (answer.get("rows") or []) if isinstance(r, dict)]
     except Exception as e:
         # OCR alone; never-open is still checked on it, with its usual slips undone (safety.never_open)
-        cam.run.log("reader_failed", frame=f.path.name, why=f"{type(e).__name__}: {e}"[:300])
+        cam.run.log("reader_failed", frame=f.path.name, why=scrub(f"{type(e).__name__}: {e}"[:300]))
     rows = []
     for i in range(n):
         readings = [t for t in (texts[i] if i < len(texts) else "",

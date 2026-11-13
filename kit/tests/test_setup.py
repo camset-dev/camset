@@ -706,6 +706,77 @@ def test_the_proof_viewer_waits_for_the_packages(tmp_path, monkeypatch, piece, s
     assert row.next == f"the {piece} line above" and kitsetup.exit_code([row], False) == 0
 
 
+# ---------------------------------------------------------------- 10. the readers
+
+def test_the_readers_are_asked_only_once_a_config_lists_them_and_fail_nothing(tmp_path, monkeypatch, capsys):
+    """kit/tools/reader_check.py --local (never a paid reader) once private/config.json exists: its last line on an
+    answer; no config yet, no reader listed or none answering is a "--" with what to do, and fails nothing."""
+    calls = []
+
+    def run_as(code, out):
+        def run(cmd, cwd=None):
+            calls.append([str(c) for c in cmd])
+            return code, out
+        return run
+    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: pytest.fail("nothing is run"))
+    env = env_for(tmp_path, check=True)
+    kitsetup.step_readers(env)
+    assert (env.rows[-1].state, env.rows[-1].what) == ("--", "not asked with --check")
+    env = env_for(tmp_path)
+    kitsetup.step_readers(env)
+    assert env.rows[-1].what == "not asked: there is no .venv (above)"
+    py = venv_python(tmp_path)
+    kitsetup.step_readers(env)
+    row = env.rows[-1]
+    assert (row.state, row.what) == ("--", "not asked: there is no private/config.json yet")
+    assert row.next == "docs/QUICKSTART.md, step 3: list your readers in it, then .venv/bin/python kit/tools/reader_check.py asks them"
+    (tmp_path / "private").mkdir()
+    (tmp_path / "private" / "config.json").write_text("{}")
+    said = ("reader check: ...\n  omlx  openai-compatible  m  second  answered in 1.2 s: 'MENU 42'\n"
+            "1 of 1 readers asked answered: a camera run would start.\n")
+    monkeypatch.setattr(kitsetup, "run", run_as(0, said))
+    kitsetup.step_readers(env)
+    assert calls == [[str(py), str(tmp_path / "kit" / "tools" / "reader_check.py"), "--local"]]
+    assert (env.rows[-1].state, env.rows[-1].what) == ("OK", "1 of 1 readers asked answered")
+    monkeypatch.setattr(kitsetup, "run", run_as(3, "private/config.json lists no reader: copy ...\n"))
+    kitsetup.step_readers(env)
+    assert (env.rows[-1].state, env.rows[-1].what) == ("--", "not asked: private/config.json lists no reader")
+    monkeypatch.setattr(kitsetup, "run", run_as(1, "  omlx ... NO ANSWER after 0.3 s: HTTP 507 Insufficient Storage\n"
+                                                   "0 of 1 readers asked answered: a camera run would stop ...\n"))
+    kitsetup.step_readers(env)
+    row = env.rows[-1]
+    assert (row.state, row.what) == ("--", "no local reader answered (the lines above say what each did)")
+    assert "HTTP 507 Insufficient Storage" in capsys.readouterr().out
+    assert row.next == "start the reader's server, then .venv/bin/python kit/tools/reader_check.py"
+    monkeypatch.setattr(kitsetup, "run", run_as(4, "only paid readers are listed ('claude'): none is asked ...\n"))
+    kitsetup.step_readers(env)
+    row = env.rows[-1]
+    assert (row.state, row.what) == ("--", "only paid readers listed: not asked here (kit/tools/reader_check.py --all "
+                                           "asks them, each question costs money)")
+    assert "no local reader answered" not in row.what and "camera run" not in row.next
+    monkeypatch.setattr(kitsetup, "run", run_as(5, "private/config.json: entry 1 of \"readers\" has no \"name\": ...\n"))
+    kitsetup.step_readers(env)
+    assert env.rows[-1].what == "not asked: private/config.json, or its readers, cannot be read (the line above says why)"
+    assert 'entry 1 of "readers" has no "name"' in capsys.readouterr().out
+    monkeypatch.setattr(kitsetup, "run", run_as(5, "private/config.json is not valid JSON (line 3, column 5: "
+                                                   "Expecting ',' delimiter): fix it, ...\n"))
+    kitsetup.step_readers(env)
+    row = env.rows[-1]
+    assert (row.state, row.next) == ("--", "docs/QUICKSTART.md, step 3") and "no local reader answered" not in row.what
+    assert "is not valid JSON" in capsys.readouterr().out
+    monkeypatch.setattr(kitsetup, "run", run_as(6, "reader_check failed: TypeError: a bug\n"))
+    kitsetup.step_readers(env)
+    row = env.rows[-1]
+    assert (row.state, row.what) == ("--", "not asked: kit/tools/reader_check.py itself failed (the line above says "
+                                           "how): a fault in the kit, not in private/config.json")
+    assert row.next == "report it with the line above" and "reader_check failed: TypeError" in capsys.readouterr().out
+    assert kitsetup.exit_code(env.rows, False) == 0
+    win = windows(tmp_path)
+    win.check = True
+    kitsetup.step_readers(win)
+    assert win.rows[-1].next == ".venv\\Scripts\\python.exe kit\\tools\\reader_check.py"
+
+
 def test_windows_finds_the_cpp_tools_through_vswhere(tmp_path, monkeypatch, capsys):
     """Without cl on the PATH (outside a Developer prompt, the usual case), setup asks vswhere.exe under
     %ProgramFiles(x86)%\\Microsoft Visual Studio\\Installer where Visual Studio is. 2026-11-08: a comment cut the path

@@ -22,6 +22,22 @@ def own_runs(tmp_path_factory, monkeypatch):
     return top
 
 
+@pytest.fixture(autouse=True)
+def fresh_readers():
+    """camkit.vlm's state for one run cleared before and after every test (vlm.forget: the start check's verdict, the
+    readers it skipped, the stand-ins, the failures said and the run they are logged in), so that no test's run
+    reaches another's. Only once some test has imported it: none is imported here."""
+    import sys
+
+    def forget():
+        vlm = sys.modules.get("camkit.vlm")
+        if vlm is not None:
+            vlm.forget()
+    forget()
+    yield
+    forget()
+
+
 def _files(top: Path) -> dict:
     return {p: (st.st_size, st.st_mtime_ns) for p in top.rglob("*") if p.is_file() and (st := p.stat())} \
         if top.is_dir() else {}

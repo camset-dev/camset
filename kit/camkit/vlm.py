@@ -5,23 +5,30 @@ Each reader answers the same question about the same frame; the callers decide w
 sources read alike: page_model.py's vote, pass1_map.py, tiebreak.py) and flag the rest for review.
 Answers are cached under the camera's runs (runs/<model>_fw<fw>/_cache/vlm) by image + prompt + model, so re-reads
 are free (cache_key, cached, keep: every reader keeps its answers the same way).
-Readers and endpoints come from private/config.json ("readers"). A camera run that asks a reader checks that it lists
-one before it opens the link (check_readers); inside a run a missing reader is an ordinary exception (NoReader).
+Readers and endpoints come from private/config.json ("readers"). A camera run that asks a reader checks, before it
+opens the link (check_readers), that its OCR engines are ones the kit knows and that a reader it can use answers a
+real question: each is asked to read CHECK_TEXT off a small picture drawn here (check_picture), through the same
+request a run's question makes, and with none answering the run stops there. kit/tools/reader_check.py asks the same
+with no camera. Inside a run a missing reader is an ordinary exception (NoReader).
 
 Every question a run asks about a frame goes through ask_role, which takes up a stand-in when the reader playing the
-role will not connect. The batch tools that read a whole run's frames afterwards build their readers themselves
+role will not connect, and says once per reader, on standard error and in the run's events.jsonl, when one first fails
+during the run. The batch tools that read a whole run's frames afterwards build their readers themselves
 (make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py.
 """
 import base64
 import contextlib
 import hashlib
+import io
 import json
 import os
 import re
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 
 from . import ConfigMissing, config, paths
@@ -142,16 +149,592 @@ def readers(stop: bool = False, settings: dict | None = None) -> list:
     listed = settings.get("readers") or []
     if not listed:
         raise (ConfigMissing if stop else NoReader)(NO_READER)
+    why = malformed(listed, settings.get("roles") or {})    # "roles": null is as none given
+    if why:
+        raise (ConfigMissing if stop else NoReader)(
+            f"private/config.json: {why}: each reader is an object with a \"name\" of its own, as in \"readers_examples\", "
+            f"and \"roles\" an object giving a role a reader's name, {{\"second\": \"omlx\"}} (docs/QUICKSTART.md, "
+            f"\"Choosing a reader\")")
     return listed
 
 
-def check_readers() -> None:
-    """Called by every camera run that asks a reader (each one that builds a LiveCamera, and runner.prover_session
-    for the provers) before it opens the link: a config that lists no reader, or no config at all, stops the run
-    there, with what to do, before anything is pressed or downloaded. Such a run went on with OCR alone until
-    2026-11-13, each reader's question failing as it came. A run that asks none (page_scan, selftest, identify) and a
-    restore (mode_switch --restore, pass 3's, prove_run's start file put back with nothing to prove) never check."""
-    readers(stop=True)
+def malformed(listed, roles=None) -> str:
+    """Why private/config.json's "readers" (and "roles") cannot be read as readers ("" when it can): not a list, an
+    entry that is no object, one with no "name", two with the same one, or "roles" that is no object of names. Said by
+    its place in the list, never by what it holds."""
+    if roles is not None and (not isinstance(roles, dict) or not all(isinstance(v, str) for v in roles.values())):
+        return "\"roles\" is not an object giving each role a reader's name"
+    if not isinstance(listed, list):
+        return "\"readers\" is not a list"
+    names = set()
+    for i, r in enumerate(listed, 1):
+        if not isinstance(r, dict):
+            return f"entry {i} of \"readers\" is not an object"
+        name = r.get("name")
+        if not isinstance(name, str) or not name.strip():
+            return f"entry {i} of \"readers\" has no \"name\""
+        if name in names:
+            return f"two entries of \"readers\" have the name {name!r}"
+        names.add(name)
+    return ""
+
+
+def check_readers() -> list:
+    """The start check of a camera run, called by every run that asks a reader (each one that builds a LiveCamera, and
+    runner.prover_session for the provers) before it opens the link; the Checks (start_check). In order: the readers
+    listed (a config that lists none, no config at all, or one that cannot be read, said in a sentence with no path in
+    it, unreadable, stops it), the OCR engines (camkit.reading.check_engines: a name the kit does not know stops the
+    run), and each reader the run can use asked a real question (start_check:
+    none answering, or the second reader not answering with no local reader to stand in, stops it, naming each reader
+    and what it said or which error, and what to do). All three stop with ConfigMissing, before anything is pressed or
+    downloaded. A reader that does not answer is skipped for the run: a local one that answered stands in for it in
+    its role as a stand-in would (stand_in; never a paid one), and a role left with none goes unanswered for the run,
+    each of its questions taken as no answer at once (ask_role). A healthy config's readers play their roles as ever.
+    Asked once per process: a run that calls it again (a prover with a second session) is not asked again. A run
+    that asks no reader (page_scan, selftest, identify) and a restore (mode_switch --restore, pass 3's, prove_run's
+    start file put back with nothing to prove) never check. Until 2026-11-13 a run went on with OCR alone when no
+    reader was listed, and until the start check asked a question, when the readers listed did not answer."""
+    from . import reading
+    try:
+        readers(stop=True)          # the config read first: check_engines takes any ValueError for an unknown engine
+    except CONFIG_FAULTS as e:      # not JSON, not a file that opens, not the shape the kit reads: one plain sentence
+        raise ConfigMissing(unreadable(e)) from None
+    role_players()                  # any other fault is the kit's, raised as itself, still before the link
+    reading.check_engines()
+    if _CHECKED is None:
+        _passed(start_check())
+    return list(_CHECKED)
+
+
+# What reading private/config.json raises when the file is not JSON (ValueError), does not open (OSError) or is not
+# the shape the kit reads (TypeError, AttributeError: a list where an object goes); unreadable says it in words
+CONFIG_FAULTS = (ValueError, TypeError, AttributeError, OSError)
+
+
+def unreadable(e: BaseException) -> str:
+    """What is wrong with a private/config.json the kit cannot read (CONFIG_FAULTS), in one plain sentence naming
+    neither a path nor what the file holds: not JSON (the line and column to fix), not a file that opens, or not the
+    shape the kit reads. It never says to copy the example over it: the file holds the person's own settings."""
+    shape = "kit/config.example.json shows the shape the kit reads (docs/QUICKSTART.md, step 3)"
+    if isinstance(e, json.JSONDecodeError):
+        return (f"private/config.json is not valid JSON at line {e.lineno}, column {e.colno} ({e.msg}): fix that line; "
+                f"{shape}")
+    if isinstance(e, OSError):
+        return f"private/config.json cannot be opened ({type(e).__name__}): check that it is a file you can read"
+    return (f"private/config.json is not in the shape the kit reads ({type(e).__name__}): it must be one JSON object, "
+            f"with \"readers\" a list of objects and \"roles\" an object of names; {shape}")
+
+
+# ------------------------------------------------------------------------------------------------ the start check
+
+CHECK_TEXT = "MENU 42"       # what the check's picture says, and what a reader must read off it
+CHECK_PROMPT = "notice"      # the question asked about it, one of a run's own (PROMPTS)
+CHECK_TIMEOUT = 25.0         # s a reader gets to answer it: what a proof's question gets (camkit.reading.TIMEOUTS)
+CHECK_WAITS = (2, None)      # a busy gateway (502/503/504) is asked once more after 2 s, where a run's question waits more
+NO_ANSWER = "no answer"      # a Check's error when the reader was still busy at the deadline
+CHECK_SLACK = 5.0            # s past a reader's tries and pauses before the check stops waiting for it (ask_checks)
+
+
+def paid(cfg: dict) -> bool:
+    """A reader that costs money per question: Claude ("kind": "anthropic") or a hosted service, which names the
+    environment variable holding its key ("api_key_env": OpenAI, Gemini). It plays only the roles private/config.json
+    gives it ("roles", or its place in "readers") and never stands in for another (may_stand_in); the start check
+    asks it when it is the second reader, as every proof does, and as the third only when no local reader answered."""
+    return cfg.get("kind") == "anthropic" or bool(cfg.get("api_key_env"))
+
+
+def may_stand_in(cfg: dict) -> bool:
+    """A reader the kit may bring in by itself for one that does not answer (stand_in, start_check): a local one, never
+    a paid one (paid), which would make every question of the run cost money though the config never gave it the
+    role (the owner's decision, 2026-11-13)."""
+    return not paid(cfg)
+
+
+def kind_of(cfg: dict) -> str:
+    """A reader's kind in words: "anthropic", or "openai-compatible" for a server or service (Reader)."""
+    return "anthropic" if cfg.get("kind") == "anthropic" else "openai-compatible"
+
+
+def _last_part(model) -> str:
+    """A model id's last part when it holds a path separator, else the id."""
+    text = str(model or "")
+    return re.split(r"[/\\]+", text.rstrip("/\\"))[-1] if ("/" in text or "\\" in text) else text
+
+
+def shown_model(model) -> str:
+    """A model id as the kit prints it: its last part when it holds a path separator (a local path names a folder of
+    the person's own; a repository id's owner goes too), scrubbed, never taken for a key (scrub's keep)."""
+    text = _last_part(model)
+    return scrub(text, keep=(text,))
+
+
+# What scrub replaces in a text the kit prints or logs about a reader: a server's own message can echo an address, a
+# key or a folder. The patterns are a small cousin of kit/tools/check_public.py's (not importable from camkit).
+_SCRUBS = [
+    (re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]*://[^\s'\"<>)\]]+"), "<address>"),                      # any URL
+    (re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}"), "<e-mail>"),
+    (re.compile(r"(?:\b[A-Za-z]:)?[/\\]{1,2}(?:home|Users|users|mnt/[a-z]/users)[/\\]{1,2}[^/\\\s'\"]+"), "<home>"),
+    (re.compile(r"\b(?:Bearer|Basic)\s+\S+|\b(?:sk|pk|rk)-[A-Za-z0-9_-]{6,}|\bAIza[0-9A-Za-z_-]{20,}"), "<key>"),
+    (re.compile(r"(?<![0-9A-Fa-f])[0-9A-Fa-f]{2}([:-])(?:[0-9A-Fa-f]{2}\1){4}[0-9A-Fa-f]{2}(?![0-9A-Fa-f])"), "<address>"),
+    (re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?::\d+)?(?![\d.])"), "<address>"),
+    (re.compile(r"\b[\w-]+(?:\.[\w-]+)*\.(?:local|lan|home|internal|localdomain|intranet)\b", re.I), "<address>"),
+]
+_IP6 = re.compile(r"(?<![\w.:])(?:[0-9A-Fa-f]{0,4}:){2,7}[0-9A-Fa-f]{0,4}(?:%[\w.-]+)?(?![\w:])")
+# a key with no prefix: an unbroken run of 32 letters and digits or more, as keys are; a long model id is words joined
+# by hyphens or underscores ("Qwen3-VL-30B-A3B-Instruct-AWQ-4bit") and is never one. The model ids private/config.json
+# names, and the one a server says answered, are kept from this rule (scrub's keep)
+_OPAQUE = re.compile(r"(?<![A-Za-z0-9])[A-Za-z0-9]{32,}(?![A-Za-z0-9])")
+_TOKEN = r"(?<![\w.-]){}(?![\w.-])"            # a configured text, matched only as a whole token
+
+
+def _ip6(m) -> str:
+    import ipaddress
+    try:
+        ipaddress.ip_address(m.group(0).split("%")[0])
+    except ValueError:
+        return m.group(0)
+    return "<address>"
+
+
+def _configured(listed) -> tuple:
+    """({the pattern of a configured address or key: (the length of its text, what it is replaced by)}, the configured
+    model ids' last parts) for the readers listed. A host name with no dot ("gpu") is matched only where it is written
+    as an address: after "//" or "@", or before a port; never as a word of a sentence ("the gpu is busy")."""
+    known, models = {}, set()
+    for r in listed if isinstance(listed, list) else []:
+        if not isinstance(r, dict):
+            continue
+        if isinstance(r.get("model"), str) and _last_part(r["model"]).strip():
+            models.add(_last_part(r["model"]).strip())
+        url = r.get("url")
+        if isinstance(url, str) and url.strip():
+            host = re.sub(r"^[A-Za-z][A-Za-z0-9+.-]*://", "", url.strip()).split("/")[0]
+            bare = host.rsplit("@", 1)[-1]
+            name = bare.split(":")[0]
+            for h in (url.strip().rstrip("/"), host, bare):
+                if len(h) > 2 and ("." in h or ":" in h or "/" in h):
+                    known[re.escape(h)] = (len(h), "<address>")
+            if len(name) > 2:
+                n = re.escape(name)
+                known[n if "." in name else rf"(?:(?<=//)|(?<=@)){n}|{n}(?=:\d)"] = (len(name), "<address>")
+        key = os.environ.get(r["api_key_env"]) if isinstance(r.get("api_key_env"), str) else None
+        if key and len(key) > 3:
+            known[re.escape(key)] = (len(key), "<key>")
+    return known, models
+
+
+def scrub(text, listed: list | None = None, keep=()) -> str:
+    """text with what could name the person's network or keys taken out, for the terminal and a run's events.jsonl:
+    every address and host a reader of private/config.json (or of listed) names, each as a whole token, every key a
+    reader's "api_key_env" holds, and anything that looks like an address (a URL, an IPv4 or IPv6 address, a MAC
+    address, a .local host), a key (a bearer token, sk-..., an unbroken run of 32 letters and digits or more), an e-mail
+    address or a home folder. The configured model ids' last parts and keep (the model a server says answered) are
+    never taken for a key. Never raises: a config that cannot be read scrubs by the patterns alone."""
+    text = str(text)
+    if listed is None:
+        try:
+            listed = _settings().get("readers") or []
+        except Exception:        # noqa: BLE001 - an unreadable config: the patterns alone
+            listed = []
+    known, models = _configured(listed)
+    for pattern, word in _SCRUBS:   # a URL whole first, a configured host inside it with it
+        text = pattern.sub(word, text)
+    text = _IP6.sub(_ip6, text)
+    for pattern in sorted(known, key=lambda p: known[p][0], reverse=True):      # the longest text first
+        text = re.sub(_TOKEN.format(f"(?:{pattern})"), known[pattern][1], text)
+    held = []
+
+    def hold(m):                    # a kept id out of the way of the rule, put back after it
+        held.append(m.group(0))
+        return f"\x00{len(held) - 1}\x00"
+    for k in sorted({k for k in (*models, *(_last_part(x).strip() for x in keep)) if k}, key=len, reverse=True):
+        text = re.sub(_TOKEN.format(re.escape(k)), hold, text)
+    text = _OPAQUE.sub("<key>", text)
+    return re.sub(r"\x00(\d+)\x00", lambda m: held[int(m.group(1))], text)
+
+
+def check_picture() -> bytes:
+    """The start check's picture, as a PNG: CHECK_TEXT in white on black, at the size of the kit's frames (640 x 480,
+    camkit.frames)."""
+    from PIL import Image, ImageDraw, ImageFont
+    w, h = 640, 480
+    try:
+        font = ImageFont.load_default(size=88)
+        image = Image.new("RGB", (w, h))
+        draw = ImageDraw.Draw(image)
+        x0, y0, x1, y1 = draw.textbbox((0, 0), CHECK_TEXT, font=font)
+        draw.text(((w - (x1 - x0)) // 2 - x0, (h - (y1 - y0)) // 2 - y0), CHECK_TEXT, font=font, fill="white")
+    except (ImportError, OSError, TypeError):        # a Pillow without FreeType: its bitmap font, drawn small and enlarged
+        small = Image.new("RGB", (w // 8, h // 8))
+        ImageDraw.Draw(small).text((14, 25), CHECK_TEXT, fill="white")
+        image = small.resize((w, h), Image.NEAREST)
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@dataclass
+class Check:
+    """One reader at the start check: its configured name, kind and model (as shown_model prints it), whether it costs
+    money (paid), the roles it plays ("second", "third"), whether it was asked and, if not, why; whether its answer read
+    CHECK_TEXT (ok), how long it took (seconds), what it read (said), when it did not answer right, why (error), and
+    the model the server says answered where that is another id than the configured one (served). Every text in it is
+    scrubbed (scrub)."""
+    name: str
+    kind: str
+    model: str
+    paid: bool
+    roles: tuple = ()
+    asked: bool = False
+    not_asked: str = ""
+    ok: bool = False
+    seconds: float | None = None
+    said: str = ""
+    error: str = ""
+    served: str = ""
+
+    def who(self) -> str:
+        """The reader as the messages name it: 'name', with its roles and whether it costs money."""
+        notes = [f"{r} reader" for r in self.roles] + (["paid"] if self.paid else [])
+        return repr(self.name) + (f" ({', '.join(notes)})" if notes else "")
+
+    def outcome(self) -> str:
+        """What came of it, in words."""
+        if not self.asked:
+            return f"not asked: {self.not_asked}"
+        if self.ok:
+            return f"answered in {self.seconds:.1f} s"
+        return f"did not answer right: {self.error}"
+
+
+def server_says(e: urllib.error.HTTPError) -> str:
+    """The short message an HTTP error's body gives (an OpenAI-style {"error": {"message": ...}}, a {"detail": ...}, or
+    its first words), or ""."""
+    try:
+        text = (e.read(4096) or b"").decode("utf-8", "replace").strip()
+    except Exception:            # noqa: BLE001 - the body is only words for the message
+        return ""
+    try:
+        body = json.loads(text)
+    except ValueError:
+        body = None
+    if isinstance(body, dict):
+        said = next((body[k] for k in ("error", "detail", "message") if body.get(k)), "")
+        if isinstance(said, dict):
+            said = said.get("message") or said.get("type") or ""
+        text = said if isinstance(said, str) else json.dumps(said)
+    text = " ".join(text.split())
+    return text if len(text) <= 160 else text[:157] + "..."
+
+
+def failure(e: BaseException, timeout: float | None = None) -> str:
+    """Why a reader gave no answer, in words: the HTTP status, its reason and the server's own short message ("HTTP 507
+    Insufficient Storage: ..."), a timeout, a refused connection, or the exception; scrubbed (scrub)."""
+    if isinstance(e, urllib.error.HTTPError):
+        said = server_says(e)
+        return scrub(f"HTTP {e.code} {e.reason}".rstrip() + (f": {said}" if said else ""))
+    reason = e.reason if isinstance(e, urllib.error.URLError) else e
+    if isinstance(reason, TimeoutError) or "timed out" in str(reason).lower() or "timeout" in type(e).__name__.lower():
+        return f"no answer within {timeout:g} s (timed out)" if timeout else "timed out"
+    if isinstance(e, urllib.error.URLError):
+        return scrub(f"could not connect ({getattr(reason, 'strerror', None) or reason})")
+    status = getattr(e, "status_code", None)               # the Anthropic SDK's errors
+    if status:
+        return scrub(f"HTTP {status}: {getattr(e, 'message', None) or e}"[:300])
+    return scrub(f"{type(e).__name__}: {e}"[:300])
+
+
+def url_refused(cfg: dict) -> str:
+    """Why an OpenAI-compatible reader's "url" cannot be asked, naming only the reader's entry, never the text in it
+    (it is an address): none, or one with no http:// or https:// in front. "" when it can, and for Claude, which has
+    no url."""
+    if cfg.get("kind") == "anthropic":
+        return ""
+    url = cfg.get("url")
+    if not isinstance(url, str) or not url.strip():
+        return "its entry in private/config.json has no \"url\""
+    if not re.match(r"(?i)https?://\S", url.strip()):
+        return "its \"url\" in private/config.json does not start with http:// or https://"
+    return ""
+
+
+def _texts(answer) -> list:
+    """Every text in an answer, nested lists and objects included."""
+    if isinstance(answer, dict):
+        return [t for v in answer.values() for t in _texts(v)]
+    if isinstance(answer, list):
+        return [t for v in answer for t in _texts(v)]
+    return [str(answer)] if isinstance(answer, (str, int, float)) and not isinstance(answer, bool) else []
+
+
+def _folded(text: str) -> str:
+    return re.sub(r"[\W_]", "", text).casefold()
+
+
+def reads_check_text(answer) -> bool:
+    """The answer reads CHECK_TEXT and nothing else, case, spacing and signs aside ("MENU 42", "Menu42"; never "MENU
+    420" or "SUBMENU 42"): its "text", or, when it has no "text", all its texts joined."""
+    text = answer.get("text") if isinstance(answer, dict) else None
+    if not isinstance(text, str):
+        text = " ".join(_texts(answer))
+    return _folded(text) == _folded(CHECK_TEXT)
+
+
+def ask_check(cfg: dict, image: bytes, timeout: float = CHECK_TIMEOUT, roles: tuple = ()) -> Check:
+    """One reader asked the start check's question about image (check_picture) through the request a run's question
+    makes (make_reader, the reader's answer), with nothing looked up in or kept to the answers' cache; one whose url
+    cannot be asked is not sent anything (url_refused). Never raises."""
+    c = Check(str(cfg.get("name")), kind_of(cfg), shown_model(cfg.get("model")), paid(cfg), tuple(roles), asked=True)
+    t = time.monotonic()
+    refused = url_refused(cfg)
+    if refused:
+        c.error, c.seconds = refused, 0.0
+        return c
+    reader = None
+    try:
+        reader = make_reader(cfg, timeout=timeout)
+        answer = reader.answer(image, PROMPTS[CHECK_PROMPT], waits=CHECK_WAITS)
+    except Exception as e:       # noqa: BLE001 - every failure is the reader's error, said
+        c.error = failure(e, timeout)
+    else:
+        if not isinstance(answer, dict) or "_unparsed" in answer:
+            raw = " ".join(str(answer.get("_unparsed", answer) if isinstance(answer, dict) else answer).split())
+            c.error = scrub(f"its answer was no JSON object: {raw[:80]!r}" if raw else "its answer was empty")
+        elif "_error" in answer:
+            c.error = scrub(str(answer["_error"])[:300])
+        else:
+            said = answer.get("text") if isinstance(answer.get("text"), str) else " ".join(_texts(answer))
+            c.said = scrub(" ".join(said.split())[:80])
+            c.ok = reads_check_text(answer)
+            if not c.ok:
+                c.error = f"it read {c.said!r} where the picture says {CHECK_TEXT!r}"
+    served = str(getattr(reader, "served", None) or "").strip()
+    configured = str(cfg.get("model") or "").strip()
+    # the raw ids compared first, then what is printed: a path before the same name is no other model
+    if served and served.casefold() != configured.casefold() and shown_model(served).casefold() != c.model.casefold():
+        c.served = shown_model(served)
+    c.seconds = time.monotonic() - t
+    return c
+
+
+def ask_checks(cfgs: list, image: bytes, timeout: float = CHECK_TIMEOUT, roles: dict | None = None) -> list:
+    """ask_check for each reader at once, in threads of their own, so that the check takes as long as the slowest
+    reader, not their sum: Checks in the order given. A reader still busy past the deadline (its tries and its pause
+    on a busy gateway) is no answer."""
+    roles = roles or {}
+    out = [None] * len(cfgs)
+    lock, closed = threading.Lock(), []
+
+    def one(i, cfg):
+        c = ask_check(cfg, image, timeout, roles.get(cfg.get("name"), ()))
+        with lock:
+            if not closed:              # a reader that answers after the deadline changes nothing
+                out[i] = c
+    threads = [threading.Thread(target=one, args=(i, cfg), daemon=True) for i, cfg in enumerate(cfgs)]
+    deadline = time.monotonic() + timeout * len(CHECK_WAITS) + sum(w or 0 for w in CHECK_WAITS) + CHECK_SLACK
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join(max(0.0, deadline - time.monotonic()))
+    with lock:
+        closed.append(True)
+        got = list(out)
+    for i, cfg in enumerate(cfgs):
+        if got[i] is None:
+            got[i] = Check(str(cfg.get("name")), kind_of(cfg), shown_model(cfg.get("model")), paid(cfg),
+                           tuple(roles.get(cfg.get("name"), ())), asked=True,
+                           error=f"{NO_ANSWER} within {timeout:g} s (timed out)")
+    return got
+
+
+def role_players() -> dict:
+    """{reader name: (the roles it plays)} for the readers private/config.json lists ("second", "third": role); a
+    "roles" entry naming no reader listed is refused there (ConfigMissing), where during a run it would fail every
+    question."""
+    players: dict = {}
+    for name in ("second", "third"):
+        try:
+            cfg = role(name)
+        except NoReader:
+            continue
+        except ValueError as e:
+            raise ConfigMissing(str(e)) from None
+        players.setdefault(cfg["name"], ())
+        players[cfg["name"]] += (name,)
+    return players
+
+
+def _unasked(r: dict, roles: tuple, why: str) -> Check:
+    return Check(str(r["name"]), kind_of(r), shown_model(r.get("model")), paid(r), tuple(roles), not_asked=why)
+
+
+def plan(listed: list, players: dict, ask_paid: str = "needed") -> tuple:
+    """(the readers asked first, the paid ones asked only when no local reader of the first answered, the Checks of
+    those never asked), in the order listed. The readers a run can use: each local one (it plays a role or may stand
+    in, may_stand_in) and each paid one that plays a role (it never stands in). A paid second reader is asked with the
+    local ones: a run asks it on every proof, so one question more costs nothing by comparison, and a second reader
+    that does not answer (a key not set) must be found before the link. ask_paid: "needed" (the run's rule: a paid
+    third reader only when no local one answered), "all" (kit/tools/reader_check.py --all: every reader listed, paid
+    or not, used by a run or not) or "never" (reader_check.py --local, which kit/setup.py runs: never a paid one)."""
+    first, later, skipped = [], [], []
+    for r in listed:
+        roles = players.get(r["name"], ())
+        if ask_paid == "all" or not paid(r):
+            first.append(r)
+        elif not roles:
+            skipped.append(_unasked(r, roles, "a run never asks it: a paid reader plays only the roles private/"
+                                              "config.json gives it, and stands in for none (--all asks it)"))
+        elif ask_paid == "never":
+            skipped.append(_unasked(r, roles, "paid: not asked with --local (a run asks it as the second reader, as "
+                                              "the third when no local reader answers; --all asks it)"))
+        elif "second" in roles:
+            first.append(r)
+        else:
+            later.append(r)
+    return first, later, skipped
+
+
+def start_check(ask_paid: str = "needed", timeout: float = CHECK_TIMEOUT, say=print) -> list:
+    """Each reader a run can use asked the start check's question (plan, ask_checks): the local ones and a paid second
+    reader first and at once, a paid third reader only when no local one answered (each question to it costs money:
+    say says so first); the Checks of all the readers listed, in their order. No reader listed, or an entry that is no
+    reader, raises ConfigMissing (readers). Asks; decides nothing: verdict says what a run makes of the Checks."""
+    listed = readers(stop=True)
+    players = role_players()
+    first, later, skipped = plan(listed, players, ask_paid)
+    image = check_picture()
+    checks = ask_checks(first, image, timeout, players)
+    left = list(later)
+    if later and not any(c.ok and not c.paid for c in checks):
+        say(f"no local reader answered: asking the paid third reader {', '.join(repr(r['name']) for r in later)} "
+            f"(each question costs money)")
+        checks += ask_checks(later, image, timeout, players)
+        left = []
+    for r in left:
+        skipped.append(_unasked(r, players.get(r["name"], ()),
+                                "paid, and a local reader answered (kit/tools/reader_check.py --all asks it)"))
+    by_name = {c.name: c for c in checks + skipped}
+    return [by_name[str(r["name"])] for r in listed if str(r["name"]) in by_name]
+
+
+def verdict(checks: list) -> tuple:
+    """What a run makes of the start check's Checks: (the stand-ins to take up, {role: the config of the reader that
+    stands in for the one that did not answer}, and the reason the run cannot start, or "" when it can). The run needs
+    a reader for the "second" role, the one asked about the screen: its own, unless it did not answer, then the first
+    local reader listed that answered (may_stand_in, as stand_in takes one during a run; never a paid one); the
+    "third" role gets a stand-in the same way where one answered, and otherwise goes unanswered for the run (ask_role:
+    a run asks it only to break a tie). A paid third reader not asked because a local one answered keeps its role,
+    unchecked."""
+    listed = readers(stop=True)
+    good = [r for r in listed if any(c.name == str(r["name"]) and c.ok for c in checks)]
+    stand_ins, why = {}, ""
+    for name in ("second", "third"):
+        own = next((c for c in checks if name in c.roles), None)
+        if own is None or own.ok or not own.asked:
+            continue
+        sub = next((r for r in good if str(r["name"]) != own.name and may_stand_in(r)), None)
+        if sub is not None:
+            stand_ins[name] = sub
+        elif name == "second":
+            why = _second_missing(own, checks, listed)
+    if not why and not good:
+        why = "no reader answered"
+    return stand_ins, why
+
+
+def _second_missing(own: Check, checks: list, listed: list) -> str:
+    """Why a run cannot start when its second reader did not answer and no local reader may stand in: which answered,
+    and, where a paid reader is listed for another role or none, that it stands in for no other, and how to give it
+    the role for one who would pay for it."""
+    answered = [c.name for c in checks if c.ok]
+    why = ("no reader answered" if not answered else
+           f"the second reader, {own.name!r}, did not answer, and no local reader answered to stand in for it "
+           f"({', '.join(repr(n) for n in answered)} answered)")
+    others = [str(r["name"]) for r in listed if paid(r) and str(r["name"]) != own.name]
+    if others:
+        one = len(others) == 1
+        why += (f"; {', '.join(repr(n) for n in others)} {'is a paid reader' if one else 'are paid readers'} listed but "
+                f"not given the second role, and a paid reader never stands in for another: to pay for "
+                f"{'it' if one else 'one'} as the second reader, give it the role in private/config.json, "
+                f"\"roles\": {{\"second\": {json.dumps(others[0])}}}")
+    return why
+
+
+_CHECKED: list | None = None   # the Checks of the start check that let this process's run start, or None (not checked)
+_SKIPPED: set = set()          # the readers that did not answer it: none stands in, none is asked in the role it kept
+
+
+def _passed(checks: list) -> None:
+    """The start check's Checks taken by the run: stops it (ConfigMissing) when it cannot start, naming each reader and
+    what came of it, with what to do; else says in a line what came of each, takes up the stand-ins (assign_role) and
+    skips for the run the readers that did not answer (_SKIPPED: never brought in as a stand-in, and a role left to
+    one goes unanswered, ask_role)."""
+    global _CHECKED
+    stand_ins, why = verdict(checks)
+    if why:
+        lines = [f"  {c.who()}: {c.outcome()}" for c in checks]
+        raise ConfigMissing(
+            f"The start check: {why}, so this run stops before it opens the camera link, and nothing is pressed (a "
+            f"reader is required: docs/decisions/0022). Each reader was asked to read {CHECK_TEXT!r} off a small "
+            f"picture, as a run asks about the camera's screen:\n" + "\n".join(lines) + "\n"
+            "What to do: start each reader's server, or give it what it says it lacks (an HTTP 507 is the server short "
+            "of memory or disk, a 503 one still loading its model; a paid reader, its key in the environment variable "
+            "its entry names), and check its \"url\" and \"model\" in private/config.json; then "
+            ".venv/bin/python kit/tools/reader_check.py asks the same question with no camera (docs/QUICKSTART.md, "
+            "\"Choosing a reader\").")
+    print("readers: " + "; ".join(f"{c.who()} {c.outcome()}" for c in checks), flush=True)
+    for c in checks:
+        if c.asked and not c.ok:
+            _SKIPPED.add(c.name)
+    for name, sub in stand_ins.items():
+        own = next(c for c in checks if name in c.roles)
+        assign_role(name, sub)
+        print(f"reader {own.name!r} does not answer: {sub['name']!r} stands in as the {name} reader for this run",
+              flush=True)
+    for name in ("second", "third"):
+        own = next((c for c in checks if name in c.roles), None)
+        if own is not None and own.name in _SKIPPED and name not in stand_ins:
+            print(f"reader {own.name!r} does not answer and no local reader may stand in: the {name} reader's "
+                  f"questions go unanswered for this run", flush=True)
+    _CHECKED = list(checks)
+
+
+# ------------------------------------------------------------------------------------------------ during a run
+
+_FAILING: set = set()          # the readers whose failure during this run has been said (failing)
+_RUN = None                    # the run whose events.jsonl that is logged in (log_to), or None
+
+
+def log_to(run) -> None:
+    """The run whose events.jsonl a reader's failure is logged in (camkit.live.LiveCamera gives it its own run)."""
+    global _RUN
+    _RUN = run
+
+
+def failing(cfg: dict, e: BaseException, timeout: float | None = None) -> None:
+    """A reader that failed a run's question, said once per reader in the run, on standard error and in the run's
+    events.jsonl ("reader_failing"), not once per question: the question itself is still taken as no answer by its
+    caller, as ever."""
+    name = str(cfg.get("name"))
+    if name in _FAILING:
+        return
+    _FAILING.add(name)
+    why = failure(e, timeout)
+    print(f"reader {name!r} failed during the run ({why}): each question to it is taken as no answer, the readings go "
+          f"on with OCR alone or a local stand-in, and this is said once", file=sys.stderr, flush=True)
+    with contextlib.suppress(Exception):
+        if _RUN is not None and hasattr(_RUN, "log"):
+            _RUN.log("reader_failing", reader=name, why=why)
+
+
+def forget() -> None:
+    """A run's readers' state cleared: the start check's verdict, the readers it skipped, the stand-ins, the failures
+    said and the run they are logged in (a new run in the same process; the tests)."""
+    global _CHECKED, _RUN
+    _CHECKED, _RUN = None, None
+    _SKIPPED.clear()
+    _FAILING.clear()
+    _STANDING_IN.clear()
 
 
 def role(name: str) -> dict:
@@ -161,7 +744,7 @@ def role(name: str) -> dict:
     the role raises NoReader, an ordinary exception (see there)."""
     c = _settings()
     listed = readers(settings=c)
-    named = c.get("roles", {}).get(name)
+    named = (c.get("roles") or {}).get(name)
     if named:
         found = next((r for r in listed if r["name"] == named), None)
         if found is None:
@@ -197,15 +780,16 @@ def playing(name: str) -> dict:
 def reader_for(name: str, **override):
     """The reader playing a role (`role`), or, once that one has failed to connect, the next configured reader that
     answers, remembered for the process: a server on another machine switched off must not cost every proof its
-    reading (2026-11-06). A hosted reader ("kind": "anthropic") is never chosen as a stand-in by itself: it costs
-    money, so it stands in only when the config names it for the role."""
+    reading (2026-11-06). A paid reader (paid) is never chosen as a stand-in: it costs money, so it plays only the
+    roles the config gives it."""
     return make_reader(playing(name), **override)
 
 
 def stand_in(name: str, failed: dict) -> dict | None:
-    """After `failed` would not connect: the next local reader that answers a tiny request, kept for the role."""
+    """After `failed` would not connect: the next local reader that answers a tiny request, kept for the role; never a
+    paid one (may_stand_in), nor one that did not answer the run's start check (check_readers)."""
     for r in readers():
-        if r["name"] == failed.get("name") or r.get("kind") == "anthropic":
+        if r["name"] == failed.get("name") or not may_stand_in(r) or r["name"] in _SKIPPED:
             continue
         try:
             make_reader(r, timeout=20).ping()
@@ -221,13 +805,29 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     """The answer of the reader playing a role ("second", "third"); when it will not connect, the next configured
     reader that answers takes the role for the rest of the run (stand_in): the remote server was off, 2026-11-06.
     Every question a run asks about a frame comes here (proving.screens.ask_second, camkit.live's reader_label and
-    submenu_labels); the batch tools the module docstring names are the exception."""
+    submenu_labels, camkit.reading.ask); the batch tools the module docstring names are the exception. A reader that
+    fails is said once in the run (failing); the failure goes on to the caller as before. A role whose reader did not
+    answer the run's start check, with no reader standing in, raises NoReader at once, asking nothing: every caller
+    takes it as no answer, as from a reader that failed, without the timeout each question would cost."""
+    cfg = playing(name)
+    if str(cfg.get("name")) in _SKIPPED:
+        raise NoReader(f"reader {cfg.get('name')!r} did not answer the run's start check, and no reader stands in for "
+                       f"it: the {name} reader's questions go unanswered for this run")
     try:
-        return reader_for(name, timeout=timeout).ask(image, prompt)
-    except urllib.error.URLError:
-        if standing_in(name) is not None or stand_in(name, role(name)) is None:
+        return make_reader(cfg, timeout=timeout).ask(image, prompt)
+    except Exception as e:
+        failing(cfg, e, timeout)
+        if not isinstance(e, urllib.error.URLError) or standing_in(name) is not None or stand_in(name, role(name)) is None:
             raise
-        return reader_for(name, timeout=max(timeout, 60)).ask(image, prompt)
+    cfg = playing(name)
+    try:
+        return make_reader(cfg, timeout=max(timeout, 60)).ask(image, prompt)
+    except Exception as e:
+        failing(cfg, e, max(timeout, 60))
+        raise
+
+
+BUSY_WAITS = (2, 5, 15, None)    # s between a run's tries at a busy gateway (502/503/504), then it gives up
 
 
 class Reader:
@@ -257,10 +857,17 @@ class Reader:
             reply.read()
 
     def ask(self, image: bytes, prompt: str) -> dict:
+        """The answer, from the cache when this model has answered this question about this picture, else asked
+        (answer) and kept (keep)."""
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
             return answer
+        return keep(key, self.answer(image, prompt))
+
+    def answer(self, image: bytes, prompt: str, waits: tuple = BUSY_WAITS) -> dict:
+        """The answer asked now, nothing looked up or kept (ask keeps it; the start check asks this way). waits: the
+        seconds between tries when the gateway is busy (502/503/504), None ending them."""
         body = {
             "model": self.model, "temperature": 0, "max_tokens": 800,
             "chat_template_kwargs": {"enable_thinking": False},
@@ -270,7 +877,7 @@ class Reader:
         }
         req = urllib.request.Request(self.url + "/chat/completions", json.dumps(body).encode(), self.headers())
         with self.slots:
-            for wait in (2, 5, 15, None):
+            for wait in waits:
                 try:
                     with urllib.request.urlopen(req, timeout=self.timeout) as r:
                         reply = json.load(r)
@@ -280,8 +887,9 @@ class Reader:
                     if e.code not in (502, 503, 504) or wait is None:
                         raise
                     time.sleep(wait)
+        self.served = reply.get("model") if isinstance(reply, dict) else None     # the model the server says answered
         # a reasoning server can answer with no content at all ("content": null): that is no JSON, asked again
-        return keep(key, parse_json(reply["choices"][0]["message"].get("content") or ""))
+        return parse_json(reply["choices"][0]["message"].get("content") or "")
 
 
 def parse_json(text: str) -> dict:

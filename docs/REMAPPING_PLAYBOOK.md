@@ -273,9 +273,19 @@ right trade.
 
 **Which reader plays which role** is set in `private/config.json` `"roles"`, for example
 `{"second": "claude", "third": "omlx"}`. The second reading is asked on every proof; the third
-breaks ties. Without `"roles"`, the first two readers listed play them. When the second reader will not connect (a
-server on another machine switched off, 2026-11-06), the next local reader that answers stands in for the rest of
-the run, never a hosted one by itself; `kit/page_model.py --vlm --reader NAME` names one outright. The reader also
+breaks ties. Without `"roles"`, the first two readers listed play them. A paid reader (Claude, or a service with
+`api_key_env`) plays only the roles given it there and never stands in for another. Before a camera run opens the
+link, each reader it can use is asked to read a small picture (the local ones and a paid second reader at once, a paid
+third only when no local one answered). One that does not answer is skipped for the run, with what it said or the
+error: a local reader that answered stands in for it, and a role left with none goes unanswered for the run, its
+questions taken as no answer at once. With no reader answering, or the second reader not answering and no local
+reader to stand in, the run stops there (`kit/tools/reader_check.py` asks the same with no camera; the quickstart's
+[Choosing a reader](QUICKSTART.md#choosing-a-reader)). On 2026-11-13 a session ran with no reader answering (the
+remote one timed out, the local one answered every question with HTTP 507), each question going on with OCR alone,
+and nothing said so. When the second reader will not connect (at the start, or a server on another machine switched
+off during the run, 2026-11-06), the next local reader that answers stands in for the rest of the run, never a paid
+one; `kit/page_model.py --vlm --reader NAME` names one outright. A reader that fails during the run is said
+once, on the terminal and in the run's `events.jsonl` (`reader_failing`); its questions are still taken as no answer. The reader also
 decides where OCR leaves a number box unread (Apple Vision skipped "11 sec" on a frame it had read "10" on): it has
 been right every time it was checked against the screen, so it comes before the second OCR engine.
 

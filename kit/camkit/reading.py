@@ -834,7 +834,7 @@ def ask(frame, prompt: str, timeout: float = 25.0, role: str = "second") -> Aske
         down["fails"] += 1
         if down["fails"] >= DOWN_AFTER:
             down["until"] = time.monotonic() + DOWN_FOR
-        return Asked(None, None, None, f"the reader failed ({type(e).__name__}: {e})"[:300])
+        return Asked(None, None, None, vlm.scrub(f"the reader failed ({type(e).__name__}: {e})"[:300]))
     down.update(fails=0, until=0.0)
     if not isinstance(answer, dict) or "_unparsed" in answer:
         return Asked(None, name, model, "the reader's answer was no JSON object")
@@ -860,9 +860,9 @@ def engine_of(name) -> str:
 
 
 def check_engines() -> tuple:
-    """(the first OCR engine, the second or None) as camkit.ocr.read runs them, for a camera run to call at its start,
-    as camkit.vlm.check_readers is: an engine name it does not know stops the run there, with what to put instead
-    (ConfigMissing, a SystemExit), before anything is pressed. Nothing calls it yet (2026-11-13)."""
+    """(the first OCR engine, the second or None) as camkit.ocr.read runs them, checked at every camera run's start by
+    camkit.vlm.check_readers, before its readers are asked: an engine name it does not know stops the run there, with
+    what to put instead (ConfigMissing, a SystemExit), before anything is pressed."""
     try:
         first = engine_of(ocr.engine())
         other = ocr.second()

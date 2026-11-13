@@ -137,7 +137,11 @@ it has been measured.
   reader calls it would add, what it would keep or refuse, and what a third vote by the second OCR engine would settle
   where a run kept that engine's reading (the page models do; the proof lines do not); it reads the runs and writes
   nothing there, and its counts are for the owner's terminal. A test lists the modules that still read the screen by
-  themselves; the list only gets shorter.
+  themselves; the list only gets shorter. A camera run's start check now asks a real question (to read a small
+  picture, as a run asks) of each local reader and of a paid second reader, and of a paid third reader only when no
+  local one answered; it checks the OCR engines' names too, and stops the run before its link when no reader answers,
+  when the second reader does not and no local reader may stand in, or when an engine is unknown
+  (`kit/tools/reader_check.py` asks the same with no camera).
 - **Next, after the census:** `camkit.match.key` and `page_model.key_text` take the one cleaning, and the other tables
   go. Finding a row must leave out first the icon OCR reads as letters in front of a row's label, as
   `page_model.same_text` does, or the reader would be asked about most rows for nothing.
@@ -148,7 +152,7 @@ it has been measured.
   `eyes`. Then the provers, `kit/provers/pp_reset_run.py` last. Then the guards, which may only add refusals: the
   never-open check asks the reader on any doubt, not only on an empty bar, and Enter on a notice judges the reader's
   reading too. Then the start of a run (`--ocr-only` to run without a reader on purpose; `kit/tiebreak.py` with one
-  reader; a reader check with no camera), the batch tools (pass 1's carousels and grids ask on a doubt), and the
+  reader), the batch tools (pass 1's carousels and grids ask on a doubt), and the
   playbook's section 5, the quickstart and the porting notes, rewritten for the rule.
 - **Not before they are measured:** agreement as a gate on every proof frame (the reader's question answers something
   else than the option on some screens: checklists, number fields, Creative Look panels, axes, star ratings; each needs

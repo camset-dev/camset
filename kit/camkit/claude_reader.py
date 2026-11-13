@@ -34,10 +34,19 @@ class ClaudeReader:
         self.client = anthropic.Anthropic(timeout=timeout)
 
     def ask(self, image: bytes, prompt: str) -> dict:
+        """The answer, from the cache when this model has answered this question about this picture, else asked
+        (answer) and kept, unless refused."""
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
             return answer
+        answer = self.answer(image, prompt)
+        return answer if "_error" in answer else keep(key, answer)
+
+    def answer(self, image: bytes, prompt: str, waits=None) -> dict:
+        """The answer asked now, nothing looked up or kept (ask keeps it; camkit.vlm's start check asks this way). waits
+        is vlm.Reader's, unused here: the SDK retries a busy service by itself."""
+        del waits
         with self.slots:
             response = self.client.beta.messages.create(
                 model=self.model,
@@ -50,8 +59,9 @@ class ClaudeReader:
                                                  "data": base64.standard_b64encode(image).decode("utf-8")}},
                     {"type": "text", "text": prompt}]}],
             )
+        self.served = getattr(response, "model", None)          # the model that answered (a fallback's, after one)
         if response.stop_reason == "refusal":
             category = getattr(response.stop_details, "category", None) if response.stop_details else None
             return {"_error": f"refused ({category})"}
         text = "".join(block.text for block in response.content if block.type == "text")
-        return keep(key, parse_json(text))
+        return parse_json(text)

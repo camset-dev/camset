@@ -377,7 +377,7 @@ def census(places: list, args) -> dict:
     models = [r.get("model") for r in config(required=False).get("readers") or []] + args.model
     asker = None
     if args.ask:
-        vlm.check_readers()                  # none listed: its sentence, and nothing asked
+        vlm.readers(stop=True)               # none listed: its sentence, and nothing asked
         models.append(vlm.role("second").get("model"))
     proofs, menus, runs = Tally(), Tally(), 0
     for place in places:

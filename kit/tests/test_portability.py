@@ -107,6 +107,7 @@ def test_a_copy_of_the_example_config_contacts_nothing(tmp_path, monkeypatch):
     the run's cleanup and restore go on. Until 2026-11-13 its first reader was a server at an example address on the
     local network, to which a copy left as it was sent pictures of the camera's screen. The readers it shows are under
     "readers_examples", which the kit does not read: one of each kind "Choosing a reader" names."""
+    import io
     import json
     from camkit import link, vlm
     from camkit.runs import Run
@@ -135,9 +136,12 @@ def test_a_copy_of_the_example_config_contacts_nothing(tmp_path, monkeypatch):
         vlm.check_readers()
     with pytest.raises(vlm.NoReader):
         vlm.role("second")
-    # filled in: the one reader listed plays the second role and the check passes; the third role asks for another,
-    # an ordinary exception as the IndexError before it was
+    # filled in: the one reader listed plays the second role and the check passes once it answers the check's question
+    # (no network: the server is a stub); the third role asks for another, an ordinary exception as the IndexError
+    # before it was
     camkit.CONFIG.write_text(json.dumps({**example, "readers": example["readers_examples"][1:2]}), encoding="utf-8")
+    answer = {"choices": [{"message": {"content": json.dumps({"text": vlm.CHECK_TEXT})}}]}
+    monkeypatch.setattr(vlm.urllib.request, "urlopen", lambda req, timeout: io.BytesIO(json.dumps(answer).encode()))
     vlm.check_readers()
     assert vlm.role("second")["name"] == "omlx"
     with pytest.raises(vlm.NoReader, match="the third role needs another"):

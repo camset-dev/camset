@@ -36,6 +36,9 @@ can take more than a few seconds says so first, with a rough time, and shows a p
     a submission. A fresh clone gets no page: proof_viewer.py refuses (exit status 3) and the line says why, what
     makes it available, and that the definition viewer needs no runs. A failed build is reported with its reason
     (the kit's runs from before per-camera folders: the command that moves them). Neither fails the setup.
+10. The readers: each local reader private/config.json lists asked the question a camera run asks it at its start
+    (kit/tools/reader_check.py --local; a paid reader is never asked here). No config yet, no reader listed, only
+    paid ones, or none answering is a "--" with what to do, and fails nothing.
 Then a table: each piece, its state and what next; and the last words: everything is in place, or what is left for
 you to do, numbered in order, and "Then run <this command> again". Ctrl+C stops it at any time; nothing is lost.
 Exit status: 0 when nothing required is missing or failed, 1 when something is (on Windows, UTF-8 mode not on), 2 when
@@ -114,6 +117,7 @@ SWIFT_TIME, SWIFT_SLOW = "usually under a minute", 10 * 60
 EDITOR_TIME, EDITOR_SLOW = f"usually 5 to 15 minutes the first time, as it compiles some hundred libraries; a minute or less after; {LONGER}", 60 * 60
 TESTS_TIME, TESTS_SLOW = f"about 3 minutes on a fast computer, 5 to 15 minutes on many; {LONGER}", 30 * 60
 VIEWER_TIME, VIEWER_SLOW = "seconds; a minute or two where the kit has run on a camera", 15 * 60
+READERS_TIME, READERS_SLOW = "seconds; up to about a minute for a reader that does not answer", 5 * 60
 LIBXML2_TIME, LIBXML2_SLOW = f"a minute or two; {LONGER}", 20 * 60
 
 
@@ -1591,6 +1595,68 @@ def step_viewer(env: Env) -> None:
     env.add("proof viewer", "OK", f"built ({page})", f"open {page} in a browser")
 
 
+# ---------------------------------------------------------------- 10. the readers
+
+# kit/tools/reader_check.py's exit statuses: no config or no reader listed (its NOTHING_TO_ASK), only paid readers
+# listed with --local (ONLY_PAID), a config or readers that cannot be read (UNREADABLE), and the check's own fault
+# (FAILED), which is the kit's, never the config's
+READERS_NOTHING, READERS_ONLY_PAID, READERS_UNREADABLE, READERS_FAILED = 3, 4, 5, 6
+READER_CHECK = "kit/tools/reader_check.py"
+
+
+def step_readers(env: Env) -> None:
+    """The local readers private/config.json lists, each asked the question a camera run asks it at its start
+    (kit/tools/reader_check.py --local: never a paid reader, so a setup run costs nothing). Optional: no config yet, no
+    reader listed, or none answering is a "--" with what to do, and fails nothing."""
+    check = env.native(f"{env.rel(env.venv_bin('python'))} {READER_CHECK}")
+    if env.check:
+        env.add("readers", "--", "not asked with --check", check)
+        return
+    py = env.venv_bin("python")
+    if not py.exists():
+        env.add("readers", "--", "not asked: there is no .venv (above)", "the venv line above")
+        return
+    unready = [r.piece for r in last_rows(env.rows) if r.piece in ("venv", "packages") and r.state in ("FAIL", "DO")]
+    if unready:
+        why = ".venv is not ready" if unready[0] == "venv" else "the kit's packages are not installed"
+        env.add("readers", "--", f"not asked: {why} (above)", f"the {unready[0]} line above")
+        return
+    if not (env.root / "private" / "config.json").exists():
+        env.add("readers", "--", "not asked: there is no private/config.json yet",
+                f"docs/QUICKSTART.md, step 3: list your readers in it, then {check} asks them")
+        return
+    with long_step(env, "asking each local reader in private/config.json a question", "the readers", READERS_TIME,
+                   READERS_SLOW):
+        code, out = run([py, env.root / "kit" / "tools" / "reader_check.py", "--local"], cwd=env.root)
+    lines = out.strip().splitlines()
+    last = lines[-1].strip() if lines else "no output"
+    if code == 0:
+        env.add("readers", "OK", last.split(":", 1)[0])
+        return
+    if code == READERS_NOTHING:
+        env.add("readers", "--", "not asked: private/config.json lists no reader",
+                f"docs/QUICKSTART.md, \"Choosing a reader\": list yours, then {check} asks them")
+        return
+    if code == READERS_ONLY_PAID:
+        env.add("readers", "--", f"only paid readers listed: not asked here ({READER_CHECK} --all asks them, each "
+                                 "question costs money)", f"{check} --all")
+        return
+    tail(out)
+    if code == READERS_UNREADABLE:
+        env.add("readers", "--", "not asked: private/config.json, or its readers, cannot be read (the line above says "
+                                 "why)", "docs/QUICKSTART.md, step 3")
+        return
+    if code == READERS_FAILED:
+        env.add("readers", "--", f"not asked: {READER_CHECK} itself failed (the line above says how): a fault in the "
+                                 "kit, not in private/config.json", "report it with the line above")
+        return
+    if code == 1:
+        env.add("readers", "--", "no local reader answered (the lines above say what each did)",
+                f"start the reader's server, then {check}")
+        return
+    env.add("readers", "--", f"not asked: {READER_CHECK} failed (exit {code}): {last}", "the lines above")
+
+
 # ---------------------------------------------------------------- the table, and main
 
 def table(rows: list) -> str:
@@ -1730,6 +1796,7 @@ def all_steps(env: Env, zip_arg: str | None) -> int:
         step_access(env)
         step_tests(env)
         step_viewer(env)
+        step_readers(env)
     return code
 
 

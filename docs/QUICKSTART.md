@@ -195,6 +195,29 @@ settings and the like, so prefer a local model when the menus hold such things.
 `kit/config.example.json` has one entry of each kind under `readers_examples`, which the kit does not read: copy the
 ones you choose into `readers`, which is empty until you do, and put your own server's address in a local one's `url`.
 
+**Check that they answer.** Every camera run that asks a reader checks its readers before it opens the camera link:
+each reader it can use is asked to read "MENU 42" off a small picture, through the same request a run's question
+makes (its address, its model, a run's own question), with the time a proof's question gets (25 s). A paid reader
+(Claude, or a service named with `api_key_env`) plays only the roles the config gives it (`roles`, or its place in
+`readers`) and never stands in for another, so one with no role is never asked. The local readers and a paid second
+reader (a run asks it on every proof anyway) are asked at once, so a healthy setup adds a few seconds; a paid third
+reader is asked only when no local one answered, and the run says so first. A reader that does not answer is named
+with what it said or the error (`HTTP 507 Insufficient Storage: ...` is the server short of memory or disk) and skipped
+for the run: a local reader that answered stands in for it, and a role left with none goes unanswered for the run, its
+questions taken as no answer at once. With no reader answering, or the second reader not answering and no local
+reader to stand in for it, the run stops there and nothing is pressed. What it prints names no address or key. The
+same check with no camera, to try a reader after setting it up or restarting its server:
+
+```sh
+.venv/bin/python kit/tools/reader_check.py           # each reader: kind, model, answered in how long, or the error
+.venv/bin/python kit/tools/reader_check.py --all     # the paid readers too (each question costs money)
+```
+
+It exits 0 when a camera run would start. `kit/setup.py` runs it with `--local` (never a paid reader) once
+`private/config.json` lists your readers; with only paid readers listed it asks none and says so. A reader that fails later, during a run, is said once on the terminal and
+in the run's `events.jsonl` (`reader_failing`), and its questions go unanswered as before (the playbook's
+[section 5](REMAPPING_PLAYBOOK.md#5-readers-accuracy-before-speed)).
+
 ## 4. Identify the camera and its file
 
 Over USB, run the first line too (step 3): every command from here on needs it, in the same shell.
@@ -351,6 +374,7 @@ prints the command to run instead.
 ```sh
 mkdir -p private                                                         # your own folder, git-ignored: config, camera files, help text, SDK table (decision 18)
 python3 kit/setup.py --check                                            # what is set up, changing nothing (--force: build from clean; --editor: the editor too)
+.venv/bin/python kit/tools/reader_check.py [--all]                      # each reader asked a camera run's start question, with no camera (--all: the paid ones too)
 (cd editor && CAMSET_INTERNAL=1 sh packaging/build_macos_app.sh)          # the internal macOS app, into editor/target/dist-internal: never to be published
 .venv/bin/python kit/tests/score_screen.py --every 10                    # pixel reader vs OCR on the corpus
 .venv/bin/python -u kit/table_walk.py --rows "My Dial Settings"          # read-only walk of a table / Fn Menu / Custom Key
