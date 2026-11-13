@@ -33,6 +33,15 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   message, and `kit/setup.py`'s line for it, also say that the definition viewer needs no runs:
   `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at
   <https://camset-dev.github.io/camset/viewer/>.
+- Creative Look proofs on a Mac: since macOS 27.2, Apple's text recognition often misses one of the numbers at the
+  ends of a look parameter's scale (the "+9" at the top of -9..+9, the "0" at the bottom of 0..9), and the proof
+  stopped with the scale "not readable". The kit now counts the scale's tick marks. Once the run has read both ends
+  of a parameter's scale beside the same number of ticks, that parameter's -9..+9 or 0..9 scale with an end missing
+  is read from its ticks, and its proofs say so (`"range_from": "ticks"`, else `"ends"`). The proof still stops, as
+  before, on a 1..5 scale (Sharpness Range) with an end missing, since five ticks fit several scales, on a parameter
+  whose ends the run has not yet read both of, and with RapidOCR (Windows and Linux), which reads neither end of
+  0..9 or 1..5. Ends that do not match the ticks beside them (a tick read as a plus would make 1..5 read as -5..+5)
+  now stop the proof instead of being taken as read.
 
 ## 0.2.1 (2026-11-13)
 

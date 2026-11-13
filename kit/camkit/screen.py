@@ -23,7 +23,8 @@ Screen types:
             orange button; on a button Enter would apply, so the walker leaves with MENU (Cancel)
   look      Creative Look parameter panel (over live view, so no title line): a framed strip of 8
             parameter cells (y 350-403), the selected one orange with ⌃/⌄ over/under it where the
-            value can still move; an orange ▶ on the vertical scale at the right marks the value.
+            value can still move; an orange ▶ on the vertical scale at the right marks the value, and
+            the scale's tick marks (on the a1 II, one a step) run from its top end (y 99) to its bottom (y 243).
             Cell 0, the Look itself, shows at the left only while selected (▲▼ boxes, no scale)
   slider    one value on a horizontal scale (Aspect Marker Level, Exposure Comp., Flash Comp.), over
             live view: − and + boxes (92 px wide, mirrored about x 320, y ~316-378; without outlines the
@@ -152,6 +153,8 @@ TRACKS = {"list": (LIST_SCROLL[2], LIST_SCROLL[3]), "sidelist": (SIDE_SCROLL[1],
 # it is selected; cells 1-8 are the parameters, Contrast to Clarity
 LOOK_CELLS = [14, 92, 162, 232, 302, 372, 442, 504, 566, 628]
 LOOK_MARKER = (550, 578, 80, 260)      # the scale's orange ▶: x0, x1, y0, y1
+LOOK_TICKS = (586, 600, 85, 255)       # its tick marks, between the ▶ and the end numbers: x0, x1, y0, y1
+LOOK_TICK_ENDS = (99, 243)             # y of the top and bottom ticks, beside the end numbers
 PICK_ROW_TOP, PICK_ROW_PITCH, PICK_ROWS = 48, 53, 7    # function picker options (right panel)
 PICK_RADIO_X = 358
 PICK_TAB_TOP, PICK_TAB_PITCH = 46, 52  # its tabs
@@ -175,6 +178,7 @@ class Screen:
     rows: list = dataclasses.field(default_factory=list)   # menu/submenu: (top, bottom) of each row
     boxes: list = dataclasses.field(default_factory=list)  # fields: (x0, x1) of each field
     marker: int | None = None                       # look: y of the value marker; slider: its x
+    ticks: int | None = None                        # look: the scale's tick marks counted (_look_ticks)
     count: int | None = None                        # list: options visible
     current: int | None = None                      # list: slot of the saved value (orange radio), if visible
     scroll: tuple | None = None                     # list: scrollbar thumb (y0, y1); None = whole list visible
@@ -1048,10 +1052,31 @@ def _look(a, s: Screen):
     mk = np.nonzero(o[y0:y1, x0:x1].sum(axis=1) > 3)[0]
     if len(mk):
         s.marker = y0 + int((mk.min() + mk.max()) // 2)
+    s.ticks = _look_ticks(g)
     _sig(s, b"look", np.array([s.field if s.field is not None else -1, (s.marker or 0) // 2]),
                         np.array([s.glyphs.get("up", False), s.glyphs.get("down", False)]),
                         _binarize_small(g, (18, 60, 330, 115), (40, 6), 150),          # the look's name
                         _binarize_small(g, (10, 352, 628, 402), (155, 12), 150))       # every cell's value
+
+
+def _look_ticks(g) -> int | None:
+    """The look scale's tick marks counted, or None when what is lit there is not a row of thin (at most 4 px), evenly
+    spaced ticks from the top end to the bottom (something bright behind the panel, BW's greyed Saturation, or no
+    scale). The a1 II's panel draws one a step: 19 on -9..+9, 10 on 0..9, 5 on 1..5, the count on every look frame of
+    its runs that gives one (2026-11-13); another body's may not, so proving.looks trusts a count only once the run
+    has read both ends of the same parameter beside it."""
+    x0, x1, y0, y1 = LOOK_TICKS
+    lit = np.nonzero((g[y0:y1, x0:x1] > 150).sum(axis=1) >= 4)[0]
+    if len(lit) < 2:
+        return None
+    runs = np.split(lit, np.nonzero(np.diff(lit) > 1)[0] + 1)
+    mids = np.array([y0 + (r[0] + r[-1]) / 2 for r in runs])
+    gaps = np.diff(mids)
+    top, bottom = LOOK_TICK_ENDS
+    if len(runs) < 2 or max(len(r) for r in runs) > 4 or gaps.max() - gaps.min() > 2 \
+            or abs(mids[0] - top) > 4 or abs(mids[-1] - bottom) > 4:
+        return None
+    return len(runs)
 
 
 def _slider(a, s: Screen):

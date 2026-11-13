@@ -27,10 +27,53 @@ def scale_end(text: str) -> int | None:
     return int(d[-1]) if d else None
 
 
-def look_cell(cam, known=None) -> tuple:
-    """(value in the active cell or None, the parameter's name, the scale's (low, high), the value the
-    ▶ marker shows). The scale's ends are the camera's own range: "+9"/"-9", "9"/"0", "5"/"1" (a
-    tick mark reads as "-" before an end that is not negative), one digit each (scale_end)."""
+_SEEN: dict = {}       # run folder -> its scales_seen, for as long as the run's process lives
+
+
+def scales_seen(run) -> dict | None:
+    """The run's {(cell, tick count): every scale both ends of that cell's parameter were read as beside that many
+    ticks} (look_cell gathers it, scale_from_ticks trusts it), kept for the run's process: prove_run.py makes one Run
+    for all its jobs, so a look proved later can use what the earlier ones showed of the same parameter. A run resumed
+    in a new process gathers it again. None for no run (a check off the camera): nothing is gathered, and the ticks
+    never answer."""
+    return None if run is None else _SEEN.setdefault(str(run.dir), {})
+
+
+def scale_from_ticks(ticks: int | None, lo: int | None, hi: int | None, seen: set | None) -> tuple:
+    """(low, high) of a scale whose end OCR missed, from its tick marks alone, or (lo, hi) as they came. The ticks
+    answer only when all three hold:
+    - their count alone leaves one scale on the a1 II's panel (this menu generation's: one tick a step, one digit an
+      end, a scale below zero symmetric), so 19 ticks are -9..+9 and 10 are 0..9; 5 fit seven scales (0..4, 1..5 ...
+      5..9, -2..+2) and never answer;
+    - every end OCR read agrees with that scale (`hi` the top's number, `lo` the bottom's digit, its sign unread:
+      scale_end). An end only vetoes, never chooses: a "5" read as "6" over five ticks would have made the scale 2..6;
+    - this run has read both ends of this parameter beside that many ticks, as that scale and no other (`seen`, the
+      scales look_cell kept for the cell and count): the body has shown it draws this scale so, and another parameter
+      with as many ticks proves nothing of this one. Without that, the scale stays unread and the row stops, as before.
+    Apple's OCR since macOS 27.2 misses an end on about half of the a1 II's look frames (2026-11-13). The marker's
+    value on a scale an end chose is no second reading of it: the cell's number comes from the same OCR, in the same
+    typeface, and at the scale's end shows the very digit the end shows."""
+    if not ticks or not seen:
+        return lo, hi
+    span = ticks - 1
+    fits = [(a, a + span) for a in range(-9, 10 - span) if a >= 0 or a == -(a + span)]
+    if len(fits) != 1:
+        return lo, hi
+    (a, b), = fits
+    if hi not in (None, b) or lo not in (None, abs(a)) or seen != {(a, b)}:
+        return lo, hi
+    return a, b
+
+
+def look_cell(cam, known=None, seen=None) -> tuple:
+    """(value in the active cell or None, the parameter's name, the scale's (low, high), the value the ▶ marker shows,
+    how the scale was read: "ends", "ticks", or None when it is unread or `known` stands in for it). The scale's ends
+    on the a1 II's panel are "+9"/"-9", "9"/"0", "5"/"1" (a tick mark reads as "-" before an end that is not
+    negative), one digit each (scale_end). Where the screen counted the scale's ticks (screen._look_ticks), ends that
+    give a scale of another number of steps leave it unread (a tick read as "+" would make 1..5's "5" a -5..+5), both
+    ends read are kept in `seen` (scales_seen) under the lit cell and the ticks beside them, and an end OCR missed may
+    come from the ticks (scale_from_ticks). A frame with no cell lit names no parameter: it keeps nothing and takes no
+    scale from the ticks (its ends alone may give one, still held to the ticks beside them)."""
     s, f = cam.read(), cam.frame
     lines = ocr.read([f.path])[f.path]
     c = screen.LOOK_CELLS
@@ -39,34 +82,49 @@ def look_cell(cam, known=None) -> tuple:
     val = None if not m else int(m.group(2)) * (-1 if m.group(1) == "-" else 1)
     top, bot = (ocr.text_in(lines, b).strip() for b in ((586, 80, 640, 120), (586, 220, 640, 262)))
     hi, lo = scale_end(top), scale_end(bot)
+    both = hi is not None and lo is not None
     # "+9" over "-9" is symmetric; OCR can drop the "+" ("9" over "-9", Shadows 2026-10-29): the same
     # number at both ends can only be a symmetric scale (the others run 0..9 and 1..5)
     if hi is not None and (top.lstrip().startswith("+") or (lo == hi and hi > 0)):
         lo = -hi
+    how = None if lo is None or hi is None else "ends"
+    here = (s.field, s.ticks)
+    if s.field is None:
+        seen = None                         # no cell lit: no parameter to keep evidence for, or to take it from
+    if how and s.ticks:
+        if both and seen is not None:
+            seen.setdefault(here, set()).add((lo, hi))
+        if s.ticks != hi - lo + 1:
+            lo, hi, how = None, None, None
+    elif not how:
+        got = scale_from_ticks(s.ticks, lo, hi, seen.get(here) if seen is not None else None)
+        if None not in got:
+            (lo, hi), how = got, "ticks"
     if known and (lo is None or hi is None or (lo, hi) != tuple(known)):
-        lo, hi = known                      # the scale this parameter showed first (its ends unread now)
+        (lo, hi), how = known, None         # the scale this parameter showed first (its ends unread now)
     name = ocr.text_in(lines, (130, 285, 520, 335)).strip()
     mark = None
     if s.marker is not None and hi is not None and lo is not None:
         mark = round(lo + (240 - s.marker) / 140 * (hi - lo))
-    return val, name, (lo, hi), mark
+    return val, name, (lo, hi), mark, how
 
 
-def look_value(cam, known=None):
-    """The active cell's value: where the ▶ marker sits on the scale (geometry, not text), checked
-    against the size of the number in the cell when OCR reads one; OCR loses the minus sign ("•9"
-    for -9, Contrast 2026-10-29), so the sign is the marker's. Without a marker, the cell's text."""
+def look_value(cam, known=None, seen=None):
+    """(the active cell's value, the parameter's name, the scale, how the scale was read: look_cell). The value is
+    where the ▶ marker sits on the scale (geometry, not text), checked against the size of the number in the cell when
+    OCR reads one; OCR loses the minus sign ("•9" for -9, Contrast 2026-10-29), so the sign is the marker's. Without
+    a marker, the cell's text."""
     for _ in range(2):
-        val, name, rng, mark = look_cell(cam, known)
+        val, name, rng, mark, how = look_cell(cam, known, seen)
         if val is not None and None not in rng and not rng[0] <= val <= rng[1]:
             val = None                       # an icon read as a digit ("49" for 9): off the scale, ignored
         if mark is not None and (val is None or abs(abs(val) - abs(mark)) <= 1):
-            return mark, name, rng
+            return mark, name, rng, how
         if mark is None and val is not None:
-            return val, name, rng
+            return val, name, rng, how
         time.sleep(0.4)
         cam.refresh("reread")
-    return None, name, rng
+    return None, name, rng, how
 
 
 def reader_cell(cam) -> int | None:
@@ -222,10 +280,12 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     middle and highest values (Up raises), OK, download, diff, and back to the value it had (that
     last diff must be empty). Opening a look's panel commits the look, so the job first downloads
     its own base. A cell with no arrows (BW Saturation) cannot move and is noted as fixed. The panel's
-    Reset is never pressed (a guarded key)."""
+    Reset is never pressed (a guarded key). Each proof says how the scale was read ("range_from": "ends" or "ticks",
+    look_cell)."""
     path, L, labels = job["path"], job["look"], job["labels"]
     name = f"Creative Look {labels[L]!r}"
     row_place = place(cam)
+    scales = scales_seen(run)
 
     def open_panel(again: bool):
         open_look_panel(cam, job, top, row_place, name, again)
@@ -242,7 +302,7 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         open_panel(True)
         to_cell(p)
         g = cam.read().glyphs
-        start, pname, (lo, hi) = look_value(cam)
+        start, pname, (lo, hi), range_from = look_value(cam, seen=scales)
         unread = ""
         if start is None and None not in (lo, hi):
             start, words = reader_on_scale(cam, (lo, hi))     # OCR read no value: the vision reader before the row fails
@@ -264,13 +324,13 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             raise Failed(f"{name} cell {p}: value {start}, range {lo}..{hi} not readable{unread}")
         targets = sorted({lo, (lo + hi) // 2, hi} - {start})      # -9/0/+9, 0/4/9, 1/3/5
         order = targets + [start]
-        print(f"{name} {pname}: {start} in {lo}..{hi}; proving {order}", flush=True)
+        print(f"{name} {pname}: {start} in {lo}..{hi} (read by its {range_from}); proving {order}", flush=True)
         cur, first = start, True
         for t in order:
             if not first:
                 open_panel(True)
                 to_cell(p)
-                now, _, _ = look_value(cam, (lo, hi))
+                now = look_value(cam, (lo, hi), scales)[0]
                 now, said = look_checked(cam, now, cur, f"{name} {pname}", (lo, hi))
                 if now != cur:
                     raise Failed(f"{name} {pname}: the cell shows {now}, the last OK chose {cur}" + (f" ({said})" if said else ""))
@@ -280,7 +340,7 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                 cam.press(key)
                 if cam.read().kind != "look":
                     raise Failed(f"{name} {pname}: {key} left the panel ({cam.read().kind})")
-            got, _, _ = look_value(cam, (lo, hi))
+            got = look_value(cam, (lo, hi), scales)[0]
             got, said = look_checked(cam, got, t, f"{name} {pname}", (lo, hi))
             if got != t:
                 raise Failed(f"{name} {pname}: the cell shows {got}, not {t}" + (f" ({said})" if said else ""))
@@ -298,7 +358,7 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             back = t == start
             rec = {"path": path, "kind": "look", "option": job["option"], "look": L, "field": p, "param": pname,
                    "index": [L, p, "back" if back else t], "label": f"{pname} {t:+d}" if lo < 0 else f"{pname} {t}",
-                   "value": t, "range": [lo, hi], "chosen_frame": chosen, "vlm": seen_vlm, "dat": dat.name, "base": base_path.name,
+                   "value": t, "range": [lo, hi], "range_from": range_from, "chosen_frame": chosen, "vlm": seen_vlm, "dat": dat.name, "base": base_path.name,
                    "changes": changes_of(changes),
                    "sampled": True, "applied": True}
             out.write(json.dumps(rec) + "\n")
