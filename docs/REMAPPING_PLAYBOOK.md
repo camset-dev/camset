@@ -22,6 +22,13 @@ Nothing is copied from another model or from documentation without proof.
   when and in which run each thing was proved goes into `private/evidence/<model>_fw<fw>.json`, and the menu tree, the
   accepted rulings and the record shapes into `private/evidence/<model>_fw<fw>/`; both stay with the owner and are
   never part of the submission ([the evidence](DATA_CONTRACTS.md#the-mappings-evidence)).
+- What the mapping found by hand (a record's name or note the camera proved wrong, a record the menus never write,
+  a value no menu offers, a copy, why a record cannot be proved), in the camera's hand tables file,
+  `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json`, written by hand and part of the `data/` folder, which the
+  writer applies to the definition (Phase 6); how each was proved goes into your
+  `private/evidence/<model>_fw<fw>.hand.json`, which stays with you
+  ([the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand) lists the tables a
+  new model's pass reads).
 - `runs/<model>_fw<fw>/<run>/proofs.jsonl`: one line per proof, with evidence frames and downloads, in the camera's
   own folder of runs (section 7, "Where runs go"). It stays local and is never published; so does the proof viewer
   (`kit/tools/proof_viewer.py`), your own check of each value against the camera's screens, which exists only where
@@ -36,8 +43,9 @@ Nothing is copied from another model or from documentation without proof.
   `not_on_camera` (not in this body's menu, or never written by it), `state` (a working value the camera keeps),
   `camera_only` (only the camera's own saves write it), `equipment` (greyed without equipment you do not have),
   `network` (a network block, by hand only), `unknown` (every candidate row tried, none moved it); `skipped` is for the
-  owner's own exclusions. The editor and the proof viewer show the reason; the a1 II's are its hand table `UNPROVED`
-  (in its hand tables file, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`).
+  owner's own exclusions. The editor and the proof viewer show the reason; each camera's are its hand table
+  `UNPROVED` (in its hand tables file; the a1 II's, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, is the
+  pattern).
 
 ## 1. Rules that are never broken
 
@@ -786,29 +794,44 @@ section 8).
    `kit/tests/test_definitions.py`'s "mapping words" test fails while any text a photographer reads outside Expert
    mode (a name, group, help, display rule or refused option's reason) holds a record number, a pass, the owner or
    another word of the mapping; fix the kit's rules or tables, never the definition by hand. The writer's body is in
-   `kit/writer/` (`kit/schema_update.py` stays the command), and the ILCE-1M2's own corrections live in its hand
-   tables file, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json` (its tables and their shapes:
-   [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)), which apply to
-   its definition alone; a new model's pass reads none yet. The tables are public, edited by hand there, and hold
-   names, value tables and facts; how each was proved (a hand proof's values, run and day, a sample's count, the
-   owner's word, what shows a not-offered mark) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`, which
-   `kit/writer/hand_evidence.py` puts back; without it `--write` refuses
-   ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) only adds to
-   the tables, and carries a note's evidence only as a suffix, `"note+"`, after the table's note; the public words and
-   values live in the table alone, so reword a note or mend a value there and nowhere else (evidence that would
-   replace a public value is refused, naming the table, key and field; a format-1 file is converted once with
-   `kit/writer/hand_evidence.py --convert`). A write stops, writing nothing, when evidence went stale in that run (a
+   `kit/writer/` (`kit/schema_update.py` stays the command), and what a mapping finds by hand goes into the camera's
+   own hand tables file, `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` (the a1 II's,
+   `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, is the pattern; the tables and their shapes:
+   [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)), which applies to
+   that camera's definition alone. A new model has no file until its first hand fact: write it by hand then, with
+   `"camera": "<model>_fw<fw>"` and only the tables you need. A new model's definition takes the plain pass, which
+   reads `RECORD_FIXES` (a name or note the camera proved wrong), `NEW_RECORDS` with the `FILTER_FLAGS` entries it
+   takes in (a record the menus never write, found by hand, laid out like a record the definition holds), `NEW_LIKE`
+   with `NEW_WHOLE_LABELS`, `FRAME_PROOFS` (what a record holds, and a hand proof), `CAROUSEL`, `VALUE_FIXES`,
+   `PP7_VALUES`, `KEEP_LABELS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES` (with `COPY_MODES` and
+   `COPY_MODES_UNKNOWN`), `UNPROVED` (why no proof reaches a record) and `CONTEXT_WORDS`, and stops, naming it, on a
+   table only the a1 II's own pass reads so far (the list in [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)).
+   There a value a table names is named, not proved: an editor offers it outside Expert mode only once a proof covers
+   it, and taking an entry out takes its record or hand proof out on the next `--write`.
+   The tables are public, edited by hand there, and hold names, value tables and facts; how each was proved (a hand
+   proof's values, run, day and menu row, a sample's count, the owner's word, what shows a not-offered mark, a
+   reason's day) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`
+   ([the hand evidence file](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)); while the tables
+   hold `FRAME_PROOFS`, `UNPROVED` or `NOT_OFFERED` entries `--write` refuses without it, and if you proved none of them
+   by hand you write that file with no evidence in it (`"tables": {}`)
+   ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) holds evidence
+   fields only and carries a note's evidence only as a suffix, `"note+"`; the public words and values live in the table
+   alone, so reword a note or mend a value there and nowhere else. The a1 II's pass puts the file back into its tables
+   (evidence that would replace a public value is refused, naming the table, key and field); the plain pass reads it
+   apart, refuses any field that is not evidence, and writes every piece where the definition keeps it private, never
+   into a public note (`kit/writer/hand_evidence.py --check` lists, read only, what it would refuse; a format-1 file is
+   converted once with `kit/writer/hand_evidence.py --convert`). A write stops, writing nothing, when evidence went stale in that run (a
    proof's, or more than five settings': after a setting's key was renamed, say); `--accept-stale` writes it anyway,
    and `--drop-stale` shows the evidence file's "stale" section by key and field and removes it:
-   - `LABEL_FIXES` (OCR slips: a spelling, no evidence of the code; a mended name on a value no proof or rule names
-     stays the old schema's, `schema kept`, which an editor does not offer outside Expert mode);
+   - `LABEL_FIXES` (the a1 II's pass only: OCR slips: a spelling, no evidence of the code; a mended name on a value no
+     proof or rule names stays the old schema's, `schema kept`, which an editor does not offer outside Expert mode);
    - `RECORD_FIXES` (names and notes);
    - `VALUE_FIXES`;
    - `NEW_LIKE` (a new record shaped like a sibling);
    - `NEW_RECORDS` (records found by hand);
    - `KEEP_LABELS` (a flag several options share);
-   - `HOLD_TABLES` (a Recall Custom hold's copy of a live setting, named by the live table once that is proved in full
-     and every proof of the hold fits it, the code itself or mirrored; a hold item proved in full on one hold names
+   - `HOLD_TABLES` (the a1 II's pass only: a Recall Custom hold's copy of a live setting, named by the live table once
+     that is proved in full and every proof of the hold fits it, the code itself or mirrored; a hold item proved in full on one hold names
      the other holds that agree with it, whatever the item; until then a hold's Exposure Comp. code no proof chose is
      named by `EV_DOWN_FROM_20`'s quarter-stop count, `counted`, which an editor does not offer outside Expert
      mode);
@@ -819,13 +842,14 @@ section 8).
      camera writes itself is `held` and stays offered). An
      option refused under another setting is never this: the proof runs' refusals (`menu_blocked`) stay in the
      evidence ([the field](DATA_CONTRACTS.md));
-   - `MY_MENU_EMPTY` (My Menu's empty place, "(empty)" in every slot, below);
+   - `MY_MENU_EMPTY` (the a1 II's pass only: My Menu's empty place, "(empty)" in every slot, below);
    - `CONTEXT_WORDS` (a proof context in other words: one reworded in `runs/` after it was written, or a state as
      found that the proof does not need, which the runs still hold ("S&Q mode (…)" is "S&Q mode"); a pattern and its
      new words, renamed where a row enters the definition and in the rows the definition kept, or the old row would
      stay beside the new).
 
-   My Menu's slots (`camera.my_menu.records`, seven per page) share one code table. `kit/provers/mymenu_run.py --allow
+   In the a1 II's own pass only, so far (the plain pass names My Menu's slots as any record, by their proofs): My
+   Menu's slots (`camera.my_menu.records`, seven per page) share one code table. `kit/provers/mymenu_run.py --allow
    "Add Item"` (a never-open action: only with your owner's word) adds every item the Add Item picker offers, one
    download each, and its proofs say which page and slot took which code (`my_menu`); the writer reads those proofs,
    not the report's row, and names each code in every slot: the slot that took it is proved, the others hold the

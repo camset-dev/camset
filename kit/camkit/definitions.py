@@ -443,7 +443,10 @@ def lost_evidence(doc: dict, have: dict) -> list:
     definition about to be written) still has the public part of, but not the evidence: a whole proof whose lean form
     is the public "proved" `doc` holds lean, a date of an unproved_reason or unproved_sets `doc` holds without one, a
     not-offered mark's evidence where `doc` has the mark without it. Exact: a run that proves again writes a whole proof,
-    and one that changes a public field changes what the evidence is checked against. The fields that are evidence
+    and one that changes a public field changes what the evidence is checked against. A proof read lean still counts
+    as lean when a pass has since put the sources of its names on it (proved.names, which writer/proofs.with_names adds
+    to every proof): it holds none of the run, day and rows the evidence file keeps (until 2026-11-13 the names hid it,
+    and such a write dropped them). The fields that are evidence
     whole (EVIDENCE_FIELDS: source, note_evidence, in_sets_proved, menu_blocked) and a layout's note_evidence have no
     public part to tell a dropped one from one a run took out, so they are not checked here (only a definition with no
     evidence at all is refused for them, write)."""
@@ -454,8 +457,9 @@ def lost_evidence(doc: dict, have: dict) -> list:
         if s is None:
             continue
         p = s.get("proved")
-        if isinstance(ev.get("proved"), dict) and isinstance(p, dict) and set(p) <= {"values", "sampled"} \
-                and lean_proof(ev["proved"]) == lean_proof(p) and p != ev["proved"]:
+        if isinstance(ev.get("proved"), dict) and isinstance(p, dict) and set(p) - {"names"} <= {"values", "sampled"} \
+                and lean_proof(ev["proved"]) == lean_proof(p) \
+                and {f: x for f, x in p.items() if f != "names"} != {f: x for f, x in ev["proved"].items() if f != "names"}:
             out.append(f"{k}: proved")
         for f in ("unproved_reason", "unproved_sets"):
             if "date" in (ev.get(f) or {}) and isinstance(s.get(f), dict) and "date" not in s[f]:
@@ -497,11 +501,13 @@ def _sha256(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def check_write(p: Path, doc: dict) -> None:
+def check_write(p: Path, doc: dict, taken_out=()) -> None:
     """What write() refuses, before anything is written: a write cut short still unfinished (CutShort: its marker
     there, cut_short); a definition with no evidence at all where the evidence file holds some, or one that lacks part
     of the evidence that file holds for its settings (lost_evidence): it was read without it (load_public), whole or in
-    part (WouldLoseEvidence)."""
+    part (WouldLoseEvidence). `taken_out`: lost_evidence's words ("<key>: <field>") for evidence the writer took out on
+    purpose, which it said (the plain pass, when the hand evidence no longer gives a reason's day or a mark's
+    evidence): not refused."""
     why = cut_short(p)
     if why:
         raise CutShort(why)
@@ -514,7 +520,7 @@ def check_write(p: Path, doc: dict) -> None:
         raise WouldLoseEvidence(f"nothing written: {p} holds none of the evidence that {ev} keeps for it, so it was "
                                 "read without it (definitions.load_public), and writing it would empty that file. "
                                 "Read it with definitions.load(), which puts the evidence back, and write that.")
-    lost = lost_evidence(doc, have)
+    lost = [x for x in lost_evidence(doc, have) if x not in set(taken_out)]
     if lost:
         raise WouldLoseEvidence(f"nothing written: {p} lacks part of the evidence that {ev} keeps for its settings "
                                 f"({len(lost)}: {', '.join(lost[:5])}{', ...' if len(lost) > 5 else ''}), so it was "
@@ -522,7 +528,7 @@ def check_write(p: Path, doc: dict) -> None:
                                 "Read it with definitions.load(), which puts the evidence back, and write that.")
 
 
-def write(p: Path, doc: dict) -> Path | None:
+def write(p: Path, doc: dict, taken_out=()) -> Path | None:
     """The definition's own format (one-space indent, ASCII), written whole or not at all: its evidence into the
     private evidence file (evidence_path; private/ made as needed) when there is any or the file is there already,
     first, then the public file lean (split), each through a temporary file, so a write that fails half way never
@@ -530,8 +536,8 @@ def write(p: Path, doc: dict) -> Path | None:
     file about to be written; removed once the public file is in place, so a marker left says the write was cut short
     (finish_write). Returns the evidence file written, or None. Refused (check_write): a write cut short still
     unfinished (CutShort), a definition with no evidence at all where the evidence file holds some, or one lacking part
-    of it (WouldLoseEvidence)."""
-    check_write(p, doc)
+    of it (WouldLoseEvidence) but what the writer took out on purpose (`taken_out`, check_write)."""
+    check_write(p, doc, taken_out)
     pub, evidence = split(doc)
     ev = evidence_path(p)
     if not (has_evidence(evidence) or ev.exists()):

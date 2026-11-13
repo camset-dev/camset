@@ -73,17 +73,22 @@ never prints the camera's own settings (no start values). Without --write it onl
 It writes the definition of the camera the kit works on (camkit.paths: --camera, CAMSET_CAMERA or
 private/config.json), editor/definitions/<model>_fw<fw>.json, and refuses a run whose downloads are another camera
 or firmware than that definition's (camkit.models): a body's proofs land in its own definition only. The ILCE-1M2
-firmware 4.00's hand tables (CAROUSEL, the label tables and the rest: its data file,
-data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, which writer/hand_tables.py reads) and the fixes of its pass
-below (the 0x04e2 range, the runs it reads) apply to that definition alone (TODO: each camera's pass reads its own
-hand tables, docs/decisions/0020). Records pass2_report marks "not one to one" are left out and listed.
+firmware 4.00's definition gets its own pass (main below), which reads every one of its hand tables (CAROUSEL, the
+label tables and the rest: its data file, data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, which
+writer/hand_tables.py reads) and holds the fixes of that body below (the 0x04e2 range, the runs it reads; TODO: those
+become hand table entries and the two passes one, docs/decisions/0020). Records pass2_report marks "not one to one"
+are left out and listed.
 
-Any other camera's definition gets the plain pass (generic below), with none of those tables: each proved value the
-label the camera showed, a record the definition lacks a setting named by its menu row, and the evidence. A camera
-with no definition yet gets one started from its data/ folder and the run's newest download (seed below): its model
-and layout signature, its tabs from the camera file's tab colours, and the settings the report proves. That is a
-first definition, every name the camera's own; what the mapping finds by hand goes into its data/ files and, with
---write again, into it.
+Any other camera's definition gets the plain pass (generic below): each proved value the label the camera showed, a
+record the definition lacks a setting named by its menu row, and the evidence, with that camera's own hand tables
+where it has a file (writer/hand_facts.py: the tables the plain pass reads, as the ILCE-1M2's pass reads its own; a
+file that fills a table only the ILCE-1M2's pass reads is refused in plain words). A camera with no definition yet
+gets one started from its data/ folder and the run's newest download (seed below): its model and layout signature,
+its tabs from the camera file's tab colours, and the settings the report proves. That is a first definition, every
+name the camera's own; what the mapping finds by hand goes into its hand tables file and, with --write again, into
+it. In either pass --write refuses, before anything is read, while the camera's hand tables hold entries the private
+hand evidence completes (a hand proof, a reason's day, what shows a not-offered mark) and that file is not on this
+computer (writer/hand_evidence.missing).
 
 The parts of a definition the kit takes from data/ alone (from_data below) are written on every run: "$schema" and
 "definition_format" first, the camera section copied from data/<model>_fw<fw>/camera_<model>_fw<fw>.json, the memory
@@ -135,7 +140,10 @@ from writer.offered import check_video_systems, not_offered_marks, with_video_sy
 from writer.copies import with_copies  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
-from writer import hand_evidence, hand_tables  # noqa: E402   (the hand tables, and where their evidence is kept)
+# the hand tables, where their evidence is kept, and what the plain pass takes of them (by_lines_of, run_start and
+# like_setting are shared with it)
+from writer import hand_evidence, hand_facts, hand_tables  # noqa: E402
+from writer.hand_facts import by_lines_of  # noqa: E402
 
 # the ILCE-1M2's hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, writer/hand_tables.py), its hand
 # evidence put back where the private overlay holds it (HAND_EVIDENCE: the file read, None on a clone without it, where
@@ -213,47 +221,15 @@ def blocked(run: Path) -> dict:
 
 
 def run_start() -> Path:
-    """The run's newest start file, by the camera's downloads manifest (camkit.provenance.newest_start): a new record's
-    size, count and memory-set presence are read from it, and like_setting's fill asks whether its value is among the
-    proofs. Until 2026-11-11 the file names sorted as text chose it, an old download ("93438_before.DAT" after
-    "239606_before.DAT")."""
-    from camkit import provenance
-    got = provenance.newest_start(RUN_ROOT, under=RUN)
-    if got is None:
-        sys.exit(f"no start file of {RUN.name} in the camera's downloads manifest "
-                 f"({paths.shown(provenance.manifest_path(RUN_ROOT))}): a new record's layout is read from the run's "
-                 "own start download; run a session of the run on the camera, or take its old downloads in with "
-                 "kit/tools/upload_check.py --adopt")
-    return got
+    """The run's newest start file, by the camera's downloads manifest (writer/hand_facts.run_start, of this camera's
+    runs): a new record's size, count and memory-set presence are read from it."""
+    return hand_facts.run_start(RUN_ROOT, RUN)
 
 
 def like_setting(key: str, by_key: dict, e: dict, r: dict) -> dict:
-    """A proved record the schema lacked, laid out like its sibling: size, count and memory-set
-    presence from the run's start file, labels from the proofs (axis value alone)."""
-    from camkit import camset
-    like, name = NEW_LIKE[key]
-    rid = int(key.split("0x")[1], 16)
-    cs = camset.read(run_start())
-    rec = cs.get(0, rid)
-    base = by_key[like]
-    s = {f: base[f] for f in ("area", "source", "tab", "group", "order", "scalar", "modes") if f in base}
-    vals = {} if "[field" in e["row"] else {v: clean(lab if key in NEW_WHOLE_LABELS else lab.split(":", 1)[-1].strip())
-                                            for lab, v in r["proved"].items()}
-    # the sibling's spelling of a label the proofs read the same ("ISO 160" for the box's "ISO160")
-    sib = {v: lab for v, lab in base.get("values") or []}
-    vals = {v: sib[v] if re.sub(r"\s+", "", str(sib.get(v, ""))).lower() == re.sub(r"\s+", "", lab).lower() else lab
-            for v, lab in vals.items()}
-    if vals and rec.value() not in vals:
-        # the row's start value is not among the proofs: a gap there would tell the user's setting.
-        # The sibling's labels fill it, as they agree with every proved one (S&Q's HD record, every
-        # option proved, stores 25M as 29 where the movie one has 28, so no fill when not needed)
-        for v, lab in base.get("values") or []:
-            vals.setdefault(v, lab)
-    # how it was found is evidence (camkit.definitions keeps note_evidence private): no note of its own
-    s.update(key=key, id=rid, name=name, values=sorted([v, lab] for v, lab in vals.items()),
-             note="", note_evidence=f"proved on the camera, laid out like {like} (runs/{RUN.name})",
-             in_sets=cs.get(1, rid) is not None, size=rec.size, count=rec.count)
-    return s
+    """A proved record the schema lacked, laid out like its sibling (writer/hand_facts.like_setting, with this
+    camera's NEW_LIKE and NEW_WHOLE_LABELS and its run's start file)."""
+    return hand_facts.like_setting(key, by_key, e, r, NEW_LIKE, NEW_WHOLE_LABELS, run_start(), RUN.name)
 
 
 def my_menu_items(proofs: list, by_key: dict, records: list) -> list:
@@ -492,15 +468,6 @@ def renew_line(s: dict, line: str, ev_like: re.Pattern) -> bool:
         parts = [evidence if ev_like.search(p) else p for p in ev.split("; ")]
         s["note_evidence"] = "; ".join(dict.fromkeys(parts + [evidence]))
     return (s.get("note"), s.get("note_evidence")) != was
-
-
-def by_lines_of(frame_proofs: dict) -> set:
-    """The records a hand table lists values for but gives no proof (FRAME_PROOFS with "values" and without "proved" or
-    "sampled": the Registered AF area records, whose holds are proof lines since 2026-11-09), proved by the report
-    alone: what the table once listed is in the lines, and a value it listed that no line credits goes. An entry with a
-    note only (AF Frame Move Amt's, 2026-11-09) is none of them: it sets the note, and the proof the definition holds
-    is merged with the report's (kept_proof), as any setting's is."""
-    return {k for k, fp in frame_proofs.items() if "values" in fp and not {"proved", "sampled"} & set(fp)}
 
 
 def hold_chosen(proved_now, old_values, start_only) -> set:
@@ -847,15 +814,12 @@ def main():
     if target.stem != paths.A1II:
         generic_main(target, RUN, a.write and not a.dry_run, a.force, a.accept_stale)   # any other camera: the plain pass
         return
-    if a.write and not a.dry_run and HAND_EVIDENCE is None:
-        # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the
-        # tables give no hand proofs, and a definition written so would lose every one of them
-        sys.exit(f"schema_update: nothing written. Part of the {paths.A1II} definition is proved by its hand tables "
-                 f"({paths.shown(datafiles.hand_tables_file(paths.A1II))}), and what those proofs were is kept in the "
-                 "mapper's private file "
-                 f"{paths.shown(hand_evidence.path(paths.A1II))}, which is not on this computer. Writing without it "
-                 "would drop those proofs from the definition. Run --write where that file is (the private overlay, "
-                 "private/evidence/), or point CAMSET_EVIDENCE_DIR at its folder; --from-data needs no evidence.")
+    # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the tables
+    # give no hand proofs, and a definition written so would lose every one of them (the plain pass refuses alike)
+    missing = hand_evidence.missing(paths.A1II, HAND_EVIDENCE, {"FRAME_PROOFS": FRAME_PROOFS, "UNPROVED": UNPROVED,
+                                                                "NOT_OFFERED": NOT_OFFERED})
+    if a.write and not a.dry_run and missing:
+        sys.exit(missing)
     doc = definitions.load(target)
     writer_proofs.CONTEXT_WORDS.update(CONTEXT_WORDS)      # this body's contexts the runs reworded (menu_row)
     why = model_refused(RUN, doc)

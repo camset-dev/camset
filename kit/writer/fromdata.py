@@ -297,27 +297,28 @@ def reset_names(doc: dict, write: bool) -> int:
     return n
 
 
-def refuse_before_writing(target, doc: dict, accept_stale: bool = False) -> None:
+def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=()) -> None:
     """Every refusal of a definition's write, before anything is written: evidence that went stale in this run's
     reading (definitions.stale_refusal; accept_stale writes all the same, the evidence kept aside), and a definition
-    that lacks the evidence its evidence file holds (definitions.check_write)."""
+    that lacks the evidence its evidence file holds (definitions.check_write), but what the writer took out on purpose
+    and said (`taken_out`)."""
     why = None if accept_stale else definitions.stale_refusal(definitions.newly_stale(doc, target), target)
     if why:
         raise definitions.StaleStop(why)
-    definitions.check_write(target, doc)
+    definitions.check_write(target, doc, taken_out)
 
 
-def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True) -> None:
+def write_definition(target, doc: dict, accept_stale: bool = False, reset: bool = True, taken_out=()) -> None:
     """The definition `doc` written to `target`, its refusals first (refuse_before_writing, and with reset the reset
     file's: reset_refusal), then (reset) the reset file's names and tabs from it, then the definition itself: no
-    refusal arrives after a file was written."""
-    refuse_before_writing(target, doc, accept_stale)
+    refusal arrives after a file was written. `taken_out`: evidence the writer took out on purpose (check_write)."""
+    refuse_before_writing(target, doc, accept_stale, taken_out)
     if reset:
         why = reset_refusal(doc)
         if why:
             raise datafiles.Refused("nothing written: " + why)
         reset_names(doc, True)
-    definitions.write(target, doc)
+    definitions.write(target, doc, taken_out)
 
 
 def say_stale(target) -> None:

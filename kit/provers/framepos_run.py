@@ -63,7 +63,9 @@ is printed (decision 16): each changed key with its delta, and the count of reco
 
 --zone-grid (2026-11-09): with Switch V/H AF Area = Off one Zone move writes the zone's grid index into every copy at
 once (set1:0x019a, the level memories, the six vertical copies), so a sweep of the nine places proves the vertical
-copies' nine values without turning the camera. After the same setup, Zone chosen, slot 1 is registered and downloaded
+copies' nine values without turning the camera. The places' codes and names are the ZONE table of the hand tables of
+the camera the kit works on (ZONE below), never another camera's: a camera whose tables name none stops before
+anything connects. After the same setup, Zone chosen, slot 1 is registered and downloaded
 (zone-start) and the start place read from set1:0x019a; the frame is led to the upper left by exact presses (Left
 column+1 times, Up row+1 times: none goes past an edge, so the route holds whether the zone stops at an edge or wraps;
 kit2_frame's notes do not say which), then Right, Right, Down, Left, Left, Down, Right, Right, slot 1 registered and a
@@ -109,8 +111,9 @@ from camkit import definitions, jsonl, match, paths, safety  # noqa: E402
 from runner import LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json  # noqa: E402
 from writer import hand_tables  # noqa: E402
 
-# the Zone grid's places, [code, name], the a1 II's (its hand tables, writer/hand_tables.py: the public table alone)
-ZONE = hand_tables.load(paths.A1II, evidence=False).ZONE
+# the Zone grid's places, [code, name], of the camera the kit works on (its hand tables' ZONE, writer/hand_tables.py:
+# the public table alone); empty for a camera whose tables name none, where --zone-grid stops before the camera
+ZONE = hand_tables.active().ZONE
 ROW = "Focus Area"
 MEMORY_ROW = "Camera Set. Memory"
 VH_ROW, OFF = "Switch V/H AF Area", "Off"
@@ -497,19 +500,19 @@ def slot_filled(cs) -> bool:
 
 # ---------------------------------------------------------------- the zone grid sweep (no camera)
 
-def zone_names(table=ZONE) -> dict:
-    """{code: name} of the Zone grid table (the a1 II's hand tables' ZONE)."""
-    return {int(c): n for c, n in table}
+def zone_names(table=None) -> dict:
+    """{code: name} of the Zone grid table (`table`, else the camera's hand tables' ZONE)."""
+    return {int(c): n for c, n in (ZONE if table is None else table)}
 
 
-def code_place(code, table=ZONE) -> tuple | None:
+def code_place(code, table=None) -> tuple | None:
     """A grid code's place (column, row), left and up negative, or None for a code the table does not name."""
     return place_of(zone_names(table).get(code))
 
 
-def place_name(place: tuple, table=ZONE) -> str | None:
+def place_name(place: tuple, table=None) -> str | None:
     """The table's name for a place (column, row), or None."""
-    for _, n in table:
+    for _, n in (ZONE if table is None else table):
         if place_of(n) == tuple(place):
             return n
     return None
@@ -569,7 +572,7 @@ def zone_records(index: dict) -> list:
                   and "grid index" in s["name"] and ("vertical" in s["name"] or "(current" in s["name"]))
 
 
-def sweep_line(k: int, expected: tuple, code, base_changes: list, download: str, index: dict, table=ZONE) -> dict:
+def sweep_line(k: int, expected: tuple, code, base_changes: list, download: str, index: dict, table=None) -> dict:
     """The place's line for zone_grid.jsonl: {"place" (the code read from the download), "name" (the table's), "expected"
     (the place the route led to), "confirmed", "download", "records" (every set1 record that changed to the code),
     "groups"}; no value but the codes."""
@@ -1083,6 +1086,10 @@ def main(argv=None) -> int:
         got = summary_lines(jsonl.read(paths.run_root() / a.run / "framepos.jsonl"))
         print("\n".join(got) if got else "no line in the run")
         return 0
+    if a.zone_grid and not ZONE:
+        sys.exit("framepos_run: --zone-grid plans and checks its sweep by the Zone grid's places, and the hand tables of "
+                 "the camera the kit works on name none (ZONE in data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json; "
+                 "docs/DATA_CONTRACTS.md, \"The hand tables file\"): nothing was touched")
     moves = parse_moves(a.moves) if a.moves is not None else None
     doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
     todo = plan(doc, a.areas or "default", moves) if a.areas or not a.zone_grid else []

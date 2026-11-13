@@ -356,6 +356,27 @@ not there:
   the camera is touched while your definition has no proved Focus Area record. `--order-from <key>` names the record
   when it is not the a1 II's id, and is refused without `--counted`.
 
+### Your hand tables: what the writer reads of them now
+
+Nothing to do: without a hand tables file your definition is written exactly as before, byte for byte. What changed
+is what you can record. Until now only the a1 II's definition took its hand tables, so a fact your mapping found by
+hand (a name or note the camera proved wrong, a record the menus never write, a value no menu offers, the copies the
+camera keeps, why a record cannot be proved) had nowhere to go. Now `kit/schema_update.py` reads your camera's own
+`data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` when you write one by hand: the tables
+[Data files](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand) lists, the a1 II's file the
+pattern. A table only the a1 II's pass reads so far stops the writer, naming it, rather than being left unread, and so
+does a file that does not fit its JSON Schema; an entry for a setting your definition lacks yet is said, "not
+applied". A value your tables name is offered outside Expert mode only once a proof covers it (or a `NOT_OFFERED` mark
+says the camera holds it), and taking an entry out of the tables takes its record or hand proof out of the definition
+on the next `--write`. How each hand fact was proved goes into your `private/evidence/<model>_fw<fw>.hand.json`
+([its shape](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)), which stays with you: evidence
+fields only, each on an entry your tables hold, and none of it reaches the public definition, however you word it.
+While your tables hold `FRAME_PROOFS`, `UNPROVED` or `NOT_OFFERED` entries `--write` refuses without that file, and
+the file with no evidence in it (`"tables": {}`) says you proved none of them by hand; `.venv/bin/python
+kit/writer/hand_evidence.py --check` says which parts of it the writer would refuse. `kit/pass2_report.py` reads your
+`KEEP_LABELS` too, where it read no hand rules on any body but the a1 II, and `kit/provers/framepos_run.py
+--zone-grid` your `ZONE`, where it read the a1 II's on every camera.
+
 ### Your pull request: one commit on a fresh branch
 
 The last step, only if you will send your camera back. The older commits of your branch still hold files that are

@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them in a camera's own pass, which only the ILCE-1M2 firmware 4.00 has so far; any other camera takes the plain pass, which reads none of them yet.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -93,7 +93,7 @@
   },
   "NEW_CHECK_NAMES": {
    "type": "object",
-   "description": "Names for records first proved through a checklist, by setting key, as their neighbours are named.",
+   "description": "Names for records first proved through a checklist, by setting key, as their neighbours are named. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "propertyNames": {
     "$ref": "#/$defs/key"
    },
@@ -109,15 +109,15 @@
    "additionalProperties": {
     "type": "string"
    },
-   "description": "Records the camera writes only once their screen is first saved, by record id (\"0x16bd\"): the sentence added to the note of a record first proved through a checklist."
+   "description": "Records the camera writes only once their screen is first saved, by record id (\"0x16bd\"): the sentence added to the note of a record first proved through a checklist. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   },
   "ZONE": {
    "$ref": "#/$defs/values",
-   "description": "The Zone focus area's grid places, [code, name], as the zone records' values name them; kit/provers/framepos_run.py plans and checks its sweep by them."
+   "description": "The Zone focus area's grid places, [code, name], as the zone records' values name them; kit/provers/framepos_run.py --zone-grid plans and checks its sweep by them, for the camera the kit works on; no pass of the writer reads it."
   },
   "FRAME_STEPS": {
    "type": "array",
-   "description": "How far one press moved a focus frame under each AF Frame Move Amt option, [option, area, x, y]; the notes that give the steps say the same numbers (a test keeps them in step).",
+   "description": "How far one press moved a focus frame under each AF Frame Move Amt option, [option, area, x, y]; the notes that give the steps say the same numbers (a test keeps them in step). No pass of the writer reads it: the plain pass, every other camera's, refuses a file that fills it.",
    "items": {
     "type": "array",
     "minItems": 4,
@@ -150,28 +150,28 @@
   },
   "CAROUSEL": {
    "type": "array",
-   "description": "Carousel options proved with whatever second-axis value the camera held, [key, value, label]: where the record names only the option, the value takes the option's name.",
+   "description": "Carousel options proved with whatever second-axis value the camera held, [key, value, label]: where the record names only the option, the value takes the option's name. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "VALUE_FIXES": {
    "type": "array",
-   "description": "Values a proof names with something that is not the value's own (an icon, a carousel's second axis, a word the report took as agreeing), [key, value, label]: the label stands.",
+   "description": "Values a proof names with something that is not the value's own (an icon, a carousel's second axis, a word the report took as agreeing), [key, value, label]: the label stands. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "PP7_VALUES": {
    "type": "array",
-   "description": "Values outside this body's lists that its files hold, [key, value, label]: added to the record's values.",
+   "description": "Values outside this body's lists that its files hold, [key, value, label]: added to the record's values. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "KEEP_LABELS": {
    "type": "array",
-   "description": "Records proved by a row whose options do not name their values (a flag several options share, a scale proved by counts): proved, their values keeping the definition's names.",
+   "description": "Records proved by a row whose options do not name their values (a flag several options share, a scale proved by counts): proved, their values keeping the definition's names. In the plain pass a value the definition does not name yet takes the camera's label (no proved value is left without a name), and a name the definition holds stays a hand table's only where the camera read otherwise. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
    "uniqueItems": true,
    "items": {
     "$ref": "#/$defs/key"
@@ -179,7 +179,7 @@
   },
   "EV_DOWN_FROM_20": {
    "type": "array",
-   "description": "Recall Custom holds' Exposure Comp. records whose scale is named by counting quarter stops down from 20, the codes no proof chose \"counted\".",
+   "description": "Recall Custom holds' Exposure Comp. records whose scale is named by counting quarter stops down from 20, the codes no proof chose \"counted\". Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "uniqueItems": true,
    "items": {
     "$ref": "#/$defs/key"
@@ -187,7 +187,7 @@
   },
   "HOLD_TABLES": {
    "type": "object",
-   "description": "A Recall Custom hold's copy of a live setting, by the hold's key: named by the live setting's table once that is proved in full and every proof of the hold fits it.",
+   "description": "A Recall Custom hold's copy of a live setting, by the hold's key: named by the live setting's table once that is proved in full and every proof of the hold fits it. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "propertyNames": {
     "$ref": "#/$defs/key"
    },
@@ -215,7 +215,7 @@
   },
   "HOLD_BRACKET_COPIES": {
    "type": "object",
-   "description": "A hold's bracket record, by its key, and the live bracket setting it copies, numbered by the live code's place in the live list from 0.",
+   "description": "A hold's bracket record, by its key, and the live bracket setting it copies, numbered by the live code's place in the live list from 0. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "propertyNames": {
     "$ref": "#/$defs/key"
    },
@@ -225,25 +225,25 @@
   },
   "ISO_TABLE": {
    "$ref": "#/$defs/key",
-   "description": "The record whose values name every ISO Range Limit record's index: the live ISO."
+   "description": "The record whose values name every ISO Range Limit record's index: the live ISO. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   },
   "LABEL_FIXES": {
    "type": "object",
-   "description": "OCR slips the old crawl left in value names, each slip and its mend: applied before anything is compared; a mended name no proof or rule backs stays \"schema kept\".",
+   "description": "OCR slips the old crawl left in value names, each slip and its mend: applied before anything is compared; a mended name no proof or rule backs stays \"schema kept\". Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "additionalProperties": {
     "type": "string"
    }
   },
   "GROUP_NAMES": {
    "type": "object",
-   "description": "The camera's own names for menu groups a breadcrumb was read cut, or with its icon as a letter, each read name and the camera's.",
+   "description": "The camera's own names for menu groups a breadcrumb was read cut, or with its icon as a letter, each read name and the camera's. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "additionalProperties": {
     "type": "string"
    }
   },
   "MY_MENU_ROW": {
    "type": "string",
-   "description": "The menu row whose proofs add My Menu's items: the writer reads those proofs, not the report's row."
+   "description": "The menu row whose proofs add My Menu's items: the writer reads those proofs, not the report's row. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   },
   "MY_MENU_EMPTY": {
    "type": "object",
@@ -252,7 +252,7 @@
     "label",
     "line"
    ],
-   "description": "My Menu's empty place, named in every slot.",
+   "description": "My Menu's empty place, named in every slot. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it.",
    "properties": {
     "label": {
      "type": "string",
@@ -272,7 +272,7 @@
      "$ref": "#/$defs/key"
     }
    },
-   "description": "By shooting family, the records whose values that family's Shoot Mode carousel describes."
+   "description": "By shooting family, the records whose values that family's Shoot Mode carousel describes. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   },
   "NOT_OFFERED": {
    "type": "array",
@@ -384,7 +384,7 @@
   },
   "ORIENTED": {
    "type": "string",
-   "description": "A pattern (Python's) for the report's rows proved holding the camera one way; its group names the way."
+   "description": "A pattern (Python's) for the report's rows proved holding the camera one way; its group names the way. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   }
  },
  "$defs": {
@@ -483,7 +483,8 @@
      "description": "Its name."
     },
     "values": {
-     "$ref": "#/$defs/values"
+     "$ref": "#/$defs/values",
+     "description": "Its values' names, a hand table's. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one."
     },
     "note": {
      "type": "string",
@@ -517,7 +518,8 @@
      "description": "What the record holds, in plain words."
     },
     "values": {
-     "$ref": "#/$defs/values"
+     "$ref": "#/$defs/values",
+     "description": "Its values' names, a hand table's. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one."
     }
    }
   },

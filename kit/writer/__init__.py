@@ -12,10 +12,13 @@
                 under one video system only
     copies      the copies the camera keeps of a live value, where its downloads bear the rule out
     gate        --write's gate: the report's open questions against the camera's accepted file
-    generic     the plain pass for any other camera, from a seed when it has no definition yet
+    generic     the plain pass for any other camera, from a seed when it has no definition yet, with its hand tables
     hand_tables a camera's hand tables, read from its public data file (data/<model>_fw<fw>/hand_tables_*.json):
                 what the mapping found by hand about the camera, in the shapes the writer reads
-    hand_evidence  a hand table's evidence, kept in the private overlay and put back into its tables when there
+    hand_facts  the hand tables the plain pass reads, put on the definition (and the ones it refuses, which only the
+                ILCE-1M2's pass reads so far)
+    hand_evidence  a hand table's evidence, kept in the private overlay and put back into its tables when there; the
+                stop when it is not there and the tables need it
 
 kit/schema_update.py keeps the pass that reads the camera's runs (its main, and the readers of runs/<model>_fw<fw>/:
 the help walks, the table walk, pass 1's map) and gives every name here under its old place (schema_update.clean),

@@ -542,6 +542,10 @@ def test_a_definition_lacking_part_of_its_evidence_is_refused(tmp_path):
     ev = definitions.write(p, doc)
     before = (p.read_bytes(), ev.read_bytes())
     for k, change in (("global:0x0001", lambda s: s.update(proved=definitions.lean_proof(s["proved"]))),
+                      # the same lean proof once a pass put its names' sources on it (writer/proofs.with_names does on
+                      # every write): still a loss of the run, the day and the rows (until 2026-11-13 the names hid it)
+                      ("global:0x0001", lambda s: s.update(proved={**definitions.lean_proof(s["proved"]),
+                                                                   "names": {"0": "one reader"}})),
                       ("set:0x0004", lambda s: s["unproved_reason"].pop("date")),
                       ("global:0x0001", lambda s: [m.pop("evidence") for m in s["not_offered"]])):
         part = definitions.load(p)

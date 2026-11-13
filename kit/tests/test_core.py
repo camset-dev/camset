@@ -3379,8 +3379,10 @@ def schema_checked() -> list:
     for kind, schema in (("camera", "camera"), ("help", "help-file"), ("settings_reset", "settings-reset"),
                          ("hand_tables", "hand-tables")):
         out += [(p.relative_to(ROOT).as_posix(), schema) for p in sorted((ROOT / "data").glob(f"*/{kind}_*_fw*.json"))]
-    # the mapper's own menu trees, private whole (camkit.datafiles), where this computer has them
+    # the mapper's own menu trees, private whole (camkit.datafiles), and hand evidence (kit/writer/hand_evidence.py),
+    # where this computer has them
     out += [(p.as_posix(), "menu-tree") for p in sorted(definitions.EVIDENCE_DIR.glob("*/menu_tree_*_fw*.json"))]
+    out += [(p.as_posix(), "hand-evidence") for p in sorted(definitions.EVIDENCE_DIR.glob("*_fw*.hand.json"))]
     return out
 
 

@@ -421,7 +421,7 @@
        "items": {
         "type": "integer"
        },
-       "description": "The values a proof on the camera checked: those an option was chosen for, and those named from the camera's own word (read off its screen, a rule over proved values, a hand table checked against the camera, a sampled scale's values between its points); never a name kept from an old schema or counted out by a hand rule. An editor offers these outside Expert mode."
+       "description": "The values a proof on the camera checked: those an option was chosen for, and those named from the camera's own word (read off its screen, a rule over proved values, a hand table checked against the camera, a sampled scale's values between its points); never a name kept from an old schema or counted out by a hand rule, nor, for a camera other than the ILCE-1M2 firmware 4.00 (the plain pass), a value a hand table names that no proof covers and no held not_offered mark holds (named, not proved). An editor offers these outside Expert mode."
       },
       "sampled": {
        "type": "object",

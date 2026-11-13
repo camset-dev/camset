@@ -13,6 +13,8 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, datafiles, definitions, paths  # noqa: E402
 from writer import hand_evidence, hand_tables  # noqa: E402
+# imported before any test points the kit at a data folder of its own: it binds the a1 II's tables as it is imported
+import schema_update  # noqa: E402,F401
 
 A1 = paths.A1II
 CAM = "ILCE-0X0_fw1.00"             # a made-up camera
@@ -44,11 +46,12 @@ def test_a_camera_with_no_hand_tables_file_has_every_table_empty(monkeypatch, tm
         (set, frozenset, list, None, None)
 
 
-def test_a_made_up_camera_runs_the_plain_pass_with_its_tables_file_unread(monkeypatch, tmp_path):
-    """Until each camera's pass reads its own hand tables (Stage 2 of the plan), a camera other than the a1 II takes
-    the plain pass whether it has a hand tables file or not: schema_update dispatches to generic_main before any table
-    is read."""
+def test_a_made_up_camera_runs_the_plain_pass_with_its_own_tables(monkeypatch, tmp_path):
+    """A camera other than the a1 II takes the plain pass (schema_update dispatches to generic_main), and the plain
+    pass reads that camera's own hand tables, never the a1 II's that schema_update binds for its own pass
+    (kit/tests/test_plain_hand_tables.py has what each table does there)."""
     import schema_update as S
+    from writer import generic
     a_camera(monkeypatch, tmp_path, {"KEEP_LABELS": ["global:0x0001"]})
     called = []
     monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False:
@@ -57,6 +60,12 @@ def test_a_made_up_camera_runs_the_plain_pass_with_its_tables_file_unread(monkey
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])
     S.main()
     assert called == [CAM]
+    got = []
+    monkeypatch.setattr(generic, "plain", lambda target, run, write, force, accept_stale, tables, evidence:
+                        got.append(tables))
+    generic.generic_main(definitions.path(CAM), Path("/nowhere") / CAM / "kit2_pass2", False)
+    (tables,) = got
+    assert (sorted(tables.KEEP_LABELS), tables.NOT_OFFERED, tables.FRAME_PROOFS) == (["global:0x0001"], [], {})
 
 
 def test_the_a1_iis_tables_are_in_the_shapes_the_writer_reads():

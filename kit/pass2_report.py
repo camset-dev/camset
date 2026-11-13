@@ -1746,7 +1746,7 @@ def main():
         print(f"left out: {len(skip)} proofs of {len(cut)} rows, from attempts that did not finish", flush=True)
     ROW_NAMES.update(norm(re.split(r" \[", p)[0]) for r in proofs for p in r.get("path") or [])
     MENU_NAMES.update(menu_names(definitions.menu_tree_file(target.stem) if target.exists() else None))
-    hand = hand_rules(bool(cam) and cam[0] == models.A1II)
+    hand = hand_rules(cam)
     readouts = frozenset(k for k, x in schema.items() if "view only" in (x.get("note") or "").lower())
     stood = stood_out(run, proofs, skip, schema, hand, readouts)
     if stood:
@@ -1977,19 +1977,20 @@ def attach_readings(run: Path, proofs: list, prefix: str = "") -> int:
     return n
 
 
-def hand_rules(a1ii: bool) -> set:
-    """The records the ILCE-1M2's hand rules already name (WRITTEN_BY, DISP_MODES here, KEEP_LABELS in its hand tables,
-    data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json): a value carried over in one of them is reported and left to
-    that rule. None on another body (TODO decisions 19, 20)."""
-    if not a1ii:
-        return set()
+def hand_rules(cam: tuple | None) -> set:
+    """The records the hand rules of the run's camera (`cam`, its (model, firmware) as models.of_run gives them; None
+    when the run cannot tell) already name: KEEP_LABELS in that camera's own hand tables
+    (data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json, the public tables alone; none for a camera with no file), and
+    on the ILCE-1M2 WRITTEN_BY and DISP_MODES here too (that body's record ids, TODO decisions 19, 20). A value carried
+    over in one of them is reported and left to that rule, as the writer's pass leaves the record's names to it."""
     try:
         from writer import hand_tables
-        KEEP_LABELS = hand_tables.load(paths.A1II, evidence=False).KEEP_LABELS
+        KEEP_LABELS = hand_tables.load(paths.key(*cam), evidence=False).KEEP_LABELS if cam else set()
     except Exception as e:                      # noqa: BLE001 - reported, and the verdict then covers those too
         print(f"(the hand tables' KEEP_LABELS not read: {e})", flush=True)
         KEEP_LABELS = set()
-    return {k.split("[")[0] for k in set(WRITTEN_BY) | DISP_MODES | set(KEEP_LABELS)}
+    own = set(WRITTEN_BY) | DISP_MODES if cam and cam[0] == models.A1II else set()
+    return {k.split("[")[0] for k in own | set(KEEP_LABELS)}
 
 
 def write_md(run: Path, report: list, disputes: list, carried: list, twins: list, name: str = "report",

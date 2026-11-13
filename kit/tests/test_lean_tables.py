@@ -25,7 +25,7 @@ EVIDENCE_KEYS = {"run", "date", "proved", "sampled", "linear", "allowance", "evi
 # (a note's evidence is its suffix, "note+": hand_evidence never replaces a public note)
 EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run", "date", "menu", "allowance"},
                    "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
-                   "NOT_OFFERED": {"$key", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
+                   "NOT_OFFERED": {"$key", "$values", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
                    "UNPROVED": {"1"}, "MY_MENU_EMPTY": {"line+"}}
 # the mapper's hand evidence for the a1 II, where this computer holds the private overlay
 HAND_EVIDENCE = hand_evidence.path(paths.A1II)
@@ -82,6 +82,30 @@ def test_the_schema_refuses_a_hand_proofs_evidence_in_an_entry():
         (bad[name] if key is None else bad[name][key])[field] = value      # a field, or a reason's day (index 1)
         assert not check.is_valid(bad), (name, key, field)
     assert not check.is_valid({**doc, "NEW_TABLE": {}})
+
+
+def test_the_hand_evidence_schema_takes_evidence_and_nothing_else():
+    """schemas/hand-evidence.schema.json, the private hand evidence file's shape, names per table exactly the evidence
+    fields a table's entries may get back (EVIDENCE_FIELDS: no value name, record name or structure, which would be a
+    public fact kept out of the public file), takes the file with no evidence in it (a mapper who proved nothing by
+    hand), and refuses another field, another table, another format and a file with no camera."""
+    import jsonschema
+    schema = json.loads((ROOT / "schemas" / "hand-evidence.schema.json").read_text(encoding="utf-8"))
+    tables = schema["properties"]["tables"]["properties"]
+    assert set(tables) == set(EVIDENCE_FIELDS)
+    for name, want in EVIDENCE_FIELDS.items():
+        node = tables[name] if name == "MY_MENU_EMPTY" else tables[name].get("additionalProperties") or \
+            schema["$defs"][tables[name]["$ref"].split("/")[-1]]["additionalProperties"]
+        assert set(node["properties"]) == want, name
+    check = jsonschema.Draft202012Validator(schema)
+    empty = {"$schema": hand_evidence.SCHEMA_REF, "hand_format": hand_evidence.FORMAT, "camera": "ILCE-0X0_fw1.00",
+             "tables": {}}
+    check.validate(empty)
+    for bad in ({**empty, "tables": {"FRAME_PROOFS": {"global:0x0001": {"name": "A"}}}},
+                {**empty, "tables": {"RECORD_FIXES": {"global:0x0001": {"note": "A whole note."}}}},
+                {**empty, "tables": {"KEEP_LABELS": {}}}, {**empty, "hand_format": 1},
+                {k: v for k, v in empty.items() if k != "camera"}, {**empty, "values": []}):
+        assert not check.is_valid(bad), bad
 
 
 def test_without_its_evidence_a_table_says_what_the_camera_is_and_nothing_of_how(monkeypatch, tmp_path):

@@ -1,0 +1,213 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Hand evidence (private/evidence/<model>_fw<firmware>.hand.json)",
+ "description": "How, when, in which run and from which state each fact of a camera's hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json) was proved: the mapper's own file, private whole, never published (docs/decisions/0016). The ILCE-1M2 firmware 4.00's own pass puts it back into the tables as kit/writer/hand_tables.py reads them (kit/writer/hand_evidence.py put_back), by table name, key and index: it only adds to the tables' entries, never makes one, and never replaces a public value (a note's evidence goes after the public note, as \"note+\"). Every other camera's plain pass never puts it into the tables: it takes the file only as this schema allows (evidence fields only, table by table; every part on an entry the tables hold; a NOT_OFFERED part with its \"$key\"), and writes each piece only where the definition keeps evidence, never into a public field; kit/writer/hand_evidence.py --check says, read only, which parts it would refuse. kit/schema_update.py --write, for any camera, refuses to write a definition whose hand tables hold FRAME_PROOFS, UNPROVED or NOT_OFFERED entries while this file is not there; a mapper who proved none of those entries by hand says so with this file holding no evidence (\"tables\": {}).",
+ "type": "object",
+ "required": [
+  "hand_format",
+  "camera",
+  "tables"
+ ],
+ "additionalProperties": false,
+ "patternProperties": {
+  "^[$_]": {
+   "description": "A key the kit does not read (\"$schema\", \"$comment\", \"_comment\")."
+  }
+ },
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file (\"../../schemas/hand-evidence.schema.json\")."
+  },
+  "hand_format": {
+   "const": 2,
+   "description": "The file's layout: 2, a note's evidence kept as its suffix (\"note+\"). Format 1 kept the whole note: the kit refuses it, naming kit/writer/hand_evidence.py --convert, which converts it once."
+  },
+  "camera": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*_fw\\d+\\.\\d+$",
+   "description": "The camera, <model>_fw<firmware>, as the file name and the hand tables file say it: the kit refuses evidence for another camera."
+  },
+  "tables": {
+   "type": "object",
+   "description": "By table name, the evidence each entry adds: by the entry's key for a table of entries, by its place from 0 for NOT_OFFERED (checked by \"$key\"), by its field for MY_MENU_EMPTY. Only the tables whose entries carry evidence; empty when no hand fact was proved by hand.",
+   "additionalProperties": false,
+   "properties": {
+    "FRAME_PROOFS": {
+     "type": "object",
+     "description": "A hand proof of a record (the values it chose, or how many samples, whether they lie on a line), the run, day and menu row it was made in and the owner's word for a never-open row, and the note's evidence.",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "note+": {
+        "$ref": "#/$defs/after"
+       },
+       "proved": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        },
+        "description": "The values the hand proof chose."
+       },
+       "sampled": {
+        "type": "integer",
+        "description": "How many samples a hand proof of a scale took, in place of \"proved\"."
+       },
+       "linear": {
+        "type": "boolean",
+        "description": "Whether the proved values lie on a line, both ends among them: the scale is then written as sampled."
+       },
+       "run": {
+        "type": "string",
+        "description": "The run the hand proof was made in (a hand proof names it, its day and its menu row)."
+       },
+       "date": {
+        "type": "string",
+        "description": "The day it was made."
+       },
+       "menu": {
+        "description": "The menu row or rows it went through.",
+        "anyOf": [
+         {
+          "type": "string"
+         },
+         {
+          "type": "array",
+          "items": {
+           "type": "string"
+          }
+         }
+        ]
+       },
+       "allowance": {
+        "type": "string",
+        "description": "The owner's word for a never-open row the hand proof opened (\"the owner allowed <row> remotely, <date>\")."
+       }
+      }
+     }
+    },
+    "NEW_RECORDS": {
+     "$ref": "#/$defs/notes",
+     "description": "A record found by hand: its note's evidence."
+    },
+    "FILTER_FLAGS": {
+     "$ref": "#/$defs/notes",
+     "description": "As NEW_RECORDS, for the entries the two share: put on once."
+    },
+    "RECORD_FIXES": {
+     "$ref": "#/$defs/notes",
+     "description": "A record's corrected note: its evidence."
+    },
+    "NOT_OFFERED": {
+     "type": "object",
+     "description": "What shows each not-offered mark, by its place in the table from 0, each part naming its mark's setting (\"$key\") and, where the setting has more than one mark, its values (\"$values\").",
+     "propertyNames": {
+      "pattern": "^\\d+$"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "$key": {
+        "$ref": "#/$defs/key",
+        "description": "The mark's setting key, checked against the table's entry at that place: evidence that no longer fits its mark is refused. The plain pass requires it."
+       },
+       "$values": {
+        "type": "array",
+        "items": {
+         "type": "integer"
+        },
+        "description": "The mark's values, checked against the table's entry at that place as \"$key\" is: evidence that no longer fits its mark is refused. The plain pass requires it where the table gives the setting more than one mark (a reorder or an insertion there would otherwise move one mark's evidence onto another)."
+       },
+       "evidence": {
+        "type": "string",
+        "description": "What shows the mark: the walks it names and that each went over the whole list."
+       },
+       "files": {
+        "type": "array",
+        "items": {
+         "type": "string"
+        },
+        "description": "A held value's downloads, in the camera's runs, that hold it."
+       }
+      }
+     }
+    },
+    "VIDEO_SYSTEM_VALUES": {
+     "type": "object",
+     "description": "What the camera showed under the other video system, for each setting the table names.",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "evidence": {
+        "type": "string",
+        "description": "What the camera showed."
+       }
+      }
+     }
+    },
+    "UNPROVED": {
+     "type": "object",
+     "description": "The day each reason was settled, at the reason's place 1 ([kind, day, why]).",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "1": {
+        "type": "string",
+        "description": "The day."
+       }
+      }
+     }
+    },
+    "MY_MENU_EMPTY": {
+     "type": "object",
+     "description": "My Menu's empty place: its line's evidence.",
+     "additionalProperties": false,
+     "properties": {
+      "line+": {
+       "$ref": "#/$defs/after"
+      }
+     }
+    }
+   }
+  }
+ },
+ "$defs": {
+  "key": {
+   "type": "string",
+   "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+   "description": "A setting's key, as the definition and the hand tables key it."
+  },
+  "after": {
+   "type": "string",
+   "description": "Evidence put after the public words, one space between (\"(seen on the camera, <day>)\"): it names a run or a day, and the writer sets it apart from the note."
+  },
+  "notes": {
+   "type": "object",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+     "note+": {
+      "$ref": "#/$defs/after"
+     }
+    }
+   }
+  }
+ }
+}

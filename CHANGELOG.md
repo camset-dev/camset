@@ -53,6 +53,43 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- Every camera's definition takes its own hand tables. `kit/schema_update.py` gave the a1 II's hand tables to the a1
+  II's definition alone: any other camera took the plain pass, which read none, so a fact found by hand on another
+  body (a name or note the camera proved wrong, a record the menus never write, a value no menu offers, the copies it
+  keeps, why a record cannot be proved) could not reach its definition. The plain pass now reads the camera's own
+  `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` where it has one: `RECORD_FIXES`, `NEW_RECORDS` (with
+  `FILTER_FLAGS`), `NEW_LIKE`, `NEW_WHOLE_LABELS`, `FRAME_PROOFS`, `CAROUSEL`, `VALUE_FIXES`, `PP7_VALUES`,
+  `KEEP_LABELS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES`, `COPY_MODES`, `COPY_MODES_UNKNOWN`, `UNPROVED` and
+  `CONTEXT_WORDS`, and stops in plain words, before anything is written, on a file that fills a table only the a1 II's
+  pass reads so far (its checklist records, Recall Custom holds, My Menu and the first kit's spellings), holds an entry
+  no table it reads would use, or does not fit its JSON Schema, so no table is filled in and believed to take effect;
+  an entry that cannot take effect yet (a setting the definition lacks) is said, "not applied" (docs/DATA_CONTRACTS.md,
+  "The hand tables file"). A value a hand table names is named, not proved: the editor offers it outside Expert mode
+  only where a proof covers it or a `NOT_OFFERED` mark says the camera holds it, and never becomes checked through a
+  `NEW_LIKE` record's fill from its sibling. What the tables or the hand evidence no longer give (a record found by
+  hand, a hand proof, a reason's day, a mark's evidence) leaves the definition, said. A record `NEW_LIKE` names is laid
+  out the same whatever the report's or the file's order (a chain of them sibling first; a cycle refused), and a second
+  run on the same tables changes nothing and says so. A camera with no file, or with every table empty, gets the plain pass as before, byte
+  for byte; the a1 II's own pass is unchanged. How each hand fact was proved stays in the mapper's
+  `private/evidence/<model>_fw<fw>.hand.json`, which now has a JSON Schema (`schemas/hand-evidence.schema.json`, "The
+  hand evidence file"): the plain pass takes from it only evidence fields, each on an entry the tables hold (a
+  not-offered mark's part naming its mark's values where a setting has several marks), and writes
+  each piece only into a field the definition keeps private, however it is worded, so a note's evidence or the owner's
+  word never reaches a public note. `--write` refuses, for any camera, while the camera's tables hold `FRAME_PROOFS`,
+  `UNPROVED` or `NOT_OFFERED` entries and that file is not there (a look says so and goes on; a mapper who proved none
+  of them by hand writes it with no evidence in it); the plain pass stops on a hand proof that names no run, day or menu
+  row; and evidence that no longer fits the tables stops either pass in plain words, no traceback.
+  `kit/writer/hand_evidence.py --check` says, read only, which parts of a camera's hand evidence the plain pass would
+  refuse, by table, key and field, never a value. `kit/pass2_report.py` leaves a value carried over in a record the
+  run's own camera's `KEEP_LABELS` names to that rule (it read no hand rules on another body before), and
+  `kit/provers/framepos_run.py --zone-grid` plans by the `ZONE` of the camera the kit works on (it read the a1 II's on
+  every body before), stopping before the camera where it names none.
+- The guard that stops a write from dropping evidence it read away (a proof read without its run, day and menu rows:
+  `kit/camkit/definitions.py`, `lost_evidence`) missed such a proof once the pass had put the sources of its value
+  names on it, as every write does, so the write would have kept only the values and the names in the evidence file.
+  The kit's own reading puts every fitting proof back (`definitions.load`), so no write in normal use met it; a
+  definition read with part of a proof's evidence missing, in either pass and with or without hand tables, now stops
+  as it was meant to, nothing written, naming the setting. A write that has all its evidence writes as before.
 - The foundations of one rule for when OCR alone is trusted and when the reader is asked
   ([decision 22](docs/decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)), with no
   change in what any run reads, decides or presses: `kit/camkit/reading.py` holds the one cleaning every reading is to
@@ -149,9 +186,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   entry, and `kit/tools/check_public.py` refuses a run or a day in it as in any file of a camera's data folder.
   `kit/writer/hand_tables.py` reads a camera's file, refusing in plain words one for another camera, a table it does
   not know or a key given twice, and puts the mapper's private hand evidence back as before: the definition the kit
-  writes is the same. A camera without the file has every table empty, and any camera but the a1 II still takes the
-  plain pass, which reads none of them yet: nothing to do for whoever maps another body (docs/DATA_CONTRACTS.md, "The
-  hand tables file").
+  writes is the same. A camera without the file has every table empty: nothing to do for whoever maps another body
+  (what the plain pass, any camera's but the a1 II's, reads of a camera's own file is the first entry of this list;
+  docs/DATA_CONTRACTS.md, "The hand tables file").
 
 ### The docs
 

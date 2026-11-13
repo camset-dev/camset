@@ -14,7 +14,9 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "kit"))
 sys.path.insert(1, str(ROOT / "kit" / "provers"))
 import framepos_run as F  # noqa: E402
+from camkit import definitions, paths  # noqa: E402
 from camkit.link import LinkError  # noqa: E402
+from writer import hand_tables  # noqa: E402
 
 LABELS = ["Wide", "Zone", "Center Fix", "Spot: XL", "Spot: L", "Spot: M", "Spot: S", "Spot: XS", "Expand Spot",
           "Custom 1", "Custom 2", "Custom 3", "Tracking: Wide", "Tracking: Zone", "Tracking: Center Fix",
@@ -24,6 +26,32 @@ GRID = [[0, "Centre"], [1, "Up"], [2, "Right"], [3, "Left"], [4, "Down"], [5, "L
         [7, "Upper left"], [8, "Upper right"]]
 LEFT_UP = [["ms_left", 3], ["ms_up", 2]]
 TAB = (158, 41, 3)                  # the lit slot tab's colour on the a1 II's slot screen
+
+
+@pytest.fixture(autouse=True)
+def a1_zone(monkeypatch):
+    """The Zone grid's places these tests' sweeps are planned by: the a1 II's (its hand tables' ZONE, GRID above in
+    another order). framepos_run reads the hand tables of the camera the kit works on, which no test names but where
+    it says so."""
+    monkeypatch.setattr(F, "ZONE", hand_tables.load(paths.A1II, evidence=False).ZONE)
+
+
+def test_the_zone_table_is_the_active_cameras_and_without_one_the_sweep_stops(monkeypatch, tmp_path):
+    """framepos_run's ZONE is the hand tables' of the camera the kit works on (writer/hand_tables.active), never the a1
+    II's on another camera: a made-up camera with no hand tables file has none, and --zone-grid then stops before
+    anything is read or connected; one whose file names a grid has its own."""
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    monkeypatch.setenv("CAMSET_CAMERA", "ILCE-0X0_fw1.00")
+    assert hand_tables.active().ZONE == []
+    monkeypatch.setattr(F, "ZONE", hand_tables.active().ZONE)
+    monkeypatch.setattr(F, "read_json", lambda path: pytest.fail("read the definition"))
+    with pytest.raises(SystemExit, match="--zone-grid plans and checks its sweep by the Zone grid's places"):
+        F.main(["--list", "--zone-grid"])
+    p = tmp_path / "data" / "ILCE-0X0_fw1.00" / "hand_tables_ILCE-0X0_fw1.00.json"
+    p.parent.mkdir(parents=True)
+    p.write_text('{"camera": "ILCE-0X0_fw1.00", "ZONE": [[0, "Centre"], [1, "Up"]]}', encoding="utf-8")
+    assert hand_tables.active().ZONE == [[0, "Centre"], [1, "Up"]]
 
 
 def made_up_doc() -> dict:

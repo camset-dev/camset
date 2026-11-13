@@ -6,6 +6,7 @@ on the values no option was seen to write taken out (without_held), the records 
 (one_slot_table), the mark on a record pass2_report found not one to one, a live setting's memory copy seen taken by a
 registration (in_sets_proved), and the owner's allowance a proof carries in the note's evidence (with_allowances)."""
 import collections
+import contextlib
 import json
 import re
 from pathlib import Path
@@ -219,7 +220,9 @@ def mixed(record: dict) -> bool:
 
 
 # where each value's name comes from (proved.names, schemas/definition.schema.json): read off the camera by two
-# readers, one, or the vision model alone; the old schema's label kept by likeness; a hand table's; copied from a
+# readers, one, or the vision model alone; the old schema's label kept by likeness; a hand table's; counted (a rule or
+# a table written by hand names it, no proof chose it: the a1 II's hold quarter stops, and in the plain pass a hand
+# table's name no proof covers, writer/hand_facts.named_not_proved); copied from a
 # sibling, a hold or a bracket by a rule; a number scale's value between the sampled points. A value taken from
 # "nothing changed" has its readers' source like any other, never a mark of its own (docs/decisions/0016), and an old
 # source of that kind ("held") is not written again (with_names)
@@ -389,12 +392,25 @@ AXIS_ROW = re.compile(r"(.*?) / ([^\[]*?)( \[.*\])?")
 # goes whole
 FOUND_WORDS = re.compile(r"\bas[\s-]+found\b", re.I)
 AS_FOUND = re.compile(r"\s*\[([^\]]*\bas[\s-]+found\b[^\]]*)\]", re.I)
-# a proof's context in other words ({pattern: words}), filled by the camera's writer from its tables
-# (kit/schema_update.py: the hand tables' CONTEXT_WORDS): a context reworded in the runs after a definition kept its
-# row, or a
-# state as found that a proof does not need, which the runs still hold. Renamed where a row enters the definition and
-# in the rows a definition kept, so the old words go (docs/decisions/0016)
+# a proof's context in other words ({pattern: words}), filled by the camera's writer from its tables (the hand tables'
+# CONTEXT_WORDS: kit/schema_update.py's own pass fills it, the plain pass sets it while it runs, reworded): a context
+# reworded in the runs after a definition kept its row, or a state as found that a proof does not need, which the runs
+# still hold. Renamed where a row enters the definition and in the rows a definition kept, so the old words go
+# (docs/decisions/0016)
 CONTEXT_WORDS: dict = {}
+
+
+@contextlib.contextmanager
+def reworded(words: dict):
+    """CONTEXT_WORDS as `words` (the camera's hand tables', in their order) while the block runs, then as it was: one
+    camera's contexts never reach another's definition in one process."""
+    global CONTEXT_WORDS
+    was = CONTEXT_WORDS
+    CONTEXT_WORDS = dict(words)
+    try:
+        yield
+    finally:
+        CONTEXT_WORDS = was
 
 
 def menu_row(row: str, axis_values: frozenset) -> str:
@@ -425,10 +441,12 @@ def not_found(context) -> str:
     return f" [{', '.join(words)}]" if words else ""
 
 
-def with_menu_rows(doc: dict, axis_values: frozenset) -> int:
+def with_menu_rows(doc: dict, axis_values: frozenset, matched: int | None = None) -> int:
     """Every setting's proved.menu named as menu_row says: the passes name a proof's rows so as they take them in
     (before kept_proof, so a rerun's rows meet the definition's), and this renames what a definition kept from an
-    older run; a rerun changes nothing. Prints and returns how many settings' kept rows were renamed."""
+    older run; a rerun changes nothing. Prints and returns how many settings' kept rows were renamed; the reworded-
+    context patterns it says were applied are `matched` where the caller counted those that match a row (the plain
+    pass), else every one CONTEXT_WORDS holds."""
     n = 0
     for s in doc["settings"]:
         p = s.get("proved") or {}
@@ -439,7 +457,8 @@ def with_menu_rows(doc: dict, axis_values: frozenset) -> int:
             p["menu"] = rows
             n += 1
     print(f"menu rows: {len(axis_values)} axis rows named after the value they stood on, named by their item alone; "
-          f"{n} settings' rows kept from an older run renamed; {len(CONTEXT_WORDS)} reworded-context patterns applied")
+          f"{n} settings' rows kept from an older run renamed; "
+          f"{len(CONTEXT_WORDS) if matched is None else matched} reworded-context patterns applied")
     return n
 
 

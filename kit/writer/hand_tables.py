@@ -98,6 +98,46 @@ def load(camera: str, evidence: bool = True) -> Tables:
     return Tables(**tables, HAND_EVIDENCE=found)
 
 
+def load_plain(camera: str) -> tuple:
+    """(the camera's hand tables, its hand evidence) as the plain pass reads them (writer/generic.py): the public tables
+    alone (load(camera, evidence=False)), the tables file held to its JSON Schema (so no entry carries a field of a
+    proof's evidence), and the hand evidence apart, never put into the tables: {table name: {key or place: fields}},
+    held to its own schema and to the tables (hand_evidence.plain_problems: evidence fields only, every part on an
+    entry the tables hold). Either file refused in plain words (Refused) naming the table, the key and the field.
+    HAND_EVIDENCE is the evidence file read, None when there is none ({} then)."""
+    tables = load(camera, evidence=False)
+    p = datafiles.hand_tables_file(camera)
+    if p.exists():
+        why = hand_evidence.schema_problems(json.loads(p.read_text(encoding="utf-8-sig")), "hand-tables")
+        if why:
+            raise _refused(p, "it does not fit its JSON Schema: " + "; ".join(why))
+    doc, found = hand_evidence.read_doc(camera)
+    if doc is not None:
+        why = hand_evidence.plain_problems(doc, camera, vars(tables))
+        if why:
+            raise hand_evidence.Refused(
+                f"{paths.shown(found)}: the plain pass takes from the hand evidence only what its JSON Schema allows "
+                "(schemas/hand-evidence.schema.json: evidence fields, table by table; anything that is a fact about the "
+                "camera belongs in the public tables file), each part on an entry the tables hold:\n"
+                + "".join(f"  {w}\n" for w in why) + "Nothing was done: mend the file by hand, then run the command "
+                "again (" + hand_evidence.check_command(camera) + " lists the same, read only).")
+    tables.HAND_EVIDENCE = found
+    return tables, (doc or {}).get("tables") or {}
+
+
+def active(evidence: bool = False) -> Tables:
+    """The hand tables of the camera the kit works on (camkit.paths.camera: --camera, CAMSET_CAMERA or
+    private/config.json), the public tables alone unless `evidence`; every table empty when nothing names the camera,
+    as for a camera with no file. For a prover's table (framepos_run's ZONE): never another camera's."""
+    try:
+        got = paths.camera()
+    except paths.NoCamera:
+        got = None
+    if got is None:
+        return Tables(**empty(), HAND_EVIDENCE=None)
+    return load(got[0], evidence=evidence)
+
+
 def read(p: Path, camera: str) -> dict:
     """The tables the file at `p` holds, each in the shape the writer reads, for the camera `camera`; Refused, in plain
     words, for a file that is not JSON, another camera's file, a table the kit does not know, a key or a row twice, a
