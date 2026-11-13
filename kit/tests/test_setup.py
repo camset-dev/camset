@@ -23,6 +23,18 @@ sys.modules["camset_setup"] = kitsetup              # dataclasses look their mod
 _spec.loader.exec_module(kitsetup)
 
 
+@pytest.fixture(autouse=True)
+def own_temp(tmp_path, monkeypatch):
+    """No test here empties the computer's real temporary folder for the setup's tests (tests_folder): when the setup
+    itself runs these tests, that folder is the one they are running in, and a test that reached step_tests emptied
+    it under every test after it (2026-11-12: 113 errors, FileNotFoundError, in a run of `kit/setup.py`)."""
+    monkeypatch.setattr(kitsetup.tempfile, "gettempdir", lambda: str(tmp_path / "temp"))
+
+
+def test_no_test_here_reaches_the_real_temporary_folder(tmp_path):
+    assert Path(kitsetup.tests_folder()[0]).parent == tmp_path / "temp"
+
+
 def elf(cpu: int) -> bytes:
     return b"\x7fELF" + bytes(14) + cpu.to_bytes(2, "little") + bytes(44)
 
