@@ -110,6 +110,19 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the lens-name record (0x167c) says a teleconverter's name is added after the lens's without naming the one used,
   and the registration stamp (0x0c09) no longer gives the number seen as a fact. They reach the definition the next
   time the maintainer writes it with `kit/schema_update.py --write`.
+- The a1 II's hand tables reworded to claim only what holds for every a1 II: the Recall Custom holds' bracket copies
+  say their rule (the live setting's place in its list) without a proof's trial values, the memories' aperture and
+  shutter records say their encoding without the values a registration held, the Preset Focus/Zoom records that
+  vary with the lens say what the lenses tried showed, Enlarge Screen says which custom key it took on the body
+  mapped without saying that every body takes that one, the movie title and file-name prefix give the camera's own
+  defaults, not what was typed, every note that gives a Custom box's step says it may depend on the box's size, and
+  the RAW output rows and the Dial/Wheel checkbox no longer speak of one camera or one menu page. Proxy Rec.
+  Settings (0x0284) is corrected: its row follows the Proxy File Format, not the main movie File Format (greyed,
+  showing 6M 4:2:0 8bit, under XAVC S HD), changing that format does not rewrite the record, and code 3 is what
+  Initialize and Camera Settings Reset write, which no menu choice writes, no longer labelled XAVC S HD. They reach
+  the definition the next time the maintainer writes it with `kit/schema_update.py --write`. The model page's Proxy
+  recording and Focus frame position rows say the same, and Enlarge Screen's help, in the definition now, says it
+  assigns a custom key, Custom Button 2 on the camera tried.
 - The a1 II's hand tables (the names, notes and value tables its mapping found by hand, the values its menus never
   offer, its copies, why a record cannot be proved) were Python code in the kit; they are its data file now,
   `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, edited by hand, with a JSON Schema

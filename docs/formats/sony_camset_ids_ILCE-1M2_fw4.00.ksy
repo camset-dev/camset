@@ -350,7 +350,8 @@ enums:
     0x0284:
       id: proxy_rec_settings
       doc: 'Proxy Rec. Settings [Shooting > Image Quality/Rec]: 0 16M 4:2:0 10bit, 1 9M 4:2:0 10bit (XAVC HS HD),
-        3 9M 4:2:0 10bit (XAVC S HD). live settings; 1 of 1 settings on it proved on the camera.'
+        3 9M 4:2:0 10bit (the reset value; no menu choice writes it). live settings; 1 of 1 settings on it proved
+        on the camera.'
     0x0286:
       id: aps_c_super_35mm
       doc: 'APS-C/Super 35mm [Shooting > Image Quality/Rec]: 0 On, 1 Auto, 2 Off. live settings; 1 of 1 settings
@@ -3523,8 +3524,8 @@ enums:
         on the camera.'
     0x1465:
       id: enlarge_screen_setting
-      doc: 'Enlarge Screen Setting [Setup > Accessibility]: 0 Off, 2 On (Custom Btn 2). live settings; 1 of 1 settings
-        on it proved on the camera.'
+      doc: 'Enlarge Screen Setting [Setup > Accessibility]: 0 Off, 2 On (assigns a custom key; Custom Btn 2 on the
+        camera tried). live settings; 1 of 1 settings on it proved on the camera.'
     0x1472:
       id: aspect_marker_1472
       doc: 'Aspect Marker [Shooting > Marker Display]: 0 On, 1 Off. live settings; 1 of 1 settings on it proved

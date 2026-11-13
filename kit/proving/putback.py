@@ -11,8 +11,8 @@ def put_back_leftovers(changes: list, history: list) -> dict | None:
                      keeps it (S&Q Shoot Mode's exposure-mode record once S&Q Motion was chosen, Rating Set's
                      touched flags, the keys Flexible Exp. Mode reassigns)
       "not_offered"  no download of the row holds the record's start value: the saved value is not among the options
-                     the list offers here (Proxy Rec. Settings' XAVC S HD choice under another format, Flash Mode's
-                     Autoflash in Manual Exposure)
+                     the list offers here (Proxy Rec. Settings holding its reset value, 3, which no menu choice
+                     writes; Flash Mode's Autoflash in Manual Exposure)
     The session's upload puts them back; the report credits a kept value to the option that first set it (carried
     over), never to the put-back."""
     kept, not_offered = [], []

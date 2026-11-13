@@ -528,10 +528,10 @@ folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left
 - **A put-back that leaves records differing** is no failure when the prover can say why (`put_back_leftovers`,
   2026-11-07): a record the camera has held since an earlier option of the row ("kept": S&Q Shoot Mode's exposure
   mode, the keys Flexible Exp. Mode reassigns), a saved value no option of the list gives back ("not offered": Flash
-  Mode's Autoflash outside Intelligent Auto, a Proxy Rec. Setting of another format), or a checklist's copy of a box's
-  tick written from the first save on (`mirrored_boxes`: Rating Set(Custom Key)). The attempt is recorded finished
-  with the reason, the session's upload puts the records back, and the report credits a kept value to the option that
-  first set it. Anything else still fails the row.
+  Mode's Autoflash outside Intelligent Auto, Proxy Rec. Settings holding the reset value no menu choice writes), or a
+  checklist's copy of a box's tick written from the first save on (`mirrored_boxes`: Rating Set(Custom Key)). The
+  attempt is recorded finished with the reason, the session's upload puts the records back, and the report credits a
+  kept value to the option that first set it. Anything else still fails the row.
 - **Recall Custom holds** (Reg. Custom Shoot Set, a never-open action: only with your owner's word, given as `--allow
   "Reg. Custom Shoot Set"`): `kit/provers/customshoot_run.py --allow "Reg. Custom Shoot Set" --hold N` for the items'
   ticks, then `kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold N --items "ITEM,..."` for their

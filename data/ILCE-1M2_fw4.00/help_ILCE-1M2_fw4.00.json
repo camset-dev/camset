@@ -6244,7 +6244,7 @@
    "help": "Whether DRO Bracket is offered when you change Drive Mode."
   },
   "global:0x1465": {
-   "help": "Lets you enlarge menu screens to read them more easily; turning it on assigns that to Custom Button 2."
+   "help": "Lets you enlarge menu screens to read them more easily; turning it on also assigns that to a custom key (Custom Button 2 on the camera tried)."
   },
   "global:0x1472": {
    "help": "Shows lines on the shooting screen for another picture shape, to frame for a later crop."

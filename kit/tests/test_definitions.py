@@ -3096,6 +3096,8 @@ def test_a_registrations_proof_of_the_memory_copy_sits_after_in_sets():
 
 FRAMEPOS = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e", "set:0x0f30", "set:0x019c",
             "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
+# what a Custom box's step is not known to be: the same at every size (one box, at one size, measured it)
+BOX_STEP_SIZE = "A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped."
 
 
 def step_facts(steps: dict) -> dict:
@@ -3129,9 +3131,10 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     """The public hand tables and the public definition: the steps a press moved under AF Frame Move Amt Standard and
     Large come from one table (FRAME_STEPS) through its sentences (step_facts), which stand word for word in the public
     notes, AF Frame Move Amt's, the model page's row and the changelog's entry, and nowhere else a number does: no
-    position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where a frame stood. AF Frame
-    Move Amt's hand entry is a note only, its proof the report's; the Custom boxes' place records are 26 new memory set
-    records laid out like the spot's."""
+    position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where a frame stood. Every
+    hand note that gives a Custom box's step, and the model page's row, says in one sentence (BOX_STEP_SIZE) that it
+    may depend on the box's size and was measured at one. AF Frame Move Amt's hand entry is a note only, its proof the report's; the Custom
+    boxes' place records are 26 new memory set records laid out like the spot's."""
     import schema_update as S
     T = hand_tables.load(A1, evidence=False)
     facts, notes = step_facts(T.FRAME_STEPS), frame_notes(T)
@@ -3157,6 +3160,11 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     for k in FRAMEPOS[6:] + boxes:                     # and as the hand tables say them
         want = "box" if k in boxes else "point"
         assert facts[want] in T.FRAME_PROOFS[k]["note"], k
+    # a Custom box's step was measured at one size of one box: each note that gives it says so, in the same words
+    for k in boxes + ["global:0x03a3"]:
+        assert BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"], k
+    assert not [k for k in FRAMEPOS if BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"]]
+    assert row.index(facts["all"]) < row.index(BOX_STEP_SIZE)     # and the model page's row, after its steps
     forbidden = re.compile(r"\b(?:edge|limit|travel|near|side|stood|further)\b|\b(?:stop|short|border|boundar|clamp|corner)\w*"
                            r"|\b(?:less|more) than\b|on the way|from the centre", re.I)
     geometry = r"640 x 480|3 x 3|\(320, 240 = centre\)|\(0 centre, [^)]*\)|slot 1|Custom [123]|copy [1-4]|ILCE-1M2|0x[0-9a-f]{4}"
