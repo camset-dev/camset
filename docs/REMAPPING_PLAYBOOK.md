@@ -37,7 +37,7 @@ Nothing is copied from another model or from documentation without proof.
   `camera_only` (only the camera's own saves write it), `equipment` (greyed without equipment you do not have),
   `network` (a network block, by hand only), `unknown` (every candidate row tried, none moved it); `skipped` is for the
   owner's own exclusions. The editor and the proof viewer show the reason; the a1 II's are its hand table `UNPROVED`
-  (`kit/writer/a1_tables.py`).
+  (in its hand tables file, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`).
 
 ## 1. Rules that are never broken
 
@@ -730,9 +730,11 @@ section 8).
    mode (a name, group, help, display rule or refused option's reason) holds a record number, a pass, the owner or
    another word of the mapping; fix the kit's rules or tables, never the definition by hand. The writer's body is in
    `kit/writer/` (`kit/schema_update.py` stays the command), and the ILCE-1M2's own corrections live in its hand
-   tables, `kit/writer/a1_tables.py`, which apply to its definition alone. The tables are public and hold names, value
-   tables and facts; how each was proved (a hand proof's values, run and day, a sample's count, the owner's word, what
-   shows a not-offered mark) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`, which
+   tables file, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json` (its tables and their shapes:
+   [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)), which apply to
+   its definition alone; a new model's pass reads none yet. The tables are public, edited by hand there, and hold
+   names, value tables and facts; how each was proved (a hand proof's values, run and day, a sample's count, the
+   owner's word, what shows a not-offered mark) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`, which
    `kit/writer/hand_evidence.py` puts back; without it `--write` refuses
    ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) only adds to
    the tables, and carries a note's evidence only as a suffix, `"note+"`, after the table's note; the public words and

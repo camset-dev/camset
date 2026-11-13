@@ -45,6 +45,12 @@ repos:
         language: python
         pass_filenames: false
         files: ^(data/[^/]+/settings_reset_[^/]*_fw[^/]*\.json$|schemas/)
+      - id: hand-tables-json
+        name: the hand tables files match their JSON Schema (no evidence in an entry)
+        entry: python kit/tools/hook.py check-jsonschema --schemafile schemas/hand-tables.schema.json "data/*/hand_tables_*_fw*.json"
+        language: python
+        pass_filenames: false
+        files: ^(data/[^/]+/hand_tables_[^/]*_fw[^/]*\.json$|schemas/)
       - id: nothing-private
         name: nothing private is published (private/, runs/, the SDK, addresses, the camera's help text)
         entry: python kit/tools/hook.py python kit/tools/check_public.py

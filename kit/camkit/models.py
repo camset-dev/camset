@@ -11,9 +11,10 @@ it where a file's identity is printed.
 
 A few lookup tables in the pipeline are the ILCE-1M2's own (firmware 4.00): record ids and label sequences proved on
 that body (prove_run's LABELS, ICON_ROWS and DISP_MODES, pass2_report's DISP_MODES and WRITTEN_BY, pass3_run's
-BLOCKERS, schema_update's fixes). They apply to that body's files only; each carries a TODO to move into
-data/<model>_fw<fw>/camera_<model>_fw<fw>.json (docs/decisions/0020), as upload_check's Picture Profile records moved
-into its picture_profile_in_use (2026-11-08).
+BLOCKERS, the fixes in schema_update's own pass). They apply to that body's files only; each carries a TODO to move
+into data/<model>_fw<fw>/ (docs/decisions/0020), as upload_check's Picture Profile records moved into the camera
+file's picture_profile_in_use (2026-11-08) and schema_update's hand tables into the camera's hand tables file,
+data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json (kit/writer/hand_tables.py).
 """
 from pathlib import Path
 

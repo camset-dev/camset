@@ -1,10 +1,9 @@
 """A camera's hand tables are public and hold what the camera is; their evidence is the mapper's (docs/decisions/0016):
-kit/writer/<model>_tables.py keeps no day, no run and no hand proof, and kit/writer/hand_evidence.py puts the evidence
-back from the private overlay (private/evidence/<model>_fw<fw>.hand.json) when it is there. Made-up tables where a test
-needs them; the real evidence only where the mapper's computer has it."""
-import ast
+the tables file, data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json, keeps no day, no run and no hand proof (its JSON
+Schema refuses an evidence field in an entry, and check_public's rule refuses a run or a day in it), and
+kit/writer/hand_evidence.py puts the evidence back from the private overlay (private/evidence/<model>_fw<fw>.hand.json)
+when it is there. Made-up tables where a test needs them; the real evidence only where the mapper's computer has it."""
 import json
-import importlib.util
 import re
 import sys
 from pathlib import Path
@@ -12,12 +11,13 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, definitions, paths  # noqa: E402
-from writer import a1_tables, hand_evidence  # noqa: E402
+from camkit import ROOT, datafiles, definitions, paths  # noqa: E402
+from writer import hand_evidence, hand_tables  # noqa: E402
 
-TABLES = sorted((ROOT / "kit" / "writer").glob("*_tables.py"))
-# a day, a run's name or a run's folder: the evidence's, never a public table's
-DAY_OR_RUN = re.compile(r"\b20\d\d-\d\d-\d\d\b|kit2_|runs/")
+TABLES = sorted((ROOT / "data").glob("*/hand_tables_*_fw*.json"))
+# a day, a run's name, a run's folder (runs/, or runs\ as Windows writes it) or a download's or a frame's file name: the
+# evidence's, never a public table's
+DAY_OR_RUN = re.compile(r"\b20\d\d-\d\d-\d\d\b|kit2_|runs[/\\]|\.(?:DAT|png|jpg)\b")
 # the fields a hand proof's evidence is made of (run, day, the values it chose, its sample, the owner's word...), which
 # no public table writes
 EVIDENCE_KEYS = {"run", "date", "proved", "sampled", "linear", "allowance", "evidence", "files"}
@@ -27,52 +27,71 @@ EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run
                    "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
                    "NOT_OFFERED": {"$key", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
                    "UNPROVED": {"1"}, "MY_MENU_EMPTY": {"line+"}}
+# the mapper's hand evidence for the a1 II, where this computer holds the private overlay
+HAND_EVIDENCE = hand_evidence.path(paths.A1II)
 
 
 def test_there_is_a_hand_table_to_check():
-    assert ROOT / "kit" / "writer" / "a1_tables.py" in TABLES
+    assert datafiles.hand_tables_file(paths.A1II) in TABLES
 
 
-@pytest.mark.parametrize("path", TABLES, ids=lambda p: p.name)
+def walk(o, where=""):
+    """(place, key or None, value) of every object key and every value in a JSON document."""
+    if isinstance(o, dict):
+        for k, v in o.items():
+            yield f"{where}/{k}", k, v
+            yield from walk(v, f"{where}/{k}")
+    elif isinstance(o, list):
+        for i, v in enumerate(o):
+            yield f"{where}/{i}", None, v
+            yield from walk(v, f"{where}/{i}")
+
+
+@pytest.mark.parametrize("path", TABLES, ids=lambda p: p.parent.name)
 def test_a_hand_table_holds_no_day_no_run_and_no_hand_proof(path):
-    """No string in the file (an f-string's parts included) names a day, a kit2_ run or a run's folder, and no table
-    entry is written with a proof's or the evidence's keys (a dict's key, a keyword of .update(), an entry's [key]).
-    Comments may name runs and days (an ordinary comment, kept for a later clean-up), never a value of the owner's."""
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    said = [f"line {n.lineno}: {n.value!r}" for n in ast.walk(tree)
-            if isinstance(n, ast.Constant) and isinstance(n.value, str) and DAY_OR_RUN.search(n.value)]
-    keys = []
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Dict):
-            keys += [f"line {k.lineno}: {k.value!r}" for k in n.keys
-                     if isinstance(k, ast.Constant) and k.value in EVIDENCE_KEYS]
-        elif isinstance(n, ast.Call):
-            keys += [f"line {n.lineno}: {kw.arg}=" for kw in n.keywords if kw.arg in EVIDENCE_KEYS]
-        elif isinstance(n, ast.Subscript) and isinstance(n.slice, ast.Constant) and n.slice.value in EVIDENCE_KEYS:
-            keys += [f"line {n.lineno}: [{n.slice.value!r}]"]
+    """No string in the file (a key or a value) names a day, a kit2_ run or a run's folder, no key is one of a proof's
+    or the evidence's, and check_public's rule for a camera's data folder (datafiles.evidence_in_public, the one that
+    refuses a commit) finds nothing in it."""
+    doc = json.loads(path.read_text(encoding="utf-8"))
+    said = [where for where, k, v in walk(doc) for s in (k, v) if isinstance(s, str) and DAY_OR_RUN.search(s)]
+    keys = [where for where, k, _ in walk(doc) if k in EVIDENCE_KEYS]
     assert not said, "a day or a run in a public hand table (the hand evidence's, kit/writer/hand_evidence.py):\n" + \
         "\n".join(said)
     assert not keys, "a hand proof's or the evidence's key in a public hand table:\n" + "\n".join(keys)
+    assert datafiles.evidence_in_public(path) == []
 
 
-def fresh_tables(monkeypatch, evidence_dir, name="writer._a1_tables_public"):
-    """kit/writer/a1_tables.py read afresh with the hand evidence looked for in `evidence_dir` (an empty folder: as a
-    fresh clone reads it), apart from the module the writer holds (which its pass adds to as it runs)."""
-    monkeypatch.setattr(definitions, "EVIDENCE_DIR", evidence_dir)
-    spec = importlib.util.spec_from_file_location(name, ROOT / "kit" / "writer" / "a1_tables.py")
-    mod = importlib.util.module_from_spec(spec)
-    monkeypatch.setitem(sys.modules, spec.name, mod)
-    spec.loader.exec_module(mod)
-    return mod
+def test_the_schema_refuses_a_hand_proofs_evidence_in_an_entry():
+    """schemas/hand-tables.schema.json, which the hooks and CI check every hand tables file against, takes the a1 II's
+    file and refuses it with any of the evidence's fields put into an entry (a proof's run or day, its values, the
+    owner's word, a not-offered mark's evidence, a reason's day), and a table it does not know."""
+    import jsonschema
+    schema = json.loads((ROOT / "schemas" / "hand-tables.schema.json").read_text(encoding="utf-8"))
+    check = jsonschema.Draft202012Validator(schema)
+    doc = json.loads(datafiles.hand_tables_file(paths.A1II).read_text(encoding="utf-8"))
+    check.validate(doc)
+    for name, key, field, value in (("FRAME_PROOFS", "set:0x019a", "run", "x"), ("FRAME_PROOFS", "set:0x019a", "proved", [0]),
+                                    ("FRAME_PROOFS", "global:0x0052", "allowance", "x"),
+                                    ("FRAME_PROOFS", "global:0x0018", "linear", True),
+                                    ("RECORD_FIXES", "global:0x0df2", "note+", "x"),
+                                    ("NEW_RECORDS", "set:0x023c", "date", "x"), ("NOT_OFFERED", 0, "evidence", "x"),
+                                    ("NOT_OFFERED", 0, "files", ["a.DAT"]), ("UNPROVED", "global:0x1672", 1, "x"),
+                                    ("MY_MENU_EMPTY", None, "line+", "x"), ("VIDEO_SYSTEM_VALUES", "global:0x0202",
+                                                                             "evidence", "x")):
+        bad = json.loads(json.dumps(doc))
+        (bad[name] if key is None else bad[name][key])[field] = value      # a field, or a reason's day (index 1)
+        assert not check.is_valid(bad), (name, key, field)
+    assert not check.is_valid({**doc, "NEW_TABLE": {}})
 
 
 def test_without_its_evidence_a_table_says_what_the_camera_is_and_nothing_of_how(monkeypatch, tmp_path):
     """The tables as a clone without the overlay reads them: a hand table's entry is its note and its value names,
     a not-offered mark and a video system's values carry no evidence, a reason no day, My Menu's empty line no run;
-    and no note a table computes names a day or a run."""
-    whole = fresh_tables(monkeypatch, definitions.EVIDENCE_DIR, "writer._a1_tables_whole")
-    T = fresh_tables(monkeypatch, tmp_path)
-    assert T.HAND_EVIDENCE is None
+    and no note names a day or a run. load(evidence=False) reads them so."""
+    whole = hand_tables.load(paths.A1II)               # with the mapper's evidence where this computer holds it
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path)
+    T = hand_tables.load(paths.A1II)
+    assert T.HAND_EVIDENCE is None and vars(hand_tables.load(paths.A1II, evidence=False)) == vars(T)
     assert {k: set(fp) - {"note", "values"} for k, fp in T.FRAME_PROOFS.items() if set(fp) - {"note", "values"}} == {}
     assert not [m["key"] for m in T.NOT_OFFERED if {"evidence", "files"} & set(m)]
     assert not [k for k, e in T.VIDEO_SYSTEM_VALUES.items() if set(e) - {"NTSC", "PAL"}]
@@ -218,12 +237,13 @@ def test_write_refuses_without_the_hand_evidence(monkeypatch):
     assert f"{paths.A1II}.hand.json" in words
 
 
-@pytest.mark.skipif(a1_tables.HAND_EVIDENCE is None, reason="the hand tables' evidence is the mapper's (private/evidence/)")
+@pytest.mark.skipif(not HAND_EVIDENCE.exists(), reason="the hand tables' evidence is the mapper's (private/evidence/)")
 def test_the_hand_evidence_holds_evidence_only():
     """The mapper's hand evidence names only evidence fields, table by table (EVIDENCE_FIELDS): a value name, a record
-    name or a structure in it would be a public fact kept out of the public file."""
-    import json
-    doc = json.loads(Path(a1_tables.HAND_EVIDENCE).read_text(encoding="utf-8"))
+    name or a structure in it would be a public fact kept out of the public file. Every table it names is one the
+    tables file holds (writer/hand_tables.TABLES)."""
+    doc = json.loads(HAND_EVIDENCE.read_text(encoding="utf-8"))
+    assert set(doc["tables"]) <= set(hand_tables.TABLES)
     assert doc["camera"] == paths.A1II and set(doc["tables"]) <= set(EVIDENCE_FIELDS)
     wrong = {}
     for name, patch in doc["tables"].items():
@@ -236,16 +256,15 @@ def test_the_hand_evidence_holds_evidence_only():
     assert wrong == {}
 
 
-@pytest.mark.skipif(a1_tables.HAND_EVIDENCE is None, reason="the hand tables' evidence is the mapper's (private/evidence/)")
-def test_a_note_in_the_hand_evidence_is_the_public_note_with_its_evidence(monkeypatch, tmp_path):
+@pytest.mark.skipif(not HAND_EVIDENCE.exists(), reason="the hand tables' evidence is the mapper's (private/evidence/)")
+def test_a_note_in_the_hand_evidence_is_the_public_note_with_its_evidence():
     """A note's evidence in the hand evidence (its suffix, "note+", or My Menu's "line+") is evidence only: put after
     the public table's note, the note says, once its evidence is set apart (writer.notes.split_evidence), what the
     public note says. The written definition's note is the public one for every owner, and the private file only adds
     how and when it was found."""
-    import json
     from writer.notes import split_evidence
-    T = fresh_tables(monkeypatch, tmp_path)          # the public tables, no evidence put back
-    doc = json.loads(Path(a1_tables.HAND_EVIDENCE).read_text(encoding="utf-8"))
+    T = hand_tables.load(paths.A1II, evidence=False)          # the public tables, no evidence put back
+    doc = json.loads(HAND_EVIDENCE.read_text(encoding="utf-8"))
     pairs = [(f"{name}[{key}]", getattr(T, name)[key].get("note") or "", fields["note+"])
              for name, patch in doc["tables"].items() for key, fields in patch.items()
              if isinstance(fields, dict) and "note+" in fields]
@@ -260,17 +279,18 @@ def test_a_note_in_the_hand_evidence_is_the_public_note_with_its_evidence(monkey
                 if isinstance(fields, dict) and "note" in fields], "a whole note: the public words twice"
 
 
-def test_format_one_hand_evidence_stops_the_tables_import_in_plain_words(tmp_path):
-    """Review 4 (2026-11-11): the tables module puts the hand evidence back as it is imported, so a format-1 file
-    stopped every command with a traceback. Now it stops in plain words naming the command that converts it (and
-    put_back's refusals are still ValueErrors for the callers that catch them)."""
+def test_format_one_hand_evidence_stops_the_tables_reading_in_plain_words(tmp_path):
+    """Review 4 (2026-11-11): reading the tables puts the hand evidence back (writer/hand_tables.load, as
+    kit/schema_update.py does when it is imported), so a format-1 file stopped every command with a traceback. Now it
+    stops in plain words naming the command that converts it (and put_back's refusals are still ValueErrors for the
+    callers that catch them)."""
     import os
     import subprocess
-    from camkit import ROOT, paths
     (tmp_path / f"{paths.A1II}.hand.json").write_text(json.dumps({"hand_format": 1, "camera": paths.A1II,
                                                                   "tables": {}}), encoding="utf-8")
-    got = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); import writer.a1_tables",
-                          str(ROOT / "kit")], env={**os.environ, "CAMSET_EVIDENCE_DIR": str(tmp_path)},
+    got = subprocess.run([sys.executable, "-c", "import sys; sys.path.insert(0, sys.argv[1]); "
+                          "from writer import hand_tables; hand_tables.load(sys.argv[2])", str(ROOT / "kit"),
+                          paths.A1II], env={**os.environ, "CAMSET_EVIDENCE_DIR": str(tmp_path)},
                          capture_output=True, text=True)
     assert got.returncode == 1 and "Traceback" not in got.stderr
     assert "format 1" in got.stderr and f"kit/writer/hand_evidence.py --convert --camera {paths.A1II}" in got.stderr

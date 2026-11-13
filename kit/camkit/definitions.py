@@ -192,17 +192,37 @@ def split(doc: dict) -> tuple:
     return pub, evidence
 
 
-# a run's folder, a kit2_ run name or an ISO date: none is anywhere in a public definition (evidence_in_public)
-RUN_OR_DAY = re.compile(r"runs/|kit2_|\b20\d\d-\d\d-\d\d\b")
+# a run's folder (written / or, on Windows, \), a kit2_ run name or an ISO date: none is anywhere in a public definition
+# (evidence_in_public)
+RUN_OR_DAY = re.compile(r"runs[/\\]|kit2_|\b20\d\d-\d\d-\d\d\b")
+# a download's or a frame's file name ("00420_after.DAT", "00145_enter.png"): a proof's, never a public file's; but the
+# camera's own file names, its sample and the suffix of the files it saves, which a camera file and a definition's
+# camera section give (OWN_FILE_NAMES), are what the camera is (file_names)
+FILE_NAME = re.compile(r"[\w.-]*\.(?:DAT|png|jpg)\b")
+OWN_FILE_NAMES = ("sample", "save_name")
+
+
+def file_names(doc, camera: str | None = "camera") -> list:
+    """Every download's or frame's file name (FILE_NAME) in the JSON document `doc`, in order, but the camera's own
+    file names (OWN_FILE_NAMES) in its camera section: `camera` names that section's key in `doc` (a definition's
+    "camera"), or None for a camera file, whose own top level it is."""
+    if isinstance(doc, dict):
+        if camera is None:
+            doc = {k: v for k, v in doc.items() if k not in OWN_FILE_NAMES}
+        elif isinstance(doc.get(camera), dict):
+            doc = {**doc, camera: {k: v for k, v in doc[camera].items() if k not in OWN_FILE_NAMES}}
+    return FILE_NAME.findall(json.dumps(doc, ensure_ascii=False))
 
 
 def evidence_in_public(doc: dict, text: str = None) -> list:
     """Every place a public definition carries evidence, in words: a field of EVIDENCE_FIELDS (or the old observed,
     written_with) on a setting, a proof key but values and sampled, a sample's key but linear, a date in
-    unproved_reason or unproved_sets, not_offered's evidence, a layout's note_evidence, and, in the file's text
-    (`text`, else the definition as JSON), a run's folder, a kit2_ run name or an ISO date. Empty for a lean one."""
+    unproved_reason or unproved_sets, not_offered's evidence, a layout's note_evidence, in the file's text (`text`,
+    else the definition as JSON) a run's folder, a kit2_ run name or an ISO date, and anywhere but the camera's own
+    file names a download's or a frame's file name (file_names). Empty for a lean one."""
     text = json.dumps(doc) if text is None else text
     found = [f"names {m!r}" for m in RUN_OR_DAY.findall(text)]
+    found += [f"names the file {m!r}" for m in file_names(doc)]
     found += ["a layout's note_evidence" for lay in doc.get("layouts") or [] if "note_evidence" in lay]
     if STALE in doc:
         found.append(f"the evidence kept aside ({STALE})")

@@ -179,6 +179,11 @@ def family_name(names: dict, reads: dict) -> str:
     return max(sorted(left or names), key=lambda x: (rank.get(reads.get(x), 0), x in reads, names[x][1], names[x][0]))
 
 
+# the exposure modes' names and the letters a mode dial and older names give them: photography's own words, no
+# camera's (a value still named by its letter beside the names takes the name: schema_update)
+MODE_LETTERS = {"Program Auto": "P", "Aperture Priority": "A", "Shutter Priority": "S", "Manual Exposure": "M"}
+
+
 def ev_label(v: int) -> str:
     """A quarter-stop count from 20 (down is plus) as the camera shows it: halves, else thirds."""
     ev = (20 - v) / 4

@@ -228,6 +228,26 @@ def test_a_public_data_file_with_evidence_is_refused(tmp_path, monkeypatch):
     cam = d / "camera_ILCE-0X0_fw1.00.json"
     cam.write_text(json.dumps({"note": "read in runs/kit2_x"}), encoding="utf-8")
     assert sorted(datafiles.evidence_in_public(cam)) == ["names 'kit2_'", "names 'runs/'"]
+    # a download's or a frame's file name, or a run's folder as Windows writes it, is evidence too; the camera's own
+    # file names (its sample, the suffix of the files it saves) are what the camera is
+    cam.write_text(json.dumps({"sample": "ILCE-0X0_fw1.00.DAT", "save_name": {"stem_chars": 6, "suffix": "E1.DAT"},
+                               "note": "frame 00145_enter.png in runs\\x"}), encoding="utf-8")
+    assert datafiles.evidence_in_public(cam) == ["names 'runs\\\\'", "names the file '00145_enter.png'"]
+    help_file = d / "help_ILCE-0X0_fw1.00.json"
+    help_file.write_text(json.dumps({"sample": "a.DAT"}), encoding="utf-8")
+    assert datafiles.evidence_in_public(help_file) == ["names the file 'a.DAT'"], "only a camera file names its own"
+
+
+def test_a_definition_naming_a_download_or_a_frame_is_refused_but_its_own_sample_is_not():
+    """A public definition holds no download's or frame's file name (a proof's) and no run's folder as Windows writes
+    it, but its camera section names the camera's own sample and the suffix of the files it saves."""
+    doc = {"model": "ILCE-0X0", "camera": {"sample": "ILCE-0X0_fw1.00.DAT", "save_name": {"suffix": "E1.DAT"}},
+           "layouts": [], "settings": [{"key": "global:0x0001", "note": "Read off 00145_enter.png."}]}
+    assert evidence_in(doc, json.dumps(doc)) == ["names the file '00145_enter.png'"]
+    doc["settings"][0]["note"] = "Read in runs\\kit2x."
+    assert evidence_in(doc, json.dumps(doc)) == ["names 'runs\\\\'"]
+    doc["settings"][0]["note"] = "What it holds."
+    assert evidence_in(doc, json.dumps(doc)) == []
 
 
 # ---------------------------------------------------------------- the reviewer's holes (2026-11-11)

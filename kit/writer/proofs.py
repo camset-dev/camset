@@ -390,7 +390,8 @@ AXIS_ROW = re.compile(r"(.*?) / ([^\[]*?)( \[.*\])?")
 FOUND_WORDS = re.compile(r"\bas[\s-]+found\b", re.I)
 AS_FOUND = re.compile(r"\s*\[([^\]]*\bas[\s-]+found\b[^\]]*)\]", re.I)
 # a proof's context in other words ({pattern: words}), filled by the camera's writer from its tables
-# (kit/schema_update.py: a1_tables.CONTEXT_WORDS): a context reworded in the runs after a definition kept its row, or a
+# (kit/schema_update.py: the hand tables' CONTEXT_WORDS): a context reworded in the runs after a definition kept its
+# row, or a
 # state as found that a proof does not need, which the runs still hold. Renamed where a row enters the definition and
 # in the rows a definition kept, so the old words go (docs/decisions/0016)
 CONTEXT_WORDS: dict = {}

@@ -56,9 +56,10 @@ Contents (text files, and the ASCII strings in binary ones):
 - Each definition is lean (camkit.definitions.evidence_in_public): none of the mapping's evidence (how, when, in which
   run or from which state a thing was proved), which stays in the mapper's private/evidence/ (docs/decisions/0016).
 - So is every camera's data folder, data/<model>_fw<fw>/ (camkit.datafiles.evidence_in_public): no menu tree, no
-  accepted file and no record shapes there (private whole), no run's folder, kit2_ run name or ISO date in any of its
-  files, and a reset file as lean as kit/schema_update.py writes it (no test's own words, no reading no test could
-  tell).
+  accepted file and no record shapes there (private whole), no run's folder (runs/, or Windows' runs\\), kit2_ run name, ISO date
+  or download's or frame's file name (.DAT, .png, .jpg; but the camera file's own sample and saved-file suffix) in any
+  of its files, and a reset file as lean as kit/schema_update.py writes it (no test's own words, no reading no test
+  could tell).
 - Every help text in each definition (editor/definitions/<model>_fw<fw>.json) is the project's own, as its
   data/<model>_fw<fw>/help_<model>_fw<fw>.json has it, and that file says it is for the definition's own model and
   firmware (kit/camkit/help_files.py).

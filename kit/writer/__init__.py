@@ -13,7 +13,8 @@
     copies      the copies the camera keeps of a live value, where its downloads bear the rule out
     gate        --write's gate: the report's open questions against the camera's accepted file
     generic     the plain pass for any other camera, from a seed when it has no definition yet
-    a1_tables   the ILCE-1M2 firmware 4.00's hand tables, public: what the camera is
+    hand_tables a camera's hand tables, read from its public data file (data/<model>_fw<fw>/hand_tables_*.json):
+                what the mapping found by hand about the camera, in the shapes the writer reads
     hand_evidence  a hand table's evidence, kept in the private overlay and put back into its tables when there
 
 kit/schema_update.py keeps the pass that reads the camera's runs (its main, and the readers of runs/<model>_fw<fw>/:

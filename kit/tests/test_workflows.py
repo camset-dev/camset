@@ -139,6 +139,27 @@ def test_ci_runs_ruff_at_the_version_the_hook_pins():
     assert re.search(r"^python -m pip install uv==\d+\.\d+\.\d+$", run, re.M)          # uv itself pinned
 
 
+def test_ci_and_the_hooks_check_every_data_file_against_its_schema():
+    """Every kind of file of a camera's data folder that has a JSON Schema (the camera file, the help file, the reset
+    file and the hand tables file, whose schema refuses an evidence field in an entry) is checked against it both by CI
+    and by a commit hook, with the same command and the same files, as the definitions are; a hook runs when a file of
+    its kind or a schema changes."""
+    hooks = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    local = next(r["hooks"] for r in hooks["repos"] if r["repo"] == "local")
+    ci = step(workflow()["jobs"]["kit"], "JSON Schemas")["run"].splitlines()
+    kinds = {"definition": "editor/definitions/*.json", "camera": "data/*/camera_*_fw*.json",
+             "help-file": "data/*/help_*_fw*.json", "settings-reset": "data/*/settings_reset_*_fw*.json",
+             "hand-tables": "data/*/hand_tables_*_fw*.json"}
+    for schema, files in kinds.items():
+        command = f"check-jsonschema --schemafile schemas/{schema}.schema.json"
+        assert f"{command} {files}" in ci, schema
+        hook = [h for h in local if h["entry"] == f'python kit/tools/hook.py {command} "{files}"']
+        assert len(hook) == 1, schema
+        assert hook[0]["pass_filenames"] is False and "schemas/" in hook[0]["files"], schema
+        assert re.search(hook[0]["files"], files.replace("*", "x")), schema
+    assert len([line for line in ci if "check-jsonschema" in line]) == len(kinds)
+
+
 def test_ci_runs_the_kits_tests_on_windows_in_utf8_mode():
     """The kit's tests run on Windows too (first run there 2026-11-12), with PYTHONUTF8 set for the job, as the kit
     needs on Windows, and with the actions pinned as the Linux job's are."""

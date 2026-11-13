@@ -3,6 +3,8 @@ definition's evidence: two owners with different settings who map the same model
 public files, so nothing in data/<model>_fw<fw>/ says what the camera held, nor how, when or in which run it was read.
 
     data/<model>_fw<fw>/settings_reset_<model>_fw<fw>.json      public, lean: which settings each reset puts back
+    data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json         public: the hand tables (kit/writer/hand_tables.py),
+                                                                their evidence private/evidence/<model>_fw<fw>.hand.json
     private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json      private whole: the menus as the walk read them,
     private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json       the mapper's rulings on pass 2's report, and
     private/evidence/<model>_fw<fw>/record_shapes_<model>_fw<fw>.json  the downloads' value shapes
@@ -260,6 +262,12 @@ def reset_file(camera: str) -> Path:
     return definitions.data_dir(camera) / f"settings_reset_{camera}.json"
 
 
+def hand_tables_file(camera: str) -> Path:
+    """data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json: the camera's hand tables, public and written by hand
+    (schemas/hand-tables.schema.json; kit/writer/hand_tables.py reads it). Only a path: a camera may have none."""
+    return definitions.data_dir(camera) / f"hand_tables_{camera}.json"
+
+
 def not_lean_words(p, why: list) -> str:
     """The plain words a command stops with on a reset file that is not lean (reset_not_lean's `why`), naming the
     command that keeps the whole file privately and writes the lean one (kit/tools/move_evidence.py)."""
@@ -316,10 +324,11 @@ def camera_folders(data: Path = None) -> list:
 def evidence_in_public(p, text: str = None) -> list:
     """Every place a public file of a camera's data folder carries what decision 16 keeps private, in words: a file
     that is private whole (PRIVATE_WHOLE: a menu tree, the accepted rulings, the record shapes); a run's folder, a
-    kit2_ run name or an ISO date anywhere; in the reset file the walk's state words (STATE_WORDS) and any part of the
-    older whole shape (reset_not_lean: the tests' own words, a reading no test could tell), naming the command that
-    makes it lean. Empty for a lean file. `text` is the file's contents (a commit's blob, check_public --commits),
-    else the file is read."""
+    kit2_ run name or an ISO date anywhere; a download's or a frame's file name anywhere but the camera file's own
+    (its sample and the suffix of the files the camera saves: definitions.file_names); in the reset file the walk's
+    state words (STATE_WORDS) and any part of the older whole shape (reset_not_lean: the tests' own words, a reading no
+    test could tell), naming the command that makes it lean. Empty for a lean file. `text` is the file's contents (a
+    commit's blob, check_public --commits), else the file is read."""
     p = Path(p)
     kind = kind_of(p)
     if kind in PRIVATE_WHOLE:
@@ -327,6 +336,12 @@ def evidence_in_public(p, text: str = None) -> list:
                 f"{move_command(p.parent.name)}"]
     text = p.read_text(encoding="utf-8") if text is None else text
     found = [f"names {m!r}" for m in sorted(set(RUN_OR_DAY.findall(text)))]
+    try:
+        names = definitions.file_names(json.loads(text), camera=None) if kind == "camera" else None
+    except ValueError:
+        names = None
+    names = definitions.FILE_NAME.findall(text) if names is None else names
+    found += [f"names the file {m!r}" for m in sorted(set(names))]
     if kind == "settings_reset":
         found += [f"the words {w!r}" for w in STATE_WORDS if w.lower() in text.lower()]
         try:

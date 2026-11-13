@@ -1032,6 +1032,35 @@ def test_a_reset_file_not_lean_is_refused_naming_the_move(tmp_path, monkeypatch)
     assert C.data_problems() == []
 
 
+def test_a_hand_tables_file_that_names_a_run_or_a_day_is_refused(tmp_path, monkeypatch):
+    """A camera's hand tables file is a public data file like the others: check_public refuses one whose words name a
+    run's folder (as / or as Windows' \\ writes it), a kit2_ run, a day or a download's or a frame's file name (the
+    hand evidence's, private/evidence/<model>_fw<fw>.hand.json), in the tree and in a commit's blob alike; the a1 II's
+    as shipped passes."""
+    cam = "ILCE-0X0_fw1.00"
+    d = tmp_path / "data" / cam
+    d.mkdir(parents=True)
+    f = d / f"hand_tables_{cam}.json"
+    dirty = {"camera": cam, "FRAME_PROOFS": {
+        "global:0x0001": {"note": "Proved on 2026-01-02 (runs/kit2_x)."},
+        "global:0x0002": {"note": "Seen in runs\\x and on frame 00145_enter.png, downloads 00420_after.DAT and a.jpg."}}}
+    f.write_text(json.dumps(dirty), encoding="utf-8")
+    monkeypatch.setattr(C, "ROOT", tmp_path)
+    found = C.data_problems()
+    assert found and all(x.startswith(f"data/{cam}/hand_tables_{cam}.json: ") for x in found)
+    from camkit import datafiles
+    assert datafiles.evidence_in_public(f) == [
+        "names '2026-01-02'", "names 'kit2_'", "names 'runs/'", "names 'runs\\\\'", "names the file '00145_enter.png'",
+        "names the file '00420_after.DAT'", "names the file 'a.jpg'"]
+    assert C.blob_problems(f"data/{cam}/hand_tables_{cam}.json", json.dumps(dirty))
+    f.write_text(json.dumps({"camera": cam, "FRAME_PROOFS": {"global:0x0001": {"note": "What it holds."}}}),
+                 encoding="utf-8")
+    assert C.data_problems() == []
+    from camkit import ROOT, datafiles, paths
+    a1 = datafiles.hand_tables_file(paths.A1II)
+    assert C.blob_problems(a1.relative_to(ROOT).as_posix(), a1.read_text(encoding="utf-8")) == []
+
+
 def _staged_blob(tmp_path, git, path: str, data: bytes):
     """`data` added to the index at `path` straight from git's objects (a name the file system may not hold). Git for
     Windows refuses a name holding a control character in its index (core.protectNTFS, on there by default): there

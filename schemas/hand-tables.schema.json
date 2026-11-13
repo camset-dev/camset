@@ -1,0 +1,597 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them in a camera's own pass, which only the ILCE-1M2 firmware 4.00 has so far; any other camera takes the plain pass, which reads none of them yet.",
+ "type": "object",
+ "required": [
+  "camera"
+ ],
+ "additionalProperties": false,
+ "properties": {
+  "$schema": {
+   "type": "string",
+   "description": "This file's JSON Schema, relative to the file."
+  },
+  "_comment": {
+   "type": "string",
+   "description": "What the file is, for a person reading it; the kit reads no part of it."
+  },
+  "camera": {
+   "type": "string",
+   "pattern": "^[A-Za-z0-9][A-Za-z0-9-]*_fw\\d+\\.\\d+$",
+   "description": "The camera the tables are for, <model>_fw<firmware> (\"ILCE-1M2_fw4.00\"): the kit refuses a file whose camera is not the one its name says."
+  },
+  "RECORD_FIXES": {
+   "type": "object",
+   "description": "Records whose name or note the camera proved wrong, by setting key: put on the setting at every write.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/record_fix"
+   }
+  },
+  "FILTER_FLAGS": {
+   "type": "object",
+   "description": "Playback Filter Condition's boxes and their never-set flags, records whose values its options do not name: new records, which NEW_RECORDS takes in by reference.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/new_record"
+   }
+  },
+  "NEW_RECORDS": {
+   "type": "object",
+   "description": "Records the menus never write, found by hand on the camera, by setting key: added to the definition when it lacks it, laid out from the newest download and like the record `like` names, with the entry's name, values and note (a record a FRAME_PROOFS entry fills keeps its values and note from there). {\"$ref\": \"#/FILTER_FLAGS/<key>\"} is FILTER_FLAGS' entry of the same key: one entry in both tables.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "oneOf": [
+     {
+      "$ref": "#/$defs/new_record"
+     },
+     {
+      "$ref": "#/$defs/filter_flag"
+     }
+    ]
+   }
+  },
+  "NEW_LIKE": {
+   "type": "object",
+   "description": "Records a proof found that the definition lacked, by setting key: laid out like the sibling `like` names (size, count and memory-set presence from the run's start download), named `name`; their values are the proofs' labels, the part after the colon unless NEW_WHOLE_LABELS lists the record.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "like",
+     "name"
+    ],
+    "properties": {
+     "like": {
+      "$ref": "#/$defs/key",
+      "description": "The sibling it is laid out like."
+     },
+     "name": {
+      "type": "string",
+      "description": "Its name."
+     }
+    }
+   }
+  },
+  "NEW_WHOLE_LABELS": {
+   "type": "array",
+   "description": "The NEW_LIKE records whose values take a proof's whole label (\"Fluor.: Warm White\"), not the part after its colon.",
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/key"
+   }
+  },
+  "NEW_CHECK_NAMES": {
+   "type": "object",
+   "description": "Names for records first proved through a checklist, by setting key, as their neighbours are named.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "LATE_COPY": {
+   "type": "object",
+   "propertyNames": {
+    "pattern": "^0x[0-9a-f]{4}$"
+   },
+   "additionalProperties": {
+    "type": "string"
+   },
+   "description": "Records the camera writes only once their screen is first saved, by record id (\"0x16bd\"): the sentence added to the note of a record first proved through a checklist."
+  },
+  "ZONE": {
+   "$ref": "#/$defs/values",
+   "description": "The Zone focus area's grid places, [code, name], as the zone records' values name them; kit/provers/framepos_run.py plans and checks its sweep by them."
+  },
+  "FRAME_STEPS": {
+   "type": "array",
+   "description": "How far one press moved a focus frame under each AF Frame Move Amt option, [option, area, x, y]; the notes that give the steps say the same numbers (a test keeps them in step).",
+   "items": {
+    "type": "array",
+    "minItems": 4,
+    "maxItems": 4,
+    "prefixItems": [
+     {
+      "type": "string"
+     },
+     {
+      "type": "string"
+     },
+     {
+      "type": "integer"
+     },
+     {
+      "type": "integer"
+     }
+    ]
+   }
+  },
+  "FRAME_PROOFS": {
+   "type": "object",
+   "description": "What the mapping found by hand about a record, by setting key: its note, and its values' names where the entry lists them. The hand proof itself (its values, run, day and menu row, a sample's count, the owner's word) is the hand evidence's; an entry that lists values and has no proof there is proved by the report's lines alone.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/frame_proof"
+   }
+  },
+  "CAROUSEL": {
+   "type": "array",
+   "description": "Carousel options proved with whatever second-axis value the camera held, [key, value, label]: where the record names only the option, the value takes the option's name.",
+   "items": {
+    "$ref": "#/$defs/row"
+   }
+  },
+  "VALUE_FIXES": {
+   "type": "array",
+   "description": "Values a proof names with something that is not the value's own (an icon, a carousel's second axis, a word the report took as agreeing), [key, value, label]: the label stands.",
+   "items": {
+    "$ref": "#/$defs/row"
+   }
+  },
+  "PP7_VALUES": {
+   "type": "array",
+   "description": "Values outside this body's lists that its files hold, [key, value, label]: added to the record's values.",
+   "items": {
+    "$ref": "#/$defs/row"
+   }
+  },
+  "KEEP_LABELS": {
+   "type": "array",
+   "description": "Records proved by a row whose options do not name their values (a flag several options share, a scale proved by counts): proved, their values keeping the definition's names.",
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/key"
+   }
+  },
+  "EV_DOWN_FROM_20": {
+   "type": "array",
+   "description": "Recall Custom holds' Exposure Comp. records whose scale is named by counting quarter stops down from 20, the codes no proof chose \"counted\".",
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/key"
+   }
+  },
+  "HOLD_TABLES": {
+   "type": "object",
+   "description": "A Recall Custom hold's copy of a live setting, by the hold's key: named by the live setting's table once that is proved in full and every proof of the hold fits it.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "live",
+     "mirror"
+    ],
+    "properties": {
+     "live": {
+      "$ref": "#/$defs/key",
+      "description": "The live setting."
+     },
+     "mirror": {
+      "type": [
+       "integer",
+       "null"
+      ],
+      "description": "The number the live code is taken from to give the hold's code; null: the code itself."
+     }
+    }
+   }
+  },
+  "HOLD_BRACKET_COPIES": {
+   "type": "object",
+   "description": "A hold's bracket record, by its key, and the live bracket setting it copies, numbered by the live code's place in the live list from 0.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/key"
+   }
+  },
+  "ISO_TABLE": {
+   "$ref": "#/$defs/key",
+   "description": "The record whose values name every ISO Range Limit record's index: the live ISO."
+  },
+  "LABEL_FIXES": {
+   "type": "object",
+   "description": "OCR slips the old crawl left in value names, each slip and its mend: applied before anything is compared; a mended name no proof or rule backs stays \"schema kept\".",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "GROUP_NAMES": {
+   "type": "object",
+   "description": "The camera's own names for menu groups a breadcrumb was read cut, or with its icon as a letter, each read name and the camera's.",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "MY_MENU_ROW": {
+   "type": "string",
+   "description": "The menu row whose proofs add My Menu's items: the writer reads those proofs, not the report's row."
+  },
+  "MY_MENU_EMPTY": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "label",
+    "line"
+   ],
+   "description": "My Menu's empty place, named in every slot.",
+   "properties": {
+    "label": {
+     "type": "string",
+     "description": "Its name in every slot."
+    },
+    "line": {
+     "type": "string",
+     "description": "The line added to each slot's note; {code} is the camera file's my_menu.empty."
+    }
+   }
+  },
+  "SHOOT_MODE_RECORDS": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "array",
+    "items": {
+     "$ref": "#/$defs/key"
+    }
+   },
+   "description": "By shooting family, the records whose values that family's Shoot Mode carousel describes."
+  },
+  "NOT_OFFERED": {
+   "type": "array",
+   "items": {
+    "$ref": "#/$defs/not_offered"
+   },
+   "description": "Values the camera's menus never offer, each mark written only while its evidence holds (kit/writer/offered.py); the order is the writer's."
+  },
+  "VIDEO_SYSTEM_VALUES": {
+   "type": "object",
+   "description": "Values offered under one video system only, by setting key, where no proof walked the row under each system: both keys always, the other's empty when every value listed is one system's.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "NTSC",
+     "PAL"
+    ],
+    "properties": {
+     "NTSC": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     },
+     "PAL": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    }
+   }
+  },
+  "COPIES": {
+   "type": "object",
+   "description": "The values the camera keeps in more than one record, by the live setting's key: its Stills copy and its Movie copy, in that order.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "array",
+    "minItems": 2,
+    "maxItems": 2,
+    "items": {
+     "$ref": "#/$defs/key"
+    }
+   }
+  },
+  "COPY_MODES": {
+   "type": "array",
+   "items": {
+    "type": "array",
+    "items": {
+     "type": "string"
+    }
+   },
+   "description": "The modes whose value each copy is, by its place in COPIES, named as camera.memory_sets.modes names them."
+  },
+  "COPY_MODES_UNKNOWN": {
+   "type": "array",
+   "description": "The COPIES families whose copies' modes are not known yet: they carry no copy_for, and the write checks the weaker rule.",
+   "uniqueItems": true,
+   "items": {
+    "$ref": "#/$defs/key"
+   }
+  },
+  "UNPROVED": {
+   "type": "object",
+   "description": "Why no proof can reach a record, by setting key: [kind, null, why], the kind one the definition's unproved_reason lists and the why in a photographer's words; the day it was settled is the hand evidence's (null here).",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "array",
+    "minItems": 3,
+    "maxItems": 3,
+    "prefixItems": [
+     {
+      "enum": [
+       "not_on_camera",
+       "skipped",
+       "state",
+       "camera_only",
+       "equipment",
+       "network",
+       "unknown"
+      ]
+     },
+     {
+      "type": "null"
+     },
+     {
+      "type": "string",
+      "minLength": 1
+     }
+    ]
+   }
+  },
+  "CONTEXT_WORDS": {
+   "type": "object",
+   "description": "Proof contexts in other words, a pattern (Python's) and its words, applied in this order where a row enters the definition and to the rows it kept.",
+   "additionalProperties": {
+    "type": "string"
+   }
+  },
+  "ORIENTED": {
+   "type": "string",
+   "description": "A pattern (Python's) for the report's rows proved holding the camera one way; its group names the way."
+  }
+ },
+ "$defs": {
+  "key": {
+   "type": "string",
+   "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+   "description": "A setting's key, as the definition keys it."
+  },
+  "values": {
+   "type": "array",
+   "description": "Value names, [code, name].",
+   "items": {
+    "type": "array",
+    "minItems": 2,
+    "maxItems": 2,
+    "prefixItems": [
+     {
+      "type": "integer"
+     },
+     {
+      "type": "string"
+     }
+    ]
+   }
+  },
+  "row": {
+   "type": "array",
+   "minItems": 3,
+   "maxItems": 3,
+   "prefixItems": [
+    {
+     "$ref": "#/$defs/key"
+    },
+    {
+     "type": "integer"
+    },
+    {
+     "type": "string"
+    }
+   ]
+  },
+  "record_fix": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "name"
+   ],
+   "properties": {
+    "name": {
+     "type": "string",
+     "description": "The setting's name."
+    },
+    "note": {
+     "type": "string",
+     "description": "Its note (a note's evidence is the hand evidence's)."
+    },
+    "tab": {
+     "type": "string",
+     "description": "Its tab."
+    },
+    "group": {
+     "type": "string",
+     "description": "Its group."
+    },
+    "range": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "items": {
+      "type": "integer"
+     },
+     "description": "Its range."
+    },
+    "unit": {
+     "type": "string",
+     "description": "Its unit."
+    }
+   }
+  },
+  "new_record": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "like",
+    "name",
+    "values",
+    "note"
+   ],
+   "properties": {
+    "like": {
+     "$ref": "#/$defs/key",
+     "description": "The record whose tab, group, order and modes it takes."
+    },
+    "name": {
+     "type": "string",
+     "description": "Its name."
+    },
+    "values": {
+     "$ref": "#/$defs/values"
+    },
+    "note": {
+     "type": "string",
+     "description": "Its note (empty where a FRAME_PROOFS entry gives it)."
+    }
+   }
+  },
+  "filter_flag": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "$ref"
+   ],
+   "properties": {
+    "$ref": {
+     "type": "string",
+     "pattern": "^#/FILTER_FLAGS/(global|set):0x[0-9a-f]{4}$",
+     "description": "FILTER_FLAGS' entry of the same key."
+    }
+   }
+  },
+  "frame_proof": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "note"
+   ],
+   "properties": {
+    "note": {
+     "type": "string",
+     "description": "What the record holds, in plain words."
+    },
+    "values": {
+     "$ref": "#/$defs/values"
+    }
+   }
+  },
+  "not_offered": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key",
+    "values",
+    "why",
+    "menu"
+   ],
+   "anyOf": [
+    {
+     "required": [
+      "walk"
+     ]
+    },
+    {
+     "required": [
+      "table"
+     ]
+    }
+   ],
+   "properties": {
+    "key": {
+     "$ref": "#/$defs/key"
+    },
+    "values": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "integer"
+     },
+     "description": "The values the menus never offer."
+    },
+    "why": {
+     "type": "string",
+     "description": "Why, in plain words, for the editor (it says them after \"Not on the camera's list: A, B.\"), naming neither the values nor how many."
+    },
+    "menu": {
+     "type": "string",
+     "description": "The menu whose list leaves them out."
+    },
+    "walk": {
+     "type": "string",
+     "description": "A pattern (Python's) for the report's rows that walked the row's whole list: each must prove the record and none may write the value."
+    },
+    "table": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "prefixItems": [
+      {
+       "type": "string"
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     ],
+     "description": "The table walk's screen, [table, page or null], every picker list of which must go round to its start without the function."
+    },
+    "held": {
+     "const": true,
+     "description": "A value the camera writes itself (its factory value) and the list cannot choose back: an editor keeps offering it."
+    },
+    "named_by": {
+     "$ref": "#/$defs/key",
+     "description": "The record whose proved names name a held value."
+    }
+   }
+  }
+ }
+}

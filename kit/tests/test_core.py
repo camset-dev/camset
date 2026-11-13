@@ -3376,7 +3376,8 @@ def schema_checked() -> list:
     """(file, JSON Schema) of every definition and every data folder's files that have one: the same list the hook
     and CI check (docs/DATA_CONTRACTS.md, "What a mapping delivers")."""
     out = [(p.relative_to(ROOT).as_posix(), "definition") for p in sorted((ROOT / "editor" / "definitions").glob("*.json"))]
-    for kind, schema in (("camera", "camera"), ("help", "help-file"), ("settings_reset", "settings-reset")):
+    for kind, schema in (("camera", "camera"), ("help", "help-file"), ("settings_reset", "settings-reset"),
+                         ("hand_tables", "hand-tables")):
         out += [(p.relative_to(ROOT).as_posix(), schema) for p in sorted((ROOT / "data").glob(f"*/{kind}_*_fw*.json"))]
     # the mapper's own menu trees, private whole (camkit.datafiles), where this computer has them
     out += [(p.as_posix(), "menu-tree") for p in sorted(definitions.EVIDENCE_DIR.glob("*/menu_tree_*_fw*.json"))]

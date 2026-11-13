@@ -17,7 +17,7 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, camset, datafiles, definitions, jsonl, models, paths  # noqa: E402
 from camkit.runs import Run  # noqa: E402
-from writer import a1_tables as HAND_TABLES  # noqa: E402
+from writer import hand_evidence, hand_tables  # noqa: E402
 
 A1 = paths.A1II
 DOC = definitions.load(A1)
@@ -28,7 +28,7 @@ SAMPLE = definitions.sample(DOC)
 
 # the mapping's evidence: the definition's (its proofs' rows, name sources, runs) and its hand tables' (the hand proofs,
 # kit/writer/hand_evidence.py), both in the mapper's private overlay
-EVIDENCE = definitions.evidence_path(definitions.path(A1)).exists() and HAND_TABLES.HAND_EVIDENCE is not None
+EVIDENCE = definitions.evidence_path(definitions.path(A1)).exists() and hand_evidence.path(A1).exists()
 # a test that reads the mapping's evidence, which only the mapper's private evidence files hold; without them (a fresh
 # clone, CI) there is nothing to check
 needs_evidence = pytest.mark.skipif(not EVIDENCE, reason="reads the mapping's evidence (private/evidence/, not here)")
@@ -768,7 +768,7 @@ def test_no_setting_lists_the_records_a_proof_wrote_together():
 
 
 def test_the_shipped_copies_are_the_hand_tables_and_each_copy_names_its_setting():
-    """The shipped definition's copies are a1_tables.COPIES (the Picture Profile parameters in use, PP1-PP11, and the
+    """The shipped definition's copies are the hand tables' COPIES (the Picture Profile parameters in use, PP1-PP11, and the
     profile in use among them, each with its Stills and Movie copy), and every copy_of names a setting that lists that
     copy: the two fields agree, as the editor's step that writes the copies needs."""
     import schema_update as S
@@ -1067,7 +1067,7 @@ def test_the_mirror_stride_is_the_camera_files():
     own: global:0x018c@1248 is Movie Memory 1's field 288 on the a1 II."""
     import schema_update as S
     m = S.mirror_of(DOC)
-    assert m["element_bytes"] == 320 and m == S.A1_MIRROR
+    assert m["element_bytes"] == 320 and m == S.mirror_of({"camera": datafiles.read_json(definitions.camera_file(A1))})
     assert S.mirror_place("global:0x018c@1248", m) == (4, 288)
     assert S.mirror_key(m, 4, 288) == "global:0x018c@1248"
     assert S.mirror_place("global:0x018c@1248", {}) == (None, None)
@@ -1309,9 +1309,10 @@ def test_a_new_camera_gets_its_own_definition_from_its_data_and_proofs(tmp_path,
     assert S.text(again) == written.read_text(encoding="utf-8")       # a second run changes nothing
 
 
-def test_the_a1_tables_run_for_the_a1_definition_only(monkeypatch):
-    """schema_update's ILCE-1M2 tables and the runs they read are that definition's: any other camera, the a1 II at
-    another firmware included, takes the plain pass (generic_main)."""
+def test_the_a1_pass_runs_for_the_a1_definition_only(monkeypatch):
+    """schema_update's ILCE-1M2 pass, its hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json) and the
+    runs it reads are that definition's: any other camera, the a1 II at another firmware included, takes the plain pass
+    (generic_main)."""
     import schema_update as S
     called = []
     monkeypatch.setattr(S, "generic_main", lambda target, run, write, force=False, accept_stale=False:
@@ -1415,9 +1416,10 @@ def test_a_rerun_keeps_only_old_values_a_counted_line_still_wrote():
 def test_no_name_in_schema_update_is_bound_twice():
     """Every table and function of schema_update.py and its parts (kit/writer/) is bound once at module level: a later
     binding shadows the first for every reader (a note fragment bound to CAROUSEL took the carousel table's place,
-    2026-11-06), and schema_update.py, which gives every part's names under its old place, imports no name twice. Loop
-    names with a leading underscore are a loop's own and are left out; updates in place (|=, [k] =) are not
-    bindings."""
+    2026-11-06), and schema_update.py, which gives every part's names under its old place and binds each hand table
+    under its name, imports no name twice. Loop names with a leading underscore are a loop's own and are left out;
+    updates in place (|=, [k] =) are not bindings. The hand tables themselves are a data file now, where a key given
+    twice is refused (test_hand_tables.py)."""
     import ast
     import collections
 
@@ -1443,7 +1445,7 @@ def test_no_name_in_schema_update_is_bound_twice():
         return bound
 
     every = {p: bound_in(p) for p in [ROOT / "kit" / "schema_update.py", *sorted((ROOT / "kit" / "writer").glob("*.py"))]}
-    assert "main" in every[ROOT / "kit" / "schema_update.py"] and "CAROUSEL" in every[ROOT / "kit" / "writer" / "a1_tables.py"]
+    assert "main" in every[ROOT / "kit" / "schema_update.py"] and "CAROUSEL" in every[ROOT / "kit" / "schema_update.py"]
     assert {p.name: [n for n, times in b.items() if times > 1 and not n.startswith("_")] for p, b in every.items()} == \
         {p.name: [] for p in every}
 
@@ -1925,9 +1927,9 @@ def test_a_context_the_runs_reworded_renames_the_row_the_definition_kept(monkeyp
     keeps what a report does not show; menu_row puts every row in the new words (CONTEXT_WORDS, from the camera's
     tables), so with_menu_rows renames the kept one and the two meet. The shipped definition holds no row in the old
     words. Made-up rows."""
-    from writer import a1_tables
     from writer import proofs as S
-    monkeypatch.setattr(S, "CONTEXT_WORDS", dict(a1_tables.CONTEXT_WORDS))
+    words = hand_tables.load(A1, evidence=False).CONTEXT_WORDS
+    monkeypatch.setattr(S, "CONTEXT_WORDS", dict(words))
     doc = {"settings": [{"key": "a", "proved": {"menu": ["Switch [Mode A, Recording Media Slot 2]",
                                                          "Switch [Mode A, Recording Media on one slot]"]}}]}
     assert S.with_menu_rows(doc, frozenset()) == 1
@@ -1941,7 +1943,7 @@ def test_a_context_the_runs_reworded_renames_the_row_the_definition_kept(monkeyp
     assert S.menu_row("Switch [Mode A, Recording Media Simult. Recording]", frozenset()) == \
         "Switch [Mode A, Recording Media on both slots]", "either two-slot state"
     menus = [r for s in DOC["settings"] for r in (s.get("proved") or {}).get("menu") or []]
-    assert not [r for r in menus for p in a1_tables.CONTEXT_WORDS if re.search(p, r)]
+    assert not [r for r in menus for p in words if re.search(p, r)]
 
 
 def test_no_public_note_says_it_read_a_value_off_a_file():
@@ -2892,17 +2894,18 @@ def test_a_record_a_proof_names_as_a_side_effect_is_never_credited_to_its_option
 
 
 def test_registered_af_areas_carry_no_hand_proof():
-    """The Registered AF area records' hand table (REG in kit/writer/a1_tables.py), public or with its evidence: twelve
-    records, none with a proof of the table's own (their proof is the report's), every name standing against the
-    lines' labels (KEEP_LABELS)."""
+    """The Registered AF area records' hand table entries (FRAME_PROOFS, one note for the twelve), public or with its
+    evidence: twelve records, none with a proof of the table's own (their proof is the report's), every name standing
+    against the lines' labels (KEEP_LABELS)."""
     import schema_update as S
-    reg = [k for k, fp in S.FRAME_PROOFS.items() if fp["note"].startswith(S.REG_NOTE)]
+    reg_note = hand_tables.load(A1, evidence=False).FRAME_PROOFS["global:0x0e7a"]["note"]
+    reg = [k for k, fp in S.FRAME_PROOFS.items() if fp["note"].startswith(reg_note)]
     assert len(reg) == 12 and all("proved" not in S.FRAME_PROOFS[k] for k in reg) and set(reg) <= S.KEEP_LABELS
 
 
 @needs_evidence
 def test_registered_af_areas_are_proved_by_their_proof_lines_alone(tmp_path, monkeypatch, capsys):
-    """The Registered AF area records' hand table (REG in kit/writer/a1_tables.py) names them, their values and the
+    """The Registered AF area records' hand table entries (FRAME_PROOFS) name them, their values and the
     note, and carries no proof (FRAME_PROOFS without "proved"): their proof is the report's, whole, so a value the table
     once listed that no proof line credits goes, and their names stand against the lines' labels (KEEP_LABELS). A
     record left out of the report keeps the proof it has. Made-up report."""
@@ -3095,19 +3098,47 @@ FRAMEPOS = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e"
             "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
 
 
+def step_facts(steps: dict) -> dict:
+    """The step sentences the notes say word for word, made from FRAME_STEPS alone ({(AF Frame Move Amt's option,
+    area): (X, Y) a press}): "point" in the spot's point notes, "box" in the Custom boxes' place notes, "all" in AF
+    Frame Move Amt's note and the model page's Focus frame position row. The hand tables file repeats them in each note;
+    these are what the table's numbers say, so a step changed in one place only fails here."""
+    sm, sxs, lm, lxs, sb, lb = (steps[k] for k in (("Standard", "Spot M"), ("Standard", "Spot XS"), ("Large", "Spot M"),
+                                                    ("Large", "Spot XS"), ("Standard", "Custom 1"), ("Large", "Custom 1")))
+    return {
+        "point": (f"Under AF Frame Move Amt Standard a press moved Spot M's point {sm[0]} in X and {sm[1]} in Y and "
+                  f"Spot XS's {sxs[0]} and {sxs[1]}; under Large Spot M's point {lm[0]} in X and {lm[1]} in Y and "
+                  f"Spot XS's {lxs[0]} and {lxs[1]}"),
+        "box": (f"Under AF Frame Move Amt Standard a press moved Custom 1's box {sb[0]} in X and {sb[1]} in Y, and "
+                f"under Large {lb[0]} in X and {lb[1]} in Y, twice Standard's both ways"),
+        "all": (f"under Standard a press moved Spot M's point {sm[0]} in X and {sm[1]} in Y, Spot XS's {sxs[0]} and "
+                f"{sxs[1]}, and Custom 1's box {sb[0]} and {sb[1]}; under Large Spot M's point {lm[0]} in X and "
+                f"{lm[1]} in Y, Spot XS's {lxs[0]} and {lxs[1]}, and the box {lb[0]} and {lb[1]}, twice Standard's")}
+
+
+def frame_notes(T) -> dict:
+    """The public notes the frame steps live in, from the hand tables `T` read without evidence: the spot's point
+    note (its frame positions part, "point"), a vertical point's ("vertical"), a Custom box's place note ("box") and a
+    box copy's ("copy")."""
+    fp = T.FRAME_PROOFS
+    return {"point": fp["set:0x019c"]["note"], "vertical": fp["set:0x01c0"]["note"], "box": fp["set:0x1327"]["note"],
+            "copy": fp["set:0x1333"]["note"]}
+
+
 def test_the_frame_steps_come_from_one_table_in_the_public_files():
-    """The public half of the hand tables of 2026-11-09 and the public definition: the steps a press moved under AF
-    Frame Move Amt Standard and Large come from one table (FRAME_STEPS) through its sentences (STEP_FACTS), which stand
-    word for word in the public notes, AF Frame Move Amt's, the model page's row and the changelog's entry, and nowhere
-    else a number does: no position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where
-    a frame stood. AF Frame Move Amt's hand entry is a note only, its proof the report's; the Custom boxes' place
-    records are 26 new memory set records laid out like the spot's."""
+    """The public hand tables and the public definition: the steps a press moved under AF Frame Move Amt Standard and
+    Large come from one table (FRAME_STEPS) through its sentences (step_facts), which stand word for word in the public
+    notes, AF Frame Move Amt's, the model page's row and the changelog's entry, and nowhere else a number does: no
+    position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where a frame stood. AF Frame
+    Move Amt's hand entry is a note only, its proof the report's; the Custom boxes' place records are 26 new memory set
+    records laid out like the spot's."""
     import schema_update as S
-    from writer import a1_tables as T
+    T = hand_tables.load(A1, evidence=False)
+    facts, notes = step_facts(T.FRAME_STEPS), frame_notes(T)
     steps = {n for xy in T.FRAME_STEPS.values() for v in xy if v is not None for n in re.findall(r"\d+", str(v))}
     assert all(isinstance(v, int) for xy in T.FRAME_STEPS.values() for v in xy)
     assert T.FRAME_STEPS[("Large", "Custom 1")] == tuple(2 * v for v in T.FRAME_STEPS[("Standard", "Custom 1")])
-    for phrase in T.STEP_FACTS.values():
+    for phrase in facts.values():
         assert set(re.findall(r"\d+", phrase.replace("Custom 1", ""))) <= steps, phrase
     boxes = [k for k in S.NEW_RECORDS if k.startswith("set:0x13") and "box position" in S.NEW_RECORDS[k]["name"]]
     assert len(boxes) == 26 and all(S.NEW_RECORDS[k]["like"] == "set:0x019c" for k in boxes)
@@ -3117,28 +3148,32 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     entry = log[log.index("- The notes of the ILCE-1M2's focus point"):]
     entry = entry[:entry.index("\n- ")]
-    assert T.STEP_FACTS["point"] in T.FRAMEPOS_POINT and T.STEP_FACTS["box"] in T.BOX_PLACE
-    assert T.STEP_FACTS["all"] in amt_note and T.STEP_FACTS["all"] in row
+    assert facts["point"] in notes["point"] and facts["point"] in notes["vertical"] and facts["box"] in notes["box"]
+    assert facts["all"] in amt_note and facts["all"] in row and facts["all"] in T.FRAME_PROOFS["global:0x03a3"]["note"]
     written = {k: PUB_BY[k] for k in FRAMEPOS + boxes + ["global:0x03a3"] if k in PUB_BY}
     for k, s in written.items():
         want = "all" if k == "global:0x03a3" else "box" if k in boxes else "point" if k not in FRAMEPOS[:6] else None
-        assert want is None or T.STEP_FACTS[want] in s["note"], k
+        assert want is None or facts[want] in s["note"], k
+    for k in FRAMEPOS[6:] + boxes:                     # and as the hand tables say them
+        want = "box" if k in boxes else "point"
+        assert facts[want] in T.FRAME_PROOFS[k]["note"], k
     forbidden = re.compile(r"\b(?:edge|limit|travel|near|side|stood|further)\b|\b(?:stop|short|border|boundar|clamp|corner)\w*"
                            r"|\b(?:less|more) than\b|on the way|from the centre", re.I)
     geometry = r"640 x 480|3 x 3|\(320, 240 = centre\)|\(0 centre, [^)]*\)|slot 1|Custom [123]|copy [1-4]|ILCE-1M2|0x[0-9a-f]{4}"
 
     def bare(text: str) -> str:
-        for phrase in T.STEP_FACTS.values():
+        for phrase in facts.values():
             text = text.replace(phrase, "")
         return re.sub(geometry, "", text)
-    texts = [T.AF_NOTE, T.VERT, T.FRAMEPOS_POINT, T.BOX_PLACE, T.BOX_COPIES, amt_note, row, entry]
+    texts = [*notes.values(), amt_note, row, entry]
     texts += [s["note"] for k, s in written.items() if k not in FRAMEPOS[:6]]
+    texts += [T.FRAME_PROOFS[k]["note"] for k in FRAMEPOS[6:] + boxes]
     for text in texts:
         assert not re.search(r"\d", bare(text)) and not forbidden.search(text), (bare(text), text)
-    for text in (T.FRAMEPOS_POINT, T.BOX_PLACE):
+    for text in (notes["point"], notes["box"]):
         assert "AF Frame Move Amt Standard" in text and "kit2_" not in text, text
-    assert "a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS" in T.FRAMEPOS_POINT
-    assert "differ" not in T.BOX_PLACE and "moving with the presses" in T.BOX_PLACE and "moved Custom 1's box" in T.BOX_PLACE
+    assert "a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS" in notes["point"]
+    assert "differ" not in notes["box"] and "moving with the presses" in notes["box"] and "moved Custom 1's box" in notes["box"]
     assert "Spot XS's step is smaller than Spot M's across (and, under Large, up and down too)" in entry
     assert not {"values", "proved", "sampled", "run", "date"} & set(S.FRAME_PROOFS["global:0x03a3"])
     assert "global:0x03a3" not in S.by_lines_of(S.FRAME_PROOFS)
@@ -3184,14 +3219,15 @@ def test_tonights_hand_tables_hold_proofs_only():
     assert S.FRAME_PROOFS["global:0x0c89"]["allowance"].startswith("the owner allowed Viewfinder Bright. remotely")
     framepos = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e", "set:0x0f30", "set:0x019c",
                 "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
-    from writer import a1_tables as T
+    T = hand_tables.load(A1, evidence=False)              # the public tables: the facts, no runs
+    facts, notes = step_facts(T.FRAME_STEPS), frame_notes(T)
     boxes = {k: S.NEW_RECORDS[k] for k in S.NEW_RECORDS if k.startswith("set:0x13") and "box position" in S.NEW_RECORDS[k]["name"]}
     # the steps: every number the sentences hold is the table's, the box's steps under Large twice Standard's both ways
     # as its sentence says (one press each way, runs/kit2_framepos_amt_one), and no other figure for the box
     steps = {n for xy in T.FRAME_STEPS.values() for v in xy if v is not None for n in re.findall(r"\d+", str(v))}
     assert all(isinstance(v, int) for xy in T.FRAME_STEPS.values() for v in xy)
     assert T.FRAME_STEPS[("Large", "Custom 1")] == tuple(2 * v for v in T.FRAME_STEPS[("Standard", "Custom 1")])
-    for phrase in T.STEP_FACTS.values():
+    for phrase in facts.values():
         assert set(re.findall(r"\d+", phrase.replace("Custom 1", ""))) <= steps, phrase
     # each sentence where it belongs, word for word
     amt_note = S.FRAME_PROOFS["global:0x03a3"]["note"]
@@ -3200,12 +3236,12 @@ def test_tonights_hand_tables_hold_proofs_only():
     log = (ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
     entry = log[log.index("- The notes of the ILCE-1M2's focus point"):]
     entry = entry[:entry.index("\n- ")]
-    assert T.STEP_FACTS["point"] in T.FRAMEPOS_POINT and T.STEP_FACTS["box"] in T.BOX_PLACE
-    assert T.STEP_FACTS["all"] in amt_note and T.STEP_FACTS["all"] in row
+    assert facts["point"] in notes["point"] and facts["box"] in notes["box"]
+    assert facts["all"] in amt_note and facts["all"] in row
     written = {k: by_key[k] for k in framepos + list(boxes) + ["global:0x03a3"] if k in by_key}
     for k, s in written.items():                          # as the writer wrote them
         want = "all" if k == "global:0x03a3" else "box" if k in boxes else "point" if k not in framepos[:6] else None
-        assert want is None or T.STEP_FACTS[want] in s["note"], k
+        assert want is None or facts[want] in s["note"], k
     # with the sentences, the grid's geometry, the days, the slot, the boxes' and copies' numbers, the model, record ids
     # and run names taken out, no digit is left; no word says where a frame stood, nor how far it could go
     forbidden = re.compile(r"\b(?:edge|limit|travel|near|side|stood|further)\b|\b(?:stop|short|border|boundar|clamp|corner)\w*"
@@ -3214,24 +3250,24 @@ def test_tonights_hand_tables_hold_proofs_only():
                 r"copy [1-4]|ILCE-1M2|0x[0-9a-f]{4}|kit2_\w+")
 
     def bare(text: str) -> str:
-        for phrase in T.STEP_FACTS.values():
+        for phrase in facts.values():
             text = text.replace(phrase, "")
         return re.sub(geometry, "", text)
-    texts = [T.AF_NOTE, T.VERT, T.FRAMEPOS_POINT, T.BOX_PLACE, T.BOX_COPIES, amt_note, row, entry]
+    texts = [*notes.values(), amt_note, row, entry]
     texts += [S.FRAME_PROOFS[k]["note"] for k in framepos[6:] + list(boxes)]
     texts += [f"{s['note']} ({s.get('note_evidence', '')})" for k, s in written.items() if k not in framepos[:6]]
     for text in texts:
         assert not re.search(r"\d", bare(text)) and not forbidden.search(text), (bare(text), text)
-    # the public sentences (T.*) say the facts; the runs that show them are the hand evidence's, put back into the
-    # entries' notes (S.FRAME_PROOFS: the spot's point records, a Custom box's place)
-    for text in (T.FRAMEPOS_POINT, T.BOX_PLACE):
+    # the public notes (the hand tables file) say the facts; the runs that show them are the hand evidence's, put back
+    # into the entries' notes (S.FRAME_PROOFS: the spot's point records, a Custom box's place)
+    for text in (notes["point"], notes["box"]):
         assert "AF Frame Move Amt Standard" in text and "kit2_" not in text, text
     for text in (S.FRAME_PROOFS["set:0x019c"]["note"], S.FRAME_PROOFS[next(iter(boxes))]["note"]):
         assert "AF Frame Move Amt Standard" in text and "kit2_framepos_amt" in text, text
     assert ("a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS"
-            in T.FRAMEPOS_POINT) and "led to each of the nine places" in S.FRAME_PROOFS["set:0x019a"]["note"]
-    assert "differ" not in T.BOX_PLACE and "moving with the presses" in T.BOX_PLACE
-    assert "moved Custom 1's box" in T.BOX_PLACE and "Spot XS's step is smaller than Spot M's across (and, under Large, up and down too)" in entry
+            in notes["point"]) and "led to each of the nine places" in S.FRAME_PROOFS["set:0x019a"]["note"]
+    assert "differ" not in notes["box"] and "moving with the presses" in notes["box"]
+    assert "moved Custom 1's box" in notes["box"] and "Spot XS's step is smaller than Spot M's across (and, under Large, up and down too)" in entry
     # AF Frame Move Amt's note is a note only, its evidence a sentence of its own: its proof stays the report's (pass
     # 2's, by the menu), merged with the definition's (by_lines_of takes it not)
     assert not {"values", "proved", "sampled", "run", "date"} & set(S.FRAME_PROOFS["global:0x03a3"])
@@ -3251,7 +3287,7 @@ def test_tonights_hand_tables_hold_proofs_only():
     for k in boxes:
         fp = S.FRAME_PROOFS[k]
         assert fp["sampled"] == 2 and fp["run"] == "kit2_framepos" and "Custom box" in fp["menu"], k
-        assert T.STEP_FACTS["box"] in fp["note"], k        # the steps a press moved, no place (checked above)
+        assert facts["box"] in fp["note"], k        # the steps a press moved, no place (checked above)
     for k in boxes:
         if k in by_key:                                   # once the definition holds them, as the writer wrote them
             assert by_key[k]["in_sets"] and by_key[k]["area"] == "set" and by_key[k]["proved"]["sampled"]["proofs"] == 2

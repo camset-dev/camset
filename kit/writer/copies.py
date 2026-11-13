@@ -1,7 +1,7 @@
 """The values the camera keeps in more than one record: a live setting and the per-mode copies it keeps beside it
 ("copies" on the live setting, "copy_of" on each copy; docs/DATA_CONTRACTS.md, "A value kept in more than one record").
-The camera's hand table names the families (COPIES in kit/writer/a1_tables.py: the Picture Profile parameters in use
-and the profile in use, each with its Stills and Movie copy, and the other settings Different Set for Still/Mv keeps
+The camera's hand table names the families (COPIES in its hand tables file, writer/hand_tables.py: the Picture
+Profile parameters in use and the profile in use, each with its Stills and Movie copy, and the other settings Different Set for Still/Mv keeps
 per mode); the rule an editor leans on, that in a file the camera wrote the live value equals at least one of its
 copies, is checked here on the camera's own downloads at every write, and a download that contradicts a family stops the
 write. Keys only, never a value (docs/decisions/0016)."""

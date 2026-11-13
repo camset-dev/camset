@@ -1,0 +1,2660 @@
+{
+  "$schema": "../../schemas/hand-tables.schema.json",
+  "_comment": "The ILCE-1M2 firmware 4.00's hand tables: what the mapping found by hand about the camera and the rules the writer applies to its definition, the same for every owner of this model and firmware. kit/schema_update.py reads them (kit/writer/hand_tables.py); edit them here, by hand. How, when and from which state each hand fact was proved is the mapper's evidence, kept in the private overlay (private/evidence/ILCE-1M2_fw4.00.hand.json) and put back when the kit reads this file, never written here (docs/decisions/0016). A NEW_RECORDS entry {\"$ref\": \"#/FILTER_FLAGS/<key>\"} is FILTER_FLAGS' own entry. schemas/hand-tables.schema.json says what each table holds.",
+  "camera": "ILCE-1M2_fw4.00",
+  "RECORD_FIXES": {
+    "global:0x0df2": {"name": "ISO (stills)"},
+    "global:0x0e06": {"name": "Metering Mode (stills)"},
+    "global:0x0e08": {"name": "Metering Mode (movie)"},
+    "global:0x0e0e": {"name": "White Balance (stills)"},
+    "global:0x0e12": {"name": "Picture Profile (stills)"},
+    "global:0x0dfc": {"name": "ISO Auto Range Limit Min (stills)"},
+    "global:0x0e02": {"name": "ISO AUTO Max (stills)"},
+    "global:0x0e16": {
+      "name": "Exposure Comp. (copy 1)",
+      "note": "A copy the camera keeps of Exposure Comp.; which shooting mode's it is, is not known yet."
+    },
+    "global:0x13d6": {
+      "name": "Exposure Comp. (copy 2)",
+      "note": "A copy the camera keeps of Exposure Comp.; which shooting mode's it is, is not known yet."
+    },
+    "global:0x0e04": {
+      "name": "ISO AUTO Max (movie)",
+      "note": "Movie mode's ISO AUTO Maximum. Setting Minimum above Maximum raises both Maximum records to Minimum's value, and they stay there when Minimum comes back down."
+    },
+    "global:0x118b": {"name": "S&Q Shoot Mode: Motion or Time-lapse"},
+    "global:0x0053": {
+      "name": "Picture Profile",
+      "note": "No 7-9: PP7-PP9 are not on this body's menu (see their records). 12-15, offered in Movie mode only, are the Help Guide's PPLUT1-PPLUT4: profiles that apply an imported user LUT, shown as User1-User4."
+    },
+    "set:0x0f32": {"name": "Zone position memory (vertical A, grid index, copy 1)"},
+    "set:0x0f34": {"name": "Zone position memory (vertical A, grid index, copy 2)"},
+    "set:0x0f36": {"name": "Zone position memory (vertical A, grid index, copy 3)"},
+    "global:0x13d4": {
+      "name": "Drive Mode (menu choice)",
+      "note": "Takes the same codes as Drive Mode 0x02b5 when the drive mode is chosen from the menu, on a body Camera Settings Reset has set 0x1126 to 7 on, which a file cannot set back: a body never reset may not keep this record in step. A settings file sets it."
+    },
+    "global:0x13e2": {"name": "Exposure mode (S&Q Motion)"},
+    "global:0x13fd": {"name": "Drive Mode Limit: Single Shooting"},
+    "global:0x0b65": {"name": "ISO Range Limit"},
+    "global:0x0b69": {"name": "ISO Range Limit"},
+    "global:0x0b6d": {"name": "ISO Range Limit"},
+    "global:0x0b63": {"name": "ISO Range Limit (upper)"},
+    "global:0x0b67": {"name": "ISO Range Limit (upper)"},
+    "global:0x0b6b": {"name": "ISO Range Limit (upper)"},
+    "global:0x01b0": {"name": "Focus Area Limit: Tracking: Zone"},
+    "global:0x04e6": {"name": "Finder DISP Mode"},
+    "set:0x11ad": {"name": "Memory slot exposure mode (stills registration)"},
+    "global:0x0170": {"name": "S&Q Motion or Time-lapse active"},
+    "global:0x0b95": {"name": "WB Color Temp. (C.Temp./Filter, movie)"},
+    "global:0x1479": {
+      "name": "Unknown (beside Aspect Marker Level)",
+      "note": "Not Aspect Marker Level (0x1476), nor another marker type's level, nor Movie mode's Aspect Marker, whose row is one list, Off and the ratios, writing 0x0326: none of them writes it."
+    },
+    "global:0x1478": {"name": "Aspect Marker Disp."},
+    "global:0x04d2": {
+      "name": "ISO AUTO Min. SS: automatic speed",
+      "note": "Used when ISO AUTO Min. SS (0x0336) is 0 (automatic); Right/Left on that option."
+    },
+    "global:0x0256": {"name": "Record Setting (S&Q, XAVC S 4K, 30p)"},
+    "global:0x0254": {"name": "Record Setting (S&Q, XAVC S 4K, 60p)"},
+    "global:0x020e": {"name": "Record Setting (XAVC HS 8K, 30p)"},
+    "global:0x0212": {"name": "Record Setting (XAVC HS 4K, 60p)"},
+    "global:0x0218": {"name": "Record Setting (XAVC S 4K, 60p)"},
+    "global:0x0220": {"name": "Record Setting (XAVC S HD, 60p)"},
+    "global:0x0e68": {"name": "Focus Area remembered (horizontal)"},
+    "global:0x0e6a": {"name": "Focus Area remembered (vertical, grip down)"},
+    "global:0x0e6c": {"name": "Focus Area remembered (vertical, grip up)"},
+    "global:0x1315": {"name": "Custom area remembered (horizontal)"},
+    "global:0x1317": {"name": "Custom area remembered (horizontal, copy 1)"},
+    "global:0x1319": {"name": "Custom area remembered (horizontal, copy 2)"},
+    "global:0x1393": {"name": "Custom area remembered (horizontal, copy 3)"},
+    "global:0x131b": {"name": "Custom area remembered (vertical, grip down)"},
+    "global:0x131d": {"name": "Custom area remembered (vertical, grip down, copy 1)"},
+    "global:0x131f": {"name": "Custom area remembered (vertical, grip down, copy 2)"},
+    "global:0x1395": {"name": "Custom area remembered (vertical, grip down, copy 3)"},
+    "global:0x1321": {"name": "Custom area remembered (vertical, grip up)"},
+    "global:0x1323": {"name": "Custom area remembered (vertical, grip up, copy 1)"},
+    "global:0x1325": {"name": "Custom area remembered (vertical, grip up, copy 2)"},
+    "global:0x1397": {"name": "Custom area remembered (vertical, grip up, copy 3)"},
+    "global:0x04e2": {
+      "name": "Camera position state (not a setting)",
+      "note": "Set by the camera, not by a loaded file: 1 with the camera level, 8 held vertically (grip down and grip up alike); a file holding 1, uploaded with the camera held vertically, downloads as 8."
+    },
+    "global:0x03d1": {
+      "name": "Front dial",
+      "note": "Jump method for this dial in playback; the three dials share one list."
+    },
+    "global:0x03d2": {
+      "name": "Rear Dial L",
+      "note": "Jump method for this dial in playback; the three dials share one list."
+    },
+    "global:0x03d3": {
+      "name": "Rear Dial R",
+      "note": "Jump method for this dial in playback; the three dials share one list."
+    },
+    "global:0x0284": {
+      "name": "Proxy Rec. Settings",
+      "note": "Movie menu only. Under Proxy File Format XAVC HS HD the list offers 16M 4:2:0 10bit (0) and 9M 4:2:0 10bit (1). Code 3, in the list since the first definition, is named by no proof. Under one main movie File Format the row is greyed and shows 6M 4:2:0 8bit, whatever the record holds. Which options the row offers under each main movie File Format is open."
+    },
+    "global:0x01dc": {"name": "RAW File Type (one slot)"},
+    "global:0x01da": {"name": "File Format (one slot)"},
+    "global:0x03c7": {"name": "JPEG/HEIF Switch (Playback)"},
+    "global:0x1672": {
+      "name": "Unknown flag (not a setting)",
+      "note": "Screen Reader and Disp Set of Multi Media do not move it."
+    },
+    "global:0x122e": {"name": "Wi-Fi Connect"},
+    "global:0x0495": {
+      "name": "Movie HDMI Output RAW",
+      "note": "Greyed even with Log Shooting On and Rec. Media dur HDMI Output On (\"This function is currently disabled.\"): probably needs a RAW recorder on HDMI."
+    },
+    "global:0x0496": {
+      "name": "RAW Output Setting",
+      "note": "Greyed even with Log Shooting On and Rec. Media dur HDMI Output On (\"This function is currently disabled.\"): probably needs a RAW recorder on HDMI."
+    },
+    "global:0x02d9": {"name": "Silent Mode target: Auto Pixel Mapping"},
+    "global:0x04e0": {"name": "Spot size when Spot was last left"},
+    "global:0x0b8d": {"name": "Exposure mode last registered to a memory slot (P/A/S/M)"},
+    "global:0x12e1": {"name": "Custom slot when Custom was last left"},
+    "set:0x00cb": {"name": "Unknown (memory sets; written by a registration)"},
+    "global:0x0392": {
+      "name": "Unknown (Focus Area-like)",
+      "note": "Not the last non-Wide Focus Area: no Focus Area choice moves it, in Stills or in Movie mode."
+    },
+    "global:0x03f9": {"name": "Bluetooth Rmt Ctrl"},
+    "global:0x13d1": {
+      "name": "Unknown (moves with connection screens; the SDK lists it as Priority Key Settings)",
+      "note": "Setting PriorityKeySettings over the SDK leaves it; opening Cnct. while Power OFF's Creators' App screen or Bluetooth Rmt Ctrl's Pairing screen moves it."
+    },
+    "global:0x13d2": {
+      "name": "Priority Key Settings (flag 1)",
+      "note": "Becomes 1 when PC Remote priority, 2, is set over the SDK; setting camera priority, 1, again, or reconnecting, leaves it 1, and an upload puts 0 back."
+    },
+    "global:0x13d3": {"name": "Priority Key Settings (flag 2)", "note": "As 0x13d2, with it."},
+    "global:0x0b93": {"name": "WB Color Temp. (C.Temp./Filter, stills)"},
+    "global:0x01f4": {"name": "RAW File Type (Slot 2)"},
+    "global:0x0e7a": {"name": "Registered AF area: kind (horizontal)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0e7c": {"name": "Registered AF area: kind (vertical, grip down)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0e7e": {"name": "Registered AF area: kind (vertical, grip up)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0f80": {"name": "Registered AF area: area (horizontal)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0f82": {"name": "Registered AF area: area (vertical, grip down)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0f84": {"name": "Registered AF area: area (vertical, grip up)", "tab": "Focus", "group": "Focus Area"},
+    "global:0x0f24": {
+      "name": "AF point copy: X",
+      "range": [0, 639],
+      "unit": "px",
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+    },
+    "global:0x0f26": {
+      "name": "AF point copy: Y",
+      "range": [0, 479],
+      "unit": "px",
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+    },
+    "global:0x0f28": {
+      "name": "AF point copy 2: X",
+      "range": [0, 639],
+      "unit": "px",
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+    },
+    "global:0x0f2a": {
+      "name": "AF point copy 2: Y",
+      "range": [0, 479],
+      "unit": "px",
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+    },
+    "global:0x018b": {
+      "name": "Network block (holds a Cnct. while Power OFF flag)",
+      "note": "160 bytes. Its byte 45 follows Cnct. while Power OFF: 1 On, 0 Off (0x03d7 is the setting itself); the rest is not known."
+    },
+    "global:0x0cbe[10]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0cbe[11]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0cbe[12]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0cbe[13]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0cbe[14]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0cbe[15]": {
+      "name": "Base Look",
+      "note": "Base look of a custom Creative Look (C1-C6). Choosing a base gives the look that base's parameters; the panel's Reset (the trash button, \"Reset the current look? All parameters are reset.\", Cancel lit) puts the parameters back to the base's and keeps the base. Written the same in Stills, Movie, S&Q and Time-lapse."
+    },
+    "global:0x0e99": {"name": "WB fine-tune A-B (AWB, stills)"},
+    "global:0x0e9b": {"name": "WB fine-tune A-B (AWB, movie)"},
+    "global:0x0e9d": {"name": "WB fine-tune A-B (Daylight, stills)"},
+    "global:0x0e9f": {"name": "WB fine-tune A-B (Daylight, movie)"},
+    "global:0x0ea1": {"name": "WB fine-tune A-B (Shade, stills)"},
+    "global:0x0ea3": {"name": "WB fine-tune A-B (Shade, movie)"},
+    "global:0x0ea5": {"name": "WB fine-tune A-B (Cloudy, stills)"},
+    "global:0x0ea7": {"name": "WB fine-tune A-B (Cloudy, movie)"},
+    "global:0x0ea9": {"name": "WB fine-tune A-B (Incandescent, stills)"},
+    "global:0x0eab": {"name": "WB fine-tune A-B (Incandescent, movie)"},
+    "global:0x0ead": {"name": "WB fine-tune A-B (Fluor.: Warm White, stills)"},
+    "global:0x0eaf": {"name": "WB fine-tune A-B (Fluor.: Warm White, movie)"},
+    "global:0x0eb1": {"name": "WB fine-tune A-B (Fluor.: Cool White, stills)"},
+    "global:0x0eb3": {"name": "WB fine-tune A-B (Fluor.: Cool White, movie)"},
+    "global:0x0eb5": {"name": "WB fine-tune A-B (Fluor.: Day White, stills)"},
+    "global:0x0eb7": {"name": "WB fine-tune A-B (Fluor.: Day White, movie)"},
+    "global:0x0eb9": {"name": "WB fine-tune A-B (Fluor.: Daylight, stills)"},
+    "global:0x0ebb": {"name": "WB fine-tune A-B (Fluor.: Daylight, movie)"},
+    "global:0x0ebd": {"name": "WB fine-tune A-B (Underwater Auto, stills)"},
+    "global:0x0ebf": {"name": "WB fine-tune A-B (Underwater Auto, movie)"},
+    "global:0x0ec1": {"name": "WB fine-tune A-B (C.Temp./Filter, stills)"},
+    "global:0x0ec3": {"name": "WB fine-tune A-B (C.Temp./Filter, movie)"},
+    "global:0x0ed1": {"name": "WB fine-tune G-M (AWB, stills)"},
+    "global:0x0ed3": {"name": "WB fine-tune G-M (AWB, movie)"},
+    "global:0x0ed5": {"name": "WB fine-tune G-M (Daylight, stills)"},
+    "global:0x0ed7": {"name": "WB fine-tune G-M (Daylight, movie)"},
+    "global:0x0ed9": {"name": "WB fine-tune G-M (Shade, stills)"},
+    "global:0x0edb": {"name": "WB fine-tune G-M (Shade, movie)"},
+    "global:0x0edd": {"name": "WB fine-tune G-M (Cloudy, stills)"},
+    "global:0x0edf": {"name": "WB fine-tune G-M (Cloudy, movie)"},
+    "global:0x0ee1": {"name": "WB fine-tune G-M (Incandescent, stills)"},
+    "global:0x0ee3": {"name": "WB fine-tune G-M (Incandescent, movie)"},
+    "global:0x0ee5": {"name": "WB fine-tune G-M (Fluor.: Warm White, stills)"},
+    "global:0x0ee7": {"name": "WB fine-tune G-M (Fluor.: Warm White, movie)"},
+    "global:0x0ee9": {"name": "WB fine-tune G-M (Fluor.: Cool White, stills)"},
+    "global:0x0eeb": {"name": "WB fine-tune G-M (Fluor.: Cool White, movie)"},
+    "global:0x0eed": {"name": "WB fine-tune G-M (Fluor.: Day White, stills)"},
+    "global:0x0eef": {"name": "WB fine-tune G-M (Fluor.: Day White, movie)"},
+    "global:0x0ef1": {"name": "WB fine-tune G-M (Fluor.: Daylight, stills)"},
+    "global:0x0ef3": {"name": "WB fine-tune G-M (Fluor.: Daylight, movie)"},
+    "global:0x0ef5": {"name": "WB fine-tune G-M (Underwater Auto, stills)"},
+    "global:0x0ef7": {"name": "WB fine-tune G-M (Underwater Auto, movie)"},
+    "global:0x0ef9": {"name": "WB fine-tune G-M (C.Temp./Filter, stills)"},
+    "global:0x0efb": {"name": "WB fine-tune G-M (C.Temp./Filter, movie)"}
+  },
+  "FILTER_FLAGS": {
+    "global:0x1290": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Still Images/Movies (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Still Images/Movies condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12ba": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Still Images/Movies never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Still Images/Movies condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1293": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Shot Mark (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Shot Mark condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12bd": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Shot Mark never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Shot Mark condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1294": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Protect (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Protect condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12be": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Protect never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Protect condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1295": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Rating condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12bf": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Rating condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1296": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: FTP Transfer Status (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the FTP Transfer Status condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12c0": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: FTP Transfer Status never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the FTP Transfer Status condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1297": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Smartphone Trans State (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Smartphone Trans State condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12c1": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Smartphone Trans State never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Smartphone Trans State condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1298": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Voice Memo (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The box of the Voice Memo condition on the Playback Filter Condition screen: choosing a value ticks it, Enter on the ticked box unticks it and keeps the value."
+    },
+    "global:0x12c2": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Voice Memo never set",
+      "values": [[0, "Set once"], [1, "Never set"]],
+      "note": "1 until a value is first chosen for the Voice Memo condition, 0 from then on whatever the box. A settings file sets it."
+    },
+    "global:0x1282": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★ (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★ box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16bd), as Rating Set(Custom Key)'s box of the same star does."
+    },
+    "global:0x1283": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★★ (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★★ box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16be), as Rating Set(Custom Key)'s box of the same star does."
+    },
+    "global:0x1284": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★★★ (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★★★ box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16bf), as Rating Set(Custom Key)'s box of the same star does."
+    },
+    "global:0x1285": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★★★★ (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★★★★ box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16c0), as Rating Set(Custom Key)'s box of the same star does."
+    },
+    "global:0x1286": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★★★★★ (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★★★★★ box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16c1), as Rating Set(Custom Key)'s box of the same star does."
+    },
+    "global:0x1287": {
+      "like": "global:0x12b7",
+      "name": "Playback Filter Condition: Rating ★OFF (box)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The ★OFF box of the Rating condition's grid on the Playback Filter Condition screen. Ticking it also writes the rating's second copy (0x16c2), as Rating Set(Custom Key)'s box of the same star does."
+    }
+  },
+  "NEW_RECORDS": {
+    "global:0x1290": {"$ref": "#/FILTER_FLAGS/global:0x1290"},
+    "global:0x12ba": {"$ref": "#/FILTER_FLAGS/global:0x12ba"},
+    "global:0x1293": {"$ref": "#/FILTER_FLAGS/global:0x1293"},
+    "global:0x12bd": {"$ref": "#/FILTER_FLAGS/global:0x12bd"},
+    "global:0x1294": {"$ref": "#/FILTER_FLAGS/global:0x1294"},
+    "global:0x12be": {"$ref": "#/FILTER_FLAGS/global:0x12be"},
+    "global:0x1295": {"$ref": "#/FILTER_FLAGS/global:0x1295"},
+    "global:0x12bf": {"$ref": "#/FILTER_FLAGS/global:0x12bf"},
+    "global:0x1296": {"$ref": "#/FILTER_FLAGS/global:0x1296"},
+    "global:0x12c0": {"$ref": "#/FILTER_FLAGS/global:0x12c0"},
+    "global:0x1297": {"$ref": "#/FILTER_FLAGS/global:0x1297"},
+    "global:0x12c1": {"$ref": "#/FILTER_FLAGS/global:0x12c1"},
+    "global:0x1298": {"$ref": "#/FILTER_FLAGS/global:0x1298"},
+    "global:0x12c2": {"$ref": "#/FILTER_FLAGS/global:0x12c2"},
+    "global:0x1282": {"$ref": "#/FILTER_FLAGS/global:0x1282"},
+    "global:0x1283": {"$ref": "#/FILTER_FLAGS/global:0x1283"},
+    "global:0x1284": {"$ref": "#/FILTER_FLAGS/global:0x1284"},
+    "global:0x1285": {"$ref": "#/FILTER_FLAGS/global:0x1285"},
+    "global:0x1286": {"$ref": "#/FILTER_FLAGS/global:0x1286"},
+    "global:0x1287": {"$ref": "#/FILTER_FLAGS/global:0x1287"},
+    "global:0x16c2": {
+      "like": "global:0x16c1",
+      "name": "Playback Filter Condition: Rating ★OFF (copy)",
+      "values": [[0, "Not ticked"], [1, "Ticked"]],
+      "note": "The second copy of the Rating condition's ★OFF box (0x1287), written as the ★-★★★★★ copies 0x16bd-0x16c1 are, which Rating Set(Custom Key) shares."
+    },
+    "set:0x023c": {
+      "like": "set:0x0b8d",
+      "name": "Memory slot filled",
+      "values": [[2, "Empty"], [4, "Registered"]],
+      "note": "2 in a slot never registered (as Initialize leaves it); registering the slot in any family writes 4. Sets 1-3 are the Stills slots 1-3, 4-6 Movie's, 7-9 S&Q Motion's, 10-12 Time-lapse's; M1-M4 go to the card, not this file. A settings file does not set it."
+    },
+    "set:0x11ab": {
+      "like": "set:0x0b8d",
+      "name": "Memory slot registration family",
+      "values": [[0, "Stills"], [1, "Not written (empty, or Movie)"], [4, "S&Q Motion or Time-lapse"]],
+      "note": "Written when the slot is registered: 0 in Stills mode, 4 in S&Q Motion and Time-lapse; a Movie-mode registration (sets 4-6) leaves it 1, as Initialize does. A settings file does not set it."
+    },
+    "global:0x18cb": {
+      "like": "global:0x04e5",
+      "name": "Recall Custom hold: registration working copy",
+      "values": [],
+      "note": "4 slots: Recall Custom hold 1-3 and a fourth that copies whichever hold's registration screen was opened last. Uploading a file does not set the fourth slot."
+    },
+    "global:0x0e80": {
+      "like": "global:0x04e5",
+      "name": "Recall Custom hold: Cont. Bracket setting",
+      "values": [],
+      "note": "4 slots: Recall Custom hold 1-3 and the registration working copy. Registering Cont. Bracket in a hold copies the live Cont. Bracket setting (0x04c6) here, numbered by its place in the live list from 0: live 3, 10, 14, 19 and 43 wrote 2, 9, 12, 17 and 39. The hold's screen shows only \"Cont. Bracket\"; the step and images are these."
+    },
+    "global:0x0e84": {
+      "like": "global:0x04e5",
+      "name": "Recall Custom hold: Single Bracket setting",
+      "values": [],
+      "note": "4 slots, as 0x0e80. Registering Single Bracket in a hold copies the live Single Bracket setting (0x04c8) here, numbered by its place in the live list from 0: live 1, 3, 21 and 64 wrote 0, 2, 18 and 59."
+    },
+    "set:0x0f2c": {"like": "set:0x0f0b", "name": "Zone position memory (grid index, copy 5)", "values": [], "note": ""},
+    "set:0x0f2e": {"like": "set:0x0f0b", "name": "Zone position memory (grid index, copy 6)", "values": [], "note": ""},
+    "set:0x0f30": {"like": "set:0x0f0b", "name": "Zone position memory (grid index, copy 7)", "values": [], "note": ""},
+    "global:0x0c09": {
+      "like": "global:0x04e5",
+      "name": "Recall Custom hold: registration stamp",
+      "values": [],
+      "note": "4 slots: Recall Custom hold 1-3 and the registration working copy (as 0x18cb). Every Register writes a small number into its hold's slot and the working copy; what it stands for is not known. A settings file sets it. View only."
+    },
+    "global:0x1126": {
+      "like": "global:0x04e5",
+      "name": "Unknown camera state (not a menu setting)",
+      "values": [],
+      "note": "Camera Settings Reset and Initialize both set 7, and an uploaded file does not set it. Not the DISP layouts, not the Fn cursor, not an SDK property. Once it is 7, choosing a drive mode also writes 0x13d4."
+    },
+    "global:0x1195": {
+      "like": "global:0x0476",
+      "name": "Touch Focus: AE",
+      "values": [[0, "AE OFF"], [1, "AE ON"]],
+      "note": ""
+    },
+    "global:0x1196": {
+      "like": "global:0x0476",
+      "name": "Touch Tracking: AE",
+      "values": [[0, "AE OFF"], [1, "AE ON"]],
+      "note": ""
+    },
+    "global:0x1197": {
+      "like": "global:0x0476",
+      "name": "Touch Shutter: AE",
+      "values": [[0, "AE OFF"], [1, "AE ON"]],
+      "note": ""
+    },
+    "global:0x167c": {"like": "global:0x167c", "name": "Preset Focus/Zoom: lens name", "values": [], "note": ""},
+    "global:0x16a1": {
+      "like": "global:0x167c",
+      "name": "Preset Focus/Zoom: lens serial number",
+      "values": [],
+      "note": ""
+    },
+    "global:0x1694": {
+      "like": "global:0x167c",
+      "name": "Preset Focus/Zoom: focal length (mm)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x1682": {
+      "like": "global:0x167c",
+      "name": "Preset Focus/Zoom: focus position (probable)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x1688": {
+      "like": "global:0x167c",
+      "name": "Preset Focus/Zoom: zoom position (probable)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x1732": {
+      "like": "global:0x167c",
+      "name": "Preset Focus/Zoom: focal length x 10",
+      "values": [],
+      "note": ""
+    },
+    "global:0x1437": {"like": "global:0x167c", "name": "Preset Focus/Zoom: slot flag A", "values": [], "note": ""},
+    "global:0x16f3": {"like": "global:0x167c", "name": "Preset Focus/Zoom: slot flag B", "values": [], "note": ""},
+    "global:0x168e": {"like": "global:0x167c", "name": "Preset Focus/Zoom: lens data C", "values": [], "note": ""},
+    "global:0x172c": {"like": "global:0x167c", "name": "Preset Focus/Zoom: lens data D", "values": [], "note": ""},
+    "global:0x0b75": {"like": "global:0x167c", "name": "Preset Focus/Zoom: slot registered", "values": [], "note": ""},
+    "global:0x13ef": {
+      "like": "global:0x02bd",
+      "name": "Self-timer(Single): delay",
+      "values": [[0, "10 sec"], [1, "5 sec"], [2, "2 sec"]],
+      "note": ""
+    },
+    "global:0x13f1": {
+      "like": "global:0x02bd",
+      "name": "Self-timer(Cont.): delay and shots",
+      "values": [
+        [0, "10 Sec. 3 Img."],
+        [1, "10 Sec. 5 Img."],
+        [2, "5 Sec. 3 Img."],
+        [3, "5 Sec. 5 Img."],
+        [4, "2 Sec. 3 Img."],
+        [5, "2 Sec. 5 Img."]
+      ],
+      "note": ""
+    },
+    "set:0x14b4": {"like": "set:0x14b4", "name": "Custom 1 box: height", "values": [], "note": ""},
+    "set:0x14b6": {"like": "set:0x14b6", "name": "Custom 1 box: width", "values": [], "note": ""},
+    "set:0x14b8": {"like": "set:0x14b8", "name": "Custom 2 box: height", "values": [], "note": ""},
+    "set:0x14ba": {"like": "set:0x14ba", "name": "Custom 2 box: width", "values": [], "note": ""},
+    "set:0x14bc": {"like": "set:0x14bc", "name": "Custom 3 box: height", "values": [], "note": ""},
+    "set:0x14be": {"like": "set:0x14be", "name": "Custom 3 box: width", "values": [], "note": ""},
+    "set:0x1488": {"like": "set:0x1488", "name": "Custom box in use: height", "values": [], "note": ""},
+    "set:0x148a": {"like": "set:0x148a", "name": "Custom box in use: width", "values": [], "note": ""},
+    "set:0x148c": {"like": "set:0x148c", "name": "Custom box in use: height x 1000", "values": [], "note": ""},
+    "set:0x148e": {"like": "set:0x148e", "name": "Custom box in use: width x 1000", "values": [], "note": ""},
+    "set:0x14b0": {"like": "set:0x14b0", "name": "Custom box in use: height (copy)", "values": [], "note": ""},
+    "set:0x14b2": {"like": "set:0x14b2", "name": "Custom box in use: width (copy)", "values": [], "note": ""},
+    "set:0x14c0": {"like": "set:0x14c0", "name": "Custom 1 box: default height", "values": [], "note": ""},
+    "set:0x14c2": {"like": "set:0x14c2", "name": "Custom 1 box: default width", "values": [], "note": ""},
+    "set:0x14c4": {"like": "set:0x14c4", "name": "Custom 2 box: default height", "values": [], "note": ""},
+    "set:0x14c6": {"like": "set:0x14c6", "name": "Custom 2 box: default width", "values": [], "note": ""},
+    "set:0x14c8": {"like": "set:0x14c8", "name": "Custom 3 box: default height", "values": [], "note": ""},
+    "set:0x14ca": {"like": "set:0x14ca", "name": "Custom 3 box: default width", "values": [], "note": ""},
+    "set:0x1327": {"like": "set:0x019c", "name": "Custom box position in use: X", "values": [], "note": ""},
+    "set:0x1329": {"like": "set:0x019c", "name": "Custom box position in use: Y", "values": [], "note": ""},
+    "set:0x1333": {"like": "set:0x019c", "name": "Custom 1 box position: X (copy 1)", "values": [], "note": ""},
+    "set:0x1335": {"like": "set:0x019c", "name": "Custom 1 box position: X (copy 2)", "values": [], "note": ""},
+    "set:0x1337": {"like": "set:0x019c", "name": "Custom 1 box position: X (copy 3)", "values": [], "note": ""},
+    "set:0x139f": {"like": "set:0x019c", "name": "Custom 1 box position: X (copy 4)", "values": [], "note": ""},
+    "set:0x1339": {"like": "set:0x019c", "name": "Custom 1 box position: Y (copy 1)", "values": [], "note": ""},
+    "set:0x133b": {"like": "set:0x019c", "name": "Custom 1 box position: Y (copy 2)", "values": [], "note": ""},
+    "set:0x133d": {"like": "set:0x019c", "name": "Custom 1 box position: Y (copy 3)", "values": [], "note": ""},
+    "set:0x13a1": {"like": "set:0x019c", "name": "Custom 1 box position: Y (copy 4)", "values": [], "note": ""},
+    "set:0x133f": {"like": "set:0x019c", "name": "Custom 2 box position: X (copy 1)", "values": [], "note": ""},
+    "set:0x1341": {"like": "set:0x019c", "name": "Custom 2 box position: X (copy 2)", "values": [], "note": ""},
+    "set:0x1343": {"like": "set:0x019c", "name": "Custom 2 box position: X (copy 3)", "values": [], "note": ""},
+    "set:0x13a3": {"like": "set:0x019c", "name": "Custom 2 box position: X (copy 4)", "values": [], "note": ""},
+    "set:0x1345": {"like": "set:0x019c", "name": "Custom 2 box position: Y (copy 1)", "values": [], "note": ""},
+    "set:0x1347": {"like": "set:0x019c", "name": "Custom 2 box position: Y (copy 2)", "values": [], "note": ""},
+    "set:0x1349": {"like": "set:0x019c", "name": "Custom 2 box position: Y (copy 3)", "values": [], "note": ""},
+    "set:0x13a5": {"like": "set:0x019c", "name": "Custom 2 box position: Y (copy 4)", "values": [], "note": ""},
+    "set:0x134b": {"like": "set:0x019c", "name": "Custom 3 box position: X (copy 1)", "values": [], "note": ""},
+    "set:0x134d": {"like": "set:0x019c", "name": "Custom 3 box position: X (copy 2)", "values": [], "note": ""},
+    "set:0x134f": {"like": "set:0x019c", "name": "Custom 3 box position: X (copy 3)", "values": [], "note": ""},
+    "set:0x13a7": {"like": "set:0x019c", "name": "Custom 3 box position: X (copy 4)", "values": [], "note": ""},
+    "set:0x1351": {"like": "set:0x019c", "name": "Custom 3 box position: Y (copy 1)", "values": [], "note": ""},
+    "set:0x1353": {"like": "set:0x019c", "name": "Custom 3 box position: Y (copy 2)", "values": [], "note": ""},
+    "set:0x1355": {"like": "set:0x019c", "name": "Custom 3 box position: Y (copy 3)", "values": [], "note": ""},
+    "set:0x13a9": {"like": "set:0x019c", "name": "Custom 3 box position: Y (copy 4)", "values": [], "note": ""},
+    "set:0x0f38": {
+      "like": "set:0x0f0b",
+      "name": "Zone position memory (vertical B, grid index, copy 1)",
+      "values": [],
+      "note": ""
+    },
+    "set:0x0f3a": {
+      "like": "set:0x0f0b",
+      "name": "Zone position memory (vertical B, grid index, copy 2)",
+      "values": [],
+      "note": ""
+    },
+    "set:0x0f3c": {
+      "like": "set:0x0f0b",
+      "name": "Zone position memory (vertical B, grid index, copy 3)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0e74": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area (horizontal)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0e76": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area (vertical, grip down)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0e78": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area (vertical, grip up)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0f8c": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area, alt numbering (horizontal)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0f8e": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area, alt numbering (vertical, grip down)",
+      "values": [],
+      "note": ""
+    },
+    "global:0x0f90": {
+      "like": "global:0x0e62",
+      "name": "Registered AF area: Tracking start area, alt numbering (vertical, grip up)",
+      "values": [],
+      "note": ""
+    }
+  },
+  "NEW_LIKE": {
+    "global:0x0b63": {"like": "global:0x0b65", "name": "ISO Range Limit (upper)"},
+    "global:0x0b67": {"like": "global:0x0b69", "name": "ISO Range Limit (upper)"},
+    "global:0x0b6b": {"like": "global:0x0b6d", "name": "ISO Range Limit (upper)"},
+    "global:0x04d0": {"like": "global:0x04ce", "name": "Interval (16 shots)"},
+    "global:0x0e10": {"like": "global:0x0e0e", "name": "White Balance (movie)"},
+    "global:0x0e14": {"like": "global:0x0e12", "name": "Picture Profile (movie)"},
+    "global:0x0dfe": {"like": "global:0x0dfa", "name": "ISO Auto Range Limit Min (movie)"},
+    "global:0x13e3": {"like": "global:0x13e2", "name": "Exposure mode (time-lapse)"},
+    "global:0x1476": {"like": "global:0x1479", "name": "Aspect Marker Level"},
+    "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K)"},
+    "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD)"},
+    "global:0x0258": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 24p)"},
+    "global:0x025a": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 120p)"},
+    "global:0x0210": {"like": "global:0x020e", "name": "Record Setting (XAVC HS 8K, 24p)"},
+    "global:0x0214": {"like": "global:0x0212", "name": "Record Setting (XAVC HS 4K, 24p)"},
+    "global:0x0216": {"like": "global:0x0212", "name": "Record Setting (XAVC HS 4K, 120p)"},
+    "global:0x021a": {"like": "global:0x0218", "name": "Record Setting (XAVC S 4K, 30p)"},
+    "global:0x021c": {"like": "global:0x0218", "name": "Record Setting (XAVC S 4K, 24p)"},
+    "global:0x021e": {"like": "global:0x0218", "name": "Record Setting (XAVC S 4K, 120p)"},
+    "global:0x0222": {"like": "global:0x0220", "name": "Record Setting (XAVC S HD, 30p)"},
+    "global:0x0224": {"like": "global:0x0220", "name": "Record Setting (XAVC S HD, 24p)"},
+    "global:0x0226": {"like": "global:0x0220", "name": "Record Setting (XAVC S HD, 120p)"},
+    "global:0x12b0": {"like": "global:0x12b7", "name": "Playback Filter Condition: Still Images/Movies"},
+    "global:0x12b3": {"like": "global:0x12b7", "name": "Playback Filter Condition: Shot Mark"},
+    "global:0x12b4": {"like": "global:0x12b7", "name": "Playback Filter Condition: Protect"},
+    "global:0x12b5": {"like": "global:0x12b7", "name": "Playback Filter Condition: Voice Memo"},
+    "global:0x12c9": {"like": "global:0x12b7", "name": "Playback Filter Condition: FTP Transfer Status"},
+    "global:0x12ca": {"like": "global:0x12b7", "name": "Playback Filter Condition: Smartphone Trans State"}
+  },
+  "NEW_WHOLE_LABELS": [
+    "global:0x0210",
+    "global:0x0214",
+    "global:0x0216",
+    "global:0x021a",
+    "global:0x021c",
+    "global:0x021e",
+    "global:0x0222",
+    "global:0x0224",
+    "global:0x0226",
+    "global:0x024e",
+    "global:0x0258",
+    "global:0x025a",
+    "global:0x025c",
+    "global:0x0e10",
+    "global:0x0e14",
+    "global:0x12b0",
+    "global:0x12b3",
+    "global:0x12b4",
+    "global:0x12b5",
+    "global:0x12c9",
+    "global:0x12ca"
+  ],
+  "NEW_CHECK_NAMES": {
+    "global:0x0cb4": "Monitor: Display All Info.",
+    "global:0x0cb9": "Monitor: Monitor Off",
+    "global:0x0cba": "Finder: Display All Info.",
+    "global:0x1903": "Finder: No Disp. Info. exposure display",
+    "global:0x1904": "Finder: Histogram exposure display",
+    "global:0x1905": "Finder: Level exposure display"
+  },
+  "LATE_COPY": {
+    "0x16bd": " The second copy of this box: 0 until the Rating Set screen is first saved (or Rating is put on a key), so a 0 in a file never saved there says nothing about the box; the first copy (0x0f96) is the one to read.",
+    "0x16be": " The second copy of this box: 0 until the Rating Set screen is first saved (or Rating is put on a key), so a 0 in a file never saved there says nothing about the box; the first copy (0x0f97) is the one to read.",
+    "0x16bf": " The second copy of this box: 0 until the Rating Set screen is first saved (or Rating is put on a key), so a 0 in a file never saved there says nothing about the box; the first copy (0x0f98) is the one to read.",
+    "0x16c0": " The second copy of this box: 0 until the Rating Set screen is first saved (or Rating is put on a key), so a 0 in a file never saved there says nothing about the box; the first copy (0x0f99) is the one to read.",
+    "0x16c1": " The second copy of this box: 0 until the Rating Set screen is first saved (or Rating is put on a key), so a 0 in a file never saved there says nothing about the box; the first copy (0x0f9a) is the one to read."
+  },
+  "ZONE": [
+    [0, "Centre"],
+    [1, "Up"],
+    [2, "Right"],
+    [3, "Left"],
+    [4, "Down"],
+    [5, "Lower right"],
+    [6, "Lower left"],
+    [7, "Upper left"],
+    [8, "Upper right"]
+  ],
+  "FRAME_STEPS": [
+    ["Standard", "Spot M", 30, 20],
+    ["Standard", "Spot XS", 20, 20],
+    ["Large", "Spot M", 60, 38],
+    ["Large", "Spot XS", 36, 32],
+    ["Standard", "Custom 1", 28, 19],
+    ["Large", "Custom 1", 56, 38]
+  ],
+  "FRAME_PROOFS": {
+    "set:0x019a": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x0f0b": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x0f0d": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x0f2c": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x0f2e": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x0f30": {
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ],
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too."
+    },
+    "set:0x019c": {
+      "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x01be": {
+      "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x019e": {
+      "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x01c4": {
+      "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x0180@288": {"note": "F-number x 100: F5.6 560, F8 800, F11 1100. Written when the memory is registered."},
+    "global:0x018c@928": {
+      "note": "F-number x 100: F5.6 560, F8 800, F11 1100. Written when the memory is registered. The live copy of memory 3's block."
+    },
+    "global:0x018c@288": {
+      "note": "F-number x 100: F5.6 560, F8 800, F11 1100. Written when Stills slot 1 is registered. The live copy of memory 1's block."
+    },
+    "global:0x018c@608": {
+      "note": "F-number x 100: F5.6 560, F8 800, F11 1100. Written when Stills slot 2 is registered. The live copy of memory 2's block."
+    },
+    "set:0x0180@290": {
+      "note": "The shutter speed's numerator (1 for 1/250, 1/500, 1/60). Written when the memory is registered."
+    },
+    "global:0x018c@930": {
+      "note": "The shutter speed's numerator (1 for 1/250, 1/500, 1/60). Written when the memory is registered. The live copy of memory 3's block."
+    },
+    "global:0x018c@290": {
+      "note": "The shutter speed's numerator (1 for 1/250, 1/500, 1/60). Written when Stills slot 1 is registered. The live copy of memory 1's block."
+    },
+    "global:0x018c@610": {
+      "note": "The shutter speed's numerator (1 for 1/250, 1/500, 1/60). Written when Stills slot 2 is registered. The live copy of memory 2's block."
+    },
+    "set:0x0180@292": {
+      "note": "The shutter speed's denominator: 250, 500, 60 for 1/250, 1/500, 1/60. Written when the memory is registered."
+    },
+    "global:0x018c@932": {
+      "note": "The shutter speed's denominator: 250, 500, 60 for 1/250, 1/500, 1/60. Written when the memory is registered. The live copy of memory 3's block."
+    },
+    "global:0x018c@292": {
+      "note": "The shutter speed's denominator: 250, 500, 60 for 1/250, 1/500, 1/60. Written when Stills slot 1 is registered. The live copy of memory 1's block."
+    },
+    "global:0x018c@612": {
+      "note": "The shutter speed's denominator: 250, 500, 60 for 1/250, 1/500, 1/60. Written when Stills slot 2 is registered. The live copy of memory 2's block."
+    },
+    "set:0x0180@260": {
+      "note": "APEX Av + 16, in 256ths: F8 5632 (22.0), F11 5888 (23.0), one stop apart. 0 when the aperture had not been set since the file was loaded. Written when the memory is registered."
+    },
+    "global:0x018c@900": {
+      "note": "APEX Av + 16, in 256ths: F8 5632 (22.0), F11 5888 (23.0), one stop apart. 0 when the aperture had not been set since the file was loaded. Written when the memory is registered. The live copy of memory 3's block."
+    },
+    "global:0x018c@260": {
+      "note": "APEX Av + 16, in 256ths: F8 5632 (22.0), F11 5888 (23.0), one stop apart. 0 when the aperture had not been set since the file was loaded. Written when Stills slot 1 is registered. The live copy of memory 1's block."
+    },
+    "global:0x018c@580": {
+      "note": "APEX Av + 16, in 256ths: F8 5632 (22.0), F11 5888 (23.0), one stop apart. 0 when the aperture had not been set since the file was loaded. Written when Stills slot 2 is registered. The live copy of memory 2's block."
+    },
+    "set:0x0180@262": {
+      "note": "APEX Tv + 16, in 256ths: 1/500 6400 (25.0), 1/60 5632 (22.0), three stops apart. 0 when the shutter speed had not been set since the file was loaded. Written when the memory is registered."
+    },
+    "global:0x018c@902": {
+      "note": "APEX Tv + 16, in 256ths: 1/500 6400 (25.0), 1/60 5632 (22.0), three stops apart. 0 when the shutter speed had not been set since the file was loaded. Written when the memory is registered. The live copy of memory 3's block."
+    },
+    "global:0x018c@262": {
+      "note": "APEX Tv + 16, in 256ths: 1/500 6400 (25.0), 1/60 5632 (22.0), three stops apart. 0 when the shutter speed had not been set since the file was loaded. Written when Stills slot 1 is registered. The live copy of memory 1's block."
+    },
+    "global:0x018c@582": {
+      "note": "APEX Tv + 16, in 256ths: 1/500 6400 (25.0), 1/60 5632 (22.0), three stops apart. 0 when the shutter speed had not been set since the file was loaded. Written when Stills slot 2 is registered. The live copy of memory 2's block."
+    },
+    "global:0x10fd": {
+      "note": "The movie self-timer's Rec Start delay: 3 s 1, 5 s 2, 10 s 3.",
+      "values": [[1, "3"], [2, "5"], [3, "10"]]
+    },
+    "global:0x10ff": {
+      "note": "The movie self-timer's Repetition: Only Once 0 (the SDK's Off), Repeat 1 (On).",
+      "values": [[0, "Only Once"], [1, "Repeat"]]
+    },
+    "global:0x10ac": {"note": "Focus Bracket's Step Width (1-10), stored as the number."},
+    "global:0x10aa": {"note": "Focus Bracket's Number of Shots, stored as the number."},
+    "global:0x04e5": {
+      "note": "The DISP display mode on the monitor: Display All Info 0, No Disp. Info 1, Histogram 2, Level 3 (the SDK's 2-5; For Viewfinder 4 was not offered in Movie mode). A settings file does not restore it.",
+      "values": [
+        [0, "Display All Information"],
+        [1, "No Display Information"],
+        [2, "Histogram"],
+        [3, "Level"],
+        [4, "For Viewfinder"]
+      ]
+    },
+    "global:0x0478": {
+      "note": "The Screen Reader's speed, fastest first.",
+      "values": [
+        [0, "Fast 4"],
+        [1, "Fast 3"],
+        [2, "Fast 2"],
+        [3, "Fast 1"],
+        [4, "Standard"],
+        [5, "Slow 1"],
+        [6, "Slow 2"]
+      ]
+    },
+    "global:0x0e37": {
+      "note": "A copy of the Screen Reader's Speed (0x0478): every choice wrote both.",
+      "values": [
+        [0, "Fast 4"],
+        [1, "Fast 3"],
+        [2, "Fast 2"],
+        [3, "Fast 1"],
+        [4, "Standard"],
+        [5, "Slow 1"],
+        [6, "Slow 2"]
+      ]
+    },
+    "global:0x0479": {
+      "note": "The Screen Reader's Volume, 0-15, stored the other way round (15 - the volume): 0 was 15, 15 was 0."
+    },
+    "global:0x13ca": {
+      "note": "MENU Long Press to Switch: by its name, holding MENU switches the Screen Reader on or off (not tried). On 0, Off 1.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x0477": {"note": "The Screen Reader itself: On 0, Off 1.", "values": [[0, "On"], [1, "Off"]]},
+    "global:0x0385": {
+      "note": "AF Illuminator. The memory sets' copy follows a registration.",
+      "values": [[0, "Auto"], [1, "Off"]]
+    },
+    "global:0x048d": {
+      "note": "Audio Signal(Shooting).",
+      "values": [[0, "On:all"], [1, "On:w/o shutter"], [2, "On:shutter only"], [3, "Off"]]
+    },
+    "global:0x101a": {"note": "Audio Signal(Start/End).", "values": [[0, "On"], [1, "Off"]]},
+    "global:0x047b": {"note": "The monitor's Brightness Setup.", "values": [[1, "Manual"], [2, "Sunny Weather"]]},
+    "global:0x049e": {
+      "note": "Video Light Mode; 0x18e4 is written with it.",
+      "values": [[0, "Power Link"], [1, "REC Link"], [2, "REC Link&STBY"], [3, "Auto"]]
+    },
+    "global:0x18e4": {
+      "note": "A copy of Video Light Mode (0x049e): every choice wrote both.",
+      "values": [[0, "Power Link"], [1, "REC Link"], [2, "REC Link&STBY"], [3, "Auto"]]
+    },
+    "global:0x046f": {
+      "note": "Lock Operation Parts.",
+      "values": [[0, "Off"], [1, "Multi-Selector Only"], [2, "Dial + Wheel"], [3, "All"]]
+    },
+    "global:0x13ba": {
+      "note": "Delete Slot1/2 (a setting on the Delete page).",
+      "values": [[0, "Select When Exec"], [1, "Delete Both"], [2, "Del. Select Only"]]
+    },
+    "global:0x1722": {"note": "Wake On LAN.", "values": [[0, "Enable"], [1, "Disable"]]},
+    "global:0x0076": {
+      "note": "Bluetooth Function; 0x0401 holds it the other way round.",
+      "values": [[0, "Off"], [1, "On"]]
+    },
+    "global:0x0401": {
+      "note": "Bluetooth Function, the other way round from 0x0076: every choice wrote both.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x0480": {
+      "note": "Finder Frame Rate (greyed with HDMI connected).",
+      "values": [[0, "Standard"], [1, "High"], [2, "Higher"]]
+    },
+    "global:0x1195": {
+      "note": "Touch Focus's AE OFF / AE ON, the carousel's second axis (Touch Func. in Shooting itself is 0x0476).",
+      "values": [[0, "AE OFF"], [1, "AE ON"]]
+    },
+    "global:0x1196": {
+      "note": "Touch Tracking's AE OFF / AE ON, the carousel's second axis (Touch Func. in Shooting itself is 0x0476).",
+      "values": [[0, "AE OFF"], [1, "AE ON"]]
+    },
+    "global:0x1197": {
+      "note": "Touch Shutter's AE OFF / AE ON, the carousel's second axis (Touch Func. in Shooting itself is 0x0476).",
+      "values": [[0, "AE OFF"], [1, "AE ON"]]
+    },
+    "global:0x0051": {
+      "note": "Playback/Monitor. Vol., 0-15, stored the other way round (15 - the volume): 0 was 15, 15 was 0."
+    },
+    "global:0x03c4": {
+      "note": "Voice Memo Play Vol., 0-15, stored the other way round (15 - the volume): 0 was 15, 15 was 0."
+    },
+    "global:0x12c8": {
+      "note": "Audio Signal Volume, 0-5, stored the other way round (5 - the volume): 0 was 5, 5 was 0."
+    },
+    "global:0x0052": {"note": "The monitor's manual brightness, with Brightness Setup on Manual: -2 is 0, +2 is 4."},
+    "global:0x02bd": {
+      "note": "Self-timer Type: Single or Cont.",
+      "values": [[0, "Self-timer (Single)"], [1, "Self-timer (Cont)"]]
+    },
+    "global:0x13ef": {
+      "note": "Self-timer Type's Single delay, its carousel's second axis.",
+      "values": [[0, "10 sec"], [1, "5 sec"], [2, "2 sec"]]
+    },
+    "global:0x13f1": {
+      "note": "Self-timer Type's Cont. delay and shots, its carousel's second axis.",
+      "values": [
+        [0, "10 Sec. 3 Img."],
+        [1, "10 Sec. 5 Img."],
+        [2, "5 Sec. 3 Img."],
+        [3, "5 Sec. 5 Img."],
+        [4, "2 Sec. 3 Img."],
+        [5, "2 Sec. 5 Img."]
+      ]
+    },
+    "global:0x167c": {
+      "note": "Each slot's lens name; with a teleconverter mounted, the teleconverter's name is added after the lens's (\"<lens> + <teleconverter>\"). Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x16a1": {
+      "note": "Each slot's lens serial number: a preset recalls only on the very lens it was registered with. A teleconverter leaves it the lens's. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x1694": {
+      "note": "The focal length when the preset was registered, a teleconverter included. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x1682": {
+      "note": "Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x1688": {
+      "note": "No zoom position registered reads 65536000 or -1, by the lens. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x1732": {
+      "note": "0x1694 in tenths of a millimetre. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x1437": {
+      "note": "3 with a zoom, 1 with a prime; 0 in a slot never registered. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x16f3": {
+      "note": "2 with a zoom, 3 with a prime and in a slot never registered. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x168e": {
+      "note": "Written on registering; its meaning is not known. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x172c": {
+      "note": "Written on registering, as 0x168e; an APS-C or A-mount lens might tell what it holds. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x0b75": {
+      "note": "1 in a registered slot. Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. Mounting a lens or loading a file writes nothing here."
+    },
+    "global:0x0018": {
+      "note": "Audio Rec Level, 0-31, stored as the level itself.",
+      "values": [
+        [0, "0"],
+        [1, "1"],
+        [2, "2"],
+        [3, "3"],
+        [4, "4"],
+        [5, "5"],
+        [6, "6"],
+        [7, "7"],
+        [8, "8"],
+        [9, "9"],
+        [10, "10"],
+        [11, "11"],
+        [12, "12"],
+        [13, "13"],
+        [14, "14"],
+        [15, "15"],
+        [16, "16"],
+        [17, "17"],
+        [18, "18"],
+        [19, "19"],
+        [20, "20"],
+        [21, "21"],
+        [22, "22"],
+        [23, "23"],
+        [24, "24"],
+        [25, "25"],
+        [26, "26"],
+        [27, "27"],
+        [28, "28"],
+        [29, "29"],
+        [30, "30"],
+        [31, "31"]
+      ]
+    },
+    "set:0x14b4": {
+      "note": "Custom 1's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14b6": {
+      "note": "Custom 1's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14b8": {
+      "note": "Custom 2's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14ba": {
+      "note": "Custom 2's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14bc": {
+      "note": "Custom 3's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14be": {
+      "note": "Custom 3's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x1488": {
+      "note": "The height of the Custom box chosen as Focus Area, whichever of the three. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x148a": {
+      "note": "The width of the Custom box chosen as Focus Area, whichever of the three. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x148c": {
+      "note": "0x1488 times 1000, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x148e": {
+      "note": "0x148a times 1000, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14b0": {
+      "note": "A copy of 0x1488, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14b2": {
+      "note": "A copy of 0x148a, written with it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14c0": {
+      "note": "Custom 1's default height: no change moved it, and Reset (C4 in the editor) puts the box back to it. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14c2": {
+      "note": "Custom 1's default width, as 0x14c0. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14c4": {
+      "note": "Custom 2's default height, as 0x14c0. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14c6": {
+      "note": "Custom 2's default width, as 0x14c0. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14c8": {
+      "note": "Custom 3's default height, as 0x14c0. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "set:0x14ca": {
+      "note": "Custom 3's default width, as 0x14c0. Kept only in the memory sets: a slot holds the sizes it was registered with."
+    },
+    "global:0x018c@1248": {"note": "F-number x 100. Written when Movie slot 1 (memory set 4) is registered."},
+    "global:0x018c@1250": {
+      "note": "The shutter speed's numerator. Written when Movie slot 1 (memory set 4) is registered."
+    },
+    "global:0x018c@1252": {
+      "note": "The shutter speed's denominator. Written when Movie slot 1 (memory set 4) is registered."
+    },
+    "global:0x018c@1568": {"note": "F-number x 100. Written when Movie slot 2 (memory set 5) is registered."},
+    "global:0x018c@1570": {
+      "note": "The shutter speed's numerator. Written when Movie slot 2 (memory set 5) is registered."
+    },
+    "global:0x018c@1572": {
+      "note": "The shutter speed's denominator. Written when Movie slot 2 (memory set 5) is registered."
+    },
+    "global:0x018c@1888": {"note": "F-number x 100. Written when Movie slot 3 (memory set 6) is registered."},
+    "global:0x018c@1890": {
+      "note": "The shutter speed's numerator. Written when Movie slot 3 (memory set 6) is registered."
+    },
+    "global:0x018c@1892": {
+      "note": "The shutter speed's denominator. Written when Movie slot 3 (memory set 6) is registered."
+    },
+    "global:0x018c@2208": {"note": "F-number x 100. Written when S&Q Motion slot 1 (memory set 7) is registered."},
+    "global:0x018c@2210": {
+      "note": "The shutter speed's numerator. Written when S&Q Motion slot 1 (memory set 7) is registered."
+    },
+    "global:0x018c@2212": {
+      "note": "The shutter speed's denominator. Written when S&Q Motion slot 1 (memory set 7) is registered."
+    },
+    "global:0x018c@2528": {"note": "F-number x 100. Written when S&Q Motion slot 2 (memory set 8) is registered."},
+    "global:0x018c@2530": {
+      "note": "The shutter speed's numerator. Written when S&Q Motion slot 2 (memory set 8) is registered."
+    },
+    "global:0x018c@2532": {
+      "note": "The shutter speed's denominator. Written when S&Q Motion slot 2 (memory set 8) is registered."
+    },
+    "global:0x018c@2848": {"note": "F-number x 100. Written when S&Q Motion slot 3 (memory set 9) is registered."},
+    "global:0x018c@2850": {
+      "note": "The shutter speed's numerator. Written when S&Q Motion slot 3 (memory set 9) is registered."
+    },
+    "global:0x018c@2852": {
+      "note": "The shutter speed's denominator. Written when S&Q Motion slot 3 (memory set 9) is registered."
+    },
+    "global:0x018c@3168": {"note": "F-number x 100. Written when Time-lapse slot 1 (memory set 10) is registered."},
+    "global:0x018c@3170": {
+      "note": "The shutter speed's numerator. Written when Time-lapse slot 1 (memory set 10) is registered."
+    },
+    "global:0x018c@3172": {
+      "note": "The shutter speed's denominator. Written when Time-lapse slot 1 (memory set 10) is registered."
+    },
+    "global:0x018c@3488": {"note": "F-number x 100. Written when Time-lapse slot 2 (memory set 11) is registered."},
+    "global:0x018c@3490": {
+      "note": "The shutter speed's numerator. Written when Time-lapse slot 2 (memory set 11) is registered."
+    },
+    "global:0x018c@3492": {
+      "note": "The shutter speed's denominator. Written when Time-lapse slot 2 (memory set 11) is registered."
+    },
+    "global:0x018c@3808": {"note": "F-number x 100. Written when Time-lapse slot 3 (memory set 12) is registered."},
+    "global:0x018c@3810": {
+      "note": "The shutter speed's numerator. Written when Time-lapse slot 3 (memory set 12) is registered."
+    },
+    "global:0x018c@3812": {
+      "note": "The shutter speed's denominator. Written when Time-lapse slot 3 (memory set 12) is registered."
+    },
+    "set:0x023c": {
+      "note": "2 in a slot never registered (as Initialize leaves it); registering it in any family writes 4, which no settings file clears.",
+      "values": [[2, "Empty"], [4, "Registered"]]
+    },
+    "set:0x11ab": {
+      "note": "Written when the slot is registered: 0 in Stills, 4 in S&Q Motion and Time-lapse; a Movie registration leaves it 1, as an empty slot has it. No settings file sets it.",
+      "values": [[0, "Stills"], [1, "Not written (empty, or Movie)"], [4, "S&Q Motion or Time-lapse"]]
+    },
+    "global:0x01dc": {
+      "note": "RAW File Type for single-slot recording. With Recording Media on one slot, Image Quality Settings has one column.",
+      "values": [
+        [0, "Uncompressed"],
+        [2, "Lossless Comp (L)"],
+        [3, "Lossless Comp (M)"],
+        [4, "Lossless Comp (S)"],
+        [7, "Compressed"]
+      ]
+    },
+    "global:0x01da": {
+      "note": "File Format for single-slot recording: RAW 0, RAW & JPEG 1, RAW & HEIF 2, JPEG 3, HEIF 4. The list shows RAW, RAW & JPEG, JPEG with JPEG/HEIF Switch on JPEG, and RAW, RAW & HEIF, HEIF with it on HEIF; the switch writes HEIF 4 here from JPEG. With Recording Media on one slot, Image Quality Settings has one column.",
+      "values": [[0, "RAW"], [1, "RAW & JPEG"], [2, "RAW & HEIF"], [3, "JPEG"], [4, "HEIF"]]
+    },
+    "global:0x0294": {
+      "note": "Distortion Comp.: Auto 0, Off 1. Greyed at Auto with a lens that always corrects, open with one that does not.",
+      "values": [[0, "Auto"], [1, "Off"]]
+    },
+    "global:0x047c": {
+      "note": "The viewfinder's Brightness Setup (open with Select Finder/Monitor on VF(Manual)).",
+      "values": [[0, "Auto"], [1, "Manual"]]
+    },
+    "global:0x1465": {
+      "note": "Enlarge Screen. Setting it On also assigns Enlarge Menu Scrn to Custom Button 2 (0x0410 and 0x042a, 2547) and puts the monitor on Monitor(Manual) (0x047a 7).",
+      "values": [[0, "Off"], [2, "On (Custom Btn 2)"]]
+    },
+    "global:0x03cb": {"note": "Playback's Image Index.", "values": [[0, "30 Images"], [3, "9 Images"]]},
+    "global:0x03c7": {
+      "note": "Playback > Edit > JPEG/HEIF Switch (the shooting menu's is 0x01d8).",
+      "values": [[0, "JPEG"], [1, "HEIF(4:2:0)"], [2, "HEIF(4:2:2)"]]
+    },
+    "global:0x04a2": {
+      "note": "Shutter When Pwr OFF (Setup Option; Off brings a warning about the sensor).",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x0c89": {
+      "note": "The viewfinder's manual brightness, with Brightness Setup on Manual: -2 is 0, +2 is 4. Its row opens only with the finder in use, which takes the monitor folded in and the eye sensor covered (an eye at the finder). With the HDMI cable in, its row answers \"This function is currently disabled.\""
+    },
+    "global:0x047d": {
+      "note": "Finder Color Temp.: -2 is 0, +2 is 4. Its row opens only with the finder in use, which takes the monitor folded in and the eye sensor covered (an eye at the finder). With the HDMI cable in, its row answers \"This function is currently disabled.\""
+    },
+    "global:0x04e6": {
+      "note": "The finder's display mode in use, the monitor's codes (0x04e5). DISP pressed at the finder steps it through the modes ticked in DISP Set > Finder (0x0cba-0x0cbd), in the list's order, and comes round after one press per mode ticked. DISP Set > Finder moves it when the mode in use leaves the cycle. A settings file sets it.",
+      "values": [[0, "Display All Info."], [1, "No Disp. Info."], [2, "Histogram"], [3, "Level"]]
+    },
+    "set:0x01c0": {
+      "note": "The spot's X with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x01c6": {
+      "note": "The spot's Y with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x01c2": {
+      "note": "The spot's X with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x01c8": {
+      "note": "The spot's Y with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
+    },
+    "set:0x1327": {
+      "note": "The X of the Custom box in use, whichever of the three, as 0x019c is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1329": {
+      "note": "The Y of the Custom box in use, whichever of the three, as 0x019e is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1333": {
+      "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1335": {
+      "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1337": {
+      "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x139f": {
+      "note": "Custom 1's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1339": {
+      "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x133b": {
+      "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x133d": {
+      "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x13a1": {
+      "note": "Custom 1's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x133f": {
+      "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1341": {
+      "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1343": {
+      "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x13a3": {
+      "note": "Custom 2's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1345": {
+      "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1347": {
+      "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1349": {
+      "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x13a5": {
+      "note": "Custom 2's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x134b": {
+      "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x134d": {
+      "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x134f": {
+      "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x13a7": {
+      "note": "Custom 3's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1351": {
+      "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1353": {
+      "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x1355": {
+      "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "set:0x13a9": {
+      "note": "Custom 3's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records."
+    },
+    "global:0x03a3": {
+      "note": "Sizes the step a press of the multi-selector moves a focus frame: under Standard a press moved Spot M's point 30 in X and 20 in Y, Spot XS's 20 and 20, and Custom 1's box 28 and 19; under Large Spot M's point 60 in X and 38 in Y, Spot XS's 36 and 32, and the box 56 and 38, twice Standard's."
+    },
+    "global:0x171c": {
+      "note": "Auto Create Still Image (Movie mode): On 0, Off 1. Refused while connected to Remote Shooting.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x04a3": {
+      "note": "Auto Pixel Mapping (Setup Option): On 0, Off 1; turning it Off asks to confirm, as pixel mapping must then be done by hand.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x0494": {
+      "note": "Only selectable when Rec. Media dur HDMI Output = Off (HDMI Only): 60p 10bit 0, 30p 10bit 2, 24p 10bit 4. Odd values (1, 3) are probably the PAL rates 50p/25p; the camera keeps them but the menu cannot select them in NTSC mode.",
+      "values": [[0, "60p 10bit"], [2, "30p 10bit"], [4, "24p 10bit"]]
+    },
+    "global:0x02b3": {
+      "note": "USB Streaming > Output Res/Frame Rate. 7, HD (1080p) 25p, is a PAL rate: every PAL rate is stored one code above its NTSC counterpart (the Movie, S&Q and Time-lapse frame rates, proved under each system).",
+      "values": [
+        [0, "4K (2160p) 30p"],
+        [2, "4K (2160p) 15p"],
+        [4, "HD (1080p) 60p"],
+        [6, "HD (1080p) 30p"],
+        [8, "HD (720p) 30p"],
+        [7, "HD (1080p) 25p (PAL)"]
+      ]
+    },
+    "global:0x02b4": {"note": "USB Streaming > Movie Rec During Streaming.", "values": [[0, "Enable"], [1, "Disable"]]},
+    "global:0x02d9": {
+      "note": "Silent Mode Settings > Target Function Settings > Auto Pixel Mapping: whether Silent Mode turns Auto Pixel Mapping off.",
+      "values": [[0, "Not Target"], [1, "Off"]]
+    },
+    "global:0x0e29": {
+      "note": "The Dial/Wheel page's checkbox (Custom Key/Dial Set., stills, page 6). Ticking it again copies the M-mode dial functions over the other-mode ones (0x0407-0x040e: dial 2's Other took dial 2's M-mode function).",
+      "values": [[0, "Off (unticked)"], [1, "On (ticked)"]]
+    },
+    "global:0x0b5c": {
+      "note": "Text: the movie title, one ASCII byte per character, zero-filled (\"C\" read 67, 0...; typed \"Ca\" read 67, 97, 0...)."
+    },
+    "global:0x0b5b": {
+      "note": "Text: the 3-character file-name prefix as ASCII bytes, the first in the low byte (DSC = 0x435344; typed DSD = 0x445344). Stills' File/Folder Settings > Set File Name."
+    },
+    "global:0x10b6": {
+      "note": "The exposure mode in use: follows the mode dial (the camera writes the dial position here on load), or the Shoot Mode carousel with Mode Dial Control Set = Set with Menu. View only.",
+      "values": [[0, "Intelligent Auto"], [1, "P"], [2, "A"], [3, "S"], [4, "M"]]
+    },
+    "global:0x13e0": {
+      "note": "As 0x10b6, numbered from Intelligent Auto 0, P 2 to M 5; written with it by the mode dial or the Shoot Mode carousel. View only.",
+      "values": [[0, "Intelligent Auto"], [2, "P"], [3, "A"], [4, "S"], [5, "M"]]
+    },
+    "set:0x0b8d": {
+      "note": "Written when the slot is registered: a Stills registration in P writes 1, in A 2, in S 3 and in M 4.",
+      "values": [[1, "P"], [2, "A"], [3, "S"], [4, "M"]]
+    },
+    "set:0x11ad": {
+      "note": "Written when the slot is registered in Stills mode: the mode in use, as 0x10b6 numbers them, P 1, A 2, S 3 and M 4; a Movie-mode registration leaves it. A settings file does not set it.",
+      "values": [[1, "P"], [2, "A"], [3, "S"], [4, "M"]]
+    },
+    "global:0x0b8d": {
+      "note": "The exposure mode last registered to a memory slot, not the menu's: a choice in the Shoot Mode carousel leaves it, and a Stills registration in P writes 1, in A 2, in S 3 and in M 4.",
+      "values": [[1, "P"], [2, "A"], [3, "S"], [4, "M"]]
+    },
+    "set:0x00cb": {
+      "note": "A Stills registration in S or in M writes 1 here. The camera keeps no copy of it outside the memory sets. What it means is not known.",
+      "values": [[0, "0"], [1, "1"]]
+    },
+    "global:0x04e0": {
+      "note": "Written when Focus Area leaves Spot: the Spot size it had (S 0, M 1, L 2, XL 3, XS 4). A size chosen within Spot leaves it; the size in use is 0x0e5c.",
+      "values": [[0, "S"], [1, "M"], [2, "L"], [3, "XL"], [4, "XS"]]
+    },
+    "global:0x12e1": {
+      "note": "Written when Focus Area leaves Custom: the Custom slot it had (Custom 1 0, Custom 2 1, Custom 3 2); moving between Custom 2 and 3 leaves it.",
+      "values": [[0, "Custom 1"], [1, "Custom 2"], [2, "Custom 3"]]
+    },
+    "global:0x03da": {
+      "note": "Remote Shoot Setting > RAW+J Save Image. Greyed while Save Image Size is 2M (\"not available as follows: Save Image Size 2M\"); open with Original.",
+      "values": [[0, "RAW & JPEG"], [1, "JPEG Only"], [2, "RAW Only"]]
+    },
+    "global:0x13bf": {
+      "note": "Stills 0, Movie 1, S&Q Motion 2, Time-lapse 3. Follows the still/movie/S&Q switch (the camera writes the switch position here on load), or the Shoot Mode carousel with Mode Dial Control Set = Set with Menu. View only.",
+      "values": [[0, "Stills"], [1, "Movie"], [2, "S&Q"], [3, "Time-lapse"]]
+    },
+    "global:0x10b7": {
+      "note": "S&Q Motion and Time-lapse both 2. Follows the still/movie/S&Q switch (the camera writes the switch position here on load), or the Shoot Mode carousel with Mode Dial Control Set = Set with Menu. View only.",
+      "values": [[0, "Stills"], [1, "Movie"], [2, "S&Q / Time-lapse"]]
+    },
+    "global:0x0170": {
+      "note": "1 in S&Q Motion and in Time-lapse, 0 in Stills and Movie. Follows the still/movie/S&Q switch (the camera writes the switch position here on load), or the Shoot Mode carousel with Mode Dial Control Set = Set with Menu. View only. In the memory sets, registering a slot in S&Q Motion or Time-lapse writes 1, and a settings file does not set the sets' copies.",
+      "values": [[0, "Off"], [1, "On"]]
+    },
+    "global:0x118b": {
+      "note": "Which of the S&Q switch's two families: choosing S&Q Motion in the Shoot Mode carousel writes 0, Time-lapse 1.",
+      "values": [[0, "S&Q Motion"], [1, "Time-lapse"]]
+    },
+    "global:0x190c": {
+      "note": "The frame rate of the active movie format, derived from the per-format Rec Frame Rate records; the camera recomputes it on load. View only.",
+      "values": [[1, "60p"], [3, "30p"], [5, "24p"], [7, "120p"]]
+    },
+    "global:0x1176": {
+      "note": "Auto Framing Settings > Movie Rec/Streaming: whether the recorded or streamed movie is cropped.",
+      "values": [[0, "Crop"], [1, "Do not crop"]]
+    },
+    "global:0x0b95": {
+      "note": "Movie's own C.Temp./Filter temperature, 2500-9900 K: set in Movie mode it is written with 0x0b91, the temperature in use; set in Stills, the stills copy 0x0b93 is written with 0x0b91. Whether a change in one mode writes the other mode's copy too is Different Set for Still/Mv's White Balance box, not proved yet. Every temperature between 2500 K and 9900 K is the scale's."
+    },
+    "global:0x1165": {
+      "note": "Time-lapse Settings > Video Light Setting (open from Movie mode too).",
+      "values": [[0, "Off"], [1, "2 Sec"], [2, "5 Sec"], [3, "10 Sec"]]
+    },
+    "global:0x0fde": {
+      "note": "The ISO the camera is using (ISO AUTO result); recomputed on load from the ISO settings. It holds the ISO's own codes. View only."
+    },
+    "global:0x0fe0": {
+      "note": "The ISO the camera is using (ISO AUTO result); recomputed on load from the ISO settings. It holds the ISO's own codes. View only."
+    },
+    "set:0x0f32": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "set:0x0f34": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "set:0x0f36": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "set:0x0f38": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "set:0x0f3a": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "set:0x0f3c": {
+      "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+      "values": [
+        [0, "Centre"],
+        [1, "Up"],
+        [2, "Right"],
+        [3, "Left"],
+        [4, "Down"],
+        [5, "Lower right"],
+        [6, "Lower left"],
+        [7, "Upper left"],
+        [8, "Upper right"]
+      ]
+    },
+    "global:0x0e7a": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot"],
+        [4, "Expand Spot"],
+        [5, "Custom"],
+        [6, "Tracking"]
+      ]
+    },
+    "global:0x0e7c": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot"],
+        [4, "Expand Spot"],
+        [5, "Custom"],
+        [6, "Tracking"]
+      ]
+    },
+    "global:0x0e7e": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot"],
+        [4, "Expand Spot"],
+        [5, "Custom"],
+        [6, "Tracking"]
+      ]
+    },
+    "global:0x0f80": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"],
+        [12, "Tracking: Wide"],
+        [13, "Tracking: Zone"],
+        [14, "Tracking: Center Fix"],
+        [15, "Tracking: Spot XL"],
+        [16, "Tracking: Spot L"],
+        [17, "Tracking: Spot M"],
+        [18, "Tracking: Spot S"],
+        [19, "Tracking: Spot XS"],
+        [20, "Tracking: Expand Spot"],
+        [21, "Tracking: Custom 1"],
+        [22, "Tracking: Custom 2"],
+        [23, "Tracking: Custom 3"]
+      ]
+    },
+    "global:0x0f82": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"],
+        [12, "Tracking: Wide"],
+        [13, "Tracking: Zone"],
+        [14, "Tracking: Center Fix"],
+        [15, "Tracking: Spot XL"],
+        [16, "Tracking: Spot L"],
+        [17, "Tracking: Spot M"],
+        [18, "Tracking: Spot S"],
+        [19, "Tracking: Spot XS"],
+        [20, "Tracking: Expand Spot"],
+        [21, "Tracking: Custom 1"],
+        [22, "Tracking: Custom 2"],
+        [23, "Tracking: Custom 3"]
+      ]
+    },
+    "global:0x0f84": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"],
+        [12, "Tracking: Wide"],
+        [13, "Tracking: Zone"],
+        [14, "Tracking: Center Fix"],
+        [15, "Tracking: Spot XL"],
+        [16, "Tracking: Spot L"],
+        [17, "Tracking: Spot M"],
+        [18, "Tracking: Spot S"],
+        [19, "Tracking: Spot XS"],
+        [20, "Tracking: Expand Spot"],
+        [21, "Tracking: Custom 1"],
+        [22, "Tracking: Custom 2"],
+        [23, "Tracking: Custom 3"]
+      ]
+    },
+    "global:0x0e74": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: S"],
+        [4, "Spot: M"],
+        [5, "Spot: L"],
+        [6, "Spot: XL"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x0e76": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: S"],
+        [4, "Spot: M"],
+        [5, "Spot: L"],
+        [6, "Spot: XL"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x0e78": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: S"],
+        [4, "Spot: M"],
+        [5, "Spot: L"],
+        [6, "Spot: XL"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x0f8c": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x0f8e": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x0f90": {
+      "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+      "values": [
+        [0, "Wide"],
+        [1, "Zone"],
+        [2, "Center Fix"],
+        [3, "Spot: XL"],
+        [4, "Spot: L"],
+        [5, "Spot: M"],
+        [6, "Spot: S"],
+        [7, "Spot: XS"],
+        [8, "Expand Spot"],
+        [9, "Custom 1"],
+        [10, "Custom 2"],
+        [11, "Custom 3"]
+      ]
+    },
+    "global:0x048e": {
+      "note": "USB Connection Mode, in the list's order: Sel. When Connect 0, USB Streaming 1, Mass Storage 3, MTP 4, Remote Shooting 5; no option writes 2. MTP is refused (\"Connected to Remote Shooting. Cannot be executed.\") while Remote Shooting is On, even with no session open; chosen with Remote Shooting Off, it is kept when Remote Shooting is turned On again, while the row reads Sel. When Connect. Refused, or not kept, while a remote session is open.",
+      "values": [
+        [0, "Sel. When Connect"],
+        [1, "USB Streaming"],
+        [3, "Mass Storage(MSC)"],
+        [4, "MTP"],
+        [5, "Remote Shooting"]
+      ]
+    },
+    "global:0x048f": {
+      "note": "USB LUN Setting. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "Multi"], [1, "Single"]]
+    },
+    "global:0x0490": {
+      "note": "USB Power Supply. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "On"], [4, "Off"]]
+    },
+    "global:0x0050": {
+      "note": "Power Save Start Time; Off and 30 Min ask to confirm (power consumption increases). Refused, or not kept, while a remote session is open.",
+      "values": [[0, "Off"], [1, "30 Min."], [2, "5 Min."], [3, "2 Min."], [4, "1 Min."], [6, "10 Sec."]]
+    },
+    "global:0x0e80": {
+      "note": "4 slots: Recall Custom hold 1-3 and the registration working copy. Registering Cont. Bracket in a hold copies the live Cont. Bracket setting (0x04c6) here, numbered by its place in the live list from 0: live 3, 10, 14, 19 and 43 wrote 2, 9, 12, 17 and 39. The hold's screen shows only \"Cont. Bracket\"; the step and images are these."
+    },
+    "global:0x0e84": {
+      "note": "4 slots, as 0x0e80. Registering Single Bracket in a hold copies the live Single Bracket setting (0x04c8) here, numbered by its place in the live list from 0: live 1, 3, 21 and 64 wrote 0, 2, 18 and 59."
+    },
+    "global:0x0078": {
+      "note": "Airplane Mode. The wired LAN stays up with it On. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x0402": {
+      "note": "Airplane Mode. The wired LAN stays up with it On. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x03d7": {
+      "note": "Cnct. while Power OFF. On asks to use a paired device or pair a new one (\"Awaiting cnct. frm Creators' App\"). Byte 45 of 0x018b moves with it. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x03f9": {
+      "note": "Bluetooth Rmt Ctrl. On opens the Pairing screen and stays Off until a remote pairs; a session opened during pairing cuts it short. Refused, or not kept, while a remote session is open.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x122f": {
+      "note": "Wired LAN Connect: On 0, Off 1. A file written with it Off takes the camera off the network when loaded. It cannot be turned off from a session that needs it.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x03f0": {
+      "note": "Remote Shooting: On 0, Off 1. A file written with it Off takes the camera off the network when loaded. It cannot be turned off from a session that needs it.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x122e": {
+      "note": "Wi-Fi Connect: On 0, Off 1. Greyed while Wired LAN Connect is On (\"not available as follows: Wired LAN On\"). Each changed only its own record. The access point's name is in no settings file. With Wi-Fi on, a session over Wi-Fi downloads the same settings, but only with the USB cable out: while it is in, network sessions fail at the fingerprint.",
+      "values": [[0, "On"], [1, "Off"]]
+    },
+    "global:0x048b": {
+      "note": "Auto Power OFF Temp.; High asks to confirm (\"The temperature of the device may rise to prioritize recording time\", Cancel lit).",
+      "values": [[0, "Standard"], [1, "High"]]
+    },
+    "global:0x0cbe[0]": {
+      "note": "Base look of the built-in look ST: fixed at itself (0). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[0, "ST"]]
+    },
+    "global:0x0cbe[1]": {
+      "note": "Base look of the built-in look PT: fixed at itself (1). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[1, "PT"]]
+    },
+    "global:0x0cbe[2]": {
+      "note": "Base look of the built-in look NT: fixed at itself (2). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[2, "NT"]]
+    },
+    "global:0x0cbe[3]": {
+      "note": "Base look of the built-in look VV: fixed at itself (3). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[3, "VV"]]
+    },
+    "global:0x0cbe[4]": {
+      "note": "Base look of the built-in look VV2: fixed at itself (4). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[4, "VV2"]]
+    },
+    "global:0x0cbe[5]": {
+      "note": "Base look of the built-in look FL: fixed at itself (5). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[5, "FL"]]
+    },
+    "global:0x0cbe[6]": {
+      "note": "Base look of the built-in look IN: fixed at itself (6). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[6, "IN"]]
+    },
+    "global:0x0cbe[7]": {
+      "note": "Base look of the built-in look SH: fixed at itself (7). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[7, "SH"]]
+    },
+    "global:0x0cbe[8]": {
+      "note": "Base look of the built-in look BW: fixed at itself (8). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[8, "BW"]]
+    },
+    "global:0x0cbe[9]": {
+      "note": "Base look of the built-in look SE: fixed at itself (9). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[9, "SE"]]
+    },
+    "global:0x0cbe[16]": {
+      "note": "Base look of the built-in look FL2: fixed at itself (10). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[10, "FL2"]]
+    },
+    "global:0x0cbe[17]": {
+      "note": "Base look of the built-in look FL3: fixed at itself (11). Its panel has no Look cell, where C1-C6's starts with one; every camera file holds this number. Numbered as C1-C6's base-look list.",
+      "values": [[11, "FL3"]]
+    },
+    "global:0x0d5e[8]": {
+      "note": "BW's Saturation: fixed at 0 for the monochrome look (the cell does not move; every camera file holds 0).",
+      "values": []
+    },
+    "global:0x0d5e[9]": {
+      "note": "SE's Saturation: fixed at 0 for the monochrome look (the cell does not move; every camera file holds 0).",
+      "values": []
+    }
+  },
+  "CAROUSEL": [
+    ["global:0x0350", 2, "Spot"],
+    ["global:0x0e06", 2, "Spot"],
+    ["global:0x0e68", 3, "Spot"],
+    ["global:0x0e6a", 3, "Spot"],
+    ["global:0x0e6c", 3, "Spot"],
+    ["global:0x0e68", 5, "Custom"],
+    ["global:0x0e6a", 5, "Custom"],
+    ["global:0x0e6c", 5, "Custom"],
+    ["global:0x02b5", 7, "Self-timer(Cont.)"],
+    ["global:0x1486", 6, "Self-timer(Cont.)"],
+    ["global:0x036f", 1, "D-Range Optimizer: Auto"]
+  ],
+  "VALUE_FIXES": [
+    ["global:0x0e08", 2, "Spot"],
+    ["global:0x118b", 1, "Time-lapse"],
+    ["global:0x03a7", 7, "Airplane"],
+    ["global:0x0336", 0, "Automatic (Slower to Faster)"],
+    ["global:0x0256", 14, "140M 4:2:2 10bit"],
+    ["global:0x0256", 18, "100M 4:2:0 8bit"],
+    ["global:0x0256", 22, "60M 4:2:0 8bit"],
+    ["global:0x1172", 2, "Auto Start(15s swtc)"],
+    ["global:0x02b5", 11, "White Balance Bracket"],
+    ["global:0x1486", 10, "White Balance Bracket"],
+    ["global:0x13d4", 11, "White Balance Bracket"],
+    ["global:0x13d4", 7, "Self-timer(Cont.)"],
+    ["global:0x13bb", 1, "1 / 2 This Image"]
+  ],
+  "PP7_VALUES": [
+    ["global:0x052b[6]", 15, "S-Log2 (the first a1's PP7; not offered on this body)"],
+    ["global:0x073b[6]", 11, "S-Gamut (the first a1's PP7; not offered on this body)"]
+  ],
+  "KEEP_LABELS": [
+    "global:0x0284",
+    "global:0x0346",
+    "global:0x0348",
+    "global:0x034a",
+    "global:0x034c",
+    "global:0x034e",
+    "global:0x0bf9[0]",
+    "global:0x0bf9[1]",
+    "global:0x0bf9[2]",
+    "global:0x0c01[0]",
+    "global:0x0c01[1]",
+    "global:0x0c01[2]",
+    "global:0x0e74",
+    "global:0x0e76",
+    "global:0x0e78",
+    "global:0x0e7a",
+    "global:0x0e7c",
+    "global:0x0e7e",
+    "global:0x0f80",
+    "global:0x0f82",
+    "global:0x0f84",
+    "global:0x0f8c",
+    "global:0x0f8e",
+    "global:0x0f90",
+    "global:0x1282",
+    "global:0x1283",
+    "global:0x1284",
+    "global:0x1285",
+    "global:0x1286",
+    "global:0x1287",
+    "global:0x1290",
+    "global:0x1293",
+    "global:0x1294",
+    "global:0x1295",
+    "global:0x1296",
+    "global:0x1297",
+    "global:0x1298",
+    "global:0x12ba",
+    "global:0x12bd",
+    "global:0x12be",
+    "global:0x12bf",
+    "global:0x12c0",
+    "global:0x12c1",
+    "global:0x12c2",
+    "global:0x16ae",
+    "global:0x16bd",
+    "global:0x16be",
+    "global:0x16bf",
+    "global:0x16c0",
+    "global:0x16c1",
+    "global:0x16c2"
+  ],
+  "EV_DOWN_FROM_20": ["global:0x0bf9[0]", "global:0x0bf9[1]", "global:0x0bf9[2]"],
+  "HOLD_TABLES": {
+    "global:0x0c01[0]": {"live": "global:0x0334", "mirror": null},
+    "global:0x0c01[1]": {"live": "global:0x0334", "mirror": null},
+    "global:0x0c01[2]": {"live": "global:0x0334", "mirror": null},
+    "global:0x0bf9[0]": {"live": "global:0x0340", "mirror": 40},
+    "global:0x0bf9[1]": {"live": "global:0x0340", "mirror": 40},
+    "global:0x0bf9[2]": {"live": "global:0x0340", "mirror": 40}
+  },
+  "HOLD_BRACKET_COPIES": {"global:0x0e80": "global:0x04c6", "global:0x0e84": "global:0x04c8"},
+  "ISO_TABLE": "global:0x0334",
+  "LABEL_FIXES": {
+    "faRegist. Face Priority": "Regist. Face Priority",
+    "fhRegist. Face Priority": "Regist. Face Priority",
+    "SRegist. Face Priority": "Regist. Face Priority",
+    "S&d Record Setting": "S&Q Record Setting",
+    "Sad Frame Rate Settings": "S&Q Frame Rate Settings",
+    "Reg. AF AreatAF On": "Reg. AF Area+AF On",
+    "Subject Reccgnition AF": "Subject Recognition AF",
+    "Tracking On E + A5": "Tracking On (frame icon) + AF On"
+  },
+  "GROUP_NAMES": {
+    "DCnct./Remote Sht.": "Cnct./Remote Sht.",
+    "Cnct./Remote Sh.": "Cnct./Remote Sht.",
+    "DCnct./Re...": "Cnct./Remote Sht."
+  },
+  "MY_MENU_ROW": "My Menu Setting > Add Item",
+  "MY_MENU_EMPTY": {"label": "(empty)", "line": "An empty place stores {code}."},
+  "SHOOT_MODE_RECORDS": {
+    "Movie": ["global:0x13e1"],
+    "S&Q": ["global:0x13e2"],
+    "Time-lapse": ["global:0x13e3"],
+    "Stills": ["global:0x0bd5[0]", "global:0x0bd5[1]", "global:0x0bd5[2]"]
+  },
+  "NOT_OFFERED": [
+    {
+      "key": "global:0x0407",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0408",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0409",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x040a",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x040b",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x040c",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x040d",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x040e",
+      "values": [198, 861],
+      "table": ["Custom Key/Dial Set.", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. menu offers the same 17 functions for each stills dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0421",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0422",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0423",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0424",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0425",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0426",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0427",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x0428",
+      "values": [269],
+      "table": ["Custom Key/Dial Set. (movie)", "Dial/Wheel"],
+      "why": "The Custom Key/Dial Set. (movie) menu offers the same 18 functions for each dial and wheel, and no others.",
+      "menu": "Custom Key/Dial Set. (movie) > Dial/Wheel"
+    },
+    {
+      "key": "global:0x045f[0]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x045f[1]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x045f[2]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0462[0]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0462[1]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0462[2]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0465[0]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0465[1]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0465[2]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0468[0]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0468[1]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0468[2]",
+      "values": [861],
+      "table": ["My Dial Settings", null],
+      "why": "The My Dial Settings menu offers the same 18 functions on every dial, and no others.",
+      "menu": "My Dial Settings"
+    },
+    {
+      "key": "global:0x0e00",
+      "values": [2, 3, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Maximum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50, ISO 64 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Maximum"
+    },
+    {
+      "key": "global:0x0e02",
+      "values": [2, 3, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Maximum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50, ISO 64 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Maximum"
+    },
+    {
+      "key": "global:0x0dfa",
+      "values": [2, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Minimum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0dfc",
+      "values": [2, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Minimum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0dfa",
+      "values": [3],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "held": true,
+      "named_by": "global:0x0334",
+      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until the minimum is changed, but the menu's list starts at ISO 100, so it cannot be chosen again.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0dfc",
+      "values": [3],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "held": true,
+      "named_by": "global:0x0334",
+      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until the minimum is changed, but the menu's list starts at ISO 100, so it cannot be chosen again.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0204",
+      "values": [2],
+      "walk": "^Movie Settings > Rec Frame Rate \\[Movie mode, (?:PAL, )?File Format XAVC HS 4K[,\\]]",
+      "why": "With XAVC HS 4K the camera's Rec Frame Rate list offers 60p, 24p and 120p (50p and 100p on PAL), not 30p.",
+      "menu": "Movie Settings > Rec Frame Rate"
+    },
+    {
+      "key": "global:0x0202",
+      "values": [0, 5],
+      "walk": "^Movie Settings > Rec Frame Rate \\[Movie mode, File Format XAVC HS 8K\\]",
+      "why": "With XAVC HS 8K the camera's Rec Frame Rate list offers 30p and 24p only.",
+      "menu": "Movie Settings > Rec Frame Rate"
+    },
+    {
+      "key": "global:0x020a",
+      "values": [5],
+      "walk": "^Movie Settings > Rec Frame Rate \\[Movie mode, (?:PAL, )?File Format XAVC S-I 4K[,\\]]",
+      "why": "With XAVC S-I 4K the camera's Rec Frame Rate list offers 60p, 30p and 24p (50p and 25p on PAL), not 120p.",
+      "menu": "Movie Settings > Rec Frame Rate"
+    },
+    {
+      "key": "global:0x020c",
+      "values": [5],
+      "walk": "^Movie Settings > Rec Frame Rate \\[Movie mode, (?:PAL, )?File Format XAVC S-I HD[,\\]]",
+      "why": "With XAVC S-I HD the camera's Rec Frame Rate list offers 60p, 30p and 24p (50p and 25p on PAL), not 120p.",
+      "menu": "Movie Settings > Rec Frame Rate"
+    },
+    {
+      "key": "global:0x0e10",
+      "values": [9],
+      "walk": "^White Balance \\[(?:Movie mode|S&Q mode(?: \\([^)]*\\))?)\\]$",
+      "why": "Movie mode's White Balance list has no Flash: its 14 options, in Movie mode and in S&Q, leave it out.",
+      "menu": "White Balance [Movie mode]"
+    }
+  ],
+  "VIDEO_SYSTEM_VALUES": {
+    "global:0x02b3": {"NTSC": [0, 2, 4, 6, 8], "PAL": [7]},
+    "global:0x0202": {"NTSC": [2, 4], "PAL": []}
+  },
+  "COPIES": {
+    "global:0x04e9[0]": ["global:0x04ff[0]", "global:0x0515[0]"],
+    "global:0x04e9[1]": ["global:0x04ff[1]", "global:0x0515[1]"],
+    "global:0x04e9[2]": ["global:0x04ff[2]", "global:0x0515[2]"],
+    "global:0x04e9[3]": ["global:0x04ff[3]", "global:0x0515[3]"],
+    "global:0x04e9[4]": ["global:0x04ff[4]", "global:0x0515[4]"],
+    "global:0x04e9[5]": ["global:0x04ff[5]", "global:0x0515[5]"],
+    "global:0x04e9[6]": ["global:0x04ff[6]", "global:0x0515[6]"],
+    "global:0x04e9[7]": ["global:0x04ff[7]", "global:0x0515[7]"],
+    "global:0x04e9[8]": ["global:0x04ff[8]", "global:0x0515[8]"],
+    "global:0x04e9[9]": ["global:0x04ff[9]", "global:0x0515[9]"],
+    "global:0x04e9[10]": ["global:0x04ff[10]", "global:0x0515[10]"],
+    "global:0x052b[0]": ["global:0x0541[0]", "global:0x0557[0]"],
+    "global:0x052b[1]": ["global:0x0541[1]", "global:0x0557[1]"],
+    "global:0x052b[2]": ["global:0x0541[2]", "global:0x0557[2]"],
+    "global:0x052b[3]": ["global:0x0541[3]", "global:0x0557[3]"],
+    "global:0x052b[4]": ["global:0x0541[4]", "global:0x0557[4]"],
+    "global:0x052b[5]": ["global:0x0541[5]", "global:0x0557[5]"],
+    "global:0x052b[6]": ["global:0x0541[6]", "global:0x0557[6]"],
+    "global:0x052b[7]": ["global:0x0541[7]", "global:0x0557[7]"],
+    "global:0x052b[8]": ["global:0x0541[8]", "global:0x0557[8]"],
+    "global:0x052b[9]": ["global:0x0541[9]", "global:0x0557[9]"],
+    "global:0x052b[10]": ["global:0x0541[10]", "global:0x0557[10]"],
+    "global:0x056d[0]": ["global:0x0583[0]", "global:0x0599[0]"],
+    "global:0x056d[1]": ["global:0x0583[1]", "global:0x0599[1]"],
+    "global:0x056d[2]": ["global:0x0583[2]", "global:0x0599[2]"],
+    "global:0x056d[3]": ["global:0x0583[3]", "global:0x0599[3]"],
+    "global:0x056d[4]": ["global:0x0583[4]", "global:0x0599[4]"],
+    "global:0x056d[5]": ["global:0x0583[5]", "global:0x0599[5]"],
+    "global:0x056d[6]": ["global:0x0583[6]", "global:0x0599[6]"],
+    "global:0x056d[7]": ["global:0x0583[7]", "global:0x0599[7]"],
+    "global:0x056d[8]": ["global:0x0583[8]", "global:0x0599[8]"],
+    "global:0x056d[9]": ["global:0x0583[9]", "global:0x0599[9]"],
+    "global:0x056d[10]": ["global:0x0583[10]", "global:0x0599[10]"],
+    "global:0x05af[0]": ["global:0x05c5[0]", "global:0x05db[0]"],
+    "global:0x05af[1]": ["global:0x05c5[1]", "global:0x05db[1]"],
+    "global:0x05af[2]": ["global:0x05c5[2]", "global:0x05db[2]"],
+    "global:0x05af[3]": ["global:0x05c5[3]", "global:0x05db[3]"],
+    "global:0x05af[4]": ["global:0x05c5[4]", "global:0x05db[4]"],
+    "global:0x05af[5]": ["global:0x05c5[5]", "global:0x05db[5]"],
+    "global:0x05af[6]": ["global:0x05c5[6]", "global:0x05db[6]"],
+    "global:0x05af[7]": ["global:0x05c5[7]", "global:0x05db[7]"],
+    "global:0x05af[8]": ["global:0x05c5[8]", "global:0x05db[8]"],
+    "global:0x05af[9]": ["global:0x05c5[9]", "global:0x05db[9]"],
+    "global:0x05af[10]": ["global:0x05c5[10]", "global:0x05db[10]"],
+    "global:0x05f1[0]": ["global:0x0607[0]", "global:0x061d[0]"],
+    "global:0x05f1[1]": ["global:0x0607[1]", "global:0x061d[1]"],
+    "global:0x05f1[2]": ["global:0x0607[2]", "global:0x061d[2]"],
+    "global:0x05f1[3]": ["global:0x0607[3]", "global:0x061d[3]"],
+    "global:0x05f1[4]": ["global:0x0607[4]", "global:0x061d[4]"],
+    "global:0x05f1[5]": ["global:0x0607[5]", "global:0x061d[5]"],
+    "global:0x05f1[6]": ["global:0x0607[6]", "global:0x061d[6]"],
+    "global:0x05f1[7]": ["global:0x0607[7]", "global:0x061d[7]"],
+    "global:0x05f1[8]": ["global:0x0607[8]", "global:0x061d[8]"],
+    "global:0x05f1[9]": ["global:0x0607[9]", "global:0x061d[9]"],
+    "global:0x05f1[10]": ["global:0x0607[10]", "global:0x061d[10]"],
+    "global:0x0633[0]": ["global:0x0649[0]", "global:0x065f[0]"],
+    "global:0x0633[1]": ["global:0x0649[1]", "global:0x065f[1]"],
+    "global:0x0633[2]": ["global:0x0649[2]", "global:0x065f[2]"],
+    "global:0x0633[3]": ["global:0x0649[3]", "global:0x065f[3]"],
+    "global:0x0633[4]": ["global:0x0649[4]", "global:0x065f[4]"],
+    "global:0x0633[5]": ["global:0x0649[5]", "global:0x065f[5]"],
+    "global:0x0633[6]": ["global:0x0649[6]", "global:0x065f[6]"],
+    "global:0x0633[7]": ["global:0x0649[7]", "global:0x065f[7]"],
+    "global:0x0633[8]": ["global:0x0649[8]", "global:0x065f[8]"],
+    "global:0x0633[9]": ["global:0x0649[9]", "global:0x065f[9]"],
+    "global:0x0633[10]": ["global:0x0649[10]", "global:0x065f[10]"],
+    "global:0x0675[0]": ["global:0x068b[0]", "global:0x06a1[0]"],
+    "global:0x0675[1]": ["global:0x068b[1]", "global:0x06a1[1]"],
+    "global:0x0675[2]": ["global:0x068b[2]", "global:0x06a1[2]"],
+    "global:0x0675[3]": ["global:0x068b[3]", "global:0x06a1[3]"],
+    "global:0x0675[4]": ["global:0x068b[4]", "global:0x06a1[4]"],
+    "global:0x0675[5]": ["global:0x068b[5]", "global:0x06a1[5]"],
+    "global:0x0675[6]": ["global:0x068b[6]", "global:0x06a1[6]"],
+    "global:0x0675[7]": ["global:0x068b[7]", "global:0x06a1[7]"],
+    "global:0x0675[8]": ["global:0x068b[8]", "global:0x06a1[8]"],
+    "global:0x0675[9]": ["global:0x068b[9]", "global:0x06a1[9]"],
+    "global:0x0675[10]": ["global:0x068b[10]", "global:0x06a1[10]"],
+    "global:0x06b7[0]": ["global:0x06cd[0]", "global:0x06e3[0]"],
+    "global:0x06b7[1]": ["global:0x06cd[1]", "global:0x06e3[1]"],
+    "global:0x06b7[2]": ["global:0x06cd[2]", "global:0x06e3[2]"],
+    "global:0x06b7[3]": ["global:0x06cd[3]", "global:0x06e3[3]"],
+    "global:0x06b7[4]": ["global:0x06cd[4]", "global:0x06e3[4]"],
+    "global:0x06b7[5]": ["global:0x06cd[5]", "global:0x06e3[5]"],
+    "global:0x06b7[6]": ["global:0x06cd[6]", "global:0x06e3[6]"],
+    "global:0x06b7[7]": ["global:0x06cd[7]", "global:0x06e3[7]"],
+    "global:0x06b7[8]": ["global:0x06cd[8]", "global:0x06e3[8]"],
+    "global:0x06b7[9]": ["global:0x06cd[9]", "global:0x06e3[9]"],
+    "global:0x06b7[10]": ["global:0x06cd[10]", "global:0x06e3[10]"],
+    "global:0x06f9[0]": ["global:0x070f[0]", "global:0x0725[0]"],
+    "global:0x06f9[1]": ["global:0x070f[1]", "global:0x0725[1]"],
+    "global:0x06f9[2]": ["global:0x070f[2]", "global:0x0725[2]"],
+    "global:0x06f9[3]": ["global:0x070f[3]", "global:0x0725[3]"],
+    "global:0x06f9[4]": ["global:0x070f[4]", "global:0x0725[4]"],
+    "global:0x06f9[5]": ["global:0x070f[5]", "global:0x0725[5]"],
+    "global:0x06f9[6]": ["global:0x070f[6]", "global:0x0725[6]"],
+    "global:0x06f9[7]": ["global:0x070f[7]", "global:0x0725[7]"],
+    "global:0x06f9[8]": ["global:0x070f[8]", "global:0x0725[8]"],
+    "global:0x06f9[9]": ["global:0x070f[9]", "global:0x0725[9]"],
+    "global:0x06f9[10]": ["global:0x070f[10]", "global:0x0725[10]"],
+    "global:0x073b[0]": ["global:0x0751[0]", "global:0x0767[0]"],
+    "global:0x073b[1]": ["global:0x0751[1]", "global:0x0767[1]"],
+    "global:0x073b[2]": ["global:0x0751[2]", "global:0x0767[2]"],
+    "global:0x073b[3]": ["global:0x0751[3]", "global:0x0767[3]"],
+    "global:0x073b[4]": ["global:0x0751[4]", "global:0x0767[4]"],
+    "global:0x073b[5]": ["global:0x0751[5]", "global:0x0767[5]"],
+    "global:0x073b[6]": ["global:0x0751[6]", "global:0x0767[6]"],
+    "global:0x073b[7]": ["global:0x0751[7]", "global:0x0767[7]"],
+    "global:0x073b[8]": ["global:0x0751[8]", "global:0x0767[8]"],
+    "global:0x073b[9]": ["global:0x0751[9]", "global:0x0767[9]"],
+    "global:0x073b[10]": ["global:0x0751[10]", "global:0x0767[10]"],
+    "global:0x077d[0]": ["global:0x0793[0]", "global:0x07a9[0]"],
+    "global:0x077d[1]": ["global:0x0793[1]", "global:0x07a9[1]"],
+    "global:0x077d[2]": ["global:0x0793[2]", "global:0x07a9[2]"],
+    "global:0x077d[3]": ["global:0x0793[3]", "global:0x07a9[3]"],
+    "global:0x077d[4]": ["global:0x0793[4]", "global:0x07a9[4]"],
+    "global:0x077d[5]": ["global:0x0793[5]", "global:0x07a9[5]"],
+    "global:0x077d[6]": ["global:0x0793[6]", "global:0x07a9[6]"],
+    "global:0x077d[7]": ["global:0x0793[7]", "global:0x07a9[7]"],
+    "global:0x077d[8]": ["global:0x0793[8]", "global:0x07a9[8]"],
+    "global:0x077d[9]": ["global:0x0793[9]", "global:0x07a9[9]"],
+    "global:0x077d[10]": ["global:0x0793[10]", "global:0x07a9[10]"],
+    "global:0x07bf[0]": ["global:0x07d5[0]", "global:0x07eb[0]"],
+    "global:0x07bf[1]": ["global:0x07d5[1]", "global:0x07eb[1]"],
+    "global:0x07bf[2]": ["global:0x07d5[2]", "global:0x07eb[2]"],
+    "global:0x07bf[3]": ["global:0x07d5[3]", "global:0x07eb[3]"],
+    "global:0x07bf[4]": ["global:0x07d5[4]", "global:0x07eb[4]"],
+    "global:0x07bf[5]": ["global:0x07d5[5]", "global:0x07eb[5]"],
+    "global:0x07bf[6]": ["global:0x07d5[6]", "global:0x07eb[6]"],
+    "global:0x07bf[7]": ["global:0x07d5[7]", "global:0x07eb[7]"],
+    "global:0x07bf[8]": ["global:0x07d5[8]", "global:0x07eb[8]"],
+    "global:0x07bf[9]": ["global:0x07d5[9]", "global:0x07eb[9]"],
+    "global:0x07bf[10]": ["global:0x07d5[10]", "global:0x07eb[10]"],
+    "global:0x0801[0]": ["global:0x0817[0]", "global:0x082d[0]"],
+    "global:0x0801[1]": ["global:0x0817[1]", "global:0x082d[1]"],
+    "global:0x0801[2]": ["global:0x0817[2]", "global:0x082d[2]"],
+    "global:0x0801[3]": ["global:0x0817[3]", "global:0x082d[3]"],
+    "global:0x0801[4]": ["global:0x0817[4]", "global:0x082d[4]"],
+    "global:0x0801[5]": ["global:0x0817[5]", "global:0x082d[5]"],
+    "global:0x0801[6]": ["global:0x0817[6]", "global:0x082d[6]"],
+    "global:0x0801[7]": ["global:0x0817[7]", "global:0x082d[7]"],
+    "global:0x0801[8]": ["global:0x0817[8]", "global:0x082d[8]"],
+    "global:0x0801[9]": ["global:0x0817[9]", "global:0x082d[9]"],
+    "global:0x0801[10]": ["global:0x0817[10]", "global:0x082d[10]"],
+    "global:0x0843[0]": ["global:0x0859[0]", "global:0x086f[0]"],
+    "global:0x0843[1]": ["global:0x0859[1]", "global:0x086f[1]"],
+    "global:0x0843[2]": ["global:0x0859[2]", "global:0x086f[2]"],
+    "global:0x0843[3]": ["global:0x0859[3]", "global:0x086f[3]"],
+    "global:0x0843[4]": ["global:0x0859[4]", "global:0x086f[4]"],
+    "global:0x0843[5]": ["global:0x0859[5]", "global:0x086f[5]"],
+    "global:0x0843[6]": ["global:0x0859[6]", "global:0x086f[6]"],
+    "global:0x0843[7]": ["global:0x0859[7]", "global:0x086f[7]"],
+    "global:0x0843[8]": ["global:0x0859[8]", "global:0x086f[8]"],
+    "global:0x0843[9]": ["global:0x0859[9]", "global:0x086f[9]"],
+    "global:0x0843[10]": ["global:0x0859[10]", "global:0x086f[10]"],
+    "global:0x0885[0]": ["global:0x089b[0]", "global:0x08b1[0]"],
+    "global:0x0885[1]": ["global:0x089b[1]", "global:0x08b1[1]"],
+    "global:0x0885[2]": ["global:0x089b[2]", "global:0x08b1[2]"],
+    "global:0x0885[3]": ["global:0x089b[3]", "global:0x08b1[3]"],
+    "global:0x0885[4]": ["global:0x089b[4]", "global:0x08b1[4]"],
+    "global:0x0885[5]": ["global:0x089b[5]", "global:0x08b1[5]"],
+    "global:0x0885[6]": ["global:0x089b[6]", "global:0x08b1[6]"],
+    "global:0x0885[7]": ["global:0x089b[7]", "global:0x08b1[7]"],
+    "global:0x0885[8]": ["global:0x089b[8]", "global:0x08b1[8]"],
+    "global:0x0885[9]": ["global:0x089b[9]", "global:0x08b1[9]"],
+    "global:0x0885[10]": ["global:0x089b[10]", "global:0x08b1[10]"],
+    "global:0x08c7[0]": ["global:0x08dd[0]", "global:0x08f3[0]"],
+    "global:0x08c7[1]": ["global:0x08dd[1]", "global:0x08f3[1]"],
+    "global:0x08c7[2]": ["global:0x08dd[2]", "global:0x08f3[2]"],
+    "global:0x08c7[3]": ["global:0x08dd[3]", "global:0x08f3[3]"],
+    "global:0x08c7[4]": ["global:0x08dd[4]", "global:0x08f3[4]"],
+    "global:0x08c7[5]": ["global:0x08dd[5]", "global:0x08f3[5]"],
+    "global:0x08c7[6]": ["global:0x08dd[6]", "global:0x08f3[6]"],
+    "global:0x08c7[7]": ["global:0x08dd[7]", "global:0x08f3[7]"],
+    "global:0x08c7[8]": ["global:0x08dd[8]", "global:0x08f3[8]"],
+    "global:0x08c7[9]": ["global:0x08dd[9]", "global:0x08f3[9]"],
+    "global:0x08c7[10]": ["global:0x08dd[10]", "global:0x08f3[10]"],
+    "global:0x0909[0]": ["global:0x091f[0]", "global:0x0935[0]"],
+    "global:0x0909[1]": ["global:0x091f[1]", "global:0x0935[1]"],
+    "global:0x0909[2]": ["global:0x091f[2]", "global:0x0935[2]"],
+    "global:0x0909[3]": ["global:0x091f[3]", "global:0x0935[3]"],
+    "global:0x0909[4]": ["global:0x091f[4]", "global:0x0935[4]"],
+    "global:0x0909[5]": ["global:0x091f[5]", "global:0x0935[5]"],
+    "global:0x0909[6]": ["global:0x091f[6]", "global:0x0935[6]"],
+    "global:0x0909[7]": ["global:0x091f[7]", "global:0x0935[7]"],
+    "global:0x0909[8]": ["global:0x091f[8]", "global:0x0935[8]"],
+    "global:0x0909[9]": ["global:0x091f[9]", "global:0x0935[9]"],
+    "global:0x0909[10]": ["global:0x091f[10]", "global:0x0935[10]"],
+    "global:0x094b[0]": ["global:0x0961[0]", "global:0x0977[0]"],
+    "global:0x094b[1]": ["global:0x0961[1]", "global:0x0977[1]"],
+    "global:0x094b[2]": ["global:0x0961[2]", "global:0x0977[2]"],
+    "global:0x094b[3]": ["global:0x0961[3]", "global:0x0977[3]"],
+    "global:0x094b[4]": ["global:0x0961[4]", "global:0x0977[4]"],
+    "global:0x094b[5]": ["global:0x0961[5]", "global:0x0977[5]"],
+    "global:0x094b[6]": ["global:0x0961[6]", "global:0x0977[6]"],
+    "global:0x094b[7]": ["global:0x0961[7]", "global:0x0977[7]"],
+    "global:0x094b[8]": ["global:0x0961[8]", "global:0x0977[8]"],
+    "global:0x094b[9]": ["global:0x0961[9]", "global:0x0977[9]"],
+    "global:0x094b[10]": ["global:0x0961[10]", "global:0x0977[10]"],
+    "global:0x098d[0]": ["global:0x09a3[0]", "global:0x09b9[0]"],
+    "global:0x098d[1]": ["global:0x09a3[1]", "global:0x09b9[1]"],
+    "global:0x098d[2]": ["global:0x09a3[2]", "global:0x09b9[2]"],
+    "global:0x098d[3]": ["global:0x09a3[3]", "global:0x09b9[3]"],
+    "global:0x098d[4]": ["global:0x09a3[4]", "global:0x09b9[4]"],
+    "global:0x098d[5]": ["global:0x09a3[5]", "global:0x09b9[5]"],
+    "global:0x098d[6]": ["global:0x09a3[6]", "global:0x09b9[6]"],
+    "global:0x098d[7]": ["global:0x09a3[7]", "global:0x09b9[7]"],
+    "global:0x098d[8]": ["global:0x09a3[8]", "global:0x09b9[8]"],
+    "global:0x098d[9]": ["global:0x09a3[9]", "global:0x09b9[9]"],
+    "global:0x098d[10]": ["global:0x09a3[10]", "global:0x09b9[10]"],
+    "global:0x09cf[0]": ["global:0x09e5[0]", "global:0x09fb[0]"],
+    "global:0x09cf[1]": ["global:0x09e5[1]", "global:0x09fb[1]"],
+    "global:0x09cf[2]": ["global:0x09e5[2]", "global:0x09fb[2]"],
+    "global:0x09cf[3]": ["global:0x09e5[3]", "global:0x09fb[3]"],
+    "global:0x09cf[4]": ["global:0x09e5[4]", "global:0x09fb[4]"],
+    "global:0x09cf[5]": ["global:0x09e5[5]", "global:0x09fb[5]"],
+    "global:0x09cf[6]": ["global:0x09e5[6]", "global:0x09fb[6]"],
+    "global:0x09cf[7]": ["global:0x09e5[7]", "global:0x09fb[7]"],
+    "global:0x09cf[8]": ["global:0x09e5[8]", "global:0x09fb[8]"],
+    "global:0x09cf[9]": ["global:0x09e5[9]", "global:0x09fb[9]"],
+    "global:0x09cf[10]": ["global:0x09e5[10]", "global:0x09fb[10]"],
+    "global:0x0a11[0]": ["global:0x0a27[0]", "global:0x0a3d[0]"],
+    "global:0x0a11[1]": ["global:0x0a27[1]", "global:0x0a3d[1]"],
+    "global:0x0a11[2]": ["global:0x0a27[2]", "global:0x0a3d[2]"],
+    "global:0x0a11[3]": ["global:0x0a27[3]", "global:0x0a3d[3]"],
+    "global:0x0a11[4]": ["global:0x0a27[4]", "global:0x0a3d[4]"],
+    "global:0x0a11[5]": ["global:0x0a27[5]", "global:0x0a3d[5]"],
+    "global:0x0a11[6]": ["global:0x0a27[6]", "global:0x0a3d[6]"],
+    "global:0x0a11[7]": ["global:0x0a27[7]", "global:0x0a3d[7]"],
+    "global:0x0a11[8]": ["global:0x0a27[8]", "global:0x0a3d[8]"],
+    "global:0x0a11[9]": ["global:0x0a27[9]", "global:0x0a3d[9]"],
+    "global:0x0a11[10]": ["global:0x0a27[10]", "global:0x0a3d[10]"],
+    "global:0x0a53[0]": ["global:0x0a69[0]", "global:0x0a7f[0]"],
+    "global:0x0a53[1]": ["global:0x0a69[1]", "global:0x0a7f[1]"],
+    "global:0x0a53[2]": ["global:0x0a69[2]", "global:0x0a7f[2]"],
+    "global:0x0a53[3]": ["global:0x0a69[3]", "global:0x0a7f[3]"],
+    "global:0x0a53[4]": ["global:0x0a69[4]", "global:0x0a7f[4]"],
+    "global:0x0a53[5]": ["global:0x0a69[5]", "global:0x0a7f[5]"],
+    "global:0x0a53[6]": ["global:0x0a69[6]", "global:0x0a7f[6]"],
+    "global:0x0a53[7]": ["global:0x0a69[7]", "global:0x0a7f[7]"],
+    "global:0x0a53[8]": ["global:0x0a69[8]", "global:0x0a7f[8]"],
+    "global:0x0a53[9]": ["global:0x0a69[9]", "global:0x0a7f[9]"],
+    "global:0x0a53[10]": ["global:0x0a69[10]", "global:0x0a7f[10]"],
+    "global:0x0a95[0]": ["global:0x0aab[0]", "global:0x0ac1[0]"],
+    "global:0x0a95[1]": ["global:0x0aab[1]", "global:0x0ac1[1]"],
+    "global:0x0a95[2]": ["global:0x0aab[2]", "global:0x0ac1[2]"],
+    "global:0x0a95[3]": ["global:0x0aab[3]", "global:0x0ac1[3]"],
+    "global:0x0a95[4]": ["global:0x0aab[4]", "global:0x0ac1[4]"],
+    "global:0x0a95[5]": ["global:0x0aab[5]", "global:0x0ac1[5]"],
+    "global:0x0a95[6]": ["global:0x0aab[6]", "global:0x0ac1[6]"],
+    "global:0x0a95[7]": ["global:0x0aab[7]", "global:0x0ac1[7]"],
+    "global:0x0a95[8]": ["global:0x0aab[8]", "global:0x0ac1[8]"],
+    "global:0x0a95[9]": ["global:0x0aab[9]", "global:0x0ac1[9]"],
+    "global:0x0a95[10]": ["global:0x0aab[10]", "global:0x0ac1[10]"],
+    "global:0x0ad7[0]": ["global:0x0aed[0]", "global:0x0b03[0]"],
+    "global:0x0ad7[1]": ["global:0x0aed[1]", "global:0x0b03[1]"],
+    "global:0x0ad7[2]": ["global:0x0aed[2]", "global:0x0b03[2]"],
+    "global:0x0ad7[3]": ["global:0x0aed[3]", "global:0x0b03[3]"],
+    "global:0x0ad7[4]": ["global:0x0aed[4]", "global:0x0b03[4]"],
+    "global:0x0ad7[5]": ["global:0x0aed[5]", "global:0x0b03[5]"],
+    "global:0x0ad7[6]": ["global:0x0aed[6]", "global:0x0b03[6]"],
+    "global:0x0ad7[7]": ["global:0x0aed[7]", "global:0x0b03[7]"],
+    "global:0x0ad7[8]": ["global:0x0aed[8]", "global:0x0b03[8]"],
+    "global:0x0ad7[9]": ["global:0x0aed[9]", "global:0x0b03[9]"],
+    "global:0x0ad7[10]": ["global:0x0aed[10]", "global:0x0b03[10]"],
+    "global:0x0b19[0]": ["global:0x0b2f[0]", "global:0x0b45[0]"],
+    "global:0x0b19[1]": ["global:0x0b2f[1]", "global:0x0b45[1]"],
+    "global:0x0b19[2]": ["global:0x0b2f[2]", "global:0x0b45[2]"],
+    "global:0x0b19[3]": ["global:0x0b2f[3]", "global:0x0b45[3]"],
+    "global:0x0b19[4]": ["global:0x0b2f[4]", "global:0x0b45[4]"],
+    "global:0x0b19[5]": ["global:0x0b2f[5]", "global:0x0b45[5]"],
+    "global:0x0b19[6]": ["global:0x0b2f[6]", "global:0x0b45[6]"],
+    "global:0x0b19[7]": ["global:0x0b2f[7]", "global:0x0b45[7]"],
+    "global:0x0b19[8]": ["global:0x0b2f[8]", "global:0x0b45[8]"],
+    "global:0x0b19[9]": ["global:0x0b2f[9]", "global:0x0b45[9]"],
+    "global:0x0b19[10]": ["global:0x0b2f[10]", "global:0x0b45[10]"],
+    "global:0x0053": ["global:0x0e12", "global:0x0e14"],
+    "global:0x0334": ["global:0x0df2", "global:0x0df4"],
+    "global:0x0350": ["global:0x0e06", "global:0x0e08"],
+    "global:0x0367": ["global:0x0e0e", "global:0x0e10"],
+    "global:0x0dfa": ["global:0x0dfc", "global:0x0dfe"],
+    "global:0x0e00": ["global:0x0e02", "global:0x0e04"],
+    "global:0x0340": ["global:0x0e16", "global:0x13d6"],
+    "global:0x0b91": ["global:0x0b93", "global:0x0b95"],
+    "global:0x0c4d": ["global:0x0e99", "global:0x0e9b"],
+    "global:0x0c4f": ["global:0x0e9d", "global:0x0e9f"],
+    "global:0x0c51": ["global:0x0ea1", "global:0x0ea3"],
+    "global:0x0c53": ["global:0x0ea5", "global:0x0ea7"],
+    "global:0x0c55": ["global:0x0ea9", "global:0x0eab"],
+    "global:0x0c57": ["global:0x0ead", "global:0x0eaf"],
+    "global:0x0c59": ["global:0x0eb1", "global:0x0eb3"],
+    "global:0x0c5b": ["global:0x0eb5", "global:0x0eb7"],
+    "global:0x0c5d": ["global:0x0eb9", "global:0x0ebb"],
+    "global:0x0c61": ["global:0x0ebd", "global:0x0ebf"],
+    "global:0x0c63": ["global:0x0ec1", "global:0x0ec3"],
+    "global:0x0c6b": ["global:0x0ed1", "global:0x0ed3"],
+    "global:0x0c6d": ["global:0x0ed5", "global:0x0ed7"],
+    "global:0x0c6f": ["global:0x0ed9", "global:0x0edb"],
+    "global:0x0c71": ["global:0x0edd", "global:0x0edf"],
+    "global:0x0c73": ["global:0x0ee1", "global:0x0ee3"],
+    "global:0x0c75": ["global:0x0ee5", "global:0x0ee7"],
+    "global:0x0c77": ["global:0x0ee9", "global:0x0eeb"],
+    "global:0x0c79": ["global:0x0eed", "global:0x0eef"],
+    "global:0x0c7b": ["global:0x0ef1", "global:0x0ef3"],
+    "global:0x0c7f": ["global:0x0ef5", "global:0x0ef7"],
+    "global:0x0c81": ["global:0x0ef9", "global:0x0efb"]
+  },
+  "COPY_MODES": [["Stills"], ["Movie", "S&Q", "Time-lapse"]],
+  "COPY_MODES_UNKNOWN": ["global:0x0340"],
+  "UNPROVED": {
+    "global:0x1672": [
+      "state",
+      null,
+      "A flag the camera keeps for itself, not a menu setting: Screen Reader and Disp Set of Multi Media, once thought to move it, leave it as it is."
+    ],
+    "global:0x04e2": [
+      "state",
+      null,
+      "The camera sets it from how it is held, level or vertical, whatever a settings file says: a working value, not a menu setting."
+    ],
+    "global:0x13d1": [
+      "state",
+      null,
+      "A working value the camera keeps: it moved when the connection screens were opened, never with a menu choice."
+    ],
+    "global:0x13d2": [
+      "state",
+      null,
+      "A flag the camera turns on the first time PC Remote priority is chosen over a remote connection, and keeps when the camera's priority is chosen again: no menu row writes it."
+    ],
+    "global:0x13d3": [
+      "state",
+      null,
+      "A flag the camera turns on with the one beside it, the first time PC Remote priority is chosen over a remote connection: no menu row writes it."
+    ],
+    "global:0x0c46": [
+      "state",
+      null,
+      "The camera flips it each time a settings file is loaded: a working value, not a menu setting."
+    ],
+    "global:0x18cb": [
+      "state",
+      null,
+      "The camera's working copy of a Recall Custom hold, filled from whichever hold's registration screen was opened last: no setting of its own."
+    ],
+    "global:0x1126": [
+      "state",
+      null,
+      "A state the camera keeps: no menu choice writes it, a settings file does not set it, and only Camera Settings Reset and Initialize change it."
+    ],
+    "global:0x0c09": [
+      "state",
+      null,
+      "A stamp the camera writes when a Recall Custom hold is registered, not a value a menu chooses."
+    ],
+    "global:0x0f24": [
+      "camera_only",
+      null,
+      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+    ],
+    "global:0x0f26": [
+      "camera_only",
+      null,
+      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+    ],
+    "global:0x0f28": [
+      "camera_only",
+      null,
+      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+    ],
+    "global:0x0f2a": [
+      "camera_only",
+      null,
+      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+    ],
+    "global:0x0495": [
+      "equipment",
+      null,
+      "Greyed on this camera without a RAW recorder connected over HDMI: it can be proved with one attached."
+    ],
+    "global:0x0496": [
+      "equipment",
+      null,
+      "Greyed on this camera without a RAW recorder connected over HDMI: it can be proved with one attached."
+    ],
+    "global:0x018b": [
+      "network",
+      null,
+      "Part of the camera's network settings, which are changed by hand only, never over a remote connection, so no proof is made of them."
+    ],
+    "global:0x0392": [
+      "unknown",
+      null,
+      "Every menu choice tried left it as it was: Focus Area's every area, in Stills and in Movie mode. What writes it is not known."
+    ],
+    "global:0x1479": [
+      "unknown",
+      null,
+      "Every menu choice tried left it as it was: Aspect Marker Level at several levels and under another marker type, and the Movie menu's Aspect Marker list. What writes it is not known."
+    ]
+  },
+  "CONTEXT_WORDS": {
+    "Recording Media Slot \\d+": "Recording Media on one slot",
+    "Recording Media (?:Sort|Simult\\.) Recording": "Recording Media on both slots",
+    "S&Q mode \\((?:Time-lapse|S&Q Motion)\\)": "S&Q mode",
+    "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off"
+  },
+  "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)\\]$"
+}

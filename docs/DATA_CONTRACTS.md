@@ -39,6 +39,7 @@ plainly.
 | `camera_<model>_fw<fw>.json`: the camera's own facts (the file's container block, tabs, memories, link-critical and volatile records, the records that hold an owner's own data, the camera's wording) | By hand, from what the mapping found; the container block from `kit/tools/identify.py`'s draft when no known block reads the camera's files | Yes: a definition's `camera` section is copied from it, and the kit reads the camera's files through its block |
 | `help_guide_menu_<model>_fw<fw>.jsonl`: the Help Guide's menu list | By hand, from Sony's published Help Guide: one line per item with its tab, group, name and modes, and no other text of Sony's (decision 13) | Optional: `kit/schema_update.py` and the safety review (`python -m camkit.safety`) read it when it is there |
 | `help_<model>_fw<fw>.json`: each setting's help in the project's own words | By hand, in your own words, never Sony's (decision 13): what each setting a person meets in the menus does, in a sentence or two; records shown in Expert mode only get none | Optional |
+| `hand_tables_<model>_fw<fw>.json`: what the mapping found by hand (records whose name or note the camera proved wrong, records found by hand, value names no proof gives, the values the menus never offer, the copies, why a record cannot be proved) | By hand, as the mapping finds each fact (the playbook, Phase 6), never by a kit step; how each was proved goes into your private hand evidence ([below](#the-hand-tables-file-what-the-mapping-found-by-hand)) | Optional: `kit/schema_update.py` applies it in the a1 II's own pass; any other camera's plain pass reads none of it yet |
 | `settings_reset_<model>_fw<fw>.json`: which settings Camera Settings Reset and Initialize put back | By hand, from the downloads before and after each reset, run by the owner (the playbook, Phase 5), and only where the owner allows a reset: you write it lean and edit it there, and it is the one file the kit reads ([below](#the-reset-file-what-each-reset-puts-back)) | Optional: the model page's appendix shows it when it is there |
 
 Three files the kit needs stay with whoever maps the camera, in `private/evidence/<model>_fw<fw>/`: the menu tree,
@@ -61,7 +62,7 @@ viewer read, stays with the runs and is generated too: `kit/pass1_map.py <crawl>
 crawls (`--dry-run` first; one that differs is replaced only with `--replace`).
 
 The pre-commit hooks and CI (`.github/workflows/kit-ci.yml`) check every definition and every data folder's camera,
-help and reset files against their JSON Schemas (`.venv/bin/pre-commit run --all-files`); the Help Guide's menu list
+help, reset and hand tables files against their JSON Schemas (`.venv/bin/pre-commit run --all-files`); the Help Guide's menu list
 has none yet. The kit's tests check the menu tree and the accepted file against theirs where they are present.
 
 ## `editor/definitions/<model>_fw<fw>.json`: what every record means
@@ -98,7 +99,7 @@ whether it began where the list stood), the dates of `unproved_reason` and `unpr
 `not_offered` mark; and a layout's `note_evidence`. The public `proved` keeps only the values a proof checked
 (`values`) or, for a scale proved by samples, whether they lie on one line (`sampled.linear`).
 
-A camera's hand tables (the ILCE-1M2's `kit/writer/a1_tables.py`) are public in the same way: they hold names, value
+A camera's hand tables (`data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json`, [below](#the-hand-tables-file-what-the-mapping-found-by-hand)) are public in the same way: they hold names, value
 tables and facts about the camera (what a record holds, its copies and families, the values its menus never offer and
 why, the reasons a setting cannot be proved). How each hand fact was proved (a hand proof's values, run, day and menu
 row, a sample's count, the owner's allowance, what shows a not-offered mark, a reason's date) is in
@@ -304,7 +305,7 @@ among all of them.
 A value a setting lists that the camera's menus never offer is marked in `not_offered`, with why in plain words and the
 menu whose list leaves it out (what shows it, the walk and its run, is in the evidence): the definitions of the first kit listed some codes as the union of
 several pickers (a dial's functions beside a key's), and a few no list the kit walked ever showed. Which values, and
-the words, are the camera's hand table (`NOT_OFFERED` in `kit/writer/a1_tables.py`); its evidence, in the hand
+the words, are the camera's hand table (`NOT_OFFERED` in its [hand tables file](#the-hand-tables-file-what-the-mapping-found-by-hand)); its evidence, in the hand
 evidence file (`private/evidence/<model>_fw<fw>.hand.json`, [above](#the-mappings-evidence)), says that each walk it
 names went over the whole list; `kit/schema_update.py` (`kit/writer/offered.py`) writes a mark only while
 that evidence holds: every row of the report the mark names (its walks of the setting's list, one per state) proves
@@ -339,7 +340,7 @@ the other's list is empty (the other system's rates, proved, are not among its v
 each system are what make a value absent from one system's list mean the list leaves it out (on the a1 II, pass 3's PAL entries of
 2026-11-06 crawled each list afresh under PAL; `NOT_OFFERED`'s evidence, in the hand evidence file, says the same of
 the HS 4K and S-I lists). A setting no proof walked under both systems takes its values from the camera's hand table
-(`VIDEO_SYSTEM_VALUES` in `kit/writer/a1_tables.py`, both keys; the evidence for each in the hand evidence file) only
+(`VIDEO_SYSTEM_VALUES` in its hand tables file, both keys; the evidence for each in the hand evidence file) only
 where what the camera showed under the other
 system speaks for it; a list never seen under the other system keeps its values under neither, however the one-code
 rule reads them. Where the proofs speak, they stand. On the a1 II the proofs give it to Rec Frame Rate for each movie
@@ -388,7 +389,7 @@ copy of the page's own mode: the Stills page the Stills copy, the Movie and S&Q 
 use holds the values of the mode the file was saved in (`main_tiles` in
 `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`).
 
-The families and their modes are the camera's hand table (`COPIES` and `COPY_MODES` in `kit/writer/a1_tables.py`), and
+The families and their modes are the camera's hand table (`COPIES` and `COPY_MODES` in its hand tables file), and
 the rules were checked on the camera's own downloads before any was written (the download log,
 `runs/<model>_fw<fw>/downloads.jsonl`, and the pass-2 run's downloads, NTSC and PAL). Exposure Comp.'s three records
 are a family whose copies' modes are not known yet (`COPY_MODES_UNKNOWN`): its copies carry no `copy_for`, the write
@@ -414,7 +415,7 @@ write checks them against the camera's downloads as above. Keys and mode names o
 A setting no proof can reach says why instead of staying "not proved": its kind and its why in a photographer's words
 (each kind is described in the `unproved_reason` row of [the setting's fields](#a-setting) above, from the definition
 schema; the words the editor shows for each are in the editor's guide). `kit/schema_update.py` writes one only while the setting has no proof, and takes it
-out once a proof reaches it: the ILCE-1M2's from its hand table (`UNPROVED` in `kit/writer/a1_tables.py`, each
+out once a proof reaches it: the ILCE-1M2's from its hand table (`UNPROVED` in its hand tables file, each
 reason's date in the hand evidence file: the camera's
 working values, the AF point copies only its own saves write, the HDMI RAW rows that need a recorder, the network
 block, the two records every candidate row was tried on), and by rule PP7-PP9, which its menus do not offer, and the
@@ -548,6 +549,55 @@ Each entry of `defaults`:
 
 {{ schema_fields("camera", "properties/personal_records/properties/defaults/items") }}
 
+## The hand tables file: what the mapping found by hand
+
+`data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` holds what a camera's mapping found by hand and the rules the
+writer applies to its definition, table by table: the records whose name or note the camera proved wrong
+(`RECORD_FIXES`), the records the menus never write, found by hand (`NEW_RECORDS`, `NEW_LIKE`, and `FRAME_PROOFS` with
+each one's note and value names), value names no proof can give (`CAROUSEL`, `VALUE_FIXES`, `KEEP_LABELS` and the
+others), the values the menus never offer (`NOT_OFFERED`), the copies the camera keeps (`COPIES`), why a record cannot
+be proved (`UNPROVED`), and the label fixes and proof-row rules. It is public and the same for any owner of that model
+and firmware, and written and edited by hand: no kit step writes it, and the writer checks what it can against the
+camera's own files at every write (a not-offered mark against the walks, the copies and the video systems against the
+downloads). A fix to what a record means goes here and nowhere else, never into the definition by hand (the playbook,
+Phase 6). Schema: `schemas/hand-tables.schema.json`, which the hooks and CI check; every table is optional, and an
+entry holds no field of a proof's evidence.
+
+How, when, in which run and from which state each hand fact was proved (a hand proof's values, run, day and menu row,
+a sample's count, the owner's word, what shows a not-offered mark, the day a reason was settled) is the mapper's, in
+`private/evidence/<model>_fw<fw>.hand.json` ([above](#the-mappings-evidence)), which `kit/writer/hand_tables.py` puts
+back into the tables as it reads them, by table name, key and index; `kit/tools/check_public.py` refuses a hand tables
+file that names a run or a day, as it does any file of a camera's data folder. The reader gives each table the shape
+the writer reads (a list of keys as a set; `[key, value, label]` rows by key and value; a reason's `[kind, null, why]`
+as one tuple), and refuses a file for another camera, a table it does not know, a key or a row given twice (JSON would
+keep the last one without a word), a table out of its shape and a `NEW_RECORDS` `$ref` to anything but what the next
+sentence says; the rest of an entry's shape is the schema's, which the hooks and CI check. The patterns a hand tables file holds (`CONTEXT_WORDS`' patterns and their words, `NOT_OFFERED`'s walks, `ORIENTED`) are Python's regular expressions that the writer runs: the reader refuses one that does not compile, and the maintainer reviews them in a pull request as code. `MY_MENU_EMPTY`'s line takes the camera file's empty code in place of `{code}`, put in as text, and the reader refuses any other brace in it. A `NEW_RECORDS` entry
+`{"$ref": "#/FILTER_FLAGS/<key>"}` is `FILTER_FLAGS`' entry of the same key: one entry in both tables, so its evidence
+is put on it once. A sentence several notes share (the frame positions, a Custom box's place) is said again in each,
+and a test keeps the copies alike.
+
+A camera without the file has every table empty. `kit/schema_update.py` applies the tables in a camera's own pass,
+which only the ILCE-1M2 at firmware 4.00 has so far (its file is the pattern); any other camera takes the plain pass,
+which reads none of them yet.
+
+{{ schema_fields("hand-tables") }}
+
+A `RECORD_FIXES` entry:
+
+{{ schema_fields("hand-tables", "$defs/record_fix") }}
+
+A `NEW_RECORDS` or `FILTER_FLAGS` entry:
+
+{{ schema_fields("hand-tables", "$defs/new_record") }}
+
+A `FRAME_PROOFS` entry:
+
+{{ schema_fields("hand-tables", "$defs/frame_proof") }}
+
+A `NOT_OFFERED` mark:
+
+{{ schema_fields("hand-tables", "$defs/not_offered") }}
+
 ## The menu tree: the camera's menus
 
 `private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json` holds every row of the menus, page by page, as the
@@ -611,7 +661,7 @@ kit never reads and writes the lean one in its place.
 
 `kit/schema_update.py --write` refuses to write the definition (exit 1, each question listed) while pass 2's report
 holds something it does not settle and this file does not accept: a conflict whose label the writer keeps against the
-camera's reading (a hand rule such as the ILCE-1M2's `KEEP_LABELS`, in `kit/writer/a1_tables.py`, or a picker reading
+camera's reading (a hand rule such as the ILCE-1M2's `KEEP_LABELS`, in its [hand tables file](#the-hand-tables-file-what-the-mapping-found-by-hand), or a picker reading
 that is not sure), a new record it does not add, a record not one to one (it loses its proof and is marked
 `disputed`), a name dispute (the bar's OCR or the vision model read another name than the map's) or a value a record
 carried over from the option before outside a hand rule. A section the report lacks counts as empty. Each question is

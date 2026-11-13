@@ -72,10 +72,11 @@ never prints the camera's own settings (no start values). Without --write it onl
 
 It writes the definition of the camera the kit works on (camkit.paths: --camera, CAMSET_CAMERA or
 private/config.json), editor/definitions/<model>_fw<fw>.json, and refuses a run whose downloads are another camera
-or firmware than that definition's (camkit.models): a body's proofs land in its own definition only. The fixes below
-(CAROUSEL, the 0x04e2 range, the label tables, the runs they read) are the ILCE-1M2 firmware 4.00's own and apply to
-that definition alone (TODO: into data/<model>_fw<fw>/camera_*.json, docs/decisions/0020). Records pass2_report marks
-"not one to one" are left out and listed.
+or firmware than that definition's (camkit.models): a body's proofs land in its own definition only. The ILCE-1M2
+firmware 4.00's hand tables (CAROUSEL, the label tables and the rest: its data file,
+data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, which writer/hand_tables.py reads) and the fixes of its pass
+below (the 0x04e2 range, the runs it reads) apply to that definition alone (TODO: each camera's pass reads its own
+hand tables, docs/decisions/0020). Records pass2_report marks "not one to one" are left out and listed.
 
 Any other camera's definition gets the plain pass (generic below), with none of those tables: each proved value the
 label the camera showed, a record the definition lacks a setting named by its menu row, and the evidence. A camera
@@ -95,7 +96,7 @@ every definition, without runs: after a camera file or help file in data/ was ed
 --definitions runs it). On the committed data it gives the committed definitions byte for byte
 (kit/tests/test_definitions.py).
 
-The parts are in kit/writer/ (its __init__ lists them): the ILCE-1M2's hand tables, the names values get, the notes and
+The parts are in kit/writer/ (its __init__ lists them): the hand tables' reader, the names values get, the notes and
 their evidence, the parts from data/, the gate and the plain pass. This file keeps the ILCE-1M2's pass (main) and the
 readers of that camera's runs it needs, and gives every name of those parts under its old place (schema_update.clean).
 """
@@ -114,8 +115,8 @@ from pass2_report import (close, latest_run, mirrored_values, num, registration_
 from runner import read_json  # noqa: E402
 import writer.gate  # noqa: E402,F401   (the tests point its accepted file at their own)
 from writer import proofs as writer_proofs  # noqa: E402   (menu_row reads the camera's reworded contexts from it)
-from writer.labels import (LATIN, PICKER_FAMILY, TICKED, UNTICKED, axis_tail_out, check_labels,  # noqa: E402,F401
-                           clean, ev_label, family_name, icon_word, one_name, option_prefix_out, picker_family,
+from writer.labels import (LATIN, MODE_LETTERS, PICKER_FAMILY, TICKED, UNTICKED, axis_tail_out,  # noqa: E402,F401
+                           check_labels, clean, ev_label, family_name, icon_word, one_name, option_prefix_out, picker_family,
                            same_option, snap, squashed, tick_values, value_order)
 from writer.mirror import (mirror_key, mirror_names, mirror_of, mirror_place)  # noqa: E402,F401
 from writer.notes import (ALLOWANCE, EVIDENCE, PAREN, TAIL, add_line, apply_fix, fix_differs, note_is,  # noqa: E402,F401
@@ -134,18 +135,41 @@ from writer.offered import check_video_systems, not_offered_marks, with_video_sy
 from writer.copies import with_copies  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
-from writer.a1_tables import (A1_MIRROR, AF_NOTE, AREA, BOX, BUILT_IN_LOOKS, CAROUSEL,  # noqa: E402,F401
-                              CLOSED, CONT_SHOTS, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, EV_DOWN_FROM_20, EXPOSURE_NOTES, FILTER_FLAGS,
-                              FILTER_ITEMS, FILTER_STARS, FRAME_PROOFS, GROUP_NAMES, HAND_EVIDENCE, HOLD_BRACKET_COPIES,
-                              HOLD_TABLES, ISO_TABLE, KEEP_LABELS, KIND, LABEL_FIXES, LATE_COPY, LAYOUT_DOCS,
-                              LOOK_BASE_NOTE, MIRROR, MODE_LETTERS, MY_MENU_EMPTY, MY_MENU_PAGES, MY_MENU_ROW, NEW_CHECK_NAMES,
-                              NEW_LIKE, NOT_OFFERED,
-                              NEW_RECORDS, NEW_WHOLE_LABELS, ONE_SLOT, CONTEXT_WORDS, ORIENTED, PM2, PP7_VALUES, PRESET, RAW_OFF,
-                              RECORD_FIXES, REG_NOTE, SHOOT_MODE_RECORDS, SINGLE_DELAY, SR_SPEED,
-                              START, START_B, SWITCH_NOTE, TICK_VALUES, TOUCH_AE, UNPROVED, VALUE_FIXES, VERT,
-                              VIDEO_SYSTEM_VALUES,
-                              VOL15, ZONE, ZONE_NOTE)
-from writer import hand_evidence  # noqa: E402   (where the hand tables' evidence is kept, for --write's refusal)
+from writer import hand_evidence, hand_tables  # noqa: E402   (the hand tables, and where their evidence is kept)
+
+# the ILCE-1M2's hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, writer/hand_tables.py), its hand
+# evidence put back where the private overlay holds it (HAND_EVIDENCE: the file read, None on a clone without it, where
+# --write refuses): its own pass (main) applies them, under these names, which the tests read and patch
+HAND = hand_tables.load(paths.A1II)
+CAROUSEL = HAND.CAROUSEL
+CONTEXT_WORDS = HAND.CONTEXT_WORDS
+COPIES = HAND.COPIES
+COPY_MODES = HAND.COPY_MODES
+COPY_MODES_UNKNOWN = HAND.COPY_MODES_UNKNOWN
+EV_DOWN_FROM_20 = HAND.EV_DOWN_FROM_20
+FRAME_PROOFS = HAND.FRAME_PROOFS
+GROUP_NAMES = HAND.GROUP_NAMES
+HAND_EVIDENCE = HAND.HAND_EVIDENCE
+HOLD_BRACKET_COPIES = HAND.HOLD_BRACKET_COPIES
+HOLD_TABLES = HAND.HOLD_TABLES
+ISO_TABLE = HAND.ISO_TABLE
+KEEP_LABELS = HAND.KEEP_LABELS
+LABEL_FIXES = HAND.LABEL_FIXES
+LATE_COPY = HAND.LATE_COPY
+MY_MENU_EMPTY = HAND.MY_MENU_EMPTY
+MY_MENU_ROW = HAND.MY_MENU_ROW
+NEW_CHECK_NAMES = HAND.NEW_CHECK_NAMES
+NEW_LIKE = HAND.NEW_LIKE
+NEW_RECORDS = HAND.NEW_RECORDS
+NEW_WHOLE_LABELS = HAND.NEW_WHOLE_LABELS
+NOT_OFFERED = HAND.NOT_OFFERED
+ORIENTED = HAND.ORIENTED
+PP7_VALUES = HAND.PP7_VALUES
+RECORD_FIXES = HAND.RECORD_FIXES
+SHOOT_MODE_RECORDS = HAND.SHOOT_MODE_RECORDS
+UNPROVED = HAND.UNPROVED
+VALUE_FIXES = HAND.VALUE_FIXES
+VIDEO_SYSTEM_VALUES = HAND.VIDEO_SYSTEM_VALUES
 
 RUN_ROOT = paths.module_root()          # the camera's runs (models.refused checks they are the definition's)
 RUN = RUN_ROOT / "kit2_pass2"
@@ -263,7 +287,8 @@ def my_menu_empty(doc: dict, records: list, over: dict, changed: list) -> int:
     empty = ((doc.get("camera") or {}).get("my_menu") or {}).get("empty")
     if empty is None:
         return 0
-    line = MY_MENU_EMPTY["line"].format(code=empty)
+    # {code} put in as text, never by str.format: the line is data, whose other braces must stay words
+    line = MY_MENU_EMPTY["line"].replace("{code}", str(empty))
     slots = [x for x in doc["settings"] if x.get("area") == "global" and x.get("id") in records and x.get("index") is not None]
     for x in slots:
         labs = dict((v, lab) for v, lab in x.get("values") or [])
@@ -826,7 +851,8 @@ def main():
         # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the
         # tables give no hand proofs, and a definition written so would lose every one of them
         sys.exit(f"schema_update: nothing written. Part of the {paths.A1II} definition is proved by its hand tables "
-                 f"(kit/writer/a1_tables.py), and what those proofs were is kept in the mapper's private file "
+                 f"({paths.shown(datafiles.hand_tables_file(paths.A1II))}), and what those proofs were is kept in the "
+                 "mapper's private file "
                  f"{paths.shown(hand_evidence.path(paths.A1II))}, which is not on this computer. Writing without it "
                  "would drop those proofs from the definition. Run --write where that file is (the private overlay, "
                  "private/evidence/), or point CAMSET_EVIDENCE_DIR at its folder; --from-data needs no evidence.")
@@ -1346,9 +1372,9 @@ def main():
         doc["settings"].append(s)
         by_key[k] = s
         changed.append((k, s["name"], "new", None, info["values"]))
-    for lay in doc.get("layouts") or []:
-        if LAYOUT_DOCS.get(lay.get("signature")) and lay.get("doc") != LAYOUT_DOCS[lay["signature"]]:
-            lay["doc"] = LAYOUT_DOCS[lay["signature"]]
+    for lay in doc.get("layouts") or []:          # the layout's model page, docs/models/<key>.md (as seed names it)
+        if lay.get("doc") != f"docs/models/{target.stem}.md":
+            lay["doc"] = f"docs/models/{target.stem}.md"
             changed.append(("layout " + lay["signature"], lay.get("model", ""), "doc", None, lay["doc"]))
     for (k, v), lab in VALUE_FIXES.items():
         over[k][v] = "hand table"
@@ -1567,7 +1593,7 @@ def main():
         for pg, info in pages.items():
             if not info.get("in_order"):
                 continue
-            rec = MY_MENU_PAGES[int(pg) - 1]
+            rec = doc["camera"]["my_menu"]["records"][int(pg) - 1]      # the camera file's page records
             for i, (code, name) in enumerate(info["slots"]):
                 k = f"global:0x{rec:04x}[{i}]"
                 if k not in by_key:

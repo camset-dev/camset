@@ -70,6 +70,7 @@ jobs:
           check-jsonschema --schemafile schemas/camera.schema.json data/*/camera_*_fw*.json
           check-jsonschema --schemafile schemas/help-file.schema.json data/*/help_*_fw*.json
           check-jsonschema --schemafile schemas/settings-reset.schema.json data/*/settings_reset_*_fw*.json
+          check-jsonschema --schemafile schemas/hand-tables.schema.json data/*/hand_tables_*_fw*.json
 
   # the kit's tests on Windows as well (first run there by hand on 2026-11-12, docs/PORTING.md): only the tests, the
   # guard and the other checks above run on Linux alone. PYTHONUTF8: the kit needs Python's UTF-8 mode on Windows, and

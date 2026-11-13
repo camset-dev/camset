@@ -100,6 +100,16 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the lens-name record (0x167c) says a teleconverter's name is added after the lens's without naming the one used,
   and the registration stamp (0x0c09) no longer gives the number seen as a fact. They reach the definition the next
   time the maintainer writes it with `kit/schema_update.py --write`.
+- The a1 II's hand tables (the names, notes and value tables its mapping found by hand, the values its menus never
+  offer, its copies, why a record cannot be proved) were Python code in the kit; they are its data file now,
+  `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, edited by hand, with a JSON Schema
+  (`schemas/hand-tables.schema.json`) that the commit hooks and CI check and that refuses a hand proof's evidence in an
+  entry, and `kit/tools/check_public.py` refuses a run or a day in it as in any file of a camera's data folder.
+  `kit/writer/hand_tables.py` reads a camera's file, refusing in plain words one for another camera, a table it does
+  not know or a key given twice, and puts the mapper's private hand evidence back as before: the definition the kit
+  writes is the same. A camera without the file has every table empty, and any camera but the a1 II still takes the
+  plain pass, which reads none of them yet: nothing to do for whoever maps another body (docs/DATA_CONTRACTS.md, "The
+  hand tables file").
 
 ### The docs
 

@@ -63,8 +63,8 @@ editor can edit; any other camera is **not mapped yet**, and the README's
 - Your camera's definition as `kit/schema_update.py --write` wrote it, never edited by hand, and no other camera's
   definition changed. It is lean: how, when and in which run each thing was proved is in your evidence file,
   `private/evidence/<model>_fw<fw>.json`, which is never sent, and `kit/tools/check_public.py` refuses a definition
-  that carries any of it ([decision 16](docs/decisions/0016-the-owner-s-values-never-reach-the-schema-or-the-docs.md)). A fix to what one of the ILCE-1M2's records means goes into its hand tables,
-  `kit/writer/a1_tables.py` (the playbook, Phase 6: names, value tables and facts; the hand proofs are the
+  that carries any of it ([decision 16](docs/decisions/0016-the-owner-s-values-never-reach-the-schema-or-the-docs.md)). A fix to what one of the ILCE-1M2's records means goes into its hand tables file,
+  `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json` (the playbook, Phase 6: names, value tables and facts; the hand proofs are the
   maintainer's, in `private/evidence/`), and the maintainer rewrites that definition from them
   (`kit/tools/build_docs.py --write-schema`, which needs the camera runs and the hand evidence only the maintainer has); a fix to a camera
   file in `data/` reaches its definition with `kit/tools/build_docs.py --definitions`, which needs no runs.

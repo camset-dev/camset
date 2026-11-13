@@ -69,7 +69,8 @@ def why_not(entry: dict, s: dict, value: int, report: list, tables: dict, run_ro
 
 def not_offered_marks(doc: dict, entries: list, report: list, tables: dict, run_root: Path) -> tuple:
     """Each setting's `not_offered`, [{value, label, why, menu, evidence, held?}] in value order, from the marks
-    `entries` names (a1_tables.NOT_OFFERED: a key, its values, the why in plain words, the menu, the evidence, and
+    `entries` names (the hand tables' NOT_OFFERED: a key, its values, the why in plain words, the menu, the
+    evidence, and
     "walk" (a pattern for the report's rows that walked the list, whole as the entry's evidence says: the writer checks
     that each proves the record and none wrote the value), "table" (a picker screen of the table walk) or both), each
     written only when its evidence holds (why_not); a mark it refuses is printed. A value the camera holds but its list
@@ -153,7 +154,8 @@ def system_values(doc: dict, report: list, systems: dict, table: dict) -> dict:
     listed values proved under one system only, in value order; a value proved under both is under neither, and so is
     one no proof walked. A setting gets one when some listed value is one system's: a list whose listed values are all
     one system's has the other's empty (the other system's rates, proved, not among its values). The camera's hand
-    table (`table`, a1_tables.VIDEO_SYSTEM_VALUES: a key, its values by system, both keys, and the evidence) gives a
+    table (`table`, the hand tables' VIDEO_SYSTEM_VALUES: a key, its values by system, both keys, and the evidence)
+    gives a
     setting no proof walked under both systems; where the proofs speak, they stand and the table's entry is printed."""
     by_key = {s["key"]: s for s in doc["settings"]}
     seen = {}

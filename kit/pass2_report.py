@@ -1978,15 +1978,16 @@ def attach_readings(run: Path, proofs: list, prefix: str = "") -> int:
 
 
 def hand_rules(a1ii: bool) -> set:
-    """The records the ILCE-1M2's hand rules already name (WRITTEN_BY, DISP_MODES here, KEEP_LABELS in
-    kit/schema_update.py): a value carried over in one of them is reported and left to that rule. None on another
-    body (TODO decisions 19, 20)."""
+    """The records the ILCE-1M2's hand rules already name (WRITTEN_BY, DISP_MODES here, KEEP_LABELS in its hand tables,
+    data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json): a value carried over in one of them is reported and left to
+    that rule. None on another body (TODO decisions 19, 20)."""
     if not a1ii:
         return set()
     try:
-        from schema_update import KEEP_LABELS
+        from writer import hand_tables
+        KEEP_LABELS = hand_tables.load(paths.A1II, evidence=False).KEEP_LABELS
     except Exception as e:                      # noqa: BLE001 - reported, and the verdict then covers those too
-        print(f"(kit/schema_update.py's KEEP_LABELS not read: {e})", flush=True)
+        print(f"(the hand tables' KEEP_LABELS not read: {e})", flush=True)
         KEEP_LABELS = set()
     return {k.split("[")[0] for k in set(WRITTEN_BY) | DISP_MODES | set(KEEP_LABELS)}
 

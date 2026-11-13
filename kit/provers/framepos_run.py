@@ -8,7 +8,8 @@ moved with the multi-selector on the shooting screen, slot 1 registered again, t
     .venv/bin/python -u kit/provers/framepos_run.py --zone-grid --allow "Camera Set. Memory"     (the sweep only)
 
 The camera (the a1 II, firmware 4.00): moving a focus frame on the shooting screen changes no live record; registering
-a memory slot copies its place into that slot's memory set (kit/writer/a1_tables.py, ZONE and AF_NOTE: the Zone's
+a memory slot copies its place into that slot's memory set (its hand tables,
+data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, ZONE and the point records' FRAME_PROOFS notes: the Zone's
 place on its 3 x 3 grid in six records, the Spot point's X and Y on the 640 x 480 grid, 320, 240 the centre;
 runs/<model>_fw<fw>/kit2_frame_reg registered nine zone places and two spot moves one by one). Which records the
 other areas (Expand Spot, Custom 1-3, the Tracking areas) keep their place in is what this run finds.
@@ -106,8 +107,10 @@ import afreg_run  # noqa: E402
 from afreg_run import bare, slug  # noqa: E402
 from camkit import definitions, jsonl, match, paths, safety  # noqa: E402
 from runner import LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json  # noqa: E402
-from writer.a1_tables import ZONE  # noqa: E402
+from writer import hand_tables  # noqa: E402
 
+# the Zone grid's places, [code, name], the a1 II's (its hand tables, writer/hand_tables.py: the public table alone)
+ZONE = hand_tables.load(paths.A1II, evidence=False).ZONE
 ROW = "Focus Area"
 MEMORY_ROW = "Camera Set. Memory"
 VH_ROW, OFF = "Switch V/H AF Area", "Off"
@@ -495,7 +498,7 @@ def slot_filled(cs) -> bool:
 # ---------------------------------------------------------------- the zone grid sweep (no camera)
 
 def zone_names(table=ZONE) -> dict:
-    """{code: name} of the Zone grid table (kit/writer/a1_tables.py ZONE)."""
+    """{code: name} of the Zone grid table (the a1 II's hand tables' ZONE)."""
     return {int(c): n for c, n in table}
 
 

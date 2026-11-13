@@ -17,7 +17,8 @@ The camera (the a1 II, firmware 4.00; runs/<model>_fw<fw>/kit2_afreg, 2026-11-02
 AF Area Registration On, holding Fn on the shooting screen copies the orientation's live Focus Area memories into the
 "Registered AF area" records: its kind, its area (the 24 Focus Area options, numbered as the live memory 0x0f46) and,
 for a Tracking option, its start area in two numberings; with Switch V/H AF Area Off one hold writes all three
-orientations' copies. kit/writer/a1_tables.py's REG table names them and lists what was proved.
+orientations' copies. The a1 II's hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json: their
+FRAME_PROOFS and NEW_RECORDS entries, and RECORD_FIXES) name them and their values.
 
 --areas: labels as the definition names the area record's values ("Spot: S", "Tracking: Custom 2"), comma-separated;
 "missing", the values the area record's proofs have not covered; or "all". --list prints the plan and the codes each
@@ -85,7 +86,7 @@ MESSAGE_S = 2.5          # "Registered the focus area." is gone 1.5-3 s after th
 ORIENTATIONS = {None: "horizontal", "down": "vertical, grip down", "up": "vertical, grip up"}
 VH = {None: "Off", "down": "AF Point + AF Area", "up": "AF Point + AF Area"}
 PARTS = ("area", "kind", "Tracking start area", "Tracking start area, alt numbering")
-NAME = "Registered AF area: {part} ({orientation})"            # the REG table's names (kit/writer/a1_tables.py)
+NAME = "Registered AF area: {part} ({orientation})"            # their names in the hand tables (RECORD_FIXES, NEW_RECORDS)
 # the owner's word for the hold, given per run as --allow: Fn held on the shooting screen with AF Area Registration On
 # registers the area (a registration: the playbook's rule 2), a press the kit makes there only when named (decision 21)
 FN_HOLD = "Fn hold on the shooting screen"

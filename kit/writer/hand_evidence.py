@@ -1,16 +1,18 @@
-"""A camera's hand tables, kept apart from their evidence (docs/decisions/0016). A tables file (kit/writer/a1_tables.py
-for the ILCE-1M2 firmware 4.00) is public: it holds what the camera is, the same for every owner of that model and
-firmware who maps it (record names, value tables, the copies and families, the notes that say what a record holds, the
-rules the writer applies). How, when, in which run and from which state each of its facts was proved (a hand proof's
-values, run, day and menu row, a sample's count, the owner's allowance, a note's evidence, what shows a not-offered
-mark) is the mapping's evidence, and is kept in the private overlay beside the definition's own evidence:
+"""A camera's hand tables, kept apart from their evidence (docs/decisions/0016). The tables file
+(data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json, which kit/writer/hand_tables.py reads) is public: it holds what
+the camera is, the same for every owner of that model and firmware who maps it (record names, value tables, the copies
+and families, the notes that say what a record holds, the rules the writer applies). How, when, in which run and from
+which state each of its facts was proved (a hand proof's values, run, day and menu row, a sample's count, the owner's
+allowance, a note's evidence, what shows a not-offered mark) is the mapping's evidence, and is kept in the private
+overlay beside the definition's own evidence:
 
     private/evidence/<model>_fw<fw>.hand.json   by table name, the fields each entry's evidence adds or replaces
 
-put_back() puts that evidence back into the tables when the file is there (the tables file calls it last), so the
-writer reads them whole and writes the same definition and evidence file as before the split. Without it (a fresh
-clone, CI) the tables stay the public ones: --from-data and the checks need nothing more, and kit/schema_update.py
---write refuses to write that camera's definition, which would lose the hand proofs.
+put_back() puts that evidence back into the tables when the file is there (writer/hand_tables.load calls it last, once
+the tables are in the shapes the writer reads), so the writer reads them whole and writes the same definition and
+evidence file as before the split. Without it (a fresh clone, CI) the tables stay the public ones: --from-data and the
+checks need nothing more, and kit/schema_update.py --write refuses to write that camera's definition, which would lose
+the hand proofs.
 
 The file's "tables" map a table's name to a patch: for a dict, {key: value or patch}; for a list or a tuple, {index:
 value or patch}, an entry of a list that has a "key" checked by "$key". The evidence adds to entries, never makes one,
@@ -43,13 +45,13 @@ def path(camera: str) -> Path:
 
 class Refused(SystemExit, ValueError):
     """A hand evidence file put_back will not read as it stands, in plain words: what is wrong and what to do. A
-    SystemExit, so a command (or the tables module's import, which calls put_back) stops with the words and no
-    traceback; a ValueError too, for the callers that catch put_back's refusals as such."""
+    SystemExit, so a command (or anything that reads the tables with their evidence: writer/hand_tables.load) stops
+    with the words and no traceback; a ValueError too, for the callers that catch put_back's refusals as such."""
 
 
 def put_back(tables: dict, camera: str) -> Path | None:
-    """The camera's hand evidence put back into `tables` (a tables module's globals()), in place; the file read, or
-    None when it is not there. A file for another camera or format, or naming a table, key or index the tables do not
+    """The camera's hand evidence put back into `tables` ({table name: table}, as writer/hand_tables.load makes them),
+    in place; the file read, or None when it is not there. A file for another camera or format, or naming a table, key or index the tables do not
     have, is refused (ValueError): evidence that no longer fits its table must not land on another entry."""
     p = path(camera)
     if not p.exists():
@@ -153,8 +155,8 @@ def _suffixed(old, add, where: str) -> str:
 
 
 def convert(doc: dict, tables: dict) -> tuple:
-    """(format 2 of the format-1 hand evidence `doc`, [what could not be converted]) against the public `tables` (a
-    tables module's globals() read without evidence): each string the evidence held whole where the public entry has
+    """(format 2 of the format-1 hand evidence `doc`, [what could not be converted]) against the public `tables`
+    ({table name: table}, read without evidence: writer/hand_tables.load(camera, evidence=False)): each string the evidence held whole where the public entry has
     a string becomes its suffix, "<field>+" (dropped when it is the public string itself); a string that does not begin
     with the public words is listed (table, key, field), left as it is, and put_back then refuses it by name."""
     left = []
@@ -184,30 +186,15 @@ def convert(doc: dict, tables: dict) -> tuple:
     return {**doc, "hand_format": FORMAT, "tables": tabs}, left
 
 
-# the hand tables module of each camera that has one (kit/writer/<name>.py), by the camera's key
-TABLES_MODULES = {"ILCE-1M2_fw4.00": "a1_tables"}
-
-
 def public_tables(camera: str) -> dict:
-    """The camera's hand tables as a clone without the overlay reads them (no evidence put back): its tables module
-    read afresh with the evidence folder pointed at an empty one."""
-    import importlib.util
-    import tempfile
-    name = TABLES_MODULES.get(camera)
-    if name is None:
-        raise SystemExit(f"{camera} has no hand tables (kit/writer/*_tables.py), so it has no hand evidence to convert")
-    keep = definitions.EVIDENCE_DIR
-    with tempfile.TemporaryDirectory() as empty:
-        definitions.EVIDENCE_DIR = Path(empty)
-        try:
-            spec = importlib.util.spec_from_file_location(f"writer._{name}_public",
-                                                          Path(__file__).resolve().parent / f"{name}.py")
-            mod = importlib.util.module_from_spec(spec)
-            sys.modules[spec.name] = mod
-            spec.loader.exec_module(mod)
-        finally:
-            definitions.EVIDENCE_DIR = keep
-    return vars(mod)
+    """The camera's hand tables as a clone without the overlay reads them (no evidence put back), {table name: table},
+    from its tables file (writer/hand_tables.py); a camera without one has no hand evidence to convert."""
+    from camkit import datafiles
+    from writer import hand_tables
+    if not datafiles.hand_tables_file(camera).exists():
+        raise SystemExit(f"{camera} has no hand tables ({datafiles.hand_tables_file(camera).name} in its data folder), "
+                         "so it has no hand evidence to convert")
+    return vars(hand_tables.load(camera, evidence=False))
 
 
 def main(argv=None) -> None:
