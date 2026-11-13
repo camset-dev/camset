@@ -202,6 +202,21 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   moved to the playbook's section 5 (the stages the rule comes in by) and to `kit/camkit/reading.py` (how two
   readings are compared). The decisions index gives each decision's rule in one sentence, from a Rule line in each
   record.
+- The decision records say what holds now (decision 1, changed, departing on purpose from Nygard's practice of
+  superseding records): a changed decision's record is rewritten in place, with one line saying what it said before
+  and when, a safety rule's only with the maintainer's decision (another camera's owner allows more through the
+  playbook's rules, never by rewriting a record); git keeps earlier wordings from 0.2.0 on, and a withdrawn decision
+  keeps its file as a stub. Decisions 11, 14, 19 and 20 each read whole on their own, with no record amending another;
+  6, 7, 8, 9 and 13 have their dated changes folded in, with the date of each and why; every status is plain. No rule
+  is weaker: the Rule lines of 6, 7, 8 and 20 now say as much as their records (6 binds the kit and whoever maps a
+  camera, and the editor's user alone writes an edited file, by their own hand and at their own risk, never a mapping
+  or an agent through the editor; 7 lets C4 go only as guarded Help or a go-ahead named per run; 8 opens Auto Power
+  OFF Temp. only when a run names it). Decision 7 no longer counts the multi-selector's centre among the keys never
+  sent, which was never so: it is a menu key, as Enter. Decision 20 also says that the kit keeps a camera's facts as
+  that camera's data (its camera file and hand tables), the a1 II's few tables still in the kit's code marked to move;
+  6 names the downloads manifest per camera, 9 says where the credentials file is on Windows and that its privacy is
+  not checked there, and 18 names `private/evidence/` among the places the code looks. No record's number or file name
+  changed.
 
 ## 0.2.1 (2026-11-13)
 

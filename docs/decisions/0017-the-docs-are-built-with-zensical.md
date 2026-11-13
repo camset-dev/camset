@@ -1,7 +1,7 @@
 # 17. The docs are built with Zensical
 
 - **Date:** 2026-11-03
-- **Status:** accepted; supersedes the builder named in [14](0014-one-source-per-fact.md)
+- **Status:** accepted
 - **Rule:** The docs site is built with Zensical from mkdocs.yml; MkDocs, Material for MkDocs and mkdocs-macros are no
   longer used.
 
@@ -20,3 +20,6 @@ configuration; MkDocs, Material for MkDocs and mkdocs-macros are no longer used.
 
 Zensical runs define_env once per page, not once per build, so a macro keeps no state between pages; ours keep
 none. Its macros expose less of the page (url, path, title, meta) than mkdocs-macros did.
+
+See also: [decision 14](0014-one-source-per-fact.md) (what the site renders from its sources, and what stays
+committed).

@@ -138,7 +138,7 @@ and the default is no.
     the picture; on the shooting screen it does whatever the body assigns to it, a change the kit must not make. Send
     it only as guarded Help, on a menu or option screen whose footer draws the help button. The screen is the guard:
     `Link.press` sends C4 only when the screen read last is a menu, option, panel or editor screen, and refuses it on
-    the shooting screen, in Playback and with a picture displayed (decision 7, amended 2026-11-06). Whether the body
+    the shooting screen, in Playback and with a picture displayed (decision 7, since 2026-11-06). Whether the body
     lists its operating mode (CameraOperatingMode) is learnt from `props`, once per open link, the first time C4 is
     judged; a `props` that fails or cannot be read refuses C4. When the mode is listed, C4 goes only when `get` gives
     an integer mode that is not Playback: any other answer refuses it, whatever its words, since camlink answers

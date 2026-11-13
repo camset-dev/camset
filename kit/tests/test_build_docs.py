@@ -157,7 +157,7 @@ def docs_tree(tmp_path, monkeypatch):
         "# 1. The first, with a | in it\n\n- **Date:** 2026-10 (first kit)\n- **Status:** accepted\n"
         "- **Rule:** The first rule.\n\n## Context\n", encoding="utf-8")
     (d / "decisions" / "0002-second.md").write_text(
-        "# 2. The second\n\n- **Date:** 2026-11-04\n- **Status:** accepted; amends [1](0001-first.md); carried out\n"
+        "# 2. The second\n\n- **Date:** 2026-11-04\n- **Status:** accepted (see [1](0001-first.md)); carried out\n"
         "  2026-11-06\n- **Rule:** The second rule, which runs on to a\n  second line.\n\n## Context\n", encoding="utf-8")
     (d / "decisions" / "index.md").write_text(
         f"# Decisions\n\nWritten by hand.\n\n{build_docs.DECISIONS_START}\nSTALE ROW\n{build_docs.DECISIONS_END}\n",
@@ -188,19 +188,20 @@ def test_the_decisions_table_has_each_records_status(docs_tree):
     of it."""
     d = docs_tree / "docs" / "decisions"
     (d / "0003-third.md").write_text(
-        "# 3. The third\n\n- **Date:** 2026-11-08\n- **Status:** accepted; amends [1](0001-first.md) and\n"
-        "  [2](0002-second.md) (the second's rule, in brief); trimmed 2026-11-08: its working notes moved to\n"
+        "# 3. The third\n\n- **Date:** 2026-11-08\n- **Status:** withdrawn 2026-11-13; replaced by\n"
+        "  [1](0001-first.md) and [2](0002-second.md) (the second's rule, in brief); its working notes moved to\n"
         "  [the guide](../GUIDE.md#a-part)\n- **Rule:** The third.\n\n## Context\n", encoding="utf-8")
     (d / "0004-fourth.md").write_text(
-        "# 4. The fourth\n\n- **Date:** 2026-11-08\n- **Status:** superseded by a record that says at some length "
-        "why it had to go, and when\n- **Rule:** The fourth.\n\n## Context\n", encoding="utf-8")
+        "# 4. The fourth\n\n- **Date:** 2026-11-08\n- **Status:** withdrawn, and replaced by a record that says "
+        "at some length why it had to go, and when\n- **Rule:** The fourth.\n\n## Context\n", encoding="utf-8")
     text = build_docs.decisions_index()
     assert "\n| # | Decision | The rule | Date | Status |\n|---|---|---|---|---|\n| 1 |" in text
     assert "| 1 | [The first, with a \\| in it](0001-first.md) | The first rule. | 2026-10 (first kit) | accepted |\n" in text
     assert ("| 2 | [The second](0002-second.md) | The second rule, which runs on to a second line. "
-            "| 2026-11-04; carried out 2026-11-06 | accepted; amends 1 |\n") in text
-    assert "| 3 | [The third](0003-third.md) | The third. | 2026-11-08 | accepted; amends 1 and 2; … |\n" in text
-    cut = "superseded by a record that says at some length why it had…"
+            "| 2026-11-04; carried out 2026-11-06 | accepted |\n") in text
+    assert ("| 3 | [The third](0003-third.md) | The third. | 2026-11-08 "
+            "| withdrawn 2026-11-13; replaced by 1 and 2; … |\n") in text
+    cut = "withdrawn, and replaced by a record that says at some…"
     assert len(cut) <= build_docs.STATUS_CHARS
     assert f"| 4 | [The fourth](0004-fourth.md) | The fourth. | 2026-11-08 | {cut} |\n" in text
 

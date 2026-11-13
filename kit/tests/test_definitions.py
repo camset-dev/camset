@@ -1,8 +1,8 @@
 """What reaches a definition (K-01, K-10, K-11, K-15, K-21, K-22): proofs from the definition's own camera only,
 finished attempts only, labels and values one to one; volatile records per body; a chain that stops when its start
-file does not load; C4 only after the owner's recorded yes. And the definitions themselves (docs/decisions/0019,
-0020): one per model and firmware, what the kit takes from data/ round-trips byte for byte, the container block read
-as the editor reads it. Synthetic runs, made-up values; no camera.
+file does not load; C4 judged by the screen (docs/decisions/0007, tested in test_guards.py). And the definitions
+themselves (docs/decisions/0019, 0020): one per model and firmware, what the kit takes from data/ round-trips byte
+for byte, the container block read as the editor reads it. Synthetic runs, made-up values; no camera.
 """
 import collections
 import json

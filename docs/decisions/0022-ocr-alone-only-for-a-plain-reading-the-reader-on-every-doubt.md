@@ -1,8 +1,7 @@
 # 22. OCR alone only for a plain reading, the reader on every doubt
 
 - **Date:** 2026-11-13
-- **Status:** accepted; in place since 2026-11-13: the building blocks, the measuring tool and the start check; no run
-  reads through `read()` yet
+- **Status:** accepted; in place in stages (see Consequences)
 - **Rule:** OCR alone settles only a plain reading; on any doubt the reader is asked first, and where they differ a
   fresh frame and a third vote decide.
 
