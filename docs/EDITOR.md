@@ -1,8 +1,10 @@
 # Using the editor
 
-Camset Editor reads, compares and edits Sony camera settings files (`CAMSET*.DAT`). Building it, the camera
-helper and the supported cameras are in the repository's README. To only look inside a file, the
-[definition viewer](viewer/) does it in a browser, with nothing to install: the same names, read-only.
+Camset Editor reads, compares and edits Sony camera settings files (`CAMSET*.DAT`). Downloading and installing it
+(on Windows the zip and, from the release after 0.2.1, the installer), building it, the camera helper and the
+supported cameras are in the repository's README, [Use the editor](https://github.com/camset-dev/camset#use-the-editor).
+To only look inside a file, the [definition viewer](viewer/) does it in a browser, with nothing to install: the same
+names, read-only.
 
 !!! warning "At your own risk"
 
@@ -72,7 +74,8 @@ camera facts, the file's container included ([decision 20](decisions/0020-the-ed
 reads two folders:
 
 - **Built-in:** the definitions that come with the editor, beside the program (inside the macOS app, next to the
-  program on Windows, in the Linux tarball; `editor/definitions/` when it runs from the clone). They are only read.
+  program on Windows, from the installer or the zip, in the Linux tarball; `editor/definitions/` when it runs from the
+  clone). They are only read; the Windows installer replaces them as a set with each version it installs.
 - **Yours:** `definitions/` in the editor's own folder (`camset_editor` in `$XDG_CONFIG_HOME`, `%APPDATA%` or
   `~/.config`). A definition there is used in place of a built-in one of the same model and firmware; the sample
   keeps the built-in one.
@@ -564,7 +567,12 @@ talks only to the camera, through the camera link program, and, while the web pa
 enter its access code. Its own folder is `camset_editor` in `$XDG_CONFIG_HOME`, `%APPDATA%` or `~/.config`; on macOS
 and Linux only you can open it (mode 700), and its private files are mode 600. On Windows they are as private as
 your user folder. Deleting the folder starts the editor afresh; the two files under `~/.config/camset` are the
-camera link's, beside it.
+camera link's, beside it. The folder is apart from the program's: on Windows the installer puts the program in
+`%LOCALAPPDATA%\Programs\Camset Editor`, and neither installing a newer version over it nor uninstalling it removes or
+replaces anything in the editor's own folder, nor a file you put beside the program yourself (the camera helper,
+say). In the program's `definitions` folder, each install replaces the built-in definitions, the files named as the
+shipped ones (`<model>_fw<firmware>.json` and `.DAT`), and nothing else. To start afresh after uninstalling, delete
+the editor's own folder by hand.
 
 | What | Where | What it holds |
 | --- | --- | --- |

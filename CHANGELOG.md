@@ -10,6 +10,15 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
   page and in Copy details: "Windows 11 build 26100 (x86_64)" (or Windows 10, or Windows Server), where it said
   "Windows (x86_64)". Windows itself gives the numbers, with no console window and nothing more to install.
+- An installer for Windows, beside the zip: `camset-editor-<version>-windows-x64-setup.exe` installs the editor for
+  you alone, with no administrator rights, puts it in the Start menu (and on the desktop, if you tick that) and in
+  Windows' installed apps, where you uninstall it; a newer installer updates it in place. Updating or uninstalling
+  never touches your own files: your preferences, the definitions you added and the copies the editor keeps stay in
+  the editor's own folder (`%APPDATA%\camset_editor` as a rule). Take the installer unless you would rather install
+  nothing; the zip holds the same program and runs from wherever you unpack it. Neither is signed yet, so Windows
+  SmartScreen warns the first time ("Windows protected your PC": More info, then Run anyway), and Smart App Control,
+  where it is on, blocks them with no Run anyway, until code signing is arranged. The installer's Properties > Details
+  name Camset Editor and the program's version, as the program's do.
 
 ### The definition viewer
 

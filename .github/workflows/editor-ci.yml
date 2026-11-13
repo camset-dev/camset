@@ -1,7 +1,9 @@
 # Builds, tests and lints the editor on Linux, macOS and Windows for every pull request and every push to main, in
 # release mode as the packages are built: cargo build, cargo test, and clippy over the program and its tests with its
 # warnings as errors. Nothing here talks to a camera, and nothing touches Sony's Camera Remote SDK: the editor needs
-# none, and kit/sdk/ is never in the repository. The packages themselves are built by editor-release.yml.
+# none, and kit/sdk/ is never in the repository. The packages themselves are built by editor-release.yml; on Windows
+# this workflow compiles the installer as the release does (packaging/windows/installer.iss), so a broken script, or a
+# runner without Inno Setup, shows on the pull request rather than on the day of a release.
 #
 # Every action is pinned to a full commit, its version in the comment beside it: checkout and rust-toolchain as in
 # editor-release.yml, actions/cache looked up 2026-11-06. Move a pin to a newer release by its commit.
@@ -60,6 +62,35 @@ jobs:
           $info = (Get-Item target/release/camset_editor.exe).VersionInfo
           "ProductName: $($info.ProductName); FileDescription: $($info.FileDescription); ProductVersion: $($info.ProductVersion)"
           if ($info.ProductName -cne 'Camset Editor' -or $info.FileDescription -cne 'Camset Editor' -or $info.ProductVersion -cne $v) { throw "camset_editor.exe lacks its icon and version details (Camset Editor $v): build.rs did not link them; its warning in the build's log says why" }
+      - name: The Windows installer compiles (packaging/windows/installer.iss, from a folder staged as the release's zip is)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # The folder holds what the release's Windows zip step stages, but for the third-party licences page, which
+        # only the release writes (cargo about): a stand-in here. Then the release's own lines build the installer
+        # from it and check its version details. What this made is removed after, so it never goes into the build cache.
+        run: |
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $dir = "target/dist/camset-editor-$v-windows-x64"
+          if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          Copy-Item target/release/camset_editor.exe $dir
+          Copy-Item -Recurse definitions "$dir/definitions"
+          Copy-Item ../LICENSE "$dir/LICENSE.txt"
+          Set-Content "$dir/THIRD_PARTY_LICENSES.html" "<!doctype html><title>Stand-in</title><p>The release writes this page with cargo about."
+          $exe = Get-Item "target/dist/camset-editor-$v-windows-x64/camset_editor.exe"
+          $copyright = ($exe.VersionInfo.LegalCopyright -split '(?<=\.) ', 2)[0]
+          $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup (ISCC.exe) is not on this runner, neither on the PATH nor in C:\Program Files (x86)\Inno Setup 6: GitHub's Windows images have carried it (their list of installed software says which version). Install it here by a pinned version with its checksum, never a bare download." }
+          "Inno Setup $((Get-Item $iscc).VersionInfo.ProductVersion): $iscc"
+          & $iscc "/DAppVersion=$v" "/DAppCopyright=$copyright" packaging\windows\installer.iss
+          if ($LASTEXITCODE) { throw "ISCC.exe stopped with exit code ${LASTEXITCODE}: its message above says why" }
+          $setup = Get-Item "target/dist/camset-editor-$v-windows-x64-setup.exe" -ErrorAction SilentlyContinue
+          if (-not $setup -or $setup.Length -lt 1MB) { throw "ISCC.exe made no installer of a program's size at target/dist/camset-editor-$v-windows-x64-setup.exe" }
+          $info = [ordered]@{}
+          foreach ($k in 'ProductName', 'ProductVersion', 'FileVersion', 'FileDescription', 'CompanyName', 'LegalCopyright') { $info[$k] = "$($setup.VersionInfo.$k)".TrimEnd() }
+          "$($setup.Name): $($setup.Length) bytes; " + (($info.Keys | ForEach-Object { "$($_): $($info[$_])" }) -join '; ')
+          if ($info.ProductName -cne 'Camset Editor' -or $info.ProductVersion -cne $v -or $info.FileVersion -cne $v -or $info.FileDescription -cne 'Camset Editor Setup' -or $info.CompanyName -cne 'Camset contributors' -or $info.LegalCopyright -cne $copyright) { throw "$($setup.Name) lacks its version details (Camset Editor $v and the copyright sentence of camset_editor.exe): the VersionInfo lines of installer.iss say what it carries" }
+          Remove-Item -Recurse -Force target/dist
       - name: Test
         run: cargo test --release
       - name: Clippy

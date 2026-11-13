@@ -26,9 +26,10 @@ check yours.
 ## Get it
 
 The editor is on the [Releases page](https://github.com/camset-dev/camset/releases): a disk image for macOS on Apple
-silicon, a tarball for Linux and, since 0.2.1, a zip for Windows. The README's
-[Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the macOS app or the
-Windows program the first time. Since 0.2.1 each release also carries the definition viewer as one file,
+silicon, a tarball for Linux and, since 0.2.1, a zip for Windows, with an installer beside it from the release after
+0.2.1. The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, which Windows
+download to take, and how to open the macOS app or the Windows program the first time. Since 0.2.1 each release also
+carries the definition viewer as one file,
 [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open in a
 browser with no internet.
 

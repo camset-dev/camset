@@ -16,18 +16,33 @@ for each camera Camset knows ([more below](#the-definition-viewer-and-the-proof-
 ## Use the editor
 
 The editor is on the project's [Releases page](https://github.com/camset-dev/camset/releases): the app in a `.dmg`
-for macOS on Apple silicon, a tarball for Linux and, since 0.2.1, a zip for Windows; it also builds from source on
-each of them ([The editor from source](#the-editor-from-source)). Take the latest release: 0.1.0 is withdrawn (its
-editor does not open today's camera definitions), and 0.2.0 has no Windows zip.
+for macOS on Apple silicon, a tarball for Linux and, since 0.2.1, a zip for Windows, with an installer beside it from
+the release after 0.2.1; it also builds from source on each of them
+([The editor from source](#the-editor-from-source)). Take the latest release: 0.1.0 is withdrawn (its editor does not
+open today's camera definitions), and 0.2.0 has no Windows zip.
 
 - **macOS:** open the disk image and drag Camset Editor onto Applications. The app is not notarized, so macOS
   refuses to open it the first time. Then open System Settings > Privacy & Security and click Open Anyway (on macOS
   14 and earlier, right-click the app > Open instead). Not yet tried on a downloaded copy.
-- **Windows** (64-bit Windows 10 or 11, on Intel or AMD): unpack the zip anywhere and run `camset_editor.exe` in the
-  folder it makes; keep that folder's files together, as the editor reads its camera definitions from beside it. The
-  program is not signed, so the first time Windows may say "Windows protected your PC": click More info, then Run
-  anyway. The camera helper is not in it, as in the other packages ([The camera helper](#the-camera-helper)). The
-  editor was built and used on a Windows 11 PC; the downloaded zip not yet tried.
+- **Windows** (64-bit Windows 10 or 11, on Intel or AMD): from the release after 0.2.1, two downloads hold the same
+  program (0.2.1 has the zip only). Take the installer unless you would rather install nothing.
+  - The installer, `camset-editor-<version>-windows-x64-setup.exe`, needs no administrator rights: it installs the
+    editor for you alone (in `%LOCALAPPDATA%\Programs\Camset Editor`), puts it in the Start menu (and on the desktop,
+    if you tick that) and in Windows' installed apps (Settings > Apps), where you uninstall it. To update, run a newer
+    installer: it replaces the older version in place. Neither updating nor uninstalling touches your own files: your
+    preferences, the definitions you added and the copies the editor keeps stay in the editor's own folder
+    (`%APPDATA%\camset_editor`, or under `XDG_CONFIG_HOME` if you have set that;
+    [what it keeps](docs/EDITOR.md#what-the-editor-keeps-on-this-computer)).
+  - The zip, `camset-editor-<version>-windows-x64.zip`, installs nothing: unpack it anywhere and run
+    `camset_editor.exe` in the folder it makes; keep that folder's files together, as the editor reads its camera
+    definitions from beside it. To update, unpack the newer zip and delete the old folder (your own files are not in
+    it).
+
+  Neither is signed yet, so Windows SmartScreen warns the first time you open the downloaded installer or program
+  ("Windows protected your PC"): click More info, then Run anyway. Where Windows 11's Smart App Control is on, it
+  blocks an unsigned program outright, with no Run anyway. Both will be so until the project arranges code signing.
+  The camera helper is in neither, as in the other packages ([The camera helper](#the-camera-helper)). The editor was
+  built and used on a Windows 11 PC; the downloaded zip and installer not yet tried.
 
 Then open a settings file from your camera's card, or the built-in sample to look around without a camera. The
 downloaded editor works with the files on the card:
@@ -174,7 +189,8 @@ On Linux the windowing libraries are needed first:
 `sudo apt-get install libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev`.
 The packages themselves: `sh packaging/build_macos_app.sh` builds `Camset Editor.app` and a `.dmg`, and
 `sh packaging/build_linux.sh` a tarball, both run from `editor/` and both into `editor/target/dist/`. For a release,
-`.github/workflows/editor-release.yml` builds them on a version tag ([RELEASING](docs/RELEASING.md#installers)).
+`.github/workflows/editor-release.yml` builds them on a version tag, and on Windows the zip and the installer
+(Inno Setup, `packaging/windows/installer.iss`) ([RELEASING](docs/RELEASING.md#installers)).
 
 ## Supported cameras
 

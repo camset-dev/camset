@@ -1,7 +1,8 @@
-# Builds the editor for macOS, Linux and Windows and keeps the packages as build artifacts, and the definition viewer
-# as one file (camset-viewer.html: every camera definition with its sample, from the public files alone, a page that
-# opens from disk with no network; kit/tools/proof_viewer.py --public --single). On a version tag (v0.2.0, say)
-# pushed to GitHub, the release job also publishes a Release for that tag with the packages and the viewer attached
+# Builds the editor for macOS, Linux and Windows (there a zip and an installer) and keeps the packages as build
+# artifacts, and the definition viewer as one file (camset-viewer.html: every camera definition with its sample, from
+# the public files alone, a page that opens from disk with no network; kit/tools/proof_viewer.py --public --single).
+# On a version tag (v0.2.0, say) pushed to GitHub, the release job also publishes a Release for that tag with the
+# packages and the viewer attached
 # (each package carries the project's LICENSE and its own third-party licences page; the viewer keeps one name, so
 # releases/latest/download/camset-viewer.html is its address); run by hand (workflow_dispatch) it keeps the artifacts
 # only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
@@ -118,6 +119,34 @@ jobs:
           $zip =[System.IO.Compression.ZipFile]::OpenRead("$PWD/target/dist/$name.zip")
           $zip.Entries.FullName
           $zip.Dispose()
+      - name: Windows installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Inno Setup builds it from the folder the zip step staged, into target/dist beside the zip
+        # (packaging/windows/installer.iss says what it installs, and what it never touches: per user, with no
+        # administrator rights). ISCC.exe, its compiler, comes with GitHub's Windows runners, in its own folder (taken
+        # first: on the PATH is Chocolatey's stand-in for it) or on the PATH; nothing is downloaded for it, and the step
+        # stops, saying so, on a runner without it. The version is Cargo.toml's and the copyright sentence the first of
+        # the program's copyright detail (Inno Setup keeps 100 characters of it, and the program's whole line is
+        # longer), both passed in. The installer's own version details (what a signing service asks for on every file
+        # it signs: the product's name and version) are then checked as the zip step checks the program's, with the
+        # spaces Inno Setup pads each to its slot's width trimmed: Camset Editor, the program's version, publisher and
+        # copyright sentence. The same lines compile the installer in editor-ci.yml on every pull request.
+        run: |
+          $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
+          $exe = Get-Item "target/dist/camset-editor-$v-windows-x64/camset_editor.exe"
+          $copyright = ($exe.VersionInfo.LegalCopyright -split '(?<=\.) ', 2)[0]
+          $iscc = @("${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe", (Get-Command ISCC.exe -ErrorAction SilentlyContinue).Source) | Where-Object { $_ -and (Test-Path $_) } | Select-Object -First 1
+          if (-not $iscc) { throw "Inno Setup (ISCC.exe) is not on this runner, neither on the PATH nor in C:\Program Files (x86)\Inno Setup 6: GitHub's Windows images have carried it (their list of installed software says which version). Install it here by a pinned version with its checksum, never a bare download." }
+          "Inno Setup $((Get-Item $iscc).VersionInfo.ProductVersion): $iscc"
+          & $iscc "/DAppVersion=$v" "/DAppCopyright=$copyright" packaging\windows\installer.iss
+          if ($LASTEXITCODE) { throw "ISCC.exe stopped with exit code ${LASTEXITCODE}: its message above says why" }
+          $setup = Get-Item "target/dist/camset-editor-$v-windows-x64-setup.exe" -ErrorAction SilentlyContinue
+          if (-not $setup -or $setup.Length -lt 1MB) { throw "ISCC.exe made no installer of a program's size at target/dist/camset-editor-$v-windows-x64-setup.exe" }
+          $info = [ordered]@{}
+          foreach ($k in 'ProductName', 'ProductVersion', 'FileVersion', 'FileDescription', 'CompanyName', 'LegalCopyright') { $info[$k] = "$($setup.VersionInfo.$k)".TrimEnd() }
+          "$($setup.Name): $($setup.Length) bytes; " + (($info.Keys | ForEach-Object { "$($_): $($info[$_])" }) -join '; ')
+          if ($info.ProductName -cne 'Camset Editor' -or $info.ProductVersion -cne $v -or $info.FileVersion -cne $v -or $info.FileDescription -cne 'Camset Editor Setup' -or $info.CompanyName -cne 'Camset contributors' -or $info.LegalCopyright -cne $copyright) { throw "$($setup.Name) lacks its version details (Camset Editor $v and the copyright sentence of camset_editor.exe): the VersionInfo lines of installer.iss say what it carries" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: camset-editor-${{ runner.os }}
@@ -125,6 +154,7 @@ jobs:
             editor/target/dist/*.dmg
             editor/target/dist/*.tar.gz
             editor/target/dist/*.zip
+            editor/target/dist/*.exe
 
   release:
     needs: build
@@ -149,4 +179,5 @@ jobs:
             dist/*.dmg
             dist/*.tar.gz
             dist/*.zip
+            dist/*.exe
             dist/camset-viewer.html
