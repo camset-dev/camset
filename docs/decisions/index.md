@@ -27,5 +27,6 @@ Why things are done as they are: one record per decision, dated, in [Michael Nyg
 | 19 | [Definitions are files, one per model and firmware](0019-definitions-are-files-one-per-model-and-firmware.md) | 2026-11-04; carried out 2026-11-06 | accepted; amends 11; … |
 | 20 | [The editor holds no camera facts](0020-the-editor-holds-no-camera-facts.md) | 2026-11-04; carried out 2026-11-06 | accepted; amends 11, 14 and 19; … |
 | 21 | [On the shooting screen, no key but MENU unless it is named](0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md) | 2026-11-10 | accepted |
+| 22 | [OCR alone only for a plain reading, the reader on every doubt](0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md) | 2026-11-13 | accepted in principle; … |
 
 <!-- end of the table -->

@@ -52,6 +52,16 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- The foundations of one rule for when OCR alone is trusted and when the reader is asked
+  ([decision 22](docs/decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)), with no
+  change in what any run reads, decides or presses: `kit/camkit/reading.py` holds the one cleaning every reading is to
+  get (look-alike letters, accents, dashes, spacing), the doubts that will send a reading to the reader, how two
+  readings are compared by what is read, and the owner's tie-break (two independent votes agree, or a fresh frame and
+  a third vote: the second OCR engine, then the site's own check, then a reader of another model), and nothing
+  calls it yet.
+  `kit/tools/reader_census.py` counts, over runs already made, how often the rule would doubt OCR, ask the reader,
+  keep or refuse a reading, and what a third vote by the second OCR engine would settle; it only reads the runs, asks
+  no reader unless `--ask`, and prints counts alone.
 - A copy of `kit/config.example.json` names nothing to contact until it is filled in: its camera address is empty and
   it lists no reader. Its first reader was a server at an example address on the local network, to which a copy left
   as it was sent pictures of the camera's screen; the readers it shows are all under `readers_examples` now.

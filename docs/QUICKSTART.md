@@ -160,7 +160,9 @@ mkdir -p private && cp kit/config.example.json private/config.json
     hosted one.
   - Claude: `{"name": "claude", "kind": "anthropic", "model": "claude-opus-5-5", "parallel": 4}`.
 - **`roles`** (optional): `{"second": ..., "third": ...}`, naming which reader gives the second
-  reading and which breaks ties.
+  reading and which breaks ties. The reading rule ([decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md))
+  counts the third as a vote of its own only when its `model` differs from the second's, compared without case or
+  surrounding spaces: the kit cannot tell the same weights under two ids apart, so give one model one id.
 
 ### Choosing a reader
 
