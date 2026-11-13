@@ -944,9 +944,9 @@ mod copies_tests {
         app.schema_gen += 1;
         let three = [setting(&app, MAIN), setting(&app, STILLS), setting(&app, MOVIE)];
         let n = app.doc.as_ref().unwrap().edited.sections.len();
-        as_opened(&mut app, |c| for si in 0..n {
+        as_opened(&mut app, |c| for section in c.sections.iter_mut().take(n) {
             for (s, x) in three.iter().zip([v, stills, movie]) {
-                c.sections[si].get_mut(s.id).unwrap().put(s.index, x).unwrap();
+                section.get_mut(s.id).unwrap().put(s.index, x).unwrap();
             }
         });
         (app, three)
