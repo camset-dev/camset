@@ -360,7 +360,8 @@ def test_no_hand_tables_and_empty_tables_give_the_plain_pass_as_before(tmp_path,
         c.write(capsys)
         said = c.write(capsys)[1]
         pub, ev, text = c.written()
-        out.append((text, json.dumps(ev), said.replace(str(tmp_path / name), "<tmp>")))
+        out.append((text, json.dumps(ev), said.replace(str(tmp_path / name), "<tmp>")
+                    .replace((tmp_path / name).as_posix(), "<tmp>")))      # Windows prints some paths with "/"
     assert out[0] == out[1]
 
 
