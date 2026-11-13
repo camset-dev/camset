@@ -28,6 +28,7 @@ from camkit import ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
@@ -114,6 +115,7 @@ def main():
                 r = json.loads(line)
                 if r.get("context") == a.context and r.get("text") is not None:
                     done.add((r["breadcrumb"], r["label"]))
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     ending, had = None, len(done)
     try:

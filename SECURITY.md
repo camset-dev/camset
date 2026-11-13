@@ -4,10 +4,10 @@
 
 Please do not describe a vulnerability in a public issue.
 
-- **Once the repository is public on GitHub:** open the repository's Security tab and choose Report a vulnerability.
-  That sends the report to the maintainer alone.
-- **Until then:** open an issue with the label "security" and no details at all, only that you have something to
-  report. The maintainer replies with a private way to send it.
+- Open the repository's [Security tab](https://github.com/camset-dev/camset/security) and choose Report a
+  vulnerability. That sends the report to the maintainer alone.
+- If that button is not there, open a Bug report titled "Security contact" and write no details in it at all. The
+  maintainer then opens a private way for you to send them.
 
 ## What is in scope
 

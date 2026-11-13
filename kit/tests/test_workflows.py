@@ -1,9 +1,10 @@
 """Offline tests of the kit's CI workflow (.github/workflows/kit-ci.yml): what it runs agrees with the commit hooks'
 pins and with kit/setup.py, which a contributor runs instead of it; and of the editor's release workflow
-(.github/workflows/editor-release.yml), which can only run on a pushed tag: what its Windows packages hold (the zip,
-and the installer built from the same folder by editor/packaging/windows/installer.iss, whose promises are checked
-here too), and that it carries the definition viewer as one file; and of the editor's CI
-(.github/workflows/editor-ci.yml): that its Windows build is checked, and its installer compiled, as the release's."""
+(.github/workflows/editor-release.yml), which can only run on a pushed tag: that it builds only a tag on main, what
+its Windows packages hold (the zip, and the installer built from the same folder by
+editor/packaging/windows/installer.iss, whose promises are checked here too), and that it carries the definition viewer
+as one file; and of the editor's CI (.github/workflows/editor-ci.yml): that its Windows build is checked, and its
+installer compiled, as the release's."""
 import ast
 import fnmatch
 import os
@@ -182,12 +183,13 @@ def test_release_builds_a_windows_zip_of_one_folder_the_editor_runs_from():
     # every step written in sh syntax runs only on macOS or Linux, or in bash: Windows runs pwsh by default
     for s in build["steps"]:
         if "run" in s and s.get("shell") not in ("bash", "pwsh"):
-            assert s.get("if") in ("runner.os == 'macOS'", "runner.os == 'Linux'") or s["run"] == "cargo test --release", s
+            assert s.get("if") in ("runner.os == 'macOS'", "runner.os == 'Linux'") \
+                or s["run"] == "cargo test --release --locked", s
     win = step(build, "Windows zip")
     assert win["if"] == "runner.os == 'Windows'" and win["shell"] == "pwsh"
     lines = win["run"].splitlines()
     want = [
-        "cargo build --release",
+        "cargo build --release --locked",
         "if ($LASTEXITCODE) { exit $LASTEXITCODE }",
         '$name = "camset-editor-$v-windows-x64"',
         '$dir = "target/dist/$name"',
@@ -243,6 +245,39 @@ def test_release_carries_the_definition_viewer_as_one_file():
     assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip", "dist/*.exe", "dist/camset-viewer.html"]
     assert [s.get("uses", "").split("@")[0] for s in release["steps"]] == ["actions/download-artifact", "actions/download-artifact",
                                                                            "softprops/action-gh-release"]
+
+
+def test_release_builds_only_a_tag_on_main():
+    """A pushed tag builds only when the commit it names is on main (2026-11-13; docs/CODE_SIGNING_POLICY.md says so):
+    the test job's checkout fetches the whole history and every branch (fetch-depth: 0) and keeps no credentials; its
+    first step, before anything is installed or built, runs on a push (a tag: the workflow's only push) and fails with
+    a sentence unless main was fetched and holds the tagged commit; run by hand it is skipped. Every later job needs
+    the test job, so after it fails nothing is built or released."""
+    wf = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))
+    on = wf.get("on", wf.get(True))                                   # YAML 1.1 reads the key on as true
+    assert list(on["push"]) == ["tags"] and "workflow_dispatch" in on
+    checkout, check = wf["jobs"]["test"]["steps"][:2]
+    assert re.fullmatch(r"actions/checkout@[0-9a-f]{40}", checkout["uses"])
+    assert checkout["with"] == {"persist-credentials": False, "fetch-depth": 0}
+    assert check["name"] == "The tagged commit is on main" and check["if"] == "github.event_name == 'push'"
+    lines = check["run"].splitlines()
+    assert lines.index("if ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then") \
+        < lines.index("if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then")
+    errors = [ln for ln in lines if "::error::" in ln]
+    assert len(errors) == 2 == lines.count("  exit 1") and all("Nothing was built" in ln for ln in errors)
+    assert "push main first, then re-run this job" in errors[1]                   # a tag pushed before main was
+    assert wf["jobs"]["build"]["needs"] == "test" and wf["jobs"]["release"]["needs"] == "build"
+
+
+def test_the_released_program_is_built_from_the_locked_crates():
+    """Every cargo build and test of the release workflow, and of the packaging scripts it runs, takes --locked: the
+    crates are editor/Cargo.lock's, or the build stops (docs/CODE_SIGNING_POLICY.md says so), as cargo about already
+    does; editor-ci.yml checks pull requests as before."""
+    packaging = ROOT / "editor" / "packaging"
+    scripts = [RELEASE, packaging / "build_macos_app.sh", packaging / "build_linux.sh"]
+    runs = [ln.strip().removeprefix("run: ") for p in scripts for ln in p.read_text(encoding="utf-8").splitlines()
+            if re.match(r"\s*(run: )?cargo (build|test|about)\b", ln)]
+    assert len(runs) == 6 and all("--locked" in r.split() for r in runs), runs
 
 
 def test_editor_ci_checks_the_windows_program_s_details():

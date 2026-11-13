@@ -38,6 +38,7 @@ from camkit import camset, jsonl, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.match import LOOKALIKES, clean as clean_option, norm  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
@@ -374,6 +375,7 @@ def main():
     for r in jsonl.read(run.dir / "proofs.jsonl"):
         if r.get("path") == PATH and r.get("applied"):
             proved.add((r.get("picker_page"), norm(r.get("shown") or r["label"])))
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     items, k, added_total, unrestored = None, 0, 0, False
     try:

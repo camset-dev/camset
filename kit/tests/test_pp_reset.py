@@ -735,6 +735,7 @@ def world(tmp_path, monkeypatch):
             log["downloads"].append(p)
             return p
     cam = SimpleNamespace(may_open=frozenset())
+    monkeypatch.setattr(runner, "check_readers", lambda: None)      # readers listed
     monkeypatch.setattr(runner, "Link", Link)
     monkeypatch.setattr(runner, "LiveCamera", lambda link, eyes, r, may_open=(): cam)
     monkeypatch.setattr(runner, "close", lambda c, link: log.__setitem__("closed", log["closed"] + 1))

@@ -32,6 +32,7 @@ from camkit import camset, ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, enter_path, option_key, to_shooting, vlm_option  # noqa: E402
@@ -204,6 +205,7 @@ def main():
     path = [ROW, f"Recall Custom hold {h}"]
     cycle, model = load_scan(a.scan)
     run = Run("kit2_pass2")
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     try:
         with proofs_file(run, a.context, {"allowance": allowance}) as out, \

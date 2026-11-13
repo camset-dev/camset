@@ -129,7 +129,10 @@ on with step 2.
 
 Copy `kit/config.example.json` to `private/config.json` (the folder for your own setup, which git
 ignores; decision 18) and fill it in. Without it a camera run stops and says so: the kit never uses the example's
-addresses, and with no config at all the eyes are the OSD.
+addresses, and with no config at all the eyes are the OSD. A copy left as it is names nothing to contact: its
+`camera_ip` is empty, so a run over the network stops and asks for it (with `CAMSET_USB=1` the kit connects over USB
+instead), and its `readers` lists none, so a run that asks a reader (the crawl, the proofs, the walks) stops before it
+presses anything and says to choose one.
 
 ```sh
 mkdir -p private && cp kit/config.example.json private/config.json
@@ -188,7 +191,7 @@ settings and the like, so prefer a local model when the menus hold such things.
    request comes back as an error from that reader.
 
 `kit/config.example.json` has one entry of each kind under `readers_examples`, which the kit does not read: copy the
-ones you choose into `readers`.
+ones you choose into `readers`, which is empty until you do, and put your own server's address in a local one's `url`.
 
 ## 4. Identify the camera and its file
 

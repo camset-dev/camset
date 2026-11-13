@@ -585,8 +585,16 @@ the editor's own folder by hand.
 | Web page uploads | `camset_editor/camera/web/` | Each file sent up from the web page, under its own name in a folder named by the time it came; the latest twenty are kept, and one open now. |
 | Your definitions | `camset_editor/definitions/` | The camera definitions you added with Add definition… ([Definitions](#definitions)). |
 | Help text | `camset_editor/help/` | A help file put there by hand replaces a definition's help text for its camera, setting by setting; where it has none, the definition's own stays. |
-| Camera logins | `~/.config/camset/network.json` | Each camera's user name and password, under its MAC address, beside one default pair; written by Save in Connect to the camera, read by the camera link program ([The camera link](#the-camera-link)). Mode 600. |
+| Camera logins | `~/.config/camset/network.json` | Each camera's user name and password, under its MAC address, beside one default pair; written by Save in Connect to the camera, read by the camera link program ([The camera link](#the-camera-link)). The passwords are in plain text, not encrypted: only the file's permissions protect them, readable by you alone on macOS and Linux (mode 600), as private as your user folder on Windows. |
 | Trusted cameras | `~/.config/camset/known_cameras.json` | The fingerprint of each camera this computer trusts, under its MAC addresses and address. Mode 600. |
+
+Two things are there for whoever works on the editor from a clone of the repository. At start, while no camera address
+is set, the editor takes `camera_ip` from the kit's `private/config.json` when it finds one in the folder it was
+started from, the folder above that, the program's own folder or one of the four above it (a clone's), and, when no
+link is chosen yet, sets the link to Network; it reads nothing else there and talks to the camera only when you ask it
+to. And `CAMSET_NETTEST=1` in its environment makes it check the network path to the camera instead of opening its
+window: it connects to the camera's address on port 22, runs the camera link program's search, writes what it found to
+`nettest.txt` in its `camera/` folder and quits.
 
 ## If the camera restarts over and over
 

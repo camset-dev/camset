@@ -28,6 +28,7 @@ from camkit.crawl import crawl  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
 from camkit.live import lit_text, LiveCamera, submenu_labels  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
@@ -283,6 +284,7 @@ def main():
     a = ap.parse_args()
     cycle, model = load_scan(a.scan)      # signatures from the current reader, not the one at scan time
     run = Run(a.run)
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     ending = None

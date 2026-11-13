@@ -35,7 +35,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import config, ocr, paths, safety  # noqa: E402
 from camkit.screen import MENU_ROW_PITCH, MENU_ROW_TOP  # noqa: E402
-from camkit.vlm import PROMPTS, cache_key, cached, make_reader, role  # noqa: E402
+from camkit.vlm import PROMPTS, cache_key, cached, make_reader, readers, role  # noqa: E402
 from runner import (SCAN_MODES, OcrUnavailable, read_frames, read_json, record_mode, record_model,  # noqa: E402
                     scan_mode, scan_unready, write_json)
 
@@ -56,8 +56,8 @@ def alive(cfg) -> bool:
 def vlm_read_pages(root: Path, reader_name: str | None = None):
     """Ask a reader for every page's first frame (answers go to the VLM cache): the "second" reader, or the
     configured reader --reader names when that one is away (a server on another machine switched off)."""
-    cfg = role("second") if not reader_name else \
-        next((r for r in config()["readers"] if r["name"] == reader_name), None)
+    listed = readers(stop=True)                 # none listed: its sentence, and nothing asked
+    cfg = role("second") if not reader_name else next((r for r in listed if r["name"] == reader_name), None)
     if cfg is None:
         sys.exit(f"--reader {reader_name!r}: no reader of that name in private/config.json")
     for _ in range(40):
@@ -87,7 +87,7 @@ def vlm_read_pages(root: Path, reader_name: str | None = None):
 def cached_vlm(image: bytes, kind: str) -> dict:
     """{reader name: answer} for the answers already cached; no requests."""
     out = {}
-    for r in config()["readers"]:
+    for r in config().get("readers") or []:
         answer = cached(cache_key(image, PROMPTS[kind], r["model"]))     # camkit.vlm's own cache, as a reader keeps it
         if answer is not None:
             out[r["name"]] = answer

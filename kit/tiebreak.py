@@ -12,16 +12,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, paths  # noqa: E402
-from camkit.vlm import PROMPTS, make_reader, role  # noqa: E402
+from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from page_model import same_text  # noqa: E402
 
 
 def main():
     if len(sys.argv) != 2:
         sys.exit("usage: kit/tiebreak.py RUN (a run in the camera's runs/<model>_fw<fw>/, or a path)")
+    readers(stop=True)                        # none listed: its sentence, and nothing read
     run = paths.run_path(sys.argv[1])
     recs = jsonl.read(run / "options.jsonl")
-    r = make_reader(role("third"), timeout=240)
+    try:
+        r = make_reader(role("third"), timeout=240)
+    except NoReader as e:                     # one reader listed: the third role has none
+        sys.exit(str(e))
     done = {t["frame"] for t in jsonl.read(run / "tiebreak.jsonl")}
     todo = [x for x in recs if not x["agreed"] and x["kind"] in ("list", "checklist", "sidelist")
             and x["frame"] not in done]

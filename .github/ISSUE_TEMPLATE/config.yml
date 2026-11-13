@@ -1,2 +1,9 @@
 blank_issues_enabled: false
-# A contact_links entry (discussions or the README) goes here once the repository has its public address.
+# what the new-issue page offers beside the two templates: never a public issue for a security problem (SECURITY.md)
+contact_links:
+  - name: Report a security problem privately
+    url: https://github.com/camset-dev/camset/security
+    about: Not in a public issue. The Security tab's Report a vulnerability sends it to the maintainer alone; SECURITY.md says more.
+  - name: Documentation
+    url: https://camset-dev.github.io/camset/
+    about: How to use the editor, how a camera is mapped, and the code signing policy.

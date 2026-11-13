@@ -50,6 +50,7 @@ from camkit.vlm import PROMPTS  # noqa: E402,F401   (reread_proofs imports it fr
 from camkit.frames import OsdSource, eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.session import check_restore, verify_restore  # noqa: E402
@@ -763,6 +764,10 @@ def main():
             print(f"   {job_key(j):60s} {j['kind']:9s} {len(planned(j)):3d} options"
                   + (f", {left} still to prove" if left < len(planned(j)) else ""), flush=True)
         return
+    # no reader listed: stop before the link opens, nothing pressed; with nothing to prove no reader is asked, so the
+    # start file (--start) goes back all the same, as a put-back must never need a reader
+    if todo:
+        check_readers()
     hdmi = eyes_from_config(run)
     out = Tagged(open(run.dir / proofs, "a", encoding="utf-8", newline="\n"), a.context,  # noqa: SIM115 (closed in the finally below)
                  {"allowance": allowance} if allowance else None)

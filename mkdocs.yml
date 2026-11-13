@@ -13,6 +13,9 @@ docs_dir: docs
 site_dir: site
 theme:
   name: material
+  # the system's own fonts: without this the theme loads Inter and JetBrains Mono from Google Fonts on every page, so
+  # Google would see each visitor (2026-11-13; kit/tests/test_build_docs.py checks it)
+  font: false
   palette:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
@@ -52,6 +55,7 @@ nav:
       - The file format: formats/index.md
       - Memory map: MEMORY_MAP.md
       - Data files and their schemas: DATA_CONTRACTS.md
+      - Code signing policy: CODE_SIGNING_POLICY.md
       # the model pages: written by kit/tools/build_docs.py from docs/models/*.md; add a page there, not here
       - "ILCE-1M2, firmware 4.00": models/ILCE-1M2_fw4.00.md
       # end of the model pages

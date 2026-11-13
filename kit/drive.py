@@ -75,6 +75,7 @@ from camkit import ocr, safety, screen, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused, press, text_of  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
@@ -378,6 +379,7 @@ def main():
     on_shooting = frozenset(safety.canonical_input(k) for k in a.on_shooting)
     cycle, model = load_scan(a.scan)
     run = Run(a.run)
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     log = open(run.dir / "drive.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     if on_shooting:

@@ -1,5 +1,6 @@
 {
-  "camera_ip": "192.168.1.50",
+  "_safe": "A copy of this file names nothing to contact until you fill it in: \"camera_ip\" is empty, so a run over the network stops and asks for it (with CAMSET_USB=1 the kit connects over USB instead), and \"readers\" lists none, so a run that asks a reader (the crawl, the proofs, the walks) stops before it presses anything and says so. Put your camera's address in \"camera_ip\", and copy the readers you choose from \"readers_examples\" into \"readers\" (docs/QUICKSTART.md, step 3).",
+  "camera_ip": "",
   "hdmi": {
     "device": "Cam Link 4K",
     "size": [
@@ -14,20 +15,7 @@
       1080
     ]
   },
-  "readers": [
-    {
-      "name": "vllm",
-      "url": "http://192.168.1.100:8080/v1",
-      "model": "RedHatAI/Qwen3.8-27B-INT4",
-      "parallel": 8
-    },
-    {
-      "name": "omlx",
-      "url": "http://127.0.0.1:8000/v1",
-      "model": "Qwen3.8-27B-4bit",
-      "parallel": 1
-    }
-  ],
+  "readers": [],
   "eyes": "osd",
   "_camera": "Which camera the kit works on; its runs go to runs/<model>_fw<firmware>/. With one camera nothing is needed: kit/tools/identify.py --camera starts its folder, and the kit takes the one camera in runs/; or name it, \"camera\": \"<model>_fw<firmware>\" as identify.py prints it. With more than one, \"cameras\" lists them, each {\"model\", \"firmware\"} with its own camera_ip, camera_model, hdmi or eyes where they differ, and \"camera\" names the one in use. --camera <model>_fw<firmware> or CAMSET_CAMERA on a command overrides it. \"cameras_example\" is not read by the kit (docs/QUICKSTART.md, step 3).",
   "cameras_example": [
@@ -41,8 +29,20 @@
       "camera_ip": "192.168.1.60"
     }
   ],
-  "_comment": "\"readers_examples\" is not read by the kit: copy the entries you choose into \"readers\" (docs/QUICKSTART.md, \"Choosing a reader\"). Ollama, OpenAI and Gemini are untested here, and their \"model\" is a placeholder for a vision model that server or service offers. \"api_key_env\" names the environment variable holding a hosted service's key; the key itself never goes in this file.",
+  "_comment": "\"readers_examples\" is not read by the kit: copy the entries you choose into \"readers\" (docs/QUICKSTART.md, \"Choosing a reader\"). \"vllm\" and \"omlx\" are the two this project used (a server on the network and one on the Mac itself), at example addresses: put your own server's in \"url\"; Ollama, OpenAI and Gemini are untested here, and their \"model\" is a placeholder for a vision model that server or service offers. \"api_key_env\" names the environment variable holding a hosted service's key; the key itself never goes in this file.",
   "readers_examples": [
+    {
+      "name": "vllm",
+      "url": "http://192.168.1.100:8080/v1",
+      "model": "RedHatAI/Qwen3.8-27B-INT4",
+      "parallel": 8
+    },
+    {
+      "name": "omlx",
+      "url": "http://127.0.0.1:8000/v1",
+      "model": "Qwen3.8-27B-4bit",
+      "parallel": 1
+    },
     {
       "name": "ollama",
       "url": "http://127.0.0.1:11434/v1",

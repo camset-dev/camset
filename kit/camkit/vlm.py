@@ -5,7 +5,8 @@ Each reader answers the same question about the same frame; the callers decide w
 sources read alike: page_model.py's vote, pass1_map.py, tiebreak.py) and flag the rest for review.
 Answers are cached under the camera's runs (runs/<model>_fw<fw>/_cache/vlm) by image + prompt + model, so re-reads
 are free (cache_key, cached, keep: every reader keeps its answers the same way).
-Readers and endpoints come from private/config.json ("readers").
+Readers and endpoints come from private/config.json ("readers"). A camera run that asks a reader checks that it lists
+one before it opens the link (check_readers); inside a run a missing reader is an ordinary exception (NoReader).
 
 Every question a run asks about a frame goes through ask_role, which takes up a stand-in when the reader playing the
 role will not connect. The batch tools that read a whole run's frames afterwards build their readers themselves
@@ -23,7 +24,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from . import config, paths
+from . import ConfigMissing, config, paths
 
 CACHE = None          # the answers' folder when set (the tests); else the camera's, cache_dir()
 
@@ -109,19 +110,69 @@ def make_reader(cfg: dict, **override):
     return Reader(**cfg)
 
 
+NO_READER = ("private/config.json lists no reader: copy the ones you choose from \"readers_examples\" into \"readers\" "
+             "(docs/QUICKSTART.md, \"Choosing a reader\")")
+
+
+class NoReader(LookupError):
+    """No reader to ask: private/config.json lists none (kit/config.example.json lists none, so a copy of it asks no
+    server anything until its owner has chosen one, 2026-11-13), or none for a role. An ordinary exception, never a
+    SystemExit: inside a camera run every caller of a reader takes it as a reader that could not answer, as it took the
+    IndexError and KeyError this was before, so the run's own cleanup and restore go on as ever. A camera run that
+    asks a reader finds a missing list before it opens the link (check_readers), and the batch tools with no camera
+    stop on it with its message (readers(stop=True))."""
+
+
+def _settings() -> dict:
+    """private/config.json, or {} when there is none: a missing file is a missing reader list here (NoReader), never a
+    ConfigMissing (a SystemExit) in the middle of a run."""
+    try:
+        return config()
+    except ConfigMissing:
+        return {}
+
+
+def readers(stop: bool = False, settings: dict | None = None) -> list:
+    """The readers private/config.json lists ("readers"), or `settings` (the config a caller has read already). None
+    listed raises NoReader, saying what to do; stop: raises ConfigMissing instead, which ends the program with that
+    sentence (the batch tools with no camera, and check_readers), and no private/config.json at all ends it with
+    config()'s own."""
+    if settings is None:
+        settings = config() if stop else _settings()
+    listed = settings.get("readers") or []
+    if not listed:
+        raise (ConfigMissing if stop else NoReader)(NO_READER)
+    return listed
+
+
+def check_readers() -> None:
+    """Called by every camera run that asks a reader (each one that builds a LiveCamera, and runner.prover_session
+    for the provers) before it opens the link: a config that lists no reader, or no config at all, stops the run
+    there, with what to do, before anything is pressed or downloaded. Such a run went on with OCR alone until
+    2026-11-13, each reader's question failing as it came. A run that asks none (page_scan, selftest, identify) and a
+    restore (mode_switch --restore, pass 3's, prove_run's start file put back with nothing to prove) never check."""
+    readers(stop=True)
+
+
 def role(name: str) -> dict:
     """The config entry that plays a role: "second" (the second reading beside OCR, asked on every
     proof) or "third" (the tie-breaker where OCR and the second disagree). private/config.json "roles"
-    names a reader for each ({"second": "claude"}); without it, the first and second readers listed."""
-    c = config()
+    names a reader for each ({"second": "claude"}); without it, the first and second readers listed. No reader for
+    the role raises NoReader, an ordinary exception (see there)."""
+    c = _settings()
+    listed = readers(settings=c)
     named = c.get("roles", {}).get(name)
     if named:
-        found = next((r for r in c["readers"] if r["name"] == named), None)
+        found = next((r for r in listed if r["name"] == named), None)
         if found is None:
             raise ValueError(f"private/config.json: \"roles\" gives the {name} role to {named!r}, which no entry of "
-                             f"\"readers\" names ({', '.join(repr(r['name']) for r in c['readers']) or 'none'})")
+                             f"\"readers\" names ({', '.join(repr(r['name']) for r in listed)})")
         return found
-    return c["readers"][{"second": 0, "third": 1}[name]]
+    at = {"second": 0, "third": 1}[name]
+    if at >= len(listed):
+        raise NoReader(f"private/config.json lists one reader, and the {name} role needs another: add one to "
+                       f"\"readers\", or name the reader for it in \"roles\" (docs/QUICKSTART.md, step 3)")
+    return listed[at]
 
 
 _STANDING_IN: dict = {}        # role -> the reader config standing in for one that would not connect, or given it
@@ -153,8 +204,7 @@ def reader_for(name: str, **override):
 
 def stand_in(name: str, failed: dict) -> dict | None:
     """After `failed` would not connect: the next local reader that answers a tiny request, kept for the role."""
-    c = config()
-    for r in c["readers"]:
+    for r in readers():
         if r["name"] == failed.get("name") or r.get("kind") == "anthropic":
             continue
         try:

@@ -341,6 +341,7 @@ class FakeEyes:
 def _prover_world(monkeypatch, uploaded=True, restored=0):
     import proving.nav
     log = {"downloads": [], "closed": [], "finished": [], "checked": []}
+    monkeypatch.setattr(runner, "check_readers", lambda: None)      # readers listed (the check's own test is below)
     monkeypatch.setattr(runner, "Link", lambda run: FakeLink(run, log["downloads"]))
     monkeypatch.setattr(runner, "LiveCamera", lambda link, eyes, run, may_open=(): types.SimpleNamespace(may_open=may_open))
     monkeypatch.setattr(runner, "close", lambda cam, link: log["closed"].append(cam))
@@ -363,6 +364,133 @@ def test_a_prover_session_closes_and_restores_after_its_body_fails(monkeypatch, 
     said = capsys.readouterr().out
     assert "stopped: Failed: the cursor is not on" in said and len(log["closed"]) == 1
     assert log["finished"] == [s.start] and log["checked"] == [s.start] and eyes.closed == 1
+
+
+def test_a_prover_session_with_no_reader_listed_presses_nothing(tmp_path, monkeypatch):
+    """private/config.json lists no reader: the session stops before it opens the link (camkit.vlm.check_readers),
+    saying what to put there, so nothing is pressed, downloaded or uploaded, and the eyes are closed. Until 2026-11-13
+    such a session opened the link and went on with OCR alone."""
+    import camkit
+    from camkit import vlm
+    log, eyes = _prover_world(monkeypatch), FakeEyes()
+    monkeypatch.setattr(runner, "check_readers", vlm.check_readers)       # the real check, which _prover_world stubs
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    camkit.CONFIG.write_text(json.dumps({"eyes": "osd", "readers": []}), encoding="utf-8")
+    opened = []
+    monkeypatch.setattr(runner, "Link", lambda run: opened.append(run))
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader"), runner.prover_session("run", eyes):
+        raise AssertionError("the session's body ran")
+    assert opened == [] and log["downloads"] == [] and eyes.closed == 1
+
+
+def test_a_crawl_with_no_reader_listed_presses_nothing(tmp_path, monkeypatch):
+    """crawl_run with no reader listed stops before its eyes or its link open (check_readers), saying what to do."""
+    import camkit
+    import crawl_run
+
+    def never(*a, **k):
+        raise AssertionError("the crawl opened its eyes or the link")
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    camkit.CONFIG.write_text(json.dumps({"eyes": "osd", "readers": []}), encoding="utf-8")
+    monkeypatch.setattr(crawl_run, "load_scan", lambda scan: ([], {}))
+    monkeypatch.setattr(crawl_run, "eyes_from_config", never)
+    monkeypatch.setattr(crawl_run, "Link", never)
+    monkeypatch.setattr(sys, "argv", ["crawl_run.py"])
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader"):
+        crawl_run.main()
+
+
+def test_a_reader_missing_mid_run_is_a_failure_the_session_closes_and_restores_after(tmp_path, monkeypatch, capsys):
+    """Inside a run a missing reader list is an ordinary exception (camkit.vlm.NoReader), never a SystemExit that would
+    skip the cleanup: a walker's question takes it as a reader that could not answer and goes on with OCR alone
+    (live.reader_label: no label, and why), and one that reaches the session's body is said, the camera closed
+    (close_for_restore) and the start file put back and checked (end_session), as after any failure."""
+    from camkit import live, vlm
+    log, eyes = _prover_world(monkeypatch), FakeEyes()
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": []})
+    monkeypatch.setattr(vlm, "_STANDING_IN", {})
+    frame = tmp_path / "frame.png"
+    frame.write_bytes(b"a frame")
+    with runner.prover_session("run", eyes) as s:
+        label, why = live.reader_label(frame)
+        assert label == "" and "NoReader" in why and "lists no reader" in why
+        vlm.ask_role("second", b"a frame", "prompt", 5)
+    said = capsys.readouterr().out
+    assert "stopped: NoReader: private/config.json lists no reader" in said and len(log["closed"]) == 1
+    assert log["finished"] == [s.start] and log["checked"] == [s.start] and s.restored is True and eyes.closed == 1
+
+
+def test_every_run_that_drives_the_menus_checks_its_readers_before_its_link():
+    """Every script that builds a LiveCamera, whose walkers ask the readers, calls camkit.vlm.check_readers before it
+    opens the link for that camera, and runner.prover_session does it for every prover: a config that lists no reader
+    stops the run before anything is pressed. A restore (mode_switch --restore, pass 3's restore()) asks nothing of a
+    reader and is not checked; prove_run checks only when it has rows to prove, so with none its start file (--start)
+    goes back with no reader (the test below)."""
+    builders = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "kit").rglob("*.py")
+                      if "tests" not in p.parts and p.parent.name != "camkit" and "__pycache__" not in p.parts
+                      and "LiveCamera(" in p.read_text(encoding="utf-8"))
+    assert "kit/runner.py" in builders and "kit/crawl_run.py" in builders and len(builders) >= 15
+    for rel in builders:
+        text = (ROOT / rel).read_text(encoding="utf-8")
+        assert "from camkit.vlm import check_readers" in text and "check_readers()" in text, rel
+    session = (ROOT / "kit" / "runner.py").read_text(encoding="utf-8").split("def prover_session", 1)[1]
+    assert session.index("check_readers()") < session.index("with Link(run) as link:")
+
+
+def test_prove_run_puts_its_start_file_back_with_no_reader_when_nothing_is_left(tmp_path, monkeypatch):
+    """prove_run --start FILE with no reader listed: when no row is left to prove, no reader is asked, so the start
+    file goes back all the same (a put-back never needs a reader); with a row to prove, the run stops before its eyes
+    or the link open (check_readers), and nothing is touched."""
+    import camkit
+    import prove_run
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    camkit.CONFIG.write_text(json.dumps({"eyes": "osd", "readers": []}), encoding="utf-8")
+    put_back, eyes = [], []
+    monkeypatch.setattr(prove_run.models, "current", lambda root: models.A1II)
+    monkeypatch.setattr(prove_run, "jobs", lambda scope=None: [])
+    monkeypatch.setattr(prove_run, "axis_jobs", lambda scope=None: [])
+    monkeypatch.setattr(prove_run, "load_scan", lambda scan: ([], {}))
+    monkeypatch.setattr(prove_run, "eyes_from_config", lambda run: eyes.append(FakeEyes()) or eyes[-1])
+    monkeypatch.setattr(prove_run, "put_start_back", lambda run, hdmi, ref: put_back.append(ref.name) or True)
+    monkeypatch.setattr(prove_run, "Link", lambda run: (_ for _ in ()).throw(AssertionError("a session's link")))
+    start = tmp_path / "00007_start.DAT"
+    start.write_bytes(b"a settings file")
+    monkeypatch.setattr(sys, "argv", ["prove_run.py", "--start", str(start)])
+    prove_run.main()
+    assert put_back == ["00007_start.DAT"] and len(eyes) == 1 and eyes[0].closed == 1
+    row = {"kind": "list", "path": ["Drive Mode"], "labels": ["Single Shooting", "Continuous Shooting"]}
+    monkeypatch.setattr(prove_run, "jobs", lambda scope=None: [row])
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader"):
+        prove_run.main()
+    assert put_back == ["00007_start.DAT"] and len(eyes) == 1
+
+
+def test_the_batch_tools_stop_with_a_sentence_when_no_reader_fits(tmp_path, monkeypatch):
+    """The batch tools that read a run's saved frames with no camera (pass1_labels, tiebreak) stop with a sentence,
+    not a traceback, when private/config.json lists no reader, before anything is read; and tiebreak, whose third
+    reader is the second one listed (or the one "roles" names), says so when only one is listed."""
+    import camkit
+    import pass1_labels
+    import tiebreak
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "config.json")
+    camkit.CONFIG.write_text(json.dumps({"readers": []}), encoding="utf-8")
+    (tmp_path / "rows.jsonl").write_text(json.dumps({"label": "Drive Mode", "kind": "list", "frames": ["00001_r.png"]})
+                                         + "\n", encoding="utf-8")
+
+    def never(*a, **k):
+        raise AssertionError("a frame was read")
+    monkeypatch.setattr(pass1_labels, "read_frames", never)
+    monkeypatch.setattr(sys, "argv", ["pass1_labels.py", str(tmp_path)])
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader"):
+        pass1_labels.main()
+    monkeypatch.setattr(sys, "argv", ["tiebreak.py", str(tmp_path)])
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader"):
+        tiebreak.main()
+    one = {"name": "omlx", "url": "http://127.0.0.1:8000/v1", "model": "m"}
+    camkit.CONFIG.write_text(json.dumps({"readers": [one]}), encoding="utf-8")
+    with pytest.raises(SystemExit, match="lists one reader, and the third role needs another"):
+        tiebreak.main()
+    assert not (tmp_path / "tiebreak.jsonl").exists()
 
 
 def test_a_prover_session_says_when_the_restore_did_not_take(monkeypatch, capsys):
@@ -526,6 +654,7 @@ def test_pass1_labels_and_page_model_stop_before_writing_when_the_ocr_engine_can
                                          + "\n", encoding="utf-8")
     (tmp_path / "options.jsonl").write_text('{"frame": "kept"}\n', encoding="utf-8")
     monkeypatch.setattr(pass1_labels, "read_frames", unavailable)
+    monkeypatch.setattr(pass1_labels, "readers", lambda stop=False: [{}])        # a reader listed
     monkeypatch.setattr(pass1_labels, "role", lambda name: {})
     monkeypatch.setattr(pass1_labels, "make_reader", lambda cfg: None)
     monkeypatch.setattr(sys, "argv", ["pass1_labels.py", str(tmp_path)])

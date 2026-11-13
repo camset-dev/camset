@@ -19,8 +19,8 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import config, jsonl, paths  # noqa: E402
-from camkit.vlm import make_reader  # noqa: E402
+from camkit import jsonl, paths  # noqa: E402
+from camkit.vlm import make_reader, readers  # noqa: E402
 
 RUN = paths.module_root() / "kit2_help"
 PROMPT = ('This is a Sony camera help screen: an orange title at the top, white help text below, and an OK '
@@ -69,7 +69,7 @@ def decide(ocr: str, first: str, second) -> tuple[str, str]:
 
 
 def main():
-    readers = [make_reader(r) for r in config()["readers"]]
+    asked = [make_reader(r) for r in readers(stop=True)]       # none listed: its sentence, and nothing asked
     done = {}
     out_path = RUN / "help_reads.jsonl"
     for r in jsonl.read(out_path):
@@ -82,11 +82,11 @@ def main():
     print(f"{len(todo)} guides to read ({len(done)} read before)", flush=True)
 
     def one(r):
-        first = ask(readers[0], r["frames"], r["prompt"])
+        first = ask(asked[0], r["frames"], r["prompt"])
 
         def second():
             try:
-                return ask(readers[1], r["frames"], r["prompt"]) if len(readers) > 1 else None
+                return ask(asked[1], r["frames"], r["prompt"]) if len(asked) > 1 else None
             except Exception as e:                    # the local server may be off
                 print(f"   second reader: {type(e).__name__}: {str(e)[:60]}", flush=True)
                 return None

@@ -35,6 +35,7 @@ from camkit.match import clean as clean_option, index_of, norm, same  # noqa: E4
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines, open_hold, row_box, to_item, to_register  # noqa: E402
 from prove_run import LOCK_S, Failed, to_shooting, vlm_option  # noqa: E402
@@ -435,6 +436,7 @@ def main():
         sys.exit(f"not items of a hold: {bad}; the items are {ITEMS}")
     cycle, model = load_scan(a.scan)
     run = Run("kit2_pass2")
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     try:
         with proofs_file(run, a.context, {"allowance": allowance}) as out, \

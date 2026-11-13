@@ -49,8 +49,8 @@ offline event.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the community leaders
 responsible for enforcement. Reports go to the maintainer privately, through the repository's security reporting
-(Security > Report a vulnerability), as [SECURITY.md](SECURITY.md) describes. Until the public repository exists,
-open an issue that asks for a private channel without giving any details; the maintainer replies with one.
+(Security > Report a vulnerability), as [SECURITY.md](SECURITY.md) describes. If that is not offered, open a Bug
+report titled "Security contact" with no details in it; the maintainer then opens a private channel.
 
 All complaints will be reviewed and investigated promptly and fairly.
 

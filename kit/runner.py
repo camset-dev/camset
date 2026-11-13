@@ -33,6 +33,7 @@ from camkit import safety, screen, session
 from camkit.frames import load
 from camkit.link import Link, StopRequested
 from camkit.live import LiveCamera, close, text_of
+from camkit.vlm import check_readers
 from camkit.screen import same_position
 # A runner's exit status when the camera is not known to be as its start file at the end: the restore did not check
 # out, the last download was refused so nothing was restored, or the restore itself failed (restoring). kit/tools/
@@ -871,6 +872,7 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
     ending = start = None
     restored = False
     try:
+        check_readers()     # no reader listed: stop before the link opens, nothing pressed
         with Link(run) as link:
             eyes.attach(link)
             to_shooting(link, eyes, "the start download")

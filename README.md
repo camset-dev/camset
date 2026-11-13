@@ -44,6 +44,10 @@ open today's camera definitions), and 0.2.0 has no Windows zip.
   The camera helper is in neither, as in the other packages ([The camera helper](#the-camera-helper)). The editor was
   built and used on a Windows 11 PC; the downloaded zip and installer not yet tried.
 
+**Code signing policy:** the Windows downloads are not signed yet; the
+[code signing policy](https://camset-dev.github.io/camset/CODE_SIGNING_POLICY/) says what will be signed, and by
+whom, once the project's application for free code signing is accepted.
+
 Then open a settings file from your camera's card, or the built-in sample to look around without a camera. The
 downloaded editor works with the files on the card:
 

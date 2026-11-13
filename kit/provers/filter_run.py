@@ -38,6 +38,7 @@ from camkit import camset, definitions, ocr  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import MAIN_RUN, Run, mark_proof_run  # noqa: E402
 from mode_switch import find, open_menu  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_in_argument, close_for_restore, end_session, in_mode,  # noqa: E402
@@ -390,6 +391,7 @@ def main():
     if a.untick:
         df = definitions.path(run.dir.parent.name)          # its box names are public (definitions.load_public)
         defn = definitions.load_public(df) if df.exists() else {}
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     proofs, unrestored = 0, False
     try:

@@ -33,6 +33,9 @@ carries the definition viewer as one file,
 [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open in a
 browser with no internet.
 
+**Code signing policy:** the Windows downloads are not signed yet; the [code signing policy](CODE_SIGNING_POLICY.md)
+says what will be signed, and by whom, once the project's application for free code signing is accepted.
+
 1. **Save the settings on the camera:** MENU > Setup > Reset/Save Settings > Save/Load Settings > Save. The camera
    writes a `CAMSET*.DAT` file into the card's `PRIVATE/SONY/CAMSET` folder. Copy it to your computer and keep it:
    it is the camera's own backup.

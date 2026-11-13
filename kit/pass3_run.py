@@ -34,6 +34,7 @@ from camkit import ROOT, camset, models, paths, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
@@ -346,6 +347,7 @@ def main():
     chosen = [b for b in chosen if not b.get("set")]
     if not chosen:
         sys.exit("nothing to run: " + RETIRED)
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     run = Run("kit2_pass3")
     with open(P3 / "pass3.log", "a", encoding="utf-8") as log:
         restored = run_blockers(run, cycle, model, chosen, log)

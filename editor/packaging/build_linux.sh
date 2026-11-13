@@ -4,7 +4,7 @@
 # Run from editor/ on Linux:   sh packaging/build_linux.sh
 set -eu
 VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
-cargo build --release
+cargo build --release --locked
 NAME="camset-editor-$VERSION-linux-$(uname -m)"
 DIR="target/dist/$NAME"
 rm -rf "$DIR"

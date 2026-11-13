@@ -99,6 +99,51 @@ def test_link_needs_a_config_only_for_the_address(tmp_path, monkeypatch):
     assert link.Link(run, usb=True).args[1:] == ["--usb"]
 
 
+def test_a_copy_of_the_example_config_contacts_nothing(tmp_path, monkeypatch):
+    """kit/config.example.json copied as it is (docs/QUICKSTART.md, step 3) gives the kit nothing to contact: no camera
+    address, so a camera run stops and asks for one, and no reader. A camera run that asks a reader stops on that
+    before it opens the link (check_readers: ConfigMissing, its sentence); inside a run a missing reader is an
+    ordinary exception (NoReader, never a SystemExit), which every caller takes as a reader that could not answer, so
+    the run's cleanup and restore go on. Until 2026-11-13 its first reader was a server at an example address on the
+    local network, to which a copy left as it was sent pictures of the camera's screen. The readers it shows are under
+    "readers_examples", which the kit does not read: one of each kind "Choosing a reader" names."""
+    import json
+    from camkit import link, vlm
+    from camkit.runs import Run
+    example = json.loads((ROOT / "kit" / "config.example.json").read_text(encoding="utf-8"))
+    assert example["camera_ip"] == "" and example["readers"] == []
+    (tmp_path / "private").mkdir()
+    monkeypatch.setattr(camkit, "CONFIG", tmp_path / "private" / "config.json")
+    camkit.CONFIG.write_text(json.dumps(example), encoding="utf-8")
+    monkeypatch.setattr(link, "config", camkit.config)
+    monkeypatch.setattr(vlm, "config", camkit.config)
+    monkeypatch.setattr(vlm, "_STANDING_IN", {})
+    monkeypatch.delenv("CAMSET_USB", raising=False)
+    with pytest.raises(camkit.ConfigMissing, match="camera_ip"):
+        link.Link(Run("cfg", root=tmp_path))
+    with pytest.raises(camkit.ConfigMissing, match="lists no reader: copy the ones you choose from \"readers_examples\""):
+        vlm.check_readers()
+    for asked in (lambda: vlm.role("second"), lambda: vlm.stand_in("second", {"name": "gone"}),
+                  lambda: vlm.ask_role("second", b"frame", "prompt", 5)):
+        with pytest.raises(vlm.NoReader, match="lists no reader") as got:
+            asked()
+        assert isinstance(got.value, Exception) and not isinstance(got.value, SystemExit)
+    assert {r["name"] for r in example["readers_examples"]} == {"vllm", "omlx", "ollama", "claude", "openai", "gemini"}
+    # no private/config.json at all: the start check says so in config()'s own sentence; mid-run it is a NoReader
+    camkit.CONFIG.unlink()
+    with pytest.raises(camkit.ConfigMissing, match="No private/config.json"):
+        vlm.check_readers()
+    with pytest.raises(vlm.NoReader):
+        vlm.role("second")
+    # filled in: the one reader listed plays the second role and the check passes; the third role asks for another,
+    # an ordinary exception as the IndexError before it was
+    camkit.CONFIG.write_text(json.dumps({**example, "readers": example["readers_examples"][1:2]}), encoding="utf-8")
+    vlm.check_readers()
+    assert vlm.role("second")["name"] == "omlx"
+    with pytest.raises(vlm.NoReader, match="the third role needs another"):
+        vlm.role("third")
+
+
 def test_kit_python_writes_utf8_explicitly():
     """Every text open()/read_text()/write_text() in kit/ names its encoding (cp1252 is Windows' default)."""
     import ast

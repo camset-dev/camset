@@ -17,7 +17,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, ocr, paths, screen  # noqa: E402
 from camkit.frames import load  # noqa: E402
-from camkit.vlm import PROMPTS, make_reader, role  # noqa: E402
+from camkit.vlm import PROMPTS, make_reader, readers, role  # noqa: E402
 from runner import OcrUnavailable, read_frames  # noqa: E402
 from page_model import same_text  # noqa: E402
 
@@ -55,6 +55,7 @@ def main():
             for k, fr in enumerate(frames):
                 if fr:
                     jobs.append((path, r["kind"], k, fr))
+    readers(stop=True)                        # none listed: its sentence, before any frame is read
     print(f"{len(jobs)} option frames to read", flush=True)
     cfg = role("second")
     reader = make_reader(cfg)

@@ -23,7 +23,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import config, jsonl, paths, vlm  # noqa: E402
+from camkit import jsonl, paths, vlm  # noqa: E402
 
 KINDS = ("list", "dialog", "sidelist", "axis", "table")
 
@@ -47,9 +47,10 @@ def todo(run: Path, redo: bool) -> list:
 def use_reader(name: str | None) -> str:
     """The reader that answers: --reader's configured one by name (it plays the "second" role for this process, as
     prove_run's ask_second then asks it), else the "second" one. Returns its name."""
+    listed = vlm.readers(stop=True)              # none listed: its sentence, and nothing asked
     if not name:
         return vlm.role("second")["name"]
-    cfg = next((r for r in config()["readers"] if r["name"] == name), None)
+    cfg = next((r for r in listed if r["name"] == name), None)
     if cfg is None:
         sys.exit(f"--reader {name!r}: no reader of that name in private/config.json")
     vlm.assign_role("second", cfg)

@@ -82,7 +82,7 @@ def test_reread_proofs_gives_the_named_reader_the_second_role(monkeypatch):
     from camkit import vlm
     readers = [{"name": "first", "url": "http://192.0.2.1/v1", "model": "m"},
                {"name": "local", "url": "http://127.0.0.1:8000/v1", "model": "m"}]
-    monkeypatch.setattr(reread_proofs, "config", lambda: {"readers": readers})
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": readers})
     monkeypatch.setattr(vlm, "_STANDING_IN", {})
     assert reread_proofs.use_reader("local") == "local" and vlm.playing("second")["name"] == "local"
     with pytest.raises(SystemExit, match="no reader of that name"):
@@ -827,7 +827,8 @@ def cards_world(tmp_path, monkeypatch, restored=True):
             return tmp_path / f"{tag}.DAT"
     eyes = SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None, close=lambda: calls.append("eyes closed"))
     ending = session.Ending(tmp_path / "after.DAT", [SimpleNamespace(key="global:0x0001", before=0, after=1)], True)
-    for name, value in (("Link", Link), ("Run", lambda name: run), ("eyes_from_config", lambda r: eyes),
+    for name, value in (("check_readers", lambda: None), ("Link", Link), ("Run", lambda name: run),
+                        ("eyes_from_config", lambda r: eyes),
                         ("load_scan", lambda scan: ([], {})), ("wait_for", lambda *a, **k: None),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
                         ("time", SimpleNamespace(sleep=lambda s: None)),

@@ -44,6 +44,7 @@ from camkit import camset, ocr  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.match import clean  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
@@ -320,6 +321,7 @@ def main():
         if a.in_mode and a.in_mode != now:
             sys.exit(f"--in {a.in_mode}: the switch waiting in {kept} left the camera in {now} mode; nothing was sent")
         cycle, model = load_scan(in_mode(a.scan, now))
+        check_readers()     # no reader listed: stop before the link opens, nothing pressed
         hdmi = eyes_from_config(run)
         try:
             with Link(run) as link:
@@ -365,6 +367,7 @@ def main():
     else:
         sys.exit(f"--to {a.to!r}: one of {FAMILIES} or {sorted(MODES)}")
     cycle, model = load_scan(in_mode(a.scan, a.in_mode or "Stills"))
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     start = after = None
     switch_failed = False           # a switch that did not happen exits 1, so --keep's chain does not go on in the old mode

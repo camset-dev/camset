@@ -56,18 +56,23 @@ None of them holds help text or a value from anyone's camera.
 | Windows | The workflow (`Windows zip`) puts `camset_editor.exe`, `definitions/` (each definition with its sample), the project's licence as `LICENSE.txt` and the third-party licences page into one folder, `camset-editor-<version>-windows-x64`, and zips that folder; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results). Then, from the release after 0.2.1 (`Windows installer`), Inno Setup builds `camset-editor-<version>-windows-x64-setup.exe` from the same folder with `packaging/windows/installer.iss`: `ISCC.exe /DAppVersion=<version> "/DAppCopyright=<copyright sentence>" packaging\windows\installer.iss` from `editor/`, the version read from `Cargo.toml` and the copyright sentence, the first sentence of the program's own copyright detail ("Copyright (c) <year> <holders>."), both passed in: Inno Setup keeps at most 100 characters of a copyright, and the program's whole line, with its sentence that the project is not Sony's, is longer. It installs for one user with no administrator rights, into `%LOCALAPPDATA%\Programs\Camset Editor`, the zip's four in the zip's layout, with a Start-menu shortcut, a desktop one if ticked, and an uninstaller in Windows' installed apps (Camset Editor, its version, Camset contributors, the program's icon, the project's page); a newer version upgrades an older in place, found by the script's `AppId`, which must never change. It never names the editor's own folder (`camset_editor` in `%APPDATA%`, or in `XDG_CONFIG_HOME` when that is set), so an upgrade or the uninstaller leaves the user's files as they are; all it deletes are the built-in definitions in the program's `definitions` folder, the files named as the shipped ones (`*_fw*.json` and `*_fw*.DAT`), replaced as a set by each install, and never a folder, whatever folder the user chose. No file types, nothing started with Windows, no code, no network. Inno Setup comes with GitHub's Windows runners (`ISCC.exe` in `C:\Program Files (x86)\Inno Setup 6`, taken first, or on the PATH, where the runner has Chocolatey's stand-in for it); the step stops, saying so, on a runner without it, and nothing is downloaded for it. The installer carries version details of its own (Properties > Details: product Camset Editor, the program's version, description Camset Editor Setup, Camset contributors, the copyright sentence), which the step checks on the built file as the zip step checks the program's, each trimmed of the spaces Inno Setup pads its fixed-width slot with (the script refuses a version or copyright longer than its slot), since a signing service asks for a product name and version on every file it signs | The editor was built (Visual Studio 2022 Build Tools), its tests run (56 and 229 passed) and the program used on a Windows 11 PC, 2026-11-12, reading a camera over the network with the camera helper (`PORTING.md`, "Seen on Windows / Linux"). The workflow's zip step itself first ran for 0.2.1; a downloaded zip not yet tried. Since 2026-11-12 `build.rs` links the program's icon (drawn from `assets/icon.png` at 16 to 256 px) and its version details (Properties > Details) into the exe, for the MSVC toolchain, with no resource compiler (`packaging/windows/resources.rs`); not yet seen on a Windows PC. On Windows, `editor-ci.yml` (after its build) and the `Windows zip` step (before it zips) check the built program's details (product name, description, version) and fail without them, which a build that cannot link them only warns about. The installer, written 2026-11-13 after 0.2.1 was out, has not yet been compiled: `editor-ci.yml` compiles it on Windows for every pull request, from a folder staged as the zip's (with a stand-in licences page), with the release's own lines and the same check of its details, so its first compile is that check's first run; installing it on a Windows PC is not yet tried. Neither the exe nor the installer is signed. |
 
 **Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.1 now; three numbers and nothing more, as the
-Windows installer's own details take it), add the release's section to `CHANGELOG.md`, commit, then tag that commit
-`v<version>` (for example `v0.2.1`) and push the tag to GitHub only. The release is
-0.2.1, tagged on 2026-11-13. Before it, 0.2.0 was tagged on 2026-11-11 on the single commit that replaced the public
-history; 0.1.0 was withdrawn then, its tag and its GitHub Release deleted, because its packages carried a definition
-in the older form. Pushing the tag starts `.github/workflows/editor-release.yml` (which runs the same, without the
-release, when run by hand with workflow_dispatch):
+Windows installer's own details take it), add the release's section to `CHANGELOG.md` and commit it to `main`. Push
+`main` to GitHub first, then tag that commit `v<version>` (for example `v0.2.1`) and push the tag to GitHub only; or
+push both at once (`git push <remote> main v<version>`, GitHub's remote). The workflow checks first that GitHub's
+`main` holds the commit the tag names, and stops when it does not: a tag pushed before `main` is put right by pushing
+`main`, then Re-run jobs on the run's page. The release is 0.2.1, tagged on 2026-11-13. Before
+it, 0.2.0 was tagged on 2026-11-11 on the single commit that replaced the public history; 0.1.0 was withdrawn then,
+its tag and its GitHub Release deleted, because its packages carried a definition in the older form. Pushing the tag
+starts `.github/workflows/editor-release.yml` (which runs the same, without the release, when run by hand with
+workflow_dispatch):
 
-1. **test:** the kit's tests, `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any
-   package is built (pull requests and main are checked by `kit-ci.yml` and `editor-ci.yml`); and, from 0.2.1, the
-   definition viewer as one file, `camset-viewer.html`, built by `kit/tools/proof_viewer.py --public --single` from
-   the public definitions in `editor/definitions/` alone (each with its sample), kept as a build artifact; it is
-   never committed;
+1. **test:** first, on a pushed tag, that the commit the tag names is on `main` (its checkout fetches the whole
+   history and every branch for it): a tag on any other commit stops the workflow there and says so, and nothing is
+   built ([the code signing policy](CODE_SIGNING_POLICY.md) promises it); then the kit's tests,
+   `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any package is built (pull
+   requests and main are checked by `kit-ci.yml` and `editor-ci.yml`); and, from 0.2.1, the definition viewer as one
+   file, `camset-viewer.html`, built by `kit/tools/proof_viewer.py --public --single` from the public definitions in
+   `editor/definitions/` alone (each with its sample), kept as a build artifact; it is never committed;
 2. **build:** on macOS, Linux and Windows, the editor's tests, its third-party licences page (`cargo about`: the
    crates, and the fonts egui builds in, from `editor/about.hbs`), and the package for that system (on Windows the zip
    and the installer built from the same folder), which carries the project's `LICENSE` and that page, kept as a
@@ -78,7 +83,9 @@ release, when run by hand with workflow_dispatch):
    Run by hand, or on Gitea, which has no GitHub Releases API, this job skips itself.
 
 Each action the workflow uses is pinned to a full commit, with its version in a comment, and `cargo-about` to a
-version, so a tag moved upstream cannot change what builds or publishes a release.
+version, so a tag moved upstream cannot change what builds or publishes a release; and every `cargo build`, `cargo
+test` and `cargo about` of the workflow and of the packaging scripts it runs takes `--locked`, so the crates are the
+ones `editor/Cargo.lock` names, or the build stops.
 
 The workflow ran on GitHub for 0.1.0: a build job that GitHub's macOS runner cancelled before any step was rebuilt
 with Re-run failed jobs on the run's page, and the release job, which waits for every build, ran after it. It has not
@@ -101,7 +108,7 @@ is not signed off (`git commit -s`; the repository's CONTRIBUTING.md). Written 2
 
 Not yet done for a public release:
 - **macOS:** the app is ad-hoc signed only: no Developer ID signature, no notarization (both need an Apple Developer account), and no universal (Intel + Apple silicon) build.
-- **Windows:** no code signing, of the program or the installer, so Windows SmartScreen warns ("Windows protected your PC") the first time the downloaded installer, or the program from the zip, is opened, and Smart App Control, where it is on, may refuse them. What users meet until then is in the README, "Use the editor".
+- **Windows:** no code signing, of the program or the installer, so Windows SmartScreen warns ("Windows protected your PC") the first time the downloaded installer, or the program from the zip, is opened, and Smart App Control, where it is on, may refuse them. What users meet until then is in the README, "Use the editor". The project is applying to SignPath Foundation for free code signing; what will be signed, how and by whom is the [code signing policy](CODE_SIGNING_POLICY.md), and the release workflow gets its signing step once the application is accepted.
 - **Proper installers for Linux** (`.deb`, AppImage), for example with cargo-packager, once the plain packages work. Windows has its installer (Inno Setup, above); it carries Inno Setup's own icon, as the script names no `.ico` (the repository keeps none; the program's icon is in `camset_editor.exe`, which the uninstaller's entry and the shortcuts show).
 - **File types:** none are claimed. `.DAT` is used by many apps (decided 2026-10-22).
 - **The docs site's links to the README, CONTRIBUTING and the Releases page.** `repo_url` and `site_url` in
@@ -109,5 +116,6 @@ Not yet done for a public release:
 - **Release notes on GitHub:** the workflow attaches the packages and the viewer and writes no notes. A release's
   notes are its section of `CHANGELOG.md` (its "Read first" repeats the README's warning, says that the camera helper
   is not included, for 0.2.0 that 0.1.0 is withdrawn and its definitions do not open in 0.2.0, and from 0.2.1 that the
-  Windows program is not signed, so SmartScreen warns), copied onto the Release by hand.
+  Windows program is not signed, so SmartScreen warns), copied onto the Release by hand, with a link named "Code
+  signing policy" to the [policy page](CODE_SIGNING_POLICY.md), which SignPath's terms ask for on the download pages.
 - **The camera helper is not in these packages** (the README, "The camera helper"). If an SDK build is ever shipped, it must carry the warranty notice above.

@@ -14,6 +14,20 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   your camera's `personal_records` to its camera file and make the sample again (docs/UPDATING.md, "Your camera
   file: what the kit reads in it now").
 
+### The project
+
+- The docs site has a code signing policy (Reference > Code signing policy), linked from the README's and the docs
+  home page's download parts: what will be signed once SignPath Foundation accepts the project's application for free
+  code signing (the editor's Windows program and its installer, built from a release tag by the release workflow on
+  GitHub's runners), who approves it, and that the editor sends nothing over a network unless asked. Nothing is signed
+  yet.
+- The release workflow builds only a tag on a commit of `main`: a tag on any other commit, or one pushed before `main`
+  was, stops it before anything is built, with a message that says what to do (push `main`, then re-run the job). Its
+  builds and tests, and the packaging scripts', take the crates `editor/Cargo.lock` names (`--locked`), or stop.
+- The security policy, the code of conduct and the new-issue page are written for the public repository: a security
+  problem goes through the repository's Security tab (Report a vulnerability), or, where that is not offered, a Bug
+  report titled "Security contact" with no details, and the new-issue page points there and to the documentation.
+
 ### The editor
 
 - On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
@@ -38,6 +52,18 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- A copy of `kit/config.example.json` names nothing to contact until it is filled in: its camera address is empty and
+  it lists no reader. Its first reader was a server at an example address on the local network, to which a copy left
+  as it was sent pictures of the camera's screen; the readers it shows are all under `readers_examples` now.
+- A run that asks a reader (the crawl, the proofs, the walks, the provers, `drive.py`, `mode_switch.py --to` and
+  `--set`, `card_actions.py`) with no reader listed in `private/config.json`, or with no `private/config.json`, stops
+  before it opens the link, saying what to put there: nothing is pressed. With an empty list such a run used to go on
+  with OCR alone, and with no config at all (over USB) it stopped at its first question to a reader, the menus left
+  open. A run that asks no reader (the page scan, the self-test) and a restore run as before; `prove_run.py --start`
+  with nothing left to prove puts its start file back with no reader. Inside a run, a reader that cannot be asked is
+  taken by each question to it as no answer, and the run goes on with OCR alone as before; only one that reaches a
+  session's own body ends the run, with the menus closed and the start file put back. `pass1_labels.py` and
+  `tiebreak.py` say in a sentence when no reader fits.
 - When the proof viewer is not built (the kit has never run on the camera here, or it works on another camera), its
   message, and `kit/setup.py`'s line for it, also say that the definition viewer needs no runs:
   `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at
@@ -74,6 +100,15 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the lens-name record (0x167c) says a teleconverter's name is added after the lens's without naming the one used,
   and the registration stamp (0x0c09) no longer gives the number seen as a fact. They reach the definition the next
   time the maintainer writes it with `kit/schema_update.py --write`.
+
+### The docs
+
+- The docs site draws its text in the system's own fonts. It loaded Inter and JetBrains Mono from Google Fonts on
+  every page, so Google saw each visitor; a test keeps it so. The repository box in its header still asks GitHub's
+  API for the star count, from the visitor's browser: GitHub hosts the site anyway.
+- The editor's guide says plainly that the camera login file holds the passwords in plain text, protected only by the
+  file's permissions, and names the two things there for developers: the camera address taken from a clone's
+  `private/config.json` at start, and `CAMSET_NETTEST=1`.
 
 ## 0.2.1 (2026-11-13)
 

@@ -230,6 +230,23 @@ def test_the_model_pages_are_in_their_names_order_on_every_os(monkeypatch):
         ("ILCE-7RM4", "models/ILCE-7RM4_fw1.00.md")]
 
 
+# ---------------------------------------------------------------- the docs site's fonts
+
+def test_the_docs_site_loads_no_fonts_from_google():
+    """The site draws its text in the system's own fonts (the theme's font: false, 2026-11-13): without it the theme
+    links every page to Google Fonts (Inter and JetBrains Mono), so Google saw each visitor. Read too as Zensical, at
+    the version kit/requirements.txt pins, reads mkdocs.yml, its defaults applied (they fill the fonts in when the
+    setting is missing); and nothing in mkdocs.yml adds a stylesheet or a script from another site. The theme's
+    repository box in the header still asks api.github.com for the star count and the latest release, from the
+    visitor's browser: GitHub, which hosts the site anyway."""
+    site = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
+    assert site["theme"]["font"] is False
+    from zensical import config as zensical_config
+    assert zensical_config.parse_mkdocs_config(str(ROOT / "mkdocs.yml"))["theme"]["font"] is False
+    for key in ("extra_css", "extra_javascript"):
+        assert not any("://" in str(x) for x in site.get(key) or []), key
+
+
 # ---------------------------------------------------------------- the record names, one file per definition
 
 def test_the_record_names_are_one_file_per_definition():

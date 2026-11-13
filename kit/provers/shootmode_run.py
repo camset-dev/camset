@@ -26,6 +26,7 @@ from camkit import camset, ocr, paths  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
@@ -96,6 +97,7 @@ def main():
     cycle, model = load_scan(a.scan)
     run = Run("kit2_pass2")
     out = proofs_file(run, CONTEXT)
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     base = camset.read(start)
     try:

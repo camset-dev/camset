@@ -5,8 +5,9 @@
 # packages and the viewer attached
 # (each package carries the project's LICENSE and its own third-party licences page; the viewer keeps one name, so
 # releases/latest/download/camset-viewer.html is its address); run by hand (workflow_dispatch) it keeps the artifacts
-# only. Gitea Actions reads this folder too and has no GitHub Releases API, so the release job
-# skips itself there. Pull requests and main are checked by kit-ci.yml and editor-ci.yml; this workflow runs their
+# only. A pushed tag builds only when the commit it names is on main: the test job checks that first and stops the
+# workflow otherwise (docs/CODE_SIGNING_POLICY.md). Gitea Actions reads this folder too and has no GitHub Releases
+# API, so the release job skips itself there. Pull requests and main are checked by kit-ci.yml and editor-ci.yml; this workflow runs their
 # tests again only as the gate before a release's packages are built.
 #
 # Every action is pinned to a full commit, its version in the comment beside it (looked up 2026-11-09), so a tag
@@ -23,9 +24,28 @@ jobs:
     permissions:
       contents: read
     steps:
+      # the whole history and every branch (fetch-depth: 0), which the check below needs; the checkout fetches them
+      # with the workflow's token and keeps no credentials afterwards, on GitHub and on Gitea alike
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+      # a release is built only from a commit of main (docs/CODE_SIGNING_POLICY.md): a tag on any other commit, or
+      # pushed before main was, stops the workflow here, before anything is built; HEAD is the commit the tag names. A
+      # check against mistakes: run by hand, the workflow builds what it is given and publishes nothing, so it is not
+      # checked, and a tag on an older commit runs that commit's own copy of this file
+      - name: The tagged commit is on main
+        if: github.event_name == 'push'
+        run: |
+          if ! git rev-parse --verify --quiet refs/remotes/origin/main >/dev/null; then
+            echo "::error::The main branch was not fetched, so whether the tag $GITHUB_REF_NAME is on it cannot be checked. Nothing was built: re-run this job."
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "::error::The tag $GITHUB_REF_NAME is on a commit that is not on main on GitHub. Nothing was built. If the commit is meant for main, push main first, then re-run this job; otherwise tag a commit of main and push that tag (docs/RELEASING.md)."
+            exit 1
+          fi
+          echo "The tag $GITHUB_REF_NAME is on main."
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.11"
@@ -49,7 +69,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
       - name: Rust tests
         working-directory: editor
-        run: cargo test --release
+        run: cargo test --release --locked
 
   build:
     needs: test
@@ -72,7 +92,7 @@ jobs:
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libxkbcommon-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libwayland-dev
       - name: Tests
-        run: cargo test --release
+        run: cargo test --release --locked
       - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
         with:
           tool: cargo-about@0.9.3
@@ -98,7 +118,7 @@ jobs:
         # build that could not make it only warns, so an exe without them would otherwise be zipped and released.
         # Windows shows no icon to a script (any exe gets one), so the details stand for both.
         run: |
-          cargo build --release
+          cargo build --release --locked
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           $v = (Select-String -Path Cargo.toml -Pattern '^version = "(.*)"').Matches[0].Groups[1].Value
           $info = (Get-Item target/release/camset_editor.exe).VersionInfo

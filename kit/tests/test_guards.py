@@ -927,7 +927,8 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
         def refresh(self, tag):
             return self.read()
     ending = SimpleNamespace(after=tmp_path / "after.DAT", changes=[], uploaded=False)
-    for name, value in (("load_scan", lambda scan: ([], {})), ("Run", lambda name: run),
+    for name, value in (("check_readers", lambda: None), ("load_scan", lambda scan: ([], {})),
+                        ("Run", lambda name: run),
                         ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None,
                                                                        close=lambda: None)),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),

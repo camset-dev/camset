@@ -42,6 +42,7 @@ from camkit import safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, press, text_of  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
@@ -127,6 +128,7 @@ def main():
     allowance = allowance_of(a.row, a.allow)
     cycle, model = load_scan(a.scan)
     run = Run("kit2_cards")
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     log = open(run.dir / "results.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     ending, restored = None, False

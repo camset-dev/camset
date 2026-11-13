@@ -33,7 +33,7 @@ if [ "${CAMSET_INTERNAL:-}" = 1 ]; then
   ls ../private/help/help_*.json >/dev/null 2>&1 || { echo "CAMSET_INTERNAL=1, but ../private/help has no help file" >&2; exit 1; }
   INTERNAL=1
 fi
-cargo build --release
+cargo build --release --locked
 OUT=target/dist
 STAGE=target/dmg
 KIND=""

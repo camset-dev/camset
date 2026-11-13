@@ -18,6 +18,7 @@ from camkit import screen  # noqa: E402
 from camkit.frames import eyes_from_config, load  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
+from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
@@ -65,6 +66,7 @@ def main():
     run = Run("kit2_axes")
     out_path = run.dir / "axes.json"
     found = read_json(out_path) if out_path.exists() else {}
+    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     try:
         with Link(run) as link:
