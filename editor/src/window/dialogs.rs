@@ -300,8 +300,10 @@ pub(crate) mod dialog_tests {
     }
 
     /// The system About names: the name and version from the file each system keeps them in (macOS's
-    /// SystemVersion.plist, Linux's os-release), the name alone where there is none or it says nothing usable, and the
-    /// processor the program was built for.
+    /// SystemVersion.plist, Linux's os-release) or the numbers Windows gives (Windows 11 is 10.0 with a build from
+    /// 22000 on; a server edition says so), the name alone where there is none or it says nothing usable, and the
+    /// processor the program was built for. The numbers' words are tested on every system; the call that reads them
+    /// only on Windows (the editor's CI, on a Windows Server edition, and a Windows PC).
     #[test]
     fn about_names_the_system() {
         let plist = "<dict>\n\t<key>ProductName</key>\n\t<string>macOS</string>\n\t<key>ProductVersion</key>\n\t<string>15.2</string>\n</dict>";
@@ -314,11 +316,24 @@ pub(crate) mod dialog_tests {
         assert_eq!(system_name("linux", "ID=arch\n"), "Linux");
         assert_eq!(system_name("linux", &format!("PRETTY_NAME=\"{}\"", "x".repeat(80))), "Linux", "too long to be a name");
         assert_eq!(system_name("windows", "anything"), "Windows");
+        let win = |major, minor, build, server| windows_name(WindowsVersion { major, minor, build, server });
+        assert_eq!(win(10, 0, 26100, false), "Windows 11 build 26100");
+        assert_eq!(win(10, 0, 22000, false), "Windows 11 build 22000", "Windows 11's first build");
+        assert_eq!(win(10, 0, 21999, false), "Windows 10 build 21999");
+        assert_eq!(win(10, 0, 19045, false), "Windows 10 build 19045");
+        assert_eq!(win(10, 0, 26100, true), "Windows Server build 26100", "Windows Server 2025 has Windows 11's numbers");
+        assert_eq!(win(10, 0, 20348, true), "Windows Server build 20348");
+        assert_eq!(win(6, 3, 9600, false), "Windows 6.3 build 9600", "an older Windows by its numbers");
+        assert_eq!(win(0, 0, 0, false), "Windows", "numbers no Windows gives");
+        assert_eq!(win(10, 0, 0, true), "Windows");
         assert_eq!(system_name("freebsd", ""), "freebsd");
         let words = system_words();
         assert!(words.ends_with(&format!(" ({})", std::env::consts::ARCH)), "{words}");
         let name = match std::env::consts::OS { "macos" => "macOS", "windows" => "Windows", _ => "" };
         assert!(words.starts_with(name), "{words}");
+        if cfg!(windows) {
+            assert!(words.starts_with("Windows ") && words.contains(" build "), "Windows' version and build, by RtlGetVersion: {words}");
+        }
     }
 
     /// Settings > About > Changes reads the changelog built in: releases and their parts as headings, each point whole

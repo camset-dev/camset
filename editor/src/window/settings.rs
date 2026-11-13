@@ -59,9 +59,9 @@ pub(crate) fn licence_words() -> String {
     }
 }
 
-/// The system the editor runs on, for About and a message about a problem: its name, its version where a file the
-/// system keeps gives it (macOS, Linux; Windows keeps it where only a system call reaches, so it is left out there),
-/// and the processor the program was built for ("macOS 15.2 (aarch64)", "Windows (x86_64)"). Read once.
+/// The system the editor runs on, for About and a message about a problem: its name, its version where the system
+/// gives it (macOS and Linux in a file they keep, Windows by a system call, `windows_version`), and the processor the
+/// program was built for ("macOS 15.2 (aarch64)", "Windows 11 build 26100 (x86_64)"). Read once.
 pub(crate) fn system_words() -> &'static str {
     static WORDS: std::sync::OnceLock<String> = std::sync::OnceLock::new();
     WORDS.get_or_init(|| {
@@ -69,14 +69,64 @@ pub(crate) fn system_words() -> &'static str {
         // cfg! rather than #[cfg], so every system's build compiles all of it; on Linux /usr/lib/os-release when there
         // is no /etc/os-release, as the os-release specification has it
         let files: &[&str] = if cfg!(target_os = "macos") { &["/System/Library/CoreServices/SystemVersion.plist"] } else if cfg!(target_os = "linux") { &["/etc/os-release", "/usr/lib/os-release"] } else { &[] };
-        let text = files.iter().find_map(|f| std::fs::read_to_string(f).ok()).unwrap_or_default();
-        format!("{} ({})", system_name(os, &text), std::env::consts::ARCH)
+        let name = match windows_version() {
+            Some(v) => windows_name(v),
+            None => system_name(os, &files.iter().find_map(|f| std::fs::read_to_string(f).ok()).unwrap_or_default()),
+        };
+        format!("{name} ({})", std::env::consts::ARCH)
     })
+}
+
+/// Windows' version as the system gives it: its numbers (10.0 for Windows 10 and 11 alike), its build, and whether
+/// it is a server edition (Windows Server, which shares its numbers with the Windows of its day).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct WindowsVersion { pub major: u32, pub minor: u32, pub build: u32, pub server: bool }
+
+/// Windows' version by ntdll's RtlGetVersion: the true numbers, where GetVersionEx says Windows 8 (6.2) to a program
+/// whose manifest does not name a later Windows. None where the call fails. No crate and no other program for it:
+/// `ver` is a console command, and the editor would flash up a console window to run it.
+#[cfg(windows)]
+fn windows_version() -> Option<WindowsVersion> {
+    // ntdll's RtlGetVersion and its RTL_OSVERSIONINFOEXW, declared here: no crate for one call
+    #[repr(C)]
+    struct VersionInfo { size: u32, major: u32, minor: u32, build: u32, platform_id: u32, service_pack: [u16; 128], sp_major: u16, sp_minor: u16, suite_mask: u16, product_type: u8, reserved: u8 }
+    const _: () = assert!(std::mem::size_of::<VersionInfo>() == 284, "RTL_OSVERSIONINFOEXW's size");
+    #[link(name = "ntdll")]
+    unsafe extern "system" {
+        fn RtlGetVersion(info: *mut VersionInfo) -> i32;
+    }
+    let mut info = VersionInfo { size: std::mem::size_of::<VersionInfo>() as u32, major: 0, minor: 0, build: 0, platform_id: 0, service_pack: [0; 128], sp_major: 0, sp_minor: 0, suite_mask: 0, product_type: 0, reserved: 0 };
+    // SAFETY: the pointer is to an RTL_OSVERSIONINFOEXW (284 bytes), its own size in its first field as the call asks
+    // to fill the longer form, alive for the call; it returns an NTSTATUS, 0 for success
+    let ok = unsafe { RtlGetVersion(&mut info) } == 0;
+    let _ = (info.platform_id, info.service_pack, info.sp_major, info.sp_minor, info.suite_mask, info.reserved);
+    // VER_NT_WORKSTATION is 1; a domain controller (2) and a server (3) are Windows Server
+    ok.then_some(WindowsVersion { major: info.major, minor: info.minor, build: info.build, server: info.product_type != 1 })
+}
+
+/// Elsewhere than on Windows there is no Windows version: the system keeps its own in a file.
+#[cfg(not(windows))]
+fn windows_version() -> Option<WindowsVersion> {
+    None
+}
+
+/// Windows' version in words, as About gives it: Windows 11 is 10.0 with a build from 22000 on ("Windows 11 build
+/// 26100"), Windows 10 is 10.0 before it ("Windows 10 build 19045"), a server edition says so ("Windows Server build
+/// 26100"), any other by its numbers ("Windows 6.3 build 9600"); "Windows" alone for numbers no Windows gives.
+pub(crate) fn windows_name(v: WindowsVersion) -> String {
+    match v {
+        WindowsVersion { major: 0, .. } | WindowsVersion { build: 0, .. } => "Windows".to_string(),
+        WindowsVersion { server: true, build, .. } => format!("Windows Server build {build}"),
+        WindowsVersion { major: 10, minor: 0, build, .. } if build >= 22000 => format!("Windows 11 build {build}"),
+        WindowsVersion { major: 10, minor: 0, build, .. } => format!("Windows 10 build {build}"),
+        WindowsVersion { major, minor, build, .. } => format!("Windows {major}.{minor} build {build}"),
+    }
 }
 
 /// A system's name and version from `std::env::consts::OS` and the file `system_words` read: macOS's
 /// SystemVersion.plist (its ProductVersion), Linux's os-release (its PRETTY_NAME, "Ubuntu 26.04 LTS"); the name alone
-/// when the file says nothing usable. Short and printable only, as it goes into About and a copied report.
+/// when the file says nothing usable, and on Windows, which keeps no such file (its version: `windows_name`). Short and
+/// printable only, as it goes into About and a copied report.
 pub(crate) fn system_name(os: &str, text: &str) -> String {
     let fit = |v: &str| -> Option<String> {
         let v = v.trim().trim_matches(|c| c == '"' || c == '\'').trim();

@@ -40,7 +40,8 @@ camera's frames never hang on this definition's records.
 No page without the camera's own runs (2026-11-06, the owner: "Proof view shouldn't be available if the kit has never
 been run on a camera. The kit runs will be owned by the end users and they'll only submit the schema"): with no camera
 named, another one, or no kit2_* run in the camera's folder, nothing is written and it says why and what would make
-the page available, on stderr, with exit status 3 (NO_RUNS; kit/setup.py and build_docs.py report it as not built).
+the page available, on stderr, with exit status 3 (NO_RUNS; kit/setup.py and build_docs.py report it as not built),
+and, every time, that the definition viewer needs no runs (--public builds it; PUBLIC_URL has it).
 The page is for whoever ran the kit on their camera, never part of a submission. The kit's runs from before
 per-camera folders (runs/kit2_*, runs/_viewer at the top of runs/) stop it with the command that moves them. The file layout view reads a download through the definition's container block
 (its camera section's "file"; docs/decisions/0020), which the page carries.
@@ -120,6 +121,7 @@ RUN_ROOT = None          # the camera's runs the page reads (runs/<model>_fw<fw>
 SCHEMA = None            # the definition the page is built from, when given (the tests); else pick_definition()
 FRAMES = "frames"          # --pack: the frames' copies, in this folder beside the page
 NO_RUNS = 3              # the exit status of a page refused for want of the camera's runs (kit/setup.py, build_docs.py)
+PUBLIC_URL = "https://camset-dev.github.io/camset/viewer/"     # the definition viewer online (mkdocs.yml's site_url)
 
 
 class Keys:
@@ -293,19 +295,22 @@ def place(doc) -> tuple:
     got = paths.camera()
     how = ("The page shows the camera's own screens from the kit's runs, so it is only for whoever ran the kit on "
            "their camera; a submission carries the camera's definition, never its runs.")
+    # every refusal ends with the page that needs no runs, the definition viewer (kit/setup.py's line says so)
+    public = ("The definition viewer needs no runs: it shows a settings file's values by name, in a browser; "
+              f"kit/tools/proof_viewer.py --public --out site/viewer builds it here, and {PUBLIC_URL} has it online.")
     if got is None:
         return folder, None, (f"No proof viewer for {mine}: no camera's runs are on this computer (no camera is "
                               f"named). {how} To have it, map your camera with the kit (docs/QUICKSTART.md), then "
-                              "run this again. A camera file's settings open in the editor without it.")
+                              f"run this again. A camera file's settings open in the editor without it. {public}")
     if got[0] != mine:
         nxt = (f"For {got[0]}'s own page: kit/tools/proof_viewer.py --definition {got[0]}."
                if definitions.path(got[0]).exists() else
                f"{got[0]} has no definition yet: kit/schema_update.py --write writes it from its runs, and its own "
                "page can then be built.")
         return folder, None, (f"No proof viewer for {mine}: the kit works on {got[0]} ({got[1]}), and another "
-                              f"camera's runs are never shown on this definition (docs/decisions/0019). {nxt}")
+                              f"camera's runs are never shown on this definition (docs/decisions/0019). {nxt} {public}")
     return folder, folder, (f"No proof viewer for {mine}: {paths.shown(folder)}/ holds no runs of the kit yet. {how} "
-                            "Run the kit on the camera (docs/QUICKSTART.md), then run this again.")
+                            f"Run the kit on the camera (docs/QUICKSTART.md), then run this again. {public}")
 
 
 def collect(settings, here: Path) -> dict:

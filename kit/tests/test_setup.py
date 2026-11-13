@@ -640,19 +640,29 @@ def test_the_proof_viewer_is_built_without_pack_and_its_path_reported(tmp_path, 
 
 def test_a_fresh_clone_gets_no_proof_viewer_and_is_told_why(tmp_path, monkeypatch, capsys):
     """The owner's rule (2026-11-06): no proof viewer where the kit has never run on a camera. proof_viewer.py refuses
-    (exit status 3) with why; the setup says so plainly and fails nothing."""
-    said = ("No proof viewer for ILCE-1M2_fw4.00: no camera's runs are on this computer (no camera is named). The page "
-            "shows the camera's own screens from the kit's runs, so it is only for whoever ran the kit on their camera.")
-    monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None: (3, said + "\n"))
+    (exit status 3) with why; the setup says so plainly and fails nothing. Its line says the definition viewer needs no
+    runs, which every refusal ends with (kit/tests/test_proof_viewer.py: no camera named, no runs, another camera)."""
+    public = ("The definition viewer needs no runs: it shows a settings file's values by name, in a browser; "
+              "kit/tools/proof_viewer.py --public --out site/viewer builds it here, and https://camset-dev.github.io/camset/viewer/ has it online.")
+    refusals = {"no camera's runs are on this computer (no camera is named)":
+                "No proof viewer for ILCE-1M2_fw4.00: no camera's runs are on this computer (no camera is named). The page "
+                "shows the camera's own screens from the kit's runs, so it is only for whoever ran the kit on their camera. " + public,
+                "the kit works on ILCE-7M5_fw1.00 (CAMSET_CAMERA), and another camera's runs are never shown on this definition (docs/decisions/0019)":
+                "No proof viewer for ILCE-1M2_fw4.00: the kit works on ILCE-7M5_fw1.00 (CAMSET_CAMERA), and another camera's runs are "
+                "never shown on this definition (docs/decisions/0019). For ILCE-7M5_fw1.00's own page: kit/tools/proof_viewer.py "
+                "--definition ILCE-7M5_fw1.00. " + public}
     venv_python(tmp_path)
-    env = env_for(tmp_path)
-    kitsetup.step_viewer(env)
-    row = env.rows[-1]
-    assert (row.piece, row.state) == ("proof viewer", "--")
-    assert row.what == "not built: no camera's runs are on this computer (no camera is named)"
-    assert row.next == "none: it shows your camera's own screens once the kit has run on it (the line above)"
-    assert said in capsys.readouterr().out          # the whole reason, above the table
-    assert kitsetup.exit_code(env.rows, False) == 0
+    for why, said in refusals.items():
+        monkeypatch.setattr(kitsetup, "run", lambda cmd, cwd=None, said=said: (3, said + "\n"))
+        env = env_for(tmp_path)
+        kitsetup.step_viewer(env)
+        row = env.rows[-1]
+        assert (row.piece, row.state) == ("proof viewer", "--")
+        assert row.what == f"not built: {why}"
+        assert row.next == ("none: it shows your camera's own screens once the kit has run on it; the definition viewer needs no runs "
+                            "(the line above)")
+        assert said in capsys.readouterr().out          # the whole reason, above the table, the definition viewer's words in it
+        assert kitsetup.exit_code(env.rows, False) == 0
 
 
 def test_a_failed_proof_viewer_build_fails_nothing(tmp_path, monkeypatch, capsys):

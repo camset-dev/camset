@@ -49,6 +49,11 @@ header.top h1 { font-size: 1.15rem; font-weight: 500; margin: 0; color: var(--st
 .notice { flex: 1 0 100%; font-size: .86rem; background: var(--side); border-left: 3px solid var(--warn); border-radius: 0 3px 3px 0; padding: 5px 9px; overflow-wrap: anywhere; }
 .notice a, .nodef a { color: var(--link); }
 .notice.intro { border-left-color: var(--sel); }
+/* what a refused file starts with, under the message that refuses it, for a report of the problem (its lines scroll
+   sideways on a narrow screen, never the page) */
+.dump { flex: 1 0 100%; min-width: 0; font-size: .86rem; }
+.dump p { margin: 0 0 2px; max-width: 75ch; }
+.dump .hex { margin: 4px 0 0; }
 #loading { flex: 1 0 100%; margin: 0; }
 .nodef p { max-width: 75ch; }
 .find { flex: 1 1 300px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -357,6 +362,7 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
     <div class="chips" id="chips" role="group" aria-label="Show"></div>
   </div>
   <div class="notice" id="notice" role="status" hidden></div>
+  <div class="dump" id="dump" role="group" aria-labelledby="dumptitle" hidden></div>
   <p class="file" id="loading">Loading… This page needs a current Chrome, Edge, Firefox or Safari (15 or newer) with JavaScript on.</p>
   <noscript><p class="file">This page needs JavaScript: turn it on, in a current Chrome, Edge, Firefox or Safari (15 or newer).</p></noscript>
 </header>
@@ -2686,6 +2692,36 @@ function unreadable(err, name) {
     ? `${name}: this settings file is damaged or incomplete; it may have been cut short when it was copied. Copy it from the card again.`
     : `${name}: this is not a settings file this viewer can read: it reads files laid out like those of the cameras it knows (${known}).`);
 }
+// a file's first n bytes as a classic hex dump, the lines `hexdump -Cv` prints (every line, none folded into a "*"):
+// the offset, sixteen bytes in hex in two groups of eight, and the same bytes as text between bars, a dot for each that
+// is not printable ASCII. It touches no page, so a check runs it on its own (node).
+function hexDump(u8, n) {
+  const lines = [], end = Math.min(n, u8.length);
+  for (let p = 0; p < end; p += 16) {
+    const row = [...u8.subarray(p, Math.min(p + 16, end))];
+    let hx = "";
+    for (let i = 0; i < 16; i++) hx += (i < row.length ? row[i].toString(16).padStart(2, "0") : "  ") + (i === 7 ? "  " : " ");
+    lines.push(`${hexOff(p)}  ${hx} |${row.map((c) => (c >= 32 && c < 127 ? String.fromCharCode(c) : ".")).join("")}|`);
+  }
+  return lines;
+}
+// what a file the definition viewer refused starts with, under the message that refuses it: its size and its first
+// DUMP_BYTES bytes as a hex dump, for whoever reports the problem to paste, after checking it holds nothing of theirs
+// (a report is usually public); read here, like the file itself, and sent nowhere. The box is a group named by its
+// visible title (#dumptitle). None (null) hides it: every file opened starts without it, and a file that is read
+// never shows it.
+const DUMP_BYTES = 256;
+function showStart(buf, name) {
+  const box = $("dump");
+  box.hidden = !buf;
+  if (!buf) { box.replaceChildren(); fit(); return; }
+  const u8 = new Uint8Array(buf), n = Math.min(u8.length, DUMP_BYTES);
+  box.replaceChildren(el("p", {}, el("b", { id: "dumptitle" }, `What ${name} starts with`), ", to paste into a report of the problem. The file was read in this browser and never left it: nothing was sent anywhere."),
+    el("p", {}, "Before you paste it anywhere public, check that it holds nothing of yours: a document or photo chosen by mistake shows its own first bytes, "
+      + "and a settings file's can show the camera's model, when the file was saved and some of your settings."),
+    el("pre", { class: "hex" }, [`${name}: ${u8.length} bytes${n < u8.length ? `, the first ${n} of them:` : ":"}`, ...hexDump(u8, n)].join("\n")));
+  fit();
+}
 // the panel the Menu shows for a file no definition describes
 function nodefDetail() {
   const f = L.f, via = DATA.foreign.via, link = (path, words) => el("a", { href: `${VIEWER.docs}${path}`, target: "_blank", rel: "noopener" }, words);
@@ -2702,7 +2738,7 @@ function nodefDetail() {
 // with it, the file carried over in this tab
 function openInViewer(buf, name) {
   let got;
-  try { got = readByTrial(buf, VIEWER.cameras); } catch (err) { $("mainmsg").replaceChildren(unreadable(err, name)); return; }
+  try { got = readByTrial(buf, VIEWER.cameras); } catch (err) { $("mainmsg").replaceChildren(unreadable(err, name)); showStart(buf, name); return; }
   if (got.cam && got.cam.key === DATA.camera) { initLayout(); useFile(got.f, name); return; }
   const whose = got.cam ? `${got.cam.name}, firmware ${got.cam.firmware}` : `${got.model}, which no definition here describes`;
   if (carry(buf, name)) {
@@ -2741,6 +2777,7 @@ function becomeForeign(got, name) {
 $("mainfile").addEventListener("change", async (e) => {
   const file = e.target.files[0];
   if (!file) return;
+  showStart(null);
   $("mainmsg").textContent = `Reading ${file.name}…`;
   try {
     const buf = await file.arrayBuffer();

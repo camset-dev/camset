@@ -138,8 +138,8 @@ set, and changes when it does. Dark and Light keep it one way; preferences from 
 had.
 
 Settings > About, the last tab, says which editor this is: the version ("0.2.1") and, for a build made from the
-repository, the build (its commit, "1a2b3c4"), the system the editor runs on (its name, its version on macOS and
-Linux, and the processor the program was built for), the cameras it works with by model and firmware (a definition you
+repository, the build (its commit, "1a2b3c4"), the system the editor runs on (its name, its version, on Windows
+with its build, and the processor the program was built for), the cameras it works with by model and firmware (a definition you
 added says so), whether the camera link program is there, the licence and copyright line, and links to the project
 page, the documentation and Report a problem. Copy details copies a short block for a message about a problem: the
 version and build, the system, the cameras and the camera link program, with no file, folder, user name or network

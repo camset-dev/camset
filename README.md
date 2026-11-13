@@ -89,8 +89,10 @@ it shows the camera's sample, not your camera: a file one camera of that model w
 personal text removed, in which some values are what that camera held, as Initialize does not reset every record. A
 file of another firmware is read with the nearest one's definition, and the page says so. A file of a camera with no
 definition yet opens too, its structure only and nothing named, when it is laid out like the files of a camera the
-viewer knows; any other file is refused. Besides the page on the docs site, each release from 0.2.1 carries it as
-one file, `camset-viewer.html`, to download and open with no internet; the latest is always at
+viewer knows; any other file is refused. The page on the docs site then shows the refused file's size and first 256
+bytes as a hex dump, to paste into a report of the problem once you have checked it holds nothing of yours (the
+downloadable file has this from the release after 0.2.1). Besides the page on the docs site, each release from 0.2.1
+carries the viewer as one file, `camset-viewer.html`, to download and open with no internet; the latest is always at
 <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html>. It is built from the public
 definitions alone, with `kit/tools/proof_viewer.py --public --out site/viewer`, or as that one file with
 `kit/tools/proof_viewer.py --public --single --out site/camset-viewer.html`.

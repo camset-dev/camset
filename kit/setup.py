@@ -33,9 +33,9 @@ can take more than a few seconds says so first, with a rough time, and shows a p
  9. The proof viewer, runs/<model>_fw<fw>/_viewer/index.html (the definition's camera's folder), built as
     kit/tools/build_docs.py builds it (no --pack, no --open), only where the kit has run on the camera the config
     names (camkit.paths): it shows that camera's own screens, so it is for whoever mapped their camera, never part of
-    a submission. A fresh clone gets no page: proof_viewer.py refuses (exit status 3) and the line says why and what
-    makes it available. A failed build is reported with its reason (the kit's runs from before per-camera folders:
-    the command that moves them). Neither fails the setup.
+    a submission. A fresh clone gets no page: proof_viewer.py refuses (exit status 3) and the line says why, what
+    makes it available, and that the definition viewer needs no runs. A failed build is reported with its reason
+    (the kit's runs from before per-camera folders: the command that moves them). Neither fails the setup.
 Then a table: each piece, its state and what next; and the last words: everything is in place, or what is left for
 you to do, numbered in order, and "Then run <this command> again". Ctrl+C stops it at any time; nothing is lost.
 Exit status: 0 when nothing required is missing or failed, 1 when something is (on Windows, UTF-8 mode not on), 2 when
@@ -1578,7 +1578,8 @@ def step_viewer(env: Env) -> None:
         note(said)
         why = said.split(": ", 1)[-1].split(". ", 1)[0].rstrip(".")
         env.add("proof viewer", "--", f"not built: {why}",
-                "none: it shows your camera's own screens once the kit has run on it (the line above)")
+                "none: it shows your camera's own screens once the kit has run on it; the definition viewer needs no runs "
+                "(the line above)")
         return
     if code or not lines:
         why = lines[-1].strip() if lines else "no output"

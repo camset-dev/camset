@@ -549,15 +549,25 @@ def refused(monkeypatch, capsys, *args) -> str:
     return out.err.strip()
 
 
+# the last words of every refused build: the page that needs no runs (kit/setup.py's line for a refused page says so)
+PUBLIC_WORDS = ("The definition viewer needs no runs: it shows a settings file's values by name, in a browser; "
+                "kit/tools/proof_viewer.py --public --out site/viewer builds it here, and "
+                "https://camset-dev.github.io/camset/viewer/ has it online.")
+
+
 def test_a_clone_with_no_runs_gets_no_page(clone, monkeypatch, capsys):
-    """The owner's rule (2026-11-06): no proof viewer where the kit has never run on a camera. The build says why and
-    what would make it available, and writes nothing, --values, --pack and --open alike."""
+    """The owner's rule (2026-11-06): no proof viewer where the kit has never run on a camera. The build says why,
+    what would make it available, and that the definition viewer needs no runs (how to build it, and where it is
+    online, the docs site's viewer/), and writes nothing, --values, --pack and --open alike."""
+    public = PUBLIC_WORDS
+    site = next(ln.split(": ", 1)[1] for ln in (ROOT / "mkdocs.yml").read_text(encoding="utf-8").splitlines() if ln.startswith("site_url: "))
+    assert f"{site.rstrip('/')}/viewer/" == pv.PUBLIC_URL, "the docs site's viewer"
     said = refused(monkeypatch, capsys)
     assert said == (f"No proof viewer for {A1}: no camera's runs are on this computer (no camera is named). The page "
                     "shows the camera's own screens from the kit's runs, so it is only for whoever ran the kit on their "
                     "camera; a submission carries the camera's definition, never its runs. To have it, map your camera "
                     "with the kit (docs/QUICKSTART.md), then run this again. A camera file's settings open in the editor "
-                    "without it.")
+                    f"without it. {public}")
     for args in (["--values", str(SAMPLE)], ["--pack"], ["--open"]):
         assert refused(monkeypatch, capsys, *args) == said
     assert not (clone / "runs").exists() and paths.mapped() == []
@@ -566,7 +576,7 @@ def test_a_clone_with_no_runs_gets_no_page(clone, monkeypatch, capsys):
     (clone / "runs" / A1 / "_cache").mkdir(parents=True)
     said = refused(monkeypatch, capsys).replace((clone / "runs").as_posix(), "runs")
     assert said.startswith(f"No proof viewer for {A1}: runs/{A1}/ holds no runs of the kit yet. The page shows ")
-    assert said.endswith("Run the kit on the camera (docs/QUICKSTART.md), then run this again.")
+    assert said.endswith(f"Run the kit on the camera (docs/QUICKSTART.md), then run this again. {public}")
     assert not (clone / "runs" / A1 / "_viewer").exists()
 
 
@@ -824,7 +834,8 @@ def test_another_cameras_page_gets_none_of_the_a1s_help(clone, monkeypatch, caps
 
 def test_another_cameras_runs_are_never_read(clone, monkeypatch, capsys):
     """The kit works on a second camera: there is no page of the a1 II's definition (its runs are not that camera's),
-    it says what would make one, and nothing is written into either camera's folder."""
+    it says what would make one, and that the definition viewer needs no runs, as every refusal does (kit/setup.py's
+    line for any refused page says so), and nothing is written into either camera's folder."""
     key = a_key(clone)
     mapped_camera(clone / "runs" / A1, key)
     mapped_camera(clone / "runs" / "ILCE-7M5_fw1.00", key)
@@ -832,8 +843,14 @@ def test_another_cameras_runs_are_never_read(clone, monkeypatch, capsys):
     assert refused(monkeypatch, capsys) == (
         f"No proof viewer for {A1}: the kit works on ILCE-7M5_fw1.00 (CAMSET_CAMERA), and another camera's runs are "
         "never shown on this definition (docs/decisions/0019). ILCE-7M5_fw1.00 has no definition yet: "
-        "kit/schema_update.py --write writes it from its runs, and its own page can then be built.")
+        f"kit/schema_update.py --write writes it from its runs, and its own page can then be built. {PUBLIC_WORDS}")
     assert not (clone / "runs" / "ILCE-7M5_fw1.00" / "_viewer").exists() and not (clone / "runs" / A1 / "_viewer").exists()
+    # the camera the kit works on has a definition of its own: that page's command, and the definition viewer's words
+    monkeypatch.setattr(definitions, "path", lambda key, real=definitions.path: real(A1) if key == "ILCE-7M5_fw1.00" else real(key))
+    said = refused(monkeypatch, capsys)
+    assert "For ILCE-7M5_fw1.00's own page: kit/tools/proof_viewer.py --definition ILCE-7M5_fw1.00." in said and said.endswith(PUBLIC_WORDS)
+    # so kit/setup.py's line for a refused page (exit status 3) is true whichever refusal it was
+    assert "the definition viewer needs no runs" in (ROOT / "kit" / "setup.py").read_text(encoding="utf-8").split("def step_viewer(")[1].split("\ndef ")[0]
 
 
 def test_runs_at_the_top_stop_the_build_with_the_move(clone, monkeypatch, capsys):
@@ -1796,6 +1813,95 @@ def test_the_viewer_says_plainly_when_its_data_does_not_load_and_the_single_file
     single = viewer_look(viewer / "camset-viewer.html", sample_files(), "other", open_=("sample", "near"))
     assert single["camera"] == OTHER and single["loaded"] == [] and single["records"] > 1000
     assert single["tries"]["sample"]["went"] == [f"?camera={A1}"] and single["tries"]["near"]["went"] == [f"?camera={A1}"]
+
+
+def hexdump_cv(data: bytes) -> list:
+    """`hexdump -Cv`'s lines for `data` (every line, none folded into a "*" as plain -C folds repeated ones), without
+    the last line it adds (the size): the offset, sixteen bytes in hex in two groups of eight, the same bytes as text
+    between bars, a dot for each that is not printable ASCII."""
+    out = []
+    for p in range(0, len(data), 16):
+        row = data[p:p + 16]
+        cells = [f"{b:02x}" if i < len(row) else "  " for i, b in enumerate(row.ljust(16, b"\0"))]
+        out.append(f"{p:08x}  {' '.join(cells[:8])}  {' '.join(cells[8:])}  |{''.join(chr(b) if 32 <= b < 127 else '.' for b in row)}|")
+    return out
+
+
+DUMP = """
+const files = JSON.parse(FILES);
+console.log(JSON.stringify(Object.fromEntries(Object.entries(files).map(([k, v]) => [k, hexDump(Uint8Array.from(v), 256)]))));
+"""
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="node is not installed")
+def test_a_refused_files_start_is_a_classic_hex_dump():
+    """What a refused file starts with is shown as the classic hex dump a person can paste into a report of the
+    problem: the lines `hexdump -Cv` prints for its first 256 bytes, every byte value among them, repeated lines each
+    shown (none folded into a "*"), a short last line padded so its text lines up, a file shorter than that whole. node
+    runs the page's own function."""
+    files = {"long": bytes(range(256)) + b"tail bytes", "short": b"not a settings file " * 2, "row": bytes(range(16)), "row_and_one": bytes(range(17)), "empty": b"",
+             "zeros": bytes(64)}
+    code = page_line("hexOff") + page_function("hexDump") + f"const FILES = {json.dumps(json.dumps({k: list(v) for k, v in files.items()}))};\n" + DUMP
+    r = subprocess.run(["node", "-e", code], capture_output=True, text=True, timeout=60)
+    assert r.returncode == 0, r.stderr
+    got = json.loads(r.stdout)
+    assert got == {k: hexdump_cv(v[:256]) for k, v in files.items()}
+    assert len(got["long"]) == 16 and got["long"][2] == '00000020  20 21 22 23 24 25 26 27  28 29 2a 2b 2c 2d 2e 2f  | !"#$%&\'()*+,-./|'
+    assert got["short"][-1] == "00000020  67 73 20 66 69 6c 65 20                           |gs file |"
+    assert got["empty"] == [] and len(got["row_and_one"]) == 2
+    assert got["zeros"] == [f"{p:08x}  " + "00 " * 8 + " " + "00 " * 8 + " |" + "." * 16 + "|" for p in (0, 16, 32, 48)], "no line folded"
+
+
+START = """
+const bytes = (k) => { const s = atob(FILES[k]); const u = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) u[i] = s.charCodeAt(i); return u.buffer; };
+const out = { loaded: [...window.__loaded] };
+for (const k of OPEN) {
+  window.__went.length = 0;
+  // the file field's own way in, as a person opens a file: its change, and the file read after it
+  $("mainfile").dispatchEvent({ type: "change", target: { files: [{ name: k + ".DAT", arrayBuffer: async () => bytes(k) }], value: "x" } });
+  await new Promise((done) => setTimeout(done, 0));
+  const pre = $("dump").querySelector("pre");
+  out[k] = { msg: $("mainmsg").textContent, shown: !$("dump").hidden, words: $("dump").children.filter((c) => c.tagName === "P").map((c) => c.textContent),
+    title: $("dump").querySelector("#dumptitle")?.textContent ?? null, dump: pre ? pre.textContent : "", pre_attrs: pre ? [...pre.attributes.keys()] : [], went: [...window.__went] };
+}
+Object.assign(out, { fetched: window.__fetches.map((f) => f[0]), loaded_after: [...window.__loaded] });
+console.log(JSON.stringify(out));
+"""
+
+
+@needs_node
+def test_a_refused_file_shows_what_it_starts_with_and_a_read_one_does_not(viewer):
+    """A file the viewer refuses, as no settings file of a layout it knows or as damaged, has under the message that
+    refuses it its size and its first 256 bytes as a hex dump, saying the file never left the browser and, as a report
+    is usually public, to check first that it holds nothing of the person's (what it can hold); the box is a group
+    named by its visible title. A file that is read, an empty one (nothing to show) and one that starts the page again
+    with its camera hide it again, and the page asks for nothing to show it (no request: the bytes are the file's,
+    read here)."""
+    files = sample_files(empty=b"", tiny=b"CAMSET\x00\x01\xff!")
+    got = viewer_look(viewer / "site" / "index.html", files, open_=("garbage", "sample", "damaged", "empty", "tiny", "near", "other"), look=START)
+    garbage = got["garbage"]
+    assert garbage["shown"] and garbage["msg"].startswith("garbage.DAT: this is not a settings file this viewer can read")
+    assert garbage["words"] == ["What garbage.DAT starts with, to paste into a report of the problem. The file was read in this browser and "
+                                "never left it: nothing was sent anywhere.",
+                                "Before you paste it anywhere public, check that it holds nothing of yours: a document or photo chosen by mistake "
+                                "shows its own first bytes, and a settings file's can show the camera's model, when the file was saved and some of "
+                                "your settings."]
+    assert garbage["title"] == "What garbage.DAT starts with" and garbage["pre_attrs"] == ["class"], "named by its title, not an aria-label on the <pre>"
+    head = PAGE[PAGE.index('<header class="top"'):PAGE.index("</header>")]
+    assert '<div class="dump" id="dump" role="group" aria-labelledby="dumptitle" hidden></div>' in head, "hidden until a file is refused"
+    lines = garbage["dump"].split("\n")
+    assert lines[0] == "garbage.DAT: 800 bytes, the first 256 of them:" and lines[1:] == hexdump_cv(files["garbage"][:256])
+    assert lines[1] == "00000000  6e 6f 74 20 61 20 73 65  74 74 69 6e 67 73 20 66  |not a settings f|"
+    assert not got["sample"]["shown"] and got["sample"]["dump"] == "" and got["sample"]["msg"].startswith("Showing sample.DAT: ILCE-1M2")
+    damaged = got["damaged"]
+    assert damaged["shown"] and damaged["msg"].endswith("Copy it from the card again.")
+    assert damaged["dump"].split("\n")[1:] == hexdump_cv(files["damaged"][:256])
+    assert not got["empty"]["shown"] and "is empty (0 bytes)" in got["empty"]["msg"]
+    assert got["tiny"]["shown"] and got["tiny"]["dump"].split("\n") == ["tiny.DAT: 10 bytes:", *hexdump_cv(files["tiny"])]
+    assert got["tiny"]["dump"].endswith("  ff 21" + " " * 20 + "|CAMSET...!|"), "a short line padded, its text in line with a whole one's"
+    assert not got["near"]["shown"] and got["near"]["msg"].startswith("Showing near.DAT")
+    assert not got["other"]["shown"] and got["other"]["went"] == [f"?camera={OTHER}"]
+    assert got["fetched"] == [] and got["loaded_after"] == got["loaded"], "no request and no script loaded to show it"
 
 
 def test_the_pages_html_says_what_it_needs_before_its_script_runs():

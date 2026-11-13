@@ -5,6 +5,26 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ## Unreleased
 
+### The editor
+
+- On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
+  page and in Copy details: "Windows 11 build 26100 (x86_64)" (or Windows 10, or Windows Server), where it said
+  "Windows (x86_64)". Windows itself gives the numbers, with no console window and nothing more to install.
+
+### The definition viewer
+
+- A file the definition viewer refuses shows, under the message that refuses it, what the file starts with: its size
+  and its first 256 bytes as a classic hex dump (offset, hex, text), to paste into a report of the problem. It says
+  that the file was read in the browser and never left it, and to check before pasting it anywhere public that it
+  holds nothing of yours; a file that is read shows none.
+
+### The mapping kit
+
+- When the proof viewer is not built (the kit has never run on the camera here, or it works on another camera), its
+  message, and `kit/setup.py`'s line for it, also say that the definition viewer needs no runs:
+  `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at
+  <https://camset-dev.github.io/camset/viewer/>.
+
 ## 0.2.1 (2026-11-13)
 
 The editor for Windows too, the definition viewer to download as one file and on the docs site, About in Settings,

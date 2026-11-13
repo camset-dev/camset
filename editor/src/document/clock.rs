@@ -42,7 +42,7 @@ pub(crate) fn stamp_of(when: std::time::SystemTime) -> String {
 #[cfg(windows)]
 #[repr(C)]
 #[derive(Default)]
-struct SystemTime { year: u16, month: u16, day_of_week: u16, day: u16, hour: u16, minute: u16, second: u16, milliseconds: u16 }
+struct WinSystemTime { year: u16, month: u16, day_of_week: u16, day: u16, hour: u16, minute: u16, second: u16, milliseconds: u16 }
 
 /// Seconds since 1970 as this computer's local date and time on Windows (year, month, day, hour, minute, second),
 /// with the daylight saving of that day; None where Windows cannot say. By Windows' own time zone setting, not the C
@@ -52,12 +52,12 @@ fn windows_local(secs: u64) -> Option<(u16, u16, u16, u16, u16, u16)> {
     // kernel32's two calls, declared here: no crate for them
     #[link(name = "kernel32")]
     unsafe extern "system" {
-        fn FileTimeToSystemTime(file_time: *const u64, system_time: *mut SystemTime) -> i32;
-        fn SystemTimeToTzSpecificLocalTime(zone: *const std::ffi::c_void, universal: *const SystemTime, local: *mut SystemTime) -> i32;
+        fn FileTimeToSystemTime(file_time: *const u64, system_time: *mut WinSystemTime) -> i32;
+        fn SystemTimeToTzSpecificLocalTime(zone: *const std::ffi::c_void, universal: *const WinSystemTime, local: *mut WinSystemTime) -> i32;
     }
     // a FILETIME: 100 ns steps since 1601, its two 32-bit halves low first, which a u64 is on every Windows there is
     let ticks = secs.checked_add(11_644_473_600)?.checked_mul(10_000_000)?;
-    let (mut utc, mut local) = (SystemTime::default(), SystemTime::default());
+    let (mut utc, mut local) = (WinSystemTime::default(), WinSystemTime::default());
     // SAFETY: each pointer is to a value of the size and layout the call reads or fills, alive for the call; a null
     // zone means the computer's own
     let ok = unsafe { FileTimeToSystemTime(&ticks, &mut utc) != 0 && SystemTimeToTzSpecificLocalTime(std::ptr::null(), &utc, &mut local) != 0 };
