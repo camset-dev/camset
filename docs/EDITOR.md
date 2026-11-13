@@ -137,7 +137,7 @@ Settings > Appearance > Theme is "Follow the system" for a new user: the window 
 set, and changes when it does. Dark and Light keep it one way; preferences from before the choice keep the theme they
 had.
 
-Settings > About, the last tab, says which editor this is: the version ("0.2.0") and, for a build made from the
+Settings > About, the last tab, says which editor this is: the version ("0.2.1") and, for a build made from the
 repository, the build (its commit, "1a2b3c4"), the system the editor runs on (its name, its version on macOS and
 Linux, and the processor the program was built for), the cameras it works with by model and firmware (a definition you
 added says so), whether the camera link program is there, the licence and copyright line, and links to the project
@@ -148,7 +148,7 @@ Third-party licences opens the licences of the crates and fonts built into the e
 (`THIRD_PARTY_LICENSES.html`, which the packages carry; a build of your own has it only once `cargo about` has written
 it). The foot of Settings says only where the settings are kept.
 
-The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.0") and at the right end of
+The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.1") and at the right end of
 the status bar, the whole version (with the build) on hover. The status bar's version is the one that can be clicked,
 and it opens Settings on the About tab, on every system (Windows and Linux have no menu bar), bringing Settings over
 the other windows, unfolded, if it is open already; over Changes, Esc then closes Settings before Changes. The web

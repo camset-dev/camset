@@ -16,9 +16,9 @@ for each camera Camset knows ([more below](#the-definition-viewer-and-the-proof-
 ## Use the editor
 
 The editor is on the project's [Releases page](https://github.com/camset-dev/camset/releases): the app in a `.dmg`
-for macOS on Apple silicon, a tarball for Linux and, from 0.2.1, a zip for Windows; before 0.2.1, build it from source
-on Windows ([The editor from source](#the-editor-from-source)). Take 0.2.0 or later: 0.1.0 is withdrawn, and its
-editor does not open today's camera definitions.
+for macOS on Apple silicon, a tarball for Linux and, since 0.2.1, a zip for Windows; it also builds from source on
+each of them ([The editor from source](#the-editor-from-source)). Take the latest release: 0.1.0 is withdrawn (its
+editor does not open today's camera definitions), and 0.2.0 has no Windows zip.
 
 - **macOS:** open the disk image and drag Camset Editor onto Applications. The app is not notarized, so macOS
   refuses to open it the first time. Then open System Settings > Privacy & Security and click Open Anyway (on macOS

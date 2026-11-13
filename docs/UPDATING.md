@@ -142,9 +142,10 @@ are private now ([Your pull request](#your-pull-request-one-commit-on-a-fresh-br
 
 ### Packages and tags
 
-The release is `v0.2.0`, on the new commit. 0.1.0 is withdrawn: its tag and its packages are gone from GitHub, and
-its editor does not open a definition the updated kit writes, nor the 0.2.0 editor one the older kit wrote. If you
-downloaded a 0.1.0 package, take 0.2.0 from the Releases page instead.
+The first release on the new history is `v0.2.0`, on the new commit; 0.2.1 followed. 0.1.0 is withdrawn: its tag and
+its packages are gone from GitHub, and its editor does not open a definition the updated kit writes, nor an editor
+from 0.2.0 on one the older kit wrote. If you downloaded a 0.1.0 package, take the latest release from the Releases
+page instead.
 
 A clone made earlier still has a `v0.1.0` tag of its own, on the old history; a plain fetch, or step 3's, neither moves
 nor removes it. Remove it with `git tag -d v0.1.0`. (`git fetch --prune --prune-tags origin` removes it too, but also

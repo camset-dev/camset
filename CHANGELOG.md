@@ -5,6 +5,26 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ## Unreleased
 
+## 0.2.1 (2026-11-13)
+
+The editor for Windows too, the definition viewer to download as one file and on the docs site, About in Settings,
+the kit's plain words for a Python that cannot run it, and fixes.
+
+### Read first
+
+- **Writing an edited settings file to a camera is at your own risk.** A file edited by hand once put a camera into
+  a restart loop in Movie mode, which ended when Initialize was run on the camera; Initialize also clears the network
+  setup and the memories. The editor and the camera may refuse or change values. Always keep the camera's own backup,
+  a settings file it saved itself, to load back: on the card and on your computer.
+- This is an independent project, not affiliated with or endorsed by Sony. Sony and the camera names are used only
+  to say what the files are.
+- The editor's packages (the macOS app and disk image, the Linux tarball, the Windows zip) do not include the camera
+  helper, which reading and writing a camera directly needs: the editor works on the files a camera saves to its
+  card. The helper is built from Sony's Camera Remote SDK on your own computer under Sony's terms (the README, "The
+  camera helper").
+- Windows: the program is not signed, so Windows SmartScreen warns the first time it runs ("Windows protected your
+  PC"): click More info, then Run anyway (the README, "Use the editor").
+
 ### The editor
 
 - The editor's version is easy to find: in the window's title and at the right end of the status bar. Settings has an

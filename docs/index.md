@@ -26,11 +26,11 @@ check yours.
 ## Get it
 
 The editor is on the [Releases page](https://github.com/camset-dev/camset/releases): a disk image for macOS on Apple
-silicon, a tarball for Linux and, from 0.2.1, a zip for Windows (before 0.2.1, build the editor from source there).
-The README's [Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the
-macOS app or the Windows program the first time. From 0.2.1 each release also carries the definition viewer as one
-file, [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open
-in a browser with no internet.
+silicon, a tarball for Linux and, since 0.2.1, a zip for Windows. The README's
+[Use the editor](https://github.com/camset-dev/camset#use-the-editor) says how, and how to open the macOS app or the
+Windows program the first time. Since 0.2.1 each release also carries the definition viewer as one file,
+[camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open in a
+browser with no internet.
 
 1. **Save the settings on the camera:** MENU > Setup > Reset/Save Settings > Save/Load Settings > Save. The camera
    writes a `CAMSET*.DAT` file into the card's `PRIVATE/SONY/CAMSET` folder. Copy it to your computer and keep it:
@@ -78,5 +78,5 @@ camera back.
 
 ## Version
 
-0.2.0, released 2026-11-11; 0.1.0 is withdrawn. What changed in each release is in the
+0.2.1, released 2026-11-13; 0.1.0 is withdrawn. What changed in each release is in the
 [changelog](https://github.com/camset-dev/camset/blob/main/CHANGELOG.md).

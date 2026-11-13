@@ -1,7 +1,7 @@
 [package]
 name = "camset-editor"
 default-run = "camset_editor"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 rust-version = "1.85"        # the first release with the 2024 edition
 description = "Reads, compares and edits Sony camera settings files (CAMSET .DAT)"

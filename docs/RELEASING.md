@@ -53,14 +53,14 @@ None of them holds help text or a value from anyone's camera.
 |---|---|---|
 | macOS | `sh packaging/build_macos_app.sh` (from `editor/`): `Camset Editor.app` and a `.dmg` (the app beside a shortcut to Applications, to drag it onto) in `editor/target/dist`, with only the tools macOS ships; the bundle identifier is `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Built and launched by Finder's route (`open`) on the Mac that built it, 2026-10-29: Apple silicon, ad-hoc signed. A downloaded copy, which macOS marks as from the internet, not yet tried. |
 | Linux | `sh packaging/build_linux.sh` (from `editor/`): a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | `build_linux.sh` written, not yet run. The editor itself was built and run on Ubuntu 26.04 (`PORTING.md`, "Seen on Windows / Linux"). |
-| Windows | The workflow (`Windows zip`) puts `camset_editor.exe`, `definitions/` (each definition with its sample), the project's licence as `LICENSE.txt` and the third-party licences page into one folder, `camset-editor-<version>-windows-x64`, and zips that folder; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results) | The editor was built (Visual Studio 2022 Build Tools), its tests run (56 and 229 passed) and the program used on a Windows 11 PC, 2026-11-12, reading a camera over the network with the camera helper (`PORTING.md`, "Seen on Windows / Linux"). The workflow's zip step itself first runs with the next tag; a downloaded zip not yet tried. Since 2026-11-12 `build.rs` links the program's icon (drawn from `assets/icon.png` at 16 to 256 px) and its version details (Properties > Details) into the exe, for the MSVC toolchain, with no resource compiler (`packaging/windows/resources.rs`); not yet seen on a Windows PC. On Windows, `editor-ci.yml` (after its build) and the `Windows zip` step (before it zips) check the built program's details (product name, description, version) and fail without them, which a build that cannot link them only warns about. The exe is not signed. |
+| Windows | The workflow (`Windows zip`) puts `camset_editor.exe`, `definitions/` (each definition with its sample), the project's licence as `LICENSE.txt` and the third-party licences page into one folder, `camset-editor-<version>-windows-x64`, and zips that folder; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results) | The editor was built (Visual Studio 2022 Build Tools), its tests run (56 and 229 passed) and the program used on a Windows 11 PC, 2026-11-12, reading a camera over the network with the camera helper (`PORTING.md`, "Seen on Windows / Linux"). The workflow's zip step itself first ran for 0.2.1; a downloaded zip not yet tried. Since 2026-11-12 `build.rs` links the program's icon (drawn from `assets/icon.png` at 16 to 256 px) and its version details (Properties > Details) into the exe, for the MSVC toolchain, with no resource compiler (`packaging/windows/resources.rs`); not yet seen on a Windows PC. On Windows, `editor-ci.yml` (after its build) and the `Windows zip` step (before it zips) check the built program's details (product name, description, version) and fail without them, which a build that cannot link them only warns about. The exe is not signed. |
 
-**Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.0 now), add the release's section to `CHANGELOG.md`,
-commit, then tag that commit `v<version>` (for example `v0.2.0`) and push the tag to GitHub only. The release is
-0.2.0, tagged on 2026-11-11 on the single commit that replaced the public history; 0.1.0 was withdrawn then, its tag
-and its GitHub Release deleted, because its packages carried a definition in the older form. Pushing the tag starts
-`.github/workflows/editor-release.yml` (which runs the same, without the release, when run by hand with
-workflow_dispatch):
+**Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.1 now), add the release's section to `CHANGELOG.md`,
+commit, then tag that commit `v<version>` (for example `v0.2.1`) and push the tag to GitHub only. The release is
+0.2.1, tagged on 2026-11-13. Before it, 0.2.0 was tagged on 2026-11-11 on the single commit that replaced the public
+history; 0.1.0 was withdrawn then, its tag and its GitHub Release deleted, because its packages carried a definition
+in the older form. Pushing the tag starts `.github/workflows/editor-release.yml` (which runs the same, without the
+release, when run by hand with workflow_dispatch):
 
 1. **test:** the kit's tests, `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any
    package is built (pull requests and main are checked by `kit-ci.yml` and `editor-ci.yml`); and, from 0.2.1, the
@@ -90,7 +90,7 @@ workflow above, then deletes the `v0.1.0` tag on both remotes and its GitHub Rel
 
 **The docs site** is built and published to GitHub Pages by `.github/workflows/docs.yml`, on each push to main that
 touches what the site is built from (or run by hand), once Pages is enabled for the repository (Settings → Pages →
-Source: GitHub Actions); on Gitea its deploy job skips itself. Written 2026-11-04, not yet run.
+Source: GitHub Actions); on Gitea its deploy job skips itself. It is live at https://camset-dev.github.io/camset/.
 
 **Statistics:** `.github/workflows/stats.yml` runs daily (03:17 UTC, or by hand) and appends to CSV files on the `stats` branch, an orphan branch it creates on the first run: `stats/summary.csv` (stars, forks, watchers, open issues, total downloads), `stats/downloads.csv` (each release asset's download count) and, for what GitHub's Insights page keeps only 14 days, `stats/traffic.csv` (views and clones, by day), `stats/referrers.csv` and `stats/paths.csv`. The traffic series need the `STATS_TOKEN` secret, a fine-grained token for this repository only with Administration: read, set under Settings > Secrets and variables > Actions; without it the workflow skips them and says so in its log.
 
@@ -106,6 +106,6 @@ Not yet done for a public release:
   `mkdocs.yml` point at github.com/camset-dev/camset since 2026-11-09, so the site's header links back to the repository.
 - **Release notes on GitHub:** the workflow attaches the packages and the viewer and writes no notes. A release's
   notes are its section of `CHANGELOG.md` (its "Read first" repeats the README's warning, says that the camera helper
-  is not included and, for 0.2.0, that 0.1.0 is withdrawn and its definitions do not open in 0.2.0), copied onto the
-  Release by hand.
+  is not included, for 0.2.0 that 0.1.0 is withdrawn and its definitions do not open in 0.2.0, and from 0.2.1 that the
+  Windows program is not signed, so SmartScreen warns), copied onto the Release by hand.
 - **The camera helper is not in these packages** (the README, "The camera helper"). If an SDK build is ever shipped, it must carry the warranty notice above.
