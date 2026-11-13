@@ -1060,8 +1060,29 @@ the same generation, never as proof:
    (`volatile_records`) before Phase 1: a diff ignores only its own body's volatile records, so without them every
    row fails its last diff. Upload the download back and download again to find the records a file
    cannot set.
-6. **Then Phase 1.** How long the work takes is in section 11.
-7. **Read the camera's own help** for every row (`kit/help_run.py`) and every option
+6. **Find the records that hold an owner's own data and the live mode record,** and write them into the camera file
+   too, each body's own ids, never the a1 II's. `personal_records`: every record that changes when the owner's own
+   things change, text or not, as the text check misses a name packed against other bytes (on the a1 II: Preset
+   Focus/Zoom's registered lens list, each lens's name, serial number and data, and the file-name prefix). What the
+   Help Guide says Save/Load Settings keeps tells which things to try. Each change is the owner's, by their own hand
+   and asked first: registering a lens to a preset needs a held custom key or the lens's ring and overwrites a slot,
+   so it goes in a slot they do not use. Download before and after (`kit/tools/upload_check.py --diff REF TAG`), and
+   list each record that changed by its key's id ("0x167c",
+   [DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records)); the bytes the diff
+   prints are the owner's (a lens's name, its serial number): copy them nowhere, not into notes, the camera file or a
+   message. A record with a camera default (a file-name prefix) goes under `defaults`, its bytes read from the file
+   the camera wrote right after Initialize, the one `make_sample.py` is given, never from the owner's working file
+   (DATA_CONTRACTS has the one-line command): they go into the published sample.
+   `kit/tools/make_sample.py` refuses to make the sample without the list, with a record listed twice, a
+   record the file does not hold or a default of another length than its record, and `kit/tools/check_public.py`
+   refuses such a sample; an empty list is allowed only once those things were tried and changed no other record,
+   and both say so when they meet one. `live_mode`: download once in each mode of the Still/Movie/S&Q switch (the
+   owner's hand); the live record whose value follows the mode is it, with what each value means.
+   `kit/tools/help_extras.py` reads a drive's mode by it and stops without it; `kit/provers/customshoot_values.py
+   --counted` reads the Focus Area order from this camera's own definition (`--order-from` its Focus Area record) and
+   stops before the camera is touched while there is none.
+7. **Then Phase 1.** How long the work takes is in section 11.
+8. **Read the camera's own help** for every row (`kit/help_run.py`) and every option
    (`prove_run --help-text`) once Phase 1's maps exist: C4 opens it where the footer draws the help
    button, and the kit sends it on no other screen (decision 7, rule 13). Then
    `kit/help_reads.py` reads every saved guide frame again with the VLM readers, where OCR slips. For the ILCE-1M2,

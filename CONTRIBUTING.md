@@ -35,7 +35,11 @@ editor can edit; any other camera is **not mapped yet**, and the README's
   does not run on the pull request yet.
 - **By hand:** the pass-2 report's counts and conflicts and the writer's gate line (`kit/schema_update.py` without
   `--write` prints "gate: … open questions …"; the report stays in your `runs/`, so the template asks you to paste
-  both), and spot checks. The maintainer does not go through your runs, and the proof viewer is yours: it is
+  both); the personal records listed in your camera file and how each was found, or what was tried before an empty
+  list (the template asks for it: the records' ids only, never the bytes a diff printed), and any record a pull
+  request takes out of a camera's list or whose default bytes it changes, which the publish guard stops for this
+  look. For a new camera the maintainer reads every `keep_text` entry as text that will be published and every
+  default's bytes as bytes that will be published: the guard has no older list to compare them with. And spot checks. The maintainer does not go through your runs, and the proof viewer is yours: it is
   built only from the runs on your computer, to check each value against your camera's screens, and is never sent. A camera of the maintainer's own model, the ILCE-1M2, can be re-checked on the
   maintainer's body.
 
@@ -44,7 +48,9 @@ editor can edit; any other camera is **not mapped yet**, and the README's
 - No text from Sony's In-Camera Guide or Help Guide: help is written in your own words
   ([decision 13](docs/decisions/0013-sony-s-help-text-stays-private.md)).
 - No values or names from anyone's camera ([decision 16](docs/decisions/0016-the-owner-s-values-never-reach-the-schema-or-the-docs.md)):
-  the only settings files published are the definitions' samples, which `kit/tools/make_sample.py` scrubs.
+  the only settings files published are the definitions' samples, which `kit/tools/make_sample.py` scrubs of text and
+  of the records your camera file lists in `personal_records` (a lens list with serial numbers, a file-name prefix;
+  [DATA_CONTRACTS](docs/DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records)).
   `kit/tools/check_public.py` refuses a commit that tracks `private/`, `runs/`, a file of Sony's SDK, a settings file
   no definition names as its sample or another binary file, and any MAC address, private network address, serial-number value, e-mail address or home
   folder but the placeholders the docs use, or a path in `private/` other than the places

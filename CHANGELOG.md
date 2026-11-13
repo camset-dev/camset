@@ -5,6 +5,15 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ## Unreleased
 
+### Read first
+
+- **If you map a camera other than the a1 II and made a sample** (`editor/definitions/<model>_fw<fw>.DAT`): on any
+  body but the a1 II the kit zeroed in it only the records whose value reads as text (its list of the a1 II's own
+  personal records applied to the ILCE-1M2 alone), and the text check misses a name packed against other bytes, so a
+  registered lens list, with each lens's serial number, and other records of the owner's own could be left in. Add
+  your camera's `personal_records` to its camera file and make the sample again (docs/UPDATING.md, "Your camera
+  file: what the kit reads in it now").
+
 ### The editor
 
 - On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
@@ -42,6 +51,29 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   whose ends the run has not yet read both of, and with RapidOCR (Windows and Linux), which reads neither end of
   0..9 or 1..5. Ends that do not match the ticks beside them (a tick read as a plus would make 1..5 read as -5..+5)
   now stop the proof instead of being taken as read.
+- A camera's records that hold an owner's own data, every record that changes when the owner's own things change,
+  text or not, are named in its own camera file, `personal_records` (records zeroed whole, records set back to the
+  camera's default, records of numbers never read as text, and the camera's own words kept; each record as the
+  record keys write it, "0x167c"), no longer only in the kit and only for the a1 II. `kit/tools/make_sample.py`
+  scrubs a sample by them and refuses, before writing anything, a camera file without them, a record listed twice, a
+  record the file does not hold and a default of another length than its record, saying what to add or correct;
+  `kit/tools/check_public.py` checks every published sample (a file of its definition's own model and firmware) by
+  its camera file's list in the same way, names what it finds by the record or a text by its length, never by a
+  value, and refuses for the maintainer's eye a pull request that weakens a camera's list against the range's base:
+  a record taken out, a default's bytes changed, a record moved to or newly set to a default, or a new camera file of
+  a model already mapped that lists less. Both say when a list names no record to zero or set back. The a1 II's
+  camera file carries what the kit held before, and its published sample comes out byte for byte the same
+  (docs/DATA_CONTRACTS.md, "Records that hold an owner's own data").
+- `kit/provers/customshoot_values.py --counted` names a hold's Focus Area rows in the Focus Area order of the camera
+  the kit works on, read from its own definition when the run starts (`--order-from` names the record, and is refused
+  without `--counted`), no longer the a1 II's order read when the prover was imported; a camera without one stops
+  before the camera is touched, saying what to prove first.
+- `kit/tools/help_extras.py` reads a drive's shooting mode by the camera file's `live_mode`, no longer by the a1 II's
+  record, and stops plainly where the camera file names none or its start file holds no such record.
+- Two notes of the a1 II's definition no longer publish what was particular to its owner's camera on the day:
+  the lens-name record (0x167c) says a teleconverter's name is added after the lens's without naming the one used,
+  and the registration stamp (0x0c09) no longer gives the number seen as a fact. They reach the definition the next
+  time the maintainer writes it with `kit/schema_update.py --write`.
 
 ## 0.2.1 (2026-11-13)
 

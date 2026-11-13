@@ -2197,7 +2197,8 @@ def test_custom_shoot_focus_area_counted_round(monkeypatch):
     # (2026-10-31). A popup of six rows; scrolling keeps the cursor on the fifth until the end.
     import types
     import customshoot_values as V
-    rows = ["Regist Focus Area"] + [o if ":" not in o else o.split(":")[0] + ":" for o in V.ORDER]
+    order = V.focus_area_order(where=paths.A1II)          # the a1 II's definition, named: not the active camera's
+    rows = ["Regist Focus Area"] + [o if ":" not in o else o.split(":")[0] + ":" for o in order]
 
     class Popup:
         def __init__(self, at):
@@ -2225,9 +2226,46 @@ def test_custom_shoot_focus_area_counted_round(monkeypatch):
         monkeypatch.setattr(V.time, "sleep", lambda s: None)
         read, s0 = V.look_by_count(cam, None, None, None, 1, 0)
         assert read == rows and s0 == at
-        names = V.order_names(read)
-        assert names == ["Regist Focus Area"] + V.ORDER and names[s0] == names[at]
-    assert V.order_names(rows[:-1]) is None
+        names = V.order_names(read, order)
+        assert names == ["Regist Focus Area"] + order and names[s0] == names[at]
+    assert V.order_names(rows[:-1], order) is None
+
+
+def test_custom_shoot_focus_area_order_is_the_active_cameras(tmp_path, monkeypatch, capsys):
+    """--counted names the rows in the Focus Area order of the camera the kit works on, read from its own definition
+    when the run starts, never the a1 II's: a made-up camera's order is its own; a camera with no definition, or one
+    whose definition has no such setting on its Focus Area row, stops with what to prove first; --order-from names
+    another setting. The prover keeps no order of its own (none read at import)."""
+    import customshoot_values as V
+    cam = "ILCE-0X0_fw1.00"
+    monkeypatch.setattr(definitions, "DIR", tmp_path)
+    monkeypatch.setenv("CAMSET_CAMERA", cam)
+    with pytest.raises(SystemExit, match=r"the ILCE-0X0_fw1\.00 has none yet.*Prove Focus Area on this camera first"):
+        V.focus_area_order()
+    mine = [[0, "Wide"], [2, "Spot: L"], [1, "Zone"], [3, "Tracking: Wide"]]
+    doc = {"model": "ILCE-0X0", "layouts": [{"model": "ILCE-0X0", "firmware": "1.00"}], "settings": [
+        {"key": "global:0x0f46", "name": "Made-up area", "row": ["AF", "Focus Area"], "values": mine},
+        {"key": "global:0x0a00", "name": "Made-up other order", "row": ["Focus Area"], "values": [[0, "Zone"], [1, "Wide"]]},
+        {"key": "global:0x0b00", "name": "Elsewhere", "row": ["Drive Mode"], "values": [[0, "Single"]]}]}
+    (tmp_path / f"{cam}.json").write_text(json.dumps(doc), encoding="utf-8")
+    assert V.focus_area_order() == ["Wide", "Zone", "Spot: L", "Tracking: Wide"]          # by code, the camera's own
+    assert V.focus_area_order("global:0x0a00") == ["Zone", "Wide"]
+    assert V.order_names(["Regist Focus Area", "Wide", "Zone", "Spot:", "Tracking:"], V.focus_area_order()) == \
+        ["Regist Focus Area", "Wide", "Zone", "Spot: L", "Tracking: Wide"]
+    with pytest.raises(SystemExit, match=r"definition \(.*\) has no setting global:0x0c00\. .*--order-from"):
+        V.focus_area_order("global:0x0c00")
+    with pytest.raises(SystemExit, match="has global:0x0b00 on another row than Focus Area"):
+        V.focus_area_order("global:0x0b00")
+    doc["settings"][0]["values"] = []
+    (tmp_path / f"{cam}.json").write_text(json.dumps(doc), encoding="utf-8")
+    with pytest.raises(SystemExit, match="names no values for global:0x0f46"):
+        V.focus_area_order()
+    assert not hasattr(V, "ORDER")
+    # --order-from without --counted names a record nothing reads: refused, not ignored, before anything else
+    monkeypatch.setattr(sys, "argv", ["customshoot_values", "--hold", "1", "--items", "Focus Area",
+                                      "--order-from", "global:0x0a00"])
+    with pytest.raises(SystemExit, match="without --counted nothing reads it"):
+        V.main()
 
 
 def test_custom_shoot_reads_a_row_ocr_leaves_empty_with_the_reader(monkeypatch):
@@ -3150,6 +3188,46 @@ def test_help_extras_counts_fields_and_reads_the_family():
     assert X.family("Example description for Time- lapse mode.") == "Time-lapse"
     assert X.family("Example description for still image shooting.") == "Stills"
     assert X.family("Example description for video recording.") == "Movie"
+
+
+def test_help_extras_reads_the_mode_by_the_cameras_own_live_mode(tmp_path, monkeypatch):
+    """A drive's mode is read by the live_mode of the camera the kit works on (its camera file), never by the a1 II's
+    record: the a1 II's gives the contexts it always gave (Time-lapse as S&Q); a made-up camera's names another record
+    and other codes; a camera file without live_mode, or no camera file, stops with what to add."""
+    import help_extras as X
+    cs = camset.read(SAMPLE)
+    (tmp_path / "run" / "dat").mkdir(parents=True)
+
+    def drive(rid, v):
+        r = cs.get(0, rid)
+        (tmp_path / "run" / "dat" / "x.DAT").write_bytes(camset.with_values(cs, {(0, rid): bytes([v]) + r.raw[1:]}))
+        return {"before": "x.DAT"}
+    a1 = X.live_mode(paths.A1II)
+    assert a1[0] == 0x13bf
+    assert [X.context(tmp_path / "run", drive(0x13bf, v), a1) for v in range(4)] == \
+        ["Stills mode", "Movie mode", "S&Q mode", "S&Q mode"]
+    data = tmp_path / "data"
+    monkeypatch.setattr(definitions, "DATA", data)
+    cam = "ILCE-0X0_fw1.00"
+    monkeypatch.setenv("CAMSET_CAMERA", cam)
+    with pytest.raises(SystemExit, match=r"the ILCE-0X0_fw1\.00 has none"):
+        X.live_mode()
+    (data / cam).mkdir(parents=True)
+    facts = {"model": "ILCE-0X0", "section_counts": [], "tab_colors": {}}
+    (data / cam / f"camera_{cam}.json").write_text(json.dumps(facts), encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"names no live_mode\. Find the record"):
+        X.live_mode()
+    facts["live_mode"] = {"key": "global:0x0489", "modes": {"0": "Movie", "1": "Time-lapse", "2": "Stills"}}
+    (data / cam / f"camera_{cam}.json").write_text(json.dumps(facts), encoding="utf-8")
+    mine = X.live_mode()
+    assert mine == (0x0489, {"0": "Movie", "1": "Time-lapse", "2": "Stills"})
+    assert [X.context(tmp_path / "run", drive(0x0489, v), mine) for v in range(3)] == \
+        ["Movie mode", "S&Q mode", "Stills mode"]
+    with pytest.raises(SystemExit, match="holds 3, which the camera file's live_mode does not name"):
+        X.context(tmp_path / "run", drive(0x0489, 3), mine)
+    assert cs.get(0, 0x7ffe) is None                    # a live_mode naming a record the file does not hold: words
+    with pytest.raises(SystemExit, match=r"holds no record 0x7ffe in its live settings"):
+        X.context(tmp_path / "run", drive(0x0489, 0), (0x7ffe, mine[1]))
 
 
 def test_help_extras_tells_a_rows_guide_from_its_options():

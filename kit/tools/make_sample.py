@@ -18,11 +18,20 @@ sample goes beside the definition of the
 file's model and firmware (editor/definitions/<model>_fw<fw>.DAT), which names it in its camera section ("sample",
 from data/<model>_fw<fw>/camera_<model>_fw<fw>.json): the editor's Explore a sample opens it, the docs' memory map
 reads it, and kit/tools/check_public.py lets that file alone be published.
-Zeroed: every record whose value is printable text of 4+ characters (owner, copyright, network names, device names)
-and, on the ILCE-1M2, the registered lens list (names, serials, per-lens data); there the file-name prefix, 3
-letters an owner chooses (often initials), is set to the camera's default, DSC. Another body's own lists of the kind
-are its own record ids: add them here once proved. The save time becomes 20260101_000000. Both checksums are
-recomputed at the file's container block's sites (camkit.camset).
+Zeroed: every record whose value is printable text of 4+ characters (owner, copyright, network names, device names),
+and the records the camera's own file lists in "personal_records" (data/<model>_fw<fw>/camera_<model>_fw<fw>.json,
+schemas/camera.schema.json), every record that changes when the owner's own things change, text or not (the text
+check misses a name packed against other bytes): "zeroed", records zeroed whole (the ILCE-1M2's registered lens list:
+names, serials, per-lens data); "defaults", records set to the camera's own default (the ILCE-1M2's file-name prefix,
+3 letters an owner chooses, often initials, set to DSC); "not_text", records of numbers never read for text between
+NULs; "keep_text", the camera's own words kept. Records are named "0x167c", as the record keys and
+kit/tools/upload_check.py --diff write them. Those are each body's own record ids, so before anything is written the
+tool stops on a camera file without the key (saying what to add and how to find it: missing_words), on a key not
+shaped as the schema says or naming a record twice (personal_rules), and on a record the file given does not hold or a
+default of another length than its record (personal_problems); a list naming no record to zero or set back is said
+(empty_note). kit/tools/check_public.py checks a published sample by the same key. A zeroed text is printed by its
+length alone. The save time becomes 20260101_000000. Both checksums are recomputed at the file's container block's
+sites (camkit.camset).
 
 --take FAMILY --from RESULT (2026-11-11, made strict the same day): the records Initialize leaves, taken from files
 the same camera wrote after the camera's own reset of them, so the sample holds the reset values, never the owner's.
@@ -79,34 +88,195 @@ import re
 import sys
 import tempfile
 from pathlib import Path, PureWindowsPath
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, definitions, match, paths, provenance, safety  # noqa: E402
 
-# the ILCE-1M2's own record ids (proved on that body): its lens list, its file-name prefix, its memory blocks
-A1II_MODEL = "ILCE-1M2"
-LENS = {0x167C, 0x16A1, 0x1682, 0x1688, 0x168E, 0x1694, 0x172C, 0x1732, 0x1437, 0x16F3, 0x0B75}
-KEEP_TEXT = {"DSC"}
-PREFIX, DEFAULT_PREFIX = 0x0B5B, b"DSC\0"       # File Name (prefix): ASCII, the first letter in the low byte
-BLOCKS = (0x018C, 0x0180)                        # the memory exposure blocks: numbers, never text
 DEFAULT_STAMP = "20260101_000000"
 KEY = re.compile(r"(?:(global|set(\d+)):)?0x([0-9a-f]{1,4})", re.I)
 MODES = ("Stills", "Movie")                      # the modes a reset run is made in (kit/provers/pp_reset_run.py)
+# the camera file's key that names the body's records holding an owner's own data, text or not
+# (schemas/camera.schema.json): each body's own record ids, never another body's
+PERSONAL = "personal_records"
+# a record id as a record key writes it and kit/tools/upload_check.py --diff prints it after "global:" or "setN:": the
+# one form personal_records takes, and the form every message of make_sample and check_public names a record by
+RECORD_ID = re.compile(r"0x[0-9a-f]{4}")          # whole (fullmatch): no newline after it
+HEX_BYTES = re.compile(r"(?:[0-9a-f]{2})+")
 
 
-def personal(rid: int, raw: bytes, model: str = A1II_MODEL) -> str:
-    """Why a record is zeroed ("lens list", or the start of its text), or "" when it is kept."""
+def rid_text(rid: int) -> str:
+    """A record id as personal_records and the record keys write it ("0x167c")."""
+    return f"0x{rid:04x}"
+
+
+class Personal(NamedTuple):
+    """A camera's "personal_records", as the sample is scrubbed by them. Each record id holds in whichever section it is
+    in."""
+    zeroed: dict           # {record id: what it holds}: zeroed whole (the ILCE-1M2's registered lens list)
+    defaults: dict         # {record id: (bytes, what it holds)}: set to the camera's own default (the ILCE-1M2's
+                           # file-name prefix, DSC)
+    not_text: frozenset    # record ids never read for pieces of text between NULs: numbers (memory exposure blocks)
+    keep_text: frozenset   # text a record may hold and keep: the camera's own word, not an owner's (DSC)
+
+    def protects(self) -> bool:
+        """Whether the list names any record to zero or set back: an empty one leaves only the text check."""
+        return bool(self.zeroed or self.defaults)
+
+
+SHAPES = {"zeroed": ("records",), "defaults": ("record", "bytes"), "not_text": ("records",)}
+
+
+def personal_rules(camera: dict) -> Personal | None:
+    """The camera's facts' (its camera file's, or a definition's camera section) "personal_records", or None when they
+    have none. ValueError, in words naming the entry or the record, for one not shaped as schemas/camera.schema.json
+    says (as strict as the schema: no other key, no empty list of records), and for a record listed twice, in one
+    group or two: each record has one place."""
+    pr = (camera or {}).get(PERSONAL)
+    if pr is None:
+        return None
+    if not isinstance(pr, dict) or set(pr) - {*SHAPES, "keep_text"}:
+        raise ValueError(f"\"{PERSONAL}\" is an object of \"zeroed\", \"defaults\", \"not_text\" and \"keep_text\", "
+                         "nothing else")
+    seen = {}
+
+    def rid(x, group: str) -> int:
+        if not isinstance(x, str) or not RECORD_ID.fullmatch(x):
+            raise ValueError(f"\"{PERSONAL}\".{group}: {json.dumps(x)} is not a record id as the record keys write it: "
+                             "\"0x\" and four lower-case hex digits, as kit/tools/upload_check.py --diff prints it after "
+                             "\"global:\" (\"0x167c\")")
+        n = int(x, 16)
+        if n in seen:
+            twice = f"in {group} twice" if seen[n] == group else f"in {seen[n]} and in {group}"
+            raise ValueError(f"\"{PERSONAL}\" lists {x} {twice}: each record goes in one place")
+        seen[n] = group
+        return n
+
+    def entries(group: str) -> list:
+        need = SHAPES[group]
+        shape = ", ".join(f"\"{k}\"" for k in need)
+        g = pr.get(group, [])
+        if not isinstance(g, list):
+            raise ValueError(f"\"{PERSONAL}\".{group} is a list of entries, each {{{shape} and maybe \"what\"}}")
+        for i, e in enumerate(g):
+            if not isinstance(e, dict) or set(need) - set(e) or set(e) - {*need, "what"} \
+                    or not isinstance(e.get("what", ""), str):
+                raise ValueError(f"\"{PERSONAL}\".{group}, entry {i + 1}: each holds {shape} and maybe \"what\" (a "
+                                 "text), nothing else")
+            if "records" in need and (not isinstance(e["records"], list) or not e["records"]):
+                raise ValueError(f"\"{PERSONAL}\".{group}, entry {i + 1}: \"records\" is a list of one record id or "
+                                 "more")
+        return g
+    zeroed = {rid(r, "zeroed"): e.get("what", "") for e in entries("zeroed") for r in e["records"]}
+    defaults = {}
+    for i, e in enumerate(entries("defaults")):
+        b = e["bytes"]
+        if not isinstance(b, str) or not HEX_BYTES.fullmatch(b):
+            raise ValueError(f"\"{PERSONAL}\".defaults, entry {i + 1}: \"bytes\" is the default's whole bytes as "
+                             "lower-case hex (\"44534300\")")
+        defaults[rid(e["record"], "defaults")] = (bytes.fromhex(b), e.get("what", ""))
+    not_text = frozenset(rid(r, "not_text") for e in entries("not_text") for r in e["records"])
+    keep = pr.get("keep_text", [])
+    if not isinstance(keep, list) or not all(isinstance(t, str) and t for t in keep):
+        raise ValueError(f"\"{PERSONAL}\".keep_text is a list of texts, none empty")
+    return Personal(zeroed, defaults, not_text, frozenset(keep))
+
+
+def personal_problems(rules: Personal, cs, where: str) -> list:
+    """What in a camera's personal records does not fit the file `cs` (`where` names it), each in words naming the
+    record: a record no section of the file holds (a typo, or a decimal number written after "0x": it would protect
+    nothing), and a default whose length is not the record's (it could never be set)."""
+    held = set().union(*(set(sec) for sec in cs.sections))
+    out = [f"{rid_text(r)} ({group}) is a record no section of {where} holds: a typo, or a decimal number written "
+           "after \"0x\"? Take it from the keys kit/tools/upload_check.py --diff prints"
+           for group, ids in (("zeroed", rules.zeroed), ("defaults", rules.defaults), ("not_text", rules.not_text))
+           for r in sorted(ids) if r not in held]
+    for r, (b, _what) in sorted(rules.defaults.items()):
+        for si, sec in enumerate(cs.sections):
+            got = sec.get(r)
+            if got is not None and len(got.raw) != len(b):
+                out.append(f"{rid_text(r)} (defaults): its default is {len(b)} bytes, and the record in section {si} of "
+                           f"{where} holds {len(got.raw)}: give the record's whole bytes")
+    return out
+
+
+def empty_note(where: str) -> str:
+    """What is said of a sample made or checked by a list that names no record to zero or set back."""
+    return (f"{where}'s \"{PERSONAL}\" names no record to zero or set back, so only the records whose value reads as "
+            "text are zeroed: right only for a body on which the owner's own things were tried (a lens registered, a "
+            "file-name prefix set) and changed no other record (docs/DATA_CONTRACTS.md, \"Records that hold an "
+            "owner's own data\")")
+
+
+def missing_words(where: str, model: str) -> str:
+    """Why a sample of this camera is not made (make_sample) or not shown clean (check_public): its camera file at
+    `where` says nothing of its personal records; what to add, and how to find them on the body."""
+    return (f"{where} has no \"{PERSONAL}\", so which of the {model}'s records hold an owner's own data is not known. "
+            "The sample is published: the kit zeroes every record whose value reads as text, and the records that key "
+            "lists, each body's own. Every record that changes when the owner's own things change goes in, text or "
+            "not, as the text check misses a name packed against other bytes (on the ILCE-1M2: Preset Focus/Zoom's "
+            "registered lens list, each lens's name, serial number and data, and the file-name prefix). Find this "
+            "body's: download; ask the owner to change one such thing on the camera by their own hand (register a "
+            "lens to a preset slot they do not use, set File Name's prefix); download again and compare "
+            "(kit/tools/upload_check.py --diff REF TAG lists the records that differ by key; the bytes it prints are "
+            "the owner's: copy them nowhere). List each record that changed, by its key's id (\"0x167c\"), as "
+            f"\"{PERSONAL}\" (docs/DATA_CONTRACTS.md, \"Records that hold an owner's own data\"; the ILCE-1M2's camera "
+            "file is the pattern); a record with a camera default goes under \"defaults\", its bytes read from the "
+            "file the camera wrote right after Initialize (the one make_sample is given), never from the owner's "
+            "working file, as they go into the sample. Then make the sample again with kit/tools/make_sample.py")
+
+
+def camera_rules(cs) -> Personal:
+    """The personal records of the camera that wrote `cs`, from its own camera file (data/<model>_fw<fw>/
+    camera_<model>_fw<fw>.json), checked against `cs` (personal_problems); exits, saying what to add or correct and how,
+    when that file or its key is not there, or the key is not shaped right or does not fit the file. Says so when the
+    list names no record to zero or set back (empty_note)."""
+    key = paths.key(cs.model, cs.firmware)
+    f = definitions.camera_file(key)
+    if not f.exists():
+        sys.exit(f"make_sample: nothing written: the {cs.model} firmware {cs.firmware} has no camera file "
+                 f"({paths.shown(f)}), so which of its records hold an owner's own data is not known. Start its data/ "
+                 f"folder first (docs/REMAPPING_PLAYBOOK.md, section 16), with \"{PERSONAL}\" in it")
+    try:
+        rules = personal_rules(json.loads(f.read_text(encoding="utf-8")))
+    except ValueError as e:
+        sys.exit(f"make_sample: nothing written: {paths.shown(f)}: {e}")
+    if rules is None:
+        sys.exit("make_sample: nothing written: " + missing_words(paths.shown(f), cs.model))
+    bad = personal_problems(rules, cs, "the file given")
+    if bad:
+        sys.exit(f"make_sample: nothing written: {paths.shown(f)}'s \"{PERSONAL}\": " + "; ".join(bad))
+    if not rules.protects():
+        print("note: " + empty_note(paths.shown(f)))
+    return rules
+
+
+def personal(rid: int, raw: bytes, rules: Personal) -> str:
+    """Why a record is zeroed: what its personal records say it holds (a record they list), or the text it holds (to
+    be counted, never shown); "" when it is kept."""
     text = raw.rstrip(b"\0")
-    a1 = model == A1II_MODEL
-    if a1 and rid in LENS:
-        return "lens list"
-    if len(text) >= 4 and len(raw) > 4 and all(32 <= b < 127 for b in text) and text.decode("ascii").strip() not in KEEP_TEXT:
-        return text[:24].decode("ascii")
-    if b"\0" in raw and not (a1 and rid in BLOCKS):
+    if rid in rules.zeroed:
+        return rules.zeroed[rid] or "personal record"
+    if len(text) >= 4 and len(raw) > 4 and all(32 <= b < 127 for b in text) and text.decode("ascii").strip() not in rules.keep_text:
+        return text.decode("ascii")
+    if b"\0" in raw and rid not in rules.not_text:
         for chunk in raw.split(b"\0"):
-            if len(chunk) >= 4 and all(32 <= b < 127 for b in chunk) and chunk.decode("ascii").strip() not in KEEP_TEXT:
-                return chunk[:24].decode("ascii")
+            if len(chunk) >= 4 and all(32 <= b < 127 for b in chunk) and chunk.decode("ascii").strip() not in rules.keep_text:
+                return chunk.decode("ascii")
     return ""
+
+
+def shown_why(rid: int, why: str, rules: Personal) -> str:
+    """A zeroed record's reason as make_sample and check_public print it: a listed record by what it holds, a text by
+    its length alone (a pull request's check log is public)."""
+    return why if rid in rules.zeroed else f"text, {len(why)} characters"
+
+
+def default_due(rid: int, raw: bytes, rules: Personal) -> bytes | None:
+    """The camera's default a record is set to (its personal records' "defaults"), when it holds another value
+    (personal_problems has refused a default of another length); None otherwise."""
+    d = rules.defaults.get(rid)
+    return d[0] if d is not None and raw != d[0] and len(raw) == len(d[0]) else None
 
 
 # ---------------------------------------------------------------- --take: which records (the definition)
@@ -877,6 +1047,7 @@ def main(argv=None):
     if bool(a.take) != bool(a.sources):
         sys.exit("make_sample: --take and --from go together: the family, and the reset runs it comes from")
     cs = camset.read(a.src)
+    rules = camera_rules(cs)                       # before anything else: no sample without them
     out_path = Path(a.out) if a.out else definitions.DIR / f"{paths.key(cs.model, cs.firmware)}.DAT"
     changes, zeroed, taken_keys = {}, [], set()
     if a.take:
@@ -906,15 +1077,17 @@ def main(argv=None):
     for si, sec in enumerate(cs.sections):
         for rid, r in sec.items():
             raw = changes.get((si, rid), r.raw)
-            why = personal(rid, raw, cs.model)
-            if (si, rid) in taken_keys and (why or (cs.model == A1II_MODEL and rid == PREFIX)):
+            why = personal(rid, raw, rules)
+            if (si, rid) in taken_keys and (why or rid in rules.defaults):
                 sys.exit(f"make_sample: {keyname((si, rid))} is taken and also zeroed as personal: take another record")
-            if cs.model == A1II_MODEL and rid == PREFIX and r.raw != DEFAULT_PREFIX and len(r.raw) == len(DEFAULT_PREFIX):
-                changes[(si, rid)] = DEFAULT_PREFIX
-                zeroed.append((si, rid, len(r.raw), "file-name prefix set to DSC"))
+            default = default_due(rid, r.raw, rules)
+            if default is not None:
+                changes[(si, rid)] = default
+                zeroed.append((si, rid, len(r.raw), f"{rules.defaults[rid][1] or 'personal record'}: set to the "
+                                                    "camera's default", True))
             elif why:
                 changes[(si, rid)] = bytes(len(r.raw))
-                zeroed.append((si, rid, len(r.raw), why))
+                zeroed.append((si, rid, len(r.raw), why, rid in rules.zeroed))
     b = cs.block
     out = b.sealed(b.with_text(camset.with_values(cs, changes), "saved", DEFAULT_STAMP))
     if a.dry_run:
@@ -922,8 +1095,8 @@ def main(argv=None):
     else:
         write_replacing(out_path, out)
         print(f"{out_path}: {len(zeroed)} records zeroed or reset" + (f", {len(taken_keys)} taken" if taken_keys else ""))
-    for si, rid, n, why in zeroed[:40]:
-        print(f"  section {si} 0x{rid:04x} ({n} B): {why if why in ('lens list', 'file-name prefix set to DSC') else '(text)'}")
+    for si, rid, n, why, listed in zeroed[:40]:      # a listed record by what it holds; a text by its length alone
+        print(f"  section {si} {rid_text(rid)} ({n} B): {why if listed else '(' + shown_why(rid, why, rules) + ')'}")
 
 
 if __name__ == "__main__":

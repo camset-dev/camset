@@ -45,7 +45,14 @@ Contents (text files, and the ASCII strings in binary ones):
   camera's credentials, docs/decisions/0009, and no address), nor its
   "private_strings", nor the owner's name or the body's serial as the camera's properties hold them
   (private/data/picture_profile/properties.json), when present.
-- Each definition's sample holds no personal value and valid checksums.
+- Each definition's sample holds no personal value and valid checksums: no record whose value reads as text, and
+  each record its camera's own file lists in "personal_records" (data/<model>_fw<fw>/camera_<model>_fw<fw>.json: the
+  working tree's, or a range's last commit's) zeroed or at the camera's default; a camera file without that key, one
+  not shaped as the schema says or listing a record twice, a record the sample does not hold and a default of another
+  length than its record are refused, as kit/tools/make_sample.py refuses them. What is found is named by its record
+  and what the list says it holds, a text by its length, never by its value; a list naming no record to zero or set
+  back is said in a note. The sample is a file of the model and firmware the definition's layout names (whose camera
+  file it is checked by), and a definition whose "model" is not its layout's is refused.
 - Each definition is lean (camkit.definitions.evidence_in_public): none of the mapping's evidence (how, when, in which
   run or from which state a thing was proved), which stays in the mapper's private/evidence/ (docs/decisions/0016).
 - So is every camera's data folder, data/<model>_fw<fw>/ (camkit.datafiles.evidence_in_public): no menu tree, no
@@ -64,7 +71,13 @@ file no definition names as its sample, a spreadsheet, a file .gitignore ignores
 by the binary rule and its ASCII strings, a text file by its text, a link by its target, a sample's personal values),
 the data folder's and the definitions' leanness and the camera's In-Camera Guide text; a file added in one commit and
 removed in the next is refused by the first; a submodule (gitlink) by the path rules, as it has no file to read. The
-samples are the ones the range's last commit's definitions name. Each commit's files are read as blobs with git's
+samples are the ones the range's last commit's definitions name, checked by its camera files' personal records; a
+camera file whose personal records the range weakens is refused for the maintainer's eye, as the list could otherwise
+shrink in the same pull request as its sample: a record no longer zeroed or set back, one newly kept from the text
+check, a text newly kept, the key gone, and a default's bytes changed, a record moved from zeroed to defaults or newly
+set to a default (its bytes go into the sample), each compared at the first commit's parent and at the range's own
+BASE with the last commit; and a camera file new in the range for a model a base already has one of (another
+firmware) is compared with that one the same way. Each commit's files are read as blobs with git's
 plumbing (diff-tree, one long-lived cat-file --batch: a blob at a time, dropped once judged, and a version seen again
 at the same path judged once), nothing checked out; each finding starts with its commit. Objects are asked for by
 their ids alone (from diff-tree and ls-tree -z), never by a name, and each answer must be the object asked for,
@@ -85,7 +98,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, camset, datafiles, definitions, help_files, paths  # noqa: E402
-from make_sample import A1II_MODEL, DEFAULT_PREFIX, PREFIX, personal  # noqa: E402
+from make_sample import (PERSONAL, empty_note, missing_words, personal, personal_problems, personal_rules,  # noqa: E402
+                         rid_text, shown_why)
 
 RUN = 8
 # MAC addresses: six pairs with one separator, a run of more refused too (a label or a name before it, such as
@@ -192,13 +206,103 @@ def definition_files() -> list:
 
 
 def samples() -> dict:
-    """{the published path of a definition's sample: its definition} for every definition that names one."""
+    """{the published path of a definition's sample: its definition, its camera section as the camera's own file in the
+    tree has it (with_camera_file)} for every definition that names one."""
     out = {}
     for p, doc in definition_files():
         s = definitions.sample(doc, p)
         if s is not None:
-            out[s.relative_to(ROOT).as_posix()] = doc
+            try:
+                facts = json.loads((ROOT / camera_file_of(doc)).read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                facts = None
+            out[s.relative_to(ROOT).as_posix()] = with_camera_file(doc, facts)
     return out
+
+
+def camera_file_of(doc: dict) -> str:
+    """data/<model>_fw<fw>/camera_<model>_fw<fw>.json of a definition's camera, as a published path."""
+    key = definitions.key(doc)
+    return f"data/{key}/camera_{key}.json"
+
+
+def with_camera_file(doc: dict, facts) -> dict:
+    """The definition with its camera section as the camera's own file has it (`facts`, read from the tree or from a
+    commit): a sample's personal records are checked by that file's (one_sample), the one source the definition's
+    section is copied from; the definition as it is where there is no such file."""
+    return dict(doc, camera=facts) if isinstance(facts, dict) else doc
+
+
+# said after each change that puts a default's bytes into the published sample (personal_weakened)
+OWN_DEFAULT = (": a default's bytes go into the published sample, so they must be the camera's own, read from the file "
+               "it wrote right after Initialize, never from the owner's working file")
+
+
+def personal_weakened(before, after, against: str = None) -> list:
+    """How the personal records of the camera file `after` are weaker than those of `before` (each a camera file read
+    as JSON; None: not there, or not JSON), each in words naming the records and never a default's bytes: the key
+    gone; records no longer zeroed or set back; records newly kept from the text check (not_text); texts newly kept
+    (keep_text); and what puts bytes of the list's own into the published sample, which may be the owner's: a
+    default's bytes changed, a record moved from zeroed to defaults, a record newly set to a default (OWN_DEFAULT).
+    `before` is an older version of the same file, or (`against`, its path) another camera file of the same model,
+    which the words then name. Read loosely, as the older version may not be shaped as the kit reads it now; [] when
+    `before` has no personal records."""
+    def part(facts):
+        pr = facts.get(PERSONAL) if isinstance(facts, dict) else None
+        return pr if isinstance(pr, dict) else None
+
+    def entries(pr, group: str) -> list:
+        return [e for e in pr.get(group) if isinstance(e, dict)] if isinstance(pr.get(group), list) else []
+
+    def ids(pr, group: str) -> set:
+        got = set()
+        for e in entries(pr, group):
+            v = e.get("record" if group == "defaults" else "records")
+            got |= {str(x).lower() for x in (v if isinstance(v, list) else [v]) if x is not None}
+        return got
+
+    def default_bytes(pr) -> dict:
+        return {str(e.get("record")).lower(): str(e.get("bytes")) for e in entries(pr, "defaults")}
+
+    def texts(pr) -> set:
+        return {str(t) for t in pr.get("keep_text")} if isinstance(pr.get("keep_text"), list) else set()
+
+    def listed(records) -> str:
+        return ", ".join(sorted(records))
+    old, new = part(before), part(after)
+    if old is None:
+        return []
+    if new is None:
+        return [f"has no \"{PERSONAL}\", which {against} has" if against else f"its \"{PERSONAL}\" is gone"]
+    out = []
+    gone = (ids(old, "zeroed") | ids(old, "defaults")) - (ids(new, "zeroed") | ids(new, "defaults"))
+    if gone:
+        out.append(f"does not zero or set back {listed(gone)}, which {against} does" if against else
+                   f"\"{PERSONAL}\" no longer zeroes or sets back {listed(gone)}")
+    kept = ids(new, "not_text") - ids(old, "not_text")
+    if kept:
+        out.append(f"keeps {listed(kept)} from the text check (not_text), which {against} does not" if against else
+                   f"\"{PERSONAL}\" newly keeps {listed(kept)} from the text check (not_text)")
+    more = texts(new) - texts(old)
+    if more:
+        n = f"{len(more)} text{'s' if len(more) > 1 else ''}"
+        out.append(f"keeps {n} (keep_text), which {against} does not" if against else
+                   f"\"{PERSONAL}\" newly keeps {n} (keep_text)")
+    was, now = default_bytes(old), default_bytes(new)
+    own = []
+    changed = {r for r in now if r in was and now[r] != was[r]}
+    if changed:                                     # never the bytes: they may be the owner's
+        own.append(f"gives {listed(changed)} other default bytes than {against}" if against else
+                   f"\"{PERSONAL}\" changes the default bytes of {listed(changed)}")
+    moved = (set(now) & ids(old, "zeroed")) - set(was)
+    if moved:
+        own.append(f"sets back to a default {listed(moved)}, which {against} zeroes" if against else
+                   f"\"{PERSONAL}\" moves {listed(moved)} from zeroed to defaults")
+    added = set(now) - set(was) - ids(old, "zeroed")
+    if added:
+        own.append(f"sets {listed(added)} to a default, which {against} does not" if against else
+                   f"\"{PERSONAL}\" newly sets {listed(added)} to a default")
+    return out + [x + OWN_DEFAULT for x in own]
 
 
 def sony_sdk(path: str) -> bool:
@@ -535,7 +639,12 @@ def sample_problems(home: set, owner: set) -> list:
 
 def one_sample(rel: str, raw_sample: bytes, doc: dict, home: set, owner: set) -> list:
     """A definition's sample (`rel`, its bytes): no personal value, no home address or owner string, valid checksums,
-    the definition's model."""
+    the model and firmware of the camera the definition's layout names (the camera file its sample is checked by),
+    and a definition whose "model" is that layout's. Personal values by the camera file's personal records
+    (make_sample.py's rules, checked against the sample as make_sample checks them against its source:
+    personal_problems), each found named by the record and what the list says it holds, or a text by its length,
+    never by its value: a pull request's check log is public. A list naming no record to zero or set back is said in
+    a note."""
     out = []
     if home and raw_home(raw_sample, home):
         out.append(f"{rel}: holds a home network address from private/config.json (written out or packed)")
@@ -548,16 +657,42 @@ def one_sample(rel: str, raw_sample: bytes, doc: dict, home: set, owner: set) ->
         return out + [f"{rel}: {e}"]
     if not cs.checksums_ok:
         out.append(f"{rel}: invalid checksums")
-    if cs.model != doc["model"]:
-        out.append(f"{rel}: a {cs.model} file, the sample of the {doc['model']}'s definition")
-    pref = cs.get(0, PREFIX) if cs.model == A1II_MODEL else None          # the a1 II's record id (make_sample.py)
-    if pref and pref.raw != DEFAULT_PREFIX:
-        out.append(f"{rel}: file-name prefix is {pref.raw!r}, expected {DEFAULT_PREFIX!r}")
+    # the camera the definition is, by its layout (definitions.key): the camera file its sample is checked by
+    layout = (doc.get("layouts") or [{}])[0] or {}
+    model, firmware = layout.get("model") or doc.get("model"), layout.get("firmware")
+    if doc.get("model") != model:
+        out.append(f"{rel}: its definition names the model {doc.get('model')} and its layout the {model}: a definition "
+                   f"is one model's, and its sample is checked by the camera file its layout names "
+                   f"({camera_file_of(doc)}), so the two must be the same")
+    if cs.model != model:
+        out.append(f"{rel}: a {cs.model} file, the sample of the {model}'s definition")
+    elif firmware and cs.firmware != firmware:
+        out.append(f"{rel}: a firmware {cs.firmware} file, the sample of the {model} firmware {firmware} "
+                   "definition: its personal records are checked by that firmware's camera file, so make the sample "
+                   "from a file this firmware wrote")
+    # which records hold an owner's own data: the camera's own file's personal records (make_sample.py's), each body's
+    camera = doc.get("camera") if isinstance(doc.get("camera"), dict) else {}
+    try:
+        rules = personal_rules(camera)
+    except ValueError as e:
+        return out + [f"{rel}: {camera_file_of(doc)}: {e}"]
+    if rules is None:
+        return out + [f"{rel}: not shown clean: " + missing_words(camera_file_of(doc), doc["model"])]
+    bad = personal_problems(rules, cs, "the sample")
+    if bad:
+        return out + [f"{rel}: not shown clean: {camera_file_of(doc)}'s \"personal_records\": {why}" for why in bad]
+    if not rules.protects():
+        print(f"note: {rel}: " + empty_note(camera_file_of(doc)), file=sys.stderr)
     for si, sec in enumerate(cs.sections):
         for rid, r in sec.items():
-            why = personal(rid, r.raw, cs.model)
+            default = rules.defaults.get(rid)
+            if default is not None and r.raw != default[0]:          # its value never printed: it can be the owner's
+                out.append(f"{rel} section {si} {rid_text(rid)}: not the camera's default "
+                           f"({default[1] or 'personal record'})")
+            why = personal(rid, r.raw, rules)
             if why and any(r.raw):
-                out.append(f"{rel} section {si} 0x{rid:04x}: unscrubbed personal value ({why})")
+                out.append(f"{rel} section {si} {rid_text(rid)}: unscrubbed personal value "
+                           f"({shown_why(rid, why, rules)})")
     return out
 
 
@@ -704,6 +839,29 @@ def _git_bytes(*args, repo: Path = ROOT, stdin: bytes = None) -> bytes:
 
 DATA_PATH = re.compile(r"data/([^/]+)/([^/]+\.jsonl?)")
 DEFINITION_PATH = re.compile(r"editor/definitions/[^/]+\.json")
+CAMERA_FILE_PATH = re.compile(r"data/([^/]+)/camera_\1\.json")
+
+
+def model_of(camera_file: str) -> str:
+    """The model a camera file's path names (data/<model>_fw<fw>/camera_<model>_fw<fw>.json: <model>)."""
+    key = CAMERA_FILE_PATH.fullmatch(camera_file).group(1)
+    m = paths.KEY.match(key)
+    return m.group("model") if m else key
+
+
+def range_bases(spec: str, commits: list, repo: Path) -> list:
+    """The commits a range's end is compared with for what it drops (commit_problems): the parents of its oldest
+    commit (where its own first commit started) and the range's own base, BASE of BASE..HEAD (of BASE...HEAD, the
+    merge base): a branch cut from an older main that merges main and then drops a record is caught by the second.
+    A base may hold no camera file at all (a new camera): nothing is compared from it."""
+    out = _git_bytes("rev-list", "--parents", "-n", "1", commits[0], repo=repo).decode().split()[1:]
+    if "..." in spec:
+        a, b = spec.split("...", 1)
+        out += _git_bytes("merge-base", a or "HEAD", b or "HEAD", repo=repo).decode().split()[:1]
+    elif ".." in spec:
+        out += _git_bytes("rev-parse", "--verify", f"{spec.split('..', 1)[0] or 'HEAD'}^{{commit}}",
+                          repo=repo).decode().split()
+    return list(dict.fromkeys(out))
 
 
 def blob_problems(path: str, text: str) -> list:
@@ -846,18 +1004,50 @@ def commit_problems(spec: str, repo: Path = ROOT) -> list:
     (diff-tree, one long-lived cat-file --batch, each blob read and judged in its turn and dropped after), nothing
     checked out: a pull request publishes every commit of its branch, not only its last tree. A version seen again at
     the same path (a revert) is not read or judged again. The samples are those the range's last commit's
-    definitions name."""
+    definitions name, checked by the personal records of the last commit's camera files; and a camera file whose
+    personal records the range weakens (personal_weakened: each of its bases, range_bases, against its last commit;
+    a camera file new in the range against a base's camera file of the same model) is a problem for the maintainer's
+    eye, as the list a sample is checked by would otherwise shrink in the same pull request as the sample."""
     commits = _git_bytes("rev-list", "--reverse", spec, repo=repo).decode().split()
     if not commits:
         return []
     changed = {c: _changed(c, repo) for c in commits}
     last = commits[-1]
     defs = _tree_blobs(last, "editor/definitions/", repo)
+    # each camera's own file in the last commit: what its sample's personal records are checked by (with_camera_file)
+    camera_blobs = {n: b for n, b in _tree_blobs(last, "data/", repo) if CAMERA_FILE_PATH.fullmatch(n)}
+    # and at each base of the range (range_bases): what the range's end is compared with (personal_weakened)
+    base_blobs = {b: {n: blob for n, blob in _tree_blobs(b, "data/", repo) if CAMERA_FILE_PATH.fullmatch(n)}
+                  for b in range_bases(spec, commits, repo)}
     ignored = _ignored(sorted({f for c in commits for f, _, _ in changed[c]}), repo)
     home, owner = private_tokens()
     theirs, names = guide_runs()
     objects, judged, out = _Objects(repo), {}, []
     try:
+        def facts(blob):
+            data = objects.read(blob)
+            try:
+                return json.loads(data.decode("utf-8")) if data is not None else None
+            except ValueError:                        # not JSON: the definition's own camera section stands
+                return None
+        cameras = {n: facts(blob) for n, blob in camera_blobs.items()}
+        weaker = {}
+        before = {(b, n): facts(blob) for b, blobs in base_blobs.items() for n, blob in blobs.items()}
+        for (_b, n), was in sorted(before.items()):
+            for why in personal_weakened(was, cameras.get(n)):
+                weaker.setdefault((n, why), None)
+        # a camera file new in the range, for a model a base holds another camera file of (another firmware): what
+        # that model's list holds and the new one lacks
+        known = {n for _b, n in before}
+        for n in sorted(set(cameras) - known):
+            for (_b, m), was in sorted(before.items()):
+                if model_of(m) == model_of(n):
+                    for why in personal_weakened(was, cameras[n], against=m):
+                        weaker.setdefault((n, f"a new camera file of the {model_of(n)}, which {m} lists already: "
+                                              f"{why}"), None)
+        for n, why in weaker:
+            out.append(f"{last[:12]} {n}: {why}: a pull request that weakens a camera's personal records needs the "
+                       "maintainer's eye; say in its description why, record by record")
         published = {}
         for n, blob in defs:
             if not DEFINITION_PATH.fullmatch(n) or CONTROL_RE.search(n):
@@ -872,7 +1062,7 @@ def commit_problems(spec: str, repo: Path = ROOT) -> list:
                 continue
             s = definitions.sample(doc, Path(n)) if isinstance(doc, dict) else None
             if s is not None:
-                published[s.as_posix()] = doc
+                published[s.as_posix()] = with_camera_file(doc, cameras.get(camera_file_of(doc)))
         for c in commits:
             found = []
             for f, mode, blob in sorted(changed[c]):

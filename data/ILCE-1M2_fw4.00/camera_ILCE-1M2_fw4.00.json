@@ -1,6 +1,6 @@
 {
   "$schema": "../../schemas/camera.schema.json",
-  "_comment": "Camera-specific facts the editor reads from its definition's \"camera\" section (editor/definitions/ILCE-1M2_fw4.00.json). Edit them here: kit/schema_update.py copies this file there whenever it writes the definition. Record ids are decimal numbers, but picture_profile_in_use's, which only the kit reads, are hex strings as its record keys write them; the offsets in \"file\" are hex strings, as the docs write them (docs/decisions/0020).",
+  "_comment": "Camera-specific facts the editor reads from its definition's \"camera\" section (editor/definitions/ILCE-1M2_fw4.00.json). Edit them here: kit/schema_update.py copies this file there whenever it writes the definition. Record ids are decimal numbers, but picture_profile_in_use's and personal_records', which only the kit reads, are hex strings as its record keys write them; the offsets in \"file\" are hex strings, as the docs write them (docs/decisions/0020).",
   "model": "ILCE-1M2",
   "display_name": "α1 II",
   "section_counts": [
@@ -523,6 +523,45 @@
     "live": "0x0053",
     "stills": "0x0e12",
     "movie": "0x0e14"
+  },
+  "personal_records": {
+    "zeroed": [
+      {
+        "what": "Preset Focus/Zoom's registered lens list: each slot's lens name and serial number, and the lens data registered with it",
+        "records": [
+          "0x167c",
+          "0x16a1",
+          "0x1682",
+          "0x1688",
+          "0x168e",
+          "0x1694",
+          "0x172c",
+          "0x1732",
+          "0x1437",
+          "0x16f3",
+          "0x0b75"
+        ]
+      }
+    ],
+    "defaults": [
+      {
+        "what": "File Name (prefix): three letters an owner chooses, often initials",
+        "record": "0x0b5b",
+        "bytes": "44534300"
+      }
+    ],
+    "not_text": [
+      {
+        "what": "The memory exposure blocks, the live copy and each memory set's: numbers, never text",
+        "records": [
+          "0x018c",
+          "0x0180"
+        ]
+      }
+    ],
+    "keep_text": [
+      "DSC"
+    ]
   },
   "link_timing": {
     "read_s": 5,

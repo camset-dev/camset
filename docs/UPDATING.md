@@ -329,6 +329,33 @@ of your clone, in this order. Replace `<model>_fw<fw>` with your camera's.
    search your diff (`git diff origin/main my-camera`) for your name, your camera's serial number and your network
    addresses, which the check may not know.
 
+### Your camera file: what the kit reads in it now
+
+Three commands now read your camera's own facts, from your camera file
+(`data/<model>_fw<fw>/camera_<model>_fw<fw>.json`) or your definition, and stop, saying what to add, where they are
+not there:
+
+- **Before you make a sample** (`kit/tools/make_sample.py`), add `personal_records`: every record of your body that
+  changes when the owner's own things change, text or not, such as a registered lens list with each lens's name and
+  serial number, or a file-name prefix the owner chose. On any body but the a1 II the older kit zeroed only the
+  records whose value reads as text, and the text check misses a name packed against other bytes, so a sample made
+  with it can still hold the owner's lens list. `make_sample.py` now refuses to write a sample without the key, or
+  with a record listed twice, a record the file does not hold or a default of another length than its record, and
+  `kit/tools/check_public.py --all` (and a pull request's own check) refuses such a sample. To find yours: ask the
+  owner to change one such thing on the camera by their own hand (a lens registered in a preset slot they do not use,
+  a file-name prefix), download before and after, and list each record that changed by its key's id, `"0x167c"`
+  ([DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records); the a1 II's camera file
+  is the pattern). The bytes the diff prints are the owner's: copy them nowhere. A record with a camera default goes
+  under `defaults`, its bytes read from the file the camera wrote right after Initialize, never from the owner's
+  working file, as they go into the sample. If you made a sample before this update, make it again once the key is
+  there, and read the list of records it says it zeroed.
+- `kit/tools/help_extras.py --fields` and `--guides`, which used to read each drive's shooting mode by the a1 II's
+  record on any camera, now read it by your camera file's `live_mode`.
+- `kit/provers/customshoot_values.py --counted`, which used to take the a1 II's Focus Area order on any camera, names
+  a hold's Focus Area rows in your camera's own order, read from your definition when the run starts: it stops before
+  the camera is touched while your definition has no proved Focus Area record. `--order-from <key>` names the record
+  when it is not the a1 II's id, and is refused without `--counted`.
+
 ### Your pull request: one commit on a fresh branch
 
 The last step, only if you will send your camera back. The older commits of your branch still hold files that are

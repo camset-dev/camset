@@ -21,8 +21,9 @@ owner: how each thing was proved, the menu tree, the accepted rulings and the re
 beside your runs, never in the submission ([below](#the-mappings-evidence)).
 
 The definition's sample, `editor/definitions/<model>_fw<fw>.DAT`, is the one settings file published: a download the
-camera wrote right after Initialize, never the owner's own file, with its personal text zeroed by
-`kit/tools/make_sample.py`. Initialize leaves some records as they were. Of those, only the Picture Profile
+camera wrote right after Initialize, never the owner's own file, with its personal text, and the records its camera
+file lists as holding an owner's own data ([`personal_records`](#records-that-hold-an-owners-own-data-personal_records)),
+zeroed by `kit/tools/make_sample.py`. Initialize leaves some records as they were. Of those, only the Picture Profile
 parameters are checked so far (the reset file lists what Initialize puts back for the settings tested): the sample
 takes their values after each offered profile's own Reset in Stills and in Movie (`kit/provers/pp_reset_run.py`, the
 playbook's Phase 2), with `make_sample.py --take "Picture Profile PP" --from` the two runs' results, each checked
@@ -35,7 +36,7 @@ plainly.
 
 | File | How it is made | Needed |
 |---|---|---|
-| `camera_<model>_fw<fw>.json`: the camera's own facts (the file's container block, tabs, memories, link-critical and volatile records, the camera's wording) | By hand, from what the mapping found; the container block from `kit/tools/identify.py`'s draft when no known block reads the camera's files | Yes: a definition's `camera` section is copied from it, and the kit reads the camera's files through its block |
+| `camera_<model>_fw<fw>.json`: the camera's own facts (the file's container block, tabs, memories, link-critical and volatile records, the records that hold an owner's own data, the camera's wording) | By hand, from what the mapping found; the container block from `kit/tools/identify.py`'s draft when no known block reads the camera's files | Yes: a definition's `camera` section is copied from it, and the kit reads the camera's files through its block |
 | `help_guide_menu_<model>_fw<fw>.jsonl`: the Help Guide's menu list | By hand, from Sony's published Help Guide: one line per item with its tab, group, name and modes, and no other text of Sony's (decision 13) | Optional: `kit/schema_update.py` and the safety review (`python -m camkit.safety`) read it when it is there |
 | `help_<model>_fw<fw>.json`: each setting's help in the project's own words | By hand, in your own words, never Sony's (decision 13): what each setting a person meets in the menus does, in a sentence or two; records shown in Expert mode only get none | Optional |
 | `settings_reset_<model>_fw<fw>.json`: which settings Camera Settings Reset and Initialize put back | By hand, from the downloads before and after each reset, run by the owner (the playbook, Phase 5), and only where the owner allows a reset: you write it lean and edit it there, and it is the one file the kit reads ([below](#the-reset-file-what-each-reset-puts-back)) | Optional: the model page's appendix shows it when it is there |
@@ -492,6 +493,60 @@ The firmware (`firmware`):
 The records' framing (`records`):
 
 {{ schema_fields("camera", "$defs/file_block/properties/records") }}
+
+### Records that hold an owner's own data (`personal_records`)
+
+The sample is the one settings file published, so `kit/tools/make_sample.py` zeroes in it every record whose value
+reads as text (four printable characters or more: an owner's name, a copyright, a network or device name) and the
+records the camera file lists here. The list holds every record that changes when the owner's own things change, text
+or not: the text check catches some of them and misses others (a name packed against other bytes). They are each
+body's own record ids, never another body's: on the ILCE-1M2, Preset Focus/Zoom's registered lens list (each slot's
+lens name, serial number and the lens data registered with it; [its page](models/ILCE-1M2_fw4.00.md), "Lens list") is
+zeroed, and the file-name prefix an owner chooses (three letters, often initials) is set back to the camera's default,
+DSC. A record is named as the record keys write it and `kit/tools/upload_check.py --diff` prints it after `global:`,
+`"0x167c"`, the one form the list takes, and both tools name records so. A record id holds in whichever section it is
+in; the editor does not read the key.
+
+Before it writes anything, `make_sample.py` refuses a camera file without `personal_records` (saying what to add and
+how to find it), a list not shaped as the schema below says, a record listed twice (in one group or two), a record no
+section of the file holds (a typo, or a decimal number written after `0x`) and a default of another length than its
+record. `kit/tools/check_public.py` checks every published sample by its camera file's list (the tree's, or a pull
+request's last commit's) in the same way, and names what it finds by the record and what the list says it holds, or a
+text by its length, never by its value, and refuses a sample of another model or firmware than its definition's. A
+pull request that weakens a camera's list is refused for the maintainer's eye, and its description says why: a record
+taken out or newly kept from the text check, a default's bytes changed, a record moved to or newly set to a default,
+or a new camera file for a model already mapped (another firmware) that lists less than that model's, each compared at
+the range's own base and where its first commit started.
+
+To find a body's: download; ask the owner to change one such thing on the camera, by their own hand (register a lens
+to a preset slot they do not use: it needs a held custom key or the lens's ring, and overwrites the slot; set the
+file-name prefix); download again and compare the two (`kit/tools/upload_check.py --diff REF TAG` lists the records
+that differ). Every record that changed goes in: under `zeroed` when any value of it is the owner's, under `defaults`
+with the camera's own default bytes when it has one. The bytes the diff prints are the owner's (a lens's name, its
+serial number): copy them nowhere, not into notes, the camera file or a message; only the records' ids go into the
+list. A default's bytes go into the published sample, so they are read from the file the camera wrote right after
+Initialize, the one `make_sample.py` is given (the sample's own source), never from the owner's working file, where
+the record holds the owner's own value:
+`.venv/bin/python -c "import sys; sys.path.insert(0, 'kit'); from camkit import camset; print(camset.read('SRC.DAT').get(0, 0x0b5b).raw.hex())"`
+prints them, with that file in place of `SRC.DAT` and the record's id in place of `0x0b5b` (on Windows
+`.venv\Scripts\python`). If Initialize left the owner's value in that record, ask the owner to set the camera's own
+default on the camera by hand, download, and read the record there. A pull request that changes a default's bytes,
+moves a record from `zeroed` to `defaults` or sets a record to a new default is stopped for the maintainer's eye. What the model's Help Guide says Save/Load Settings keeps tells which things to try
+([the playbook](REMAPPING_PLAYBOOK.md#16-new-model-first-day), section 16). `not_text` lists records of numbers the
+text check would misread (a run of numbers between NUL bytes can look like four letters), and `keep_text` the camera's
+own words a record may keep. A list that names no record to zero or set back is allowed only for a body on which
+those things were tried and changed no other record; both tools say so in a note when they meet one, and the pull
+request says what was tried.
+
+{{ schema_fields("camera", "properties/personal_records") }}
+
+Each entry of `zeroed` and of `not_text`:
+
+{{ schema_fields("camera", "properties/personal_records/properties/zeroed/items") }}
+
+Each entry of `defaults`:
+
+{{ schema_fields("camera", "properties/personal_records/properties/defaults/items") }}
 
 ## The menu tree: the camera's menus
 

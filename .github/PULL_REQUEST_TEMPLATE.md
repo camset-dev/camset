@@ -3,6 +3,7 @@
 **How the files were made:** <!-- which of the kit's runs, and what was written or fixed by hand -->
 **The pass-2 report:** <!-- kit/pass2_report.py's counts and its conflicts, pasted (it never prints the camera's start values) -->
 **The writer's gate:** <!-- the "gate: … open questions …" line kit/schema_update.py prints without --write, pasted -->
+**The personal records:** <!-- each record listed in the camera file's personal_records and how it was found (which of the owner's own things changed it), or what was tried before an empty list; ids only, never the bytes the diff printed. For a new camera the maintainer reads every keep_text entry as text that will be published, and every default's bytes, read from the file the camera wrote right after Initialize, as bytes that will be published -->
 
 - [ ] `data/<model>_fw<fw>/` holds the files docs/DATA_CONTRACTS.md, "What a mapping delivers", marks as needed (`camera_…json`), with the optional ones the mapping made; the menu tree, the accepted rulings and the record shapes stay in `private/evidence/`.
 - [ ] The definition, `editor/definitions/<model>_fw<fw>.json`, as `kit/schema_update.py --write` wrote it (lean, never edited by hand), and no other camera's definition changed (CONTRIBUTING.md, "What a contribution must keep").

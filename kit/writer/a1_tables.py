@@ -313,8 +313,8 @@ NEW_RECORDS = {
                             "note": ""} for n, rid in ((5, 0x0f2c), (6, 0x0f2e), (7, 0x0f30))},
     "global:0x0c09": {"like": "global:0x04e5", "name": "Recall Custom hold: registration stamp", "values": [],
                       "note": "4 slots: Recall Custom hold 1-3 and the registration working copy (as 0x18cb). Every "
-                      "Register writes 29 into its hold's slot and the working copy. What 29 stands for is not known. "
-                      "A settings file sets it. View only."},
+                      "Register writes a small number into its hold's slot and the working copy; what it stands for "
+                      "is not known. A settings file sets it. View only."},
     "global:0x1126": {"like": "global:0x04e5", "name": "Unknown camera state (not a menu setting)", "values": [],
                       "note": "Camera Settings Reset and Initialize both set 7, and an uploaded file does not set it. "
                               "Not the DISP layouts, not the Fn cursor, not an SDK property. Once it is 7, choosing a "
@@ -516,8 +516,9 @@ for _k, _vals, _note in (
 PRESET = (" Preset Focus/Zoom's six slots: 1-5 registered by a custom key held down, 6 by a lens Function Ring. "
           "Mounting a lens or loading a file writes nothing here.")
 for _k, _name, _note in (
-        ("global:0x167c", "Preset Focus/Zoom: lens name", "Each slot's lens name; a teleconverter is added to it "
-                                                          "(the lens's name, then \" + 2X Teleconverter\")."),
+        ("global:0x167c", "Preset Focus/Zoom: lens name", "Each slot's lens name; with a teleconverter mounted, the "
+                                                          "teleconverter's name is added after the lens's "
+                                                          "(\"<lens> + <teleconverter>\")."),
         ("global:0x16a1", "Preset Focus/Zoom: lens serial number", "Each slot's lens serial number: a preset recalls "
                                                                    "only on the very lens it was registered with. A "
                                                                    "teleconverter leaves it the lens's."),

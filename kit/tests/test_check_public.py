@@ -5,6 +5,7 @@ The made-up values are put together at run time, so this file itself holds none 
 """
 import json
 import os
+import re
 import shutil
 import stat
 import struct
@@ -444,6 +445,384 @@ def test_the_baseline_refusals_are_still_refused():
 
 def test_the_repository_passes():
     assert C.problems(everything=True) == []
+
+
+# ---------------------------------------------------------------- a sample's personal records: each camera's own
+
+A1 = "ILCE-1M2_fw4.00"
+OTHER = "ILCE-0X0_fw4.00"            # made up: no camera's key (the a1 II's sample renamed keeps its firmware)
+REPO = C.ROOT                        # the clone, whatever a test points check_public at
+NOT_HELD = 0x7ffe                    # a record id no section of the public sample holds (checked where used)
+
+
+def a1_sample():
+    from camkit import camset
+    return camset.read(REPO / "editor" / "definitions" / f"{A1}.DAT")
+
+
+def renamed(model: str) -> bytes:
+    """The a1 II's public sample under another model's name: a made-up body's file, no camera's values."""
+    cs = a1_sample()
+    return cs.block.sealed(cs.block.with_text(cs.data, "model", model))
+
+
+def a1_camera() -> dict:
+    return json.loads((REPO / "data" / A1 / f"camera_{A1}.json").read_text(encoding="utf-8"))
+
+
+def blank_record(cs) -> int:
+    """A live record of 16 bytes or more that holds only zeros in the public sample and no list names: room for a
+    made-up text."""
+    listed = {0x018c, 0x0b5b, 0x0b75, 0x1437, 0x167c, 0x1682, 0x1688, 0x168e, 0x1694, 0x16a1, 0x16f3, 0x172c, 0x1732}
+    return next(rid for rid, r in cs.sections[0].items() if len(r.raw) >= 16 and not any(r.raw) and rid not in listed)
+
+
+def test_a_sample_is_checked_by_its_cameras_own_personal_records(capsys):
+    """check_public checks a sample by the personal records its camera's own file lists (make_sample's): the a1 II's
+    published sample is clean; a lens record holding bytes, a file-name prefix off the camera's default and a made-up
+    text are each found, named by the record and what the camera file says it holds, the text by its length, never by
+    a value (a pull request's check log is public); a camera file without the key is found too, as make_sample
+    refuses it, with what to add and no ready-made empty list; ids are "0x167c", never decimal."""
+    from camkit import camset
+    doc = C.with_camera_file(json.loads((REPO / "editor" / "definitions" / f"{A1}.json").read_text(encoding="utf-8")),
+                             a1_camera())
+    raw = (REPO / "editor" / "definitions" / f"{A1}.DAT").read_bytes()
+    assert C.one_sample("s.DAT", raw, doc, set(), set()) == []
+    assert "note:" not in capsys.readouterr().err                  # the a1 II's list names records to zero
+    cs = a1_sample()
+    mine, owner = "QZX", "Made Up Owner"               # made up: an owner's three letters, an owner's name
+    spot = blank_record(cs)
+    dirty = camset.with_values(cs, {(0, 0x16a1): bytes([7]) + cs.get(0, 0x16a1).raw[1:],
+                                    (0, 0x0b5b): mine.encode() + b"\0",
+                                    (0, spot): owner.encode() + bytes(len(cs.get(0, spot).raw) - len(owner))})
+    found = C.one_sample("s.DAT", dirty, doc, set(), set())
+    assert any("0x16a1: unscrubbed personal value (Preset Focus/Zoom's registered lens list" in x for x in found), found
+    assert any("0x0b5b: not the camera's default (File Name (prefix)" in x for x in found), found
+    assert any(f"0x{spot:04x}: unscrubbed personal value (text, {len(owner)} characters)" in x for x in found), found
+    assert not any(mine in x or owner in x or "Made" in x for x in found)
+    bare = dict(doc, camera={k: v for k, v in doc["camera"].items() if k != "personal_records"})
+    found = C.one_sample("s.DAT", raw, bare, set(), set())
+    assert len(found) == 1 and "not shown clean" in found[0] and f"data/{A1}/camera_{A1}.json has no \"personal_records\"" \
+        in found[0] and "make_sample.py" in found[0] and "{}" not in found[0]
+    broken = dict(doc, camera=dict(doc["camera"], personal_records={"zeroed": [{"records": [5756]}]}))
+    assert any("5756 is not a record id as the record keys write it" in x and "\"0x167c\"" in x
+               for x in C.one_sample("s.DAT", raw, broken, set(), set()))
+    shipped = C.samples()[f"editor/definitions/{A1}.DAT"]
+    assert shipped["camera"]["personal_records"] == a1_camera()["personal_records"]
+
+
+# each mistake a mapper's list can hold, with the words both tools refuse it in (the made-up body's file is the a1 II's
+# sample renamed; 0x0489 is a one-byte live record of it)
+MISTAKES = [
+    ({"zeroed": [{"records": ["0x0489", f"0x{NOT_HELD:04x}"]}]},
+     f"0x{NOT_HELD:04x} (zeroed) is a record no section of"),
+    ({"defaults": [{"record": "0x0b5b", "bytes": "444353"}]},
+     "0x0b5b (defaults): its default is 3 bytes, and the record in section 0"),
+    ({"zeroed": [{"records": ["0x0489"]}], "defaults": [{"record": "0x0489", "bytes": "00"}]},
+     "lists 0x0489 in zeroed and in defaults"),
+    ({"zeroed": [{"records": ["0x0489"]}, {"records": ["0x0489"]}]}, "lists 0x0489 in zeroed twice"),
+    ({"zeroed": [{"records": ["0x0489"]}], "not_text": [{"records": ["0x0489"]}]},
+     "lists 0x0489 in zeroed and in not_text"),
+    ({"zeroed": [{"records": []}]}, "\"records\" is a list of one record id or more"),
+    ({"zeroed": [{"records": ["0x0489"], "where": "x"}]}, "nothing else"),
+    ({"zeroed": [{"records": ["0x0489"]}], "extra": []}, "nothing else"),
+    ({"keep_text": [""]}, "none empty"),
+]
+
+
+@pytest.mark.parametrize("personal, said", MISTAKES, ids=["not-held", "default-length", "two-groups", "twice",
+                                                          "zeroed-and-not-text", "empty-records", "entry-key",
+                                                          "list-key", "empty-text"])
+def test_a_mistake_in_the_personal_records_is_refused_by_both_tools(tmp_path, monkeypatch, personal, said):
+    """A mapper's slip never passes in silence: a record no section of the file holds (a typo, or a decimal number
+    written after "0x"), a default of another length than its record, a record listed twice (in one group or two)
+    and anything the schema refuses: make_sample stops before anything is written, and check_public does not show
+    the sample clean, each naming the record or the entry."""
+    import make_sample as MS
+    from camkit import camset, definitions
+    assert not any(NOT_HELD in sec for sec in a1_sample().sections)
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    (tmp_path / "data" / OTHER).mkdir(parents=True)
+    facts = {"model": "ILCE-0X0", "section_counts": [], "tab_colors": {}, "personal_records": personal}
+    (tmp_path / "data" / OTHER / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+    src, out = tmp_path / "src.DAT", tmp_path / "out.DAT"
+    src.write_bytes(renamed("ILCE-0X0"))
+    with pytest.raises(SystemExit, match=re.escape(said)) as e:
+        MS.main([str(src), "--out", str(out)])
+    assert "nothing written" in str(e.value) and not out.exists()
+    doc = {"model": "ILCE-0X0", "layouts": [{"model": "ILCE-0X0", "firmware": "4.00"}], "camera": facts}
+    found = C.one_sample("s.DAT", src.read_bytes(), doc, set(), set())
+    assert any(said in x for x in found), found
+    assert camset.read(src).model == "ILCE-0X0"
+
+
+def made_camera(root: Path, personal=None, in_definition=None):
+    """A made-up camera's definition, sample and camera file under `root`: the camera file with `personal` as its
+    personal records (None: without the key), the definition's own camera section with `in_definition`."""
+    defs, data = root / "editor" / "definitions", root / "data" / OTHER
+    defs.mkdir(parents=True, exist_ok=True)
+    data.mkdir(parents=True, exist_ok=True)
+    facts = {"model": "ILCE-0X0", "section_counts": [], "tab_colors": {}}
+    camera = dict(facts, sample=f"{OTHER}.DAT")
+    if in_definition is not None:
+        camera["personal_records"] = in_definition
+    (defs / f"{OTHER}.json").write_text(json.dumps({
+        "model": "ILCE-0X0", "layouts": [{"model": "ILCE-0X0", "firmware": "4.00"}], "settings": [],
+        "camera": camera}), encoding="utf-8")
+    (defs / f"{OTHER}.DAT").write_bytes(renamed("ILCE-0X0"))
+    if personal is not None:
+        facts["personal_records"] = personal
+    (data / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+
+
+def test_a_sample_is_checked_by_the_camera_file_not_the_definitions_copy(tmp_path, monkeypatch, capsys):
+    """The camera's own file is the one source: a definition whose copied camera section has personal records, beside
+    a camera file that has none, is not shown clean; the same with the key in the camera file passes, and a list that
+    names no record to zero or set back is said in a note."""
+    monkeypatch.setattr(C, "ROOT", tmp_path)
+    made_camera(tmp_path, personal=None, in_definition={"zeroed": [{"records": ["0x0b75"]}]})
+    found = C.sample_problems(set(), set())
+    assert len(found) == 1 and "not shown clean" in found[0] and f"data/{OTHER}/camera_{OTHER}.json" in found[0]
+    monkeypatch.setattr(C, "_DEFINITIONS", {})
+    made_camera(tmp_path, personal={}, in_definition=None)
+    capsys.readouterr()
+    assert C.sample_problems(set(), set()) == []
+    note = capsys.readouterr().err
+    assert "note:" in note and "names no record to zero or set back" in note and "only the records whose value " \
+        "reads as text are zeroed" in note
+
+
+def test_a_commit_range_checks_a_sample_by_its_last_commits_camera_file(tmp_path):
+    """--commits reads the camera file from the range's last commit, as it reads the definitions: a sample published
+    while its camera file names no personal records is refused; once a later commit of the range adds them, the
+    range passes for it."""
+    git = _scratch_repo(tmp_path)
+    base = git("rev-parse", "HEAD")
+    made_camera(tmp_path, personal=None)
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    first = git("rev-parse", "HEAD")[:12]
+    found = C.commit_problems(f"{base}..HEAD", repo=tmp_path)
+    assert any(x.startswith(f"{first} editor/definitions/{OTHER}.DAT: not shown clean") for x in found), found
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75"]}], "keep_text": ["DSC"]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "its personal records")
+    assert not any("personal_records" in x for x in C.commit_problems(f"{base}..HEAD", repo=tmp_path))
+
+
+def test_a_commit_range_that_weakens_a_cameras_personal_records_is_refused(tmp_path):
+    """The list a sample is checked by must not shrink in the same pull request as the sample: --commits compares each
+    camera file's personal records at the range's base (the first commit's parent) with its last commit, and refuses,
+    for the maintainer's eye, a record no longer zeroed or set back, one newly kept from the text check, a text newly
+    kept and the key gone; a list that only grows, or moves a record from zeroed to defaults, passes."""
+    git = _scratch_repo(tmp_path)
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75", "0x167c"]}],
+                                    "defaults": [{"record": "0x0b5b", "bytes": "44534300"}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    base = git("rev-parse", "HEAD")
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75", "0x16a1"]}, {"records": ["0x0b5b"]}],
+                                    "not_text": [{"records": ["0x167c"]}], "keep_text": ["ABC"]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a smaller list")
+    last = git("rev-parse", "HEAD")[:12]
+    cam = f"data/{OTHER}/camera_{OTHER}.json"
+    found = [x for x in C.commit_problems(f"{base}..HEAD", repo=tmp_path) if x.startswith(f"{last} {cam}: ")]
+    assert any("no longer zeroes or sets back 0x167c: a pull request that weakens" in x for x in found), found
+    assert any("newly keeps 0x167c from the text check (not_text)" in x for x in found), found
+    assert any("newly keeps 1 text (keep_text)" in x and "ABC" not in x for x in found), found
+    assert not any("0x0b5b" in x or "0x16a1" in x for x in found), found      # moved to zeroed, or added: no weaker
+    made_camera(tmp_path, personal=None)
+    git("add", "-A")
+    git("commit", "-q", "-m", "no list")
+    assert any(f"{cam}: its \"personal_records\" is gone" in x for x in C.commit_problems(f"{base}..HEAD", repo=tmp_path))
+    assert C.personal_weakened(None, {"personal_records": {}}) == []
+    assert C.personal_weakened({"personal_records": {"zeroed": [{"records": ["0x0001"]}]}},
+                               {"personal_records": {"zeroed": [{"records": ["0x0001", "0x0002"]}]}}) == []
+
+
+def weaker_lines(tmp_path, spec: str, path: str) -> list:
+    """commit_problems' weakening lines for one camera file (the rest of what it finds left out)."""
+    return [x for x in C.commit_problems(spec, repo=tmp_path) if f" {path}: " in x and "weakens" in x]
+
+
+def test_a_range_that_puts_list_bytes_into_the_sample_is_refused(tmp_path):
+    """A default's bytes go into the published sample and may be the owner's: --commits refuses, for the maintainer's
+    eye and never printing them, a default's bytes changed, a record moved from zeroed to defaults and a record newly
+    set to a default."""
+    git = _scratch_repo(tmp_path)
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75"]}],
+                                    "defaults": [{"record": "0x0b5b", "bytes": "44534300"}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    base = git("rev-parse", "HEAD")
+    made_camera(tmp_path, personal={"defaults": [{"record": "0x0b5b", "bytes": "41424300"},
+                                                 {"record": "0x0b75", "bytes": "00"},
+                                                 {"record": "0x0489", "bytes": "05"}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "other defaults")
+    found = weaker_lines(tmp_path, f"{base}..HEAD", f"data/{OTHER}/camera_{OTHER}.json")
+    assert any("changes the default bytes of 0x0b5b: a default's bytes go into the published sample" in x
+               for x in found), found
+    assert any("moves 0x0b75 from zeroed to defaults: a default's bytes" in x for x in found), found
+    assert any("newly sets 0x0489 to a default: a default's bytes" in x for x in found), found
+    assert not any("41424300" in x or "44534300" in x for x in found)
+    assert not any("no longer zeroes" in x for x in found)                  # 0x0b75 is still set back
+
+
+def test_a_new_camera_file_of_a_known_model_is_compared_with_its_list(tmp_path):
+    """A camera file new in the range, for a model a base already has a camera file of (another firmware), is
+    compared with that list: what the new one does not zero or set back is refused for the maintainer's eye."""
+    git = _scratch_repo(tmp_path)
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75", "0x167c"]}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    base = git("rev-parse", "HEAD")
+    new = "data/ILCE-0X0_fw5.00/camera_ILCE-0X0_fw5.00.json"
+    (tmp_path / new).parent.mkdir(parents=True)
+    (tmp_path / new).write_text(json.dumps({"model": "ILCE-0X0", "section_counts": [], "tab_colors": {},
+                                            "personal_records": {"zeroed": [{"records": ["0x0b75"]}]}}),
+                                encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "its next firmware")
+    found = weaker_lines(tmp_path, f"{base}..HEAD", new)
+    assert any(f"a new camera file of the ILCE-0X0, which data/{OTHER}/camera_{OTHER}.json lists already: does not "
+               f"zero or set back 0x167c, which data/{OTHER}/camera_{OTHER}.json does" in x for x in found), found
+    assert not weaker_lines(tmp_path, f"{base}..HEAD", f"data/{OTHER}/camera_{OTHER}.json")
+
+
+def test_a_sample_of_another_firmware_than_its_definition_is_refused():
+    """A sample is checked by its own firmware's camera file, so a file another firmware wrote is refused as the sample
+    of a definition: the model and the firmware must both be the definition's."""
+    doc = {"model": "ILCE-0X0", "layouts": [{"model": "ILCE-0X0", "firmware": "5.00"}],
+           "camera": {"personal_records": {"zeroed": [{"records": ["0x0b75"]}]}}}
+    found = C.one_sample("s.DAT", renamed("ILCE-0X0"), doc, set(), set())
+    assert any("a firmware 4.00 file, the sample of the ILCE-0X0 firmware 5.00 definition" in x for x in found), found
+    doc["layouts"][0]["firmware"] = "4.00"
+    assert C.one_sample("s.DAT", renamed("ILCE-0X0"), doc, set(), set()) == []
+
+
+def test_a_definition_whose_model_is_not_its_layouts_is_refused(tmp_path):
+    """The camera file a sample is checked by is the one its definition's layout names (definitions.key): a hand-edited
+    definition whose "model" is the sample's but whose layout names another model (so another camera file, with a weak
+    list, that no range compares with the first) is refused, and the sample's own model is compared with the layout's
+    (the review's W8: the first camera's definition replaced by one keyed ILCE-0X0B, the sample an ILCE-0X0 file with a
+    made-up owner's prefix)."""
+    git = _scratch_repo(tmp_path)
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75", "0x167c"]}],
+                                    "defaults": [{"record": "0x0b5b", "bytes": "44534300"}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    base = git("rev-parse", "HEAD")
+    for suffix in (".json", ".DAT"):
+        (tmp_path / "editor" / "definitions" / f"{OTHER}{suffix}").unlink()
+    other = "ILCE-0X0B_fw4.00"
+    facts = {"model": "ILCE-0X0", "section_counts": [], "tab_colors": {}, "sample": f"{other}.DAT",
+             "personal_records": {"keep_text": ["DSC"]}}
+    doc = {"model": "ILCE-0X0", "layouts": [{"model": "ILCE-0X0B", "firmware": "4.00"}], "settings": [],
+           "camera": facts}
+    (tmp_path / "editor" / "definitions" / f"{other}.json").write_text(json.dumps(doc), encoding="utf-8")
+    from camkit import camset
+    cs = camset.parse(renamed("ILCE-0X0"), check=False)
+    (tmp_path / "editor" / "definitions" / f"{other}.DAT").write_bytes(camset.with_values(cs, {(0, 0x0b5b): b"QZX\0"}))
+    (tmp_path / "data" / other).mkdir(parents=True)
+    (tmp_path / "data" / other / f"camera_{other}.json").write_text(json.dumps(facts), encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "the same camera under another key")
+    found = [x for x in C.commit_problems(f"{base}..HEAD", repo=tmp_path) if f"editor/definitions/{other}.DAT" in x]
+    assert any("its definition names the model ILCE-0X0 and its layout the ILCE-0X0B" in x for x in found), found
+    assert any("a ILCE-0X0 file, the sample of the ILCE-0X0B's definition" in x for x in found), found
+    assert not any("QZX" in x for x in found)
+    doc["model"] = "ILCE-0X0B"                                   # the two agree: only the sample's model is wrong
+    found = C.one_sample("s.DAT", renamed("ILCE-0X0"), doc, set(), set())
+    assert not any("its definition names the model" in x for x in found)
+    assert any("a ILCE-0X0 file, the sample of the ILCE-0X0B's definition" in x for x in found), found
+
+
+def test_a_branch_that_merges_main_and_then_drops_a_record_is_refused(tmp_path):
+    """A branch cut from an older main, which merges main and then drops a record main had added: its first commit's
+    parent (the older main) never listed the record, so the range is compared with its own BASE as well, and the
+    record dropped is refused for the maintainer's eye; a range whose base holds no camera file compares nothing."""
+    git = _scratch_repo(tmp_path)
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75"]}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "a camera")
+    git("switch", "-q", "-c", "mine")
+    (tmp_path / "notes.md").write_text("mine\n", encoding="utf-8")
+    git("add", "-A")
+    git("commit", "-q", "-m", "my notes")
+    git("switch", "-q", "main")
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75", "0x16a1"]}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "main lists the lens serials")
+    main = git("rev-parse", "HEAD")
+    git("switch", "-q", "mine")
+    git("merge", "-q", "--no-edit", "main")
+    made_camera(tmp_path, personal={"zeroed": [{"records": ["0x0b75"]}]})
+    git("add", "-A")
+    git("commit", "-q", "-m", "drops them again")
+    cam = f"data/{OTHER}/camera_{OTHER}.json"
+    oldest_parent, own = C.range_bases(f"{main}..HEAD", git("rev-list", "--reverse", f"{main}..HEAD").split(), tmp_path)
+    assert own == main and oldest_parent != main          # the older main alone never listed 0x16a1
+    assert any("no longer zeroes or sets back 0x16a1" in x for x in weaker_lines(tmp_path, f"{main}..HEAD", cam))
+    assert any("no longer zeroes or sets back 0x16a1" in x for x in weaker_lines(tmp_path, f"{main}...HEAD", cam))
+    first = git("rev-list", "--max-parents=0", "HEAD")
+    assert C.range_bases(f"{first}..HEAD", git("rev-list", "--reverse", f"{first}..HEAD").split(), tmp_path) == [first]
+
+
+def test_make_sample_refuses_a_camera_whose_file_names_no_personal_records(tmp_path, monkeypatch, capsys):
+    """make_sample scrubs a sample by the personal records of the camera that wrote the file, from its own camera
+    file, and refuses before anything is written, in words saying what to add and how to find it (by the owner's own
+    hand, the diff's bytes copied nowhere; no ready-made empty list), for a camera with no camera file or one without
+    the key (or with one it cannot read); with them, it zeroes and resets that camera's own records, never the a1 II's
+    ids (a made-up body's file: the a1 II's sample renamed), prints a zeroed text by its length alone, and says when
+    the list names no record to zero or set back."""
+    import make_sample as MS
+    from camkit import camset, definitions
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    cs = camset.parse(renamed("ILCE-0X0"), check=False)
+    lens = bytes([7]) + cs.get(0, 0x16a1).raw[1:]               # made up, in the a1 II's lens serial record
+    owner, spot = "Made Up Owner", blank_record(cs)
+    src, out = tmp_path / "src.DAT", tmp_path / "out.DAT"
+    src.write_bytes(camset.with_values(cs, {(0, 0x16a1): lens, (0, 0x0489): bytes([3]), (0, 0x0b5b): b"QZX\0",
+                                            (0, spot): owner.encode() + bytes(len(cs.get(0, spot).raw) - len(owner))}))
+    with pytest.raises(SystemExit, match=r"the ILCE-0X0 firmware 4\.00 has no camera file"):
+        MS.main([str(src), "--out", str(out)])
+    data = tmp_path / "data" / OTHER
+    data.mkdir(parents=True)
+    facts = {"model": "ILCE-0X0", "section_counts": [], "tab_colors": {}}
+    (data / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        MS.main([str(src), "--out", str(out)])
+    said = str(e.value)
+    for words in ("nothing written", "has no \"personal_records\"", "which of the ILCE-0X0's records",
+                  "text or not", "by their own hand", "a preset slot they do not use", "upload_check.py --diff",
+                  "copy them nowhere", "\"0x167c\"", "docs/DATA_CONTRACTS.md", "make the sample again"):
+        assert words in said, (words, said)
+    assert "{}" not in said and "neither of which reads as text" not in said
+    facts["personal_records"] = {"zeroed": [{"what": "made-up list", "records": ["0x0489"]}]}
+    facts["personal_records"]["defaults"] = [{"record": "0x0b5b", "bytes": "0x44"}]
+    (data / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+    with pytest.raises(SystemExit, match="lower-case hex"):
+        MS.main([str(src), "--out", str(out)])
+    assert not out.exists()
+    facts["personal_records"]["defaults"] = [{"what": "made-up prefix", "record": "0x0b5b", "bytes": "41424300"}]
+    (data / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+    MS.main([str(src), "--out", str(out)])
+    got = camset.read(out)
+    assert got.get(0, 0x0489).raw == bytes(len(got.get(0, 0x0489).raw))      # its own list: zeroed
+    assert got.get(0, 0x0b5b).raw == b"ABC\0"                                # its own default
+    assert got.get(0, 0x16a1).raw == lens                                    # the a1 II's id is not this body's
+    assert not any(got.get(0, spot).raw)                                     # a text: zeroed
+    shown = capsys.readouterr().out
+    assert "0x0489 (1 B): made-up list" in shown and "0x0b5b (4 B): made-up prefix: set to the camera's default" in shown
+    assert f"0x{spot:04x} ({len(cs.get(0, spot).raw)} B): (text, {len(owner)} characters)" in shown
+    assert "QZX" not in shown and owner not in shown and "note:" not in shown
+    facts["personal_records"] = {"keep_text": ["DSC"]}
+    (data / f"camera_{OTHER}.json").write_text(json.dumps(facts), encoding="utf-8")
+    MS.main([str(src), "--out", str(out), "--dry-run"])
+    shown = capsys.readouterr().out
+    assert "note:" in shown and "names no record to zero or set back" in shown
 
 
 def test_udev_rule_is_for_the_user_at_the_seat():

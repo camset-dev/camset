@@ -319,6 +319,105 @@
    },
    "description": "The live records that say which Picture Profile is in use, hex record ids as the kit's record keys write them. kit/tools/upload_check.py reads them to warn of a file that would change a profile in use (an ILCE-1M2 restarted again and again in Movie mode from such a file, 2026-11-01); the editor does not read them. Optional: without it the check is passed over, and upload_check says so."
   },
+  "personal_records": {
+   "type": "object",
+   "additionalProperties": false,
+   "description": "The records that hold an owner's own data, each body's own record ids: every record that changes when the owner's own things change (a lens registered, a file-name prefix set), text or not, as the text check misses a name packed against other bytes. kit/tools/make_sample.py scrubs the published sample by them, beside every record whose value reads as text, and kit/tools/check_public.py checks the sample by them. Both refuse a camera file without this key, a record listed twice, a record the file does not hold and a default of another length than its record. A list that names no record to zero or set back is allowed only for a body on which the owner's own things were tried and changed no other record, and both tools say so when they meet one (docs/DATA_CONTRACTS.md, \"Records that hold an owner's own data\"). The editor does not read it.",
+   "properties": {
+    "zeroed": {
+     "type": "array",
+     "description": "Records zeroed whole in the sample: those the camera fills from what an owner attached or registered, such as a lens list with each lens's name and serial number.",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "records"
+      ],
+      "properties": {
+       "what": {
+        "type": "string",
+        "description": "What the records hold, in a few words: make_sample.py and check_public.py name a record by it."
+       },
+       "records": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^0x[0-9a-f]{4}$",
+         "description": "A record id as the record keys write it and kit/tools/upload_check.py --diff prints it after \"global:\": \"0x\" and four lower-case hex digits (\"0x167c\"). It holds in whichever section the record is in."
+        },
+        "minItems": 1,
+        "uniqueItems": true,
+        "description": "The records, each as the record keys write it: \"0x\" and four lower-case hex digits (\"0x167c\"), as kit/tools/upload_check.py --diff prints it after \"global:\"."
+       }
+      }
+     }
+    },
+    "defaults": {
+     "type": "array",
+     "description": "Records set to the camera's own default in the sample, such as a file-name prefix an owner chose.",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "record",
+       "bytes"
+      ],
+      "properties": {
+       "what": {
+        "type": "string",
+        "description": "What the records hold, in a few words: make_sample.py and check_public.py name a record by it."
+       },
+       "record": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{4}$",
+        "description": "A record id as the record keys write it and kit/tools/upload_check.py --diff prints it after \"global:\": \"0x\" and four lower-case hex digits (\"0x167c\"). It holds in whichever section the record is in."
+       },
+       "bytes": {
+        "type": "string",
+        "pattern": "^(?:[0-9a-f]{2})+$",
+        "description": "The camera's default, the record's whole bytes as lower-case hex (\"44534300\": DSC and a NUL), as long as the record. They go into the published sample, so they are read from the file the camera wrote right after Initialize (the sample's own source), never from the owner's working file."
+       }
+      }
+     }
+    },
+    "not_text": {
+     "type": "array",
+     "description": "Records of numbers that are never read for pieces of text between NUL bytes (a run of numbers can look like four letters): the text a whole record reads as is still zeroed.",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "records"
+      ],
+      "properties": {
+       "what": {
+        "type": "string",
+        "description": "What the records hold, in a few words: make_sample.py and check_public.py name a record by it."
+       },
+       "records": {
+        "type": "array",
+        "items": {
+         "type": "string",
+         "pattern": "^0x[0-9a-f]{4}$",
+         "description": "A record id as the record keys write it and kit/tools/upload_check.py --diff prints it after \"global:\": \"0x\" and four lower-case hex digits (\"0x167c\"). It holds in whichever section the record is in."
+        },
+        "minItems": 1,
+        "uniqueItems": true,
+        "description": "The records, each as the record keys write it: \"0x\" and four lower-case hex digits (\"0x167c\"), as kit/tools/upload_check.py --diff prints it after \"global:\"."
+       }
+      }
+     }
+    },
+    "keep_text": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "Texts a record may hold and keep in the sample: the camera's own words, never an owner's (\"DSC\")."
+    }
+   }
+  },
   "link_timing": {
    "type": "object",
    "additionalProperties": false,

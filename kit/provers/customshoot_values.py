@@ -10,7 +10,11 @@ Enter on an item's label opens its list (a popup, opened on the hold's value). F
 from the hold's value until the list comes round or stops, then Up past it for the options above.
 Then one visit per option, the hold's own value last: the list, the option, Enter, Register, a
 settings download and a diff with the base. An item whose Enter opens something other than a list
-is left with a message (kit/provers/customshoot_run.py's notes have the screen).
+is left with a message (kit/provers/customshoot_run.py's notes have the screen). With --counted (Focus Area's list,
+whose Tracking rows show only an icon) the options are counted and named in the camera's own Focus Area order, the
+values of a live setting (--order-from, default the ILCE-1M2's 0x0f46) in the definition of the camera the kit works
+on; a camera with no definition, or none with that setting on its Focus Area row, stops the run before the camera is
+touched, saying what to prove first.
 
 Every Register also rewrites a hidden per-hold record (0x0c09), so the run registers the hold once
 unchanged first, and each item's proofs are diffed with a download made just before them; the start file (downloaded before that) goes back on at the end,
@@ -38,10 +42,36 @@ from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, chan
                     close_screen, load_scan, proofs_file, prover_session, restoring)
 
 POP_Y0, POP_DY = 118, 50                 # the popup's first option centre and pitch
-# the camera's Focus Area options by code (the live record 0x0f46): a hold's list offers them in
-# this order. The ILCE-1M2's record, in its definition (this prover is that body's)
-ORDER = [v for _, v in sorted(next(r for r in definitions.load(paths.A1II)["settings"]
-                                   if r["key"] == "global:0x0f46")["values"])]
+# the live setting whose values, by code, are the camera's Focus Area options in the order a hold's list offers them
+# (--counted): read from the definition of the camera the kit works on when a run needs it (focus_area_order), never
+# another body's. The ILCE-1M2 keeps them in 0x0f46; on another body, prove Focus Area and name its record --order-from
+ORDER_KEY = "global:0x0f46"
+FOCUS_AREA_ROW = "Focus Area"
+
+
+def focus_area_order(key: str = ORDER_KEY, where=None) -> list:
+    """The camera's Focus Area options in code order: the values of the setting `key` in the definition of the camera
+    the kit works on (`where`: a definition's key or path instead). Exits, saying why and what to do, when the camera
+    has no definition, or its definition no such setting on the Focus Area row with values."""
+    named = where is not None and str(where).endswith(".json")
+    # the active camera's stops, saying how, when nothing names the camera
+    p = definitions.active() if where is None else Path(where) if named else definitions.path(where)
+    camera = p.stem                               # a definition is named by its camera's key
+    if not p.exists():
+        sys.exit(f"--counted names a hold's Focus Area rows in the camera's own Focus Area order, which is read from "
+                 f"its definition, and the {camera} has none yet ({paths.shown(p)}). Prove Focus Area on this camera "
+                 "first (prove_run on the Focus Area row), write the definition (kit/schema_update.py --write), then "
+                 "run again; or prove the item without --counted")
+    s = next((s for s in definitions.load_public(p)["settings"] if s.get("key") == key), None)
+    if s is None or not s.get("values") or (s.get("row") or [None])[-1] != FOCUS_AREA_ROW:
+        why = ("has no setting " + key) if s is None else \
+            (f"names no values for {key}" if not s.get("values") else f"has {key} on another row than Focus Area")
+        sys.exit(f"--counted names a hold's Focus Area rows in the camera's own Focus Area order, and the {camera}'s "
+                 f"definition ({paths.shown(p)}) {why}. Prove Focus Area on this camera first (prove_run on the "
+                 "Focus Area row), write the definition (kit/schema_update.py --write), and pass --order-from with the "
+                 "key of the live setting whose values are the menu's Focus Area options in code order (the "
+                 f"ILCE-1M2's is {ORDER_KEY}); or prove the item without --counted")
+    return [v for _, v in sorted(s["values"])]
 
 
 def option_now(cam) -> str | None:
@@ -237,15 +267,15 @@ def came_round(cam, prev) -> tuple:
     return r, r == 0 and prev not in (None, 0)
 
 
-def order_names(opts: list) -> list | None:
+def order_names(opts: list, order: list) -> list | None:
     """Labels for a counted Focus Area list: the rows a hold offers above the camera's own options
-    ("Regist Focus Area") by their reading, then ORDER."""
+    ("Regist Focus Area") by their reading, then `order` (focus_area_order)."""
     extra = []
     for o in opts:
-        if o is None or ":" in o or index_of(ORDER, o) is not None:
+        if o is None or ":" in o or index_of(order, o) is not None:
             break
         extra.append(o)
-    return name_by_order(opts, extra + ORDER)
+    return name_by_order(opts, extra + order)
 
 
 def name_by_order(opts: list, names: list) -> list | None:
@@ -381,9 +411,16 @@ def main():
                          "settings reset, 2026-11-07); the start file puts the hold back at the end")
     ap.add_argument("--counted", action="store_true",
                     help="count the options and name them in the camera's Focus Area order (its Tracking "
-                         "rows show only an icon)")
+                         "rows show only an icon), as the camera's definition has it")
+    ap.add_argument("--order-from", default=None, metavar="KEY",
+                    help="with --counted: the live setting of the camera's definition whose values, by code, are the "
+                         f"Focus Area options in the menu's order (default {ORDER_KEY}, the ILCE-1M2's)")
     add_allow_argument(ap)
     a = ap.parse_args()
+    if a.order_from and not a.counted:
+        sys.exit("--order-from names the record --counted reads the Focus Area order from, and without --counted "
+                 "nothing reads it: add --counted (Focus Area's list), or leave --order-from out")
+    order = focus_area_order(a.order_from or ORDER_KEY) if a.counted else None      # before the camera is touched
     allowance = allowed(a.allow, "customshoot_values")
     h = a.hold
     want = [x.strip() for x in a.items.split(",") if x.strip()]
@@ -431,7 +468,7 @@ def main():
                 try:
                     if a.counted:
                         read, s0 = look_by_count(cam, link, cycle, model, h, k)
-                        opts, wraps = order_names(read), False
+                        opts, wraps = order_names(read, order), False
                         if opts is None:
                             raise Failed(f"{len(read)} options that do not stand in the camera's Focus Area "
                                          f"order: {read}")

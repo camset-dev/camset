@@ -242681,6 +242681,45 @@
    "stills": "0x0e12",
    "movie": "0x0e14"
   },
+  "personal_records": {
+   "zeroed": [
+    {
+     "what": "Preset Focus/Zoom's registered lens list: each slot's lens name and serial number, and the lens data registered with it",
+     "records": [
+      "0x167c",
+      "0x16a1",
+      "0x1682",
+      "0x1688",
+      "0x168e",
+      "0x1694",
+      "0x172c",
+      "0x1732",
+      "0x1437",
+      "0x16f3",
+      "0x0b75"
+     ]
+    }
+   ],
+   "defaults": [
+    {
+     "what": "File Name (prefix): three letters an owner chooses, often initials",
+     "record": "0x0b5b",
+     "bytes": "44534300"
+    }
+   ],
+   "not_text": [
+    {
+     "what": "The memory exposure blocks, the live copy and each memory set's: numbers, never text",
+     "records": [
+      "0x018c",
+      "0x0180"
+     ]
+    }
+   ],
+   "keep_text": [
+    "DSC"
+   ]
+  },
   "link_timing": {
    "read_s": 5,
    "restart_s": 30,
