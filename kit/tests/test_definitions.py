@@ -3323,6 +3323,119 @@ def test_a_note_only_hand_table_entry_leaves_the_definitions_proof_to_be_merged(
     assert kept["values"] == [0, 1] and kept["menu"] == ["Row"] and said
 
 
+def test_the_base_look_copies_say_one_note_and_take_their_names_from_the_look_in_use():
+    """The two copies of each Creative Look's base look (0x0f9b, 0x0fbb, eighteen slots each) are FRAME_PROOFS
+    entries of the a1 II's hand tables: one note, said again in each entry, word for word what the definition says,
+    and no values of their own (the a1 II's pass names them by 0x0cbe's list as it writes); their hand proofs, the
+    values the camera writes there, are the hand evidence's."""
+    fp = hand_tables.load(A1, evidence=False).FRAME_PROOFS
+    looks = [k for k in fp if k.startswith(("global:0x0f9b[", "global:0x0fbb["))]
+    assert looks == [f"global:{arr}[{i}]" for arr in ("0x0f9b", "0x0fbb") for i in range(18)]
+    assert len({fp[k]["note"] for k in looks}) == 1 and not [k for k in looks if set(fp[k]) != {"note"}]
+    assert all(PUB_BY[k]["note"] == fp[k]["note"] for k in looks)
+    assert all(PUB_BY[k]["values"] == PUB_BY["global:0x0cbe[10]"]["values"] for k in looks)
+    assert "Program Auto" not in fp[looks[0]]["note"], "the exposure mode a test ran in is evidence, not the record's"
+
+
+def test_the_published_definition_carries_every_record_fix_and_no_reason_the_tables_do_not_give():
+    """What the a1 II's hand tables say of a record is what its published definition says: every RECORD_FIXES field but
+    the note (a note's evidence apart) word for word (the camera position record's range among them), and every reason
+    no proof can reach a setting is an UNPROVED entry's or the PP7-PP9 rule's, the one its own pass still applies by
+    group."""
+    T = hand_tables.load(A1, evidence=False)
+    assert {k: {f: (PUB_BY[k].get(f), v) for f, v in fix.items() if f != "note" and PUB_BY[k].get(f) != v}
+            for k, fix in T.RECORD_FIXES.items() if k not in PUB_BY or
+            any(PUB_BY[k].get(f) != v for f, v in fix.items() if f != "note")} == {}
+    assert T.RECORD_FIXES["global:0x04e2"]["range"] == PUB_BY["global:0x04e2"]["range"] == [0, 127]
+    pp = ("Picture Profile PP7", "Picture Profile PP8", "Picture Profile PP9")
+    assert [s["key"] for s in PUB["settings"] if s.get("unproved_reason") and s["key"] not in T.UNPROVED
+            and s.get("group") not in pp] == []
+
+
+@pytest.fixture(scope="module")
+def altered_a1_run(tmp_path_factory):
+    """The a1 II's full pass (main, --write --force) on a made-up run whose definition was changed where the hand
+    tables must put it right: the Base Look copies' value names, the camera position record's range back at [0, 255],
+    and a day on one reason and on one memory set's reason in the definition's evidence, which the hand tables
+    (UNPROVED, every day taken away) no longer give. The public definition alone otherwise, whatever this computer
+    holds. Returns (what it printed, the definition written, its evidence file)."""
+    import contextlib
+    import io
+
+    import schema_update as S
+    tmp = tmp_path_factory.mktemp("altered_a1")
+    with pytest.MonkeyPatch.context() as mp:
+        _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
+        definitions.evidence_path(target).unlink(missing_ok=True)
+        doc = json.loads(target.read_text(encoding="utf-8"))
+        by = {s["key"]: s for s in doc["settings"]}
+        for k, s in by.items():
+            if k.startswith(("global:0x0f9b[", "global:0x0fbb[")):
+                s["values"] = [[v, f"x{v}"] for v, _ in s["values"]]
+        by["global:0x04e2"]["range"] = [0, 255]
+        by["global:0x1672"]["unproved_reason"]["date"] = "2026-01-02"
+        by["set:0x0180@260"]["unproved_sets"]["date"] = "2026-01-03"
+        public, evidence = definitions.split(doc)
+        target.write_text(json.dumps(public, indent=1, ensure_ascii=False), encoding="utf-8")
+        definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
+        mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
+        mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+        mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            S.main()
+        written = json.loads(target.read_text(encoding="utf-8"))
+        ev = definitions.evidence_path(target).read_text(encoding="utf-8")
+    return said.getvalue(), {s["key"]: s for s in written["settings"]}, ev
+
+
+def test_a_reason_whose_day_the_hand_evidence_does_not_give_is_written_without_one(altered_a1_run):
+    """A reason no proof can reach a setting (UNPROVED, any of them), whose day the hand evidence does not give, is
+    written without one, as the plain pass writes it: never a day of null in the evidence file. One an earlier write
+    gave a day loses it on purpose, said, and the write is told so (it is not refused as evidence read away); a memory
+    set's reason likewise."""
+    said, by, ev = altered_a1_run
+    assert "  unproved  global:0x1672: its day taken out, the hand evidence no longer gives one" in said
+    assert "  unproved  set:0x0180@260: the memory sets' day taken out" in said
+    evidence = json.loads(ev)["settings"]
+    assert "unproved_reason" not in evidence.get("global:0x1672", {})
+    assert "unproved_sets" not in evidence.get("set:0x0180@260", {})
+    assert by["global:0x1672"]["unproved_reason"] == {"kind": "state", "why": PUB_BY["global:0x1672"]["unproved_reason"]["why"]}
+    assert '"date": null' not in ev and not [k for k, e in evidence.items()
+                                             for f in ("unproved_reason", "unproved_sets") if f in e and not e[f].get("date")]
+
+
+def test_the_a1_pass_puts_its_tables_on_the_look_copies_and_the_record_fixes(altered_a1_run):
+    """The a1 II's pass names the Base Look copies' values by the look in use's list (0x0cbe) and gives them their
+    FRAME_PROOFS note, and puts a RECORD_FIXES range on its record (0x04e2), saying the range, never a name that
+    changes to itself."""
+    said, by, _ = altered_a1_run
+    fp = hand_tables.load(A1, evidence=False).FRAME_PROOFS
+    looks = [k for k in by if k.startswith(("global:0x0f9b[", "global:0x0fbb["))]
+    assert len(looks) == 36 and all(by[k]["values"] == by["global:0x0cbe[10]"]["values"] for k in looks)
+    assert all(by[k]["note"] == fp[k]["note"] for k in looks)
+    assert by["global:0x04e2"]["range"] == [0, 127]
+    assert "name: 'Camera position state (not a setting)' -> 'Camera position state (not a setting)'" not in said
+
+
+def test_the_a1_pass_stops_on_a_hand_proof_without_its_run_day_or_row(monkeypatch):
+    """A hand proof the hand evidence gives (FRAME_PROOFS with "proved" or "sampled") names its run, day and menu row
+    there: the a1 II's pass stops before it reads the definition on one that does not, or names one empty, naming the
+    record and what it lacks, by the plain pass's rule and words (hand_facts.hand_proof_gaps; no default stands in for
+    them). Made-up entries; a look, so nothing is written."""
+    import schema_update as S
+    monkeypatch.setitem(S.FRAME_PROOFS, "global:0x0001", {"note": "Made up.", "proved": [0], "run": "kit2_x"})
+    monkeypatch.setitem(S.FRAME_PROOFS, "global:0x0002", {"note": "Made up.", "sampled": 2, "run": "", "date": "d",
+                                                          "menu": "Row"})
+    monkeypatch.setattr(S, "RUN_ROOT", Path("/nowhere") / A1)
+    monkeypatch.setattr(sys, "argv", ["schema_update.py"])
+    monkeypatch.setattr(definitions, "load", lambda *a, **k: pytest.fail("the definition was read"))
+    with pytest.raises(SystemExit) as e:
+        S.main()
+    said = str(e.value.code)
+    assert "global:0x0001 (no date, menu)" in said and "global:0x0002 (no run)" in said and "nothing done" in said
+
+
 def test_replay_reads_a_registration_mirror_by_what_its_record_holds_after(tmp_path, capsys):
     """replay_proofs checks a registration mirror line by the one record it claims: what that record holds in the
     download after the registration is its stored after (or the code it names, when it stored no change), whatever

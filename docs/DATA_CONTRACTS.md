@@ -429,9 +429,9 @@ out once a proof reaches it: any camera's from its hand table (`UNPROVED` in its
 reason's date in the hand evidence file), and a memory set's own block of the memories' live copy says the same for
 the sets whose live field has one (`unproved_sets`). The ILCE-1M2's table names the camera's
 working values, the AF point copies only its own saves write, the HDMI RAW rows that need a recorder, the network
-block and the two records every candidate row was tried on, and its own pass adds by rule PP7-PP9, which its menus do
-not offer, and the raw stop values of memory sets 4-12. A value only a reset writes (the Base Look copies) has no place
-of its own: its note says so. The editor shows the kind in a few words and the why on hover (the editor's guide).
+block, the two records every candidate row was tried on and the raw stop values memory sets 4-12 never write, and its
+own pass adds by rule PP7-PP9, which its menus do not offer. A value only a reset writes (the Base Look copies) has no
+place of its own: its note says so. The editor shows the kind in a few words and the why on hover (the editor's guide).
 
 ### The owner's word and a memory's copy (in the evidence)
 
@@ -588,8 +588,9 @@ is put on it once. A sentence several notes share (the frame positions, a Custom
 and a test keeps the copies alike.
 
 A camera without the file has every table empty. `kit/schema_update.py` applies the tables to the definition of the
-camera it writes: the ILCE-1M2 firmware 4.00's own pass reads every table (its file is the pattern), and the plain
-pass, every other camera's, reads these (`kit/writer/hand_facts.py`):
+camera it writes: the ILCE-1M2 firmware 4.00's own pass reads every table (its file is the pattern; the `FRAME_PROOFS`
+entries of its Base Look copies, 0x0f9b and 0x0fbb, list no values, and that pass names them by the list of the look
+in use, 0x0cbe, as it writes), and the plain pass, every other camera's, reads these (`kit/writer/hand_facts.py`):
 
 - `RECORD_FIXES`: a setting's name, note, tab, group, range or unit, put on it at every write (one the definition
   does not hold yet is said, and waits);
@@ -605,7 +606,7 @@ pass, every other camera's, reads these (`kit/writer/hand_facts.py`):
   downloads holds is said and left out); a record laid out like another `NEW_LIKE` record comes after it, whatever the
   file's order, and a cycle of them is refused;
 - `FRAME_PROOFS`: what a record holds and its values' names, and its hand proof where the hand evidence gives one,
-  which then names its run, day and menu row there (the plain pass stops on one that does not);
+  which then names its run, day and menu row there (either pass stops on one that does not);
 - `CAROUSEL`, `VALUE_FIXES`, `PP7_VALUES` and `KEEP_LABELS`: value names no proof gives; a `KEEP_LABELS` record keeps
   the names the definition holds (a hand table's where the camera read otherwise) and names a value it does not name
   yet by the camera's label, a conflict the report notes on it is an open question for the gate, and
@@ -634,7 +635,8 @@ marks a hand proof `by_hand`; the copies of a family whose modes are not known y
 live setting with it), and a reason's day or a mark's evidence the hand evidence no longer gives (the write is told it
 was taken out on purpose, `check_write`'s `taken_out`, and is not refused as one that read the evidence away). A
 second run on the same tables, runs and evidence changes nothing and says so. The ILCE-1M2's pass is unchanged there
-too.
+too, but for a reason's day: it writes a reason whose day the hand evidence does not give without one, and takes an
+earlier day out, said, as the plain pass does.
 
 `ZONE` is a prover's, read by `kit/provers/framepos_run.py --zone-grid` for the camera the kit works on. The others
 (`NEW_CHECK_NAMES`, `LATE_COPY`, `EV_DOWN_FROM_20`, `HOLD_TABLES`, `HOLD_BRACKET_COPIES`, `ISO_TABLE`, `LABEL_FIXES`,
@@ -712,7 +714,8 @@ proved none of those entries by hand says so with the file holding no evidence:
 {"$schema": "../../schemas/hand-evidence.schema.json", "hand_format": 2, "camera": "<model>_fw<fw>", "tables": {}}
 ```
 
-The plain pass also stops on a hand proof that names no run, day or menu row. Schema:
+Either pass also stops, before it reads the definition, on a hand proof that names no run, day or menu row: no
+default stands in for them. Schema:
 `schemas/hand-evidence.schema.json`; the kit's tests check the file against it where this computer holds it.
 
 {{ schema_fields("hand-evidence") }}

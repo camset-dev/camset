@@ -75,9 +75,10 @@ private/config.json), editor/definitions/<model>_fw<fw>.json, and refuses a run 
 or firmware than that definition's (camkit.models): a body's proofs land in its own definition only. The ILCE-1M2
 firmware 4.00's definition gets its own pass (main below), which reads every one of its hand tables (CAROUSEL, the
 label tables and the rest: its data file, data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, which
-writer/hand_tables.py reads) and holds the fixes of that body below (the 0x04e2 range, the runs it reads; TODO: those
-become hand table entries and the two passes one, docs/decisions/0020). Records pass2_report marks "not one to one"
-are left out and listed.
+writer/hand_tables.py reads) and holds the fixes of that body below (the runs it reads, the rules it applies by a
+record's group or name, and by its key: the Base Look copies' records, 0x0f9b and 0x0fbb, whose values it names by
+"global:0x0cbe[10]"; TODO: those become hand table entries and the two passes one, docs/decisions/0020). Records
+pass2_report marks "not one to one" are left out and listed.
 
 Any other camera's definition gets the plain pass (generic below): each proved value the label the camera showed, a
 record the definition lacks a setting named by its menu row, and the evidence, with that camera's own hand tables
@@ -88,7 +89,8 @@ its tabs from the camera file's tab colours, and the settings the report proves.
 name the camera's own; what the mapping finds by hand goes into its hand tables file and, with --write again, into
 it. In either pass --write refuses, before anything is read, while the camera's hand tables hold entries the private
 hand evidence completes (a hand proof, a reason's day, what shows a not-offered mark) and that file is not on this
-computer (writer/hand_evidence.missing).
+computer (writer/hand_evidence.missing), and either pass stops on a hand proof whose evidence names no run, day or
+menu row (writer/hand_facts.hand_proof_stop).
 
 The parts of a definition the kit takes from data/ alone (from_data below) are written on every run: "$schema" and
 "definition_format" first, the camera section copied from data/<model>_fw<fw>/camera_<model>_fw<fw>.json, the memory
@@ -820,6 +822,11 @@ def main():
                                                                 "NOT_OFFERED": NOT_OFFERED})
     if a.write and not a.dry_run and missing:
         sys.exit(missing)
+    # a hand proof the hand evidence gives names its run, day and menu row there, as the plain pass asks, by the same
+    # rule (the tables hold the evidence put back): no default stands in for one (hand_facts.hand_proof_stop)
+    gaps = hand_facts.hand_proof_gaps({"FRAME_PROOFS": FRAME_PROOFS})
+    if gaps:
+        sys.exit(hand_facts.hand_proof_stop(paths.A1II, gaps))
     doc = definitions.load(target)
     writer_proofs.CONTEXT_WORDS.update(CONTEXT_WORDS)      # this body's contexts the runs reworded (menu_row)
     why = model_refused(RUN, doc)
@@ -1348,8 +1355,12 @@ def main():
                 pair[1] = lab
     for k, fix in RECORD_FIXES.items():
         if k in by_key and fix_differs(by_key[k], fix):
-            changed.append((k, by_key[k]["name"], "name", by_key[k]["name"], fix["name"]))
-            apply_fix(by_key[k], fix)
+            # said by what changes: the name where it does, else the first field that does (a range alone is no name
+            # changing to itself), a note by its first words
+            s = by_key[k]
+            f = next(f for f in ("name", *fix) if fix_differs(s, {f: fix[f]}))
+            changed.append((k, s["name"], f, None, fix[f][:60]) if f == "note" else (k, s["name"], f, s.get(f), fix[f]))
+            apply_fix(s, fix)
     # PP7-PP9 (elements 6-8 of each profile array) are not on this body's menu (2026-10-30): the list
     # offers PP1-PP6, PP10, PP11 in Stills and Movie mode alike, and Log Shooting on greys it out.
     # Why (2026-10-31): they are the first a1's log presets, kept in the file but dropped from this
@@ -1426,56 +1437,41 @@ def main():
             if fix_differs(r, fix):
                 changed.append((k, r["name"], "name", r["name"], fix["name"]))
                 apply_fix(r, fix)
-    # the two copies of each Creative Look's base look (2026-11-01, runs/kit2_csr): a file set C1-C6 apart
-    # in all three arrays, then Camera Settings Reset put all three back to Sony's base looks
-    look_copy = ("One of two copies of each look's base look beside the one in use (0x0cbe). Changing a custom "
-                 "look's base look writes only 0x0cbe, in the Stills menu and in Movie mode's alike (C1 through "
-                 "eight looks, Picture Profile Off, 2026-11-02), so neither copy is Movie's. Camera Settings "
-                 "Reset puts all three back to Sony's base looks (C1-C6: ST, FL, IN, SH, VV2, BW) whatever a file "
-                 "had put in each, so neither copy is what the reset reads (2026-11-01). A base-look change in "
-                 "S&Q (Program Auto) and in Time-lapse writes only 0x0cbe too, and so does the look panel's own "
-                 "Reset (C4), which puts the parameters back and keeps the base (runs/kit2_lookreset, 2026-11-03): "
-                 "no menu action writes either copy. Not a per-mode Creative Look: Different Set for Still/Mv "
-                 "lists no Creative Look on this body (Aperture, Shutter Speed, ISO, Exposure Comp., Metering "
-                 "Mode, White Balance, Picture Profile; runs/kit2_diffset), and only the base look is kept three "
-                 "times, the eight parameters once each (the owner checked by hand that the looks are the same in "
-                 "Stills, Movie and S&Q, 2026-11-03). Recorded by the values the camera writes into it (the "
-                 "owner's call, 2026-11-03): the reset's Sony base look, and each built-in look's own number, in "
-                 "0x0cbe's numbering. What the camera uses it for is unknown.")
+    # the two copies of each Creative Look's base look (0x0f9b, 0x0fbb): their note and their hand proof, the values
+    # the camera itself writes there, are their FRAME_PROOFS entries' (the proof's run, day and row the hand
+    # evidence's); the note is put here, before the reasons below, and the values are named by 0x0cbe's proved list,
+    # the built-in looks holding their own number in every file, as 0x0cbe's do
+    looks = ("global:0x0f9b[", "global:0x0fbb[")
     for k, r in by_key.items():
-        if k.startswith(("global:0x0f9b[", "global:0x0fbb[")) and not note_is(r, look_copy):
-            changed.append((k, r["name"], "note", None, look_copy[:60]))
-            put_note(r, look_copy)
-    # the copies proved by what the camera itself writes there (runs/kit2_csr: Camera Settings Reset put Sony's
-    # base looks into all three lists), labelled with 0x0cbe's proved list; the built-in looks hold their own
-    # number in every file, as 0x0cbe's do
+        fp = FRAME_PROOFS.get(k) if k.startswith(looks) else None
+        if fp is not None and not note_is(r, fp["note"]):
+            changed.append((k, r["name"], "note", None, fp["note"][:60]))
+            put_note(r, fp["note"])
     base_labels = (by_key.get("global:0x0cbe[10]") or {}).get("values") or []
-    for arr in ("0x0f9b", "0x0fbb"):
-        for i in range(18):
-            v = i if i < 10 else ([0, 5, 6, 7, 4, 8][i - 10] if i < 16 else i - 6)
-            FRAME_PROOFS[f"global:{arr}[{i}]"] = {
-                "note": look_copy, "values": base_labels, "proved": [v], "run": "kit2_csr", "date": "2026-11-01",
-                "menu": "Setup > Reset/Save Settings > Setting Reset > Camera Settings Reset (all three lists to Sony's base looks)"}
+    for k, fp in FRAME_PROOFS.items():
+        if k.startswith(looks):
+            fp["values"] = base_labels
     # why a record stays unproved, when no proof can be made (2026-11-03, the owner: "the picture profiles are
     # proven that they are not on this camera ... can we also mark them"): a third state beside proved and not
     # proved, as test tools keep "not applicable" and "skipped" apart from a failure; the records the hand table names
-    # (UNPROVED: a working value of the camera's, a value only its own saves write, equipment, a network block, or every
-    # candidate row tried), each until a proof reaches it (2026-11-09)
+    # (UNPROVED: a working value of the camera's, a value only its own saves write, equipment, a network block, every
+    # candidate row tried, or the raw stop values memory sets 4-12 never write), each until a proof reaches it
+    # (2026-11-09). A reason whose day the hand evidence does not give is written without one, as the plain pass writes
+    # it (hand_facts.unproved): one an earlier write gave a day loses it on purpose, said, and the write is told so
+    # (taken_out), never a day of null
+    taken_out = set()
     for k, r in by_key.items():
         why = None
         if not r.get("proved") and k in UNPROVED and not {"proved", "sampled"} & set(FRAME_PROOFS.get(k) or ()):
             kind, date, text = UNPROVED[k]
-            why = {"kind": kind, "date": date, "why": text}
+            why = {"kind": kind, **({"date": date} if date else {}), "why": text}
         elif not r.get("proved") and (r.get("group") or "") in ("Picture Profile PP7", "Picture Profile PP8", "Picture Profile PP9"):
             why = {"kind": "not_on_camera", "date": "2026-10-30",
                    "why": f"{r['group'][len('Picture Profile '):]} is not on the ILCE-1M2's menu (firmware 4.00): the "
                           "Picture Profile list offers Off, PP1-PP6, PP10 and PP11, so no menu writes it."}
-        elif not r.get("proved") and mirror_place(k, mirror)[0] and 4 <= mirror_place(k, mirror)[0] <= 12 \
-                and mirror_place(k, mirror)[1] in (260, 262):
-            why = {"kind": "not_on_camera", "date": "2026-11-02",
-                   "why": "Never written on this camera: sets 4-12 are the Movie, S&Q and Time-lapse memories (1-3 "
-                          "each), and registering them leaves the raw stop values as they were; only Stills memories "
-                          "write them. Their F-number and shutter are proved."}
+        if why and "date" not in why and (r.get("unproved_reason") or {}).get("date"):
+            print(f"  unproved  {k}: its day taken out, the hand evidence no longer gives one")
+            taken_out.add(f"{k}: unproved_reason.date")
         if why and r.get("unproved_reason") != why:
             changed.append((k, r["name"], "unproved_reason", None, why["kind"]))
             r["unproved_reason"] = why
@@ -1492,7 +1488,11 @@ def main():
         sets = [n for n, w in reasons.items() if w]
         if sets:
             w = reasons[sets[0]]
-            r["unproved_sets"] = {"sets": sets, "kind": w["kind"], "why": w["why"], "date": w.get("date", "")}
+            if not w.get("date") and (r.get("unproved_sets") or {}).get("date"):
+                print(f"  unproved  {k}: the memory sets' day taken out, the hand evidence no longer gives one")
+                taken_out.add(f"{k}: unproved_sets.date")
+            r["unproved_sets"] = {"sets": sets, "kind": w["kind"], "why": w["why"],
+                                  **({"date": w["date"]} if w.get("date") else {})}
         else:
             r.pop("unproved_sets", None)
     for (k, v), lab in PP7_VALUES.items():
@@ -1517,9 +1517,8 @@ def main():
             del s["range"]                         # a place on a grid, not a number
         if "proved" not in fp and "sampled" not in fp:
             continue                               # names and note only: the report's proof stands (by_lines_of)
-        menu = fp.get("menu", "Camera Set. Memory (registered after moving the focus frame)")
-        proof = {"run": fp.get("run", "kit2_frame_reg"), "date": fp.get("date", "2026-10-31"),
-                 "menu": sorted(menu) if isinstance(menu, list) else [menu]}
+        menu = fp["menu"]                          # the hand evidence names each hand proof's row, run and day (gaps)
+        proof = {"run": fp["run"], "date": fp["date"], "menu": sorted(menu) if isinstance(menu, list) else [menu]}
         if "proved" in fp and fp.get("linear"):
             # a scale whose proofs lie on a line, both ends among them (sampled_scale: Audio Rec Level), is sampled: its
             # values between are inferred, and the proofs are not listed (the level put back is the camera's own)
@@ -1592,9 +1591,6 @@ def main():
                 f"(proved holding the camera each way, 2026-10-30).")
         if k in by_key and add_line(by_key[k], line):
             changed.append((k, by_key[k]["name"], "note", None, line[:60]))
-    for s in doc["settings"]:
-        if s["key"] == "global:0x04e2" and s.get("range") == [0, 255]:
-            s["range"] = [0, 127]
     # a Picture Profile parameter's movie copy and its stills copy (or the unnamed one) offer the same values: a value
     # one copy proved and the other lacks or names otherwise unproved is copied over, either way (source "derived")
     pp = {(x["name"], x.get("group"), x.get("index")): x for x in doc["settings"]
@@ -1723,7 +1719,8 @@ def main():
     print(f"names: {dict(names.most_common())}")
     gate(open_ones, target.stem, a.force, a.write and not a.dry_run)
     if a.write and not a.dry_run:
-        write_definition(target, doc, a.accept_stale)      # every refusal first, then the reset file, then this
+        # every refusal first, then the reset file, then this; a reason's day taken out on purpose is no evidence lost
+        write_definition(target, doc, a.accept_stale, taken_out=taken_out)
         print(f"wrote {target}")
         help_files.write(private, doc, sony, help_files.SONY_SOURCE)
         print(f"wrote {private}")

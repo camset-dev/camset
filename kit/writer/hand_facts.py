@@ -165,6 +165,17 @@ def hand_proof_gaps(ev: dict) -> list:
             if not all(fp.get(f) for f in NEED)]
 
 
+def hand_proof_stop(camera: str, gaps: list) -> str:
+    """Either pass's stop, before the definition is read and nothing written, on hand proofs whose run, day or menu
+    row the hand evidence does not give (`gaps`, each key with what it lacks): what to add, and where."""
+    from . import hand_evidence
+    return (f"schema_update: nothing done. The hand evidence, {paths.shown(hand_evidence.path(camera))}, gives "
+            f"hand proofs of FRAME_PROOFS without what the definition's evidence keeps of each: {'; '.join(gaps)}. "
+            "A hand proof names the run it was made in, its day and its menu row (\"run\", \"date\" and \"menu\" "
+            "beside its \"proved\" or \"sampled\"; docs/DATA_CONTRACTS.md, \"The hand evidence file\"): add them "
+            "there, then run the command again.")
+
+
 def _copy(x):
     return json.loads(json.dumps(x))
 

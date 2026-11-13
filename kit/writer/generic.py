@@ -365,11 +365,7 @@ def generic_main(target: Path, run: Path, write: bool, force: bool = False, acce
         sys.exit(missing)
     gaps = hand_facts.hand_proof_gaps(E)
     if gaps:
-        sys.exit(f"schema_update: nothing done. The hand evidence, {paths.shown(hand_evidence.path(camera))}, gives "
-                 f"hand proofs of FRAME_PROOFS without what the definition's evidence keeps of each: {'; '.join(gaps)}. "
-                 "A hand proof names the run it was made in, its day and its menu row (\"run\", \"date\" and \"menu\" "
-                 "beside its \"proved\" or \"sampled\"; docs/DATA_CONTRACTS.md, \"The hand evidence file\"): add them "
-                 "there, then run the command again.")
+        sys.exit(hand_facts.hand_proof_stop(camera, gaps))
     if missing:                                 # a look goes on, and says what --write would stop on
         print(f"note, before --write: {missing}")
     if E.get("MY_MENU_EMPTY"):                  # evidence for a table only the ILCE-1M2's pass reads

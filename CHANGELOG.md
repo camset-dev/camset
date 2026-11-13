@@ -189,6 +189,20 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   writes is the same. A camera without the file has every table empty: nothing to do for whoever maps another body
   (what the plain pass, any camera's but the a1 II's, reads of a camera's own file is the first entry of this list;
   docs/DATA_CONTRACTS.md, "The hand tables file").
+- Three more of the a1 II's facts moved from its own pass in `kit/schema_update.py` into its hand tables: the two
+  copies of each Creative Look's base look (0x0f9b, 0x0fbb) are `FRAME_PROOFS` entries (their note; the a1 II's pass
+  still names their values by the list of the look in use, 0x0cbe), the raw stop values memory sets 4-12 never write
+  are `UNPROVED` entries, and the camera position record's range (0x04e2) is a `RECORD_FIXES` field. How they were
+  proved (the base looks' hand proof, the reasons' day), and the run, day and menu row that pass gave a hand proof
+  whose evidence named none, are the maintainer's private hand evidence now, so the code no longer holds those runs
+  and days. The definition the kit writes is the same but for one thing: the Base Look copies' note no longer names
+  the exposure mode the S&Q base-look change was tried in (it said "in S&Q (Program Auto)"; that is the test's state,
+  kept in the evidence); the definition carries it. Either pass now stops, before it reads the definition, on a hand
+  proof whose evidence names no run, day or menu row, or names one empty, by one rule, saying which and what it lacks
+  (the a1 II's took a default for them). The a1 II's pass writes a reason no proof can reach a setting whose day the
+  hand evidence does not give without a day, as the plain pass does (it wrote a day of null into the evidence file),
+  saying so where an earlier write gave one; and it says a `RECORD_FIXES` change by the field that changes (a range
+  alone was said as the name changing to itself). Nothing to do for whoever maps another body.
 
 ### The docs
 
