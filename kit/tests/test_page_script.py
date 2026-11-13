@@ -1501,47 +1501,153 @@ def test_only_the_status_bar_and_the_toast_speak_and_each_open_is_named():
     assert opens == ["Open file A…", "Open file B…", "Open a base file…"]
 
 
+# the editor's six Settings tabs as the state gives them (`settings_tabs`), About the last (`SETTINGS_ABOUT`)
+SETTINGS_TABS = """[["Appearance", "Theme."], ["Camera link", "USB."], ["Editing & Compare", "Compare."], ["Backups & start-up", "Copies."],
+  ["Camera support & web page", "Definitions."], ["ℹ About", "Which editor this is."]]"""
+
+
 @needs_node
-def test_the_status_bar_version_opens_about_and_its_changes(tmp_path):
+def test_the_window_opened_last_stacks_first(tmp_path):
+    """The page's windows stack from the top by when they were opened or asked for, the newest first, under the
+    questions (ask, send, report), which keep their place first: #windows does not scroll and each window is as tall
+    as the screen at most, so one that landed below another could be out of sight. Backups from the toolbar, then
+    Settings: Settings first. Changes from Settings > About: Changes first. Then the status bar's version: Settings
+    first again, and on top for Escape, which closes it and leaves Changes, with the focus left where it was. Backups
+    from Settings > Backups & start-up: Backups first. The page itself opens with its sections in that order."""
+    page = PAGE.read_text(encoding="utf-8")
+    sections = re.findall(r'<section id="([^"]+)"', re.search(r'<div id="windows">(.*?)\n</div>', page, re.S).group(1))
+    assert sections[:3] == ["ask", "send", "report"], sections
+    got = run(tmp_path, """
+(async () => {
+  api = async (name) => (name === "backups" ? { list: [] } : { blocks: [] });
+  state = { ...state, version: "0.2.0", version_short: "0.2.0", not_sony: "Not Sony's.", settings_tabs: """ + SETTINGS_TABS + """,
+    about: { links: [], details: "d" }, dirs: { originals: "o", camera: "c" }, prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
+  // #windows as the page has it (the harness makes each element on its first use, outside it)
+  for (const id of ["backdrop", ...""" + json.dumps(sections) + """]) $("windows").append($(id));
+  $("mymenu").hidden = true;
+  const order = () => $("windows").children.map((n) => n.id).filter((id) => id !== "backdrop");
+  const esc = () => { const e = { key: "Escape", shiftKey: false, defaultPrevented: false, preventDefault() { this.defaultPrevented = true; } };
+    for (const f of document.listeners.keydown) f(e); };
+  const button = (box, words) => $(box).querySelectorAll("button").find((b) => b.textContent === words);
+  drawVersion(state);
+  const seen = { start: order() };
+  // A: Backups from the toolbar, then Settings from the toolbar
+  $("b-backups").click(); await tick();
+  $("b-settings").click(); await tick();
+  seen.a = order();
+  // Changes from Settings > About
+  $("foot-version").click();
+  button("settings", "Changes").click(); await tick();
+  seen.changes = order();
+  // B: then the version, the focus in Changes
+  const kept = button("changelog", "✖\ufe0e") || $("changelog").querySelector("button");
+  kept.focus();
+  $("foot-version").click();
+  seen.b = { order: order(), tab: xp.settingsTab, focus: document.activeElement === kept };
+  esc();
+  seen.esc = { settings: xp.windows.settings, changes: xp.windows.changelog, backups: xp.windows.backups };
+  esc();
+  seen.esc2 = { changes: xp.windows.changelog };
+  // Backups from Settings > Backups & start-up, Backups open already: to the front
+  openSettings(3);
+  button("settings", "📂 View backups…").click(); await tick();
+  seen.fromSettings = order();
+  console.log(JSON.stringify(seen));
+})();
+""")
+    fixed = ["ask", "send", "report"]
+    assert got["start"] == sections
+    assert got["a"][:5] == fixed + ["settings", "backups"], got["a"]
+    assert got["changes"][:6] == fixed + ["changelog", "settings", "backups"], got["changes"]
+    assert got["b"] == {"order": got["b"]["order"], "tab": 5, "focus": True} and got["b"]["order"][:6] == fixed + ["settings", "changelog", "backups"], got["b"]
+    assert got["esc"] == {"settings": False, "changes": True, "backups": True}, "Escape closes the window on top, Settings"
+    assert got["esc2"] == {"changes": False}
+    assert got["fromSettings"][:5] == fixed + ["backups", "settings"], got["fromSettings"]
+    assert sorted(got["fromSettings"]) == sorted(sections), "every window kept, none added"
+
+
+@needs_node
+def test_the_status_bar_version_opens_settings_on_about_and_its_changes(tmp_path):
     """As in the window: the status bar's right end names the editor and its short version, the whole version on
-    hover, and a click opens About, which gives the version, the build (when there is one), the cameras it works
-    with and the not-affiliated line; its Changes asks the editor for the changelog and shows it, release by release;
-    the licences, a page on the editor's computer, are greyed out with where they are. The welcome page gives the
-    whole version."""
+    hover, and a click opens Settings on its last tab, About, from wherever Settings was (closed, or open on another
+    tab). About gives the version, the build (when there is one), the cameras it works with and the not-affiliated
+    line; its Changes asks the editor for the changelog and shows it, release by release; the licences, a page on the
+    editor's computer, are greyed out with where they are. The welcome page names no version of its own: the status
+    bar's is the only one on that screen."""
     got = run(tmp_path, """
 (async () => {
   const asked = [];
   api = async (name) => { asked.push(name); return { blocks: [[2, "Unreleased"], [3, "The editor"], [1, "A point."]] }; };
-  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", build: "1a2b3c4", works_with: ["ILCE-1M2"], not_sony: "Not Sony's." };
+  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", build: "1a2b3c4", works_with: ["ILCE-1M2"], not_sony: "Not Sony's.",
+    settings_tabs: """ + SETTINGS_TABS + """, prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
   drawVersion(state);
   const b = $("foot-version");
   const label = { text: b.textContent, title: b.title, aria: b.getAttribute("aria-label") };
+  const welcomeLinks = welcome().querySelectorAll("button, a").map((n) => n.textContent).filter((t) => t.includes("0.2.0"));
   const welcomeText = welcome().textContent;
   b.click();
-  const about = $("about");
-  const texts = about.querySelectorAll("p, div").map((n) => n.textContent);
-  const buttons = about.querySelectorAll("button").map((n) => [n.textContent, !!n.disabled]);
-  const shown = { open: xp.windows.about, hidden: about.hidden, title: about.querySelector(".title > span").textContent, role: about.getAttribute("role") };
-  about.querySelectorAll("button").find((n) => n.textContent === "Changes").click();
+  const settings = $("settings");
+  const texts = settings.querySelectorAll("p, div").map((n) => n.textContent);
+  const buttons = settings.querySelectorAll("button").map((n) => [n.textContent, !!n.disabled]);
+  const shown = { open: xp.windows.settings, tab: xp.settingsTab, about: SETTINGS_ABOUT, hidden: settings.hidden, title: settings.querySelector(".title > span").textContent,
+    on: settings.querySelectorAll(".set-tabs button.on").map((n) => n.textContent), windows: Object.keys(xp.windows) };
+  settings.querySelectorAll("button").find((n) => n.textContent === "Changes").click();
   await tick(); await tick();
-  const changes = { open: xp.windows.changelog, asked, title: $("changelog").querySelector(".title > span").textContent,
-    heads: $("changelog").querySelectorAll("h1").map((n) => n.textContent), text: $("changelog").textContent };
+  const changes = { open: xp.windows.changelog, settings: xp.windows.settings, asked, title: $("changelog").querySelector(".title > span").textContent,
+    heads: $("changelog").querySelectorAll("h1").map((n) => n.textContent), text: $("changelog").textContent,
+    clickable: $("changelog").querySelectorAll("button, a").map((n) => n.textContent).filter((t) => t.includes("0.2.0")) };
   delete state.build;
-  xp.keys.about = null;
-  drawAbout();
-  const noBuild = $("about").textContent;
-  console.log(JSON.stringify({ label, welcomeText, texts, buttons, shown, changes, noBuild }));
+  xp.keys.settings = null;
+  drawSettings();
+  const noBuild = $("settings").textContent;
+  // from another tab: the version turns Settings to About
+  settings.querySelectorAll(".set-tabs button").find((n) => n.textContent === "Appearance").click();
+  const away = xp.settingsTab;
+  b.click();
+  console.log(JSON.stringify({ label, welcomeLinks, welcomeText, texts, buttons, shown, changes, noBuild, away, back: xp.settingsTab }));
 })();
 """)
-    assert got["label"] == {"text": "Camset Editor 0.2.0", "title": "Camset Editor 0.2.0 (build 1a2b3c4)\nClick for About", "aria": "Camset Editor 0.2.0"}
-    assert "Version 0.2.0 (build 1a2b3c4)" in got["welcomeText"]
-    assert got["shown"] == {"open": True, "hidden": False, "title": "About Camset Editor", "role": "dialog"}
-    for t in ["Camset Editor", "Version 0.2.0", "Build 1a2b3c4", "Works with: ILCE-1M2", "Not Sony's."]:
+    assert got["label"] == {"text": "Camset Editor 0.2.0", "title": "Camset Editor 0.2.0 (build 1a2b3c4)\nClick for Settings > About", "aria": "Camset Editor 0.2.0"}
+    assert "0.2.0" not in got["welcomeText"] and got["welcomeLinks"] == [], "no version on the welcome page"
+    assert got["shown"] == {"open": True, "tab": 5, "about": 5, "hidden": False, "title": "Settings", "on": ["ℹ About"],
+                            "windows": ["backups", "history", "settings", "connect", "changelog"]}, "no About window of its own"
+    for t in ["Camset Editor", "Version 0.2.0", "Build 1a2b3c4", "Works with: ILCE-1M2", "Not Sony's.", "Which editor this is."]:
         assert t in got["texts"], (t, got["texts"])
     assert ["Changes", False] in got["buttons"] and ["Third-party licences", True] in got["buttons"]
-    assert got["changes"]["open"] is True and got["changes"]["asked"] == ["changelog"] and got["changes"]["title"] == "Changes"
+    assert got["changes"]["open"] is True and got["changes"]["settings"] is True and got["changes"]["asked"] == ["changelog"]
+    assert got["changes"]["title"] == "Changes" and got["changes"]["clickable"] == []
     assert got["changes"]["heads"] == ["Unreleased"] and "A point." in got["changes"]["text"] and "Camset Editor 0.2.0 (build 1a2b3c4)" in got["changes"]["text"]
     assert "Build" not in got["noBuild"] and "Version 0.2.0" in got["noBuild"]
+    assert (got["away"], got["back"]) == (0, 5)
+
+
+@needs_node
+def test_the_version_turns_settings_to_about_with_a_settings_field_focused(tmp_path):
+    """Settings open on another tab with the focus in one of its text fields, which `drawWindows` leaves alone so
+    that a poll does not draw it away from under the cursor: the status bar's version still turns Settings to About,
+    drawn there and then, as a click on a tab draws it."""
+    got = run(tmp_path, """
+(async () => {
+  api = async () => ({ blocks: [] });
+  state = { ...state, version: "0.2.0", version_short: "0.2.0", not_sony: "Not Sony's.", settings_tabs: """ + SETTINGS_TABS + """,
+    about: { links: [], details: "d" }, prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
+  drawVersion(state);
+  openSettings(0);
+  const field = el("input", { type: "text" });
+  field.type = "text";
+  $("settings").querySelector(".wbody").append(field);
+  field.focus();
+  xp.keys.settings = null;
+  drawWindows();
+  const left = $("settings").contains(field);
+  const before = $("settings").textContent.includes("Version 0.2.0");
+  $("foot-version").click();
+  console.log(JSON.stringify({ left, before, tab: xp.settingsTab, about: $("settings").textContent.includes("Version 0.2.0"),
+    on: $("settings").querySelectorAll(".set-tabs button.on").map((n) => n.textContent) }));
+})();
+""")
+    assert got["left"] is True, "a poll leaves Settings alone under the cursor"
+    assert {k: got[k] for k in ("before", "tab", "about", "on")} == {"before": False, "tab": 5, "about": True, "on": ["ℹ About"]}
 
 
 @needs_node
@@ -1573,34 +1679,33 @@ def test_changes_says_when_the_editor_could_not_be_asked_and_asks_again(tmp_path
 
 
 @needs_node
-def test_settings_foot_has_about_changes_and_the_version(tmp_path):
-    """As in the window: Settings end with an About Camset Editor… button, which opens About, Changes, which opens
-    Changes, and the editor's whole version as plain words."""
+def test_settings_foot_names_where_settings_are_kept_and_nothing_of_abouts(tmp_path):
+    """As in the window: Settings end with where the settings are kept, on every tab; the version, the not-affiliated
+    line, Changes and a way into About are the About tab's alone, so the foot has no button and no version."""
     got = run(tmp_path, """
 (async () => {
   api = async () => ({ blocks: [] });
-  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", not_sony: "Not Sony's.", settings_tabs: [["Appearance", "Theme."]],
-    prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
-  openWindow("settings");
-  const foot = $("settings").querySelector(".set-foot");
-  const buttons = foot.querySelectorAll("button");
-  buttons.find((b) => b.textContent === "About Camset Editor…").click();
-  const about = xp.windows.about && !$("about").hidden;
-  buttons.find((b) => b.textContent === "Changes").click();
-  await tick();
-  console.log(JSON.stringify({ words: buttons.map((b) => b.textContent), spans: foot.querySelectorAll("span").map((n) => n.textContent), about, changes: xp.windows.changelog }));
+  state = { ...state, version: "0.2.0 (build 1a2b3c4)", version_short: "0.2.0", not_sony: "Not Sony's.", settings_tabs: """ + SETTINGS_TABS + """,
+    about: { links: [], details: "d" }, prefs: { prefs_path: "prefs.json", theme: "dark", zoom: 1, density: 1 } };
+  const feet = [];
+  for (const tab of [0, 2, 3, SETTINGS_ABOUT]) {
+    xp.settingsTab = tab;
+    openWindow("settings");
+    const foot = $("settings").querySelector(".set-foot");
+    feet.push({ tab, buttons: foot.querySelectorAll("button, a").length, text: foot.textContent, title: foot.querySelector("span").title });
+  }
+  console.log(JSON.stringify({ feet }));
 })();
 """)
-    assert got["words"] == ["About Camset Editor…", "Changes"]
-    assert "Camset Editor 0.2.0 (build 1a2b3c4)" in got["spans"]
-    assert got["about"] is True and got["changes"] is True
+    for f in got["feet"]:
+        assert f == {"tab": f["tab"], "buttons": 0, "text": "⚙\ufe0e Preferences", "title": "Preferences file: prefs.json"}, f
 
 
 @needs_node
 def test_about_has_the_windows_lines_links_and_copy_details(tmp_path):
-    """The page's About draws what the editor sends (`state.about`, the window's words): the system, the camera link
-    program and the licence lines; the project's pages as links that open in a new tab and tell those pages nothing
-    of the page; and Copy details, which puts the editor's details on the clipboard and says so."""
+    """The page's Settings > About draws what the editor sends (`state.about`, the window's words): the system, the
+    camera link program and the licence lines; the project's pages as links that open in a new tab and tell those
+    pages nothing of the page; and Copy details, which puts the editor's details on the clipboard and says so."""
     got = run(tmp_path, """
 (async () => {
   const copied = [];
@@ -1608,9 +1713,9 @@ def test_about_has_the_windows_lines_links_and_copy_details(tmp_path):
   state = { ...state, version: "0.2.0", version_short: "0.2.0", works_with: ["ILCE-1M2 (firmware 4.00)"], not_sony: "Not Sony's.",
     about: { system: "System: macOS 15.2 (aarch64)", helper: "Camera link program: found", licence: "MIT licence. Copyright (c) X.",
       links: [{ text: "Project page", url: "https://example.com/p", title: "P" }, { text: "Report a problem", url: "https://example.com/p/issues", title: "R" }],
-      details: "Camset Editor 0.2.0\\nSystem: macOS 15.2 (aarch64)" } };
-  openWindow("about");
-  const about = $("about");
+      details: "Camset Editor 0.2.0\\nSystem: macOS 15.2 (aarch64)" }, settings_tabs: """ + SETTINGS_TABS + """, prefs: { prefs_path: "prefs.json" } };
+  openSettings(SETTINGS_ABOUT);
+  const about = $("settings");
   const links = about.querySelectorAll("a").map((n) => [n.textContent, n.getAttribute("href"), n.getAttribute("target"), n.getAttribute("rel")]);
   about.querySelectorAll("button").find((b) => b.textContent === "Copy details").click();
   await tick(); await tick();
@@ -1641,9 +1746,10 @@ def test_copy_details_falls_back_to_the_copy_command(tmp_path):
   const copied = await copyText("details");
   const kept = document.body.children.length;
   document.execCommand = () => { throw new Error("refused"); };
-  state = { ...state, version: "0.2.0", version_short: "0.2.0", not_sony: "Not Sony's.", about: { links: [], details: "details" } };
-  openWindow("about");
-  $("about").querySelectorAll("button").find((b) => b.textContent === "Copy details").click();
+  state = { ...state, version: "0.2.0", version_short: "0.2.0", not_sony: "Not Sony's.", about: { links: [], details: "details" },
+    settings_tabs: """ + SETTINGS_TABS + """, prefs: { prefs_path: "prefs.json" } };
+  openSettings(SETTINGS_ABOUT);
+  $("settings").querySelectorAll("button").find((b) => b.textContent === "Copy details").click();
   await tick(); await tick();
   console.log(JSON.stringify({ copied, ran, left: [kept - before, document.body.children.length - before], toast: $("toast").textContent }));
 })();

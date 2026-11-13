@@ -497,9 +497,9 @@ pub(crate) mod definitions_tests {
         if cfg!(windows) { s.replace('/', "\\") } else { s.to_string() }
     }
 
-    /// Every package puts the licences page where Settings > Third-party licences looks for it (`licences_places`):
-    /// the release workflow writes it before it packages, inside the macOS app's Resources (before the app is signed),
-    /// beside the program in the Linux tarball, its install and the Windows zip.
+    /// Every package puts the licences page where Settings > About > Third-party licences looks for it
+    /// (`licences_places`): the release workflow writes it before it packages, inside the macOS app's Resources (before
+    /// the app is signed), beside the program in the Linux tarball, its install and the Windows zip.
     #[test]
     fn packages_carry_the_licences_where_the_button_looks() {
         let places = licences_places(Path::new("/app/Contents/MacOS"));

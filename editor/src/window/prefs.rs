@@ -588,17 +588,27 @@ pub(crate) mod prefs_tests {
     #[test]
     fn test_settings_tab_definitions_and_app_init() {
         assert_eq!(SettingsTab::default(), SettingsTab::Appearance);
-        assert_eq!(SettingsTab::ALL.len(), 5);
+        assert_eq!(SettingsTab::ALL.len(), 6);
+        assert_eq!(SettingsTab::ALL.last(), Some(&SettingsTab::About), "About is the last tab");
 
         assert_eq!(SettingsTab::Appearance.label(), "🎨 Appearance");
         assert_eq!(SettingsTab::Camera.label(), "📷 Camera link");
         assert_eq!(SettingsTab::Editing.label(), "⚙ Editing & Compare");
         assert_eq!(SettingsTab::Files.label(), "📂 Backups & start-up");
         assert_eq!(SettingsTab::Definitions.label(), "📐 Camera support & web page");
+        assert_eq!(SettingsTab::About.label(), "ℹ About");
+        // each tab's symbol is one egui's built-in fonts draw (About's U+2139 is NotoEmoji's), not a look-alike letter
+        assert_eq!(SettingsTab::About.label().chars().next(), Some('\u{2139}'));
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |_| {});
+        for tab in SettingsTab::ALL {
+            assert!(ctx.fonts(|f| f.has_glyphs(&egui::FontId::proportional(14.0), tab.label())), "{tab:?}: {}", tab.label());
+        }
 
         for tab in SettingsTab::ALL {
             assert!(!tab.subtitle().is_empty());
         }
+        assert!(SettingsTab::About.subtitle().contains("version") && SettingsTab::About.subtitle().contains("Copy details"));
 
         let app = App::new(vec![], Prefs::default());
         assert_eq!(app.settings_tab, SettingsTab::Appearance);

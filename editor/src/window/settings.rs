@@ -1,5 +1,5 @@
-//! The Settings window, its Changes window, the About window and the status bar's version, and the switches that only
-//! Expert mode shows.
+//! The Settings window, its About tab among the others, its Changes window, the status bar's version (a click opens
+//! Settings on the About tab), and the switches that only Expert mode shows.
 
 use crate::*;
 
@@ -16,8 +16,8 @@ pub(crate) fn build_hash() -> Option<&'static str> {
     }
 }
 
-/// The editor's version as Settings, About, the web page and a crash log give it: `version_short` and, for a build
-/// made in a git checkout, its commit ("0.2.0 (build 1a2b3c4)").
+/// The editor's version as the status bar's hover, Changes, About's Copy details, the web page and a crash log give
+/// it: `version_short` and, for a build made in a git checkout, its commit ("0.2.0 (build 1a2b3c4)").
 pub(crate) fn version_words() -> String {
     match build_hash() {
         None => version_short().to_string(),
@@ -30,11 +30,12 @@ pub(crate) fn window_title() -> String {
     format!("Camset Editor {}", version_short())
 }
 
-/// What the welcome page and the foot of Settings say, in the window and on the web page alike.
+/// What the welcome page and Settings > About say, in the window and on the web page alike.
 pub(crate) const NOT_SONY: &str = "Independent project; not affiliated with or endorsed by Sony.";
 
 /// The project's pages, from Cargo.toml (`repository`, `homepage`; mkdocs.yml names the same, a test holds them
-/// together): About links to them, in the window and on the web page, and problems are reported on the issues page.
+/// together): Settings > About links to them, in the window and on the web page, and problems are reported on the
+/// issues page.
 pub(crate) const PROJECT_URL: &str = env!("CARGO_PKG_REPOSITORY");
 pub(crate) const DOCS_URL: &str = env!("CARGO_PKG_HOMEPAGE");
 pub(crate) const ISSUES_URL: &str = concat!(env!("CARGO_PKG_REPOSITORY"), "/issues");
@@ -93,25 +94,25 @@ pub(crate) fn system_name(os: &str, text: &str) -> String {
     }
 }
 
-/// The third-party licences button of Settings' foot and of About: it opens the licences page the packages carry in
-/// the browser, and says so greyed out in a build that has none.
+/// The third-party licences button of Settings > About: it opens the licences page the packages carry in the browser,
+/// and says so greyed out in a build that has none.
 fn licences_button(ui: &mut egui::Ui) {
     let licences = licences_page();
     let (label, hover) = match &licences {
         Some(p) => ("Third-party licences", format!("The licences of the crates and fonts built into the editor, in your browser ({})", shown_path(p))),
         None => ("Third-party licences: not in a development build", "The editor's packages carry the licences page (THIRD_PARTY_LICENSES.html); a build of your own has it once cargo about writes it into editor/target/dist (see editor/about.toml).".to_string()),
     };
-    if ui.add_enabled(licences.is_some(), egui::Button::new(RichText::new(label).small())).on_hover_text(&hover).on_disabled_hover_text(&hover).clicked() {
+    if ui.add_enabled(licences.is_some(), egui::Button::new(label)).on_hover_text(&hover).on_disabled_hover_text(&hover).clicked() {
         if let Some(p) = &licences { open_in_file_manager(p); }
     }
 }
 
-/// What changed, release by release (CHANGELOG.md), built into the program: Settings > Changes shows it.
+/// What changed, release by release (CHANGELOG.md), built into the program: Settings > About > Changes shows it.
 pub(crate) const CHANGELOG: &str = include_str!("../../../CHANGELOG.md");
 
-/// The changelog as Settings > Changes shows it: (kind, text), kind 2 a release's heading ("## …"), 3 a part's
-/// ("### …"), 1 a point ("- …", its following lines joined), 0 a paragraph. Markdown's marks are taken out: code's
-/// backticks, a link's address (its words stay), and the title.
+/// The changelog as Settings > About > Changes shows it: (kind, text), kind 2 a release's heading ("## …"), 3 a
+/// part's ("### …"), 1 a point ("- …", its following lines joined), 0 a paragraph. Markdown's marks are taken out:
+/// code's backticks, a link's address (its words stay), and the title.
 pub(crate) fn changelog_blocks(md: &str) -> Vec<(u8, String)> {
     fn plain(t: &str) -> String {
         let mut out = String::new();
@@ -158,6 +159,25 @@ pub(crate) fn changelog_blocks(md: &str) -> Vec<(u8, String)> {
     blocks
 }
 
+/// The Settings window's id: its title's, as egui gives a window by default, named here so that what brings it to the
+/// front and unfolds it (`open_about`) finds the same window. Its fold state is egui's, under `.with("collapsing")`.
+pub(crate) fn settings_window_id() -> egui::Id {
+    egui::Id::new("Settings")
+}
+
+/// The Changes window's id, as `settings_window_id` names Settings'.
+pub(crate) fn changes_window_id() -> egui::Id {
+    egui::Id::new("Changes")
+}
+
+/// Whether Settings is over Changes, by their places in egui's order of the windows (back to front): Changes opens
+/// over Settings, and the status bar's version (`open_about`) or a click brings Settings back over it. Changes is
+/// taken to be on top when it cannot be told (either not drawn yet).
+pub(crate) fn settings_over_changes(ctx: &egui::Context) -> bool {
+    let at = |id: egui::Id| ctx.memory(|m| m.layer_ids().position(|l| l == egui::LayerId::new(egui::Order::Middle, id)));
+    matches!((at(settings_window_id()), at(changes_window_id())), (Some(s), Some(c)) if s > c)
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub(crate) enum SettingsTab {
     #[default]
@@ -166,15 +186,18 @@ pub(crate) enum SettingsTab {
     Editing,
     Files,
     Definitions,
+    /// Which editor this is, the last tab: the status bar's version opens Settings on it (`open_about`).
+    About,
 }
 
 impl SettingsTab {
-    pub(crate) const ALL: [SettingsTab; 5] = [
+    pub(crate) const ALL: [SettingsTab; 6] = [
         SettingsTab::Appearance,
         SettingsTab::Camera,
         SettingsTab::Editing,
         SettingsTab::Files,
         SettingsTab::Definitions,
+        SettingsTab::About,
     ];
 
     pub(crate) fn label(&self) -> &'static str {
@@ -184,6 +207,8 @@ impl SettingsTab {
             SettingsTab::Editing => "⚙ Editing & Compare",
             SettingsTab::Files => "📂 Backups & start-up",
             SettingsTab::Definitions => "📐 Camera support & web page",
+            // U+2139, which egui's built-in emoji font (NotoEmoji) draws
+            SettingsTab::About => "ℹ About",
         }
     }
 
@@ -194,6 +219,7 @@ impl SettingsTab {
             SettingsTab::Editing => "How Compare and Memories start, and Expert mode for mapping work.",
             SettingsTab::Files => "The copies kept before saving or writing, what opens at start, and recent files.",
             SettingsTab::Definitions => "The files that tell the editor what each camera's settings mean, and the web page for a phone or tablet.",
+            SettingsTab::About => "Which editor this is: its version, the system it runs on, the cameras it works with, the licence, the project's pages, what changed, and Copy details for a message about a problem.",
         }
     }
 }
@@ -264,7 +290,16 @@ impl App {
         let mut reload = false;
         let mut open_file: Option<PathBuf> = None;
         let mut cards = CameraCardsOutcome::default();
+        let id = settings_window_id();
+        if std::mem::take(&mut self.raise_settings) && open {
+            // opened from the status bar's version: over the other windows, and unfolded if its title bar folded it
+            ctx.move_to_top(egui::LayerId::new(egui::Order::Middle, id));
+            let mut fold = egui::collapsing_header::CollapsingState::load_with_default_open(ctx, id.with("collapsing"), true);
+            fold.set_open(true);
+            fold.store(ctx);
+        }
         egui::Window::new("Settings")
+            .id(id)
             .open(&mut open)
             .resizable(true)
             .default_width(860.0)
@@ -563,35 +598,18 @@ impl App {
                                     }
                                 });
                             }
+
+                            SettingsTab::About => {
+                                self.about_cards(ui);
+                            }
                         }
                     });
 
+                // where the settings are kept; the version, the not-affiliated line, Changes and the licences are the
+                // About tab's alone (the status bar's version, under this window, opens it)
                 ui.separator();
-                ui.horizontal(|ui| {
-                    ui.label(RichText::new("⚙ Settings are kept on this computer").small().color(tone::weak(ui.visuals())))
-                        .on_hover_text(format!("Preferences file: {}", shown_path(&Prefs::path())));
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.label(RichText::new(NOT_SONY).small().color(tone::weak(ui.visuals())));
-                    });
-                });
-                // About, as a button of its own: Windows and Linux have no menu bar, and macOS's application menu opens
-                // the system's own About panel, so this (and the status bar's version) is where About is found; then
-                // what changed, the licences of what it is built from, and which editor this is
-                ui.horizontal(|ui| {
-                    if ui.button(RichText::new("About Camset Editor…").small())
-                        .on_hover_text("The version, the system it runs on, the cameras it works with, the licence and the project's pages, and Copy details for a message about a problem").clicked() {
-                        self.show_about = true;
-                    }
-                    if ui.link(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
-                        self.show_changes = true;
-                    }
-                    licences_button(ui);
-                    // cut short rather than over the buttons when the window is narrow (About has it whole)
-                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.add(egui::Label::new(RichText::new(format!("Camset Editor {}", version_words())).small().color(tone::weak(ui.visuals()))).truncate())
-                            .on_hover_text("The version, and the commit it was built from when built from the project's repository");
-                    });
-                });
+                ui.label(RichText::new("⚙ Settings are kept on this computer").small().color(tone::weak(ui.visuals())))
+                    .on_hover_text(format!("Preferences file: {}", shown_path(&Prefs::path())));
             });
         self.show_settings = open;
         if reload {
@@ -608,11 +626,11 @@ impl App {
         }
     }
 
-    /// Settings > Changes: the changelog built into this editor, release by release.
+    /// Settings > About > Changes: the changelog built into this editor, release by release.
     pub(crate) fn changes_window(&mut self, ctx: &egui::Context) {
         if !self.show_changes { return; }
         let mut open = true;
-        egui::Window::new("Changes").open(&mut open).resizable(true).default_width(640.0).default_height(520.0).show(ctx, |ui| {
+        egui::Window::new("Changes").id(changes_window_id()).open(&mut open).resizable(true).default_width(640.0).default_height(520.0).show(ctx, |ui| {
             ui.label(RichText::new(format!("Camset Editor {}", version_words())).color(tone::weak(ui.visuals())));
             ui.add_space(4.0);
             egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
@@ -629,13 +647,21 @@ impl App {
         self.show_changes = open;
     }
 
+    /// Settings, open on its About tab: what the status bar's version opens, the one version that can be clicked. Open
+    /// already, it comes over the other windows and unfolds (`raise_settings`).
+    pub(crate) fn open_about(&mut self) {
+        self.show_settings = true;
+        self.settings_tab = SettingsTab::About;
+        self.raise_settings = true;
+    }
+
     /// The status bar's version, at its right end: the editor's name and short version, weak and small, the whole
-    /// version on hover; a click opens About.
+    /// version on hover; a click opens Settings on its About tab (`open_about`).
     pub(crate) fn version_label(&mut self, ui: &mut egui::Ui) {
         let words = format!("Camset Editor {}", version_short());
         if ui.add(egui::Button::new(RichText::new(words).small().color(tone::weak(ui.visuals()))).frame(false))
-            .on_hover_text(format!("Camset Editor {}\nClick for About", version_words())).clicked() {
-            self.show_about = true;
+            .on_hover_text(format!("Camset Editor {}\nClick for Settings > About", version_words())).clicked() {
+            self.open_about();
         }
     }
 
@@ -661,18 +687,15 @@ impl App {
         format!("Camset Editor {}\nSystem: {}\nWorks with: {cameras}\n{}", version_words(), system_words(), self.helper_words())
     }
 
-    /// About Camset Editor: which editor this is (its version, and the commit of a build made from the repository),
-    /// the system it runs on, the cameras it works with, whether the camera link program is there, the licence, the
-    /// project's pages, and the ways to what changed, to the licences and to a copy of these details for a message
-    /// about a problem. Settings' About Camset Editor… button and the status bar's version open it, on every system;
-    /// macOS's application menu opens the system's own About panel instead (the Info.plist's name, version and
-    /// copyright line).
-    pub(crate) fn about_window(&mut self, ctx: &egui::Context) {
-        if !self.show_about { return; }
-        let mut open = true;
-        egui::Window::new("About Camset Editor").open(&mut open).resizable(false).collapsible(false).default_width(380.0).show(ctx, |ui| {
-            let weak = tone::weak(ui.visuals());
-            ui.label(RichText::new("Camset Editor").strong().size(20.0));
+    /// Settings > About, the last tab: which editor this is (its version, and the commit of a build made from the
+    /// repository), the system it runs on, the cameras it works with, whether the camera link program is there, the
+    /// licence, the project's pages, and the ways to what changed, to the licences and to a copy of these details for a
+    /// message about a problem. The status bar's version opens Settings on it (`open_about`), on every system: Windows
+    /// and Linux have no menu bar, and macOS's application menu opens the system's own About panel instead (the
+    /// Info.plist's name, version and copyright line).
+    pub(crate) fn about_cards(&mut self, ui: &mut egui::Ui) {
+        let weak = tone::weak(ui.visuals());
+        Self::settings_card(ui, "Camset Editor", |ui| {
             ui.label(format!("Version {}", version_short()));
             if let Some(hash) = build_hash() {
                 ui.label(format!("Build {hash}")).on_hover_text("The commit it was built from, in the project's repository");
@@ -685,10 +708,21 @@ impl App {
             }
             ui.label(RichText::new(self.helper_words()).color(weak))
                 .on_hover_text("The program that reads and writes a camera over USB or the network; without it the editor opens files only");
-            ui.add_space(6.0);
-            ui.label(RichText::new(licence_words()).small().color(weak));
-            ui.label(RichText::new(NOT_SONY).small().color(weak));
-            ui.add_space(6.0);
+            ui.add_space(4.0);
+            ui.horizontal_wrapped(|ui| {
+                let details = self.about_details();
+                if ui.button("Copy details").on_hover_text(format!("Copies these lines, to paste into a message about a problem:\n{details}")).clicked() {
+                    ui.ctx().copy_text(details);
+                    self.status = "About's details copied, to paste into a message about a problem".into();
+                }
+                if ui.button("Changes").on_hover_text("What changed, release by release").clicked() {
+                    self.show_changes = true;
+                    // an open Changes that Settings covers comes back over it (a new one is on top anyway)
+                    ui.ctx().move_to_top(egui::LayerId::new(egui::Order::Middle, changes_window_id()));
+                }
+            });
+        });
+        Self::settings_card(ui, "The project's pages", |ui| {
             // in the browser (egui opens a link with the system's own handler)
             ui.horizontal_wrapped(|ui| {
                 // a link whose words can be selected is told to a screen reader as plain text (egui 0.31's text
@@ -698,19 +732,12 @@ impl App {
                     ui.hyperlink_to(words, url).on_hover_text(format!("{what}\n{url}"));
                 }
             });
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                if ui.button(RichText::new("Changes").small()).on_hover_text("What changed, release by release").clicked() {
-                    self.show_changes = true;
-                }
-                licences_button(ui);
-                let details = self.about_details();
-                if ui.button(RichText::new("Copy details").small()).on_hover_text(format!("Copies these lines, to paste into a message about a problem:\n{details}")).clicked() {
-                    ui.ctx().copy_text(details);
-                    self.status = "About's details copied, to paste into a message about a problem".into();
-                }
-            });
         });
-        self.show_about = open;
+        Self::settings_card(ui, "Licence", |ui| {
+            ui.label(RichText::new(licence_words()).color(weak));
+            ui.label(RichText::new(NOT_SONY).color(weak));
+            ui.add_space(4.0);
+            licences_button(ui);
+        });
     }
 }

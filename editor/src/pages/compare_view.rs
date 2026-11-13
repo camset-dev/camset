@@ -769,13 +769,16 @@ pub(crate) mod screen_reader_tests {
         assert!(said.iter().all(|(_, l)| !l.trim().is_empty()));
     }
 
-    /// The status bar names the editor and its short version at its right end, on the welcome page and with a file open;
-    /// a click on it, or on Settings' About Camset Editor… button, opens About, which gives the version (and the build,
-    /// when there is one), the system, the cameras it works with by firmware, the camera link program, the licence, the
-    /// project's pages as links, and the ways to the changes, the licences and a copy of the details.
+    /// The status bar names the editor and its short version at its right end, on the welcome page (the only version
+    /// there) and with a file open. It is the one version that can be clicked, wherever the window is (the welcome page,
+    /// a file open, any Settings tab, Changes open), and a click opens Settings on its last tab, About, whether Settings
+    /// was closed or open on another tab. About gives the version (and the build, when there is one), the system, the cameras it works with by
+    /// firmware, the camera link program, the licence, the project's pages as links, and the ways to the changes, the
+    /// licences and a copy of the details. There is no About window and no other way in: Settings' foot names where the
+    /// settings are kept, and none of About's lines or buttons.
     #[test]
     fn the_status_bar_version_opens_about() {
-        use egui::accesskit::{Action as Ak, ActionRequest};
+        use egui::accesskit::{Action as Ak, ActionRequest, NodeId};
         let label = format!("Camset Editor {}", version_short());
         let mut app = App::new(vec![], Prefs::default());
         let said = spoken(&mut app);
@@ -797,21 +800,30 @@ pub(crate) mod screen_reader_tests {
             }
             out.platform_output.accesskit_update.map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().or(n.value()).map(|l| (*id, n.role(), l.to_string()))).collect::<Vec<_>>()).unwrap_or_default()
         };
+        let click = |target: NodeId| vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target, data: None })];
+        // what can be clicked and names the version: a button or a link whose words hold it
+        let versions = |said: &[(NodeId, Role, String)]| said.iter().filter(|(_, r, l)| matches!(r, Role::Button | Role::Link) && l.contains(version_short())).map(|(id, _, l)| (*id, l.clone())).collect::<Vec<_>>();
+        let only_the_bar = |v: &[(NodeId, String)]| v.len() == 1 && v[0].1 == label;
         let _ = run(&mut app, vec![]);
         let said = run(&mut app, vec![]);
-        assert!(said.iter().any(|(_, _, l)| *l == format!("Version {}", version_words())), "the welcome page's line: {said:?}");
+        // on the welcome page the status bar's version is the only one: no line of its own in the middle
+        assert!(!said.iter().any(|(_, _, l)| l.contains(version_short()) && *l != label), "on the welcome page: {said:?}");
+        assert!(only_the_bar(&versions(&said)), "on the welcome page: {said:?}");
         app.open_sample_now();
         let _ = run(&mut app, vec![]);
         let said = run(&mut app, vec![]);
-        let hit: Vec<_> = said.iter().filter(|(_, r, l)| *l == label && *r == Role::Button).collect();
-        assert_eq!(hit.len(), 1, "with a file open, one version in the status bar: {said:?}");
-        assert!(!app.show_about);
-        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: hit[0].0, data: None })]);
-        assert!(app.show_about, "a click on the version opens About");
+        let hit = versions(&said);
+        assert!(only_the_bar(&hit), "with a file open, one version, the status bar's: {said:?}");
+        // the window's own Changes buttons (a page of the menu is named so), told apart from About's below
+        let changes_elsewhere: Vec<NodeId> = said.iter().filter(|(_, r, l)| *r == Role::Button && l == "Changes").map(|(id, _, _)| *id).collect();
+        assert!(!app.show_settings);
+        let _ = run(&mut app, click(hit[0].0));
+        assert!(app.show_settings && app.settings_tab == SettingsTab::About, "a click on the version opens Settings on About");
         let _ = run(&mut app, vec![]);
         let said = run(&mut app, vec![]);
         let shows = |name: &str| said.iter().any(|(_, _, l)| l == name);
-        assert!(shows("About Camset Editor") && shows(&format!("Version {}", version_short())) && shows(NOT_SONY), "{said:?}");
+        assert!(shows(SettingsTab::About.label()) && shows(SettingsTab::About.subtitle()), "{said:?}");
+        assert!(shows("Camset Editor") && shows(&format!("Version {}", version_short())) && shows(NOT_SONY), "{said:?}");
         assert_eq!(build_hash().is_some_and(|h| shows(&format!("Build {h}"))), build_hash().is_some(), "{said:?}");
         assert!(shows(&format!("System: {}", system_words())) && system_words().contains(std::env::consts::ARCH), "{said:?}");
         let models = app.defs.works_with();
@@ -822,45 +834,110 @@ pub(crate) mod screen_reader_tests {
         for b in ["Changes", "Copy details"] {
             assert!(said.iter().any(|(_, r, l)| l == b && *r == Role::Button), "{b}: {said:?}");
         }
-        assert!(!shows("Copy version"), "one copy button: {said:?}");
+        assert!(!shows("Copy version") && !shows("About Camset Editor") && !shows("About Camset Editor…"), "one copy button, no About window or button: {said:?}");
         assert!(said.iter().any(|(_, r, l)| l.starts_with("Third-party licences") && *r == Role::Button), "{said:?}");
         // the project's pages, links a screen reader names as links; one clicked asks for it in the browser
         for (words, _, _) in ABOUT_LINKS {
             assert!(said.iter().any(|(_, r, l)| l == words && *r == Role::Link), "{words}: {said:?}");
         }
         let report = said.iter().find(|(_, r, l)| l == "Report a problem" && *r == Role::Link).unwrap().0;
-        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: report, data: None })]);
+        let _ = run(&mut app, click(report));
         assert_eq!(opened.borrow().as_slice(), [ISSUES_URL.to_string()]);
         // Copy details copies the details and says so
         let copy = said.iter().find(|(_, r, l)| l == "Copy details" && *r == Role::Button).unwrap().0;
-        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: copy, data: None })]);
+        let _ = run(&mut app, click(copy));
         assert!(app.status.starts_with("About's details copied"), "{}", app.status);
         assert_eq!(copied.borrow().as_slice(), [app.about_details()]);
-        // About's Changes opens the changelog
-        let changes: Vec<_> = said.iter().filter(|(_, r, l)| l == "Changes" && *r == Role::Button).collect();
-        let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: changes[0].0, data: None })]);
-        assert!(app.show_changes && app.show_about);
-        // Settings' About Camset Editor… button opens About too, whichever tab is open; the version is beside it
+        // About's Changes opens the changelog, over Settings, whose version line is words only
+        let changes: Vec<_> = said.iter().filter(|(id, r, l)| l == "Changes" && *r == Role::Button && !changes_elsewhere.contains(id)).collect();
+        assert_eq!(changes.len(), 1, "{said:?}");
+        let _ = run(&mut app, click(changes[0].0));
+        assert!(app.show_changes && app.show_settings && app.settings_tab == SettingsTab::About);
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        assert!(said.iter().any(|(_, r, l)| *r == Role::Label && *l == format!("Camset Editor {}", version_words())), "Changes names the version: {said:?}");
+        assert!(only_the_bar(&versions(&said)), "with Changes open: {said:?}");
+        // every tab: the status bar's version is still the one that can be clicked, and it turns Settings to About; the
+        // foot says where the settings are kept, and nothing of About's is outside the About tab
+        app.show_changes = false;
         for tab in SettingsTab::ALL {
-            (app.show_about, app.show_changes, app.show_settings, app.settings_tab) = (false, false, true, tab);
+            (app.show_settings, app.settings_tab) = (true, tab);
             let _ = run(&mut app, vec![]);
             let said = run(&mut app, vec![]);
-            let about: Vec<_> = said.iter().filter(|(_, r, l)| l == "About Camset Editor…" && *r == Role::Button).collect();
-            assert_eq!(about.len(), 1, "{tab:?}: {said:?}");
-            // the whole version as words (a label: the status bar's short one is a button, so it cannot stand in)
-            let foot_version = |said: &[(egui::accesskit::NodeId, Role, String)]| said.iter().any(|(_, r, l)| *r == Role::Label && *l == format!("Camset Editor {}", version_words()));
-            assert!(foot_version(&said), "{tab:?}: {said:?}");
-            let _ = run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target: about[0].0, data: None })]);
-            assert!(app.show_about, "{tab:?}: Settings' button opens About");
-            if tab == SettingsTab::Definitions {
-                // and it is the foot's: gone with Settings closed, while the status bar and About stay (a closed window
-                // fades out for a few frames of egui's own clock, a sixtieth of a second each here)
-                app.show_settings = false;
-                for _ in 0..12 { let _ = run(&mut app, vec![]); }
-                let said = run(&mut app, vec![]);
-                assert!(!foot_version(&said) && said.iter().any(|(_, r, l)| *r == Role::Button && *l == label), "{said:?}");
+            let hit = versions(&said);
+            assert!(only_the_bar(&hit), "{tab:?}: {said:?}");
+            assert!(said.iter().any(|(_, r, l)| *r == Role::Label && l == "⚙ Settings are kept on this computer"), "{tab:?}: the foot: {said:?}");
+            assert!(!said.iter().any(|(_, _, l)| l.starts_with("About Camset Editor")), "{tab:?}: no About button or window: {said:?}");
+            let about = tab == SettingsTab::About;
+            let changes = said.iter().filter(|(id, r, l)| l == "Changes" && *r == Role::Button && !changes_elsewhere.contains(id)).count();
+            assert_eq!(changes, usize::from(about), "{tab:?}: Changes is About's alone: {said:?}");
+            for only in [NOT_SONY, "Copy details", "Report a problem"] {
+                assert_eq!(said.iter().any(|(_, _, l)| l == only), about, "{tab:?}: {only}: {said:?}");
             }
+            assert_eq!(said.iter().any(|(_, _, l)| l.starts_with("Third-party licences")), about, "{tab:?}: {said:?}");
+            assert!(!said.iter().any(|(_, r, l)| *r == Role::Label && *l == format!("Camset Editor {}", version_words())), "{tab:?}: no version in the foot: {said:?}");
+            let _ = run(&mut app, click(hit[0].0));
+            assert!(app.show_settings && app.settings_tab == SettingsTab::About, "{tab:?}: the version turns Settings to About");
         }
+    }
+
+    /// Settings > About > Changes is the window on top of Settings: Esc closes it first, then Settings. The status bar's
+    /// version brings Settings, open already, over the other windows (Changes among them, which Esc then leaves for
+    /// the next press) and unfolds it when its title bar folded it.
+    #[test]
+    fn esc_closes_changes_first_and_the_version_raises_settings() {
+        use egui::accesskit::{Action as Ak, ActionRequest};
+        use egui::collapsing_header::CollapsingState;
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let ctx = egui::Context::default();
+        ctx.enable_accesskit();
+        let mut frame = eframe::Frame::_new_kittest();
+        let mut run = |app: &mut App, events: Vec<egui::Event>| {
+            let out = ctx.run(egui::RawInput { events, ..Default::default() }, |ctx| app.update(ctx, &mut frame));
+            out.platform_output.accesskit_update.map(|t| t.nodes.iter().filter_map(|(id, n)| n.label().map(|l| (*id, n.role(), l.to_string()))).collect::<Vec<_>>()).unwrap_or_default()
+        };
+        let esc = || vec![egui::Event::Key { key: egui::Key::Escape, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }];
+        (app.show_settings, app.settings_tab, app.show_changes) = (true, SettingsTab::About, true);
+        let _ = run(&mut app, vec![]);
+        let _ = run(&mut app, esc());
+        assert!(!app.show_changes && app.show_settings, "Esc closes Changes, over Settings, first");
+        let _ = run(&mut app, esc());
+        assert!(!app.show_settings, "then Settings");
+        // Settings > About > Changes, then the version: Settings over Changes, so Esc closes Settings first
+        let click = |target| vec![egui::Event::AccessKitActionRequest(ActionRequest { action: Ak::Click, target, data: None })];
+        let version = |said: &[(egui::accesskit::NodeId, Role, String)]| said.iter().find(|(_, r, l)| *r == Role::Button && *l == format!("Camset Editor {}", version_short())).expect("the status bar's version").0;
+        (app.show_settings, app.settings_tab, app.show_changes) = (true, SettingsTab::About, true);
+        let _ = run(&mut app, vec![]);
+        let said = run(&mut app, vec![]);
+        assert!(!settings_over_changes(&ctx), "Changes opens over Settings");
+        let _ = run(&mut app, click(version(&said)));
+        let _ = run(&mut app, vec![]);
+        assert!(settings_over_changes(&ctx), "the version brings Settings over Changes");
+        let _ = run(&mut app, esc());
+        assert!(!app.show_settings && app.show_changes, "Esc closes Settings, on top, and leaves Changes");
+        let _ = run(&mut app, esc());
+        assert!(!app.show_changes, "then Changes");
+        // Settings open on another tab, the Messages window over it, then folded by its title bar
+        let settings = egui::LayerId::new(egui::Order::Middle, settings_window_id());
+        let messages = egui::LayerId::new(egui::Order::Middle, egui::Id::new("Messages"));
+        (app.show_settings, app.settings_tab, app.show_log) = (true, SettingsTab::Appearance, true);
+        let _ = run(&mut app, vec![]);
+        ctx.move_to_top(messages);
+        let _ = run(&mut app, vec![]);
+        assert_eq!(ctx.top_layer_id(), Some(messages), "Messages over Settings");
+        let fold = settings_window_id().with("collapsing");
+        let mut folded = CollapsingState::load_with_default_open(&ctx, fold, true);
+        folded.set_open(false);
+        folded.store(&ctx);
+        let said = run(&mut app, vec![]);
+        assert!(CollapsingState::load(&ctx, fold).is_some_and(|s| !s.is_open()), "Settings folded");
+        let _ = run(&mut app, click(version(&said)));
+        let _ = run(&mut app, vec![]);
+        assert!(app.show_settings && app.show_log && app.settings_tab == SettingsTab::About);
+        assert_eq!(ctx.top_layer_id(), Some(settings), "Settings over Messages");
+        assert!(CollapsingState::load(&ctx, fold).is_some_and(|s| s.is_open()), "Settings unfolded");
+        assert!(!app.raise_settings, "once");
     }
 
     /// About's Copy details is a short plain block for a message about a problem: the version and build, the system,

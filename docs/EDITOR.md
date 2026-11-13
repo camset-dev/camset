@@ -137,26 +137,27 @@ Settings > Appearance > Theme is "Follow the system" for a new user: the window 
 set, and changes when it does. Dark and Light keep it one way; preferences from before the choice keep the theme they
 had.
 
-The foot of Settings, on every tab, has the About Camset Editor… button and names the editor's version ("Camset
-Editor 0.2.0", with "(build 1a2b3c4)", the commit, for a build made from the repository). Changes beside it opens
-what changed, release by release (the project's `CHANGELOG.md`, built into the program), and Third-party licences
-opens the licences of the crates and fonts built into the editor in your browser (`THIRD_PARTY_LICENSES.html`, which
-the packages carry; a build of your own has it only once `cargo about` has written it). The web page's Settings name
-the same version.
-
-The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.0"), at the right end of the
-status bar, and on the welcome page in full. A click on the status bar's version, or Settings' About Camset Editor…
-button, opens About Camset Editor, on every system (Windows and Linux have no menu bar): the version and the build,
-the system the editor runs on (its name, its version on macOS and Linux, and the processor the program was built
-for), the cameras it works with by model and firmware (a definition you added says so), whether the camera link
-program is there, the licence and copyright line, links to the project page, the documentation and Report a problem,
-Changes, Third-party licences and Copy details. Copy details copies a short block for a message about a problem: the
+Settings > About, the last tab, says which editor this is: the version ("0.2.0") and, for a build made from the
+repository, the build (its commit, "1a2b3c4"), the system the editor runs on (its name, its version on macOS and
+Linux, and the processor the program was built for), the cameras it works with by model and firmware (a definition you
+added says so), whether the camera link program is there, the licence and copyright line, and links to the project
+page, the documentation and Report a problem. Copy details copies a short block for a message about a problem: the
 version and build, the system, the cameras and the camera link program, with no file, folder, user name or network
-address. The web page names the version at the right end of its status bar, on its welcome page and at the foot of
-Settings, whose About Camset Editor… button and Changes open the page's About and Changes; the status bar's version
-opens About too. The page's About has the window's lines, links and Copy details, from the editor; its Third-party
-licences is greyed out, as the licences page is on the editor's computer. On macOS the application menu's About
-Camset Editor is the system's own panel: the packaged app's name, version and copyright line, from its Info.plist.
+address. Changes opens what changed, release by release (the project's `CHANGELOG.md`, built into the program), and
+Third-party licences opens the licences of the crates and fonts built into the editor in your browser
+(`THIRD_PARTY_LICENSES.html`, which the packages carry; a build of your own has it only once `cargo about` has written
+it). The foot of Settings says only where the settings are kept.
+
+The version is in sight without Settings too: in the window's title ("Camset Editor 0.2.0") and at the right end of
+the status bar, the whole version (with the build) on hover. The status bar's version is the one that can be clicked,
+and it opens Settings on the About tab, on every system (Windows and Linux have no menu bar), bringing Settings over
+the other windows, unfolded, if it is open already; over Changes, Esc then closes Settings before Changes. The web
+page has the same: About is the last tab of its Settings, with the window's lines, links, Changes and Copy details,
+from the editor (its Third-party licences is greyed out, as the licences page is on the editor's computer), and the
+version at the right end of its status bar opens Settings on it. The page's windows stack by when they were opened or
+asked for, the newest at the top (under a question, which stays first), and Esc closes the one at the top. On macOS
+the application menu's About Camset Editor is the system's own panel: the packaged app's name, version and copyright
+line, from its Info.plist.
 
 The window describes itself to the computer's screen reader (VoiceOver, Narrator, Orca) through egui's AccessKit
 support: buttons, check boxes and lists by their words, and the controls that show none by a name of their own (the

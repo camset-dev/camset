@@ -78,8 +78,7 @@ impl App {
                 ui.label(RichText::new(format!("Works with: {}", models.join(", "))).color(tone::weak(ui.visuals())));
                 ui.label(RichText::new(NOT_SONY).small().color(tone::weak(ui.visuals())));
             }
-            // which editor this is, in full (the status bar gives it short; About has the rest)
-            ui.label(RichText::new(format!("Version {}", version_words())).small().color(tone::weak(ui.visuals())));
+            // which editor this is: the status bar's version, at its right end (a click opens Settings > About), alone
             if self.defs.shipped_dir.is_none() {
                 let looked: Vec<String> = self.defs.looked_in.iter().map(|d| shown_path(d)).collect();
                 ui.label(RichText::new("The camera definitions that come with the editor were not found, so no settings file can be read yet. Reinstall the editor, or add a definition in ⚙ Settings > Camera support & web page.").color(tone::bad(ui.visuals())))

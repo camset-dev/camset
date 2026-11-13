@@ -92,7 +92,7 @@ jobs:
         # one folder zipped, as the Linux tarball is one folder, so unpacking spills nothing loose: the program, the
         # camera definitions (each with its sample) in definitions/ beside it, where the editor looks for them, the
         # project's licence as LICENSE.txt (as on the macOS disk image; it opens with a double-click) and the
-        # licences page beside the program, where Settings > Third-party licences looks
+        # licences page beside the program, where Settings > About > Third-party licences looks
         # The program's version details are checked first: build.rs links them and the icon from one .res file, and a
         # build that could not make it only warns, so an exe without them would otherwise be zipped and released.
         # Windows shows no icon to a script (any exe gets one), so the details stand for both.

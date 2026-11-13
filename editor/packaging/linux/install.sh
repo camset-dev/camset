@@ -11,7 +11,7 @@ mkdir -p "$HOME/.local/bin" "$share" "$HOME/.local/share/applications" "$HOME/.l
 install -m 755 "$here/camset_editor" "$share/camset_editor"
 rm -rf "$share/definitions"
 cp -R "$here/definitions" "$share/definitions"
-# the licences beside the program too: Settings > Third-party licences opens the page from there
+# the licences beside the program too: Settings > About > Third-party licences opens the page from there
 for f in LICENSE THIRD_PARTY_LICENSES.html; do
   if [ -f "$here/$f" ]; then install -m 644 "$here/$f" "$share/$f"; fi
 done

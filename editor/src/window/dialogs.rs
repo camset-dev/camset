@@ -321,8 +321,8 @@ pub(crate) mod dialog_tests {
         assert!(words.starts_with(name), "{words}");
     }
 
-    /// Settings > Changes reads the changelog built in: releases and their parts as headings, each point whole (its
-    /// following lines joined), Markdown's marks taken out.
+    /// Settings > About > Changes reads the changelog built in: releases and their parts as headings, each point whole
+    /// (its following lines joined), Markdown's marks taken out.
     #[test]
     fn changes_from_the_changelog() {
         let md = "# Changelog\n\nWhat changed, newest first.\n\n## Unreleased\n\n### The editor\n\n- One point,\n  on two lines with `code`.\n- A [link](https://example.invalid/x) and [another](y.md).\n\n### The docs\n\n- Last.\n";

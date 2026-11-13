@@ -102,6 +102,9 @@ impl App {
             else if self.show_history { self.show_history = false; }
             else if self.show_backups { self.show_backups = false; }
             else if self.show_log { self.show_log = false; }
+            // Changes opens from Settings > About, over it, but the status bar's version brings Settings back over it:
+            // of the two, the one on top
+            else if self.show_changes && !(self.show_settings && settings_over_changes(ctx)) { self.show_changes = false; }
             else if self.show_settings { self.show_settings = false; }
             else if self.toast.is_some() { self.toast = None; }
             else if !self.search.is_empty() {

@@ -86,6 +86,8 @@ struct App {
     prefs: Prefs,
     show_settings: bool,
     settings_tab: SettingsTab,
+    /// Settings comes over the other windows, unfolded, at its next frame (`open_about`, the status bar's version).
+    raise_settings: bool,
     /// Snapshots of the edited file before each edit (undo) and after each undo (redo).
     undo: Vec<CamSet>,
     redo: Vec<CamSet>,
@@ -268,11 +270,8 @@ struct App {
     journal: recovery::Journal,
     /// Journals an earlier session left (it stopped with edits not saved), offered one at a time, newest first.
     recovered: Vec<recovery::Found>,
-    /// Settings > Changes: the changelog's window is open.
+    /// Settings > About > Changes: the changelog's window is open.
     show_changes: bool,
-    /// The About window is open (the status bar's version, or the About Camset Editor… button at the foot of Settings,
-    /// opens it).
-    show_about: bool,
 }
 
 impl App {
@@ -295,6 +294,7 @@ impl App {
             prefs,
             show_settings: false,
             settings_tab: SettingsTab::Appearance,
+            raise_settings: false,
             undo: Vec::new(),
             redo: Vec::new(),
             focus: Focus::Items,
@@ -395,7 +395,6 @@ impl App {
             journal: recovery::Journal::new(Self::recovery_dir()),
             recovered: recovery::list(&Self::recovery_dir(), &recovery::running),
             show_changes: false,
-            show_about: false,
         };
         app.web_start_pending = app.prefs.web_at_start;
         if let Ok(v) = std::env::var("CAMSET_VIEW") {
@@ -408,7 +407,7 @@ impl App {
                 "memories" => app.view = View::Memories,
                 "mymenu" => app.view = View::MyMenu,
                 "settings" => app.show_settings = true,
-                "about" => app.show_about = true,
+                "about" => app.open_about(),
                 "settings_definitions" => { app.show_settings = true; app.settings_tab = SettingsTab::Definitions; }
                 "settings_camera" => { app.show_settings = true; app.settings_tab = SettingsTab::Camera; }
                 "write" | "write_reading" | "history" | "backups" | "connect" | "statuslog" => app.view = View::Main,
@@ -675,7 +674,6 @@ impl eframe::App for App {
         self.unchecked_window(ctx);
         self.def_replace_window(ctx);
         self.recovery_window(ctx);
-        self.about_window(ctx);
         self.changes_window(ctx);
         self.unsaved_window(ctx);
         self.shortcuts(ctx);

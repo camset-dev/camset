@@ -41,8 +41,8 @@ downloaded editor works with the files on the card:
 Reading and writing the camera directly, without the card, needs the camera helper, which you build yourself
 ([The camera helper](#the-camera-helper)). Read the warning below before you load or write an edited file.
 [What the editor does](#what-the-editor-does) is further down; the whole guide is [docs/EDITOR.md](docs/EDITOR.md).
-Which version you have is at the foot of ⚙ Settings, with Changes (what changed, release by release) and
-Third-party licences; the web page's Settings show it too.
+Which version you have is at the right end of the status bar; a click on it opens ⚙ Settings > About, with the
+build, Changes (what changed, release by release) and Third-party licences. The web page has the same.
 
 ## Warning
 

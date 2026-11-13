@@ -289,7 +289,7 @@ impl App {
             "exposure" if self.schema.camera.exposure.is_none() => WebReply::error(409, "This camera's definition has no exposure page."),
             "exposure" => WebReply::json(self.web_exposure()),
             "changes" => WebReply::json(self.web_changes()),
-            // About's Changes: the changelog built into this editor, as the window's Changes shows it
+            // Settings > About > Changes: the changelog built into this editor, as the window's Changes shows it
             "changelog" => WebReply::json(json!({ "blocks": changelog_blocks(CHANGELOG) })),
             "read" if !idle => WebReply::error(409, "The editor is busy with the camera; wait for it to finish."),
             "read" => {
@@ -731,7 +731,7 @@ impl App {
             "status": self.page_status(),
             "prefs": self.web_prefs(),
             "settings_tabs": SettingsTab::ALL.iter().map(|t| [t.label(), t.subtitle()]).collect::<Vec<_>>(),
-            // the editor's version, as Settings shows it ("0.2.0 (build 1a2b3c4)"); its two parts are set below
+            // the editor's version in full ("0.2.0 (build 1a2b3c4)"), as the status bar's hover gives it; parts below
             "version": crate::version_words(),
             "row_hovers": self.web_row_hovers(),
             "history": self.undo.len(),
@@ -779,16 +779,16 @@ impl App {
         // set apart, as the object above is as large as the json! macro takes
         out["help_refused"] = self.schema.help_refused.iter().zip(self.schema.help_refusals())
             .map(|((p, _), text)| json!({ "file": file_name_of(&p.to_string_lossy()), "text": text })).collect();
-        // the version's two parts, for About and the status bar: the short version ("0.2.0") and the build's commit
-        // (null for a build made outside the repository)
+        // the version's two parts, for Settings > About and the status bar: the short version ("0.2.0") and the build's
+        // commit (null for a build made outside the repository)
         out["version_short"] = json!(version_short());
         out["build"] = json!(build_hash());
         out["about"] = self.web_about();
         out
     }
 
-    /// About's other lines, in the window's words (`about_window`): the system the editor runs on, whether the camera
-    /// link program is there, the licence, the project's pages, and the details Copy details copies.
+    /// Settings > About's other lines, in the window's words (`about_cards`): the system the editor runs on, whether
+    /// the camera link program is there, the licence, the project's pages, and the details Copy details copies.
     fn web_about(&self) -> Value {
         json!({
             "system": format!("System: {}", system_words()),
@@ -4605,8 +4605,10 @@ pub(crate) mod tests {
         assert!(!app.page_status().contains("http"));
     }
 
-    /// The welcome page, the foot of Settings and About say what the window's do, word for word: About's lines, links
-    /// and copied details come with the state, and the page draws them from there, with About a button of Settings' foot.
+    /// The welcome page and Settings > About say what the window's do, word for word: About's lines, links and copied
+    /// details come with the state, and the page draws them from there. About is Settings' last tab on the page as in
+    /// the window, the same tabs in the same order, and the status bar's version opens Settings on it; there is no
+    /// About window of its own, and Settings' foot has no way into About.
     #[test]
     fn the_page_has_the_windows_words() {
         let mut app = App::new(vec![], Prefs::default());
@@ -4619,7 +4621,21 @@ pub(crate) mod tests {
         assert_eq!(st["about"]["links"][2]["url"], ISSUES_URL);
         assert!(SCRIPT.contains("const a = s.about || {};") && SCRIPT.contains("(a.links || []).map") && SCRIPT.contains("copyText(a.details)"));
         assert!(SCRIPT.contains("rel: \"noopener noreferrer\""), "the project's pages open in a new tab, told nothing of the page");
-        assert!(SCRIPT.contains("onclick: () => openWindow(\"about\") }, \"About Camset Editor…\")"), "the page's Settings has About as a button too");
+        // the tabs the page draws, in the window's order, About the last; the page's SETTINGS_ABOUT is its place (read
+        // with LF line ends, as git checks the script out with CRLF on Windows)
+        let script = SCRIPT.replace("\r\n", "\n");
+        let tabs: Vec<(String, String)> = serde_json::from_value(st["settings_tabs"].clone()).unwrap();
+        assert_eq!(tabs, SettingsTab::ALL.iter().map(|t| (t.label().to_string(), t.subtitle().to_string())).collect::<Vec<_>>());
+        let about = SettingsTab::ALL.iter().position(|t| *t == SettingsTab::About).unwrap();
+        assert_eq!(about, SettingsTab::ALL.len() - 1, "About is the last tab");
+        assert!(script.contains(&format!("\nconst SETTINGS_ABOUT = {about};\n")), "the page's About tab is the window's");
+        assert!(script.contains("[settingsAppearance, () => cameraCards(\"settings\"), settingsEditing, settingsFiles, settingsDefinitions, settingsAbout][tab]"));
+        // the one way in from outside Settings: the status bar's version
+        assert_eq!(script.matches("openSettings(SETTINGS_ABOUT)").count(), 1);
+        assert!(script.contains("$(\"foot-version\").addEventListener(\"click\", (e) => {\n  e.stopPropagation();\n  openSettings(SETTINGS_ABOUT);\n});"));
+        for gone in ["openWindow(\"about\")", "drawAbout", "About Camset Editor…", "about: false"] {
+            assert!(!script.contains(gone), "no About window or button on the page: {gone}");
+        }
     }
 
     /// A note reaches the page in Expert mode only, as in the window; no evidence goes with it (the lean definition

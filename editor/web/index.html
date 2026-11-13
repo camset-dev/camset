@@ -676,6 +676,7 @@ td.mm-do button + button { margin-left: 4px; }
   <footer id="statusbar" title="Tap for the whole message"><span id="foot-file"></span><span id="edits" aria-live="polite">No edits</span><span class="vsep"></span><span id="status" role="status"></span><button id="foot-version" class="sel weak"></button></footer>
 </div>
 <div id="windows">
+  <!-- the questions first, where they stay; the windows after them move to the front as they are opened (`toFront`) -->
   <div id="backdrop" hidden></div>
   <section id="ask" class="window" hidden></section>
   <section id="send" class="window" hidden></section>
@@ -684,7 +685,6 @@ td.mm-do button + button { margin-left: 4px; }
   <section id="connect" class="window wide" hidden></section>
   <section id="backups" class="window" hidden></section>
   <section id="history" class="window" hidden></section>
-  <section id="about" class="window" hidden></section>
   <section id="changelog" class="window wide" hidden></section>
   <div id="mymenu" role="dialog" aria-label="My Menu" hidden></div>
   <div id="moremenu" class="popmenu" role="menu" aria-label="More" hidden></div>

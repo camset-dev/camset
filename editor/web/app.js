@@ -186,12 +186,12 @@ const xp = {
   reveal: null,                                               // a setting to bring into view once its tab is drawn
   expert: null,                                               // the Expert switch as the Menu column was drawn for
   rm: { unmapped: false, edited: false, open: new Set() },    // the record map's filters and unfolded records
-  windows: { backups: false, history: false, settings: false, connect: false, about: false, changelog: false },   // the windows open, by their element's id
+  windows: { backups: false, history: false, settings: false, connect: false, changelog: false },   // the windows open, by their element's id
   keys: {},                                                   // what each window was last drawn for
   backups: null, history: null, historyRev: null,             // the lists Backups and Edit history show
   changelog: null, changelogFailed: false,                    // the changelog the Changes window shows, and whether asking failed
   historyAsked: 0,                                            // the newest Edit history request; older answers are dropped
-  settingsTab: 0,                                             // the Settings tab shown
+  settingsTab: 0,                                             // the Settings tab shown (`SETTINGS_ABOUT` the last)
   folds: new Set(),                                           // the folding parts of the windows left open
   rowFolds: new Set(),                                        // the camera's rows folded in the "As on the camera" layout
   subFocus: null,                                             // the sub-choice opened from elsewhere, marked beside its option, by key
@@ -1304,8 +1304,7 @@ function welcome() {
         () => replaceAct("sample", {}, null, "Explore a sample", opening("the sample"), "Open the sample")) : null),
     s.works_with && s.works_with.length ? el("p", { class: "weak" }, `Works with: ${s.works_with.join(", ")}`) : null,
     el("p", { class: "small weak" }, s.not_sony),
-    // which editor this is, in full (the status bar gives it short; About has the rest)
-    s.version ? el("p", { class: "small weak" }, `Version ${s.version}`) : null,
+    // which editor this is: the status bar's version (a tap opens Settings > About), alone
     recent.length ? el("div", { class: "strong", style: { "margin-top": "24px" } }, "Recent files") : null,
     ...recent.map((r, i) => el("div", { style: { margin: "4px 0" } },
       el("a", { href: "#", title: r.path || r.name, style: { color: "var(--link)" }, onclick: (e) => { e.preventDefault(); openRecent(i); } }, r.name))));
@@ -3396,17 +3395,56 @@ function drawSend(j) {
     el("div", { class: "buttons" }, go, el("button", { onclick: close }, "Cancel")));
 }
 
-// --- the windows: Settings, Connect to the camera, Backups, Edit history, About and Changes ---
+// --- the windows: Settings (About is its last tab), Connect to the camera, Backups, Edit history and Changes, stacked
+// from the top by when they were opened, the newest first (`toFront`) ---
 
-/** Open one of the windows (`xp.windows`), with what it shows asked for afresh. */
+// Settings' About tab, the last: its place in the editor's `SettingsTab::ALL`, whose labels come as `settings_tabs`
+// (a test of the editor's holds the two together)
+const SETTINGS_ABOUT = 5;
+
+// the windows a question, Write and the Camera link report float in: they keep their place at the top of the stack
+const FIXED_WINDOWS = ["ask", "send", "report"];
+
+/** Put a window at the front of the stack, under the questions (`FIXED_WINDOWS`), and on top of `dialogs`, so that
+ *  Escape closes it first. #windows does not scroll and each window is as tall as the screen at most, so the windows
+ *  stack by when they were opened or asked for, the newest first: one opened later never lands out of sight below
+ *  another. Moved in the page itself, not only in its look, so Tab and a screen reader meet the windows as they are
+ *  seen; the focus stays where it was, and where it goes back to when the window closes is unchanged. */
+function toFront(box) {
+  const stack = $("windows");
+  const first = [...stack.children].find((n) => n.tagName === "SECTION" && !FIXED_WINDOWS.includes(n.id));
+  if (first && first !== box) {
+    const had = document.activeElement;
+    stack.insertBefore(box, first);
+    if (had && box.contains(had) && document.activeElement !== had) had.focus({ preventScroll: true });
+  }
+  const i = dialogs.findIndex((d) => d.box === box);
+  if (i >= 0 && !dialogs[i].modal) {
+    const [d] = dialogs.splice(i, 1);
+    const modal = dialogs.findIndex((x) => x.modal);
+    dialogs.splice(modal < 0 ? dialogs.length : modal, 0, d);
+  }
+}
+
+/** Open one of the windows (`xp.windows`), with what it shows asked for afresh, at the front of the stack (`toFront`):
+ *  a window open already comes to the front too. */
 function openWindow(name) {
   xp.windows[name] = true;
   xp.keys[name] = null;
+  toFront($(name));
   if (name === "connect" || (name === "settings" && xp.settingsTab === 1)) loadCameraCards();
   if (name === "backups") loadBackups();
   if (name === "history") xp.historyRev = null;
   if (name === "changelog") loadChangelog();
   drawWindows();
+}
+
+/** Open Settings on one of its tabs (an index into `settings_tabs`), or turn the open Settings to it: drawn here, as
+ *  its tab buttons draw it, since `drawWindows` leaves a window alone while one of its text fields has the focus. */
+function openSettings(tab) {
+  xp.settingsTab = tab;
+  openWindow("settings");
+  drawSettings();
 }
 
 function closeWindow(name) {
@@ -3450,7 +3488,7 @@ function drawWindows() {
     xp.cameraKey = ck;
     if (xp.windows.connect || (xp.windows.settings && xp.settingsTab === 1)) loadCameraCards();
   }
-  const draw = { backups: drawBackups, history: drawHistory, settings: drawSettings, connect: drawConnect, about: drawAbout, changelog: drawChangelog };
+  const draw = { backups: drawBackups, history: drawHistory, settings: drawSettings, connect: drawConnect, changelog: drawChangelog };
   for (const name of Object.keys(xp.windows)) {
     const box = $(name);
     if (!xp.windows[name]) {
@@ -3509,28 +3547,25 @@ function deskButton(label, where) {
   return el("span", { title: where }, el("button", { disabled: true }, label));
 }
 
-/** Settings, as the window's: its five tabs, each with its subtitle and cards. */
+/** Settings, as the window's: its six tabs, each with its subtitle and cards, About the last (`SETTINGS_ABOUT`). */
 function drawSettings() {
   const s = state;
   const tabs = s.settings_tabs || [];
-  const key = JSON.stringify([xp.settingsTab, s.prefs, camData(), !!s.job, s.recent, s.schemas, s.dirs, s.web_url, pageTheme(), pageDensity(), getFontScale(), session.token]);
+  const key = JSON.stringify([xp.settingsTab, s.prefs, camData(), !!s.job, s.recent, s.schemas, s.dirs, s.web_url, pageTheme(), pageDensity(), getFontScale(), session.token,
+    s.version, s.version_short, s.build, s.works_with, s.not_sony, s.about]);
   if (drawnFor("settings", key)) return;
   const tab = Math.max(0, Math.min(xp.settingsTab, tabs.length - 1));
-  const draw = [settingsAppearance, () => cameraCards("settings"), settingsEditing, settingsFiles, settingsDefinitions][tab] || (() => []);
+  const draw = [settingsAppearance, () => cameraCards("settings"), settingsEditing, settingsFiles, settingsDefinitions, settingsAbout][tab] || (() => []);
   fillWindow("settings", "Settings",
     el("div", { class: "set-tabs" }, ...tabs.map(([label], i) => selButton(i === tab, plain(label), () => { xp.settingsTab = i; if (i === 1) loadCameraCards(); drawSettings(); }))),
     el("hr"),
     el("div", { class: "small weak set-row" }, tabs[tab] ? tabs[tab][1] : ""),
     el("div", {}, ...draw()),
     el("hr"),
+    // where the settings are kept; the version, the not-affiliated line and Changes are the About tab's alone, as in
+    // the window
     el("div", { class: "set-foot small weak" },
-      el("span", { title: `Preferences file: ${s.prefs.prefs_path}` }, plain("⚙ Preferences")),
-      // About as a button of its own, as the window's Settings has it
-      el("button", { class: "small", title: "The version, the system the editor runs on, the cameras it works with, the licence and the project's pages, and Copy details for a message about a problem",
-        onclick: () => openWindow("about") }, "About Camset Editor…"),
-      el("button", { class: "small sel", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
-      el("span", { title: "The version, and the commit it was built from when built from the project's repository" }, `Camset Editor ${s.version || ""}`),
-      el("span", {}, s.not_sony)));
+      el("span", { title: `Preferences file: ${s.prefs.prefs_path}` }, plain("⚙ Preferences"))));
 }
 
 function settingsAppearance() {
@@ -3846,44 +3881,47 @@ function drawHistory() {
 }
 
 /** The status bar's version, at its right end, as the window's: the editor's name and short version (the version alone
- *  on a phone), the whole version on hover; a click or a tap opens About. */
+ *  on a phone), the whole version on hover; a click or a tap opens Settings on its About tab. */
 function drawVersion(s) {
   const b = $("foot-version");
   const short = s.version_short || s.version || "";
   if (b.dataset.key === `${short}|${s.version}`) return;
   b.dataset.key = `${short}|${s.version}`;
   b.replaceChildren(el("span", { class: "vname" }, "Camset Editor "), short);
-  b.title = `Camset Editor ${s.version || short}\nClick for About`;
+  b.title = `Camset Editor ${s.version || short}\nClick for Settings > About`;
   b.setAttribute("aria-label", `Camset Editor ${short}`);
 }
 
-/** About Camset Editor, as the window's: which editor this is (its version, and the commit of a build made from the
+/** Settings > About, as the window's: which editor this is (its version, and the commit of a build made from the
  *  repository), the system the editor runs on, the cameras it works with, whether the camera link program is there,
  *  the licence, the project's pages, and the ways to what changed, to the licences (a page on the editor's computer,
  *  which the desktop app opens) and to a copy of the details for a message about a problem. All of it is the editor's
  *  (`state.about`, `web_about`), so the page and the window say the same. */
-function drawAbout() {
+function settingsAbout() {
   const s = state;
   const a = s.about || {};
-  if (drawnFor("about", JSON.stringify([s.version, s.version_short, s.build, s.works_with, s.not_sony, a]))) return;
-  fillWindow("about", "About Camset Editor",
-    el("div", { class: "strong", style: { "font-size": "1.429rem" } }, "Camset Editor"),
-    el("p", {}, `Version ${s.version_short || s.version || ""}`),
-    s.build ? el("p", { title: "The commit it was built from, in the project's repository" }, `Build ${s.build}`) : null,
-    a.system ? el("p", { title: "The computer the editor runs on, and the processor the program was built for" }, a.system) : null,
-    s.works_with && s.works_with.length ? el("p", { class: "weak", title: "The cameras and firmware the editor has a definition for: built in, or added in Settings > Camera support & web page" }, `Works with: ${s.works_with.join(", ")}`) : null,
-    a.helper ? el("p", { class: "weak", title: "The program that reads and writes a camera over USB or the network; without it the editor opens files only" }, a.helper) : null,
-    a.licence ? el("p", { class: "small weak" }, a.licence) : null,
-    el("p", { class: "small weak" }, s.not_sony),
+  return [
+    setCard("Camset Editor",
+      el("p", {}, `Version ${s.version_short || s.version || ""}`),
+      s.build ? el("p", { title: "The commit it was built from, in the project's repository" }, `Build ${s.build}`) : null,
+      a.system ? el("p", { title: "The computer the editor runs on, and the processor the program was built for" }, a.system) : null,
+      s.works_with && s.works_with.length ? el("p", { class: "weak", title: "The cameras and firmware the editor has a definition for: built in, or added in Settings > Camera support & web page" }, `Works with: ${s.works_with.join(", ")}`) : null,
+      a.helper ? el("p", { class: "weak", title: "The program that reads and writes a camera over USB or the network; without it the editor opens files only" }, a.helper) : null,
+      el("div", { class: "buttons" },
+        a.details ? el("button", { title: `Copies these lines, to paste into a message about a problem:\n${a.details}`,
+          onclick: async () => toast(await copyText(a.details) ? "About's details copied, to paste into a message about a problem"
+            : "This browser did not let the page copy: select the lines above and copy them") }, "Copy details") : null,
+        el("button", { title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"))),
     // in a new tab, and the project's pages are not told which page sent the reader there
-    el("div", { class: "buttons about-links" }, ...(a.links || []).map((l) =>
-      el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", title: `${l.title}\n${l.url}` }, l.text))),
-    el("div", { class: "buttons" },
-      el("button", { class: "small", title: "What changed, release by release", onclick: () => openWindow("changelog") }, "Changes"),
-      deskButton("Third-party licences", "In the desktop app: About Camset Editor, or the foot of Settings, opens the licences page on the editor's computer"),
-      a.details ? el("button", { class: "small", title: `Copies these lines, to paste into a message about a problem:\n${a.details}`,
-        onclick: async () => toast(await copyText(a.details) ? "About's details copied, to paste into a message about a problem"
-          : "This browser did not let the page copy: select the lines above and copy them") }, "Copy details") : null));
+    setCard("The project's pages",
+      el("div", { class: "buttons about-links" }, ...(a.links || []).map((l) =>
+        el("a", { href: l.url, target: "_blank", rel: "noopener noreferrer", title: `${l.title}\n${l.url}` }, l.text)))),
+    setCard("Licence",
+      a.licence ? el("p", { class: "weak" }, a.licence) : null,
+      el("p", { class: "weak" }, s.not_sony),
+      el("div", { class: "buttons" },
+        deskButton("Third-party licences", "In the desktop app: Settings > About opens the licences page on the editor's computer"))),
+  ];
 }
 
 /** Put a text on the clipboard of the device the page is on: with the Clipboard API where the browser offers it (on a
@@ -4200,10 +4238,10 @@ $("side").addEventListener("scroll", stripEdges, { passive: true });
 $("statusbar").addEventListener("click", () => {
   if (matchMedia("(max-width: 699px)").matches) $("statusbar").classList.toggle("open");
 });
-// the status bar's version opens About, and leaves the status bar as it was
+// the status bar's version opens Settings on its About tab, and leaves the status bar as it was
 $("foot-version").addEventListener("click", (e) => {
   e.stopPropagation();
-  openWindow("about");
+  openSettings(SETTINGS_ABOUT);
 });
 
 // how the focus is reached (`focusOrigin`): the last key or tap before it moved. A tap or a click elsewhere also ends

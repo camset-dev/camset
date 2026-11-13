@@ -7,14 +7,13 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
-- The editor's version is easy to find: in the window's title, at the right end of the status bar, on the welcome
-  page and at the foot of Settings. About Camset Editor opens from the status bar's version and from the About Camset
-  Editor… button at the foot of Settings, on every tab, so it is found on Windows and Linux too, which have no menu
-  bar. It gives the version and build, the system the editor runs on, the cameras it works with by model and
-  firmware (one you added says so), whether the camera link program is there, the licence and copyright line, links
-  to the project page, the documentation and Report a problem, Changes, the third-party licences and Copy details,
-  which copies those lines for a message about a problem, with no file, folder, name or address of yours. The macOS
-  app's own About panel, in its application menu, shows its version and copyright line.
+- The editor's version is easy to find: in the window's title and at the right end of the status bar. Settings has an
+  About tab, the last, which the status bar's version opens on every system, so it is found on Windows and Linux too,
+  which have no menu bar. It gives the version and build, the system the editor runs on, the cameras it works with by
+  model and firmware (one you added says so), whether the camera link program is there, the licence and copyright
+  line, links to the project page, the documentation and Report a problem, Changes, the third-party licences and Copy
+  details, which copies those lines for a message about a problem, with no file, folder, name or address of yours. The
+  macOS app's own About panel, in its application menu, shows its version and copyright line.
 - The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
 - A Windows package joins the macOS and Linux ones: a zip for 64-bit Windows 10 and 11 on Intel or AMD. Unpack it
   anywhere and run `camset_editor.exe` in the folder it makes, with the camera definitions and the licences beside
@@ -33,10 +32,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The web page
 
-- The page names the editor's version at the right end of its status bar, on the welcome page and at the foot of
-  Settings. A click on the status bar's version, or on Settings' About Camset Editor… button, opens About Camset
-  Editor, with the window's lines, links and Copy details, and Changes, which shows what changed, release by release;
-  Settings' foot has Changes too. The third-party licences are opened from the desktop app.
+- The page names the editor's version at the right end of its status bar. Its Settings has the About tab too, which a
+  click on that version opens, with the window's lines, links and Copy details, and Changes, which shows what changed,
+  release by release. The third-party licences are opened from the desktop app.
+- The page's windows stack by when they were opened or asked for, the newest at the top, under a question, which stays
+  first: one opened while another is open (Changes from Settings > About, Settings from the status bar's version) is
+  never below it out of sight on a phone, and Escape closes it first.
 
 ### The definition viewer
 
