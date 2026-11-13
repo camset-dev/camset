@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10 (first kit)
 - **Status:** accepted
+- **Rule:** A run saves the camera's settings first and restores them at its end, checking nothing differs; it is
+  stopped with a STOP file, never killed with a dialog open.
 
 ## Context
 

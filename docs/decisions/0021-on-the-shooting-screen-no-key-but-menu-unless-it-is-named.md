@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-10
 - **Status:** accepted
+- **Rule:** On the shooting screen no key but MENU goes out unless the run names that key for that press, since there a
+  key does whatever the body assigns to it.
 
 ## Context
 

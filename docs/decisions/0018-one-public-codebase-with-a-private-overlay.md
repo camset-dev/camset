@@ -4,6 +4,8 @@
 - **Status:** accepted; trimmed 2026-11-08: its working notes moved to [the data files' page](../DATA_CONTRACTS.md)
   (the help files) and `kit/tools/check_public.py`'s docstring (what the guard refuses); its inventory of the
   maintainers' own files left the public record
+- **Rule:** All the code lives in one public repository; what must not be published is data, kept in `private/`, a
+  repository of its own beside the code and ignored by it.
 
 ## Context
 

@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Rule:** Settings are changed on the camera, never by editing a file: only files the camera itself wrote are uploaded
+  to it, checked by their bytes.
 
 ## Context
 

@@ -154,11 +154,11 @@ def docs_tree(tmp_path, monkeypatch):
     (d / "decisions").mkdir(parents=True)
     (d / "models").mkdir()
     (d / "decisions" / "0001-first.md").write_text(
-        "# 1. The first, with a | in it\n\n- **Date:** 2026-10 (first kit)\n- **Status:** accepted\n\n## Context\n",
-        encoding="utf-8")
+        "# 1. The first, with a | in it\n\n- **Date:** 2026-10 (first kit)\n- **Status:** accepted\n"
+        "- **Rule:** The first rule.\n\n## Context\n", encoding="utf-8")
     (d / "decisions" / "0002-second.md").write_text(
         "# 2. The second\n\n- **Date:** 2026-11-04\n- **Status:** accepted; amends [1](0001-first.md); carried out\n"
-        "  2026-11-06\n\n## Context\n", encoding="utf-8")
+        "  2026-11-06\n- **Rule:** The second rule, which runs on to a\n  second line.\n\n## Context\n", encoding="utf-8")
     (d / "decisions" / "index.md").write_text(
         f"# Decisions\n\nWritten by hand.\n\n{build_docs.DECISIONS_START}\nSTALE ROW\n{build_docs.DECISIONS_END}\n",
         encoding="utf-8")
@@ -175,30 +175,65 @@ def docs_tree(tmp_path, monkeypatch):
 def test_the_decisions_table_comes_from_the_records(docs_tree):
     text = build_docs.decisions_index()
     assert text.startswith("# Decisions\n\nWritten by hand.\n\n")                       # outside the markers: as written
-    assert "| 1 | [The first, with a \\| in it](0001-first.md) | 2026-10 (first kit) |" in text
-    assert "| 2 | [The second](0002-second.md) | 2026-11-04; carried out 2026-11-06 |" in text
+    assert "| 1 | [The first, with a \\| in it](0001-first.md) | The first rule. | 2026-10 (first kit) |" in text
+    assert ("| 2 | [The second](0002-second.md) | The second rule, which runs on to a second line. "
+            "| 2026-11-04; carried out 2026-11-06 |") in text
     assert "STALE ROW" not in text and text.endswith(build_docs.DECISIONS_END + "\n")
 
 
 def test_the_decisions_table_has_each_records_status(docs_tree):
     """The Status column: each record's Status line, its links' text without their targets, its asides in brackets
     and its "carried out" clause (the Date column's) left out, then whole clauses while they fit in STATUS_CHARS, with
-    "; …" for the rest; a first clause too long alone is cut after a whole word."""
+    "; …" for the rest; a first clause too long alone is cut after a whole word. The Rule line after it is not part
+    of it."""
     d = docs_tree / "docs" / "decisions"
     (d / "0003-third.md").write_text(
         "# 3. The third\n\n- **Date:** 2026-11-08\n- **Status:** accepted; amends [1](0001-first.md) and\n"
         "  [2](0002-second.md) (the second's rule, in brief); trimmed 2026-11-08: its working notes moved to\n"
-        "  [the guide](../GUIDE.md#a-part)\n\n## Context\n", encoding="utf-8")
+        "  [the guide](../GUIDE.md#a-part)\n- **Rule:** The third.\n\n## Context\n", encoding="utf-8")
     (d / "0004-fourth.md").write_text(
         "# 4. The fourth\n\n- **Date:** 2026-11-08\n- **Status:** superseded by a record that says at some length "
-        "why it had to go, and when\n\n## Context\n", encoding="utf-8")
+        "why it had to go, and when\n- **Rule:** The fourth.\n\n## Context\n", encoding="utf-8")
     text = build_docs.decisions_index()
-    assert "\n| # | Decision | Date | Status |\n|---|---|---|---|\n| 1 |" in text
-    assert "| 1 | [The first, with a \\| in it](0001-first.md) | 2026-10 (first kit) | accepted |\n" in text
-    assert "| 2 | [The second](0002-second.md) | 2026-11-04; carried out 2026-11-06 | accepted; amends 1 |\n" in text
-    assert "| 3 | [The third](0003-third.md) | 2026-11-08 | accepted; amends 1 and 2; … |\n" in text
+    assert "\n| # | Decision | The rule | Date | Status |\n|---|---|---|---|---|\n| 1 |" in text
+    assert "| 1 | [The first, with a \\| in it](0001-first.md) | The first rule. | 2026-10 (first kit) | accepted |\n" in text
+    assert ("| 2 | [The second](0002-second.md) | The second rule, which runs on to a second line. "
+            "| 2026-11-04; carried out 2026-11-06 | accepted; amends 1 |\n") in text
+    assert "| 3 | [The third](0003-third.md) | The third. | 2026-11-08 | accepted; amends 1 and 2; … |\n" in text
     cut = "superseded by a record that says at some length why it had…"
-    assert len(cut) <= build_docs.STATUS_CHARS and f"| 4 | [The fourth](0004-fourth.md) | 2026-11-08 | {cut} |\n" in text
+    assert len(cut) <= build_docs.STATUS_CHARS
+    assert f"| 4 | [The fourth](0004-fourth.md) | The fourth. | 2026-11-08 | {cut} |\n" in text
+
+
+def test_the_decisions_table_has_each_records_rule_in_a_sentence(docs_tree):
+    """The rule column: each record's Rule line, on one line, its links' text without their targets and a | in it
+    escaped. A record without one, or with one longer than RULE_CHARS, stops the build, saying which record and why,
+    so the table never shows a gap or a paragraph."""
+    d = docs_tree / "docs" / "decisions"
+    (d / "0003-third.md").write_text(
+        "# 3. The third\n\n- **Date:** 2026-11-08\n- **Rule:** As [decision 1](0001-first.md) says, a | b.\n"
+        "- **Status:** accepted\n\n## Context\n", encoding="utf-8")
+    assert "| 3 | [The third](0003-third.md) | As decision 1 says, a \\| b. | 2026-11-08 | accepted |\n" in (
+        build_docs.decisions_index())
+    (d / "0003-third.md").write_text("# 3. The third\n\n- **Date:** 2026-11-08\n- **Status:** accepted\n\n## Context\n",
+                                     encoding="utf-8")
+    with pytest.raises(SystemExit, match=r"0003-third\.md needs a '- \*\*Rule:\*\*' line"):
+        build_docs.decisions_index()
+    long = "A rule " + "that goes on " * 13 + "and on."
+    assert len(long) > build_docs.RULE_CHARS
+    (d / "0003-third.md").write_text(f"# 3. The third\n\n- **Date:** 2026-11-08\n- **Status:** accepted\n"
+                                     f"- **Rule:** {long}\n\n## Context\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match=rf"0003-third\.md: its Rule line is {len(long)} characters.*at most "
+                                         rf"{build_docs.RULE_CHARS}"):
+        build_docs.decisions_index()
+
+
+def test_every_decision_record_says_its_rule_in_one_short_sentence():
+    """The real records: each has its Rule line, within RULE_CHARS, and the table shows it."""
+    rows = build_docs.decision_rows()
+    assert len(rows) >= 22 and [r[0] for r in rows] == list(range(1, len(rows) + 1))
+    for n, _title, _name, rule, _when, _said in rows:
+        assert 0 < len(rule) <= build_docs.RULE_CHARS and rule.endswith("."), n
 
 
 def test_the_nav_lists_every_model_page(docs_tree):

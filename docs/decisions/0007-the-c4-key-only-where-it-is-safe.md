@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01 to 2026-11-03; amended 2026-11-06
 - **Status:** accepted; amended 2026-11-06 (below)
+- **Rule:** C4, the trash button, is sent only on menu, option, panel and editor screens, never in Playback or on the
+  shooting screen; C1-C3 and C5-C7 never.
 
 ## Context
 

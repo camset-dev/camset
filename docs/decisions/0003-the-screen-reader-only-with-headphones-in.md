@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Rule:** The camera's Screen Reader is turned on remotely only with headphones in and its volume at the lowest first,
+  and only with the owner's word each time.
 
 ## Context
 

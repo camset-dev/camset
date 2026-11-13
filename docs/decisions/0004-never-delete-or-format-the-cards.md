@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Rule:** No Format or Delete is ever sent remotely, and Playback > Delete is never opened: card actions are the
+  owner's, by hand.
 
 ## Context
 

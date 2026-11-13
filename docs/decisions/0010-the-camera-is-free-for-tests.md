@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10 (first kit)
 - **Status:** accepted
+- **Rule:** Camera tests run without asking; the owner is asked only for physical actions (switches, dials, cables) and
+  visual checks, and menu routes are tried first.
 
 ## Context
 

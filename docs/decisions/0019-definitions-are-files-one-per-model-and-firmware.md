@@ -4,6 +4,8 @@
 - **Status:** accepted; amends [11](0011-the-editor-s-schema-is-the-contract-and-it-only-grows.md); carried out
   2026-11-06; trimmed 2026-11-08: its working notes moved to [the editor's guide](../EDITOR.md#definitions) and
   [the data files' page](../DATA_CONTRACTS.md)
+- **Rule:** Camera definitions are files, one per model and firmware, never built into the editor: a camera mapped with
+  the kit works the same day, with no new release.
 
 ## Context
 

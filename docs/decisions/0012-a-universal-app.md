@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10
 - **Status:** accepted
+- **Rule:** The editor is for any owner of a supported camera: no filters, categories or features shaped to one owner's
+  workflow.
 
 ## Context
 

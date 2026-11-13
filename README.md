@@ -42,11 +42,14 @@ open today's camera definitions), and 0.2.0 has no Windows zip.
   ("Windows protected your PC"): click More info, then Run anyway. Where Windows 11's Smart App Control is on, it
   blocks an unsigned program outright, with no Run anyway. Both will be so until the project arranges code signing.
   The camera helper is in neither, as in the other packages ([The camera helper](#the-camera-helper)). The editor was
-  built and used on a Windows 11 PC; the downloaded zip and installer not yet tried.
+  built and used on a Windows 11 PC, and the installer, from a run of the release workflow, was tried there on
+  2026-11-13: it installed without administrator rights, upgraded over itself and uninstalled leaving your own files
+  as they were. The zip as downloaded is not yet tried.
 
-**Code signing policy:** the Windows downloads are not signed yet; the
-[code signing policy](https://camset-dev.github.io/camset/CODE_SIGNING_POLICY/) says what will be signed, and by
-whom, once the project's application for free code signing is accepted.
+**Code signing policy:** the Windows downloads are not signed. SignPath Foundation declined the project's application
+for free code signing for now, as the project is too new, and the project will apply again later; the
+[code signing policy](https://camset-dev.github.io/camset/CODE_SIGNING_POLICY/) says what would be signed, and by
+whom, once an application is accepted.
 
 Then open a settings file from your camera's card, or the built-in sample to look around without a camera. The
 downloaded editor works with the files on the card:

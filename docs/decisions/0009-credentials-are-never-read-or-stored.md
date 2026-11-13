@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10 (first kit)
 - **Status:** accepted
+- **Rule:** The camera's login lives only in a file the owner writes; the kit never types, reads, OCRs, screenshots or
+  stores a password, nor opens Access Authen. Info.
 
 ## Context
 

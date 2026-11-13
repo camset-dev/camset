@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted
+- **Rule:** For a proof, only the narrowest reset (Camera Settings Reset), the owner's file put back after; Initialize
+  and Reset Network Set. are never pressed.
 
 ## Context
 

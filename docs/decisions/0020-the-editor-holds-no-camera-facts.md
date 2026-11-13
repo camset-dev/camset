@@ -6,6 +6,8 @@
   2026-11-06; its example block and vocabulary corrected on 2026-11-06 (the ILCE-1M2's byte 0x38 is the video
   system, not a firmware digit); trimmed 2026-11-08: its working notes moved to
   [the data files' page](../DATA_CONTRACTS.md#the-container-block-file)
+- **Rule:** The editor knows nothing about any camera: every camera fact, the file's layout included, lives in the
+  definition, and a kind it does not know is refused.
 
 ## Context
 

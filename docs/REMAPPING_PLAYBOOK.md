@@ -247,8 +247,11 @@ right trade.
 **The readers and what each is good and bad at:**
 - **OCR** (Apple Vision, `kit/ocr`, local, about 0.1-0.3 s a frame): exact characters, numbers and
   punctuation. It reads icons as letters ("S&d", "MR", "(V)", "#") and confuses Latin with Cyrillic
-  look-alikes ("30р", "ОК"). It clips short words ("Aut") and merges neighbours ("15" for the ◂ and
-  the 5). **RapidOCR** (PaddleOCR's models on ONNX Runtime, every OS, about 0.2 s a frame) is
+  look-alikes ("30р", "ОК"), returns accented letters for an icon read as a letter and a Cyrillic ZE
+  for the 3 of PP3. It clips short words ("Aut") and merges neighbours ("15" for the ◂ and the 5), and
+  it drops short numbers, one and two digits, more often than it misreads them. Apple's recognition
+  changes with the system: since macOS 27.2 it misses a scale's end number on many Creative Look
+  frames. **RapidOCR** (PaddleOCR's models on ONNX Runtime, every OS, about 0.2 s a frame) is
   the second engine. It reads icons as letters less often but drops a letter now and then
   ("Create Still mage"). The page model counts the two as separate votes (`ocr`, `ocr2`), and on
   Windows and Linux RapidOCR is the first engine (`PORTING.md`).
@@ -256,9 +259,10 @@ right trade.
   `"readers"`: name, url, model, parallel): they read meaning and ignore icons, and they read turned
   screens. But they **invent answers on black or blank frames**: Framing Stabilizer's black preview
   frame became "Auto", titled White Balance. They also drop marks ("Spot S" for "Spot: S") and
-  sometimes answer with the icon's text. This project used Qwen3.8 27B (`RedHatAI/Qwen3.8-27B-INT4`),
-  INT4 on a GPU server through vLLM (8 parallel, about 1 s a frame), plus the same model 4-bit
-  through omlx on the Mac as the third reader.
+  sometimes answer with the icon's text, and a question can make them read another thing on the
+  screen: a button, the screen's title, a neighbouring row. This project used Qwen3.8 27B
+  (`RedHatAI/Qwen3.8-27B-INT4`), INT4 on a GPU server through vLLM (8 parallel, about 1 s a frame),
+  plus the same model 4-bit through omlx on the Mac as the third reader.
 - **Claude** (`kit/camkit/claude_reader.py`, through the Anthropic Messages API): a reader entry
   with `"kind": "anthropic"`, for example
   `{"name": "claude", "kind": "anthropic", "model": "claude-opus-5-5", "parallel": 4, "effort": "medium"}`.
@@ -280,8 +284,9 @@ third only when no local one answered). One that does not answer is skipped for 
 error: a local reader that answered stands in for it, and a role left with none goes unanswered for the run, its
 questions taken as no answer at once. With no reader answering, or the second reader not answering and no local
 reader to stand in, the run stops there (`kit/tools/reader_check.py` asks the same with no camera; the quickstart's
-[Choosing a reader](QUICKSTART.md#choosing-a-reader)). On 2026-11-13 a session ran with no reader answering (the
-remote one timed out, the local one answered every question with HTTP 507), each question going on with OCR alone,
+[Choosing a reader](QUICKSTART.md#choosing-a-reader)). The same check stops the run when an OCR engine's name is one
+the kit does not know: it knows `"apple"` and `"rapidocr"`, and refuses any other name, under which Apple Vision would
+run and vote twice. On 2026-11-13 a session ran with no reader answering (the remote one timed out, the local one answered every question with HTTP 507), each question going on with OCR alone,
 and nothing said so. When the second reader will not connect (at the start, or a server on another machine switched
 off during the run, 2026-11-06), the next local reader that answers stands in for the rest of the run, never a paid
 one; `kit/page_model.py --vlm --reader NAME` names one outright. A reader that fails during the run is said
@@ -333,6 +338,48 @@ trial) into `readings.jsonl`, which the report takes as their `vlm`.
 - Answers are cached by image, prompt and model (`runs/<model>_fw<fw>/_cache/vlm`), so re-reads are free. A new
   model reads everything again.
 - Run page and option reading off the camera loop, while the camera does something else.
+
+**The one reading rule comes in by stages.** [Decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)
+says the rule and why; `kit/camkit/reading.py`'s docstrings say how a reading is cleaned and how two readings are
+compared. The table above is how the kit reads today: about a hundred and fifty places call OCR directly, some twenty
+helpers ask the reader, each with its own fallback, and eight tables mend look-alike letters, each a little
+differently. Each stage is tested on its own, and changes what a run decides only once the one before it has been
+measured.
+
+- **In place since 2026-11-13, with no run deciding or pressing differently:** the rule's building blocks in
+  `camkit.reading` (the one cleaning, the doubts, the comparison by kind, what the first two votes make of a reading,
+  the count of independent votes, and `read()`, one reading by the rule: the fresh frame, the third vote, the guards'
+  refusals, every vote recorded), with OCR, the readers and the third reader's model each asked in one place. Nothing
+  calls `read()` yet. The eight tables still mend as they did; the tests say, table by table, where the one cleaning
+  agrees with each and where it differs, so that the next stage's changes are known before they are made.
+  `kit/tools/reader_census.py` replays the rule over runs already made (proof lines, the readers' answers already
+  given, page models) and counts, per kind of screen, the readings it would doubt, the reader calls it would add, what
+  it would keep or refuse, and what a third vote by the second OCR engine would settle where a run kept that engine's
+  reading (the page models do, the proof lines do not). It writes nothing in the runs, and its counts are for the
+  owner's terminal (`--json` gives them as one object, to send to the maintainer when asked). A test lists the modules
+  that still read the screen by themselves; the list only gets shorter. The start check above asks every reader a
+  real question and checks the OCR engines' names.
+- **The current stage for a plain OCR reading the reader contradicts:** it is recorded in the proof and stands. It
+  becomes a vote like any other once each kind of screen's question to the reader is fixed and the disagreement rate
+  is measured low. This stage was put to the owner for confirmation; it is not a final rule. Until then a plain
+  reading that is another option's own text (a point lost whole, "F11" for F1.1) stands even where the reader reads
+  the right option, which is one reason a contradicted plain reading is to become a vote.
+- **Next, after the census:** `camkit.match.key` and `page_model.key_text` take the one cleaning, and the other tables
+  go. Finding a row must first leave out the icon OCR reads as letters in front of a row's label, as
+  `page_model.same_text` does, or the reader would be asked about most rows for nothing.
+- **Then, site by site, one change each:** finding a row asks the reader before taking the closest reading; a Picture
+  Profile is entered by its name with the digits' look-alikes read (PP3); one OCR match with a doubt needs the reader's
+  agreement; a look's number needs the reader to agree with OCR or with the marker, never to override both; side
+  lists, checklists, the White Balance grid and table cells read through the rule; every proof line carries its
+  `eyes`. Then the provers, `kit/provers/pp_reset_run.py` last. Then the guards, which may only add refusals: the
+  never-open check asks the reader on any doubt, not only on an empty bar, and Enter on a notice judges the reader's
+  reading too. Then the start of a run (`--ocr-only` to run without a reader on purpose; `kit/tiebreak.py` with one
+  reader), the batch tools (pass 1's carousels and grids ask on a doubt), and this section, the quickstart and the
+  porting notes, rewritten for the rule.
+- **Not before they are measured:** agreement as a gate on every proof frame (on some screens the reader's question
+  answers something else than the option: checklists, number fields, Creative Look panels, axes, star ratings; each
+  needs a better question first), a confidence floor for OCR, Apple's recognition languages set to English, and new
+  names for labels already recorded, which only the owner's word changes (proofs are keyed by their labels).
 
 ## 6. The proof, and how runs are shaped
 

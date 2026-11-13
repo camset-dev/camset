@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted
+- **Rule:** Each decision is one dated record here, in context, decision and consequences; a changed decision gets a new
+  record that supersedes the old one.
 
 ## Context
 

@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10 (first kit); Auto Power OFF Temp. allowed 2026-11-02
 - **Status:** accepted
+- **Rule:** USB, Language, NTSC/PAL, Area/Date and network identity are changed by the owner's hand, never remotely;
+  Auto Power OFF Temp. may be changed remotely.
 
 ## Context
 

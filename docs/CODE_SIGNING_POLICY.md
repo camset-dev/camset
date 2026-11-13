@@ -1,11 +1,12 @@
 # Code signing policy
 
-**Status: not accepted yet.** The project is applying to SignPath Foundation for free code signing. No Camset program
-is signed yet; this page says what will apply once the application is accepted.
+**Status: not accepted.** SignPath Foundation declined the project's application for free code signing for now
+(2026-11: the project is too new), and the project will apply again later. No Camset program is signed; this page says
+what would apply once an application is accepted.
 
 <!-- maintainer, once accepted: make the status line "Status: accepted on <date>; signed from <version>." and the line
 below "Free code signing provided by SignPath.io, certificate by SignPath Foundation." -->
-Free code signing will be provided by [SignPath.io](https://about.signpath.io/), certificate by
+Free code signing would be provided by [SignPath.io](https://about.signpath.io/), certificate by
 [SignPath Foundation](https://signpath.org/).
 
 ## What is signed
@@ -16,11 +17,11 @@ Two Windows files of each release on the project's [Releases page](https://githu
   and the installer installs;
 - the installer, `camset-editor-<version>-windows-x64-setup.exe`, which releases carry from the one after 0.2.1.
 
-Both are signed only when the release workflow,
+Both would be signed only when the release workflow,
 [`.github/workflows/editor-release.yml`](https://github.com/camset-dev/camset/blob/main/.github/workflows/editor-release.yml),
 built them on GitHub's own runners from a version tag (`v<version>`), after that workflow's tests passed. The
 workflow refuses a pushed tag whose commit is not on `main`, before it builds anything; that check is against
-mistakes, and a run started by hand skips it (such a run publishes nothing). Signing itself will be limited, in the
+mistakes, and a run started by hand skips it (such a run publishes nothing). Signing itself would be limited, in the
 project's SignPath settings, to this repository's release workflow run on a version tag.
 
 Nothing else is signed: no program built on anyone's own computer, not the macOS or Linux packages, not the

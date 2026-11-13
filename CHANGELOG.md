@@ -17,10 +17,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The project
 
 - The docs site has a code signing policy (Reference > Code signing policy), linked from the README's and the docs
-  home page's download parts: what will be signed once SignPath Foundation accepts the project's application for free
-  code signing (the editor's Windows program and its installer, built from a release tag by the release workflow on
-  GitHub's runners), who approves it, and that the editor sends nothing over a network unless asked. Nothing is signed
-  yet.
+  home page's download parts: what would be signed once SignPath Foundation accepts the project for free code signing
+  (the editor's Windows program and its installer, built from a release tag by the release workflow on GitHub's
+  runners), who approves it, and that the editor sends nothing over a network unless asked. Nothing is signed yet.
+- SignPath Foundation declined the project's application for free code signing for now (2026-11: the project is too
+  new): no Camset program is signed, the project will apply again later, and the code signing policy says so.
 - The release workflow builds only a tag on a commit of `main`: a tag on any other commit, or one pushed before `main`
   was, stops it before anything is built, with a message that says what to do (push `main`, then re-run the job). Its
   builds and tests, and the packaging scripts', take the crates `editor/Cargo.lock` names (`--locked`), or stop.
@@ -160,6 +161,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - The editor's guide says plainly that the camera login file holds the passwords in plain text, protected only by the
   file's permissions, and names the two things there for developers: the camera address taken from a clone's
   `private/config.json` at start, and `CAMSET_NETTEST=1`.
+- Decision 22, on when OCR alone is trusted and when the reader is asked, is shortened to the rule and why; its detail
+  moved to the playbook's section 5 (the stages the rule comes in by) and to `kit/camkit/reading.py` (how two
+  readings are compared). The decisions index gives each decision's rule in one sentence, from a Rule line in each
+  record.
 
 ## 0.2.1 (2026-11-13)
 

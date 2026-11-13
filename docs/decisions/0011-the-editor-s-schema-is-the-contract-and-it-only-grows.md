@@ -5,6 +5,8 @@
   definition file per model and firmware, its shape `schemas/definition.schema.json`) and
   [20](0020-the-editor-holds-no-camera-facts.md) (inside `camera.file` a kind the editor does not know refuses the
   definition)
+- **Rule:** The contract between kit and editor only grows: the kit adds fields first, and the editor ignores fields it
+  does not know and catches up later.
 
 ## Context
 

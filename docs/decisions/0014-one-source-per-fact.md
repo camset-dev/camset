@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted; its docs builder superseded by [17](0017-the-docs-are-built-with-zensical.md)
+- **Rule:** Each fact is edited in one place; documents are rendered from their sources, and the few generated files
+  that are committed are regenerated before each commit.
 
 ## Context
 

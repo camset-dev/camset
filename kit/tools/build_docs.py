@@ -32,7 +32,8 @@ Committed because other tools read them as files:
                                          compiler
   kit/common/never_touch.h               never_touch_h: the buttons and camera properties camlink and the camera
                                          helper never send, from kit/camkit/safety.py
-  docs/decisions/index.md, its table     decisions_index: each record's number, title, date and status, from the record
+  docs/decisions/index.md, its table     decisions_index: each record's number, title, rule, date and status, from the
+                                         record
   mkdocs.yml, the nav's model pages      mkdocs_nav: one entry per docs/models/<model>_fw<fw>.md
 and, local only, runs/<model>_fw<fw>/_viewer/index.html (kit/tools/proof_viewer.py). STATUS, MEMORY_MAP, the model appendix's
 measured block and the data-contract tables are not committed: the docs site renders them from these sources
@@ -399,6 +400,7 @@ DECISIONS_END = "<!-- end of the table -->"
 
 
 STATUS_CHARS = 60          # the decisions table's Status column: at most this many characters, of whole clauses
+RULE_CHARS = 160           # a record's Rule line, the table's "The rule" column: one plain sentence of at most this many
 
 
 def status_cell(said: str) -> str:
@@ -421,33 +423,49 @@ def status_cell(said: str) -> str:
     return cell + "…" if clauses else ""
 
 
+def header_line(text: str, name: str) -> str:
+    """A record's header line '- **<name>:** ...' as one line (it may run on, indented, until a blank line or the
+    next '- ' line), its links' text without their targets; "" when the record has none."""
+    m = re.search(rf"^- \*\*{name}:\*\*(.*?)(?:\n\s*\n|\n- )", text, re.M | re.S)
+    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", " ".join((m.group(1) if m else "").split()))
+
+
 def decision_rows() -> list:
-    """(number, title, file name, date, status) of every record in docs/decisions/, from its own heading, Date line
-    and Status line; a record whose Status says it was carried out later says so beside its date. The status is the
-    Status line as status_cell shortens it."""
+    """(number, title, file name, rule, date, status) of every record in docs/decisions/, from its own heading, Date
+    line, Rule line and Status line; a record whose Status says it was carried out later says so beside its date. The
+    rule is the Rule line as written, one plain sentence of at most RULE_CHARS characters (a record without one, or
+    with a longer one, stops the build); the status is the Status line as status_cell shortens it."""
     out = []
     for p in sorted((DOCS / "decisions").glob("[0-9][0-9][0-9][0-9]-*.md"), key=lambda p: p.name):
         text = p.read_text(encoding="utf-8")
+        where = p.relative_to(ROOT).as_posix()
         head = re.search(r"^# (\d+)\. (.+)$", text, re.M)
         date = re.search(r"^- \*\*Date:\*\* (.+)$", text, re.M)
         if not head or not date:
-            raise SystemExit(f"{p.relative_to(ROOT).as_posix()} needs a '# N. Title' heading and a '- **Date:**' line")
-        status = re.search(r"^- \*\*Status:\*\*(.*?)(?:\n\s*\n|\n- )", text, re.M | re.S)
-        said = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", " ".join((status.group(1) if status else "").split()))
+            raise SystemExit(f"{where} needs a '# N. Title' heading and a '- **Date:**' line")
+        rule = header_line(text, "Rule")
+        if not rule:
+            raise SystemExit(f"{where} needs a '- **Rule:**' line beside its Date and Status: the decision in one plain "
+                             f"sentence, which the decisions table shows")
+        if len(rule) > RULE_CHARS:
+            raise SystemExit(f"{where}: its Rule line is {len(rule)} characters, and the decisions table takes at most "
+                             f"{RULE_CHARS}: say the decision in one shorter sentence (the record says the rest)")
+        said = header_line(text, "Status")
         done = re.search(r"carried out\s+(\d{4}-\d{2}-\d{2})", said)
         when = date.group(1).strip() + (f"; carried out {done.group(1)}" if done else "")
-        out.append((int(head.group(1)), head.group(2).strip(), p.name, when, status_cell(said)))
+        out.append((int(head.group(1)), head.group(2).strip(), p.name, rule, when, status_cell(said)))
     return out
 
 
 def decisions_index(doc=None) -> str:
-    """docs/decisions/index.md with its table written from the records: number, title, date and status (each edited
-    once, in its record: docs/decisions/0014)."""
+    """docs/decisions/index.md with its table written from the records: number, title, the rule in a sentence, date
+    and status (each edited once, in its record: docs/decisions/0014)."""
     p = DOCS / "decisions" / "index.md"
-    rows = "".join(f"| {n} | [{esc(title)}]({name}) | {esc(when)} | {esc(said)} |\n"
-                   for n, title, name, when, said in decision_rows())
+    rows = "".join(f"| {n} | [{esc(title)}]({name}) | {esc(rule)} | {esc(when)} | {esc(said)} |\n"
+                   for n, title, name, rule, when, said in decision_rows())
     return between(p.read_text(encoding="utf-8"), DECISIONS_START, DECISIONS_END,
-                   "\n| # | Decision | Date | Status |\n|---|---|---|---|\n" + rows + "\n", "docs/decisions/index.md")
+                   "\n| # | Decision | The rule | Date | Status |\n|---|---|---|---|---|\n" + rows + "\n",
+                   "docs/decisions/index.md")
 
 
 NAV_START = "# the model pages: written by kit/tools/build_docs.py from docs/models/*.md; add a page there, not here"

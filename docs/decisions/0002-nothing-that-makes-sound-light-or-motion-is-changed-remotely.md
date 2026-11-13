@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10 (first kit)
 - **Status:** accepted
+- **Rule:** Settings that make sound, light or motion (beeps, lamps, flash, lens motors) are changed by hand only; the
+  owner may approve one harmless change at a time.
 
 ## Context
 

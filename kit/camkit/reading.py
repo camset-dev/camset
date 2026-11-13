@@ -11,7 +11,8 @@
                                           doubt (or always, for a press or a proof), a fresh frame and a third vote
                                           when they disagree, and what stands (Reading, with every Vote cast)
 
-In plain words (the decision record says it in full):
+In plain words (the decision record says why, and docs/REMAPPING_PLAYBOOK.md's section 5 the stages it comes in by;
+how two readings are compared, by the kind of thing read, is agree()'s docstring and those of the functions it names):
   1. One cleaning for every reading (canonical): compatibility forms, Cyrillic, Greek and accented look-alikes become
      the Latin letters they are drawn as, every dash a hyphen, every run of spacing one space; case kept. The camera's
      menus are in English (docs/CAMERA_SUPPORT.md), so a non-Latin or accented letter is always a misread. The raw
@@ -44,16 +45,23 @@ In plain words (the decision record says it in full):
      voted on which frame and which agreed (Reading.votes, Reading.agreed, Reading.evidence).
   6. Guards keep their own rule and may only add refusals: every eye's reading on every frame is judged, the raw
      reading beside its canonical one and never the canonical alone (Reading.texts), and any one refusing refuses; any
-     two eyes that read differently refuse, and no vote settles that; a guard is never read again on a fresh frame for
-     a better answer. A guard refuses what no eye can read, a doubt the reader does not answer, and a lone reader's
-     reading that no second, independent vote names too.
+     two eyes that read differently refuse, and no vote settles that (a third vote never outvotes a refusal); a guard
+     is never read again on a fresh frame for a better answer. A guard refuses what no eye can read, a doubt the reader
+     does not answer, and a lone reader's reading that no second, independent vote names too.
   7. A reader is required: it is never asked about a black frame, and with the reader unreachable a plain reading goes
      on, marked as OCR's alone, while a doubtful one is refused ("reader needed"); no other check stands in for it.
 
 What is in place (2026-11-13): these functions, their tests (kit/tests/test_reading.py) and the measuring tool
-kit/tools/reader_census.py, which replays doubts(), agree(), outcome() and tally() over runs already made. No caller
-reads through this module yet: camkit.match, page_model.key_text, camkit.safety and the other look-alike tables still
-compare as they did, and every run decides and presses as before. The callers move onto it site by site once the
+kit/tools/reader_census.py, which replays doubts(), agree(), outcome() and tally() over runs already made. The tests
+hold the comparison both ways on the a1 II's definition: no two options of one setting agree, by any of these rules,
+with their setting's options or without; no option with its digits read as look-alikes (every character the kit takes
+for a digit, at every digit, one and two at once) names, or agrees with, another option of its setting; and every
+option, written as readers and OCR write it (Cyrillic look-alikes, a stop after it, doubled or dropped spaces, another
+case, a ring or a bullet before it, the plus-minus zero's and the seconds mark's other forms, a space between a letter
+and a digit), names itself and agrees with itself, except where that writing is also another option's ("0 4\"" where
+the setting holds 0.4"; with no options, a zero and a space before a digit, and an I before a bare zero): there false
+agreement loses, and the test lists each such case with its reason. No caller reads through this module yet: camkit.match, page_model.key_text, camkit.safety and the other look-alike tables still compare as
+they did, and every run decides and presses as before. The callers move onto it site by site once the
 census has measured what that changes; the tests already say where canonical differs from each old table.
 
 The eyes go through one seam each, so that a test fakes them in one place (kit/tests/conftest.py, eyes):
@@ -475,9 +483,10 @@ def _variants(text: str) -> tuple:
     before a digit is a radio ring or a point read as a space ("0 4\"": 4" or 0.4"); an I or thin stroke before a zero
     with no digit or point after it is a 1 or the plus-minus sign ("I0 EV": 10 EV or the plus-minus zero); an o glued
     after a digit is a ring or a 0 ("1/25o": 1/25 or 1/250); an O or o glued before a capital and "&" or "+" is a ring
-    or a letter ("OS&Q Record Setting": S&Q Record Setting with a ring). Where the options hold two of them by exact
-    names the reading names neither (an exact name outweighs a loose likeness). Without options such a reading agrees
-    with nothing (agree)."""
+    or a letter ("OS&Q Record Setting": S&Q Record Setting with a ring). Where the options hold one of them the reading
+    names it; where they hold two of them by exact names the reading names neither (an exact name outweighs a loose
+    likeness), and the reader settles it. Without options such a reading agrees with nothing (agree). A zero glued to a
+    digit ("04\"") is none of these: its digits run together (_digit_runs), so it names no option."""
     u, out = _unring(text), [text]
     m = re.match(r"0\s+(?=\d)", u)
     if m:

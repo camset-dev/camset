@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-03
 - **Status:** accepted; supersedes the builder named in [14](0014-one-source-per-fact.md)
+- **Rule:** The docs site is built with Zensical from mkdocs.yml; MkDocs, Material for MkDocs and mkdocs-macros are no
+  longer used.
 
 ## Context
 

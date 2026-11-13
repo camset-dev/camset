@@ -2,6 +2,8 @@
 
 - **Date:** 2026-11-01
 - **Status:** accepted; how, since 2026-11-03: [18](0018-one-public-codebase-with-a-private-overlay.md)
+- **Rule:** The camera's own help text is Sony's: kept for private use and never published; the proof viewer, which
+  shows it, stays local.
 
 ## Context
 

@@ -2,6 +2,8 @@
 
 - **Date:** 2026-10-29
 - **Status:** accepted
+- **Rule:** The definition and the docs hold names and meanings only, never the owner's values: two owners who map the
+  same model and firmware get the same definition.
 
 ## Context
 
