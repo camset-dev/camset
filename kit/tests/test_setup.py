@@ -498,7 +498,9 @@ def test_the_ocr_helper_is_built_when_its_source_is_newer(tmp_path, builder):
     kitsetup.step_ocr(env, False)
     assert builder.calls == [] and env.rows[-1].state == "OK"
     assert env.rows[-1].what == "up to date (kit/ocr/build/ocr, newer than kit/ocr/ocr.swift)"
-    os.utime(src, (time.time(),) * 2)                                # a pull changed ocr.swift
+    # a pull changed ocr.swift: newer than the program (a minute old), yet seconds before the build to come, as a
+    # file written in the very tick of the build can read as newer than what the build wrote (Windows' file times)
+    os.utime(src, (time.time() - 5,) * 2)
     check = ready(tmp_path, check=True)
     kitsetup.step_ocr(check, False)
     assert builder.calls == [] and check.rows[-1].state == "DO"
