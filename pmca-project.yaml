@@ -1,0 +1,6 @@
+format: 1
+name: camset
+summary: Editor and mapping kit for Sony camera settings files (Save/Load Settings)
+category: tool
+cameras: [ILCE-1M2]
+platforms: [windows, macos, linux]
