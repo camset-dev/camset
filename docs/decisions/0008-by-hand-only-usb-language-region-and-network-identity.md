@@ -12,7 +12,9 @@ The screens that show the camera's network addresses (its MAC and IP addresses, 
 them in every frame the kit keeps, in the OCR output and in any reader's request. On 2026-11-13 the owner asked for the
 camera's Wi-Fi and Bluetooth items, and then any menu, to be read and mapped ("Let's read and map all the wifi items";
 "Yes map as much as we can"; "you have my full permission to open any menu and map items"), which the owner's hand
-alone would leave mostly unproved.
+alone would leave mostly unproved; and then the rest of the never-open list too: "you can also do password/logins,
+actions, and display serial number... I have generic sd cards in so you can format, delete, etc", the password
+screens' values to be kept ("Read everything"), and the resets that wipe the link possible, restored by hand.
 
 ## Decision
 
@@ -24,7 +26,8 @@ in stills"); it stays on the kit's by-hand list, so a run opens it only when it 
 
 A dated owner decision in the camera's reviewed scope that names the row, `{"date": "YYYY-MM-DD", "lifts": "network",
 "rows": [...], "why": "..."}`, opens it for a run given `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with
-`--rows`); a decision without `"lifts": "network"`, or dated after the day it is read, opens nothing. It may name:
+`--rows`); a decision without `"lifts": "network"` opens nothing for such a run (an owner decision, below, is
+`drive.py --owner`'s alone), and one dated after the day it is read opens nothing at all. It may name:
 
 - a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt
   Ctrl, Airplane Mode);
@@ -64,20 +67,73 @@ or connection row; and a prover's way back to the shooting screen sends no OK to
 such a run, nor anywhere to one that names identity or credentials ("Connect to ...?"). A screen met inside such a row that names identity or credentials (a pairing screen, a connecting
 notice, an SSID, a keyboard) gets MENU alone, and no reader is asked; so does an address screen. Inside an identity
 row or on an address screen, and on any screen whose text names identity, what the run prints and keeps is the
-screen's field names and whole row labels alone, never a value. Whatever is decided, these stay by hand: credentials
-and the screens that show them (decision 9), the SSID, WPS, access point and pairing rows, Import Root Certificate,
-the copyright and IPTC rows, Display Serial Number, and every action and reset (SSID/PW Reset, Reset Network Set.,
-Reset Transfer Status); the rows whose opening may itself start or end a connection or act, until someone has seen
-on the camera what Right does there, since looking only governs the presses after the opening (Smartphone
-Connection, Cloud Connection, Cloud Information, Network Streaming, USB Streaming, Tethering Connection, Tethering
-Disconnection, FTP Function); Server Setting, behind which the FTP login sits; and Edit Device Name, a keyboard
-showing the device's name, which no file holds. A decision naming one of these stops the run before anything
-connects. The a1 II's owner, the maintainer, decided so for their own camera on 2026-11-13; another camera's owner
+screen's field names and whole row labels alone, never a value. Whatever a network decision says, these stay by hand:
+credentials and the screens that show them (decision 9), the SSID, WPS, access point and pairing rows, Import Root
+Certificate, the copyright and IPTC rows, Display Serial Number, and every action and reset (SSID/PW Reset, Reset
+Network Set., Reset Transfer Status); the rows whose opening may itself start or end a connection or act, since
+looking only governs the presses after the opening (Smartphone Connection, Cloud Connection, Cloud Information,
+Network Streaming, USB Streaming, Tethering Connection, Tethering Disconnection, FTP Function); Server Setting, behind
+which the FTP login sits; and Edit Device Name, a keyboard showing the device's name, which no file holds. A network
+decision naming one of these, or saying `"confirm"`, `"link_loss"`, `"values"`, `"steps_seen"` or `"unattended"`,
+stops the run before anything connects.
+
+A dated owner decision, `{"date": "YYYY-MM-DD", "lifts": "owner", "rows": [...], "why": "..."}`, may name any row of
+the never-open list but these, whatever it says: a firmware update and the Version screen; anything that loads a file
+or settings from a card or the camera's memory (Save/Load Settings' Load, Recall Camera Setting, Import Root
+Certificate, IPTC Information's Register IPTC Info, Manage User LUTs' Import: decision 6); Initialize, an item of Setting Reset's dialog whose Enter nobody has seen (decision 5); and
+the rows of sound, light or motion and the Screen Reader (Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom
+among them), which keep their own routes (decisions 2 and 3). Only `kit/drive.py --owner` uses it, for the row its
+`--path` ends on, one per run; the crawl and the proofs never open such a row. A row whose name the kit knows in more
+than one place, or none, and every action's and card's, is named by its path ("Tab > Group > Row [> Row ...]"); the run
+goes to it in that tab and group and opens it only where the camera's screen reads that place: the top-level page's
+breadcrumb its tab and group; for a deeper row, each parent's lit bar before its Right and the title of the page that
+Right opens (after the breadcrumb of the labels above it, joined to the title by a space only right after the tab or
+the group), the last of them read again at the opening; whatever cannot be read, and a page that a Right left in the
+position it was in, refuses. Between the walk and the opening only Up and Down go out, and from then on no Right or Enter goes out,
+in `drive.py` or in the camera's own check, but the opening of that row and the presses inside it, whatever a lit row
+reads as; the run's `--confirm` covers only a press those checks judged a step or its armed press. The scope file is
+refused when git tracks it, when git cannot say whether it does, or when it writes a key twice in one object. The row opens with Right alone, from a menu page, to look: up,
+down and MENU, and Enter only as follows. `"options"` names what may be chosen, never one character, a keyboard's key, a
+button's or a go-ahead's word, a never-open name or anything that loads; in a never-choose row only with `"link_loss":
+true`, as the last press of a run given `--confirm`; in Language, NTSC/PAL and Area/Date/Time never; in a credentials
+row only the row's own listed values, on an option list. An action or a card row opens to look only at a place where
+the kit has seen it open a list or a question, judged by the whole place, never the label alone (on the a1 II: Setup >
+Reset/Save Settings > Setting Reset, Shooting > Shooting Mode > Camera Set. Memory and Reg. Custom Shoot Set, My Menu >
+My Menu Setting > Add Item, Shooting > File > Select REC Folder: `safety.opens_to_look` says where each was seen; not
+Format or Delete, whose opening no frame records, decision 4); every other one, and every row that acts as soon as
+it opens (WPS Push, Pairing, Access Point Set., Select on Cam & Send, Create New Folder, Forced File Number Reset, the
+cloud, streaming, tethering, FTP and Send rows), opens only as the armed last press of a run given `--confirm`, the row
+under `"confirm"`, with `"link_loss"` where the network may change or the link is wiped (Reset Network Set., SSID/PW
+Reset: decision 5), and with `"values": "logged"` too where its screens are otherwise blanked (WPS Push, Pairing,
+Access Point Set. and the other identity rows whose opening may change the network: the screen after the opening must be
+read to be judged and cancelled), and takes no option. Before any `--owner` run given `--confirm` connects, whatever
+its row (a never-choose option chosen as the last press may drop the link as an action's confirmation may), the person
+at the terminal types the row's name after the run has printed its place, what its last press may do and the camera; no
+flag or environment variable answers it, it stops a careless agent but not a determined one, so the owner types the
+answer themselves, and only `"unattended": true`, said beside `"confirm"` or beside a never-choose row's `"options"`
+with `"link_loss"`, waives it (decisions 4 and 5). Inside an action any Enter may be the final one: a step it names goes before
+the last press only where `"steps_seen"` marks it seen to lead only to a question, the screen reads as no question and
+shows no dialog's two buttons, and another Enter follows (never in a row whose first Enter registers: Camera Set.
+Memory, Reg. Custom Shoot Set, My Menu's items); any other Enter there is the run's armed last press, on the action's
+question only with a confirm button lit and the whole text that action's question (decision 4). The camera's own check
+presses each armed press only when `drive.py` allowed that very press for that row and its own reading agrees. A press
+that may drop the link has `RESTORE_BY_HAND.json` written before it goes, naming the start file; no link opens while it
+is there until `kit/tools/upload_check.py` has put that file back, and the run takes it away itself only when the press
+was refused before it went, or when the row only asked its question, cancelled with MENU (exit status 6), or the link
+still answered, and its restore then checked out (decision 5). Screens that take MENU alone stay so whatever is decided of
+values: a keyboard or an entry screen, an address or serial number screen, credentials, a connection or a pairing in
+the making. Without `"values": "logged"` a credentials, serial number or closed identity row's frames are saved black
+from its opening, never read, and its screens kept as nothing but their kind; an action's frames are kept as they are,
+read for the checks above, and its screens printed and kept as their field names and whole row labels; with it every
+frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the console shows their field names alone
+(decision 9). Such a run asks local readers only, and no tool reads its frames with a reader afterwards.
+
+The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
 decides for theirs, and the default stays by hand (the playbook's rule 3).
 
-Before 2026-11-13 Wi-Fi Connect, Bluetooth Function and Airplane Mode were network identity, which no allowance opened,
-and Bluetooth Rmt Ctrl, Wi-Fi Frequency Band and the address screens were on no list until a first change that day made
-them identity rows too; before 2026-11-02 Auto Power OFF Temp. was changed by hand only, as the rest; before 0.2.0
+Before 2026-11-13 no decision opened a row of the never-open list, Wi-Fi Connect, Bluetooth Function and Airplane Mode
+were network identity, which no allowance opened, and Bluetooth Rmt Ctrl, Wi-Fi Frequency Band and the address screens
+were on no list until a first change that day made them identity rows too; before 2026-11-02 Auto Power OFF Temp. was changed by hand only, as the rest; before 0.2.0
 (2026-11-11) a run's `--allow` could name one of the others.
 
 ## Consequences
@@ -85,6 +141,6 @@ them identity rows too; before 2026-11-02 Auto Power OFF Temp. was changed by ha
 Proofs of these rows come from the owner's hand changes, except the options a decision names, which the kit proves
 with `--network`, each proof line carrying the decision as its `allowance`. The frames of the screens opened this way
 hold what they show: they stay in `runs/` with every other frame, never in a submission, and go to local readers
-alone, then and later. For someone else's camera the
+alone, then and later, a `--owner` run's to none. For someone else's camera the
 playbook's rule 3 keeps Auto Power OFF Temp., the Wi-Fi and Bluetooth rows and the identity rows by hand too, until its
 owner decides otherwise.

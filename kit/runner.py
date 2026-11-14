@@ -26,6 +26,14 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   what a --network run keeps of a screen it withholds; row_values(model),
                                                   the values by row label
     known_groups(model)                           the menu's group names, for safety.group_refused
+    add_owner_argument(ap)                        --owner, drive.py's alone: a row a dated owner decision names
+    rows = owner_decided_or_exit(model)           those rows ({entry: info}: camkit.safety.owner_decided), or a stop
+                                                  before anything connects (camkit.vlm.LOCAL_ONLY set)
+    sys.exit(EXIT_RESTORE_BY_HAND)                a run's exit when its last press, an owner decision's "link_loss",
+                                                  may have dropped the link, or its restore did not check out after
+                                                  it: the start file goes back by hand (camkit.runs)
+    sys.exit(EXIT_NOT_CONFIRMED)                  a run's exit when that press brought up the row's own question,
+                                                  cancelled with MENU and restored: nothing confirmed
 
 Only camkit is imported at the top: crawl_run imports this, and prove_run's parts import crawl_run, so the prover's
 own pieces (to_shooting) are imported where they are used.
@@ -51,7 +59,7 @@ from camkit.screen import same_position
 # out, the last download was refused so nothing was restored, or the restore itself failed (restoring). kit/tools/
 # chain.py stops the chain after a step that exits with it, as after a failed upload; both take it from
 # kit/exit_status.py, which imports nothing
-from exit_status import EXIT_UNRESTORED          # the runners import it from here too
+from exit_status import EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED  # noqa: F401 (the runners import them here)
 
 SETTLE_S = 5.0          # after the start download: MENU within ~4 s of a download leaves the menu locked
 
@@ -982,11 +990,7 @@ def network_decided_or_exit(run=None) -> tuple:
                  "{\"date\": \"YYYY-MM-DD\", \"lifts\": \"network\", \"rows\": [\"<row as the camera writes it>\"], "
                  "\"why\": \"<the owner's words>\"}, and \"options\": {\"<row>\": [\"<option>\"]} for the options the "
                  "kit may choose (docs/decisions/0008).")
-    try:
-        scope = read_json(f)
-    except (OSError, ValueError) as e:
-        sys.exit(f"--network: the reviewed scope {paths.shown(f)} cannot be read ({type(e).__name__}): nothing was sent "
-                 "to the camera")
+    scope = decisions_scope_or_exit(f, "--network")
     rows, refusals = safety.network_decided(scope)
     if refusals:
         sys.exit("--network: the reviewed scope's network decisions name what no decision opens, so nothing was sent "
@@ -1007,6 +1011,136 @@ def network_decided_or_exit(run=None) -> tuple:
     if run is not None:
         log_network_decided(run, rows, options)
     return rows, options, safety.network_allowance(rows, options)
+
+
+def _no_duplicate_keys(pairs):
+    """json's object_pairs_hook: an object whose keys repeat is refused, never read as its last copy (a second "rows" or
+    "link_loss" would otherwise stand in for the first unseen: 2026-11-13, a review)."""
+    keys = [k for k, _ in pairs]
+    twice = sorted({k for k in keys if keys.count(k) > 1})
+    if twice:
+        raise ValueError(f"the key {twice[0]!r} is written twice in one object")
+    return dict(pairs)
+
+
+def scope_tracked(f: Path) -> str:
+    """Why the reviewed scope `f` is refused as a file git tracks, or "": a decision is the camera owner's and lives in
+    their runs/, never in the public codebase (docs/decisions/0018), where every clone would carry it. Git is asked in
+    the file's own folder; outside any repository nothing tracks it. When git cannot be asked although a repository
+    holds the file, it is refused: nothing then says it is not tracked."""
+    import subprocess
+    f = Path(f).resolve()
+    repo = next((p for p in (f.parent, *f.parents) if (p / ".git").exists()), None)
+    if repo is None:
+        return ""
+    try:
+        r = subprocess.run(["git", "-C", str(f.parent), "ls-files", "--error-unmatch", f.name], capture_output=True,
+                           text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError) as e:
+        return f"git could not be asked whether it tracks the file ({type(e).__name__}), and a repository holds it"
+    if r.returncode == 0:
+        return "git tracks it: a decision is the owner's own and is never committed (docs/decisions/0018)"
+    if r.returncode == 1:
+        return ""                       # git's answer for a file it does not track (ls-files --error-unmatch)
+    # any other answer (128: git could not read the repository, a safe.directory refusal...) says nothing of it
+    return (f"git answered {r.returncode} when asked whether it tracks the file, and a repository holds it: nothing "
+            "says it is not tracked (2026-11-14, a review)")
+
+
+def decisions_scope_or_exit(f: Path, flag: str) -> dict:
+    """The reviewed scope `f` read for its dated decisions (`flag`: the run's --network or --owner, for the words), or
+    the run stops before anything connects: a file that cannot be read, JSON that writes a key twice in one object
+    (_no_duplicate_keys), and a file git tracks (scope_tracked)."""
+    from camkit import paths
+    try:
+        scope = json.loads(Path(f).read_text(encoding="utf-8"), object_pairs_hook=_no_duplicate_keys)
+    except (OSError, ValueError) as e:
+        sys.exit(f"{flag}: the reviewed scope {paths.shown(f)} cannot be read ({type(e).__name__}: {e}): nothing was "
+                 "sent to the camera")
+    why = scope_tracked(f)
+    if why:
+        sys.exit(f"{flag}: the reviewed scope {paths.shown(f)} is refused: {why}; nothing was sent to the camera")
+    return scope
+
+
+def known_places(model=None) -> list:
+    """The menu places the kit knows, each a tuple of labels from the tab: (tab, group, row) for every menu row of the
+    camera's definition and every row of the page scan's pages (model: {page key: page}, its breadcrumb "Tab > Group"),
+    and (tab, group, row, ...) for every setting's row path of the definition. What an owner decision's row is told by
+    (camkit.safety.owner_row_refused: a label alone must be in exactly one place, a path's tab, group and row in one)."""
+    from camkit import definitions
+    out = []
+    target = definitions.active(required=False)
+    if target is not None and target.exists():
+        try:
+            doc = read_json(target)
+        except (OSError, ValueError):
+            doc = {}
+        for m in doc.get("menu") or []:
+            if isinstance(m, dict):
+                out.append((m.get("tab"), m.get("group"), m.get("label")))
+        for s in doc.get("settings") or []:
+            if isinstance(s, dict) and isinstance(s.get("row"), list):
+                out.append((s.get("tab"), s.get("group"), *s["row"]))
+    for page in (model or {}).values():
+        crumb = [x.strip() for x in str((page or {}).get("breadcrumb") or "").split(" > ")]
+        if len(crumb) < 2:
+            continue
+        for row in (page or {}).get("rows") or []:
+            out.append((crumb[0], crumb[1], row.get("label")))
+    return [tuple(p) for p in out if all(isinstance(x, str) and x.strip() for x in p)]
+
+
+def add_owner_argument(ap) -> None:
+    """--owner, kit/drive.py's alone: open the row a dated owner decision in the reviewed scope names ({"lifts":
+    "owner", ...}: owner_decided_or_exit), as the last label of --path, one per run. Without it nothing changes: every
+    such row stays closed (docs/decisions/0004, 0005, 0008 and 0009)."""
+    ap.add_argument("--owner", action="store_true",
+                    help="open the row a dated owner decision in the reviewed scope names (\"lifts\": \"owner\"; "
+                         "docs/decisions/0008), as the last label of --path: to look only, unless it names options, or "
+                         "confirmations for a run given --confirm; without it every such row stays closed")
+
+
+def log_owner_decided(run, rows: dict) -> None:
+    """The owner rows a run was given, in its events.jsonl ("owner_decided"), and its folder marked twice: as a
+    --network run's (camkit.vlm.LOCAL_MARKER: local readers only) and as one no batch tool reads with any reader
+    (camkit.vlm.NO_READER_MARKER), since its frames may show credentials, the serial number or values the owner chose
+    to log (docs/decisions/0009)."""
+    from camkit import vlm
+    vlm.mark_local_only(run.dir)
+    vlm.mark_no_reader(run.dir)
+    run.log("owner_decided", rows={e: {k: v for k, v in i.items() if k != "why"} for e, i in rows.items()},
+            scope=str(reviewed_scope()))
+
+
+def owner_decided_or_exit(model=None) -> dict:
+    """{entry: info} of the dated owner decisions in the reviewed scope (camkit.safety.owner_decided, the menu places
+    known_places gives), for a kit/drive.py run given --owner: stops, before anything connects and with nothing sent,
+    when the camera has no reviewed scope, when it cannot be read or git tracks it (decisions_scope_or_exit), when any
+    owner decision, a row, an option or a confirmation it names is refused, or when no owner decision opens a row. Sets
+    camkit.vlm.LOCAL_ONLY (local readers only) and prints each row with what the decision lets the run do."""
+    from camkit import paths, vlm
+    f = reviewed_scope()
+    if not f.is_file():
+        sys.exit(f"--owner opens only a row a dated owner decision in the camera's reviewed scope names, and there is no "
+                 f"reviewed scope ({paths.shown(f)}): nothing was sent to the camera. Write the owner's decision under "
+                 "\"decisions\": {\"date\": \"YYYY-MM-DD\", \"lifts\": \"owner\", \"rows\": [\"<row, or Tab > Group > "
+                 "Row>\"], \"why\": \"<the owner's words>\"} (docs/decisions/0008).")
+    scope = decisions_scope_or_exit(f, "--owner")
+    got = safety.owner_decided(scope, known_places(model))
+    if got["refusals"]:
+        sys.exit("--owner: the reviewed scope's owner decisions name what no decision opens, so nothing was sent to the "
+                 f"camera ({paths.shown(f)}):\n" + "\n".join(f"  {r}" for r in got["refusals"])
+                 + "\nTake those out of the decision (docs/decisions/0008), then run again.")
+    if not got["rows"]:
+        sys.exit(f"--owner: no dated owner decision in {paths.shown(f)} opens a row (\"lifts\": \"owner\", \"date\", "
+                 "\"rows\", \"why\"): nothing was sent to the camera")
+    vlm.LOCAL_ONLY = True
+    print("the owner decided that the kit may open these rows remotely (--owner; drive.py alone, one per run, local "
+          "readers only):", flush=True)
+    for entry, info in got["rows"].items():
+        print(f"   {entry}, {info['date']} ({info['class']}; {safety.owner_said(info)})", flush=True)
+    return got["rows"]
 
 
 _DEFINITION = {}          # the camera's definition as last read, by its file's path, time and size (definition)

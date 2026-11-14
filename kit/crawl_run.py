@@ -114,14 +114,21 @@ def group_closed(cam, name: str, known=()) -> str | None:
     return refused
 
 
-def go_to(cam, cycle, model, j, label):
+def go_to(cam, cycle, model, j, label, place=None):
     """Step from cycle position j to the row labelled `label`, the short way round, checking every
-    screen against the scan. Returns the new position, or None if a screen was not the expected one."""
+    screen against the scan. Returns the new position, or None if a screen was not the expected one. place: (tab,
+    group) the row must be in (kit/drive.py --owner: the owner decision's), its page's breadcrumb read so in the scan;
+    none there, None."""
     from page_model import same_text
     tabs = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")
     matches = [i for i, p in enumerate(cycle) if p["kind"] == "menu" and p["page"] in model
                and p["row"] is not None and p["row"] < len(model[p["page"]]["rows"])
                and same_text(model[p["page"]]["rows"][p["row"]]["label"], label)]
+    if place is not None:
+        def crumb(i):
+            parts = [unglued(x.strip()) for x in (model[cycle[i]["page"]]["breadcrumb"] or "").split(" > ")]
+            return [safety.plain(x) for x in parts[:2]]
+        matches = [i for i in matches if crumb(i) == [safety.plain(x) for x in place]]
     # My Menu repeats rows from other tabs (Pre-Capture Settings is on My Menu 1): prefer the real one
     real = [i for i in matches if model[cycle[i]["page"]]["breadcrumb"].startswith(tabs)]
     target = (real or matches or [None])[0]

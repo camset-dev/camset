@@ -80,10 +80,11 @@ and the default is no.
    (`customshoot_run.py`, `customshoot_values.py`), My Menu's Add Item (`mymenu_run.py`), a card row
    (`kit/tools/card_actions.py`, which judges each press as `drive.py` does and ends restoring as every runner
    does) and Picture Profile Reset (`pp_reset_run.py`, each profile's own Reset row; it writes no proof line, and its
-   result carries the words). (Decisions 4 and 5. The a1 II's owner allows no Format or Delete remotely on any card,
-   and allowed Camera Settings Reset, the narrowest reset, for proofs with their file put back after, and each
-   Picture Profile's own Reset for the sample; never Initialize or Reset Network Set. Ask yours: the default is no
-   reset.)
+   result carries the words). (Decisions 4 and 5. The a1 II's owner allowed Camera Settings Reset, the narrowest reset,
+   for proofs with their file put back after, and each Picture Profile's own Reset for the sample; and decided on
+   2026-11-13 that a dated owner decision may name a card's Format or Delete, Reset Network Set., SSID/PW Reset and
+   the other actions for `drive.py --owner`, confirmed only as a `--confirm` run's last press, after the person at the
+   terminal has typed the row's name (rule 3); Initialize never. Ask yours: the default is no Format, no Delete and no reset.)
 3. **By hand only:** network identity and connection settings (Wired LAN, Wi-Fi, Bluetooth, access
    authentication, FTP server), USB connection mode, language, NTSC/PAL, area and date, and Auto
    Power OFF Temp. (Decision 8. The a1 II's owner allowed Auto Power OFF Temp. remotely from 2026-11-02; ask yours.)
@@ -116,13 +117,26 @@ and the default is no.
    screen the run shows and keeps field names and whole row labels alone, never a value. Credentials, the SSID, WPS,
    access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
    connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
-   Right does there), Server Setting and Edit Device Name stay by hand whatever is decided, and a decision naming one
-   stops the run before anything connects. (The a1 II's owner
-   decided on 2026-11-13 that the kit may open their camera's network and identity rows this way: "Yes map as much as
-   we can"; "you have my full permission to open any menu and map items".)
+   Right does there), Server Setting and Edit Device Name stay by hand whatever a network decision says, and one naming
+   one, or saying `"confirm"`, `"link_loss"` or `"values"`, stops the run before anything connects. A dated owner
+   decision, `{"date", "lifts": "owner", "rows", "why"}`, may name them and the rest of the never-open list for
+   `drive.py --owner` alone, the last label of `--path`, one row per run (decisions 4, 5, 8 and 9 say how), never a
+   firmware update, anything that loads a file or settings, Initialize, nor sound, light, motion or the Screen Reader;
+   inside an action any Enter may be the final one, so it goes before the last press only where the decision marks the
+   step seen (`"steps_seen"`), an action the kit has not seen open to look opens only as the last press, and before a
+   run given `--confirm` connects the person at the terminal types the row's name (no flag or environment variable
+   answers it; only the decision's `"unattended": true` waives it; it stops a careless agent, not a determined one, so
+   the owner types it, never the agent). (The a1 II's
+   owner decided on 2026-11-13 that the kit may open their camera's network and identity rows this way: "Yes map as much
+   as we can"; "you have my full permission to open any menu and map items"; and the rest with owner decisions: "you can
+   also do password/logins, actions, and display serial number... I have generic sd cards in so you can format, delete,
+   etc".)
 4. **Credentials:**
    - Never type, read, OCR, screenshot or store a password. That includes the camera's own Access
-     Authen. Info screen: never navigate the kit there, because every frame is kept as evidence.
+     Authen. Info screen: never navigate the kit there, because every frame is kept as evidence. (The a1 II's owner
+     decided on 2026-11-13 that a dated owner decision may open their camera's credentials screens for `drive.py
+     --owner`, nothing ever typed, their frames saved black unless it says `"values": "logged"`, which keeps the text
+     in the run's `drive.jsonl` alone, never in the console (decision 9). Ask yours: the default is never.)
    - The owner puts the user name and password in `~/.config/camset/network.json` (mode 600).
      It is never committed (decision 9).
 5. **Every run starts from a known file and ends by restoring it.**

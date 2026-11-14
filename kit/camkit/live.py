@@ -18,6 +18,15 @@ draw the row's list, a MENU the camera ignored, or a list or a popup misread as 
 screen read as the shooting screen before any MENU (Manage Paired Device's list, 2026-11-13) is judged as no known
 kind, MENU alone, and from then on a frame read as the shooting screen ends the row only when the camera's own picture
 says so too (menu_closed).
+A row a dated owner decision names ("lifts": "owner", docs/decisions/0008) is opened only for kit/drive.py --owner, which
+gives the camera that one row (owner): with Right alone, once per run, from a menu page (a Right on it lit on any other
+screen is refused here too), and, for a row whose opening acts (safety.opens_acting), only as an armed press drive.py
+allowed for that row (permit) and safety.arm_refused passes on this camera's own reading. Inside it only up, down, MENU
+and Enter go out; an action's step, final step or confirmation, or a never-choose option, only so allowed and checked;
+after an armed press, MENU alone (owner_done). On such a run every Enter also meets this camera's own NEVER_ENTER
+(wiping_refused: Initialize, Reset Network Set., SSID/PW Reset). A row whose values are withheld (safety.BLANKED) takes
+MENU alone, asks no reader, and the eyes write every frame of it black (withhold, camkit.frames' withheld). handed counts
+the presses handed to the link, which drive.py says in its log of an armed press that failed.
 It fails closed as drive.py does: when an orange bar is drawn but OCR reads no text in it, the vision reader is
 asked once for the row's label (reader_label), and the label it gives is judged the same way; when it gives none, the
 press is refused, since the never-open check cannot judge a row it cannot read (2026-11-08).
@@ -38,8 +47,10 @@ one rule could be proved on every prover without the camera.
 The orange cursor is found as a bar first (lit_box). A dialog or table that lights its item without one (the White
 Balance chooser's orange text, a two-slot table's narrow cell) is read from the largest orange region instead, on those
 screens alone: on a menu page a lit row is always a bar, and its orange texts are values on unlit rows (2026-11-08)."""
+import atexit
 import contextlib
 import os
+import shutil
 import tempfile
 import time
 from pathlib import Path
@@ -47,6 +58,7 @@ from pathlib import Path
 import numpy as np
 
 from . import ocr, safety, screen, vlm
+from .frames import keep
 from .link import LinkError
 from .vlm import PROMPTS, ask_role, log_to, scrub
 
@@ -202,27 +214,43 @@ def black(frame) -> bool:
     return isinstance(image, np.ndarray) and image.size > 0 and float(image.mean()) <= BLACK
 
 
-def osd_kind(link) -> str:
+def osd_kind(link, folder=None) -> str:
     """The kind of screen the camera's own picture of it reads as (the SDK's OSD image, fetched as
-    camkit.session.osd_shooting fetches it, into a file of this process's own, removed after), or "" when it cannot be
-    fetched or read."""
+    camkit.session.osd_shooting fetches it, into a file of this process's own, removed after, with camlink's .part), or
+    "" when it cannot be fetched or read. folder: where that file goes while a row whose values are withheld is open
+    (LiveCamera.osd_folder: a folder of the run's own, mode 0700), never the shared temporary folder then."""
     from .frames import load
-    path = Path(tempfile.gettempdir()) / f"camkit_osd_{os.getpid()}_press.png"
+    path = (Path(folder) / "press.png" if folder is not None
+            else Path(tempfile.gettempdir()) / f"camkit_osd_{os.getpid()}_press.png")
     try:
         return screen.read(load(link.osd(path))).kind or ""
     except Exception:
         return ""
     finally:
-        with contextlib.suppress(OSError):
-            path.unlink()
+        for left in (path, path.with_name(path.name + ".part")):
+            with contextlib.suppress(OSError):
+                left.unlink()
 
 
 class LiveCamera:
     def __init__(self, link, hdmi, run, may_open=(), network=(), screens: bool = False, options=None, values=None,
-                 readings=None):
+                 readings=None, owner=None):
         self.link, self.hdmi, self.run = link, hdmi, run
         log_to(run)                     # a reader that fails during the run is logged in its events.jsonl (camkit.vlm)
         self.may_open = frozenset(may_open)            # never-open rows this run was told it may open
+        # the one row a dated owner decision opens for this run (kit/drive.py --owner, the last label of its --path):
+        # {label: info} as safety.owner_decided gives it. It opens with Right alone, once (owner_opened); inside it only
+        # up, down, MENU and Enter go out, and an Enter that is an action's step or confirmation, a never-choose option,
+        # or the opening of a row that acts on opening goes out only when drive.py allowed that very press for that very
+        # row (permit, used up by the next press) and safety.arm_refused passes on this camera's own reading too; after
+        # an armed press only MENU (owner_done). A row whose values are withheld (safety.BLANKED) is MENU alone from its
+        # opening, the eyes writing every frame of it black (blank), no reader asked. handed counts the presses handed
+        # to the link
+        self.owner = dict(owner or {})
+        self.permit = None
+        # owner_only: set by kit/drive.py once its walk to the owner row is done (press)
+        self.owner_opened = self.owner_done = self.blank = self.owner_only = False
+        self.handed = 0
         # the Wi-Fi and Bluetooth rows, address screens and identity rows a dated owner decision opens for this run
         # (--network: safety.network_decided's {row: date}), whether an address screen among them may open (kit/drive.py
         # alone: screens), the options the decision lets the kit choose in each ({row: [options]}: none, look only),
@@ -268,7 +296,9 @@ class LiveCamera:
         exact = getattr(self, "may_open_exact", None)
         if exact is not None:
             self.may_open_exact = None      # one press only, whatever it is
-        self.inside_refused(key)            # inside a network row: look only, or MENU alone
+        permit = getattr(self, "permit", None)
+        self.permit = None                  # drive.py's word for one owner press: used up by this press, whatever it is
+        arming = self.inside_refused(key, permit)       # inside a network row: look only, or MENU alone
         # a MENU, or an Enter inside_refused let through (an option the decision names), may close the row once it has
         # gone out: only then can the lock end (_inside_after)
         closes = getattr(self, "network_open", None) is not None and safety.canonical_input(key) in CLOSES
@@ -278,29 +308,76 @@ class LiveCamera:
         network, screens = getattr(self, "network", ()), getattr(self, "screens", False)
         values, opened, address, cls = getattr(self, "values", {}), None, False, None
         readings = getattr(self, "readings", {})
+        owner, owner_row = getattr(self, "owner", None) or {}, None
         if safety.canonical_input(key) in OPENS and self.screen.kind in ROW_SCREENS:
             lit = lit_text(self.frame.image, self.frame.path)
             if not lit.strip() and lit_box(self.frame.image) is not None:
                 lit = self.unread_row(key)          # a bar OCR read nothing in: the reader names it, or no press
             why = open_refused(lit, self.may_open, network, screens, values, readings)
+            if why and owner and getattr(self, "network_open", None) is None:
+                # the row an owner decision opens for this run, of the very class it was lifted from: Right alone, once
+                owner_row = safety.owner_lifted_row(lit, owner, values)
+                if owner_row is not None:
+                    why, arming = self.owner_open_refused(key, owner_row, lit, permit)
             if why and exact is not None and not safety.never_lifted(lit) and not safety.network_words(lit) \
                     and exact(self.frame, lit):
                 self.run.log("press_lifted_exact", key=key, frame=self.frame.path.name, lit=lit)
                 why = ""
             if why:
                 self.refuse(key, why)
-            if network and getattr(self, "network_open", None) is None:
+            if owner_row is not None:
+                opened, cls = owner_row, owner[owner_row].get("class")
+                address = cls == safety.LIFT_ADDRESS
+            elif network and getattr(self, "network_open", None) is None:
                 opened = safety.network_lifted_row(lit, network, screens, values, readings)
                 cls = safety.lift_class(lit) if opened else None
                 address = cls == safety.LIFT_ADDRESS
+        canon = safety.canonical_input(key)
+        # the owner row lit on a screen read as no menu page: judged here too (owner_open_refused, whose screen check
+        # refuses it), never by drive.py alone
+        if owner and owner_row is None and getattr(self, "network_open", None) is None and canon in OPENS \
+                and self.screen.kind not in ROW_SCREENS:
+            lit = lit_text(self.frame.image, self.frame.path)
+            row = safety.owner_lifted_row(lit, owner, values)
+            if row is not None:
+                why, _ = self.owner_open_refused(key, row, lit, permit)
+                if why:
+                    self.refuse(key, why)
+        if getattr(self, "owner_only", False) and owner and canon in OPENS and owner_row is None \
+                and getattr(self, "network_open", None) is None:
+            # set by kit/drive.py once the walk to the owner row is done: from then no row opens but the owner row, and
+            # no Enter goes out outside it, whatever the lit text reads as ("Formal" for Format: 2026-11-14, a review)
+            self.refuse(key, "in an --owner run no row but the owner row opens and no Enter goes out outside it, and "
+                             "the lit row does not read as the owner row (docs/decisions/0008)")
+        if owner and canon in ("enter", "ms_enter"):
+            self.wiping_refused(key, arming)    # Initialize's kin: this camera's own check, beside drive.py's
         judged = self.judged_screen(key)
         t = time.monotonic()
         before = self.screen
+        if arming:
+            self.owner_done = True          # an armed press, once: from here only MENU, whatever answers it
+            self.run.log("armed_press", key=key, frame=self.frame.path.name, row=arming[0], what=arming[1])
         # the safety allow-list, the STOP check, C4's screen check and the shooting screen's live there: the screen
         # read last goes with it
+        self.handed = getattr(self, "handed", 0) + 1
         self.link.press(key, hold_ms, allow=allow, screen=judged, on_shooting=on_shooting)
         if closes:
             self.menu_went_out()
+        if owner_row is not None:
+            info = owner[owner_row]
+            blank = cls in safety.BLANKED and not info.get("logged")
+            self.owner_opened = True
+            self.network_open = {"row": owner_row, "address": address, "class": cls, "frame": self.frame.path.name,
+                                 "from": before, "closing": False, "menus": getattr(self.link, "menus", None),
+                                 "owner": True, "blank": blank, "logged": bool(info.get("logged"))}
+            self.run.log("owner_row_opened", key=key, frame=self.frame.path.name, row=owner_row, lifted_from=cls,
+                         blank=blank)
+            if blank or address or cls == safety.LIFT_SERIAL:
+                self.identity_open = self.frame.path.name       # MENU alone from its opening
+            if blank:
+                self.withhold(True)             # before the frame it opened is settled and saved
+                vlm.HELD = "a row whose values are withheld is open"
+            opened = None
         if opened is not None:
             # a row a network decision opens: from here, whatever its screen reads as, look only (inside_refused), and
             # on an address screen MENU alone, no reader asked, until a MENU (or an Enter on a named option) has gone
@@ -332,7 +409,7 @@ class LiveCamera:
                 f2 = self.hdmi.grab(f"{key}-late", save=False)
                 s2 = screen.read(f2)
                 if not screen.same_state(s2, before):
-                    f2.save(self.run.shot_path(f"{key}-late"))
+                    keep(f2, self.run.shot_path(f"{key}-late"), getattr(self, "blank", False))
                     f, self.frame, self.screen = f2, f2, s2
                     break
                 if time.monotonic() >= end:
@@ -344,14 +421,126 @@ class LiveCamera:
                      timing=self.hdmi.timing)
         self._inside_after()
 
-    def inside_refused(self, key: str) -> None:
+    def withhold(self, on: bool) -> None:
+        """While a row whose values are withheld is open (blank): the eyes save every frame black and poll the camera's
+        own picture outside the run's folder (camkit.frames' withheld), so no pixel of its screens is written as
+        evidence; the frames in memory keep their pictures, for the screen's kind alone."""
+        self.blank = bool(on)
+        with contextlib.suppress(AttributeError):
+            self.hdmi.withheld = bool(on)
+        if not on:
+            # the eyes' folder for the camera's own picture of those screens goes with them (camkit.frames), and this
+            # camera's own (osd_folder)
+            getattr(self.hdmi, "close_private", lambda: None)()
+            d, self._private = getattr(self, "_private", None), None
+            if d is not None:
+                shutil.rmtree(d, ignore_errors=True)
+
+    def osd_folder(self):
+        """Where the camera's own picture of the screen is fetched to (osd_kind) while a row whose values are withheld is
+        open: the OSD eyes' own folder (camkit.frames' private_dir), or, with eyes that have none (HDMI), one of this
+        camera's own (tempfile.mkdtemp, mode 0700), removed when the row is left or the process ends; never the shared
+        temporary folder then. None otherwise."""
+        if not getattr(self, "blank", False):
+            return None
+        made = getattr(self.hdmi, "private_dir", None)
+        if made is not None:
+            return made()
+        d = getattr(self, "_private", None)
+        if d is None or not Path(d).is_dir():
+            d = self._private = Path(tempfile.mkdtemp(prefix="camkit_osd_"))
+            atexit.register(shutil.rmtree, d, True)
+        return d
+
+    def osd_seen(self) -> str:
+        """The kind the camera's own picture of the screen reads as (osd_kind), fetched into osd_folder while a row
+        whose values are withheld is open."""
+        folder = self.osd_folder()
+        return osd_kind(self.link) if folder is None else osd_kind(self.link, folder)
+
+    def owner_open_refused(self, key: str, row: str, lit: str, permit) -> tuple:
+        """(why a press may not open the owner row `row` whose lit text is `lit`, or "", the row when the press is an
+        armed one): Right alone (never Enter, the multi-selector or a look-alike), once per run (owner_opened), never
+        after an armed press; a row that acts on opening only when drive.py allowed that very opening for that very row
+        (`permit`: {"row", "what": "open"}) and safety.arm_refused passes on this camera's reading."""
+        if safety.name_refused(key) or safety.canonical_input(key) != "right":
+            return f"the owner decision opens {row!r} with Right alone, never {key!r} (docs/decisions/0008)", None
+        if getattr(self, "owner_opened", False) or getattr(self, "owner_done", False):
+            return "one owner row per run, opened once: this run has opened it already (docs/decisions/0008)", None
+        if self.screen.kind not in safety.ROW_PAGES:
+            return f"the owner row is opened from a menu page alone, not a {self.screen.kind!r} screen", None
+        info = self.owner.get(row) or {}
+        if not info.get("acts_on_open"):
+            return "", None
+        if not isinstance(permit, dict) or permit.get("row") != row or permit.get("what") != "open":
+            return (f"{row!r} acts as soon as it opens, and drive.py did not allow this opening as the armed last "
+                    "press of the run (docs/decisions/0008)"), None
+        why = safety.arm_refused(row, info.get("class"), "open", self.screen.kind, lit, "", info.get("confirm", False),
+                                 info.get("link_loss", False), place=info.get("path"))
+        return why, (None if why else (row, "open"))
+
+    def wiping_refused(self, key: str, arming) -> None:
+        """Refused, logged, for an Enter on a run given an owner row, this camera's own check beside drive.py's
+        NEVER_ENTER: never on a lit text reading Initialize, Reset Network Set. or SSID/PW Reset; never on a screen
+        reading one of them unless the lit text is Camera Settings Reset, or the press is the run's armed confirmation
+        of that very action (`arming`: (row, what), safety.armed_wiping)."""
+        lit, text = lit_text(self.frame.image, self.frame.path), text_of(self)
+        if any(safety.LINK_WIPING_ENTER.search(r) for r in safety.readings(lit)):
+            self.refuse(key, f"the cursor is on {lit.strip()!r} (docs/decisions/0005)")
+        m = next((m for r in safety.readings(text) for m in [safety.LINK_WIPING_ENTER.search(r)] if m), None)
+        armed = arming[0] if arming and arming[1] in ("confirm", "final") else ""
+        if m and not safety.CAMERA_SETTINGS_RESET.search(lit) and not safety.armed_wiping(armed, m.group(0)):
+            self.refuse(key, f"the screen reads {m.group(0)!r} and the press is no armed confirmation of that very "
+                             "action (docs/decisions/0005)")
+
+    def owner_inside_refused(self, key: str, inside: dict, permit):
+        """Refused, logged, for a key that may not go out inside the owner row open (inside), else the row when the
+        press is an armed one (an action's confirmation, a never-choose option), else None. Only up, down, MENU and
+        Enter, each in its own spelling (safety.OWNER_KEYS_INSIDE); after an armed press, or on a screen that takes MENU
+        alone (identity_open: a blanked row, an address or serial number screen, a keyboard, credentials), MENU alone.
+        An Enter is what safety.owner_enter reads it as on this camera's own reading of the screen; a step, a
+        confirmation or a never-choose option goes only when drive.py allowed that very press for that very row
+        (`permit`: {"row", "what"}) and safety.arm_refused passes on this reading too."""
+        self._fresh(key)                    # judged on a screen the camera has not left
+        canon, row, cls = safety.canonical_input(key), inside["row"], inside.get("class")
+        if safety.name_refused(key) or canon not in safety.OWNER_KEYS_INSIDE:
+            self.refuse(key, f"{key!r} never goes out inside {row!r}, a row an owner decision opened: only up, down, "
+                             "MENU and Enter (docs/decisions/0008)")
+        if canon == "menu":
+            return None
+        if getattr(self, "owner_done", False):
+            self.refuse(key, "the armed press of the run has gone: no key but MENU (docs/decisions/0008)")
+        if inside.get("address") or getattr(self, "identity_open", None):
+            self.refuse(key, f"a screen that takes MENU alone is open inside {row!r} (on {self.identity_open or 'it'}): no "
+                             "key but MENU (docs/decisions/0008)")
+        if canon != "enter":
+            return None
+        info = self.owner.get(row) or {}
+        lit, text, kind = lit_text(self.frame.image, self.frame.path), text_of(self), self.screen.kind
+        why, what = safety.owner_enter(row, cls, kind, lit, text, info.get("options") or (), info.get("steps_seen") or ())
+        if not why and what == "step" and isinstance(permit, dict) and permit.get("what") == "final":
+            what = "final"                  # a seen step drive.py arms as the last Enter of its run: armed here too
+        if not why and what != "option":
+            if not isinstance(permit, dict) or permit.get("row") != row or permit.get("what") != what:
+                why = f"drive.py did not allow this press ({what}) inside {row!r} (docs/decisions/0008)"
+            else:
+                why = safety.arm_refused(row, cls, what, kind, lit, text, info.get("confirm", False),
+                                         info.get("link_loss", False))
+        if why:
+            self.refuse(key, why)
+        return (row, what) if what in ("confirm", "choose", "final") else None
+
+    def inside_refused(self, key: str, permit=None):
         """Refused, logged, for a key that may not go out while a row a network decision opened is open
         (network_open): on an address screen or a screen naming identity or credentials, any key but MENU; else what
         safety.look_refused refuses (anything but up, down, MENU, and Enter on an option the decision names, read off
-        the lit bar now). Whatever kind the screen reads as."""
+        the lit bar now). Whatever kind the screen reads as. Inside a row an owner decision opened, owner_inside_refused
+        judges it instead, and its answer (the row, for an armed press) is returned."""
         inside = getattr(self, "network_open", None)
         if inside is None:
-            return
+            return None
+        if inside.get("owner"):
+            return self.owner_inside_refused(key, inside, permit)
         canon = safety.canonical_input(key)
         if inside["address"] or getattr(self, "identity_open", None):
             why = "" if canon in safety.SHOOTING_FREE else (
@@ -368,7 +557,7 @@ class LiveCamera:
         """A press refused: logged in the run's events.jsonl and raised (safety.Refused). On a --network run (network
         given) the reason's quoted texts are withheld in both, since a row's bar can carry an identity value (a device's
         name, an SSID, an address): safety.quoted_withheld."""
-        said = safety.quoted_withheld(why) if getattr(self, "network", None) else why
+        said = safety.quoted_withheld(why) if getattr(self, "network", None) or getattr(self, "owner", None) else why
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=said)
         raise safety.Refused(f"{key}: {said}")
 
@@ -400,6 +589,8 @@ class LiveCamera:
             return False
         if getattr(self.screen, "kind", None) == "shooting":
             return self.menu_closed(inside)
+        if inside.get("blank"):
+            return False                        # its frames are not read: the shooting screen alone ends the lock
         try:
             if not screen.same_position(self.screen, inside["from"]):
                 return False
@@ -432,7 +623,7 @@ class LiveCamera:
                 return False
         except Exception:                       # a screen that cannot be compared is no way out
             return False
-        kind = osd_kind(self.link)
+        kind = self.osd_seen()
         self.run.log("shooting_inside_osd", frame=self.frame.path.name, row=inside["row"], osd=kind or None)
         return kind == "shooting"
 
@@ -458,12 +649,16 @@ class LiveCamera:
             kind = "unknown"
         if self.network_left():
             self.network_open = self.address_open = self.identity_open = None
+            if getattr(self, "blank", False):
+                self.withhold(False)
             vlm.HELD = None
             self.run.log("network_row_left", frame=self.frame.path.name, row=inside["row"])
             return
         if getattr(self, "identity_open", None) is None:
             try:
-                why = safety.inside_menu_only(inside.get("class"), kind, text_of(self))
+                why = (safety.owner_menu_only(inside.get("class"), kind, text_of(self), inside["row"],
+                                              inside.get("blank", False)) if inside.get("owner") else
+                       safety.inside_menu_only(inside.get("class"), kind, text_of(self)))
             except Exception:                   # a screen whose text cannot be read is no permission
                 why = "identity or credentials: the screen's text could not be read"
             if why:
@@ -480,7 +675,7 @@ class LiveCamera:
         if safety.canonical_input(key) in safety.SHOOTING_FREE or getattr(self.screen, "kind", None) != "unknown" \
                 or not black(self.frame):
             return self.screen
-        kind = osd_kind(self.link)
+        kind = self.osd_seen()
         self.run.log("black_frame_osd", key=key, frame=self.frame.path.name, osd=kind or None)
         if not kind:
             why = ("the frame is black and the camera's own picture of the screen could not be read: unseen, only MENU "
@@ -509,7 +704,7 @@ class LiveCamera:
         if label:
             # on a --network run the label is not logged: a bar can carry an identity value after it
             self.run.log("lit_row_by_reader", key=key, frame=self.frame.path.name,
-                         label="(withheld)" if getattr(self, "network", None) else label)
+                         label="(withheld)" if getattr(self, "network", None) or getattr(self, "owner", None) else label)
             return label
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=UNREAD, reader=why_not, by_hand=True)
         print(f"{key} refused on {self.frame.path.name}: {UNREAD} ({why_not}); if the row is one to open, open it on "

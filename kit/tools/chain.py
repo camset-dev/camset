@@ -12,15 +12,21 @@ calls to shell word splitting. Here:
   there (the next steps would run in the wrong state and tag their proofs with the wrong context);
 - a step that exits with status 4 (EXIT_UNRESTORED, kit/exit_status.py: its restore did not check out, or the camera
   refused its last download) left the camera perhaps not on its start file: the chain stops there too, before the
-  next step changes anything else, and the end file is uploaded (decision 15); any other failure is listed and the
-  chain goes on;
+  next step changes anything else, and the end file is uploaded (decision 15); a step that exits with status 5
+  (EXIT_RESTORE_BY_HAND: its last press, which an owner decision allowed with "link_loss", may have dropped the link)
+  stops the chain too, and then no end file is uploaded: the step's start file goes back by hand first
+  (kit/tools/upload_check.py, the file the camera's RESTORE_BY_HAND.json names), and no link opens before that; a
+  step that exits with status 6 (EXIT_NOT_CONFIRMED: that press only brought up its row's own question, which the step
+  cancelled with MENU, its start file restored and checked) stops the chain as status 4 does, since nothing was
+  confirmed; any other failure is listed and the chain goes on;
 - a step over its `limit` (seconds) is asked to stop through its `stop` file (a run's STOP: the
   walkers cancel to the menu and close it). The runner never kills a step: a camera left in a
   dialog is worse than a late chain. A step with no `stop` file is only reported;
 - touching the chain's `stop` file (default STOP_CHAIN in the camera's runs/<model>_fw<fw>/) ends the chain between
   steps;
 - the `--end` file (or the chain's `end`) is uploaded last whatever happened, so the camera is left
-  as its owner had it. The owner's file is given on the command line, not kept in the chain file.
+  as its owner had it, but after a step that exited with status 5 (above). The owner's file is given on the command
+  line, not kept in the chain file.
 
 The chain runs on one camera, the one the kit works on when it starts (camkit.paths; --camera names another), and
 every step is told which (CAMSET_CAMERA). A relative path in a chain file (upload, log, stop, end) is in that
@@ -61,7 +67,7 @@ from camkit import ROOT, paths  # noqa: E402
 import tomllib  # noqa: E402
 # a step's exit status when the camera may not be back on its start file, the runners' own: from kit/exit_status.py,
 # which imports nothing (kit/runner.py would bring the camera's screen and frames along)
-from exit_status import EXIT_UNRESTORED  # noqa: E402
+from exit_status import EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED  # noqa: E402
 
 PY = sys.executable
 RUN_ROOT = None          # the camera's runs, set in main()
@@ -209,6 +215,24 @@ def main():
                 if rc == EXIT_UNRESTORED:
                     say("   the camera may not be back on its start file (the step's restore did not check out, or its "
                         "last download was refused): stopping the chain before another step changes it")
+                    break
+                if rc == EXIT_RESTORE_BY_HAND:
+                    # the step's last press, which an owner decision allowed with "link_loss", may have dropped the
+                    # link: its start file goes back by hand (camkit.runs RESTORE_BY_HAND), and no link opens before
+                    # that, so the end file is not uploaded either
+                    say("   the step's last press may have dropped the link (its owner decision's link_loss): stopping the "
+                        "chain; no end file is uploaded. Look at the camera first and cancel there by hand whatever it "
+                        "still shows (a question, a pairing, search or connection screen), with MENU or Cancel, never "
+                        "Enter or OK. Put the step's start file back by hand once the camera is reachable, with "
+                        "kit/tools/upload_check.py and the file RESTORE_BY_HAND.json names, then upload the end file "
+                        "the same way")
+                    end = None
+                    break
+                if rc == EXIT_NOT_CONFIRMED:
+                    # the step's last press brought up its row's own question, which it cancelled with MENU before it
+                    # restored its start file: nothing was confirmed, so what the next steps expect did not happen
+                    say("   the step's last press only brought up its row's question, cancelled with MENU: nothing was "
+                        "confirmed (its drive.jsonl keeps the question's frame); stopping the chain")
                     break
     finally:
         if end:

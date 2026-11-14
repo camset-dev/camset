@@ -19,7 +19,8 @@ kit/tools/reader_census.py --questions, which measures the questions themselves 
 names through ask_named_reader. A --network run (docs/decisions/0008) asks local readers only (LOCAL_ONLY) and marks
 its run folder so (LOCAL_MARKER); every tool that reads a run folder's frames afterwards looks for that mark
 (local_only_runs) before it builds a reader, and make_reader builds no reader that is not local while LOCAL_ONLY is
-set. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
+set. A run that opened a row an owner decision names (kit/drive.py --owner) marks its folder NO_READER_MARKER too, and
+local_only_runs stops a tool pointed at it before any reader is built: no reader reads those frames. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
 screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet.
 """
 import base64
@@ -1015,12 +1016,25 @@ def mark_local_only(folder) -> Path:
     return f
 
 
-def local_only_runs(*places) -> list:
-    """The run folders among `places` (each a run folder, or a file or folder inside one) that hold LOCAL_MARKER, looked
-    for in each place and the folders above it up to the runs folder (camkit.paths.runs_top); when any does, LOCAL_ONLY
-    is set for the rest of the process, and said once: every reader the tool then builds is a local one (make_reader).
-    Where a batch tool resolves the run folders it reads, it calls this before it builds a reader."""
-    global LOCAL_ONLY
+# The file a run that opened a row an owner decision names writes in its folder (kit/drive.py --owner,
+# runner.log_owner_decided): its frames may show credentials, the serial number or the values the owner chose to log
+# (docs/decisions/0009), so no tool that reads a run folder's frames afterwards asks any reader about them, local or not
+# (local_only_runs stops the tool; held_runs names such folders, for a tool that leaves them out)
+NO_READER_MARKER = "NO_READER"
+
+
+def mark_no_reader(folder) -> Path:
+    """NO_READER_MARKER written in a run's folder. Returns its path."""
+    f = Path(folder) / NO_READER_MARKER
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("frames of a run that opened a row an owner decision names: no reader reads them (docs/decisions/0009)"
+                 "\n", encoding="utf-8")
+    return f
+
+
+def _marked(places, marker) -> list:
+    """The run folders among `places` (each a run folder, or a file or folder inside one) that hold `marker`, looked
+    for in each place and the folders above it up to the runs folder (camkit.paths.runs_top)."""
     try:
         top = paths.runs_top().resolve()
     except Exception:                       # no runs folder known: each place and its parents are looked in
@@ -1033,10 +1047,31 @@ def local_only_runs(*places) -> list:
         for folder in (here, *here.parents):
             if top is not None and folder == top:
                 break
-            if (folder / LOCAL_MARKER).is_file():
+            if (folder / marker).is_file():
                 found.append(folder)
                 break
-    found = list(dict.fromkeys(found))
+    return list(dict.fromkeys(found))
+
+
+def held_runs(*places) -> list:
+    """The run folders among `places` that hold NO_READER_MARKER (_marked): frames no reader is asked about."""
+    return _marked(places, NO_READER_MARKER)
+
+
+def local_only_runs(*places) -> list:
+    """The run folders among `places` (each a run folder, or a file or folder inside one) that hold LOCAL_MARKER, looked
+    for in each place and the folders above it up to the runs folder (camkit.paths.runs_top); when any does, LOCAL_ONLY
+    is set for the rest of the process, and said once: every reader the tool then builds is a local one (make_reader).
+    Where a batch tool resolves the run folders it reads, it calls this before it builds a reader. A place in a folder
+    that holds NO_READER_MARKER (held_runs: a run that opened a row an owner decision names) stops the tool here, before
+    any reader is built or any frame read: no reader reads those frames."""
+    global LOCAL_ONLY
+    held = held_runs(*places)
+    if held:
+        sys.exit(f"{', '.join(paths.shown(f) for f in held)}: frames of a run that opened a row an owner decision names "
+                 "(credentials, the serial number, values the owner chose to log): no reader reads them, local or not "
+                 "(docs/decisions/0009); nothing asked")
+    found = _marked(places, LOCAL_MARKER)
     if found and not LOCAL_ONLY:
         LOCAL_ONLY = True
         print(f"{', '.join(paths.shown(f) for f in found)}: frames of a --network run, so only local readers are asked "

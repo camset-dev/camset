@@ -122,11 +122,18 @@ def identity_line(r: dict) -> bool:
 
 
 def runs_in(where: Path) -> tuple:
-    """(the run root, [the runs]) WHERE names: a run (a folder with proofs.jsonl or model.json) or a run root."""
+    """(the run root, [the runs]) WHERE names: a run (a folder with proofs.jsonl or model.json) or a run root. A run
+    folder found under a run root that holds camkit.vlm.NO_READER_MARKER (a run that opened a row an owner decision
+    names) is left out, and said: no reader reads its frames (docs/decisions/0009); one named alone stops the tool where
+    it is read (vlm.local_only_runs)."""
     if (where / "proofs.jsonl").exists() or (where / "model.json").exists():
         return where.parent, [where]
     found = {p.parent for name in ("proofs.jsonl", "model.json") for p in where.glob(f"*/{name}")}
-    return where, sorted(found)
+    held = {p for p in found if (p / vlm.NO_READER_MARKER).is_file()}
+    for p in sorted(held):
+        print(f"{p.name}: a run that opened a row an owner decision names, left out (no reader reads its frames)",
+              file=sys.stderr, flush=True)
+    return where, sorted(found - held)
 
 
 def expect_of(r: dict) -> str:

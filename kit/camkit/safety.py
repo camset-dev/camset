@@ -36,6 +36,16 @@ The guards:
                              credentials, the camera's identity, a connection or its region, and the Wi-Fi and
                              Bluetooth settings and address screens, which only a dated decision opens (decision 8).
   shooting_refused(key, kind, named)  a key on the shooting screen: MENU only, unless the caller names it (decision 21).
+  owner_decided(scope, places)  the rows a dated owner decision ("lifts": "owner") names, for kit/drive.py --owner alone,
+                             with its options, confirmations, "link_loss" and "values" (decisions 4, 5, 8 and 9), and
+                             why each other thing is refused; owner_never, what no decision names (a firmware update,
+                             what loads a file, sound, light, motion, the Screen Reader); owner_class, acts_on_open.
+  owner_lifted_row(lit, owner, values)  whether the lit row is the run's owner row, of the class it was lifted from.
+  owner_enter / arm_refused  what an Enter inside an owner row is (an option, an action's step or confirmation, a
+                             never-choose option) and whether a run's armed last press may be it; owner_menu_only,
+                             the screens that take MENU alone there, whatever the decision says of values;
+                             opens_to_look, the places seen to open to look; confirm_pair, a dialog's two buttons;
+                             own_question, the row's own question after an armed press (kit/drive.py cancels it).
   profile_reset_row(lit, title, profile)   why the lit row is not a Picture Profile's own Reset row, or "".
   profile_reset_dialog(text, profile)      why a screen is not that row's own "Reset PPn to the default setting?".
 
@@ -344,6 +354,9 @@ _NEVER_CHOOSE = [
     r"ntsc", r"^area/", r"date/time", r"device name", r"ftp", r"server",
     _WIFI + r"connect", r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)",
     r"airplane mode",
+    # access authentication On/Off and Wi-Fi Direct: the choice changes how the link itself logs in, or opens a network
+    # of the camera's own (2026-11-13, a review: an owner decision's option there needs "link_loss")
+    r"access authen", _WIFI + r"d[il1|]rect",
 ]
 # The Wi-Fi and Bluetooth settings and the screens that show the camera's network addresses (decision 8, as it stands
 # since 2026-11-13): by hand only, like _IDENTITY, and no --allow opens them; but unlike _IDENTITY, a dated owner
@@ -863,6 +876,13 @@ def _network_decisions(scope) -> tuple:
             continue
         if not isinstance(d.get("why"), str) or not d["why"].strip():
             refusals.append(f"{where} ({day}): it says no why, so it lifts nothing")
+            continue
+        # what only an owner decision may say: a network decision opens its rows to look and to choose named options,
+        # never to confirm, to lose the link or to keep values (2026-11-13, a review)
+        owned = [k for k in OWNER_ONLY_KEYS if k in d]
+        if owned:
+            refusals.append(f"{where} ({day}): it says {', '.join(map(repr, owned))}, which only an owner decision "
+                            "(\"lifts\": \"owner\") may say, so it lifts nothing")
             continue
         named = d.get("rows")
         if not isinstance(named, list) or not named:
@@ -1545,6 +1565,799 @@ def _confirms(text: str) -> str | None:
         if m:
             return f"confirmation text: {m.group(0)}"
     return None
+
+
+# ------------------------------------------------------------------ owner decisions (decisions 4, 5, 8 and 9)
+#
+# The a1 II's owner, the maintainer, decided on 2026-11-13 for their own camera: "you can also do password/logins,
+# actions, and display serial number... I have generic sd cards in so you can format, delete, etc"; of the password
+# screens' values, "Read everything"; and they want the resets that wipe the link (Initialize, Reset Network Set.,
+# SSID/PW Reset) possible as a run's last press, restored by hand. A dated decision in the camera's reviewed scope that
+# says "lifts": "owner" carries that: only kit/drive.py reads it, only with --owner, and only for the row its --path
+# ends on, one per run. Every other camera's default is unchanged or stricter (SSID/PW Reset joined the Enter check of
+# Initialize and Reset Network Set. for every camera, LINK_WIPING_ENTER): without --owner and such a decision naming the
+# row, every other verdict of this module is as it was (kit/tests/test_owner_decisions.py proves it over the shipped
+# labels).
+
+OWNER_LIFT = "owner"                       # a decision's "lifts" that may name any never-open row but OWNER_NEVER's
+# what a decision may say besides date, lifts, rows and why; the last three only an owner decision (_network_decisions)
+OWNER_ONLY_KEYS = ("confirm", "link_loss", "values", "steps_seen", "unattended")
+OWNER_KEYS = frozenset({"date", "lifts", "rows", "why", "options", *OWNER_ONLY_KEYS})
+# The classes an owner decision lifts a row from beyond a network decision's three (lift_class), in the words the logs
+# and the run's print use
+LIFT_CREDENTIALS, LIFT_SERIAL, LIFT_FIXED = "credentials row", "serial number screen", "closed identity row"
+LIFT_CARDS, LIFT_ACTION = "card action", "action"
+NARROW = frozenset({LIFT_NETWORK, LIFT_ADDRESS, LIFT_IDENTITY})
+ACTION_CLASSES = frozenset({LIFT_CARDS, LIFT_ACTION})
+# the classes whose screens show secrets or what identifies the camera or its owner: unless the decision says "values":
+# "logged", every frame from the opening press until the row is left is saved blacked out, no OCR text of it is kept,
+# no reader is asked and only MENU goes out (kit/drive.py, camkit.live.LiveCamera's blank)
+BLANKED = frozenset({LIFT_CREDENTIALS, LIFT_SERIAL, LIFT_FIXED})
+# the only keys that go out inside an owner row, each in its own spelling (name_refused): up and down read it, MENU
+# leaves it, Enter is judged (owner_enter); never ms_enter, Right, Left, a dial or C4
+OWNER_KEYS_INSIDE = frozenset({"up", "down", "menu", "enter"})
+CONFIRM_KINDS = frozenset({"dialog", "notice"})        # the screens a confirmation is pressed on (arm_refused)
+LIST_KINDS = frozenset({"list", "dialog", "sidelist", "checklist"})     # an option list (a credentials row's, a choice)
+ROW_PAGES = frozenset({"menu", "submenu"})             # the pages an opening press is judged on
+CONFIRM_BUTTONS = frozenset({"enter", "ok", "execute", "yes"})          # with the action's own name (confirm_buttons)
+
+# What loads settings or a file from a card or the camera's memory: never pressed whatever is decided (decision 6: only
+# files the camera wrote go back, checked by their bytes). Save/Load Settings may be named, to look and to Save; its
+# Load never ("save/load" is the row's name, not a load). IPTC Information's Register IPTC Info reads a preset from the
+# card (2026-11-14, a fourth review); Manage User LUTs' Import, Import Root Certificate and Recall Camera Setting are
+# caught by their words; nothing else on the a1 II's menu reads a file from a card
+_LOADS = r"(?<!save/)(?<!save /)\bload(?:s|ing)?\b|\brecall\b|\bimport\b|\bregister\s?iptc"
+_LOADS_RE = re.compile(_LOADS)
+# Rows no decision ever names, whatever it says (OWNER_NEVER): checked in every reading
+OWNER_NEVER = [
+    (r"firmware|\bupdate\b|\bversion\b", "a firmware update, or the Version screen it starts from"),
+    (_LOADS, "it loads settings or a file from a card or the camera's memory (docs/decisions/0006)"),
+    # motion: Cleaning Mode shakes the sensor, Pixel Mapping and Anti-dust close the shutter, Preset Focus/Zoom drives
+    # the lens (decision 2): their own routes, never an owner decision; Cleaning Mode and Pixel Mapping act on opening
+    (r"cleaning\s?mode|pixel\s?mapping|anti-?\s?dust|preset\s?focus", "it moves the sensor, the shutter or the lens "
+                                                                      "(docs/decisions/0002)"),
+    # Initialize is an item of Setting Reset's dialog (kit2_csr 00118_right.png: "Setting Reset Camera Settings Reset
+    # Initialize", kit/tests/test_core.py), not a row a path walks to, and what Enter on it does (a question, or the
+    # reset at once) has never been seen; drive.py's lit check refuses Enter on it whatever is decided (2026-11-13, a
+    # review): it stays closed until the owner has shown that screen
+    (r"initiali[sz]e", "Initialize is an item of Setting Reset's dialog, not a row, and what Enter on it does has never "
+                       "been seen (docs/decisions/0005)"),
+]
+_OWNER_NEVER_RES = [(re.compile(rx), why) for rx, why in OWNER_NEVER]
+# Rows that act as soon as they open (2026-11-13, a review): a Right on them starts a pairing, WPS, an access point
+# search, a connection or a transfer, imports a certificate, or creates a folder (Create New Folder: Right alone may act,
+# kit/tools/card_actions.py; Forced File Number Reset opens with OK preselected and creates a folder). Their opening
+# press is their confirmation: it needs the row under "confirm", --confirm and the run's last press (arm_refused's
+# "open"), and nothing is pressed in them after it
+_ACTS_ON_OPEN = [r"\bwps\b", r"pairing", r"access point", r"select on cam", r"root certif", r"create new folder",
+                 r"forced file number reset", r"tether", r"cloud", r"streaming", r"smartphone", r"ftp function",
+                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping"]
+_ACTS_ON_OPEN_RE = re.compile("|".join(_ACTS_ON_OPEN))
+# Of those, the ones whose opening may change or drop the network the run's link is on: they need "link_loss" too, and
+# the run then restores by hand (loses_link)
+_LINK_RISK_OPEN_RE = re.compile("|".join([r"\bwps\b", r"pairing", r"access point", r"select on cam", r"tether", r"cloud",
+                                          r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b"]))
+# The actions whose confirmation wipes the network setup and the access authentication, and the run's link with them;
+# kit/drive.py's NEVER_ENTER and camkit.live.LiveCamera's own check refuse Enter on a lit text or a screen reading one
+# (LINK_WIPING_ENTER), the screen only when the press is the run's armed confirmation of that very action (armed_wiping)
+_LINK_WIPING = r"initiali[sz]e|reset network|ssid\s?/?\s?pw\s?reset"
+_LINK_WIPING_RE = re.compile(_LINK_WIPING)
+LINK_WIPING_ENTER = re.compile(_LINK_WIPING, re.I)
+# the one reset decision 5 allows, which shares its dialog with Initialize (Setting Reset's two items)
+CAMERA_SETTINGS_RESET = re.compile(r"camera\s+settings?\s+reset", re.I)
+# The places of the action and card rows the kit has seen open a list, a dialog of items or a question, each (tab, group,
+# row [, row ...]) folded as plain() folds it: only a row at one of these very places opens to look (2026-11-13, a third
+# review: a name alone also matched Face Memory's Delete and Save/Load Settings' Delete, which nobody has seen open);
+# every other action's or card's opening press is its armed last press, as a row that acts on opening (opens_acting).
+# Setting Reset: a dialog of two items, Camera Settings Reset and Initialize (kit2_csr 00118_right.png,
+# kit/tests/test_core.py). Camera Set. Memory: the slot screen "MR Memory 1 2 3 M1 M2 M3 M4" (kit/provers/memreg_run.py,
+# kit2_small_1109 00021_enter.png). Reg. Custom Shoot Set: its holds' list (kit/provers/customshoot_run.py). Add Item: a
+# picker, the camera's menu again (kit/provers/mymenu_run.py). Select REC Folder: its folder list, which took MENU 1.6 s
+# after opening (kit/tools/card_actions.py, 2026-10-29). Their places are the a1 II's definition's menu and its Help
+# Guide's (data/ILCE-1M2_fw4.00/help_guide_menu_ILCE-1M2_fw4.00.jsonl). Format and Delete are not among them: no frame
+# the repository names shows what Right on either does. kit/tools/card_actions.py offered Format from 2026-10-28 to
+# 2026-11-01 and records no look at it, and the Format and Delete questions in the tests are written for the
+# confirmation check, from no frame (kit/tests/test_core.py, test_guards.py, test_scripts.py). Their opening is the armed
+# last press until a run's frame shows it, and that frame is cited here
+OPENS_TO_LOOK = frozenset({
+    ("setup", "reset/save settings", "setting reset"),
+    ("shooting", "shooting mode", "camera set. memory"),
+    ("shooting", "shooting mode", "reg. custom shoot set"),
+    ("my menu", "my menu setting", "add item"),
+    ("shooting", "file", "select rec folder"),
+})
+# Rows whose first Enter inside registers or acts, whatever it lands on (Camera Set. Memory's slot, a hold, an item):
+# no step of theirs is ever marked seen ("steps_seen"), so their first Enter is the run's armed last press
+_REGISTERS_RE = re.compile(r"camera set\. memory|reg\. custom shoot set|face memory|add item|sort item|delete item|"
+                           r"delete page|delete all|del\. regist\. af area")
+# The actions beside Format and Delete that write to a card (a folder, a file, an image's protection, rating or turn, a
+# copy, a crop, a still from a clip, the image database, a settings file saved): what they write no settings file puts
+# back, and the terminal question says so (kit/drive.py armed_words; a fifth review)
+_WRITES_CARD_RE = re.compile(r"create new folder|forced file number reset|recover image db|\bprotect\b|\brotate\b|"
+                             r"\bcopy\b|\bcrop\b|\brating\b|photo capture|create still image|clip flag|save/load")
+# Words a step never holds: a button's or a go-ahead's, whose Enter answers the action's question (2026-11-13, a review:
+# "Continue" on Format's own question passed for a step), each judged as a word in every reading (look-alikes folded,
+# OCR's slips undone)
+STEP_WORDS = frozenset({"continue", "start", "apply", "proceed", "accept", "confirm", "register", "agree", "begin",
+                        "run", "okay", "all", "ok", "enter", "execute", "yes", "no", "cancel", "set", "done"})
+# Rows in which no option is chosen whatever a decision says, "link_loss" or not: what every other setting means, and
+# what no file puts back (Language, NTSC/PAL, Area/Date/Time)
+_HARD_NEVER_CHOOSE_RE = re.compile(r"language|ntsc|^area/|date/time")
+# A keyboard's keys by their words: never an option (owner_option_refused), so Enter never types
+_KEYBOARD_WORDS = frozenset({"space", "del", "delete", "bs", "back", "backspace", "shift", "caps", "caps lock", "abc",
+                             "123", "a/a", "aa", "clear", "return", "symbol", "symbols", "next", "prev", "left", "right"})
+
+
+def owner_never(label) -> str | None:
+    """Why no decision ever names `label`, or None, any reading judged: a firmware update or the Version screen,
+    anything that loads a file or settings (decision 6), Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom
+    (OWNER_NEVER); and sound, light, motion and the Screen Reader (decisions 2 and 3), which keep their own routes (a
+    run's --allow, a dated approval, decision 3's preconditions) and which the owner did not name."""
+    for r in readings(label):
+        for rx, why in _OWNER_NEVER_RES:
+            m = rx.search(r)
+            if m:
+                return f"{why} ({m.group(0)!r}): no decision opens it"
+    for text, raw in _pairs(label):
+        for rx in (_OTHER_BY_HAND_RE, _MOTION_RE):
+            m = rx.search(text) or rx.search(raw)
+            if m:
+                return (f"sound, light or motion, or the Screen Reader ({m.group(0)!r}): an owner decision does not name "
+                        "it; it keeps its own routes (docs/decisions/0002 and 0003)")
+    return None
+
+
+def owner_class(label) -> str | None:
+    """The class of the never-open list an owner decision may lift `label` from, or None: a network decision's three
+    (lift_class), the serial number screen, an action (a card action when it says Format or Delete), credentials, or an
+    identity row that stays closed to a network decision (SSID, WPS, pairing, the copyright rows...). None for a row
+    the list does not name, and for what owner_never names, whatever else it reads as."""
+    if not isinstance(label, str) or not label.strip() or not never_open(label) or owner_never(label):
+        return None
+    narrow = lift_class(label)
+    if narrow:
+        return narrow
+    rs = readings(label)
+    if any(re.search(r"disp(?:lay|\.)?\s?serial", r) for r in rs):
+        return LIFT_SERIAL
+    for text, _raw in _pairs(label):
+        last = clean_label(text.rsplit(">", 1)[-1])
+        if _ACTION_RE.search(text) or _ACTION_RE.search(last) or _ACTION_WORD_RE.search(text):
+            return LIFT_CARDS if any(re.search(r"\b(?:format|delete)\b", r) for r in rs) else LIFT_ACTION
+    if any(_CREDENTIALS_RE.search(t) or _CREDENTIALS_RE.search(r) for t, r in _pairs(label)):
+        return LIFT_CREDENTIALS
+    return LIFT_FIXED if identity_row(label) else None
+
+
+def _first(rx, label) -> str | None:
+    for r in readings(label):
+        m = rx.search(r)
+        if m:
+            return m.group(0)
+    return None
+
+
+def acts_on_open(label) -> str | None:
+    """The words that make `label` a row that acts as soon as it opens (_ACTS_ON_OPEN), in any reading, or None."""
+    return _first(_ACTS_ON_OPEN_RE, label)
+
+
+def link_risk_open(label) -> str | None:
+    """The words that make opening `label` able to change or drop the network the run's link is on, or None."""
+    return _first(_LINK_RISK_OPEN_RE, label)
+
+
+def link_wiping(label) -> str | None:
+    """The words that make confirming `label` wipe the network setup and the link (Initialize, Reset Network Set.,
+    SSID/PW Reset), or None."""
+    return _first(_LINK_WIPING_RE, label)
+
+
+def armed_wiping(armed_row, word) -> bool:
+    """Whether the Initialize, Reset Network Set. or SSID/PW Reset a screen reads (`word`, LINK_WIPING_ENTER's match) is
+    the very action the run armed as its last press (`armed_row`, an owner decision's row under "confirm" with
+    "link_loss"): only then may Enter go on that screen (kit/drive.py press_refused, camkit.live.LiveCamera). Any other
+    armed row, or none, never."""
+    if not armed_row or not link_wiping(armed_row):
+        return False
+    w = str(word or "").lower()
+    family = (r"initiali[sz]e" if w.startswith("initiali") else r"reset network" if "network" in w
+              else r"ssid\s?/?\s?pw\s?reset")
+    return any(re.search(family, r) for r in readings(armed_row))
+
+
+def opens_to_look(place) -> bool:
+    """Whether the action or card row at `place` ([tab, group, row, ...], or "Tab > Group > Row" as a decision writes
+    it) is one the kit has seen open a list, a dialog of items or a question there (OPENS_TO_LOOK: the whole place,
+    each part folded as plain() folds it): only such a row opens to look. A label alone, or no place, is none."""
+    if isinstance(place, str):
+        place = place.split(">")
+    if not isinstance(place, (list, tuple)):
+        return False
+    return tuple(plain(x) for x in place) in OPENS_TO_LOOK
+
+
+def opens_acting(label, cls, place=None) -> bool:
+    """Whether opening the owner row `label` (of class `cls`, at `place`) is itself its armed last press: a row that acts
+    on opening (acts_on_open), and every action or card row the kit has not seen open to look at that place
+    (opens_to_look): it cannot know for an unseen row whether Right acts at once. With no place, every action does."""
+    return bool(acts_on_open(label)) or (cls in ACTION_CLASSES and not opens_to_look(place))
+
+
+def registers(label) -> str | None:
+    """The words that make `label` a row whose first Enter inside registers or acts (_REGISTERS_RE), or None."""
+    return _first(_REGISTERS_RE, label)
+
+
+def writes_card(label) -> str | None:
+    """The words that make `label` an action that writes to a card, Format and Delete aside (_WRITES_CARD_RE), or
+    None."""
+    return _first(_WRITES_CARD_RE, label)
+
+
+def hard_never_choose(row) -> str | None:
+    """Why no option of `row` is chosen whatever a decision says, "link_loss" or not (Language, NTSC/PAL, Area/Date/
+    Time), or None."""
+    m = _first(_HARD_NEVER_CHOOSE_RE, row)
+    return f"no option of a row naming {m!r} is ever chosen, whatever a decision says" if m else None
+
+
+def loses_link(row, what: str) -> bool:
+    """Whether the armed press `what` in the owner row `row` may drop the run's link: an opening that acts where the
+    network may change (link_risk_open), a link-wiping confirmation (link_wiping), or a never-choose option."""
+    if what == "open":
+        return bool(link_risk_open(row) or link_wiping(row))
+    if what in ("confirm", "final"):
+        return bool(link_wiping(row))
+    return what == "choose"
+
+
+def confirm_buttons(row) -> set:
+    """The lit texts that read as the confirm button of `row`'s confirmation: Enter, OK, Execute, Yes, the row's own
+    name, or a word of it that names an action (Delete, Format, Reset...)."""
+    seen = plain(row)
+    words = {w for w in re.findall(r"[a-z]+", seen) if _CONFIRM_RE.fullmatch(w)}
+    return set(CONFIRM_BUTTONS) | ({seen} if seen else set()) | words
+
+
+def _own_words(row) -> list:
+    """The words of a row's name that name it (four letters or more, "settings" and the like aside), and "pw"."""
+    words = re.findall(r"[a-z0-9]+", plain(row))
+    return [w for w in words if (len(w) >= 4 or w in ("pw", "ssid")) and w not in ("settings", "setting", "info")]
+
+
+def action_confirmation(text, row) -> str | None:
+    """confirmation of a screen's whole text, as read and never with anything taken out (2026-11-13, a review: taking
+    the row's own label out made "Format the memory card in Slot 1?" read as no confirmation), when that text also
+    names the action `row` by one of its own words (_own_words): "Initialize? ... Enter Cancel" for Initialize, "Reset
+    network settings?" for Reset Network Set.; None otherwise."""
+    said = confirmation(text)
+    if not said:
+        return None
+    words = [w for w in _own_words(row) if len(w) >= 4]
+    if words and any(re.search(rf"\b{re.escape(w)}\b", r) for r in readings(text) for w in words):
+        return said
+    return None
+
+
+def own_question(kind, text, row) -> str | None:
+    """Why the screen read right after a run's armed press in the owner row `row` is that row's own question, nothing
+    done yet, or None: a dialog or a notice (CONFIRM_KINDS) that asks, with a "?" or a dialog's two buttons
+    (confirm_pair with no row: Enter, OK, Execute or Yes with Cancel, never the row's own action word, so that "Reset
+    network settings in progress. Cancel" asks nothing: a fifth review), and whose whole text, as read, is the action's
+    confirmation (action_confirmation) or, with a "?", reads as a confirmation (confirmation). A notice that says the
+    action was done ("The SSID and password have been reset. OK") asks nothing and is no question (2026-11-14, a fourth
+    review). kit/drive.py cancels a question with MENU alone and says nothing was confirmed (2026-11-13, a third review:
+    a reset's question was left open)."""
+    if kind not in CONFIRM_KINDS:
+        return None
+    asks = "?" in str(text or "")
+    said = action_confirmation(text, row) if asks or confirm_pair(text, "") else None
+    if not said and asks:
+        said = confirmation(text)
+    return said or None
+
+
+def confirm_pair(text, row) -> str | None:
+    """The words of a dialog's two buttons on the screen inside the owner row `row`, or None: Cancel with a confirm
+    button (Enter, OK, Execute, Yes, or a word of the row's name that names an action: "Delete Cancel"), each a whole
+    word in any reading of the text with the row's own title off (_title_off). What makes a step never a step: a
+    question whose "?" OCR dropped, read as a list (2026-11-13, a third review)."""
+    own = {w for w in re.findall(r"[a-z]+", plain(row)) if _CONFIRM_RE.fullmatch(w)}
+    for r in readings(_title_off(text, row)):
+        found = set(re.findall(r"[a-z]+", r))
+        hit = sorted((set(CONFIRM_BUTTONS) | own) & found) if "cancel" in found else []
+        if hit:
+            return f"{hit[0]!r} and 'cancel', a dialog's two buttons"
+    return None
+
+
+def _without_own_words(text, row) -> list:
+    """Every reading of `text` with the row's own words (_own_words) taken out as whole words: what the MENU-only check
+    of an action's, a credentials list's or an identity row's screen judges, so that SSID/PW Reset's own question, or
+    Access Authen.'s own list, does not read as a connection or credentials screen. Never what a confirmation is
+    judged on (action_confirmation)."""
+    own = _own_words(row)
+    rx = re.compile(r"\b(?:" + "|".join(map(re.escape, own)) + r")\b") if own else None
+    return [rx.sub(" ", r) if rx else r for r in readings(text)]
+
+
+def owner_menu_only(cls, kind, text, row, blank: bool = False) -> str | None:
+    """Why only MENU may go out on a screen met inside the owner row `row` of class `cls`, or None, its kind and whole
+    text as read; whatever the decision says of values ("values": "logged" keeps the text, never more keys). Always: a
+    screen of a kind whose text is not shown (SHOWN_KINDS: a keyboard, an entry screen, a kind the kit cannot read),
+    since nothing is typed; an address screen; the serial number screen; a blanked row (`blank`: its frames are not
+    read). Inside a network decision's classes, as there (inside_menu_only). Inside a credentials row, any screen that
+    is not an option list (LIST_KINDS). Inside a credentials row, an action or a closed identity row, a screen naming
+    credentials or a connection, a pairing or a network list in the making (_SECRET_SCREEN), its row's own words aside
+    (_without_own_words)."""
+    if blank:
+        return "the screens of the row are blanked (its values are not logged): no key but MENU"
+    if kind not in SHOWN_KINDS:
+        return f"a {kind!r} screen (a keyboard, an entry screen, or a kind the kit does not read): nothing is typed"
+    if cls in NARROW:
+        return inside_menu_only(cls, kind, text)
+    if cls == LIFT_SERIAL:
+        return "the serial number screen: looked at only"
+    if cls == LIFT_CREDENTIALS and kind not in LIST_KINDS:
+        return f"a {kind!r} screen inside a credentials row: only an option list takes more than MENU"
+    for r in _without_own_words(text, row):
+        m = _SECRET_SCREEN_RE.search(r)
+        if m:
+            return f"credentials or a connection: {m.group(0)}"
+    return None
+
+
+def owner_option_refused(option, row, cls) -> str:
+    """Why an owner decision may not name `option` for `row` (of class `cls`), or "": what option_refused refuses (no
+    text, one character, a button's word, a name of the never-open list or of identity), a keyboard's key by its word
+    or a text with no two letters or digits running (_KEYBOARD_WORDS), anything that loads (_LOADS), and, in an action
+    (its steps), the action's own name, a word of it that names an action, and anything confirmation takes for a
+    confirmation: a step is never the confirmation (2026-11-13, a review)."""
+    why = option_refused(option)
+    if why:
+        return why
+    seen = plain(option)
+    if seen in _KEYBOARD_WORDS or not re.search(r"[a-z0-9]{2}", seen):
+        return "a key of a keyboard, never an option a decision names: nothing is typed"
+    if any(_LOADS_RE.search(r) for r in readings(option)):
+        return "it loads settings or a file (docs/decisions/0006)"
+    if cls in ACTION_CLASSES and (seen in confirm_buttons(row) or confirmation(option)):
+        return "it reads as the action itself or as its confirmation, never as a step toward it"
+    if cls in ACTION_CLASSES:
+        word = next((w for r in readings(option) for w in re.findall(r"[a-z0-9]+", r) if w in STEP_WORDS), None)
+        if word:
+            return f"it holds {word!r}, a button's or a go-ahead's word, never a step's"
+    return ""
+
+
+def owner_values_refused(info, values=()) -> str:
+    """Why the options an owner decision names for a credentials row (`info`, owner_decided's) may not be chosen, or "":
+    each must be one of the row's own listed values (`values`: the page scan's and the definition's,
+    runner.network_values), never anything else (2026-11-13, a review: no keyboard key, no text). Other classes: ""."""
+    if (info or {}).get("class") != LIFT_CREDENTIALS or not info.get("options"):
+        return ""
+    known = {plain(v) for v in values or () if isinstance(v, str) and plain(v)}
+    strange = [o for o in info["options"] if plain(o) not in known]
+    return (f"{strange[0]!r} is not one of the values the page scan and the definition list for "
+            f"{info.get('label')!r}") if strange else ""
+
+
+def _places_of(places) -> tuple:
+    """(the top-level places {(tab, group, row)}, {row: the count of places whose last label it is}, {row: a place it
+    is the last label of, as written}) of the menu places the kit knows (runner.known_places: the definition's menu and
+    settings rows, the page scan's rows), compared folded (plain)."""
+    tops, seen, where = set(), set(), {}
+    for place in places or ():
+        p = tuple(plain(x) for x in place if isinstance(x, str))
+        if len(p) < 3 or not all(p) or len(p) != len(place):
+            continue
+        seen.add(p)
+        where.setdefault(p, [str(x).strip() for x in place])
+        if len(p) == 3:
+            tops.add(p)
+    counts, at = {}, {}
+    for p in seen:
+        counts[p[-1]] = counts.get(p[-1], 0) + 1
+        at[p[-1]] = where[p]
+    return tops, counts, at
+
+
+def owner_row_refused(entry, places=()) -> tuple:
+    """(why an owner decision may not name `entry`, or "", its row's label, its place: the path as written, or for a
+    label alone the one place the kit knows it in, [tab, group, row, ...]). A row is named by its label as the camera
+    writes it, or by its path, "Tab > Group > Row [> Row ...]" as the definition and the Help Guide name its place. The label must be of a class owner_class gives and of nothing owner_never names. A path's tab, group
+    and first row must be a top-level place the kit knows (`places`); a label alone must be one the kit knows in
+    exactly one place, and never an action's or a card's (their names, Delete, Format, Reset, recur inside rows the kit
+    never opens and so never sees): those are named by their path (2026-11-13, a review)."""
+    if not isinstance(entry, str) or not entry.strip():
+        return "a row is named by its label as the camera writes it, or by its path", "", None
+    parts = [p.strip() for p in entry.split(">")]
+    if any(not p for p in parts):
+        return "every part of a path is a label: none is empty", "", None
+    label = parts[-1]
+    for part in parts[2:] if len(parts) > 1 else parts:          # the rows of a path, never its tab or group
+        why = owner_never(part)
+        if why:
+            return why, label, None
+    cls = owner_class(label)
+    if cls is None:
+        why = never_open(label)
+        return ((f"{why}: no decision opens that" if why else "not a row the never-open list names: the name of a group, or "
+                 "an unknown name, opens nothing"), label, None)
+    tops, counts, at = _places_of(places)
+    if len(parts) > 1:
+        if len(parts) < 3:
+            return ("a path is written Tab > Group > Row [> Row ...], as the definition and the Help Guide name the "
+                    "place", label, None)
+        if tuple(plain(x) for x in parts[:3]) not in tops:
+            return ("no top-level place the kit knows (the definition of the camera, its page scan) has that tab, group and "
+                    "row", label, None)
+        return "", label, parts
+    if cls in ACTION_CLASSES:
+        return (f"the name of an action or a card recurs inside rows the kit never opens: name {label!r} by its path, "
+                "Tab > Group > Row [> Row ...]", label, None)
+    n = counts.get(plain(label), 0)
+    if n != 1:
+        return (f"the kit knows {label!r} in {n} menu places (the definition of the camera, its page scan), so the label "
+                "alone does not say which: name it by its path, Tab > Group > Row [> Row ...]", label, None)
+    return "", label, at[plain(label)]
+
+
+def owner_decided(scope, places=()) -> dict:
+    """The dated owner decisions of a reviewed scope, read whole: {"rows": {entry: info}, "refusals": [why each other
+    thing is refused]}, entry being the row as the decision names it (owner_row_refused) and info {"label", "path",
+    "class", "date", "why", "options", "confirm", "link_loss", "logged", "acts_on_open"}. A decision is {"date":
+    "YYYY-MM-DD", "lifts": "owner", "rows": [...], "why": "..."}, and may say, of the rows it names:
+      "options": {"<row>": ["<option>", ...]}  the options the kit may choose in a row, or in an action the steps that
+                                               lead to its confirmation (a slot), only with the action under "confirm",
+                                               never in a reset that wipes the link;
+      "steps_seen": {"<row>": ["<step>"]}      of an action's steps, those the owner has seen lead only to a question on
+                                               this camera: only such a step's Enter goes before the run's last press
+                                               (owner_enter); never in a row whose first Enter registers (registers);
+      "confirm": ["<row>", ...]                the actions whose confirmation, or the rows whose opening acts
+                                               (opens_acting: every action the kit has not seen open to look), whose
+                                               opening, a drive.py run given --confirm may press, as its last press,
+                                               once;
+      "link_loss": true                        that press may drop the link: needed to confirm Initialize, Reset Network
+                                               Set. or SSID/PW Reset, to open a row whose opening may change the network,
+                                               and to choose an option of a never-choose row (then the run's last press);
+      "values": "logged"                       the run keeps the text of the rows' screens, in runs/ only;
+      "unattended": true                       a run given --confirm asks no question at the terminal before it connects
+                                               (asks_person: every such run asks otherwise), the owner having waived it
+                                               in the decision; only with rows under "confirm", or a never-choose row's
+                                               "options" with "link_loss": true (waives_question).
+    A decision without "lifts": "owner" counts for nothing here. One with no valid date (a day today or before), no
+    why, no rows, a key it may not have, a "link_loss" or "unattended" that is not true or false, an "unattended" with
+    no armed press to waive the question of (waives_question), a "values" that is not "logged", or an "options" or
+    "confirm" of the wrong shape is refused whole. Each row, option or confirmation that cannot be taken is
+    refused alone: a row owner_row_refused refuses, a row a network decision names too, a row named twice; an option
+    owner_option_refused refuses, any option of a serial number or address screen, of a row that acts on opening, of a
+    Language, NTSC/PAL or Area/Date/Time row, of a never-choose row without "link_loss", of a credentials row other than
+    a never-choose one, and an action's steps without the action under "confirm"; a confirmation of what is no action
+    and does not act on opening, one that may drop the link without "link_loss", and the opening of a blanked row
+    (BLANKED) that may change the network without "values": "logged" (its after-armed screen could never be judged).
+    The caller refuses to run when any refusal is given."""
+    rows, refusals = {}, []
+    net_rows = {plain(r) for r in _network_decisions(scope)[0]}
+    labels = set()
+    decisions = scope.get("decisions") if isinstance(scope, dict) else None
+    for i, d in enumerate(decisions if isinstance(decisions, list) else []):
+        if not isinstance(d, dict) or d.get("lifts") != OWNER_LIFT:
+            continue
+        where, day = f"decision {i + 1}", d.get("date")
+        if not _valid_day(day):
+            refusals.append(f"{where}: its date {day!r} is not a day written YYYY-MM-DD, today or before, so it lifts "
+                            "nothing")
+            continue
+        if not isinstance(d.get("why"), str) or not d["why"].strip():
+            refusals.append(f"{where} ({day}): it says no why, so it lifts nothing")
+            continue
+        named = d.get("rows")
+        if not isinstance(named, list) or not named:
+            refusals.append(f"{where} ({day}): it names no rows")
+            continue
+        extra = sorted(k for k in d if k not in OWNER_KEYS)
+        lose, said = d.get("link_loss", False), d.get("values")
+        options, sure, safe = d.get("options"), d.get("confirm"), d.get("steps_seen")
+        alone = d.get("unattended", False)
+        bad = (f"it says {', '.join(map(repr, extra))}, which no decision says" if extra else
+               "its \"link_loss\" is not true or false" if not isinstance(lose, bool) else
+               "its \"unattended\" is not true or false" if not isinstance(alone, bool) else
+               "it says \"unattended\" and names nothing under \"confirm\", nor a never-choose row's \"options\" with "
+               "\"link_loss\": true: it waives the terminal question of an armed press alone"
+               if alone and not waives_question(d) else
+               "its \"values\" is not \"logged\" (leave it out to keep them withheld)" if said not in (None, "logged")
+               else "its \"options\" is not an object naming, for a row it names, the options the kit may choose"
+               if options is not None and not isinstance(options, dict) else
+               "its \"confirm\" is not a list of the rows it names" if sure is not None and not isinstance(sure, list)
+               else "its \"steps_seen\" is not an object naming, for an action it names, the steps seen to lead only to "
+               "a question" if safe is not None and not isinstance(safe, dict) else "")
+        if bad:
+            refusals.append(f"{where} ({day}): {bad}, so it lifts nothing")
+            continue
+        sure = [s.strip() if isinstance(s, str) else s for s in sure or []]
+        listed = {}
+        for entry in named:
+            why, label, path = owner_row_refused(entry, places)
+            if not why and plain(label) in net_rows:
+                why = "a network decision names it too: name it in one decision"
+            if not why and (entry.strip() in listed or entry.strip() in rows or plain(label) in labels):
+                why = "it is named twice"
+            if why:
+                refusals.append(f"{where} ({day}) names {entry!r}: {why}")
+                continue
+            labels.add(plain(label))
+            listed[entry.strip()] = {"label": label, "path": path, "class": owner_class(label), "date": day,
+                                     "why": d["why"].strip(), "options": [], "confirm": False, "link_loss": lose,
+                                     "logged": said == "logged", "steps_seen": [], "unattended": alone,
+                                     "acts_on_open": opens_acting(label, owner_class(label), path)}
+        for entry in sure:
+            info = listed.get(entry) if isinstance(entry, str) else None
+            if info is None:
+                refusals.append(f"{where} ({day}): its \"confirm\" names {entry!r}, a row it does not name (or names "
+                                "refused) in \"rows\"")
+            elif info["class"] not in ACTION_CLASSES and not info["acts_on_open"]:
+                refusals.append(f"{where} ({day}): its \"confirm\" names {entry!r}, which is no action and does not act "
+                                "on opening: only an action's confirmation, or such a row's opening, is confirmed")
+            elif link_wiping(info["label"]) and not lose:
+                refusals.append(f"{where} ({day}): its \"confirm\" names {entry!r}, which wipes the network setup and the "
+                                "link: only with \"link_loss\": true")
+            elif info["acts_on_open"] and link_risk_open(info["label"]) and not lose:
+                refusals.append(f"{where} ({day}): its \"confirm\" names {entry!r}, whose opening may change the network "
+                                "the link is on: only with \"link_loss\": true")
+            elif info["acts_on_open"] and loses_link(info["label"], "open") and info["class"] in BLANKED \
+                    and said != "logged":
+                # its screens are blanked unless logged: the screen after its opening could never be judged, so the run
+                # would always end by hand with a pairing, search or connection window left open (2026-11-14, a review)
+                refusals.append(f"{where} ({day}): its \"confirm\" names {entry!r}, whose opening may change the network "
+                                "and whose screens are blanked: only with \"values\": \"logged\", so that the screen "
+                                "after its opening can be judged and cancelled")
+            else:
+                info["confirm"] = True
+        for entry, opts in (options or {}).items():
+            info = listed.get(entry.strip()) if isinstance(entry, str) else None
+            label = info["label"] if info else ""
+            if info is None:
+                why = "a row it does not name (or names refused) in \"rows\""
+            elif not isinstance(opts, list) or not opts or not all(isinstance(o, str) and plain(o) for o in opts):
+                why = "not a list of option names"
+            elif any(owner_option_refused(o, label, info["class"]) for o in opts):
+                o = next(o for o in opts if owner_option_refused(o, label, info["class"]))
+                why = f"{o!r}: {owner_option_refused(o, label, info['class'])}"
+            elif info["class"] in (LIFT_ADDRESS, LIFT_SERIAL):
+                why = "a screen with no option to choose"
+            elif link_wiping(label):
+                why = "a reset that wipes the link takes no step: its confirmation is its one armed press"
+            elif info["acts_on_open"]:
+                why = "its opening acts and is the last press of the run: nothing is chosen in it"
+            elif hard_never_choose(label):
+                why = hard_never_choose(label)
+            elif never_choose(label) and not lose:
+                why = f"{never_choose(label)} without \"link_loss\": true (the choice may drop the link)"
+            elif info["class"] == LIFT_CREDENTIALS and not never_choose(label):
+                why = "the options of a credentials row are chosen only on its own On/Off list (Access Authen., Wi-Fi Direct)"
+            elif info["class"] in ACTION_CLASSES and not info["confirm"]:
+                why = "the steps of an action lead to its confirmation: name the action under \"confirm\" too"
+            else:
+                info["options"] = list(dict.fromkeys(o.strip() for o in opts))
+                continue
+            refusals.append(f"{where} ({day}): its \"options\" for {entry!r}: {why}")
+        for entry, steps in (safe or {}).items():
+            info = listed.get(entry.strip()) if isinstance(entry, str) else None
+            if info is None:
+                why = "a row it does not name (or names refused) in \"rows\""
+            elif info["class"] not in ACTION_CLASSES:
+                why = "only an action's steps are marked seen"
+            elif registers(info["label"]):
+                why = (f"the first Enter inside it registers or acts ({registers(info['label'])!r}): no step of it is "
+                       "a seen one, its first Enter is the run's armed last press")
+            elif not isinstance(steps, list) or not steps or not all(isinstance(x, str) and plain(x) for x in steps):
+                why = "not a list of step names"
+            elif not {plain(x) for x in steps} <= {plain(o) for o in info["options"]}:
+                why = "a step it marks seen that its \"options\" do not name"
+            else:
+                info["steps_seen"] = list(dict.fromkeys(x.strip() for x in steps))
+                continue
+            refusals.append(f"{where} ({day}): its \"steps_seen\" for {entry!r}: {why}")
+        rows.update(listed)
+    return {"rows": rows, "refusals": refusals}
+
+
+def owner_lifted_row(lit: str, owner, values=None) -> str | None:
+    """The label of the owner row (`owner`: {label: info} the run was given, kit/drive.py's one row) that the lit text
+    `lit` opens, or None: the lit text, compared whole (plain), starts with the row's label, what follows it is nothing
+    or one of the row's own values (`values`, as network_lifted_row takes them), and the lit text is of the very class
+    the decision lifted the row from (owner_class(lit) == the row's class: a value that reads as another class, a
+    pairing after a connection row's name, opens nothing)."""
+    seen = plain(lit)
+    if not owner or not seen:
+        return None
+    cls = owner_class(lit)
+    for label, info in owner.items():
+        want = plain(label)
+        if not want or not seen.startswith(want) or seen[len(want):len(want) + 1].isalnum():
+            continue
+        rest = plain(seen[len(want):])
+        if rest and rest not in {plain(v) for v in (values or {}).get(label, ()) if plain(v)}:
+            continue
+        if cls is not None and cls == (info or {}).get("class"):
+            return label
+    return None
+
+
+def _title_off(text, row) -> str:
+    """The screen's whole text, folded, with the row's own name taken off once where it leads it as the screen's title
+    ("Format Slot 1 Slot 2" -> "Slot 1 Slot 2"), anchored at the start and nowhere else; the text as it is otherwise.
+    What a seen step's screen is judged on (owner_enter), never a confirmation (action_confirmation)."""
+    t, want = fold(text).strip(), plain(row)
+    lead = re.match(r"^[^0-9A-Za-z(+\-±]*", t).end()
+    if want and plain(t[lead:]).startswith(want):
+        rest = t[lead:]
+        cut = next((i for i in range(len(rest) + 1) if plain(rest[:i]) == want), None)
+        if cut is not None and not rest[cut:cut + 1].isalnum():
+            return rest[cut:]
+    return t
+
+
+def owner_enter(row: str, cls, kind, lit, text, options=(), seen=()) -> tuple:
+    """(why an Enter inside the owner row `row` of class `cls` may never go, or "", what it is), the screen read now
+    (kind, lit text, whole text). Inside an action or a card row any Enter may be the final one, since the kit cannot
+    know for an unseen body whether Enter on a slot acts at once (2026-11-13, a review): an Enter is a "step" only where
+    its lit text is a step the decision names (`options`) that it also marks seen safe on this camera (`seen`, its
+    "steps_seen": the owner has seen that Enter on it only leads to a question), on a screen that is no dialog or notice
+    (CONFIRM_KINDS), holds no question mark, reads as no confirmation once its own title is off (_title_off) and shows
+    no dialog's two buttons (confirm_pair: Enter, OK or Execute with Cancel); a named
+    step that is not all of that is "final", the run's armed last press; any other Enter there is the action's
+    "confirm", armed too. The caller makes a step "final" as well when no Enter follows it in the run. Elsewhere an
+    Enter chooses only a named option: "choose" in a never-choose row, "option" otherwise; in a credentials row only on
+    an option list (LIST_KINDS); never in a Language, NTSC/PAL or Area/Date/Time row. Never on a lit text that cannot be
+    read or that loads (_LOADS), nor on a screen naming a firmware update. Who may press each, and when, is
+    arm_refused's."""
+    shown = plain(lit)
+    if not shown:
+        return f"the lit text inside {row!r} cannot be read, so nothing is pressed", ""
+    if any(_LOADS_RE.search(r) for r in readings(lit)):
+        return f"the lit text inside {row!r} loads settings or a file (docs/decisions/0006)", ""
+    if any(_OWNER_NEVER_RES[0][0].search(r) for r in readings(text)):
+        return f"the screen inside {row!r} names a firmware update", ""
+    named = shown in {plain(o) for o in options or ()}
+    if cls in ACTION_CLASSES:
+        if not named:
+            return "", "confirm"
+        body = _title_off(text, row)
+        safe = (shown in {plain(o) for o in seen or ()} and not registers(row) and kind not in CONFIRM_KINDS
+                and "?" not in body and not confirmation(body) and not action_confirmation(body, row)
+                and not confirm_pair(text, row))
+        return "", ("step" if safe else "final")
+    if cls == LIFT_CREDENTIALS and kind not in LIST_KINDS:
+        return f"inside the credentials row {row!r} Enter goes only on an option list, not a {kind!r} screen", ""
+    if not named:
+        return (f"the lit option {str(lit).strip()!r} is not one the owner decision lets the kit choose in {row!r} "
+                "(\"options\")"), ""
+    if hard_never_choose(row):
+        return hard_never_choose(row), ""
+    return "", ("choose" if never_choose(row) else "option")
+
+
+def arm_refused(row: str, cls, what: str, kind, lit, text, confirm: bool = False, link_loss: bool = False,
+                place=None) -> str:
+    """Why the press `what` (owner_enter's, or "open": the opening press of a row whose opening acts, opens_acting) in
+    the owner row `row` of class `cls` may not be armed, or "", the screen read now (kind, lit text, whole text) and the
+    decision's word for the row (`confirm`: it names the row under "confirm"; `link_loss`; `place`, the row's place as
+    owner_decided gives it, which tells a row seen to open to look). The caller arms only the
+    run's last press, given --confirm (kit/drive.py), and camkit.live.LiveCamera presses it only when drive.py allowed
+    that very press for that very row (its permit) and this check passes on its own reading too.
+      "confirm": the row is an action under "confirm"; the screen a dialog or a notice (CONFIRM_KINDS); its lit text a
+                 confirm button (confirm_buttons); its whole text, as read, that action's confirmation
+                 (action_confirmation) and naming nothing that loads; "link_loss" where it wipes the link.
+      "final":   a named step that may act at once: the row is an action under "confirm"; a screen whose text is shown
+                 (SHOWN_KINDS, never the shooting screen) and names nothing that loads; "link_loss" where it wipes the
+                 link.
+      "open":    the row's opening acts (opens_acting, at `place`) and it is under "confirm"; the screen a menu page;
+                 the lit text the row itself; "link_loss" where the opening may change the network or wipes the link.
+      "choose":  "link_loss", on an option list, never Language, NTSC/PAL or Area/Date/Time.
+      "step":    a seen step of an action under "confirm", never of a row whose first Enter registers (registers).
+    Anything else is never armed."""
+    if what == "confirm":
+        if cls not in ACTION_CLASSES:
+            return f"{row!r} is no action, so nothing in it is confirmed"
+        if not confirm:
+            return f"the owner decision does not name {row!r} under \"confirm\""
+        if kind not in CONFIRM_KINDS:
+            return f"the screen reads as {kind!r}, not a dialog or a notice: no confirmation is pressed there"
+        if plain(lit) not in confirm_buttons(row):
+            return f"the lit text {str(lit).strip()!r} is not a confirm button of {row!r} (Enter, OK, Execute, Yes, its name)"
+        if any(_LOADS_RE.search(r) for r in readings(text)):
+            return "the screen loads settings or a file (docs/decisions/0006)"
+        if not action_confirmation(text, row):
+            return f"the screen does not read as the confirmation of {row!r}"
+        if link_wiping(row) and not link_loss:
+            return f"confirming {row!r} wipes the link: only with \"link_loss\": true"
+        return ""
+    if what == "final":
+        if cls not in ACTION_CLASSES:
+            return f"{row!r} is no action, so nothing in it is a final step"
+        if not confirm:
+            return f"a step of {row!r} may act at once, and the owner decision does not name it under \"confirm\""
+        if kind not in SHOWN_KINDS or kind == "shooting":
+            return f"the screen reads as {kind!r}, no screen a step is pressed on"
+        if any(_LOADS_RE.search(r) for r in readings(text)):
+            return "the screen loads settings or a file (docs/decisions/0006)"
+        if link_wiping(row) and not link_loss:
+            return f"a step of {row!r} may wipe the link: only with \"link_loss\": true"
+        return ""
+    if what == "open":
+        if not opens_acting(row, cls, place):
+            return f"{row!r} opens to look: its opening is no armed press"
+        if not confirm:
+            return f"{row!r} acts on opening, and the owner decision does not name it under \"confirm\""
+        if kind not in ROW_PAGES:
+            return f"the screen reads as {kind!r}, not a menu page with the row lit"
+        if owner_lifted_row(lit, {row: {"class": cls}}) is None:
+            return f"the lit row {str(lit).strip()!r} is not {row!r}"
+        if (link_risk_open(row) or link_wiping(row)) and not link_loss:
+            return f"opening {row!r} may change the network the link is on: only with \"link_loss\": true"
+        return ""
+    if what == "choose":
+        if hard_never_choose(row):
+            return hard_never_choose(row)
+        if not link_loss:
+            return f"{never_choose(row) or 'the choice'}, unless the decision says \"link_loss\": true"
+        if kind not in LIST_KINDS:
+            return f"the screen reads as {kind!r}, not an option list"
+        return ""
+    if what == "step":
+        if cls not in ACTION_CLASSES:
+            return f"{row!r} is no action, so nothing in it is a step"
+        if not confirm:
+            return f"the steps of {row!r} lead to its confirmation: the decision names it under \"confirm\" too"
+        if registers(row):
+            return f"the first Enter inside {row!r} registers or acts: no step of it is a seen one"
+        return ""
+    return f"{what!r} is no press an owner decision arms"
+
+
+def owner_said(info) -> str:
+    """What an owner decision lets a run do in one of its rows (owner_decided's info), in words."""
+    return ", ".join((["its opening acts: opened only as a --confirm run's last press"] if info.get("acts_on_open")
+                      else [f"may choose {', '.join(info['options'])}"] if info.get("options") else ["to look"])
+                     + ([f"steps seen safe: {', '.join(info['steps_seen'])}"] if info.get("steps_seen") else [])
+                     + (["may confirm, as a --confirm run's last press"] if info.get("confirm") else [])
+                     + (["the link may be lost: restored by hand"] if info.get("link_loss") else [])
+                     + (["its first Enter inside registers at once, and no settings file puts that registration back"]
+                        if registers(info.get("label")) else [])
+                     + (["the owner waived the terminal question in the decision (\"unattended\")"]
+                        if info.get("unattended") else [])
+                     + (["values logged in runs/"] if info.get("logged") else ["values withheld"]))
+
+
+def asks_person(info) -> bool:
+    """Whether a run given --confirm asks the person at the terminal before anything connects, in the owner row of
+    `info` (owner_decided's): in every row, unless the decision says "unattended": true (2026-11-14, a fourth review:
+    the decision is a local file and --confirm a flag, both of which an agent can write; kit/drive.py's typed_word
+    asks). Every row, not only an action's: a never-choose option is an armed press that may drop the link too (a fifth
+    review), and a question asked of every confirming run leaves no class of row to have been forgotten."""
+    return bool(info) and not info.get("unattended")
+
+
+def waives_question(d) -> bool:
+    """Whether the owner decision `d`, as written, has an armed press whose terminal question "unattended": true may
+    waive: a row under "confirm", or a never-choose row's "options" with "link_loss": true (an option chosen there is
+    the run's armed last press). Its rows and options are judged later, each on its own (owner_decided)."""
+    if not isinstance(d, dict):
+        return False
+    if d.get("confirm"):
+        return True
+    options = d.get("options")
+    return d.get("link_loss") is True and isinstance(options, dict) and any(
+        isinstance(e, str) and never_choose(e.split(">")[-1].strip()) for e in options)
+
+
+def owner_allowance(rows) -> str:
+    """The words a run's log carries for the owner rows it was given ({entry: info})."""
+    return "; ".join(f"the owner decided on {info['date']} that the kit may open {entry} remotely ({owner_said(info)})"
+                     for entry, info in rows.items())
 
 
 if __name__ == "__main__":

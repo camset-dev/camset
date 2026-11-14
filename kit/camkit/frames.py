@@ -10,11 +10,14 @@ directly (frames stop changing for `quiet` seconds). With OSD frames it is infer
 expected effect: an unchanged frame where a change was expected is re-shot (slow redraws), and an
 unexpected change is confirmed by a second frame.
 """
+import atexit
 import contextlib
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -37,10 +40,18 @@ class Frame:
     source: str = ""
     small: np.ndarray | None = None   # 80x60 thumbnail, kept by sources that compare every frame
 
-    def save(self, path: Path) -> Path:
-        Image.fromarray(self.image).save(path)
+    def save(self, path: Path, withheld: bool = False) -> Path:
+        """The frame written to `path` as evidence; `withheld` (the eyes' withheld: a row whose values an owner decision
+        withholds is open, camkit.live.LiveCamera) writes a black picture of the same size instead, so no pixel of that
+        screen ever reaches the disk, while the frame in memory keeps its picture for the screen's kind."""
+        Image.fromarray(np.zeros_like(self.image) if withheld else self.image).save(path)
         self.path = path
         return path
+
+
+def keep(f: Frame, path: Path, withheld: bool = False) -> Path:
+    """`f` saved as evidence at `path`: black where `withheld` (Frame.save), as it is otherwise."""
+    return f.save(path, True) if withheld else f.save(path)
 
 
 def load(path: Path, source="file") -> Frame:
@@ -93,20 +104,55 @@ class OsdSource:
     TOL = 0.01
     QUIET = 0.75
     LATE = 6.0
+    # set by camkit.live.LiveCamera while a row whose values an owner decision withholds is open: every frame saved is
+    # black (Frame.save), and the camera's own picture is polled into a folder of these eyes' own outside the run's
+    # folder (private_dir: tempfile.mkdtemp, mode 0700 and a name no other user can guess), the picture and camlink's
+    # .part beside it removed as soon as it is read (peek), the folder at close() and when the process ends: camlink
+    # writes that picture, so it is on the disk for that moment, where only this user can read it
+    withheld = False
+    _private = None
 
     def __init__(self, link, run):
         self.link, self.run = link, run
         self.live = run.dir / "_live.png"      # polling target; only settled frames become evidence
 
+    def private_dir(self) -> Path:
+        """The folder the withheld polls go to: made once (tempfile.mkdtemp, mode 0700) and kept until close()."""
+        d = getattr(self, "_private", None)
+        if d is None or not Path(d).is_dir():
+            d = self._private = Path(tempfile.mkdtemp(prefix="camkit_osd_"))
+            atexit.register(shutil.rmtree, d, True)         # an exception that skips close() still takes it away
+        return d
+
+    def close_private(self) -> None:
+        """The withheld polls' folder removed, whatever is left in it (a camlink killed mid-write leaves its .part)."""
+        d, self._private = getattr(self, "_private", None), None
+        if d is not None:
+            shutil.rmtree(d, ignore_errors=True)
+
+    def close(self):
+        self.close_private()
+
     def peek(self) -> Frame:
-        self.link.osd(self.live)
-        f = load(self.live, "osd")
+        if not getattr(self, "withheld", False):
+            self.link.osd(self.live)
+            f = load(self.live, "osd")
+            f.path = None
+            return f
+        target = self.private_dir() / "withheld.png"
+        try:
+            self.link.osd(target)
+            f = load(target, "osd")
+        finally:
+            for left in (target, target.with_name(target.name + ".part")):
+                with contextlib.suppress(OSError):
+                    left.unlink()
         f.path = None
         return f
 
     def grab(self, tag="f") -> Frame:
         f = self.peek()
-        f.save(self.run.shot_path(tag))
+        keep(f, self.run.shot_path(tag), getattr(self, "withheld", False))
         return f
 
     def settle(self, before: Frame | None, tag="f", expect_change: bool | None = None,
@@ -133,7 +179,7 @@ class OsdSource:
             last = f
             time.sleep(poll)
         f = last or self.peek()
-        f.save(self.run.shot_path(tag))
+        keep(f, self.run.shot_path(tag), getattr(self, "withheld", False))
         return f, moved
 
 
@@ -167,7 +213,7 @@ class OsdFeed(OsdSource):
         return np.zeros((60, 80), bool)        # no blinking readouts to learn: frames come on request
 
     def close(self):
-        pass
+        self.close_private()                    # the withheld polls' folder, if a withheld row made one
 
 
 def eyes_default() -> str:
@@ -245,6 +291,7 @@ class HdmiSource:
     With a calibrated crop, ffmpeg crops and scales to the canonical layout itself, so only 640x480
     frames reach Python (a tenth of the data at 59.94 fps)."""
     name = "hdmi"
+    withheld = False        # as OsdSource's: while set, every frame saved is black (Frame.save)
     # share of 8x8 blocks: ~5 blocks. Once self-changing blocks are masked the uncompressed feed has a
     # zero noise floor (2026-10-28), and one digit stepping in a number field moves ~6-12 blocks.
     TOL = 0.001
@@ -369,7 +416,7 @@ class HdmiSource:
             time.sleep(0.01)
         f = Frame(f.image, f.t, None, "hdmi", f.small)
         if save:
-            f.save(self.run.shot_path(tag))
+            keep(f, self.run.shot_path(tag), getattr(self, "withheld", False))
         return f
 
     def settle(self, before: Frame | None, tag="f", expect_change: bool | None = None,

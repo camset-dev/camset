@@ -57,6 +57,48 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- A dated owner decision that says `"lifts": "owner"` may name rows of the never-open list a network decision cannot:
+  credentials, the serial number screen, the closed identity rows, actions and resets, a card's Format and Delete;
+  never a firmware update or the Version screen, anything that loads a file or settings (Save/Load Settings' Load,
+  Recall Camera Setting, Import Root Certificate, Register IPTC Info), nor sound, light, motion or the Screen Reader, which keep their own
+  routes, and Initialize, whose Enter nobody has seen. Only `drive.py --owner` uses it, for the last label of its
+  `--path`, one row per run: the crawl and the proofs never open such a row. An action's or a card's row, and any row
+  whose name the kit knows in more than one place, is named by its path (`"Tab > Group > Row"`), and the run opens it
+  only where the screen reads that place: the top-level page's tab and group, and for a deeper row each parent's lit bar
+  before its Right and the title of the page it opens; between the walk and the opening only Up and Down go out, and
+  then no Right or Enter goes out, in `drive.py` or in the camera's own check, but that row's opening and the presses
+  inside it, whatever a lit row reads as, and a Right that leaves the page where it was refuses; `--confirm` covers only
+  the presses those checks judged. Before any `--owner` run given `--confirm` connects, the person at the terminal types
+  the row's name, the prompt showing its whole place and never the word to type; no flag answers it, it stops a careless
+  agent but not a determined one (a pseudo-terminal can answer it), so the owner types it, and only `"unattended": true`
+  beside `"confirm"`, or beside a never-choose row's `"options"` with `"link_loss"`, waives it. The row opens with Right alone, to look, only at a place where the
+  kit has seen it open a list or a question (Setup > Reset/Save Settings > Setting Reset, Camera Set. Memory, Reg.
+  Custom Shoot Set, My Menu's Add Item, Select REC Folder: the whole place, never the label alone); every other action,
+  Format and Delete among them, whose opening no frame records, and every row that acts as soon as it opens (WPS Push,
+  Pairing, Create New Folder...), opens only as a `--confirm` run's armed last press, the row under `"confirm"`.
+  `"options"` names what may be chosen (an action's steps, a never-choose option with `"link_loss": true`); inside an
+  action any Enter may be the final one, so a step goes before the last press only where `"steps_seen"` marks it seen
+  to lead only to a question and its screen shows no dialog's two buttons, and any other Enter there is the run's armed
+  last press; the camera's own check presses an armed press only when `drive.py` allowed it. Before a press that may
+  drop the link (Reset Network Set., SSID/PW Reset with `"link_loss": true`) `RESTORE_BY_HAND.json` in the camera's
+  runs folder (and in the clone's `runs/` for the camera, where `CAMSET_RUNS` points elsewhere) names the start file. A
+  press refused before it went takes it away and restores as ever; when the screen after it is the row's own question
+  (one that asks, with a "?" or a dialog's two buttons, never a notice saying it was done), MENU alone cancels it, the run restores and exits 6 (`EXIT_NOT_CONFIRMED`, the question's frame kept); when the link
+  answers with another screen, the run restores and takes the file away once the restore checks out; anything else
+  keeps it, presses nothing more and exits 5, telling the owner to cancel by hand what the camera still shows. A
+  blanked row whose opening may change the network (WPS Push, Pairing...) is confirmed only with `"values": "logged"`,
+  so that the screen after its opening can be judged. No link opens while it is there until `kit/tools/upload_check.py` has put
+  the start file back (the records no file sets back left out of the count; the owner may accept records that still
+  differ only by naming them back, `--accept 0x1126,0x18cb`), and `kit/tools/chain.py` stops after status 5, uploading
+  no end file, and after status 6. Without `"values": "logged"` a credentials, serial number or closed identity row's
+  frames are written black by the eyes, the camera's own picture of them polled into a folder of the eyes' own (mode
+  0700) removed at the end; with it the screens' text goes to the run's `drive.jsonl` alone, never to the console. Such
+  a run asks local readers only, no batch tool asks any reader about its frames, and the proof viewer neither shows
+  them nor packs a local-only run's frames. A scope that git tracks, that git cannot say it does not track, or that
+  writes a key twice in one object, is refused, and a network decision that says `"confirm"`, `"link_loss"`, `"values"`,
+  `"steps_seen"` or `"unattended"` is refused. Without `--owner` and such a decision every verdict is as before or stricter (decisions 4, 5,
+  8 and 9, changed 2026-11-13 for the a1 II's owner's camera; every other camera's default is unchanged or stricter:
+  SSID/PW Reset joined the Enter check of Initialize and Reset Network Set. for every camera).
 - The Wi-Fi and Bluetooth settings (Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt Ctrl,
   Airplane Mode), the screens that show the camera's network addresses, and the identity, connection and region rows
   whose opening starts or ends nothing (Wired LAN Connect, IP Address Setting, Remote Shoot Function, the USB rows but

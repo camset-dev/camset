@@ -89,8 +89,10 @@ records it reads (links to their rows), and a frame of the camera's own Main pag
 (kit2_page_scan*/scan.jsonl, the mode by the run's name). A definition without either part shows no such entry.
 
 --pack copies every frame the page links into its _viewer/frames/<run>/<its path in the run> and links the
-copies instead: JPEG at quality 85, about a third of the PNG's size (--png copies the files as they are). The
-folder then holds the page and all its pictures: zip it or copy it to another computer, where it opens in a
+copies instead, never a frame of a --network or --owner run (marked LOCAL_ONLY or NO_READER: camkit.vlm), which stays
+on this computer; the page shows no frame and no step at all of a run that opened a row an owner decision names
+(NO_READER: decision 9). The copies are JPEG at quality 85, about a third of the PNG's size (--png copies the files
+as they are). The folder then holds the page and all its pictures: zip it or copy it to another computer, where it opens in a
 browser with no kit installed. A second pack redoes only the frames whose source is newer than the copy, and
 removes the copies no page link names any more (under its _viewer/frames/ only). A build without --pack
 (build_docs.py's too) links the frames in the runs again and leaves the copies be: pack again before copying the
@@ -116,6 +118,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, camset, datafiles, definitions, help_files, jsonl, menu_rows, paths, placement  # noqa: E402
 from camkit.placement import norm  # noqa: E402
+from camkit.vlm import LOCAL_MARKER, NO_READER_MARKER  # noqa: E402
 
 RUN_ROOT = None          # the camera's runs the page reads (runs/<model>_fw<fw>/), or None: set by main(), place()
 SCHEMA = None            # the definition the page is built from, when given (the tests); else pick_definition()
@@ -164,14 +167,27 @@ def in_viewer(here: Path, root: Path) -> bool:
 
 def frame(run: Path, name, here: Path):
     """A frame's link: relative to the page in the camera's _viewer/, else its absolute path; with forward slashes on
-    every OS, as a page's links are. None when the file is not there."""
-    if not name:
+    every OS, as a page's links are. None when the file is not there, and for every frame of a run that opened a row an
+    owner decision names (its folder marked NO_READER_MARKER: credentials, the serial number or values the owner chose
+    to log may be on them; 2026-11-14, a review): the page never links one."""
+    if not name or held(run):
         return None
     for sub in ("shots", "upright", "."):
         p = run / sub / name
         if p.exists():
             return (Path("..") / p.relative_to(RUN_ROOT)).as_posix() if in_viewer(here, RUN_ROOT) else p.as_posix()
     return None
+
+
+def held(run: Path) -> bool:
+    """Whether the run folder `run` is one whose frames the page never shows (camkit.vlm.NO_READER_MARKER)."""
+    return (Path(run) / NO_READER_MARKER).exists()
+
+
+def local_only(run: Path) -> bool:
+    """Whether the run folder `run` is a --network or --owner run's (camkit.vlm.LOCAL_MARKER, or NO_READER_MARKER): its
+    frames are never copied for another computer by --pack."""
+    return held(run) or (Path(run) / LOCAL_MARKER).exists()
 
 
 def row_name(r) -> str:
@@ -314,8 +330,12 @@ def place(doc) -> tuple:
 
 
 def collect(settings, here: Path) -> dict:
+    """The evidence of every setting, from the kit's runs; a run that opened a row an owner decision names (held) is
+    left out whole: neither its frames nor its steps reach the page."""
     keys, ev = Keys(settings), collections.defaultdict(list)
     for run in the_runs():
+        if held(run):
+            continue
         if (run / "proofs.jsonl").exists():
             from_proofs(run, keys, here, ev)
         for log in ("drive.jsonl", "hand.jsonl"):
@@ -950,11 +970,14 @@ def relink(data, new: dict) -> int:
 
 def pack_plan(links, page_dir: Path, runs: Path = None, png: bool = False) -> dict:
     """{link: (the frame's file, its copy's link)}: the copy under frames/<run>/<its path in the run>, relative to
-    the page, with a .jpg name unless png (a frame already in JPEG keeps its name)."""
+    the page, with a .jpg name unless png (a frame already in JPEG keeps its name). No frame of a --network or --owner
+    run (local_only) is copied: its link stays into the runs, on this computer alone."""
     plan, runs = {}, runs or RUN_ROOT
     for link in links:
         src = Path(link) if Path(link).is_absolute() else Path(os.path.normpath(page_dir / link))
         rel = src.relative_to(runs)
+        if rel.parts and local_only(runs / rel.parts[0]):
+            continue
         if not png and src.suffix.lower() not in (".jpg", ".jpeg"):
             rel = rel.with_suffix(".jpg")
         plan[link] = (src, (Path(FRAMES) / rel).as_posix())
@@ -1027,7 +1050,9 @@ def pack(data, page_dir: Path, runs: Path = None, png: bool = False, workers: in
     """Copy every frame data links into page_dir/frames/, point the links at the copies (in place) and remove the
     copies no longer linked; the summary line. A frame that could not be copied keeps its link into the runs
     (runs: the camera's run root the links point into, by default the one the page reads)."""
-    plan = pack_plan(linked_frames(data), page_dir, runs, png)
+    links = linked_frames(data)
+    plan = pack_plan(links, page_dir, runs, png)
+    local = len(links) - len(plan)          # frames of --network or --owner runs: never copied (pack_plan)
     jobs = {src: page_dir / new for src, new in plan.values()}
     done, failed = pack_frames(jobs, workers, say)
     for src, e in list(failed.items())[:5]:
@@ -1042,8 +1067,13 @@ def pack(data, page_dir: Path, runs: Path = None, png: bool = False, workers: in
     line = (f"packed {len(jobs) - len(failed)} frames: {done['converted']} converted to JPEG, {done['copied']} copied, "
             f"{done['skipped']} skipped (already there), {removed} removed (no longer linked); "
             f"{FRAMES}/ holds {size_text(size)}")
+    if local:
+        line += (f"; {local} frames of --network or --owner runs were not copied: they stay on this computer and still "
+                 "link into runs/")
     if failed:
         return line + f"; {len(failed)} could not be packed and still link into runs/, so {where}/ is not self-contained"
+    if local:
+        return line + f", so {where}/ is not self-contained"
     return line + f". {where}/ is now self-contained: copy or zip the folder"
 
 

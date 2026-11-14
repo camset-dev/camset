@@ -46,11 +46,17 @@ import time
 from pathlib import Path
 
 from . import LINK_BIN, ConfigMissing, config, provenance, safety
-from .runs import Run
+from .runs import RESTORE_BY_HAND, Run, restore_pending_any
 
 
 class LinkError(Exception):
     pass
+
+
+class CameraRefused(LinkError):
+    """A reply came back and said the command was not taken ("button not accepted": the camera did nothing; camlink's
+    own guard refused it): kit/drive.py takes an armed press refused so as not gone, closes with MENU and restores.
+    No reply, a timeout, a dead camlink, a button left held: LinkError, after which the press may have acted."""
 
 
 def quoted(text) -> str:
@@ -219,10 +225,12 @@ def _catch_signals(run):
 
 class Link:
     def __init__(self, run: Run, ip: str | None = None, usb: bool = False, binary: Path | list = LINK_BIN,
-                 catch_signals: bool = True):
-        """binary: camlink, or a command line that starts one (the tests' stand-in: [python, script])."""
+                 catch_signals: bool = True, pending_restore: bool = False):
+        """binary: camlink, or a command line that starts one (the tests' stand-in: [python, script]). pending_restore:
+        kit/tools/upload_check.py's alone, putting back the start file a run's RESTORE_BY_HAND names (open)."""
         self.run = run
         self.catch_signals = catch_signals
+        self.pending_restore = bool(pending_restore)
         # CAMSET_USB=1: USB remote shooting instead of the LAN (after the camera's Initialize wiped its
         # network setup, 2026-10-30); every script then connects over USB unchanged
         usb = usb or os.environ.get("CAMSET_USB") == "1"
@@ -251,6 +259,19 @@ class Link:
     # -------------------------------------------------------------- lifetime
 
     def open(self, timeout=40.0):
+        # a run that may have dropped its link left the camera unrestored (kit/drive.py --owner, "link_loss": camkit.runs
+        # RESTORE_BY_HAND): no link opens, so no run starts from it, until kit/tools/upload_check.py has put that run's
+        # start file back and removed the file (docs/decisions/0015); refused before camlink starts
+        found = None if getattr(self, "pending_restore", False) else restore_pending_any(self.run.root)
+        if found is not None:
+            where, pending = found
+            why = (f"{where / RESTORE_BY_HAND} says a run ({pending.get('run')}) may have dropped the link and "
+                   f"left the camera unrestored: cancel on the camera by hand whatever screen it still shows (MENU or "
+                   f"Cancel, never Enter or OK), then put its start file back, by hand once the camera is reachable, "
+                   f"with kit/tools/upload_check.py {pending.get('start')} (docs/decisions/0015); no link opens until "
+                   "then")
+            self.run.log("link_refused", why=why)
+            raise LinkError(why)
         # a process group of its own: a terminal's Ctrl-C reaches this process only, which stops the run cleanly
         own_group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                      else {"start_new_session": True})
@@ -462,9 +483,14 @@ class Link:
             raise LinkError(str(e)) from None
 
     def _must(self, command: str, timeout=30.0, **guard) -> dict:
+        """The command's reply when camlink answers ok; LinkError otherwise. A reply that came back saying the camera
+        (or camlink's own guard) did not take the command ("button not accepted": nothing done) is CameraRefused; a
+        button whose release was refused ("button_held": it went down, and may have acted) and camlink's last word
+        after a signal are plain LinkError, as no reply at all is."""
         r = self.call(command, timeout, **guard)
         if not r.get("ok"):
-            raise LinkError(f"{command}: {r.get('error')}")
+            kind = LinkError if r.get("cause") in ("button_held", "signal") else CameraRefused
+            raise kind(f"{command}: {r.get('error')}")
         return r
 
     # -------------------------------------------------------------- inputs
