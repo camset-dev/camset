@@ -849,7 +849,8 @@ class Question(NamedTuple):
 
 
 # One question per kind of screen, each asking for exactly the thing the kit reads there, in a pinned form, those that
-# read a lit item that may be missing with "none" for it (camkit.vlm's ".v2" prompts; the owner, 2026-11-13: "keep OCR
+# read a lit item that may be missing with "none" for it (camkit.vlm's ".v2" prompts, and a ".v3" where a third measured
+# better, beside its second; the owner, 2026-11-13: "keep OCR
 # as main and VLM as back up, maybe we can feed a better prompt to the VLM"). Measured against the questions the kit
 # asks today by kit/tools/reader_census.py --questions, on frames already recorded, with the options expected there
 # handed to the reader and without; no caller asks them yet (the Regions above keep the old questions, whose answers
@@ -870,7 +871,7 @@ QUESTIONS = {
     "look base": Question("carousel.v2", "selected", "code", CAROUSEL.box),
     "wb grid": Question("wbgrid.v2", "A-B", "text"),
     "notice": Question("notice.v2", "text", "text", NOTICE.box),
-    "title": Question("title.v2", "title", "label", TITLE.box),
+    "title": Question("title.v3", "title", "label", TITLE.box),     # a third: title.v2 took a turned screen's line
 }
 
 
@@ -920,6 +921,14 @@ def forget() -> None:
 def _ocr_lines(frame, eng: str | None = None) -> list:
     """The OCR seam: the frame's lines from camkit.ocr.read (the configured engine, or eng)."""
     return ocr.read([frame.path], eng=eng)[frame.path]
+
+
+def screen_texts(paths) -> dict:
+    """{path: all the text OCR reads on the frame file, joined}, read in one batch by the configured engine
+    (camkit.ocr.read): what kit/tools/reader_census.py judges before a frame may go to a hosted reader."""
+    paths = list(paths)
+    got = ocr.read(paths) if paths else {}
+    return {p: " ".join(ln.text for ln in got.get(p) or []) for p in paths}
 
 
 def _reader_answer(image: bytes, question: str, timeout: float, role: str = "second") -> tuple:

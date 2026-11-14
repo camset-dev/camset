@@ -387,7 +387,14 @@ measured.
   moves onto its new question only once that shows, with each reader the owner uses, the new question naming the
   proved option on nearly every sampled frame and never less often than the old one, and its wrong options rare;
   options are handed to the reader only where the decoy list shows no wrong picks from the list against the screen.
-  A kind that falls short keeps its old question until a better one measures so.
+  A kind that falls short keeps its old question until a better one measures so. A third question (`.v3`, beside the
+  second, which stays pinned) is kept only where it names the proved option more often on the census's sample and no
+  less often on a second, held-out sample (`--held-out`), with no more wrong options; so far only the title's. The
+  census also judges against a truth checked by eye (`--truth`, a file kept outside the repository and the runs) where
+  a run recorded a label as OCR read an icon or a garbled mark, and counts where OCR and the reader are wrong alike,
+  the case OCR-main and reader-backup cannot catch: so far only on options the screen draws with the same text. When
+  the list's caller moves onto its question, a list proof on a carousel whose second axis lights a strip cell asks the
+  carousel's question instead.
 - **Next, after the census:** `camkit.match.key` and `page_model.key_text` take the one cleaning, and the other tables
   go. Finding a row leaves out the icon OCR reads as letters in front of a row's label first (in the building blocks
   since 2026-11-13), or the reader would be asked about most rows for nothing.

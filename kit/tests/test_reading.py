@@ -5,6 +5,7 @@ still read the screen by themselves, a list that only gets shorter.
 
 Letters outside ASCII are written as escapes with their Unicode names beside them, so that no reader of this file
 takes one for its Latin twin."""
+import io
 import itertools
 import json
 import re
@@ -977,6 +978,11 @@ def test_read_finds_a_row_without_the_icon_and_keeps_the_label(eyes):
 
 OLD_PROMPTS = {"dialog": "1b3b30c7a27da116", "menu": "e2882d49e3ecef0d", "notice": "c362fb838cf2f179",
                "option": "6bd26e33cfdc9f59", "fields": "6dbde91f9090b179", "any": "dd3babc8f5e633f7"}
+# the second questions as measured on 2026-11-13: pinned too, so that a third is a key of its own beside them
+V2_PROMPTS = {"lit.v2": "77d0da5d7dc8da89", "carousel.v2": "3050c5f8b5f62d16", "cell.v2": "22026c11285871a5",
+              "fields.v2": "68a3fb0b69cafab2", "look.v2": "fbec3a1213e77186", "lookscale.v2": "08fdb10bac69ea61",
+              "scale.v2": "13bf73d0a7f12bbc", "stars.v2": "7dbf13167e7ebc81", "checklist.v2": "de80063942d79bb1",
+              "wbgrid.v2": "a03ec6c4e2b1c82a", "notice.v2": "c18c6d7e45c49ba2", "title.v2": "629cab3640bdfb4b"}
 
 
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
@@ -988,15 +994,21 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     import hashlib
 
     from camkit import vlm
-    for key, digest in OLD_PROMPTS.items():
+    for key, digest in {**OLD_PROMPTS, **V2_PROMPTS}.items():
         assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
     for kind, q in reading.QUESTIONS.items():
         text = vlm.PROMPTS[q.prompt]
-        assert q.prompt.endswith(".v2") and q.prompt not in OLD_PROMPTS, kind
+        assert re.search(r"\.v[23]$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
         assert text.isascii() and "Reply with JSON only, on one line: {" in text and f'"{q.field}"' in text, kind
         assert q.expect in reading.EXPECTS and len(text) < 600, kind
     assert [k for k, v in vlm.PROMPTS.items() if k.endswith(".v2") and "write none" in v] == \
         ["lit.v2", "cell.v2", "stars.v2"]
+    # a third question is kept beside the second only where it measured better (the title's); the candidates not kept
+    # stay with the census, never in the prompt table a run's callers ask from
+    import reader_census
+    assert [k for k in vlm.PROMPTS if k.endswith(".v3")] == ["title.v3"] == \
+        [q.prompt for q in reading.QUESTIONS.values() if q.prompt.endswith(".v3")]
+    assert not set(reader_census.CANDIDATES) & set(vlm.PROMPTS)
     assert reading.region("number field", k=1).pick({"fields": ["5", "6"]}) == "6"
     assert reading.region("carousel").box == CAROUSEL.box and reading.region("list").box is None
     assert reading.region("wb grid", field="G-M").pick({"A-B": "A7", "G-M": "M1.5"}) == "M1.5"
@@ -1009,8 +1021,9 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
 
 # what reads through the new questions, and the tool that measures them: nowhere else in the kit until a caller is
 # switched, kind by kind (docs/REMAPPING_PLAYBOOK.md, section 5)
-NEW_QUESTION_NAMES = re.compile(r'\.v2["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\(|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\('
-                                r'|\breading\.read\(')
+NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\('
+                                r'|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
+                                r'|\bCliReader\b|claude-cli')
 MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
 
 
@@ -1023,6 +1036,28 @@ def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
                    and p.relative_to(ROOT).as_posix() not in MAY_NAME_THEM
                    and NEW_QUESTION_NAMES.search(p.read_text(encoding="utf-8")))
     assert found == [], f"these name the new questions or read through camkit.reading.read: {found}"
+
+
+def test_no_reader_a_camera_run_builds_is_the_census_claude_command_line(monkeypatch):
+    """The census's Claude CLI reader is its alone: camkit.vlm.make_reader, which builds every reader a run asks,
+    never builds one (an entry of that kind is no reader it knows: without an address none is built, with one it is an
+    HTTP server's), never starts a program, and neither camkit.vlm nor camkit.reading names it."""
+    import subprocess
+
+    import reader_census as rc
+    from camkit import vlm
+
+    def no_program(*a, **kw):
+        raise AssertionError("a program was started")
+    monkeypatch.setattr(subprocess, "run", no_program)
+    monkeypatch.setattr(subprocess, "Popen", no_program)
+    cli = {"name": "cli:sonnet", "kind": "claude-cli", "model": "sonnet", "parallel": 1}
+    with pytest.raises(TypeError):
+        vlm.make_reader(cli)
+    built = vlm.make_reader({**cli, "url": "http://127.0.0.1:9/v1"})
+    assert type(built) is vlm.Reader and not isinstance(built, rc.CliReader)
+    for module in ("kit/camkit/vlm.py", "kit/camkit/reading.py"):
+        assert not re.search(r"\bCliReader\b|claude-cli", (ROOT / module).read_text(encoding="utf-8")), module
 
 
 def test_read_asks_a_kinds_own_question_when_given_its_region(eyes):
@@ -1444,7 +1479,9 @@ def test_a_readers_failures_are_its_own_and_stop_it_after_a_run_of_them(tmp_path
     import reader_census
     root, asked = questions_run(tmp_path), []
     census_config(monkeypatch, FailingReader(asked))
-    assert reader_census.main([str(root), "--questions", "--json", "--cache", str(tmp_path / "answers")]) == 0
+    # one question each (the v3 route asks a list proof's own question again, one answer judged twice)
+    assert reader_census.main([str(root), "--questions", "--json", "--variants", "old,new,options,decoy",
+                               "--cache", str(tmp_path / "answers")]) == 0
     said = capsys.readouterr()
     got = json.loads(said.out)
     a = got["asked"]["fake"]
@@ -1497,6 +1534,360 @@ def test_the_census_keeps_its_answers_outside_the_runs(tmp_path, monkeypatch, ow
             assert not inside.exists()
     reader_census.main([str(root), "--minutes", "3", "--per-kind", "2"])
     assert "--per-kind, --minutes go with --questions" in capsys.readouterr().err
+
+
+def test_the_census_judges_against_a_corrected_truth_and_says_where_ocr_and_the_reader_stand():
+    """A run's label recorded as OCR read an icon ("S Zebra Display") is judged as drawn once a truth file corrects it,
+    beside the raw judgement; and against the proof's OCR reading, a reader's wrong answer is "alike" (dangerous: both
+    name the same other option, or read the same unknown text) or "apart" (decision 22's backup would catch it)."""
+    import reader_census as rc
+    raw = rc.Item("table picker", Path("f.png"), "S Zebra Display", ["S Zebra Display", "Off"],
+                  extra={"expect": "label"})
+    fixed = rc.corrected(raw, {"S Zebra Display": "Zebra Display"})
+    assert (rc.judge(raw, "Zebra Display"), rc.judge(fixed, "Zebra Display")) == ("no option", "right")
+    assert rc.corrected(raw, {}) is raw and raw.truth == "S Zebra Display"          # the item itself is untouched
+    it = rc.Item("list", Path("f.png"), "Alpha", ["Alpha", "Beta", "Gamma"], extra={"expect": "label", "ocr": "Beta"})
+    assert [rc.together(it, s) for s in ("Beta", "Gamma", "Alpha")] == \
+        ["both wrong, alike", "both wrong, apart", "OCR wrong, reader right"]
+    it.extra["ocr"] = "Alpha"
+    assert (rc.together(it, "Beta"), rc.together(it, "Alpha")) == ("reader wrong, OCR right", "both right")
+    it.extra["ocr"] = "Zqxx"
+    assert (rc.together(it, "zqxx"), rc.together(it, "Wvvv")) == ("both wrong, alike", "both wrong, apart")
+    assert rc.together(rc.Item("list", Path("f.png"), "Alpha", ["Alpha"]), "Alpha") is None   # no OCR kept
+
+
+def test_a_truth_fix_that_would_make_two_options_one_is_not_made_and_is_counted():
+    """A fix putting an option as another option of the same reading is drawn would merge the two, and a reader's
+    wrong answer naming the other would be judged right: it is not made there (the reading keeps its truth), and it is
+    counted; a fix onto a label no other option has is made."""
+    import collections
+
+    import reader_census as rc
+    it = rc.Item("list", Path("f.png"), "S Zebra", ["S Zebra", "Zebra", "Off"], extra={"expect": "label"})
+    left = collections.Counter()
+    got = rc.corrected(it, {"S Zebra": "Zebra"}, left)
+    assert got.options == ["S Zebra", "Zebra", "Off"] and got.truth == "S Zebra" and rc.judge(got, "Zebra") != "right"
+    assert left == {"list": 1}
+    got = rc.corrected(it, {"S Zebra": "Zebra Display"}, left)                           # no merge: made
+    assert got.truth == "Zebra Display" and rc.judge(got, "Zebra Display") == "right" and left == {"list": 1}
+    two = rc.Item("list", Path("f.png"), "Zqx A", ["Zqx A", "Zqx B", "Off"], extra={"expect": "label"})
+    got = rc.corrected(two, {"Zqx A": "Zqx", "Zqx B": "Zqx"}, left)                     # two onto one: neither made
+    assert got.options == ["Zqx A", "Zqx B", "Off"] and left == {"list": 3}
+    box = rc.Item("checklist", Path("f.png"), [("Exposure: On", True)], ["No Disp. Info.", "Exposure: On"],
+                  extra={"label": "Exposure: On", "radios": ["Exposure: On", "Exposure: TimeOut"]})
+    got = rc.corrected(box, {"Exposure: TimeOut": "Exposure: On"}, left)               # a radio onto its other
+    assert got.extra["radios"] == ["Exposure: On", "Exposure: TimeOut"] and left == {"list": 3, "checklist": 1}
+
+
+def test_the_census_takes_a_truth_file_only_outside_the_repository_and_the_runs(tmp_path, monkeypatch, own_runs):
+    """--truth holds the owner's labels (decision 16): refused, before it is read, inside the runs (the runs folder, a
+    camera's run root read) and inside the clone other than under private/."""
+    import camkit
+    import reader_census as rc
+    clone = tmp_path / "clone"
+    monkeypatch.setattr(camkit, "ROOT", clone)
+    truth = {"list": {"S Zebra Display": "Zebra Display"}}
+    camera = tmp_path / "TEST-CAM_fw9.99"
+    for where in (tmp_path / "elsewhere" / "truth.json", clone / "private" / "truth.json",
+                  clone / "data" / "truth.json", clone / "runs" / "truth.json", own_runs / "truth.json",
+                  camera / "truth.json"):
+        where.parent.mkdir(parents=True, exist_ok=True)
+        where.write_text(json.dumps(truth), encoding="utf-8")
+    assert rc.read_truth(tmp_path / "elsewhere" / "truth.json", [camera]) == truth
+    assert rc.read_truth(clone / "private" / "truth.json", [camera]) == truth
+    for where, why in ((clone / "data" / "truth.json", "inside the repository"),
+                       (clone / "runs" / "truth.json", "inside the repository"),
+                       (own_runs / "truth.json", "inside the runs"), (camera / "truth.json", "inside the runs")):
+        with pytest.raises(SystemExit, match=why):
+            rc.read_truth(where, [camera])
+
+
+def test_the_census_third_questions_crops_routes_and_radio_rows(tmp_path):
+    import numpy as np
+    import reader_census as rc
+    from PIL import Image
+    a = np.full((480, 640, 3), 24, np.uint8)
+    a[212:252, 340:620] = (235, 90, 20)                   # an orange bar
+    Image.fromarray(a).save(tmp_path / "f.png")
+    lit = Image.open(io.BytesIO(rc.image_of(tmp_path / "f.png", "lit crop")))
+    scale = Image.open(io.BytesIO(rc.image_of(tmp_path / "f.png", "scale crop")))
+    assert lit.size == (2 * (628 - 332), 2 * (260 - 204)) and scale.size == (200, 404)
+    assert rc.image_of(tmp_path / "f.png") == (tmp_path / "f.png").read_bytes()
+    assert rc._routed(rc.Item("list", Path("f.png"), "A", ["A"], extra={"strip": True})) == "carousel.v2"
+    assert rc._routed(rc.Item("list", Path("f.png"), "A", ["A"])) == "lit.v2"
+    assert rc._rows({"rows": [2, 3]}, None) == "5" and rc._rows({"selected": "off"}, None) == "off"
+    assert rc._starless("Rating Only (5 stars)") == "Rating Only (*****)"
+    row = [{"boxes": [{"box": 1, "label": "No Disp. Info.", "ticked": True},
+                      {"box": 2, "label": "Exposure: On", "ticked": True, "radio": "Exposure: TimeOut"}]},
+           {"boxes": [{"box": 0, "label": "Display All Info.", "ticked": False}]}]
+    extra = rc.radio_of(row, row[0], "Exposure: On")
+    assert extra == {"radio_of": "No Disp. Info.", "radios": ["Exposure: On", "Exposure: TimeOut"],
+                     "other": "Exposure: TimeOut", "boxes_only": ["No Disp. Info.", "Display All Info."]}
+    assert rc.radio_of(row, row[0], "No Disp. Info.") == {}
+    item = rc.Item("checklist", Path("f.png"), [("Exposure: On", True)], ["No Disp. Info.", "Exposure: On"],
+                   extra={"label": "Exposure: On", **extra})
+
+    def answer(selected, parent="No Disp. Info."):
+        return [{"label": parent, "ticked": True, "radios": [
+            {"label": "Exposure: On", "selected": selected == "On"},
+            {"label": "Exposure: TimeOut", "selected": selected == "TimeOut"}]}]
+    assert [rc.judge(item, answer("On")), rc.judge(item, answer("TimeOut")), rc.judge(item, answer("On", "Level"))] \
+        == ["right", "another option", "no option"]
+    assert rc.judge(item, [{"label": "No Disp. Info.", "ticked": True}]) == "no option"   # v2's answer: no radios
+
+
+def test_the_census_held_out_sample_never_repeats_the_tune_sample(tmp_path, monkeypatch, capsys):
+    import reader_census
+    root, asked = questions_run(tmp_path), []
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", asked))
+    args = [str(root), "--questions", "--json", "--per-kind", "2", "--kinds", "list", "--variants", "new",
+            "--cache", str(tmp_path / "answers")]
+    assert reader_census.main(args) == 0
+    tune = {n for n, _ in asked}
+    got = json.loads(capsys.readouterr().out)
+    assert got["sample"] == "tune" and got["sampled"]["list"]["frames"] == 2 and got["timing"]["list"]["new"]["fake"][
+        "asked now"] == 2
+    asked.clear()
+    assert reader_census.main([*args, "--held-out"]) == 0
+    held = json.loads(capsys.readouterr().out)
+    assert held["sample"] == "held out" and held["sampled"]["list"]["frames"] == 1 and not tune & {n for n, _ in asked}
+
+
+def test_a_self_check_is_counted_against_whether_the_answer_was_right(tmp_path, monkeypatch, capsys):
+    import reader_census
+    root = questions_run(tmp_path)
+    check = reader_census.CANDIDATES["lit.check.v3"]
+
+    class Unsure(QuestionsReader):
+        def answer(self, image, prompt, waits=None):
+            got = dict(super().answer(image, prompt, waits))
+            return {**got, "unsure": self.by_bytes[image] == "00002.png"} if prompt == check else got
+    census_config(monkeypatch, Unsure(root / "kit2_pass2" / "shots", []))
+    assert reader_census.main([str(root), "--questions", "--json", "--kinds", "list", "--variants", "v3",
+                               "--cache", str(tmp_path / "answers")]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert got["flags"]["list"]["v3: check"]["fake"] == {"right, sure": 2, "right, unsure": 1}
+    assert set(got["scores"]["list"]) == {"v3: route", "v3: codes", "v3: stars", "v3: crop", "v3: check"}
+
+
+def test_a_hosted_reader_is_never_sent_a_frame_that_may_name_the_network_or_a_credential():
+    """Before any frame goes to a hosted reader (a paid service, the Claude Code command line): a run named for a
+    network look, a menu path or label naming the camera's identity, a connection or a credential (the crawls that
+    opened Display Wi-Fi Info. and Display Wired LAN Info.), a screen that is no menu or option screen, a frame whose
+    text OCR read names any of those or holds an address, and a frame whose text could not be read are all left out."""
+    import reader_census as rc
+    run = Path("/x/runs/CAM_fw1.00/kit2_pass2/shots/00001.png")
+
+    def item(path=(), frame=run, truth="Off"):
+        return rc.Item("list", frame, truth, [truth], extra={"path": list(path)})
+    ok = "Drive Mode Single Shooting Off On"
+    assert rc.hosted_refused(item(["Drive Mode"]), ok, "list") is None
+    assert rc.hosted_refused(item(["Network", "Display Wi-Fi Info."]), ok, "list") == "its menu path"
+    assert rc.hosted_refused(item(["Network", "Display Wired LAN Info."]), ok, "list") == "its menu path"
+    assert rc.hosted_refused(item(truth="Access Authen. Info"), ok, "list") == "its menu path"
+    assert rc.hosted_refused(item(frame=Path("/x/runs/CAM_fw1.00/kit2_wifi_info/shots/1.png")), ok, "list") == \
+        "a network run"
+    assert rc.hosted_refused(item(), ok, "shooting") == "no menu screen"
+    assert rc.hosted_refused(item(), None, "list") == "no text read"
+    assert rc.hosted_refused(item(), "", "list") == "no text read" == rc.hosted_refused(item(), " \n ", "list")
+    assert rc.hosted_refused(item(), "Display Wi-Fi Info. SSID", "list") == "its screen's words"
+    assert rc.hosted_refused(item(), "Status 203.0.113.7", "list") == "an address on screen"
+    assert rc.hosted_refused(item(), "Wired LAN 00:11:22:33:44:55", "list") in ("its screen's words",
+                                                                               "an address on screen")
+    assert rc.is_hosted({"kind": "claude-cli"}) and rc.is_hosted({"kind": "anthropic"})
+    assert not rc.is_hosted({"name": "local", "url": "http://127.0.0.1:9/v1"})
+
+
+def test_a_reader_off_the_persons_own_network_is_hosted_paid_or_not():
+    """An unpaid OpenAI-compatible reader is hosted, and gets only the frames the guard lets through, unless its address
+    is the person's own machine or network: localhost, a .local name, a loopback, private or link-local address. A
+    public address (the documentation range Python's is_private takes), any other name, a bare one, or no address is
+    hosted."""
+    import ipaddress
+
+    import reader_census as rc
+    # 10/8, 172.16/12 and 169.254/16 addresses built from their numbers: kit/tools/check_public.py refuses a private
+    # address written out, but its placeholders (192.168.1.100, fd00::1, fe80::1)
+    made = [str(ipaddress.ip_address(n)) for n in ((10 << 24) + 5, (172 << 24) + (20 << 16) + 5,
+                                                   (169 << 24) + (254 << 16) + 7)]
+    for url in ("http://127.0.0.1:9/v1", "http://localhost:8000/v1", "http://192.168.1.100:8000/v1",
+                *(f"http://{a}/v1" for a in made), "http://[::1]:8000/v1", "http://[fe80::1%25en0]:8000/v1",
+                "http://[fd00::1]/v1", "http://gpu-box.local:8000/v1", "http://[::ffff:192.168.1.50]/v1"):
+        assert not rc.is_hosted({"name": "r", "url": url, "model": "m"}), url
+    for url in ("http://203.0.113.5/v1", "https://api.example.com/v1", "http://gpu:8000/v1", "http://8.8.8.8/v1",
+                "http://172.32.0.1/v1", "http://[2001:db8::1]/v1", "127.0.0.1:9/v1", "", None):
+        assert rc.is_hosted({"name": "r", "url": url, "model": "m"}), url
+    assert rc.is_hosted({"name": "r", "url": "http://127.0.0.1:9/v1", "api_key_env": "SOME_KEY"})   # paid
+
+
+def test_a_frame_is_left_out_for_a_hosted_reader_when_any_of_its_readings_is_refused(monkeypatch):
+    """A frame holds several readings (a number-entry screen's boxes, a frame sampled for two kinds): it goes to a
+    hosted reader only when the guard lets every one through, whichever comes first, and is counted once."""
+    import reader_census as rc
+    f = Path("/x/runs/CAM_fw1.00/kit2_pass2/shots/00001.png")
+    g = Path("/x/runs/CAM_fw1.00/kit2_pass2/shots/00002.png")
+    monkeypatch.setattr(rc, "screen_kind", lambda frame: "list")
+    monkeypatch.setattr(reading, "screen_texts", lambda paths: {p: "Zqx Mode Zqx Alpha" for p in paths})
+
+    def it(frame, truth, kind="list", path=("Zqx Mode",)):
+        return rc.Item(kind, frame, truth, [truth], extra={"path": list(path)})
+    chosen = {"list": [[it(f, "Zqx Alpha"), it(f, "Access Authen. Info")], [it(g, "Zqx Beta")]],
+              "table picker": [[it(g, "Zqx Beta", "table picker")]]}
+    kept, left = rc.hosted_sample(chosen)
+    assert [u[0].frame for u in kept["list"]] == [g] and left == {"its menu path": 1}
+    chosen = {"list": [[it(g, "Zqx Beta")]],
+              "table picker": [[it(g, "Zqx Beta", "table picker", ("Network", "Display Wi-Fi Info."))]]}
+    kept, left = rc.hosted_sample(chosen)
+    assert kept == {"list": [], "table picker": []} and left == {"its menu path": 1}
+
+
+FAKE_CLI = '''#!{python}
+import json, os, sys
+here = sorted(os.listdir("."))
+with open({log!r}, "a", encoding="utf-8") as f:
+    f.write(json.dumps({{"cwd_files": here, "args": sys.argv[1:-1], "env": sorted(os.environ)}}) + "\\n")
+if os.path.exists({log!r} + ".limit"):     # the census's environment never reaches it: a file says so
+    print(json.dumps({{"type": "result", "subtype": "error_during_execution", "is_error": True,
+                       "result": "Claude usage limit reached"}}))
+    sys.exit(1)
+print(json.dumps({{"type": "result", "subtype": "success", "is_error": False, "num_turns": 2,
+                   "duration_api_ms": 2500, "result": json.dumps({{"selected": "Zqx Alpha"}}),
+                   "usage": {{"input_tokens": 4, "cache_read_input_tokens": 1800, "cache_creation_input_tokens": 500,
+                             "output_tokens": 120}}}}))
+'''
+
+
+def fake_cli(tmp_path, monkeypatch) -> Path:
+    import os
+    import sys as _sys
+    log = tmp_path / "cli.log"
+    script = tmp_path / "fake_claude"
+    script.write_text(FAKE_CLI.format(python=_sys.executable, log=str(log)), encoding="utf-8")
+    os.chmod(script, 0o755)
+    monkeypatch.setenv("CAMSET_CLAUDE_CLI", str(script))
+    return log
+
+
+def test_the_claude_command_line_reads_one_frame_alone_in_an_empty_folder(tmp_path, monkeypatch, capsys):
+    """A Claude CLI reader (census-only) is called once per question, one at a time, in a new folder that holds the
+    one frame alone, with the Read tool only and no settings, MCP servers or session kept; its answers are kept by
+    model; the frames the guard leaves out are never sent, and how many is said."""
+    import reader_census
+    root = questions_run(tmp_path)
+    log = fake_cli(tmp_path, monkeypatch)
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", []))
+    monkeypatch.setattr(reader_census, "screen_kind", lambda f: "list")
+    monkeypatch.setattr(reading, "screen_texts", lambda paths: {
+        p: ("Display Wi-Fi Info." if p.name == "00002.png" else "Zqx Mode") for p in paths})
+    answers = tmp_path / "answers"
+    assert reader_census.main([str(root), "--questions", "--json", "--claude-cli", "sonnet", "--kinds", "list",
+                               "--variants", "best", "--cache", str(answers)]) == 0
+    said = capsys.readouterr()
+    got = json.loads(said.out)
+    calls = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
+    assert got["readers"] == ["cli:sonnet"] and len(calls) == 2           # three list frames, one left out
+    assert all(c["cwd_files"] == ["frame.png"] for c in calls)
+    a = calls[0]["args"]
+    assert a[a.index("--model") + 1] == "sonnet" and a[a.index("--tools") + 1] == "Read"
+    assert {"--restricted", "--safe-mode", "--strict-mcp-config", "--no-session-persistence"} <= set(a)
+    assert got["left out for hosted readers"] == {"its screen's words": 1} and "1 sampled frames left out" in said.err
+    assert got["cli calls"]["cli:sonnet"] == {"calls": 2, "mean seconds": got["cli calls"]["cli:sonnet"]["mean seconds"],
+                                             "mean api seconds": 2.5, "mean input tokens": 2304.0,
+                                             "mean output tokens": 120.0, "mean turns": 2.0}
+    assert got["scores"]["list"]["v3: route"]["cli:sonnet"] == {"right": 1, "another option": 1}  # the best question
+    assert not list((answers / "_cli_work").iterdir())                   # each call's folder removed
+    assert reader_census.main([str(root), "--questions", "--json", "--claude-cli", "sonnet", "--kinds", "list",
+                               "--variants", "best", "--cache", str(answers)]) == 0
+    capsys.readouterr()
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 2                        # kept: a run again asks nothing twice
+
+
+def test_the_claude_command_line_stops_at_a_usage_limit(tmp_path, monkeypatch, capsys):
+    import reader_census
+    root = questions_run(tmp_path)
+    log = fake_cli(tmp_path, monkeypatch)
+    log.with_name(log.name + ".limit").write_text("", encoding="utf-8")
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", []))
+    monkeypatch.setattr(reader_census, "screen_kind", lambda f: "list")
+    monkeypatch.setattr(reading, "screen_texts", lambda paths: {p: "Zqx Mode" for p in paths})
+    assert reader_census.main([str(root), "--questions", "--json", "--claude-cli", "sonnet", "--variants", "best",
+                               "--cache", str(tmp_path / "answers")]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert len(log.read_text(encoding="utf-8").splitlines()) == 1                         # one call, then nothing more
+    assert got["asked"]["cli:sonnet"]["stopped at a usage or rate limit"] == 1
+
+
+def test_the_claude_command_line_gets_no_api_key_base_url_or_session_variable(tmp_path, monkeypatch, capsys):
+    """The command line is run with only what it needs to run and find the person's sign-in: an API key, a base URL
+    or a Claude Code session's variables in the census's environment never reach it, so the plan answers."""
+    import reader_census
+    root = questions_run(tmp_path)
+    log = fake_cli(tmp_path, monkeypatch)
+    for k, v in (("ANTHROPIC_API_KEY", "sk-ant-zqx"), ("ANTHROPIC_AUTH_TOKEN", "zqx"),
+                 ("ANTHROPIC_BASE_URL", "http://203.0.113.5"), ("CLAUDECODE", "1"), ("CLAUDE_CODE_ENTRYPOINT", "cli"),
+                 ("CLAUDE_CODE_OAUTH_TOKEN", "zqx-plan"), ("LC_CTYPE", "UTF-8"), ("ZQX_OTHER", "1")):
+        monkeypatch.setenv(k, v)
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", []))
+    monkeypatch.setattr(reader_census, "screen_kind", lambda f: "list")
+    monkeypatch.setattr(reading, "screen_texts", lambda paths: {p: "Zqx Mode" for p in paths})
+    assert reader_census.main([str(root), "--questions", "--json", "--claude-cli", "sonnet", "--kinds", "list",
+                               "--variants", "best", "--cache", str(tmp_path / "answers")]) == 0
+    capsys.readouterr()
+    calls = [json.loads(x) for x in log.read_text(encoding="utf-8").splitlines()]
+    assert calls
+    for c in calls:
+        env = set(c["env"])
+        assert not env & {"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_BASE_URL", "CLAUDECODE",
+                          "CLAUDE_CODE_ENTRYPOINT", "ZQX_OTHER", "CAMSET_CLAUDE_CLI"}
+        assert {"PATH", "CLAUDE_CODE_OAUTH_TOKEN", "LC_CTYPE"} <= env
+    assert set(reader_census.cli_env({"PATH": "/bin", "HOME": "/h", "ANTHROPIC_API_KEY": "k", "LC_ALL": "C",
+                                      "CLAUDE_CODE_SSE_PORT": "1"})) == {"PATH", "HOME", "LC_ALL"}
+
+
+def test_the_claude_command_lines_model_is_a_name_never_an_option(tmp_path, monkeypatch, capsys):
+    import reader_census
+    root = questions_run(tmp_path)
+    log = fake_cli(tmp_path, monkeypatch)                # were it let through: the fake, and nothing asked (--minutes 0)
+    for bad in ("-p", "--dangerously-skip-permissions", "sonnet;rm", "son net", ""):
+        with pytest.raises(SystemExit):
+            reader_census.main([str(root), "--questions", f"--claude-cli={bad}", "--minutes", "0",
+                                "--cache", str(tmp_path / "answers")])
+        assert "--claude-cli" in capsys.readouterr().err
+    assert not log.exists() and not (tmp_path / "answers").exists()
+    with pytest.raises(ValueError):
+        reader_census.CliReader({"name": "cli:x", "model": "-x"}, tmp_path, 1)
+    for good in ("sonnet", "claude-sonnet-4-5", "claude-opus-4-1[1m]", "us.anthropic.claude:0"):
+        assert reader_census.CliReader({"name": f"cli:{good}", "model": good}, tmp_path, 1).model == good
+
+
+def test_the_census_asks_a_local_server_as_many_at_once_as_parallel_allows(tmp_path, monkeypatch, capsys):
+    import threading
+
+    import reader_census
+    root = questions_run(tmp_path)
+    seen, lock, live = [], threading.Lock(), [0]
+
+    class Slow(QuestionsReader):
+        def answer(self, image, prompt, waits=None):
+            import time
+            with lock:
+                live[0] += 1
+                seen.append(live[0])
+            time.sleep(0.05)
+            with lock:
+                live[0] -= 1
+            return super().answer(image, prompt, waits)
+    from camkit import vlm
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": [{"name": "fake", "url": "http://127.0.0.1:9/v1",
+                                                              "model": "m", "parallel": 8}]})
+    monkeypatch.setattr(vlm, "CACHE", None)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: Slow(root / "kit2_pass2" / "shots", []))
+    assert reader_census.main([str(root), "--questions", "--json", "--parallel", "2", "--variants", "old,new",
+                               "--cache", str(tmp_path / "answers")]) == 0
+    capsys.readouterr()
+    assert max(seen) <= 2
+    with pytest.raises(SystemExit):
+        reader_census.main([str(root), "--questions", "--parallel", "9"])
 
 
 def test_the_census_samples_the_same_frames_every_time_a_smaller_sample_the_start_of_a_larger():

@@ -117,6 +117,13 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - One question to the reader per kind of screen beside the old ones (`camkit.reading.QUESTIONS`), measured against
   them on recorded frames by `kit/tools/reader_census.py --questions`, and finding a row judged without the icon OCR
   reads in front of its label; no run asks, decides or presses differently.
+- The reader's questions measured further, again with no run asking, deciding or pressing differently: the title's
+  question kept as a third (`title.v3`) beside its pinned second, and `kit/tools/reader_census.py --questions` able to
+  check a change on a held-out sample, judge against a truth checked by eye, count where OCR and the reader are wrong
+  alike, time each question, ask a local server several questions at once (`--parallel`), and ask Claude through the
+  Claude Code command line on one's own plan, passing it no API key from the environment (`--claude-cli`, the census's
+  alone), never sending a hosted reader (that, a paid one, or one at an address off one's own network) a frame that may
+  name the network, an address or a credential.
 - A copy of `kit/config.example.json` names nothing to contact until it is filled in: its camera address is empty and
   it lists no reader. Its first reader was a server at an example address on the local network, to which a copy left
   as it was sent pictures of the camera's screen; the readers it shows are all under `readers_examples` now.

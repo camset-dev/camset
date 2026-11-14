@@ -197,6 +197,17 @@ PROMPTS.update({
         "and without the page counter at the top right. " + _JSON + '{"title": "<the title>"}'),
 })
 
+# A third question, kept where it measured better than the kind's second on the census's sample and not worse on a
+# second, held-out one (kit/tools/reader_census.py --questions, its "v3" questions; the candidates not kept stay with
+# the census, its CANDIDATES). The second questions keep their text beside it.
+PROMPTS.update({
+    # title.v2, never the orange line under it, and a turned screen read turned
+    "title.v3": (
+        "This is a Sony camera screen. Copy its title exactly as drawn: the white text at the top, never the orange "
+        "line under it. If the screen is drawn turned, read it turned. Leave out any icon before the title and the "
+        "page counter at the top right. " + _JSON + '{"title": "<the title>"}'),
+})
+
 
 def with_options(prompt: str, options) -> str:
     """A question's text (a PROMPTS value) with the options expected there handed to the reader, said just before its
