@@ -663,7 +663,7 @@
   {"mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Pairing"], "status": "closed by rule", "rule": "identity/by hand", "opener": ["--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Manage Paired Device"], "status": "closed by rule", "rule": "identity/by hand", "opener": ["--network", "--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Bluetooth Rmt Ctrl"], "status": "proved", "rule": "network setting", "opener": ["--network", "--owner"], "never_choose": true},
-  {"mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Disp Device Address"], "status": "information screen", "rule": "address screen", "opener": ["--network", "--owner"], "inferred": "class"},
+  {"mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Disp Device Address"], "status": "information screen", "rule": "address screen", "opener": ["--network", "--owner"], "fields": ["Device Address"]},
   {"mode": "Stills", "tab": "Network", "group": "Wired LAN", "path": ["Wired LAN Connect"], "status": "proved", "rule": "identity/by hand", "opener": ["--network", "--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Network", "group": "Wired LAN", "path": ["IP Address Setting"], "status": "not in the settings file (Sony)", "rule": "identity/by hand", "opener": ["--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Network", "group": "Wired LAN", "path": ["Display Wired LAN Info."], "status": "information screen", "rule": "address screen", "opener": ["--network", "--owner"], "inferred": "class"},

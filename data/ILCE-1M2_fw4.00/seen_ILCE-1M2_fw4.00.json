@@ -4,5 +4,7 @@
  "format": 1,
  "model": "ILCE-1M2",
  "firmware": "4.00",
- "facts": []
+ "facts": [
+  {"kind": "info", "mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Disp Device Address"], "fields": ["Device Address"]}
+ ]
 }
