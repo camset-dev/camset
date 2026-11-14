@@ -197,6 +197,33 @@ def status_md(doc, sample=None) -> str:
     return "\n".join(L) + "\n"
 
 
+def save_load_md(camera_file: dict) -> str:
+    """A model page's Save/Load exclusions list, from its camera file's save_load_excluded (the maker's list as data,
+    one source: docs/decisions/0014): each row or item in the list's order, the rows inside one row said together
+    ("Remote Shoot Function's Connect without Pairing and Sync. Release Set."), a note in brackets; "" when the camera
+    file has none. One line, so a table's cell can hold it."""
+    rows = (camera_file.get("save_load_excluded") or {}).get("rows") or []
+    said, i = [], 0
+    while i < len(rows):
+        e = rows[i]
+        if "item" in e:
+            said.append(e["item"] + (f" ({e['note']})" if e.get("note") else ""))
+            i += 1
+            continue
+        parent, _, own = str(e["row"]).rpartition(" > ")
+        if not parent:
+            said.append(own + (f" ({e['note']})" if e.get("note") else ""))
+            i += 1
+            continue
+        kids = []
+        while i < len(rows) and "row" in rows[i] and str(rows[i]["row"]).rpartition(" > ")[0] == parent:
+            r = rows[i]
+            kids.append(str(r["row"]).rpartition(" > ")[2] + (f" ({r['note']})" if r.get("note") else ""))
+            i += 1
+        said.append(f"{parent}'s " + (" and ".join(kids) if len(kids) < 3 else ", ".join(kids[:-1]) + " and " + kids[-1]))
+    return ", ".join(said)
+
+
 def header_rows(cs) -> list:
     """The header's parts as its container block places them, in file order, with the bytes no part names: (offset,
     length, name, what it is)."""

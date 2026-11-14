@@ -72,14 +72,19 @@ def with_expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None) ->
     return out
 
 
+# the camera file's keys never copied into the definition: words for whoever edits it, its schema, and what only the kit
+# reads (save_load_excluded: the maker's Save/Load list, which the coverage ledger and the model page read)
+CAMERA_FILE_ONLY = ("_comment", "$schema", "save_load_excluded")
+
+
 def with_camera(doc: dict) -> dict:
     """"$schema" and "definition_format" first, and the camera section copied from the camera file in data/ (when
-    there is one): the camera's own facts are edited there only."""
+    there is one, CAMERA_FILE_ONLY left out): the camera's own facts are edited there only."""
     cam = definitions.camera_file(definitions.key(doc))
     if cam.exists():
         camera = read_json(cam)
-        camera.pop("_comment", None)
-        camera.pop("$schema", None)
+        for k in CAMERA_FILE_ONLY:
+            camera.pop(k, None)
         doc = dict(doc, camera=camera)
     # the file names its JSON Schema (schemas/), so editors and check-jsonschema validate it
     return {"$schema": definitions.SCHEMA_REF, "definition_format": definitions.FORMAT,

@@ -1461,6 +1461,24 @@ _NOTICE_SHAPES = [re.compile(p) for p in (
 )]
 _NOTICE_FOLLOWS = re.compile(r"(this operation or setting (?:is )?not available as follows)\b\W*([^?]{0,80})", re.I)
 _NOTICE_OK = re.compile(r"[\s•●]*\bok\b[\s•●.]*$", re.I)
+# Beside them, the words of a notice that refuses for want of equipment (Sony's wording, every body's), each with the
+# equipment it wants, and of one that refuses while a remote session is open: the coverage ledger's blocker as a rule
+# (camkit.coverage.blocker_of), never the state the camera stood in
+NOTICE_EQUIPMENT = ((re.compile(r"attach a supported lens|function ring", re.I), "a lens with a function ring"),
+                    (re.compile(r"invalid with this lens|power\s?zoom", re.I), "a power-zoom lens"),
+                    (re.compile(r"shoe|audio accessory|microphone", re.I), "a shoe audio accessory"),
+                    (re.compile(r"raw (?:recorder|output)|recorder", re.I), "a RAW recorder"),
+                    (re.compile(r"\bflash\b", re.I), "a flash"),
+                    (re.compile(r"\blens\b", re.I), "a lens"))
+NOTICE_REMOTE = re.compile(r"remote shooting|cannot be executed|remote session", re.I)
+
+
+def notice_refuses(text) -> bool:
+    """Whether a notice's words are a refusal the kit knows: a notice of _NOTICE_SHAPES, the blocker form
+    (_NOTICE_FOLLOWS) or one refusing while a remote session is open (NOTICE_REMOTE)."""
+    t = _NOTICE_OK.sub("", " ".join(fold(text).split())).strip()
+    return bool(t) and (any(rx.fullmatch(t.lower()) for rx in _NOTICE_SHAPES) or bool(_NOTICE_FOLLOWS.search(t))
+                        or bool(NOTICE_REMOTE.search(t)))
 
 
 def blocker_known(tail, labels=(), values=None) -> str | None:

@@ -77,6 +77,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import camset, definitions, jsonl, models, ocr, paths, safety, screen  # noqa: E402
+from camkit import coverage  # noqa: E402
 from camkit.vlm import PROMPTS  # noqa: E402,F401   (reread_proofs imports it from here)
 from camkit.frames import OsdSource, eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
@@ -136,6 +137,9 @@ CONTEXT: str | None = None
 # what a --network run keeps of a screen it withholds (safety.kept_screen): the row labels the kit knows (the decisions'
 # rows among them), the values it knows, and the values by row label for a notice; set by main() on such a run
 KEPT: dict = {"labels": set(), "values": set(), "by_row": {}}
+# where each row's look goes once its handling ends (camkit.coverage.ProveLooks: the coverage ledger's looks file); set by
+# main(), none for --help-text
+LOOKS = coverage.NO_LOOKS
 
 
 # what every network row's proof ends with, whatever option the row was saved on: the session's upload of the start
@@ -715,6 +719,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
                 pending.pop(0)
                 status = "failed"
                 break
+            finally:
+                LOOKS.after(job)        # one look from what the row wrote (camkit.coverage); never raises
             pending.pop(0)
     except StopRequested:
         print("STOP file: cancelling", flush=True)
@@ -811,6 +817,7 @@ def main():
     ap.add_argument("--limit", type=int, default=None, help="stop after this many rows")
     ap.add_argument("--list", action="store_true", help="print the rows and options the run would prove, then stop (no camera)")
     ap.add_argument("--retry-failed", action="store_true", help="include rows that failed in earlier runs")
+    coverage.add_skip_argument(ap)
     ap.add_argument("--redo", action="store_true",
                     help="with --rows: prove the named rows' options again, proved before or not (the report takes "
                          "the latest proof per option: a cell whose earlier proofs carry a side effect of the way in, "
@@ -976,6 +983,9 @@ def main():
     if not a.rows:
         todo = [j for j in todo if not planned(j) <= set(j.get("done", done.get(job_key(j), set())))
                 and job_key(j) not in failed]
+    # what the coverage ledger says of each row, printed; with --skip-settled a list or dialog row whose every planned
+    # option it settled is left out (never with --context, --first, --tables, --wb*, --looks, --look-base or --redo)
+    todo = coverage.prove_filter(todo, a, planned)
     if a.limit:
         todo = todo[:a.limit]
     print(f"{len(todo)} rows to prove, {sum(len(planned(j)) for j in todo)} options", flush=True)
@@ -993,6 +1003,9 @@ def main():
     out = Tagged(open(run.dir / proofs, "a", encoding="utf-8", newline="\n"), a.context,  # noqa: SIM115 (closed in the finally below)
                  {"allowance": allowance} if allowance else None)
     failures = open(run.dir / fails, "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
+    global LOOKS
+    LOOKS = coverage.NO_LOOKS if help_text else coverage.prove_looks(run, run.dir / proofs, run.dir / fails, bool(network),
+                                                                     a.context)
     pending, start, in_a_row, unrestored = list(todo), None, 0, False
     try:
         with restoring("putting the start file back"):    # an upload that raises: exit EXIT_UNRESTORED

@@ -5,6 +5,12 @@ public files, so nothing in data/<model>_fw<fw>/ says what the camera held, nor 
     data/<model>_fw<fw>/settings_reset_<model>_fw<fw>.json      public, lean: which settings each reset puts back
     data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json         public: the hand tables (kit/writer/hand_tables.py),
                                                                 their evidence private/evidence/<model>_fw<fw>.hand.json
+    data/<model>_fw<fw>/coverage_<model>_fw<fw>.json            public, generated: the coverage ledger's lean form
+                                                                (camkit.coverage), the build of the public sources
+                                                                and the seen file; its looks file and private form
+                                                                in private/evidence/<model>_fw<fw>/
+    data/<model>_fw<fw>/seen_<model>_fw<fw>.json                public, generated: the allow-listed facts the looks
+                                                                established (camkit.coverage.ALLOWED)
     private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json      private whole: the menus as the walk read them,
     private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json       the mapper's rulings on pass 2's report, and
     private/evidence/<model>_fw<fw>/record_shapes_<model>_fw<fw>.json  the downloads' value shapes
@@ -334,7 +340,30 @@ def evidence_in_public(p, text: str = None) -> list:
     if kind in PRIVATE_WHOLE:
         return [f"{p.name} is private whole, kept in private/evidence/{p.parent.name}/: move it there with "
                 f"{move_command(p.parent.name)}"]
+    if kind == "looks":
+        return [f"{p.name} is the coverage ledger's looks file, the mapper's own: it is kept in "
+                f"private/evidence/{p.parent.name}/ (docs/decisions/0023), never in data/"]
+    in_tree = text is None
     text = p.read_text(encoding="utf-8") if text is None else text
+    if kind in ("coverage", "seen"):
+        # the public form of the coverage ledger and its seen file: their schemas, a closed vocabulary (the labels,
+        # groups and tabs of the camera's definition and of this folder's Help Guide list, safety's address field names,
+        # the equipment the kit names, the camera file's Save/Load notes, the settings' value codes), never a run, a day,
+        # a hash, a frame, a state seen or a value; and, for the file in the tree (not a commit's blob, judged beside
+        # files of another commit), the form byte for byte the build of the public sources and the seen file beside it
+        from . import coverage
+        try:
+            doc = json.loads(text)
+        except ValueError:
+            doc = None
+        if doc is None:
+            return ["it is not valid JSON"]
+        check = coverage.public_problems if kind == "coverage" else coverage.seen_problems
+        found = (check(doc, raw=text, camera=p.parent.name, data_dir=p.parent)
+                 + [f"names the file {m!r}" for m in sorted(set(definitions.FILE_NAME.findall(text)))])
+        if kind == "coverage" and in_tree and not found:
+            found += coverage.build_problems(p)
+        return found
     found = [f"names {m!r}" for m in sorted(set(RUN_OR_DAY.findall(text)))]
     try:
         names = definitions.file_names(json.loads(text), camera=None) if kind == "camera" else None

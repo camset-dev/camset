@@ -6,7 +6,8 @@ Each crawl's map goes into <crawl>/map.json, and every crawl's rows together int
 kit/prove_run.py, kit/axis_walk.py, kit/schema_update.py and the proof viewer read; each row there names its crawl
 ("run"), whose shots/ hold its frames. A map_all.json that differs from the one made now is replaced only with
 --replace (the differences are listed); --dry-run writes nothing. Into a run folder a --network or --owner run marked,
-it writes owner-only (camkit.runs.private_if_marked).
+it writes owner-only (camkit.runs.private_if_marked). A crawl run with --skip-settled (kit/crawl_run.py) left out the
+rows the coverage ledger had settled, so its map has holes: it is refused for kit2_pass1's map, and --own says so.
 
 Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + vLLM) and, if present,
 <run>/tiebreak.jsonl (omlx as a third reader where those two disagreed) and <run>/checked_labels.json
@@ -28,7 +29,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths  # noqa: E402
+from camkit import coverage, jsonl, paths  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from runner import read_json  # noqa: E402
 
@@ -133,6 +134,15 @@ def main(argv=None):
                          "(kit/pass3_run.py) is no part of pass 1's map")
     a = ap.parse_args(argv)
     runs = [paths.run_path(c) for c in a.crawls]
+    # a crawl given --skip-settled did not open the rows the coverage ledger settled: its map has a hole at each
+    for run in runs:
+        holes = coverage.crawl_skipped(run)
+        if holes and not a.own:
+            sys.exit(f"{run.name} skipped {holes} rows the coverage ledger had settled (kit/crawl_run.py "
+                     "--skip-settled): its map has holes there, so it is no part of pass 1's map; crawl again without "
+                     "--skip-settled (or write its own map.json alone with --own)")
+        if holes:
+            print(f"{run.name}: {holes} rows skipped as settled (--skip-settled): its map.json has holes there")
     if not a.dry_run:
         # a --network or --owner run's folder: map.json, and the map of them all where it is one, 0600 in it too
         root = paths.run_root(required=False)

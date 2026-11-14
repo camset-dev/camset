@@ -3362,10 +3362,11 @@ def test_camera_json_matches_the_schema_copy():
     """Each data/<model>_fw<fw>/camera_<model>_fw<fw>.json and its definition's "camera" section are one set of facts
     kept twice: they must agree (the schema's had the movie memories' names, 2026-11-03, when the data file did not),
     the container block included (docs/decisions/0020)."""
+    from writer.fromdata import CAMERA_FILE_ONLY
     for p, doc in definitions.every():
         data = json.loads(Path(definitions.camera_file(p.stem)).read_text(encoding="utf-8"))
-        data.pop("_comment", None)
-        data.pop("$schema", None)
+        for k in CAMERA_FILE_ONLY:          # what only the kit reads is never copied (save_load_excluded)
+            data.pop(k, None)
         assert data == doc["camera"], p.name
 
 
@@ -3400,7 +3401,7 @@ def schema_checked() -> list:
     and CI check (docs/DATA_CONTRACTS.md, "What a mapping delivers")."""
     out = [(p.relative_to(ROOT).as_posix(), "definition") for p in sorted((ROOT / "editor" / "definitions").glob("*.json"))]
     for kind, schema in (("camera", "camera"), ("help", "help-file"), ("settings_reset", "settings-reset"),
-                         ("hand_tables", "hand-tables")):
+                         ("hand_tables", "hand-tables"), ("coverage", "coverage"), ("seen", "coverage-seen")):
         out += [(p.relative_to(ROOT).as_posix(), schema) for p in sorted((ROOT / "data").glob(f"*/{kind}_*_fw*.json"))]
     # the mapper's own menu trees, private whole (camkit.datafiles), and hand evidence (kit/writer/hand_evidence.py),
     # where this computer has them

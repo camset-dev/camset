@@ -733,5 +733,71 @@
   "save_name": {
     "stem_chars": 6,
     "suffix": "E1.DAT"
+  },
+  "save_load_excluded": {
+    "source": "Sony's Help Guide page for Save/Load Settings",
+    "rows": [
+      {
+        "row": "IPTC Information"
+      },
+      {
+        "row": "Copyright Info"
+      },
+      {
+        "row": "External Flash Set."
+      },
+      {
+        "item": "custom white balances 1-3"
+      },
+      {
+        "row": "Face Memory"
+      },
+      {
+        "row": "Remote Shoot Function > Connect without Pairing"
+      },
+      {
+        "row": "Remote Shoot Function > Sync. Release Set."
+      },
+      {
+        "row": "FTP Transfer Func.",
+        "note": "its own file"
+      },
+      {
+        "row": "Network Streaming"
+      },
+      {
+        "row": "Cloud Connection"
+      },
+      {
+        "row": "WPS Push"
+      },
+      {
+        "row": "Access Point Set."
+      },
+      {
+        "row": "Wi-Fi Frequency Band"
+      },
+      {
+        "row": "IP Address Setting"
+      },
+      {
+        "row": "Edit Device Name"
+      },
+      {
+        "row": "Import Root Certificate"
+      },
+      {
+        "row": "Access Authen. Settings"
+      },
+      {
+        "row": "Language"
+      },
+      {
+        "row": "Area/Date/Time Setting"
+      }
+    ],
+    "header_rows": [
+      "NTSC/PAL Selector"
+    ]
   }
 }

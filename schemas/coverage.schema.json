@@ -1,0 +1,292 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "coverage.schema.json",
+ "title": "A camera's coverage ledger, the public form",
+ "description": "data/<model>_fw<fw>/coverage_<model>_fw<fw>.json, written by kit/tools/coverage.py --write and never by hand: one status per menu row, per value of each setting and per record of the file, in the order of precedence kit/camkit/coverage.py holds (STATUSES, RECORD_STATUSES; docs/DATA_CONTRACTS.md, docs/decisions/0023). It is built from the public sources alone and the few facts a look establishes that hold for every camera of the model, which live in the seen file beside it, seen_<model>_fw<fw>.json (coverage-seen.schema.json: an information screen and its address field names, a row that acts when opened, a hand check that changed a record, a row of the maker's Save/Load list seen to change nothing): nothing observed of the camera's state, so never \"tested, no record changes\", \"kit cannot read\", a value greyed, a row greyed but by the definition's inactive_when, a run, a date, a hash, a frame, a current option or a value (docs/decisions/0016). kit/tools/check_public.py refuses one that breaks this schema, holds a key of camkit.coverage.PRIVATE_KEYS or a word outside its closed vocabulary (the labels, groups and tabs of the definition and the Help Guide's list, safety's address field names, the equipment the kit names, the notes of the camera file's Save/Load list), and one that is not, byte for byte, the build of the public sources and the seen file.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "about",
+  "format",
+  "model",
+  "firmware",
+  "rows",
+  "options",
+  "records"
+ ],
+ "properties": {
+  "$schema": {
+   "type": "string"
+  },
+  "about": {
+   "type": "string",
+   "description": "What the file is, in words: the kit's own."
+  },
+  "format": {
+   "const": 1,
+   "description": "The file's layout (camkit.coverage.FORMAT)."
+  },
+  "model": {
+   "type": "string"
+  },
+  "firmware": {
+   "type": "string"
+  },
+  "rows": {
+   "type": "array",
+   "description": "Every menu row: the definition's menu (Stills), the rows only another mode's menu has, the Help Guide's rows no scan has seen, and each deeper row a setting, a look or a crawl names, each after its top row.",
+   "items": {
+    "$ref": "#/$defs/row"
+   }
+  },
+  "options": {
+   "type": "array",
+   "description": "Every setting with a value list, by its key: its values grouped by status, each value in one group.",
+   "items": {
+    "$ref": "#/$defs/option"
+   }
+  },
+  "records": {
+   "type": "array",
+   "description": "Every record of the file (the live ones as global:, one memory set's as set:), with its status.",
+   "items": {
+    "$ref": "#/$defs/record"
+   }
+  }
+ },
+ "$defs": {
+  "status": {
+   "enum": [
+    "proved",
+    "proved by hand",
+    "sampled",
+    "not offered",
+    "not in the settings file (Sony)",
+    "information screen",
+    "action, nothing to map",
+    "needs equipment",
+    "no proof possible",
+    "greyed in state",
+    "closed by rule",
+    "not yet tried"
+   ],
+   "description": "A row's status in the public form: every status but those a state seen or a kit's failure gives (tested, no record changes; kit cannot read), which the private form alone holds."
+  },
+  "key": {
+   "type": "string",
+   "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$"
+  },
+  "row": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "mode",
+    "tab",
+    "group",
+    "path",
+    "status"
+   ],
+   "properties": {
+    "mode": {
+     "enum": [
+      "Stills",
+      "Movie",
+      "S&Q"
+     ],
+     "description": "The menu's mode: Stills (the definition's menu) or another (a setting's row_mode, the Help Guide's)."
+    },
+    "tab": {
+     "type": "string"
+    },
+    "group": {
+     "type": "string"
+    },
+    "path": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "string"
+     },
+     "description": "The row's labels from its top row down."
+    },
+    "nth": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "A label the menu repeats in a tab: the second (1), third (2) ... of them."
+    },
+    "status": {
+     "$ref": "#/$defs/status"
+    },
+    "same_label_as": {
+     "type": "string",
+     "description": "A repeated label holding no setting of its own: the group of the first, whose status it takes."
+    },
+    "rule": {
+     "enum": [
+      "action",
+      "card action",
+      "credentials",
+      "identity/by hand",
+      "sound/light (by hand)",
+      "motion",
+      "network setting",
+      "address screen"
+     ],
+     "description": "The class of camkit.safety's never-open list the row is of (the first label of its path that is)."
+    },
+    "opener": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "--network",
+       "--owner",
+       "--allow",
+       "motion",
+       "never"
+      ]
+     },
+     "description": "What opens it under today's code: a dated network decision, a dated owner decision (kit/drive.py), a run's --allow, an approved motion decision, or nothing."
+    },
+    "never_choose": {
+     "const": true,
+     "description": "No option of it is ever chosen remotely, whatever a decision names (camkit.safety.never_choose)."
+    },
+    "placement_missing": {
+     "type": "array",
+     "items": {
+      "$ref": "#/$defs/key"
+     },
+     "description": "Settings with no row of their own that belong to this row: the definition's fix is their placement."
+    },
+    "blocker": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "row"
+     ],
+     "properties": {
+      "row": {
+       "type": "string",
+       "description": "A row label the definition knows."
+      }
+     },
+     "description": "What greys it, as a rule: the row the definition's inactive_when names (inferred: inactive_when); never an option, which would be the state the camera stood in, nor what a look saw."
+    },
+    "equipment": {
+     "type": "string",
+     "description": "The equipment a setting's unproved_reason names (camkit.coverage.EQUIPMENT_NAMES), never what a look saw."
+    },
+    "fields": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "An information screen's field names (never a value): the kit's address field names (safety.ADDRESS_FIELDS) alone, as the seen file holds them."
+    },
+    "reason": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "The unproved_reason kinds of its settings, for \"no proof possible\"."
+    },
+    "confirmed": {
+     "const": true,
+     "description": "Sony's list names it and a look or a hand check also showed no record differ."
+    },
+    "header": {
+     "const": true,
+     "description": "The file's header holds it, not a record (the camera file's header_rows)."
+    },
+    "sony_note": {
+     "type": "string",
+     "description": "The note the camera file's Save/Load list gives the row."
+    },
+    "inferred": {
+     "enum": [
+      "class",
+      "inactive_when"
+     ],
+     "description": "The status rests on the row's class or on the definition's rule, not on a look."
+    },
+    "values_left": {
+     "type": "integer",
+     "minimum": 1,
+     "description": "How many values of the settings placed on it are still to try (not yet tried): a run never counts such a row settled."
+    }
+   }
+  },
+  "option": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key",
+    "statuses"
+   ],
+   "properties": {
+    "key": {
+     "$ref": "#/$defs/key"
+    },
+    "statuses": {
+     "type": "object",
+     "propertyNames": {
+      "$ref": "#/$defs/option_status"
+     },
+     "additionalProperties": {
+      "type": "array",
+      "items": {
+       "type": "integer"
+      }
+     }
+    }
+   }
+  },
+  "record": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "key",
+    "status"
+   ],
+   "properties": {
+    "key": {
+     "type": "string",
+     "pattern": "^(global|set):0x[0-9a-f]{4}$"
+    },
+    "status": {
+     "enum": [
+      "proved",
+      "partly named",
+      "named, no proof possible",
+      "named, not proved",
+      "unmapped"
+     ]
+    },
+    "kind": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     }
+    },
+    "named_bytes": {
+     "type": "integer",
+     "minimum": 1
+    }
+   }
+  },
+  "option_status": {
+   "enum": [
+    "proved",
+    "proved by hand",
+    "sampled",
+    "not offered",
+    "not in the settings file (Sony)",
+    "needs equipment",
+    "no proof possible",
+    "closed by rule",
+    "not yet tried"
+   ],
+   "description": "A value's status in the public form: never one a state seen gives (tested, no record changes; greyed in state)."
+  }
+ }
+}

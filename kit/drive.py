@@ -153,6 +153,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen, session  # noqa: E402
+from camkit import coverage  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
 from camkit.live import LiveCamera, black, lit_text, open_refused, osd_kind, press, text_of  # noqa: E402
@@ -994,6 +995,7 @@ def main():
     why = press_args_refused(a.press) or on_shooting_refused(a.on_shooting) or c4_presses_refused(a.press, a.c4_press)
     if why:
         sys.exit(why)
+    ledger = coverage.drive_gate(a)     # what the coverage ledger says of the --path, printed; drive.py never skips
     on_shooting = frozenset(safety.canonical_input(k) for k in a.on_shooting)
     cam_network = camera_network(network, address)
     # a row a network decision opened, while it is open: {"row", "class", "address", "identity", "from": the screen it
@@ -1504,6 +1506,7 @@ def main():
         hdmi.close()
         log.close()
         run.seal()          # a private run's folder checked owner-only, the eyes' polling target taken away
+        ledger.after()      # one look into the coverage ledger's looks file; a failed write changes no exit status
     if byhand in ("question", "answered") and restored:
         clear_restore_by_hand(run.root)
         run.log("restore_by_hand_cleared", outcome=byhand, frame=question)

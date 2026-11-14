@@ -70,8 +70,11 @@ whole history, not only its last tree): each file a commit adds or changes is he
 the tree's, the same functions on that commit's version of it: the path rules (never published, Sony's SDK, a settings
 file no definition names as its sample, a spreadsheet, a file .gitignore ignores), the content rules (a binary file
 by the binary rule and its ASCII strings, a text file by its text, a link by its target, a sample's personal values),
-the data folder's and the definitions' leanness and the camera's In-Camera Guide text; a file added in one commit and
-removed in the next is refused by the first; a submodule (gitlink) by the path rules, as it has no file to read. The
+the data folder's and the definitions' leanness and the camera's In-Camera Guide text; where a commit adds or changes
+a coverage ledger's public form or seen file, the form must be the public build of that same commit's definition,
+data folder and seen file (coverage_commit_problems takes them out of git into a folder of its own); a file added in
+one commit and removed in the next is refused by the first; a submodule (gitlink) by the path rules, as it has no file
+to read. The
 samples are the ones the range's last commit's definitions name, checked by its camera files' personal records; a
 camera file whose personal records the range weakens is refused for the maintainer's eye, as the list could otherwise
 shrink in the same pull request as its sample: a record no longer zeroed or set back, one newly kept from the text
@@ -95,6 +98,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -805,7 +809,10 @@ def data_problems() -> list:
                 out += [f"{rel}: {why}" for why in found]          # the one line, with the command that moves it
                 continue
             where = ("the reset file is lean, by hand (docs/DATA_CONTRACTS.md, \"The reset file\")"
-                     if datafiles.kind_of(p) == "settings_reset" else f"the kit keeps it in private/evidence/{d.name}/")
+                     if datafiles.kind_of(p) == "settings_reset" else
+                     "write it again with kit/tools/coverage.py --write, which keeps runs, days, hashes and values in "
+                     f"private/evidence/{d.name}/" if datafiles.kind_of(p) in ("coverage", "seen") else
+                     f"the kit keeps it in private/evidence/{d.name}/")
             out += [f"{rel}: carries evidence ({why}); {where}" for why in found[:5]]
             if len(found) > 5:
                 out.append(f"{rel}: {len(found)} places of evidence in all")
@@ -1075,6 +1082,7 @@ def commit_problems(spec: str, repo: Path = ROOT) -> list:
                     judged[(f, mode, blob)] = ([f"{f}: {NOT_READABLE}"] if data is None else
                                                blob_judged(f, mode, data, published, home, owner, theirs, names, repo))
                 found += judged[(f, mode, blob)]
+            found += coverage_commit_problems(c, [f for f, _m, _b in changed[c]], objects, repo)
             out += [f"{c[:12]} {x}" for x in dict.fromkeys(found)]
     except Unreadable as e:
         out.append(f"check_public: git cat-file's answers can no longer be trusted ({e}); nothing after it was read, so "
@@ -1084,6 +1092,48 @@ def commit_problems(spec: str, repo: Path = ROOT) -> list:
     if out:
         out.append("a pull request publishes every commit of its branch, so open it from a fresh branch cut from the "
                    "updated main with one commit of the final files (docs/UPDATING.md, \"Your pull request\")")
+    return out
+
+
+COVERAGE_PATH = re.compile(r"data/([^/]+)/(?:coverage|seen)_\1\.json")
+
+
+def coverage_commit_problems(c: str, changed: list, objects, repo: Path) -> list:
+    """Where a commit that adds or changes a camera's coverage ledger public form or its seen file leaves the form not
+    the public build of that SAME commit's definition, data folder and seen file (camkit.coverage.build_problems): each
+    is taken out of git's objects into a folder of this check's own, the definition's sample beside it, and the form
+    built there. A form edited by hand in one commit of a range is refused there, whatever a later commit makes of it."""
+    from camkit import coverage
+    out = []
+    for camera in sorted({m.group(1) for f in changed for m in [COVERAGE_PATH.fullmatch(f)] if m}):
+        form = f"data/{camera}/coverage_{camera}.json"
+        files = dict(_tree_blobs(c, f"data/{camera}/", repo))
+        defs = dict(_tree_blobs(c, "editor/definitions/", repo))
+        if form not in files:
+            continue
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wanted = {n: b for n, b in files.items() if n.count("/") == 2}
+            defn = f"editor/definitions/{camera}.json"
+            if defn in defs:
+                wanted[defn] = defs[defn]
+                try:
+                    doc = json.loads((objects.read(defs[defn]) or b"").decode("utf-8"))
+                    sample = definitions.sample(doc, Path(defn)) if isinstance(doc, dict) else None
+                except ValueError:
+                    sample = None
+                if sample is not None and sample.as_posix() in defs:
+                    wanted[sample.as_posix()] = defs[sample.as_posix()]
+            for n, b in wanted.items():
+                data = objects.read(b)
+                if data is None or CONTROL_RE.search(n):
+                    continue
+                (root / n).parent.mkdir(parents=True, exist_ok=True)
+                (root / n).write_bytes(data)
+            if defn not in defs:
+                out.append(f"{form}: no definition in this commit to build it from")
+                continue
+            out += [f"{form}: {why}" for why in coverage.build_problems(root / form, definition=root / defn)]
     return out
 
 

@@ -88,6 +88,43 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   words, and the menu tree keeps such a row's mark that an information notice comes first. Without the flag nothing
   changes. A new checklist setting's tab is now its row's tab in the definition's menu, where the writer had a table of
   five rows (the playbook, section 8, "A row whose screen sits behind an information notice").
+- **A coverage ledger says what is settled about each row, value and record; the runners print it, and skip only
+  when told to.** A new ledger (`kit/tools/coverage.py`, decision 23) gives every menu row, every value of every
+  setting and every record of the file one status (proved, tested with no record changes, not in the settings file by
+  Sony's own list, greyed in a state, closed by rule, not yet tried and the others the data files' page lists),
+  generated each time from the definition, the data folder, `camkit.safety` and your own looks and runs, so it cannot
+  drift. `kit/drive.py`, `kit/crawl_run.py` and `kit/prove_run.py` behave as before: they only print, before they
+  press on a row, what the ledger says of it ("coverage: <row>: <status> ..."). Give `kit/crawl_run.py` or
+  `kit/prove_run.py` the new `--skip-settled` to leave settled rows out (a prover only a list or dialog row whose every
+  planned option is settled, and never with `--context`, `--first`, `--tables`, `--wb`, `--wb-corners`, `--looks`,
+  `--look-base`, `--redo` or `--help-text`); `kit/drive.py` never skips. A crawl meant to build pass 1's map must not
+  skip: its `map.json` would have holes, and `kit/pass1_map.py` refuses such a crawl. A row with values still to try
+  (Fn Menu Settings' 5,940 on the a1 II) is never settled; a row found greyed is settled only while the start file
+  still greys it, a row the kit could not read only for an unknown screen or no response to Right and only on the same
+  kit commit; on a camera with no looks file yet nothing is settled, and a ledger error never breaks a run. A run that
+  only prints builds the ledger once before it connects (about half a second at the a1 II's scale) and reads no
+  download and asks git nothing for a row. Each look the three runners make (and each hand check
+  `kit/tools/coverage.py --record` notes, from two camera downloads) goes into a private, append-only looks file,
+  `private/evidence/<model>_fw<fw>/looks_<model>_fw<fw>.jsonl`: labels, field names and record keys, never a value; the
+  latest look of a row wins (one that did not reach the row never replaces one that did), and `--record --result
+  retract --did <what>` withdraws one. `--todo` lists what is left by expected yield and what each step needs (a remote
+  look or proof, the owner's hand, equipment, a decision, a kit fix), `--row` shows one row with what it rests on, and
+  `--write` writes a public form, `data/<model>_fw<fw>/coverage_<model>_fw<fw>.json`, beside a private form with the
+  citations. The public form is built from the public sources alone and the few facts a look establishes that hold
+  for every camera of the model (an information screen and the kit's address field names it showed, a row that acts
+  when opened, a hand check that changed a record, a row of Sony's list seen to change nothing), which live in a small
+  public file of their own, `data/<model>_fw<fw>/seen_<model>_fw<fw>.json`, written by `--write` where your looks file
+  is: nothing your camera's state showed reaches either, so two owners' forms differ only in which of those facts each
+  has looked for. `kit/tools/check_public.py` refuses a public form that is not, byte for byte, the build of the public
+  sources and the seen file (so an edit by hand is refused, and an edit of a fact shows as a change to the seen file),
+  and either file where it breaks its schema or holds a run, a date, a hash, a commit or a word its sources do not
+  know; a test checks the committed form is that build. A definition never carries the camera file's Save/Load list
+  (its schema refuses it). A proof counts as valid when its diff is the row's own records, two independent readings
+  recorded in it agree on its label and each option of the row writes its own value; the proof that chooses the saved
+  option again is inferred, never valid. `--proofs` counts the repeats of a valid proof, and `--bundles` shows per run
+  folder which frames and downloads back a valid proof (it deletes nothing). The a1 II's public form is committed as
+  its public sources give it, with an empty seen file. Sony's Save/Load list is data now, `save_load_excluded` in the
+  camera file (never copied into the definition), and the model page's row is rendered from it.
 - **A network decision opens an identity or connection row only once the row has been seen to open and close over the
   link without harm.** On the a1 II a look-only `--network` run opened IP Address Setting over the wired LAN link
   (Right, then MENU, nothing chosen): its screen read as no known kind, and a second or two after the MENU the camera

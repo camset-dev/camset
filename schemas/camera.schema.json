@@ -888,6 +888,59 @@
      "type": "string"
     }
    }
+  },
+  "save_load_excluded": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "source",
+    "rows"
+   ],
+   "description": "The kit's alone, never copied into the definition (kit/writer/fromdata.py CAMERA_FILE_ONLY): what the camera maker's own list says a settings file never holds (the a1 II's: Sony's Help Guide page for Save/Load Settings), as data. The coverage ledger gives each row named here the status \"not in the settings file (Sony)\" (kit/camkit/coverage.py) and the model page's Save/Load exclusions row is rendered from it (kit/tools/build_docs.py save_load_md).",
+   "properties": {
+    "source": {
+     "type": "string",
+     "description": "Where the list is: the maker's page, by its title."
+    },
+    "rows": {
+     "type": "array",
+     "description": "The list in its own order: a menu row (\"row\", its labels as the definition's menu writes them, \" > \" before a row inside another), or something it names that is no row (\"item\"), with a note where the list says more (\"its own file\").",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "row": {
+        "type": "string"
+       },
+       "item": {
+        "type": "string"
+       },
+       "note": {
+        "type": "string"
+       }
+      },
+      "oneOf": [
+       {
+        "required": [
+         "row"
+        ]
+       },
+       {
+        "required": [
+         "item"
+        ]
+       }
+      ]
+     }
+    },
+    "header_rows": {
+     "type": "array",
+     "items": {
+      "type": "string"
+     },
+     "description": "Rows the maker's list does not name whose setting the file's header holds, not a record (the a1 II's NTSC/PAL Selector: the header's video-system byte)."
+    }
+   }
   }
  },
  "$defs": {

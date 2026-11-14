@@ -1,0 +1,185 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "looks.schema.json",
+ "title": "A line of a camera's looks file",
+ "description": "private/evidence/<model>_fw<fw>/looks_<model>_fw<fw>.jsonl, one JSON object per line, append-only: the coverage ledger's one recorded file (docs/decisions/0023). kit/drive.py writes one line per --path, kit/crawl_run.py one per row it opens and one for its lap, kit/prove_run.py one per row, kit/tools/coverage.py --record one per owner's hand check (camkit.coverage.append_look, which refuses a line this schema refuses: look_problems). It is the mapper's own, never published: it names runs, days, kit commits and the hashes of the camera's downloads. It never holds a value: field names and option names as the run itself kept them, and the records that changed by key alone.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "t",
+  "by",
+  "path",
+  "did",
+  "result"
+ ],
+ "properties": {
+  "t": {
+   "type": "string",
+   "description": "When, as an ISO date and time."
+  },
+  "run": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The run folder in runs/<model>_fw<fw>/ (a hand check: the folder of its start file)."
+  },
+  "kit": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The kit's commit (git's short hash): a row the kit could not read is tried again only on a newer one."
+  },
+  "by": {
+   "enum": [
+    "drive",
+    "crawl",
+    "prove",
+    "hand"
+   ]
+  },
+  "mode": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The mode the menu was in (the page scan's), where known."
+  },
+  "tab": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "group": {
+   "type": [
+    "string",
+    "null"
+   ]
+  },
+  "path": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "The row's labels from its top row down ([] for a crawl's lap)."
+  },
+  "option": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The option chosen, as the camera writes it (a hand check, a prover's axis or table cell)."
+  },
+  "did": {
+   "enum": [
+    "open",
+    "choose",
+    "act",
+    "lap"
+   ],
+   "description": "open: the row was opened (Right, or the Enter that opens it) and nothing chosen; choose: an Enter after the press that opened it; act; lap: a crawl's whole lap."
+  },
+  "screen": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The kind of screen the opening showed (camkit.screen's: list, notice, fields, unknown ...)."
+  },
+  "result": {
+   "enum": [
+    "no_change",
+    "changed",
+    "refused",
+    "greyed",
+    "kit_failed",
+    "not_reached",
+    "acted",
+    "looked",
+    "retract"
+   ],
+   "description": "looked: opened and walked, its diff the lap's (a crawl), never a choice. kit_failed: a failure that comes again until the kit changes (an unknown screen, no response to Right); any other (lost, an error, a walk cut short, a run that did not finish) is not_reached. retract: kit/tools/coverage.py --record --result retract, the latest look of its row, did and option, which then says nothing."
+  },
+  "blocker": {
+   "type": [
+    "object",
+    "null"
+   ],
+   "additionalProperties": false,
+   "properties": {
+    "row": {
+     "type": "string"
+    },
+    "option": {
+     "type": "string"
+    },
+    "equipment": {
+     "type": "string"
+    },
+    "remote": {
+     "type": "string"
+    }
+   },
+   "description": "What greyed or refused it, as a rule: a row the kit knows (never its value), equipment, a remote session."
+  },
+  "fields": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "Field names and row labels the screen showed (safety.kept_screen's, safety.screen_fields'), never a value."
+  },
+  "options": {
+   "type": "array",
+   "items": {
+    "type": "string"
+   },
+   "description": "A list's option names where the run kept the whole set (never which one was lit)."
+  },
+  "kit_message": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "Why the kit could not read or reach it, in the kit's words (quoted texts withheld on a private run)."
+  },
+  "decision": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "The dated owner decision the run went by, if any."
+  },
+  "start_sha256": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "end_sha256": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "records_changed": {
+   "type": "array",
+   "items": {
+    "type": "string",
+    "pattern": "^(global|set(\\d+)?):0x[0-9a-f]{4}$"
+   },
+   "description": "The records that differed from the start file, by key alone (the camera's volatile records aside)."
+  },
+  "note": {
+   "type": [
+    "string",
+    "null"
+   ],
+   "description": "A hand check's own words (never a value)."
+  }
+ }
+}

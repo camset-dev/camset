@@ -54,6 +54,38 @@ def define_env(env):
         return model_appendix.measured(doc, doc["layouts"][0]).replace(model_appendix.START, "").replace(model_appendix.END, "")
 
     @env.macro
+    def coverage_table(what: str = "rows") -> str:
+        """The coverage ledger's statuses ("rows": a row's and an option's, "records": a record's) or its proof-validity
+        rule ("validity"), in their order, with their definitions, from kit/camkit/coverage.py, their one source."""
+        from camkit import coverage
+        if what == "validity":
+            rows = ["| | Required | A proof is valid when |", "|---|---|---|"]
+            rows += [f"| {k} | {'yes' if req else 'no'} | {build_docs.esc(said)} |"
+                     for k, req, said in coverage.PROOF_VALIDITY]
+            return "\n".join(rows)
+        items = coverage.RECORD_STATUSES if what == "records" else coverage.STATUSES
+        rows = ["| # | Status | Assigned when |" + (" Settled (left out with --skip-settled) | Public |"
+                                                     if what != "records" else ""),
+                "|---|---|---|" + ("---|---|" if what != "records" else "")]
+        for i, (name, said) in enumerate(items, 1):
+            skip = (" yes, with no value still to try |" if name in coverage.SETTLED else
+                    " while the start file still greys it |" if name == "greyed in state" else
+                    " until a newer kit commit |" if name == "kit cannot read" else " no |")
+            public = (" never |" if name in coverage.NEVER_PUBLIC else
+                      " only inferred from an inactive_when |" if name == "greyed in state" else
+                      " only from an unproved_reason |" if name == "needs equipment" else " yes |")
+            rows.append(f"| {i} | `{name}` | {build_docs.esc(said)} |" + (skip + public if what != "records" else ""))
+        return "\n".join(rows)
+
+    @env.macro
+    def save_load_excluded() -> str:
+        """A model page's Save/Load exclusions list, from the camera file of the definition whose layout names the
+        page (data/<model>_fw<fw>/camera_<model>_fw<fw>.json's save_load_excluded)."""
+        doc = page_definition(getattr(getattr(env, "page", None), "path", "") or "")
+        f = definitions.camera_file(definitions.key(doc))
+        return build_docs.save_load_md(json.loads(f.read_text(encoding="utf-8")) if f.exists() else {})
+
+    @env.macro
     def schema_fields(name: str, part: str = "") -> str:
         """The fields a JSON Schema in schemas/ describes, as a table: its own words, so no list of them is kept by hand."""
         s = json.loads((ROOT / "schemas" / f"{name}.schema.json").read_text(encoding="utf-8"))

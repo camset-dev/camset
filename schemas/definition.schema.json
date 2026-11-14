@@ -112,7 +112,12 @@
   },
   "camera": {
    "$ref": "camera.schema.json",
-   "description": "The camera section: data/<model>_fw<fw>/camera_<model>_fw<fw>.json as kit/schema_update.py copies it (camera.schema.json)."
+   "not": {
+    "required": [
+     "save_load_excluded"
+    ]
+   },
+   "description": "The camera section: data/<model>_fw<fw>/camera_<model>_fw<fw>.json as kit/schema_update.py copies it (camera.schema.json), less what only the kit reads: save_load_excluded is the camera file's alone (kit/writer/fromdata.py CAMERA_FILE_ONLY), never a definition's."
   }
  },
  "$defs": {

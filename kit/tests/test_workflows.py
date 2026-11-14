@@ -141,7 +141,8 @@ def test_ci_runs_ruff_at_the_version_the_hook_pins():
 
 def test_ci_and_the_hooks_check_every_data_file_against_its_schema():
     """Every kind of file of a camera's data folder that has a JSON Schema (the camera file, the help file, the reset
-    file and the hand tables file, whose schema refuses an evidence field in an entry) is checked against it both by CI
+    file, the hand tables file, whose schema refuses an evidence field in an entry, the coverage ledger's public form,
+    whose schema refuses a key it does not know, and its seen file) is checked against it both by CI
     and by a commit hook, with the same command and the same files, as the definitions are; a hook runs when a file of
     its kind or a schema changes."""
     hooks = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
@@ -149,7 +150,8 @@ def test_ci_and_the_hooks_check_every_data_file_against_its_schema():
     ci = step(workflow()["jobs"]["kit"], "JSON Schemas")["run"].splitlines()
     kinds = {"definition": "editor/definitions/*.json", "camera": "data/*/camera_*_fw*.json",
              "help-file": "data/*/help_*_fw*.json", "settings-reset": "data/*/settings_reset_*_fw*.json",
-             "hand-tables": "data/*/hand_tables_*_fw*.json"}
+             "hand-tables": "data/*/hand_tables_*_fw*.json", "coverage": "data/*/coverage_*_fw*.json",
+             "coverage-seen": "data/*/seen_*_fw*.json"}
     for schema, files in kinds.items():
         command = f"check-jsonschema --schemafile schemas/{schema}.schema.json"
         assert f"{command} {files}" in ci, schema

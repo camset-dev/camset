@@ -546,6 +546,42 @@ folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left
 2026-11-05 stop every kit command that reads or writes runs (the commit hook goes on) until
 `kit/tools/migrate_runs.py` has moved them under their camera's folder.
 
+**What is settled, and what is left.** Start every session from the coverage ledger
+([decision 23](decisions/0023-a-ledger-says-what-is-settled-and-a-proof-is-made-once.md),
+[DATA_CONTRACTS](DATA_CONTRACTS.md#the-coverage-ledger-what-is-settled-and-what-a-proof-needs)), never from memory or
+the log:
+
+1. `kit/tools/coverage.py` prints, per tab, how many rows are proved, tested with no record changes, greyed, closed by
+   rule, not yet tried, and the records and bytes no setting explains.
+2. `kit/tools/coverage.py --todo` lists what is left by expected yield, each with what its next step needs, and every
+   row with values still to try (with how many); narrow it with `--tab`, `--mode Movie` and `--needs remote-look` (a
+   look with `kit/drive.py`), `remote-proof` (`kit/prove_run.py`), `hand` (the owner's hand, a download before and
+   after), `equipment`, `decision` (a dated owner decision, the opener the row names) or `kit` (a kit fix first). Plan
+   the session from it: remote work first, then one message to the owner per physical action (section 9).
+3. `kit/tools/coverage.py --row "<label>"` shows one row with what it rests on (the looks, crawl rows and proofs, by
+   run and day).
+
+The runners ask the ledger before they press on a row and, by default, only print its word on each ("coverage: <row>:
+<status> ..."), then do what they always did. To leave settled rows out, give `kit/crawl_run.py` or `kit/prove_run.py`
+`--skip-settled`; `kit/drive.py` never skips. A prover given it leaves out only a list or dialog row whose every
+planned option is settled, and nothing in a switched state (`--context`), with `--first`, `--tables`, `--wb`,
+`--wb-corners`, `--looks`, `--look-base`, `--redo` or `--help-text`. **A crawl meant to build pass 1's map must not
+skip:** a skipping crawl's `map.json` has a hole at each row it left out, and `kit/pass1_map.py` refuses it for
+`kit2_pass1`. A row with values still to try is never settled; a row greyed before is settled only while the start
+file still greys it, a row the kit could not read only for an unknown screen or no response to Right, on the same kit
+commit (a lost row, an error or a walk cut short is always tried again); an action or an information screen known by
+its class alone is never settled, since only a run allowed to open it reaches it. On a camera's first run there is no
+looks file yet, so nothing is settled and the run says so. Every look the runners make goes into the looks file (field
+names and record keys, never a value), the latest look of a row winning; an owner's hand check goes in with
+`kit/tools/coverage.py --record --path "Tab > Group > Row" --did choose --option "<label>" --start <before.DAT> --end
+<after.DAT>`, both files camera downloads, and a look found wrong is withdrawn with `--record --path "..." --did open
+--result retract` (`--did` names what the look did: open, choose or act). After `kit/schema_update.py --write`, run `kit/tools/coverage.py --write`: the public form in
+`data/` is built from the public sources and the few facts a look establishes for every camera of the model, which it
+keeps in the seen file beside it (`seen_<model>_fw<fw>.json`), never from what your camera's state showed; commit both,
+and never edit either by hand (`kit/tools/check_public.py` refuses a form that is not the build of its sources and its
+seen file). One valid proof of an option is enough (`--proofs` counts the repeats); `--bundles` shows which frames and
+downloads back a valid proof, and deletes nothing.
+
 ### Phase 1: map the menu
 
 1. **Page scan.** Only Down is pressed, one full lap:
@@ -1214,7 +1250,8 @@ the same generation, never as proof:
 ## 15. What "done" looks like
 
 - Every row of every mode's map is proved, or excluded with a written reason: rule, by hand, an
-  action, an info screen, or not in the file.
+  action, an info screen, or not in the file. `kit/tools/coverage.py --todo` lists nothing you could still do without
+  equipment, a decision or a kit fix, and the public form it writes (`--write`) is in the data folder.
 - `kit/pass2_report.py` shows no unexplained conflict or missing value, and `kit/schema_update.py` (without
   `--write`) prints its gate line with every open question accepted. Every proved record has
   value labels the camera showed, and the inferred ones (section 6) are only on readouts and flags.

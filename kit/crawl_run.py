@@ -71,6 +71,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen  # noqa: E402
+from camkit import coverage  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import crawl  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
@@ -599,6 +600,7 @@ def main():
                     help="open carousel › panels (commits the option); the start file is uploaded afterwards")
     add_network_argument(ap)
     add_info_ok_argument(ap)
+    coverage.add_skip_argument(ap, crawl=True)
     a = ap.parse_args()
     if a.info_ok and a.network:
         sys.exit("--info-ok passes no notice on a --network run: its rows are looked at only")
@@ -622,6 +624,7 @@ def main():
             wait_for(hdmi, ("shooting",), "the first settings download", link=link)
             before = link.download("before")
             print(f"settings saved: {before.name}", flush=True)
+            ledger = coverage.crawl_gate(run, a, before)    # the ledger's word on each row; --skip-settled skips
             time.sleep(5)                                  # MENU within ~3 s of a download locks the menu
             # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused)
             cam = LiveCamera(link, hdmi, run, network=network, values=network_values(network, model),
@@ -630,7 +633,7 @@ def main():
             try:
                 complete = crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
                                            tuple(a.tabs.split(",")) if a.tabs else None, network=network,
-                                           info_ok=info_ok_pass(named))
+                                           info_ok=info_ok_pass(named), ledger=ledger)
             except StopRequested:                           # a STOP: cancelled as ever, and no failure
                 print("STOP file: cancelling", flush=True)
                 complete = True
@@ -647,6 +650,7 @@ def main():
             # a --network run says the records that differ by their keys alone (runner.values_withheld)
             ending = end_session(link, hdmi, before, "the final settings download", reach=wait_shooting,
                                  **values_withheld(bool(network)))
+            ledger.lap(ending)                              # the lap's diff, by record keys, into the looks file
         restored = restore_checked(run, ending, before, **values_withheld(bool(network)))
     finally:
         hdmi.close()
@@ -695,7 +699,7 @@ def info_ok_pass(named: dict):
 
 
 def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
-                    network=frozenset(), info_ok=None) -> bool:
+                    network=frozenset(), info_ok=None, ledger=None) -> bool:
     """MENU, find where it opened in the scan's cycle (find_position, kit/drive.py's way: a menu reopened with the
     cursor in the group column, where a refused jump left it, is stepped into the rows of a group it may enter
     (from_groups); one opened on a page the scan does not match goes by the columns to the Shooting tab's first group),
@@ -724,6 +728,8 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
             results.write(json.dumps(row) + "\n")
             results.flush()
             show(row)
+            if ledger is not None:
+                ledger.after(row, model)            # one look per row opened (camkit.coverage), never a value
         try:
             # a Wi-Fi or Bluetooth setting that answers Right with a notice keeps the notice's text where it is one the
             # kit knows and names no identity (camkit.crawl, safety.notice_kept)
@@ -731,7 +737,8 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
                         **({"tabs": tabs} if tabs else {}),
                         panels=panels, network=network,
                         notices=(text_of, known_labels(model), row_values(model)) if network else None,
-                        **({"info_ok": info_ok} if info_ok is not None else {}))
+                        **({"info_ok": info_ok} if info_ok is not None else {}),
+                        skip=ledger.skip if ledger is not None else None)
             print(f"crawl ended: {(safety.quoted_withheld(out.stopped) if network else out.stopped) or 'lap complete'}; "
                   f"{out.presses} presses, "
                   f"{len(out.rows)} rows; the menu closed by itself {len(out.recoveries)} times "

@@ -19,6 +19,13 @@ def own_runs(tmp_path_factory, monkeypatch):
     top = tmp_path_factory.mktemp("runs")
     monkeypatch.setenv("CAMSET_RUNS", str(top))
     monkeypatch.setenv("CAMSET_CAMERA", TEST_CAMERA)
+    # the coverage ledger's private files (each camera's looks file among them) in a folder of the test's own, never
+    # the mapper's private/evidence/ (camkit.coverage.looks_dir); and no ledger a test built kept for the next
+    monkeypatch.setenv("CAMSET_LOOKS_DIR", str(tmp_path_factory.mktemp("looks")))
+    import sys
+    cov = sys.modules.get("camkit.coverage")
+    if cov is not None:
+        cov.forget()
     return top
 
 

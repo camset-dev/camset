@@ -1,0 +1,8 @@
+{
+ "$schema": "../../schemas/coverage-seen.schema.json",
+ "about": "The facts this camera's looks established that its coverage ledger's public form carries, the one part of it no public source gives, written by kit/tools/coverage.py --write where the mapper's looks file is (docs/decisions/0023): rows that open an information screen with the kit's address field names, rows that act when opened, rows and values a hand check saw change a record, rows of the maker's Save/Load list seen to change nothing. Each holds true of every camera of the model: never a run, a date, a state seen or a value (docs/decisions/0016).",
+ "format": 1,
+ "model": "ILCE-1M2",
+ "firmware": "4.00",
+ "facts": []
+}

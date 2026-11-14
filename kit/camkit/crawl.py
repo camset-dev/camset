@@ -106,7 +106,7 @@ class Counted:
 
 def crawl(cam, cycle: list, model: dict, tabs=("Shooting", "Exposure/Color", "Focus", "Network", "Setup"),
           stop=lambda: False, max_rows: int | None = None, on_row=None, labels=None, panels=False,
-          network=frozenset(), notices=None, info_ok=None) -> Crawl:
+          network=frozenset(), notices=None, info_ok=None, skip=None) -> Crawl:
     """cycle: the page scan's positions in Down order, each {"page": key, "row": slot, "signature",
     "kind"}; model: page key -> {"breadcrumb", "page", "rows": [{"label", "never_open", ...}]}.
     max_rows: stop after opening that many rows (skipped rows do not count). on_row(result) is
@@ -114,7 +114,9 @@ def crawl(cam, cycle: list, model: dict, tabs=("Shooting", "Exposure/Color", "Fo
     dated owner decision opens ({row: date}, crawl_run.py --network; network_open). notices: (read(cam), the screen's
     text now: camkit.live.text_of; the row labels the kit knows; the values it knows by row label: runner.known_labels,
     runner.row_values), for the notice such a setting answers with (visit_row); None reads none. info_ok: the notice a
-    run names to pass (visit_row); None passes none."""
+    run names to pass (visit_row); None passes none. skip(page, row): why the coverage ledger says the row is settled
+    (camkit.coverage.CrawlGate.skip, only on a kit/crawl_run.py --skip-settled run), or None: such a row is not opened,
+    "skipped: <why>"."""
     cam = Counted(cam)
     out = Crawl()
     opened = 0
@@ -138,7 +140,13 @@ def crawl(cam, cycle: list, model: dict, tabs=("Shooting", "Exposure/Color", "Fo
         page = model.get(pos["page"])
         if pos["kind"] != "tiles" and page is not None and page["breadcrumb"].startswith(tabs):
             row = page["rows"][pos["row"]] if pos["row"] is not None and pos["row"] < len(page["rows"]) else None
-            if row is not None:
+            settled = skip(page, row) if skip is not None and row is not None else None
+            if settled:
+                out.rows.append(RowResult(page.get("page", ""), pos["row"], row.get("label") or "",
+                                          f"skipped: {settled}"))
+                if on_row:
+                    on_row(out.rows[-1])
+            elif row is not None:
                 out.rows.append(visit_row(cam, s, page, pos["row"], row, labels, panels=panels, network=network,
                                           notices=notices, info_ok=info_ok))
                 opened += not out.rows[-1].outcome.startswith("skipped")
