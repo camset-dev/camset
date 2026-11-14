@@ -325,12 +325,28 @@ _ACTIONS = [
 # the next word ("Wi-FiConnect"), its last i read as l, 1, | or ! ("Wi-Fl", "Wi-F1"); the word after it follows
 # (2026-11-13, a review)
 _WIFI = r"wi\s?-?\s?f[il1|!]\s?"
+# A cloud service's row wherever "cloud" stands in it, run together or split too ("Cloud Connection", "CloudConnect",
+# "Clo ud Connection", "Creators' Cloud", another body's "Cloud Upload" or "C3 Portal/cloud"), but never White
+# Balance's "Cloudy": the lit row "White Balance Cloudy", its value beside its name, was refused as a cloud row on the
+# a1 II (2026-11-14). "Cloudy" is let through only where it ends its word in a reading, run together too
+# ("WhiteBalanceCloudy"), or comes before "Weather" with the space taken out ("cloudyweather"; with the space, "cloudy"
+# ends its word). With every space taken out a "y" and a letter after "cloud" may be a cloud row split by OCR and the
+# next word ("Creators' Clo ud Yes" is "creators'cloudyes"), so Cloudy with a word that starts with a letter after it
+# stays refused ("White Balance Cloudy A1"), and so does "Cloudyconnect". _CLOUD_SPLIT, its own entry beside _CLOUD
+# wherever _CLOUD is (runner._never_open_words then still reads _CLOUD as "cloud"): "cloud" split or slipped with a "y"
+# after it ("C loud Y", "Clo ud Y1", "C 1oud y"), which run together reads "cloudy" and would pass; White Balance's
+# Cloudy read so ("C loudy") is refused with it. What no pattern tells from Cloudy passes: a "y" OCR puts in after a
+# cloud row's "Cloud" before a sign or the end ("Creators' Cloudy", "Cloudy-Connection"), as a letter read for another
+# does ("Creators' Clond"); the group column still refuses the a1 II's Creators' Cloudy, one letter from its group's
+# name (group_refused)
+_CLOUD = r"cloud(?!y(?![a-z])|yweather)"
+_CLOUD_SPLIT = r"(?!cloud)c\s?[l1|]\s?[o0]\s?u\s?d\s?y"
 _IDENTITY = [
     # identity, connection, region
     r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
     r"usb streaming", r"wired lan connect", r"ip address", r"ssid", r"\bwps\b", r"wps push", r"wps pin",
     r"access point", r"access authen", r"pairing", r"paired",
-    r"cloud", r"streaming", r"tether", r"device name", r"root certif",
+    _CLOUD, _CLOUD_SPLIT, r"streaming", r"tether", r"device name", r"root certif",
     # FTP: the server and its login stay by hand, FTP Function starts a connection to that server
     # (asked separately), and the Display rows are reports, not settings
     r"ftp function", r"server setting", r"save/load ftp", r"display ftp",
@@ -368,7 +384,7 @@ _IDENTITY_FIXED = [p for p in _IDENTITY if p not in _IDENTITY_LIFTABLE]
 # Why network_refused refuses the identity rows _IDENTITY_LIFTABLE left out on 2026-11-13 (a review), in the words a
 # run stops with: matched in every reading of the row a decision names
 _NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
-    (r"smartphone|cloud|streaming|tether|ftp ?function",
+    (r"smartphone|" + _CLOUD + "|" + _CLOUD_SPLIT + r"|streaming|tether|ftp ?function",
      "its opening may itself start or end a connection or act, and nobody has yet seen on the camera what Right does "
      "there"),
     (r"server ?setting", "the FTP server's login sits behind it (credentials, docs/decisions/0009)"),
@@ -388,8 +404,8 @@ _NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
 _NEVER_CHOOSE = [
     r"wired lan connect", r"remote shoot", r"connection method", r"pairing", r"paired", r"ip address", r"subnet",
     # a word's start, never its end: "USBConnection Mode" run together is USB (2026-11-14, a review)
-    r"gateway", r"(?<![a-z])dns", r"smartphone", r"cnct\. while", r"cloud", r"streaming", r"tether", r"(?<![a-z])usb",
-    r"language",
+    r"gateway", r"(?<![a-z])dns", r"smartphone", r"cnct\. while", _CLOUD, _CLOUD_SPLIT, r"streaming", r"tether",
+    r"(?<![a-z])usb", r"language",
     r"ntsc", r"^area/", r"date/time", r"device name", r"ftp", r"server",
     _WIFI + r"connect", r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)",
     r"airplane mode",
@@ -2147,15 +2163,15 @@ _OWNER_NEVER_RES = [(re.compile(rx), why) for rx, why in OWNER_NEVER]
 # IP Address Setting too: opened and left with MENU over the wired LAN link it dropped the link (2026-11-14), so it is
 # never opened as a plain look
 _ACTS_ON_OPEN = [r"\bwps\b", r"pairing", r"access point", r"select on cam", r"root certif", r"create new folder",
-                 r"forced file number reset", r"tether", r"cloud", r"streaming", r"smartphone", r"ftp function",
-                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"wps push", r"wps pin",
-                 r"ip address"]
+                 r"forced file number reset", r"tether", _CLOUD, _CLOUD_SPLIT, r"streaming", r"smartphone",
+                 r"ftp function", r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"wps push",
+                 r"wps pin", r"ip address"]
 _ACTS_ON_OPEN_RE = _Rx(_ACTS_ON_OPEN)
 # Of those, the ones whose opening may change or drop the network the run's link is on: they need "link_loss" too, and
 # the run then restores by hand (loses_link)
 _LINK_RISK_OPEN_RE = _Rx([r"\bwps\b", r"wps push", r"wps pin", r"pairing", r"access point", r"select on cam", r"tether",
-                          r"cloud", r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b",
-                          r"ip address"])
+                          _CLOUD, _CLOUD_SPLIT, r"streaming", r"smartphone", r"ftp function", r"ftp transfer",
+                          r"\bsend\b", r"ip address"])
 # The actions whose confirmation wipes the network setup and the access authentication, and the run's link with them;
 # kit/drive.py's NEVER_ENTER and camkit.live.LiveCamera's own check refuse Enter on a lit text or a screen reading one
 # (LINK_WIPING_ENTER), the screen only when the press is the run's armed confirmation of that very action (armed_wiping)

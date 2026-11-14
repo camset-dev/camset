@@ -1032,9 +1032,15 @@ def joined(text, names) -> str | None:
 
 def _never_open_words() -> tuple:
     """The never-open list's names written out plainly: its actions', each other pattern that is letters, digits, spaces
-    and signs alone ("screen reader", "audio signal", "access authen"), and "reset", for run_together_refused."""
-    plain = [p for p in (*safety._IDENTITY, *safety._CREDENTIALS, *safety._ANYWHERE, *safety._MOTION,
-                         *safety._NETWORK_SETTINGS) if re.fullmatch(r"[a-z0-9 ./&'-]+", p)]
+    and signs alone ("screen reader", "audio signal", "access authen"), and "reset", for run_together_refused. A
+    pattern's look-aheads and look-behinds, which only say where it may not match, are left out first, the innermost
+    first ("cloud(?!y(?![a-z])|yweather)" is "cloud"): joined judges what is beside a name by its own rule."""
+    def bare(p: str) -> str:
+        while (q := re.sub(r"\(\?<?[=!][^()]*\)", "", p)) != p:
+            p = q
+        return p
+    plain = [p for p in map(bare, (*safety._IDENTITY, *safety._CREDENTIALS, *safety._ANYWHERE, *safety._MOTION,
+                                   *safety._NETWORK_SETTINGS)) if re.fullmatch(r"[a-z0-9 ./&'-]+", p)]
     return tuple(sorted({*safety._ACTION_NAMES, *plain, "reset"}))
 
 

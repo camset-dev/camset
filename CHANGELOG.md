@@ -265,6 +265,25 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   `drive.py`'s Enter guard refuses two help texts more ("newfolder" run together); a vouched Enter (`enter!:`, nothing
   lit) is refused on the list of the setting the definition writes "AutoCreateStillImage", run together, which reads
   "Create Still Image" with its CamelCase set apart, as it would spaced (kept so: a vouched Enter judges least).
+- White Balance's Cloudy is no cloud row. On the owner's a1 II, once White Balance > Cloudy was chosen, the lit row read
+  "White Balance Cloudy", its value beside its name, and the next press was refused, "by hand only: cloud": the word
+  meant for the cloud service's rows (Cloud Connection, Cloud Information, the Creators' Cloud group) was found inside
+  "Cloudy". Every guard that names "cloud" (the never-open list and its identity rows, the rows whose options are never
+  chosen, the rows that act on opening or may drop the link, and why no network decision opens one) now passes over
+  "Cloudy" where it ends its word in a reading, run together too ("WhiteBalanceCloudy"), or comes before "Weather".
+  A cloud row is refused as before, as written, run together and split ("CloudConnection", "Clo ud Connection",
+  "Creators'Cloud", "Cloud Upload", "C3 Portal/cloud"), and so is a cloud word split or slipped with a "y" after it
+  ("C loud Y", "Clo ud Y1"), which run together reads "cloudy": White Balance's Cloudy read split ("C loudy") is
+  refused with it. With every space taken out, a "y" and a letter after "cloud" may be a cloud row split by OCR and the
+  next word ("Creators' Clo ud Yes"), so "Cloudy" with a word that starts with a letter after it ("White Balance Cloudy
+  A1", "Cloudyconnect") is still refused, and the guards that judge a whole screen still refuse White Balance's list
+  read run together ("Shade Cloudy Incandescent"). What no pattern can tell from Cloudy now passes the row check: a "y"
+  OCR puts in after a cloud row's "Cloud" before a sign or the end ("Creators' Cloudy", "Cloudy-Connection"), as a
+  letter read for another always has ("Creators' Clond"); the group column still refuses the a1 II's Creators' Cloudy,
+  one letter from its group's name. Over the a1 II definition's menu, rows and values, each row read with one of its
+  own values beside it, and its Help Guide's menu, only "Cloudy", "White Balance Cloudy" and the six WB fine-tune names
+  for Cloudy changed verdict; no other word of the never-open list is found inside a longer word of the a1 II's labels
+  that means something else.
 - A third look-only `--network` session on the a1 II showed two rules of 2026-11-14 keeping the kit from rows it reached
   before (failing closed: nothing wrong was pressed). The jump by the tab and group columns reads the group column's lit
   bar as the way back out of the column does, the group's name judged whole by its letters and digits, equal or one

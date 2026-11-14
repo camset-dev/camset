@@ -1864,3 +1864,143 @@ def test_drive_gives_the_camera_its_confirm_word_for_an_enter_it_judged_with_con
     pressed, _, line = drive_on_shooting(tmp_path / "b", monkeypatch, ["enter:memory card"], kind="dialog",
                                          text=question, lit="Enter")
     assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False
+
+
+# ---------------------------------------------------------------- White Balance's Cloudy is no cloud row (2026-11-14)
+
+# the a1 II's cloud rows as its definition, its data and its Help Guide write them (the Creators' Cloud group and its
+# two rows), another body's, and a value beside one, each refused as written, with its words run together
+# ("CloudConnection", "creatorscloud" in lower case) or split ("Clo ud Connection")
+CLOUD_ROWS = ["Cloud Connection", "Cloud Information", "Creators' Cloud", "Cloud Connect", "Cloud Upload",
+              "C3 Portal/cloud", "Cloud Connection On", "Creators' Cloud Yes", "creatorscloud"]
+# White Balance's Cloudy as the camera read it on 2026-11-14 ("White Balance Cloudy", the lit row with its value beside
+# its name), alone, with its words run together, and with a word after it that starts with no letter (a 0 there is
+# read as an o once the spaces are taken out, deslip, so "Cloudy 0" is refused as "cloudyo")
+CLOUDY = ["White Balance Cloudy", "Cloudy", "Cloudy Weather", "Cloudy\nWeather", "White BalanceCloudy",
+          "WhiteBalanceCloudy", "CloudyWeather", "Cloudy Weather On", "WB fine-tune A-B (Cloudy, stills)",
+          "White Balance Cloudy 2"]
+
+
+def a1ii_cloud_labels() -> set:
+    """Every label holding "cloud" of the a1 II definition's menu, settings' rows and values, and of its Help Guide's
+    menu."""
+    doc = json.loads((ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    out = set(definition_labels())
+    out |= {v[1] for s in doc["settings"] for v in s.get("values") or [] if len(v) > 1 and isinstance(v[1], str)}
+    guide = ROOT / "data" / "ILCE-1M2_fw4.00" / "help_guide_menu_ILCE-1M2_fw4.00.jsonl"
+    for line in guide.read_text(encoding="utf-8").splitlines():
+        out |= {json.loads(line).get(k) for k in ("tab", "group", "item")} if line.strip() else set()
+    return {x for x in out if isinstance(x, str) and "cloud" in x.lower()}
+
+
+def test_the_a1_iis_cloud_labels_are_its_cloud_rows_and_white_balances_cloudy():
+    assert a1ii_cloud_labels() == {"Cloud Connection", "Cloud Information", "Creators' Cloud", "Cloudy"}
+    assert all(safety.never_open(x) for x in a1ii_cloud_labels() - {"Cloudy"})
+
+
+@pytest.mark.parametrize("label", CLOUD_ROWS)
+def test_every_cloud_row_is_refused_as_written_run_together_or_split(label):
+    """A cloud row is by hand only and acts on opening (decision 8), however OCR runs its words together or splits one,
+    in every guard that reads it: the "Cloudy" let through is never one of its readings."""
+    import drive
+    assert safety.plain_view(safety.never_open, label) == "by hand only: cloud"
+    for v in [label, *run_together(label), *split_apart(label)]:
+        assert safety.never_open(v).startswith("by hand only"), v
+        assert live.open_refused(v) and drive.press_refused("right", v, "", "menu"), v
+        assert safety.identity_row(v) and safety.never_lifted(v) and safety.allow_refused(v), v
+        assert safety.screen_refused(v) and safety.identity_screen(v) and safety.lift_class(v) is None, v
+        assert safety.never_choose(v) and safety.acts_on_open(v) and safety.link_risk_open(v), v
+        assert "start or end a connection" in safety.network_refused(v), v
+
+
+@pytest.mark.parametrize("label", CLOUDY)
+def test_white_balance_cloudy_is_no_cloud_row(label):
+    """2026-11-14, the owner's a1 II: once White Balance > Cloudy was chosen the lit row read "White Balance Cloudy",
+    and the next press was refused, "by hand only: cloud". "Cloudy" ending its word, or before "Weather", is no cloud
+    row in any guard, in any reading, run together too."""
+    import drive
+    import runner
+    assert safety.never_open(label) is None and live.open_refused(label) == "", label
+    assert not drive.press_refused("right", label, "", "menu")
+    assert safety.identity_row(label) is None and safety.never_lifted(label) is None
+    assert safety.allow_refused(label) is None and safety.screen_refused(label) is None
+    assert safety.identity_screen(label) is None and safety.never_choose(label) is None
+    assert safety.acts_on_open(label) is None and safety.link_risk_open(label) is None
+    assert "connection" not in safety.network_refused(label)
+    if " " in label:                    # the --info-ok check reads a word run together on its own (runner.joined)
+        assert runner.run_together_refused(label) is None
+
+
+@pytest.mark.parametrize("label", ["Cloudyconnect", "Cloudy Connection", "Creators' Clo ud Yes", "Creators' Cl oud Yes",
+                                   "White Balance Cloudy A1", "White Balance Cloud y", "Cloudy Wireless", "Cloudywifi",
+                                   "Cloudyzone", "Cloudy Weath", "Cloudy Xweather"])
+def test_cloudy_with_more_letters_after_it_run_together_stays_refused(label):
+    """With every space taken out, a "y" and a letter after "cloud" may be a cloud row split by OCR and the next word
+    ("creators'cloudyes"), or a letter put in ("Cloudyconnect"): refused, as is White Balance's Cloudy with a word that
+    starts with a letter after it, which that reading cannot tell from them, whatever the letter ("Cloudyzone"),
+    "Weather" alone whole ("Cloudy Wireless", "Cloudy Weath", "Cloudy Xweather" refused). "Cloud y" reads "cloud" as
+    written. The --info-ok check of a row's words run together refuses "Cloudyconnect" too ("cloud" is still on its
+    list)."""
+    import runner
+    assert safety.never_open(label).startswith("by hand only"), label
+    assert "cloud" in runner._never_open_words() and runner.run_together_refused("Cloudyconnect")
+
+
+@pytest.mark.parametrize("label", ["C loud Y", "Clo ud Y1", "C loudy", "C3 Portal/cl oud\nY", "Clo ud ｙ",
+                                   "Creators' C loud Y", "Creators' Clou d y.", "CLO UD Y", "Cl0ud y", "C1o ud Y",
+                                   "C 1oud Y", "Cl 0 ud Y", "White Balance C loudy", "White Balance Clou dy"])
+def test_a_cloud_word_split_with_a_y_after_it_is_refused(label):
+    """A cloud row's "Cloud" split by OCR, or slipped, with a "y" after it ("C loud Y"): with its spaces taken out it
+    reads "cloudy", which _CLOUD lets through, so _CLOUD_SPLIT judges it as read (refused before the Cloudy fix of
+    2026-11-14, and again since), a 1 or a 0 that deslip leaves as it is among them ("C 1oud Y", "Cl 0 ud Y"). White
+    Balance's Cloudy read split ("C loudy") is refused with it."""
+    import drive
+    assert safety.never_open(label).startswith("by hand only"), label
+    assert live.open_refused(label) and drive.press_refused("right", label, "", "menu")
+    assert safety.identity_row(label) and safety.never_lifted(label) and safety.allow_refused(label)
+    assert safety.screen_refused(label) and safety.identity_screen(label) and safety.lift_class(label) is None
+    assert safety.never_choose(label) and safety.acts_on_open(label) and safety.link_risk_open(label)
+    assert "start or end a connection" in safety.network_refused(label)
+
+
+def test_the_split_cloud_pattern_takes_its_y_and_a_split_word_is_the_run_together_views():
+    """_CLOUD_SPLIT names a split "cloud" only with its "y" (its as-written pattern is judged in the plain view too); a
+    split cloud word with no "y" is _CLOUD's, in the reading with every space taken out alone, as a split word always is
+    ("Forma t")."""
+    assert safety.plain_view(safety.never_open, "C loudy") == "by hand only: c loudy"
+    assert safety.never_open("C loud Connection") == "by hand only: cloud"
+    assert safety.plain_view(safety.never_open, "C loud Connection") is None
+
+
+def test_runners_never_open_words_are_the_same_with_the_split_cloud():
+    """_CLOUD_SPLIT is its own entry, so runner._never_open_words, which takes a pattern's look-arounds out, still has
+    "cloud" from _CLOUD and nothing from _CLOUD_SPLIT."""
+    import runner
+    words = runner._never_open_words()
+    assert "cloud" in words and not any(w.startswith("c\\s") or "[l1|]" in w for w in words)
+    assert safety._CLOUD_SPLIT in safety._IDENTITY and safety._CLOUD_SPLIT in safety._NEVER_CHOOSE
+    assert safety._CLOUD_SPLIT in safety._ACTS_ON_OPEN
+
+
+def test_a_y_put_in_after_a_cloud_rows_cloud_passes_the_row_check_but_not_the_group_column():
+    """What no pattern tells from White Balance's Cloudy: a "y" OCR puts in after a cloud row's "Cloud" before a sign or
+    the end ("Creators' Cloudy", "Cloudy-Connection") passes the row check, as a letter read for another does
+    ("Creators' Clond"). The group column still refuses the a1 II's Creators' Cloudy, one letter from its group's
+    name."""
+    for label in ("Creators' Cloudy", "Cloudy-Connection", "Creators' Clond"):
+        assert safety.never_open(label) is None, label
+    doc = json.loads((ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    groups = {m.get("group") for m in doc["menu"] if isinstance(m, dict)}
+    assert "Creators' Cloud" in groups
+    assert "one letter from \"Creators' Cloud\"" in safety.group_refused("Creators' Cloudy", groups)
+    assert safety.group_refused("Creators' Clond", groups)
+
+
+def test_whole_screen_guards_refuse_white_balances_list_read_run_together():
+    """A screen's whole text is judged in every reading too: White Balance's list ("Shade Cloudy Incandescent") with its
+    spaces taken out holds "cloudyi", a "y" and a letter after "cloud", and is refused, a vouched Enter on it too."""
+    import drive
+    text = "Shade Cloudy Incandescent"
+    assert safety.screen_refused(text) and safety.identity_screen(text)
+    assert drive.press_refused("enter", "", text, "dialog", vouched=True)
+    assert safety.plain_view(safety.screen_refused, text) is None
