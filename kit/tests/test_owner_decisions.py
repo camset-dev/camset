@@ -1636,6 +1636,44 @@ def test_drive_opens_an_owner_row_only_as_the_last_label_of_its_path(scope_file,
             D.main()
 
 
+IP_PLACE = ("Network", "Wired LAN", "IP Address Setting")
+
+
+def test_ip_address_setting_opens_under_an_owner_decision_only_as_an_armed_last_press(scope_file, monkeypatch):
+    """2026-11-14: opening and leaving IP Address Setting over the wired LAN link dropped the link. Under an owner
+    decision it is a row whose opening may drop the link (acts_on_open, link_risk_open): "confirm" needs "link_loss"
+    (and "values": "logged", its screens being blanked otherwise), and a look-only run of it (no --confirm, or the row
+    not under "confirm") stops before anything connects; the armed form is accepted by the decision parser. The region
+    and USB rows stay closed identity rows, looked at only, their frames blacked out."""
+    import drive as D
+    import runner
+    row, places = "IP Address Setting", PLACES + [IP_PLACE]
+    assert safety.acts_on_open(row) and safety.link_risk_open(row) and safety.loses_link(row, "open")
+    assert safety.owner_class(row) == safety.LIFT_FIXED
+    look = owner({"rows": [row]}, places=places)
+    assert look["refusals"] == [] and look["rows"][row]["acts_on_open"] and not look["rows"][row]["confirm"]
+    assert "link_loss" in owner({"rows": [row], "confirm": [row]}, places=places)["refusals"][0]
+    assert "logged" in owner({"rows": [row], "confirm": [row], "link_loss": True}, places=places)["refusals"][0]
+    armed = {"rows": [row], "confirm": [row], "link_loss": True, "values": "logged"}
+    got = owner(armed, places=places)
+    assert got["refusals"] == [] and got["rows"][row]["confirm"] and got["rows"][row]["link_loss"]
+    assert got["rows"][row]["acts_on_open"] and got["rows"][row]["path"] == list(IP_PLACE)
+    # drive.py: a look-only run stops before the link opens, whatever its presses
+    monkeypatch.setattr(runner, "known_places", lambda model=None: places)
+    monkeypatch.setattr(D, "load_scan", lambda scan: ([], {}))
+    monkeypatch.setattr(D, "Link", lambda r: pytest.fail("the link opened"))
+    for decision, more in (({"rows": [row]}, []), ({"rows": [row]}, ["--confirm"]), (armed, [])):
+        scope_file(decision)
+        monkeypatch.setattr(sys, "argv", ["drive.py", "--owner", "--path", row, "--press", "right", *more])
+        with pytest.raises(SystemExit, match="may drop the link .* nothing was sent to the camera"):
+            D.main()
+    # the region and USB rows, unchanged: closed identity rows, opened to look, their frames blacked out
+    for label in ("Language", "USB Connection Mode", "USB LUN Setting", "USB Power Supply", "NTSC/PAL Selector",
+                  "Area/Date/Time Setting"):
+        assert safety.owner_class(label) == safety.LIFT_FIXED in safety.BLANKED and not safety.acts_on_open(label)
+        assert not safety.link_risk_open(label)
+
+
 def test_the_walk_goes_to_a_row_in_the_tab_and_group_it_is_asked_for():
     """E: go_to, given a place, takes only a row whose page's breadcrumb reads that tab and group."""
     import crawl_run

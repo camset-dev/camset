@@ -16,6 +16,12 @@ alone would leave mostly unproved; and then the rest of the never-open list too:
 actions, and display serial number... I have generic sd cards in so you can format, delete, etc", the password
 screens' values to be kept ("Read everything"), and the resets that wipe the link possible, restored by hand.
 
+On 2026-11-14 a run under such a decision opened IP Address Setting over the wired LAN link to look at it (Right, then
+MENU, nothing chosen). Its screen read as no known kind, and one to two and a half seconds after the MENU the camera
+raised a network error and dropped the link the run was on, which did not come back. This record had listed the row
+among those whose opening starts or ends nothing, as it had the USB, language, NTSC/PAL and area and date rows, though
+nobody had seen any of them opened over the link.
+
 ## Decision
 
 USB settings, Language, NTSC/PAL, Area/Date, the camera's network identity and its connections are changed by the
@@ -33,10 +39,16 @@ A dated owner decision in the camera's reviewed scope that names the row, `{"dat
   Ctrl, Airplane Mode);
 - a screen that shows the camera's addresses (Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address),
   opened only by `drive.py`, as the last row of its path;
-- an identity, connection or region row whose opening starts or ends nothing, Right on it opening an option list, a
-  submenu or an information screen (Wired LAN Connect, IP Address Setting, Remote Shoot Function, Cnct. while Power
-  OFF, Wake On LAN, Manage Paired Device, Display FTP Result, USB Connection Mode, USB LUN Setting, USB Power Supply,
-  Language, NTSC/PAL, Area/Date/Time).
+- an identity or connection row that has been seen to open and close over the link without harm, Right on it
+  opening an option list, a submenu or an information screen (on the a1 II, seen on 2026-11-13 and 2026-11-14: Wired
+  LAN Connect and Wake On LAN, each a list of two; Remote Shoot Function, a submenu; Cnct. while Power OFF, a notice
+  while greyed; Manage Paired Device, a screen; Display FTP Result, an information screen).
+
+A row is liftable only once it has been seen to open and close over the link without harm: `kit/camkit/safety.py`
+names beside each such row when it was seen, and a test holds the list to that record. IP Address Setting is never
+lifted, since opening and leaving it over the link dropped the link (2026-11-14); USB Connection Mode, USB LUN Setting,
+USB Power Supply, Language, NTSC/PAL and Area/Date/Time are not lifted until someone has seen them opened over the
+link. They stay by the owner's hand.
 
 A row so named is looked at only: the kit opens it, reads its options with up and down, and leaves it with MENU; it
 presses no Enter, no Right or Left and turns no dial there, which could choose or commit an option, until it is back
@@ -78,13 +90,15 @@ list's, a window centred on it), on a notice what `notice_kept` keeps (a notice 
 label where it is one the kit knows, never that row's value, its current state), and the count of lines withheld; the
 shooting screen as its kind alone, since its status line is the owner's shooting values; a row label the kit does not
 know as "(withheld)", the row a decision names as the run was given it; a text the navigation read as "(the text read
-withheld)", never its length; a refusal's or an error's quoted texts withheld; the records that differ at the session's end by
+withheld)", never its length; a refusal's or an error's quoted texts withheld, in the closing lines as in the first (a
+link command's quoted path holds the home folder); the records that differ at the session's end by
 key and count alone, never a value, in the console and in `drive.jsonl` (unless the owner row's decision logs values).
 A proof of a network row says nothing of the option it was saved on: the named options are proved in their own order,
 each said as "proof i of N", the records they changed said by key, and every such row ends with the session's upload of
 the start file; the proofs' diffs against the start file tell it by nature, as do the run's `events.jsonl` (its presses
 tell the way the cursor went from the saved option) and its frames, and all stay in the run's owner-only folder. An `--owner` run keeps alike, but for the owner row's own screens where its decision says
 `"values": "logged"` (decision 9). Such a run's folder is the owner's alone on macOS and Linux (decision 9). Whatever a network decision says, these stay by hand:
+IP Address Setting and the USB, language, NTSC/PAL and area and date rows (above);
 credentials and the screens that show them (decision 9), the SSID, WPS, access point and pairing rows, Import Root
 Certificate, the copyright and IPTC rows, Display Serial Number, and every action and reset (SSID/PW Reset, Reset
 Network Set., Reset Transfer Status); the rows whose opening may itself start or end a connection or act, since
@@ -119,11 +133,16 @@ Reset/Save Settings > Setting Reset, Shooting > Shooting Mode > Camera Set. Memo
 My Menu Setting > Add Item, Shooting > File > Select REC Folder: `safety.opens_to_look` says where each was seen; not
 Format or Delete, whose opening no frame records, decision 4); every other one, and every row that acts as soon as
 it opens (WPS Push, Pairing, Access Point Set., Select on Cam & Send, Create New Folder, Forced File Number Reset, the
-cloud, streaming, tethering, FTP and Send rows), opens only as the armed last press of a run given `--confirm`, the row
+cloud, streaming, tethering, FTP and Send rows, and IP Address Setting, whose opening and MENU dropped the link on
+2026-11-14), opens only as the armed last press of a run given `--confirm`, the row
 under `"confirm"`, with `"link_loss"` where the network may change or the link is wiped (Reset Network Set., SSID/PW
 Reset: decision 5), and with `"values": "logged"` too where its screens are otherwise blanked (WPS Push, Pairing,
-Access Point Set. and the other identity rows whose opening may change the network: the screen after the opening must be
-read to be judged and cancelled), and takes no option. Before any `--owner` run given `--confirm` connects, whatever
+Access Point Set., IP Address Setting and the other identity rows whose opening may change the network: the screen
+after the opening must be read to be judged and cancelled), and takes no option; a run that names such a row whose
+opening may change the network without `--confirm`, or a decision without it under `"confirm"`, stops before anything
+connects. The USB, language, NTSC/PAL and area and date rows stay closed identity rows an owner decision opens to look
+at, their frames blacked out; none of them has been seen opened over the link, so an owner's look at one is at the
+owner's risk of a dropped link. Before any `--owner` run given `--confirm` connects, whatever
 its row (a never-choose option chosen as the last press may drop the link as an action's confirmation may), the person
 at the terminal types the row's name after the run has printed its place, what its last press may do and the camera; no
 flag or environment variable answers it, it stops a careless agent but not a determined one, so the owner types the
@@ -148,7 +167,11 @@ frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the con
 The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
 decides for theirs, and the default stays by hand (the playbook's rule 3).
 
-Before 2026-11-14 a decision could name Wi-Fi Frequency Band's options, and a `--network` run printed and kept the
+Before 2026-11-14 IP Address Setting and the region and USB rows (USB Connection Mode, USB LUN Setting, USB Power
+Supply, Language, NTSC/PAL, Area/Date/Time) were liftable to look at, listed as rows whose opening starts or ends
+nothing though nobody had seen one opened over the link, an owner decision could open IP Address Setting to look
+without `--confirm`, a decision could name Wi-Fi Frequency Band's options, and a
+`--network` run printed and kept the
 text of the screens it did not withhold (a list's lines, a notice's, the page after MENU, the shooting screen's status
 line). Before 2026-11-13 no decision opened a row of the never-open list, Wi-Fi Connect, Bluetooth Function and Airplane Mode
 were network identity, which no allowance opened, and Bluetooth Rmt Ctrl, Wi-Fi Frequency Band and the address screens

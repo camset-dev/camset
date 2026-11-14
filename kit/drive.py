@@ -137,7 +137,8 @@ records that differ are said and kept by key and count alone, never a value (run
 unless the owner row's decision logs values. A run whose first --path label the scan does not reach (find_position,
 crawl_run.go_to) sends none of its presses, says the label as it was given (the run's own argument, on every run),
 restores its start file and, once that checks out, exits EXIT_INCOMPLETE (8; kit/exit_status.py), so a chain or an
-agent can tell it from a run that did its presses.
+agent can tell it from a run that did its presses. A run whose restore does not finish (EXIT_UNRESTORED, 4) keeps a
+result line in drive.jsonl saying so, with no screen (unfinished_line).
 """
 import argparse
 import contextlib
@@ -897,6 +898,23 @@ def shooting_word(cam, run, name: str, on_shooting) -> dict:
     return {"on_shooting": frozenset({name})}
 
 
+UNFINISHED = "the run did not finish: its restore stopped short, and the camera is not known to be on its start file"
+
+
+def unfinished_line(a, ok: bool, before: Path, network=None, address=None, owner_entry=None, owner_info=None,
+                    marker=None) -> dict:
+    """drive.jsonl's result line for a run whose restore ended early (runner.restoring's EXIT_UNRESTORED, or an armed
+    press's restore by hand): what the run was asked (its path, presses and note, the decision's rows), whether its
+    presses went (`ok`), the start file, and that it did not finish and was not restored (UNFINISHED). No screen's text,
+    no screen at all, and no record's value: the run's record, where the file was left empty (2026-11-14)."""
+    return {"path": a.path, "presses": a.press, "note": a.note, "completed": ok,
+            **({"network": dict(network)} if network else {}),
+            **({"address_screen": address} if address else {}),
+            **({"owner": {owner_entry: {k: v for k, v in owner_info.items() if k != "why"}}} if owner_info else {}),
+            "before": before.name, "after": None, "restore": "not finished", "outcome": UNFINISHED,
+            **({"marker": marker.name} if marker else {})}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", action="append", required=True, help="top-level row label, then submenu labels")
@@ -947,6 +965,14 @@ def main():
         if len(owner_place) < 3:
             sys.exit(f"--owner: the decision gives {owner_entry!r} no tab and group: nothing was sent to the camera")
         owner_cam = {owner_label: owner_info}           # all the camera is given: one row
+        # a row whose opening may drop the link the run is on (IP Address Setting dropped it, 2026-11-14) opens only as
+        # the armed last press: a run without --confirm, or a decision not naming it under "confirm", could only walk
+        # there and be refused, so it stops before anything connects
+        if owner_info.get("acts_on_open") and safety.link_risk_open(owner_label) and not (
+                a.confirm and owner_info.get("confirm")):
+            sys.exit(f"--owner: opening {owner_entry!r} may drop the link the run is on, so it opens only as the armed "
+                     "last press of a run given --confirm, the row under \"confirm\" with \"link_loss\": true "
+                     "(docs/decisions/0008): nothing was sent to the camera")
         # a credentials row's options are its own listed values (the page model's, the definition's), never a key
         why = safety.owner_values_refused(owner_info, network_values(owner_cam, scan[1]).get(owner_label, ()))
         if why:
@@ -1422,9 +1448,11 @@ def main():
             else:
                 # whatever ends the restore early (close giving up, a STOP while waiting, an upload refused) exits
                 # EXIT_UNRESTORED (runner.restoring); after an armed press that may drop the link, the marker stays and
-                # the run exits EXIT_RESTORE_BY_HAND instead
+                # the run exits EXIT_RESTORE_BY_HAND instead. Either way drive.jsonl gets a result line saying so
+                # (unfinished_line), where it was left empty (2026-11-14)
+                result_written = False
                 try:
-                    with restoring("drive.py's restore"):
+                    with restoring("drive.py's restore", withhold=private):
                         close_for_restore(cam, link)
                         try:
                             wait_for(hdmi, ("shooting",), "the settings download after the presses", link=link)
@@ -1450,7 +1478,15 @@ def main():
                                               "after": ending.after.name if ending.after else None,
                                               "changes": changes_kept(ending.changes, keep_values)}) + "\n")
                         log.flush()
+                        result_written = True
                 except SystemExit:
+                    if not result_written:
+                        # the run's record: what it was asked to do and that it did not finish, never a screen's text;
+                        # a log that cannot be written changes no exit status
+                        with contextlib.suppress(OSError, ValueError):
+                            log.write(json.dumps(unfinished_line(a, ok, before, network if a.network else None, address,
+                                                                 owner_entry, owner_info, marker)) + "\n")
+                            log.flush()
                     if not byhand:
                         raise
                     unfinished = True           # the marker stays (below)

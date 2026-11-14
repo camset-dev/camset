@@ -57,7 +57,7 @@ from pathlib import Path
 from camkit import safety, screen, session
 from camkit.frames import load
 from camkit.link import Link, StopRequested
-from camkit.live import LiveCamera, close, text_of
+from camkit.live import LiveCamera, close, text_of, withheld_on
 from camkit.vlm import check_readers
 from camkit.screen import same_position
 # A runner's exit status when the camera is not known to be as its start file at the end: the restore did not check
@@ -732,20 +732,23 @@ def changes_of(changes) -> list:
 
 
 @contextlib.contextmanager
-def restoring(what: str = "the restore"):
+def restoring(what: str = "the restore", withhold: bool = False):
     """Around a restore: any exception it raises (an upload the camera refused or did not answer, a STOP while waiting
     for the shooting screen, camkit.live.close giving up with its SystemExit) is said and turned into exit
     EXIT_UNRESTORED, so a chain stops there instead of starting its next step from a camera that may not be on its
-    start file. A traceback's exit status 1 once let it go on. A second Ctrl-C (KeyboardInterrupt) is left as it is."""
+    start file. A traceback's exit status 1 once let it go on. A second Ctrl-C (KeyboardInterrupt) is left as it is.
+    withhold (a --network or --owner run): the error's quoted texts withheld, as the run's first error line has them."""
+    said = safety.quoted_withheld if withhold else str
     try:
         yield
     except SystemExit as e:
         if e.code in (None, 0, EXIT_UNRESTORED):
             raise
-        print(f"{what} did not finish ({e}): the camera may not be on its start file", flush=True)
+        print(f"{what} did not finish ({said(e)}): the camera may not be on its start file", flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e
     except Exception as e:
-        print(f"{what} did not finish ({type(e).__name__}: {e}): the camera may not be on its start file", flush=True)
+        print(f"{what} did not finish ({said(f'{type(e).__name__}: {e}')}): the camera may not be on its start file",
+              flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e
 
 
@@ -764,16 +767,18 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
     and lists none (camkit.session.ended), for a prover that never prints a value the start file holds (afreg_run);
     keys=True with it lists their keys, never a value (a --network or --owner run: values_withheld).
     expected: records no settings file sets which the run is known to write (camkit.session.ended), said by key and
-    left out (memreg_run: a memory slot's registration marks)."""
+    left out (memreg_run: a memory slot's registration marks). With keys (a --network or --owner run) an error's quoted
+    texts are withheld in what it prints too (restoring), as that run's first error line has them."""
     if reach is None:
         from proving.nav import to_shooting as reach
-    with restoring(f"the session's end ({why})"):
+    said = safety.quoted_withheld if keys else str
+    with restoring(f"the session's end ({why})", withhold=keys):
         try:
             reach(link, eyes, why)
         except StopRequested:                   # the STOP holds for every press; only the restore goes on
             print("STOP file: the wait for the shooting screen ends here; restoring all the same", flush=True)
         except Exception as e:                  # Failed (no shooting screen), RuntimeError (the feed), LinkError
-            print(f"   {why}: {type(e).__name__}: {e}; restoring all the same", flush=True)
+            print(f"   {why}: {said(f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
         time.sleep(1)
         return session.finish(link, start, tag=tag, **({} if show is None else {"show": show}),
                               **({"expected": frozenset(expected)} if expected else {}), **({"keys": True} if keys else {}))
@@ -874,8 +879,10 @@ def close_for_restore(cam, link) -> None:
     confirmation, it is said ("closing gave up on a <kind> screen; restoring all the same") and the session goes on to
     end_session as after the other failures, the download closing what is open. On any other screen (unknown, a
     dialog), one that reads as a confirmation, or none that can be read, the run ends as it says, with exit
-    EXIT_UNRESTORED (restoring): no restore is tried over it, and a person looks."""
-    with restoring("closing the camera before its restore"):
+    EXIT_UNRESTORED (restoring): no restore is tried over it, and a person looks. On a --network or --owner run every
+    line it prints has an error's quoted texts withheld (camkit.live.withheld_on), as the run's first error line has."""
+    withhold = bool(getattr(cam, "network", None) or getattr(cam, "owner", None))
+    with restoring("closing the camera before its restore", withhold=withhold):
         try:
             close(cam, link)
         except (SystemExit, CloseGaveUp) as e:
@@ -883,11 +890,11 @@ def close_for_restore(cam, link) -> None:
                 raise
             kind, why_not = restorable_after_close(cam)
             if kind is None:
-                print(f"closing gave up and {why_not}: no restore is tried over it", flush=True)
+                print(f"closing gave up and {withheld_on(cam, why_not)}: no restore is tried over it", flush=True)
                 raise                           # restoring: said, exit EXIT_UNRESTORED
             print(f"closing gave up on a {kind} screen; restoring all the same", flush=True)
         except Exception as e:
-            print(f"closing: {type(e).__name__}: {e}; restoring all the same", flush=True)
+            print(f"closing: {withheld_on(cam, f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
 
 
 @dataclass

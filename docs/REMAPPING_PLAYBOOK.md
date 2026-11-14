@@ -98,9 +98,12 @@ and the default is no.
    writes it>"], "why": "<their words>"}`, used by a run given `--network` (`drive.py`, `crawl_run.py`, `prove_run.py`
    with `--rows`), may open a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth
    Function, Bluetooth Rmt Ctrl, Airplane Mode), a screen that shows the camera's network addresses (Display Wi-Fi
-   Info., Display Wired LAN Info., Disp Device Address: `drive.py` only, as the last label of `--path`), or an identity,
-   connection or region row whose opening starts or ends nothing (decision 8 lists them). No `--allow` opens any of
-   them. A row so named is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
+   Info., Display Wired LAN Info., Disp Device Address: `drive.py` only, as the last label of `--path`), or an identity
+   or connection row that has been seen to open and close over the link without harm (decision 8 lists them, and
+   `safety.py` says beside each when it was seen). A row is liftable only once so seen: IP Address Setting dropped the
+   wired LAN link when opened and left with MENU (2026-11-14), and USB Connection Mode, USB LUN Setting, USB Power
+   Supply, Language, NTSC/PAL and Area/Date/Time have not been seen opened over the link, so all stay by hand. No
+   `--allow` opens any of them. A row so named is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
    read right after a MENU (or an Enter on a named option) is the shooting screen, or the page it was opened from with
    its lit bar on the row itself; never on what kind of screen the camera seems to show alone, nor on a later read.
    Where the row's own screen read as the shooting screen before any MENU, it is taken as a screen of no known kind
@@ -116,7 +119,8 @@ and the default is no.
    that names identity or credentials gets MENU alone and no reader, and from the run's start to its end no screen's
    text is printed or kept: row labels the kit knows, field names, a list's option names as the definition gives them
    (never which one is lit), a notice as the kit keeps it, the count withheld, and the shooting screen as its kind
-   alone; its run folder is yours alone on macOS and Linux. Credentials, the SSID, WPS,
+   alone, and a refusal's or an error's quoted texts are withheld in its closing lines as in its first; its run folder
+   is yours alone on macOS and Linux. IP Address Setting and the USB and region rows above, credentials, the SSID, WPS,
    access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
    connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
    Right does there), Server Setting and Edit Device Name stay by hand whatever a network decision says, and one naming
@@ -125,7 +129,9 @@ and the default is no.
    `drive.py --owner` alone, the last label of `--path`, one row per run (decisions 4, 5, 8 and 9 say how), never a
    firmware update, anything that loads a file or settings, Initialize, nor sound, light, motion or the Screen Reader;
    inside an action any Enter may be the final one, so it goes before the last press only where the decision marks the
-   step seen (`"steps_seen"`), an action the kit has not seen open to look opens only as the last press, and before a
+   step seen (`"steps_seen"`), an action the kit has not seen open to look opens only as the last press, IP Address
+   Setting only as the armed last press with `"link_loss"` (a run without `--confirm` stops before anything connects),
+   the USB and region rows only to look and at your owner's risk of a dropped link, and before a
    run given `--confirm` connects the person at the terminal types the row's name (no flag or environment variable
    answers it; only the decision's `"unattended": true` waives it; it stops a careless agent, not a determined one, so
    the owner types it, never the agent). (The a1 II's

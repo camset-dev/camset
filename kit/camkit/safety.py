@@ -323,13 +323,14 @@ _IDENTITY = [
     # pictures carry the number, is walked
     r"disp(?:lay|\.)?\s?serial",
 ]
-# Of those, the identity, connection and region rows a dated owner decision naming the row may open to look at (decision
-# 8, the a1 II's owner's of 2026-11-13: "you have my full permission to open any menu and map items"), still never by
-# --allow and never without --network: identity_liftable. Only rows whose opening is known to start or end nothing:
-# Right on them opens an option list (Wired LAN Connect, Cnct. while Power OFF, Wake On LAN, the USB rows, Language), a
-# submenu (Remote Shoot Function, IP Address Setting, Area/Date/Time Setting) or an information screen (Manage Paired
-# Device's list, Display FTP Result, NTSC/PAL Selector's message). What stays never opened whatever is decided
-# (_IDENTITY_FIXED), with credentials and every action (never_open's other classes): the SSID, WPS, access point,
+# Of those, the identity and connection rows a dated owner decision naming the row may open to look at (decision 8, the
+# a1 II's owner's of 2026-11-13: "you have my full permission to open any menu and map items"), still never by --allow
+# and never without --network: identity_liftable. Only rows SEEN to open and close over the link without harm, each
+# entry naming when (kit/tests/test_network_rows.py pins the list to that record): IP Address Setting, listed here
+# unseen, dropped the wired LAN link the run was on when opened and left with MENU (2026-11-14). What stays never opened
+# whatever is decided (_IDENTITY_FIXED), with credentials and every action (never_open's other classes): IP Address
+# Setting, and USB Connection Mode, USB LUN Setting, USB Power Supply, Language, NTSC/PAL and Area/Date/Time, which
+# nobody has seen opened over the link (_NOT_LIFTED_WHY); the SSID, WPS, access point,
 # access authentication and pairing rows, Import Root Certificate, Save/Load FTP Settings, the copyright and IPTC rows,
 # Select on Cam & Send and Display Serial Number; and the rows whose opening may itself start or end a connection or act,
 # which nobody has yet seen Right do on the camera (2026-11-13, a review: look-only governs the presses after the
@@ -338,9 +339,12 @@ _IDENTITY = [
 # login sits (credentials, decision 9), and Edit Device Name, whose opening shows a keyboard and the device's name, and
 # which no settings file holds
 _IDENTITY_LIFTABLE = [
-    r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
-    r"wired lan connect", r"ip address", r"paired", r"display ftp", r"remote shoot function", r"cnct\. while",
-    r"wake on lan",
+    r"wired lan connect",       # seen 2026-11-13/14: Wired LAN Connect, a list of two; the link held
+    r"wake on lan",             # seen 2026-11-13/14: Wake On LAN, a list of two
+    r"remote shoot function",   # seen 2026-11-13/14: Remote Shoot Function, a submenu
+    r"cnct\. while",            # seen 2026-11-13/14: Cnct. while Power OFF, a notice while greyed
+    r"paired",                  # seen 2026-11-13: Manage Paired Device, a screen; MENU returned to the page
+    r"display ftp",             # seen 2026-11-13/14: Display FTP Result, an information screen
 ]
 _IDENTITY_FIXED = [p for p in _IDENTITY if p not in _IDENTITY_LIFTABLE]
 # Why network_refused refuses the identity rows _IDENTITY_LIFTABLE left out on 2026-11-13 (a review), in the words a
@@ -351,6 +355,10 @@ _NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
      "there"),
     (r"server setting", "the FTP server's login sits behind it (credentials, docs/decisions/0009)"),
     (r"device name", "its opening shows a keyboard and the device's name, which no settings file holds"),
+    # taken out of _IDENTITY_LIFTABLE on 2026-11-14: a row is lifted only once it has been seen to open over the link
+    (r"ip address", "opening or leaving it over the network link dropped the link on the a1 II (2026-11-14); by the "
+                    "owner's hand only"),
+    (r"date/time|^area/|ntsc|language|usb connection|usb lun|usb power", "not yet seen opened; by the owner's hand"),
 )]
 # Rows of the classes a network decision opens in which no option is ever chosen, whatever a decision names: the choice
 # drops the link a run needs (Wired LAN Connect, USB, the IP address settings; Airplane Mode, which drops the Wi-Fi and
@@ -1836,14 +1844,17 @@ _OWNER_NEVER_RES = [(re.compile(rx), why) for rx, why in OWNER_NEVER]
 # kit/tools/card_actions.py; Forced File Number Reset opens with OK preselected and creates a folder). Their opening
 # press is their confirmation: it needs the row under "confirm", --confirm and the run's last press (arm_refused's
 # "open"), and nothing is pressed in them after it
+# IP Address Setting too: opened and left with MENU over the wired LAN link it dropped the link (2026-11-14), so it is
+# never opened as a plain look
 _ACTS_ON_OPEN = [r"\bwps\b", r"pairing", r"access point", r"select on cam", r"root certif", r"create new folder",
                  r"forced file number reset", r"tether", r"cloud", r"streaming", r"smartphone", r"ftp function",
-                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping"]
+                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"ip address"]
 _ACTS_ON_OPEN_RE = re.compile("|".join(_ACTS_ON_OPEN))
 # Of those, the ones whose opening may change or drop the network the run's link is on: they need "link_loss" too, and
 # the run then restores by hand (loses_link)
 _LINK_RISK_OPEN_RE = re.compile("|".join([r"\bwps\b", r"pairing", r"access point", r"select on cam", r"tether", r"cloud",
-                                          r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b"]))
+                                          r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b",
+                                          r"ip address"]))
 # The actions whose confirmation wipes the network setup and the access authentication, and the run's link with them;
 # kit/drive.py's NEVER_ENTER and camkit.live.LiveCamera's own check refuse Enter on a lit text or a screen reading one
 # (LINK_WIPING_ENTER), the screen only when the press is the run's armed confirmation of that very action (armed_wiping)

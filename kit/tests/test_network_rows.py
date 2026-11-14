@@ -10,6 +10,7 @@ kit/tools/check_public.py lets through.
 import contextlib
 import io
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -1070,7 +1071,7 @@ def drive_address(tmp_path, monkeypatch, scope_file, presses: list, path=("Displ
 def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision, open_lines, open_kind, page_lit,
                open_lit, page_kind="submenu", slow=False, misread=(), misread_lit=False, menu_does="page",
                page_lines=None, own="", model=None, shooting_lines=None, changes=(), definition=None, reach=True,
-               exits=None):
+               exits=None, end_raises=None):
     """drive.py's main() on a made-up camera, no LiveCamera under it: the path's row lit (page_lit) on a page of
     page_kind until a Right or an Enter goes out, then a screen of open_kind showing open_lines, its lit bar open_lit;
     MENU, or Enter there, brings the page back, at the place it was (drive.same_position: the same kind at the same
@@ -1083,8 +1084,9 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
     inside the row closes the menu onto the shooting screen, which shows these lines (its status line); changes: the
     records the session's end finds differing; definition: the camera's definition (camkit.definitions.active); reach:
     whether the scan reaches the path's first label (crawl_run.go_to); exits: a list that takes the exit status main()
-    exits with, where it exits (else the exit is raised). A read without a press (the wait's) finds the open screen
-    drawn, a slow camera's included. Returns (the keys pressed, the console, drive.jsonl's line, the run's events)."""
+    exits with, where it exits (else the exit is raised); end_raises: what the session's end raises (the link gone).
+    A read without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys
+    pressed, the console, drive.jsonl's line, the run's events)."""
     import drive as D
     from camkit import definitions, vlm
     scope_file(decision)
@@ -1154,6 +1156,12 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
         seen["camera"] = kw
         return Cam()
     ending = SimpleNamespace(after=tmp_path / "after.DAT", changes=list(changes), uploaded=False)
+
+    def ended(link, before, show=30, **kw):
+        if end_raises is not None:
+            raise end_raises
+        seen.update(ended={"show": show, **kw})
+        return ending
     for name, value in (("check_readers", lambda: seen.setdefault("local_only", vlm.LOCAL_ONLY)),
                         ("load_scan", lambda scan: ([], model or {})), ("Run", lambda name: run),
                         ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None,
@@ -1174,8 +1182,7 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("network_values", lambda rows, model: {r: v for r, v in VALUES.items() if r in rows}),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("close_for_restore", lambda cam, link: sent.append(("closed",))),
-                        ("session", SimpleNamespace(ended=lambda link, before, show=30, **kw: seen.update(ended={"show": show, **kw}) or ending,
-                                                    put_back=lambda link, e, before: e)),
+                        ("session", SimpleNamespace(ended=ended, put_back=lambda link, e, before: e)),
                         ("restore_checked", lambda r, e, before, **kw: seen.update(checked=kw) or True)):
         monkeypatch.setattr(D, name, value)
     argv = ["drive.py", "--network", *[x for p in path for x in ("--path", p)], *[x for p in presses for x in ("--press", p)]]
@@ -1402,19 +1409,64 @@ def test_a_network_rows_own_list_names_no_identity(text):
 
 # ---------------------------------------------------------------- identity and connection rows (decision 8, 2026-11-13)
 
-# the identity, connection and region rows a decision may open: Right on each opens an option list, a submenu or an
-# information screen, and starts or ends nothing
-IDENTITY_LOOK = ["Wired LAN Connect", "IP Address Setting", "Remote Shoot Function", "Cnct. while Power OFF",
-                 "Wake On LAN", "Manage Paired Device", "Display FTP Result", "USB Connection Mode", "USB LUN Setting",
-                 "USB Power Supply", "Language", "NTSC/PAL Selector", "Area/Date/Time Setting", "Date/Time Setup"]
+# The identity and connection rows seen opened and left with MENU over the LAN link on the a1 II without harm, look-only
+# (decision 8): (when, what Right opened). A row is liftable only once so seen: safety._IDENTITY_LIFTABLE holds these
+# and nothing else (test_only_rows_seen_opened_over_the_link_are_liftable), each entry naming when it was seen
+IDENTITY_SEEN = {
+    "Wired LAN Connect": ("2026-11-13/14", "a list of two; the link held"),
+    "Wake On LAN": ("2026-11-13/14", "a list of two"),
+    "Remote Shoot Function": ("2026-11-13/14", "a submenu"),
+    "Cnct. while Power OFF": ("2026-11-13/14", "a notice while greyed"),
+    "Manage Paired Device": ("2026-11-13", "a screen; MENU returned to the page"),
+    "Display FTP Result": ("2026-11-13/14", "an information screen"),
+}
+IDENTITY_LOOK = list(IDENTITY_SEEN)
 # the identity rows no decision opens (2026-11-13, a review): opening one may itself start or end a connection or act,
 # and nobody has yet seen on the camera what Right does there (look-only governs the presses after the opening); Server
-# Setting holds the FTP login (credentials); Edit Device Name opens a keyboard and the device's name, held by no file
+# Setting holds the FTP login (credentials); Edit Device Name opens a keyboard and the device's name, held by no file.
+# Since 2026-11-14 also IP Address Setting, whose opening and MENU dropped the wired LAN link, and the region and USB rows
+# nobody has seen opened over the link
 NOT_LIFTED = {"Smartphone Connection": "start or end a connection", "Cloud Connection": "start or end a connection",
               "Cloud Information": "start or end a connection", "Network Streaming": "start or end a connection",
               "USB Streaming": "start or end a connection", "Tethering Connection": "start or end a connection",
               "Tethering Disconnection": "start or end a connection", "FTP Function": "start or end a connection",
-              "Server Setting": "login", "Edit Device Name": "keyboard"}
+              "Server Setting": "login", "Edit Device Name": "keyboard",
+              "IP Address Setting": "dropped the link", "LANIP Address Setting": "dropped the link",
+              "USB Connection Mode": "not yet seen opened", "USB LUN Setting": "not yet seen opened",
+              "USB Power Supply": "not yet seen opened", "Language": "not yet seen opened",
+              "NTSC/PAL Selector": "not yet seen opened", "Area/Date/Time Setting": "not yet seen opened",
+              "Date/Time Setup": "not yet seen opened"}
+
+
+def test_only_rows_seen_opened_over_the_link_are_liftable():
+    """safety._IDENTITY_LIFTABLE is exactly the rows seen opened over the link (IDENTITY_SEEN): each pattern names one
+    of them and every one is named, so a row added there without being recorded here as seen fails; and each entry in
+    safety.py carries the day it was seen beside it."""
+    import inspect
+    for rx in safety._IDENTITY_LIFTABLE:
+        named = [label for label in IDENTITY_SEEN if any(re.search(rx, r) for r in safety.readings(label))]
+        assert len(named) == 1, (rx, named)
+    assert {label for label in IDENTITY_SEEN if safety.identity_liftable(label)} == set(IDENTITY_SEEN)
+    assert all(safety.lift_class(label) == safety.LIFT_IDENTITY for label in IDENTITY_SEEN)
+    source = inspect.getsource(safety)
+    block = source[source.index("\n_IDENTITY_LIFTABLE = [") + 1:]
+    block = block[:block.index("\n]")]
+    entries = [line for line in block.splitlines()[1:] if line.strip() and not line.strip().startswith("#")]
+    assert len(entries) == len(safety._IDENTITY_LIFTABLE), entries
+    for line in entries:
+        assert re.search(r"#\s*seen 20\d\d-\d\d-\d\d", line), f"no day it was seen beside: {line.strip()}"
+
+
+def test_a_scope_naming_ip_address_setting_stops_drive_before_anything_connects(scope_file):
+    """The owner's dated decision of 2026-11-13 names IP Address Setting; since 2026-11-14 no decision opens it: drive.py
+    given --network stops before the link opens (no run folder's drive.jsonl is written), saying why."""
+    scope_file({**DECISION, "rows": ["Bluetooth Function", "IP Address Setting"]})
+    r = drive("--network", "--path", "IP Address Setting")
+    assert r.returncode != 0 and "nothing was sent to the camera" in r.stderr, r.stderr
+    assert "dropped the link" in r.stderr and "no decision opens it" in r.stderr, r.stderr
+    scope_file({**DECISION, "rows": ["Language"]})
+    r = drive("--network", "--path", "Language")
+    assert r.returncode != 0 and "not yet seen opened" in r.stderr and "nothing was sent" in r.stderr, r.stderr
 
 
 @pytest.mark.parametrize("label,said", NOT_LIFTED.items())
@@ -1534,21 +1586,23 @@ def test_screen_fields_keep_whole_row_labels_and_withhold_values():
 
 def test_drive_shows_an_identity_rows_screens_as_field_names_and_chooses_nothing(tmp_path, monkeypatch, scope_file,
                                                                                 capsys):
-    lines = ["IP Address Setting", "IP Address", IP, "Subnet Mask", "255.255.255.0"]
+    # a made-up submenu of Remote Shoot Function showing an address, to see that no value of it is kept
+    row = "Remote Shoot Function"
+    lines = [row, "IP Address", IP, "Subnet Mask", "255.255.255.0"]
     pressed, seen, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "down", "enter:."],
-                                             ("IP Address Setting",), {**DECISION, "rows": ["IP Address Setting"]},
-                                             lines, "submenu", page_lit="IP Address Setting", open_lit="IP Address")
+                                             (row,), {**DECISION, "rows": [row]},
+                                             lines, "submenu", page_lit=row, open_lit="IP Address")
     out = capsys.readouterr().out
     assert pressed == ["menu", "right", "down"] and line["completed"] is False        # Enter: never chosen there
     assert '"lifted_from": "identity or connection row"' in logged
     assert all("text" not in s for s in line["screens"])
-    assert line["screens"][0]["fields"] == ["IP Address Setting", "IP Address", "Subnet Mask"]
+    assert line["screens"][0]["fields"] == [row, "IP Address", "Subnet Mask"]
     for where in (out, json.dumps(line), logged):
         assert IP not in where and "255.255" not in where
-    # IP Address Setting's entry screen (a keyboard, or the address in boxes): read as no known kind, MENU alone
-    pressed, _, line, _ = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "down"], ("IP Address Setting",),
-                                     {**DECISION, "rows": ["IP Address Setting"]}, ["1", "2", IP, "Done"],
-                                     "unknown", page_lit="IP Address Setting", open_lit="1")
+    # an entry screen inside it (a keyboard, or an address in boxes): read as no known kind, MENU alone
+    pressed, _, line, _ = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "down"], (row,),
+                                     {**DECISION, "rows": [row]}, ["1", "2", IP, "Done"],
+                                     "unknown", page_lit=row, open_lit="1")
     assert pressed == ["menu", "right"] and line["completed"] is False                # a keyboard: MENU alone
     assert IP not in json.dumps(line)
 
@@ -1926,48 +1980,51 @@ def read_on(group, *texts) -> list:
     return [{"group": group, "readings": list(texts)}]
 
 
+# The page icon glued on was first seen on the a1 II's IP Address Setting ("LANIP Address Setting", 2026-11-13), which no
+# decision opens since 2026-11-14 (its opening dropped the link): Wired LAN Connect, a row of the same page that a
+# decision opens, stands in for it in the tests below
 def test_a_row_read_with_its_icon_glued_on_lifts_only_where_another_reader_read_the_row():
-    """The Wired LAN page's icon read as letters glued to the label ("LANIP Address Setting"): the lift takes it for IP
-    Address Setting only where the page model keeps, for the same row, a reading that is the row exactly, every reading
-    of it is of the row's class, and what the reading adds is a word of the page's own group name, glued on, of at most
-    safety.ICON_MAX letters (safety.lifted_readings, glued_icon)."""
-    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
-    values = {"IP Address Setting": ["Automatic", "Manual"]}
-    two = {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "LAN IP Address Setting",
-                                         "IP Address Setting")}
+    """The Wired LAN page's icon read as letters glued to the label ("LANWired LAN Connect"): the lift takes it for
+    Wired LAN Connect only where the page model keeps, for the same row, a reading that is the row exactly, every
+    reading of it is of the row's class, and what the reading adds is a word of the page's own group name, glued on, of
+    at most safety.ICON_MAX letters (safety.lifted_readings, glued_icon)."""
+    rows = decided({**DECISION, "rows": ["Wired LAN Connect"]})
+    values = {"Wired LAN Connect": ["On", "Off"]}
+    two = {"Wired LAN Connect": read_on("Wired LAN", "LANWired LAN Connect", "LAN Wired LAN Connect",
+                                         "Wired LAN Connect")}
     lift = lambda lit, readings: safety.network_lifted_row(lit, rows, values=values, readings=readings)  # noqa: E731
-    assert lift("LANIP Address Setting", two) == "IP Address Setting"
-    assert lift("LANIP Address Setting  Automatic", two) == "IP Address Setting"
-    assert lift("LANIP Address Setting  Elsewhere", two) is None                   # no value of its own
-    assert lift("LANIP Address Setting", None) is None                              # no second reading
-    assert lift("LAN IP Address Setting", two) is None                              # a word in front: no icon
-    assert lift("LANIP Address Setting", {"IP Address Setting": [["LANIP Address Setting", "IP Address Setting"]]}) \
+    assert lift("LANWired LAN Connect", two) == "Wired LAN Connect"
+    assert lift("LANWired LAN Connect  On", two) == "Wired LAN Connect"
+    assert lift("LANWired LAN Connect  Elsewhere", two) is None                   # no value of its own
+    assert lift("LANWired LAN Connect", None) is None                              # no second reading
+    assert lift("LAN Wired LAN Connect", two) is None                              # a word in front: no icon
+    assert lift("LANWired LAN Connect", {"Wired LAN Connect": [["LANWired LAN Connect", "Wired LAN Connect"]]}) \
         is None                                                                     # no page group known
-    assert lift("LANIP Address Setting", {"IP Address Setting": read_on("Wi-Fi", "LANIP Address Setting",
-                                                                        "IP Address Setting")}) is None   # not its group
-    assert lift("LANIP Address Setting", {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting",
-                                                                        "IP Adress Setting")}) is None  # differs
-    assert lift("LANIP Address Setting", {"IP Address Setting": read_on(
-        "Wired LAN", "LANIP Address Setting", "IP Address Setting", "IP Address Password")}) is None   # credentials
-    assert lift("LANIP Address Setting", {"IP Address Setting": read_on(
-        "Wired LAN", "LANIP Address Setting", "IP Address Setting", "IP Address Setting Reset")}) is None  # an action
-    assert lift("WiredIP Address Setting", {"IP Address Setting": read_on(
-        "Wired LAN", "WiredIP Address Setting", "IP Address Setting")}) is None      # a word of 5 letters: no icon
-    assert lift("LANIP Address Settlng", {"IP Address Setting": read_on(
-        "Wired LAN", "LANIP Address Settlng", "IP Address Setting")}) is None        # not the row itself after the icon
+    assert lift("LANWired LAN Connect", {"Wired LAN Connect": read_on("Wi-Fi", "LANWired LAN Connect",
+                                                                        "Wired LAN Connect")}) is None   # not its group
+    assert lift("LANWired LAN Connect", {"Wired LAN Connect": read_on("Wired LAN", "LANWired LAN Connect",
+                                                                        "Wired LAN Conect")}) is None  # differs
+    assert lift("LANWired LAN Connect", {"Wired LAN Connect": read_on(
+        "Wired LAN", "LANWired LAN Connect", "Wired LAN Connect", "Wired LAN Connect Password")}) is None   # credentials
+    assert lift("LANWired LAN Connect", {"Wired LAN Connect": read_on(
+        "Wired LAN", "LANWired LAN Connect", "Wired LAN Connect", "Wired LAN Connect Reset")}) is None  # an action
+    assert lift("WiredWired LAN Connect", {"Wired LAN Connect": read_on(
+        "Wired LAN", "WiredWired LAN Connect", "Wired LAN Connect")}) is None      # a word of 5 letters: no icon
+    assert lift("LANWired LAN Connecl", {"Wired LAN Connect": read_on(
+        "Wired LAN", "LANWired LAN Connecl", "Wired LAN Connect")}) is None        # not the row itself after the icon
     for lit in ("LAN Access Point Set.", "LANAccess Point Set."):
-        assert lift(lit, {"IP Address Setting": read_on("Wired LAN", lit, "IP Address Setting")}) is None
+        assert lift(lit, {"Wired LAN Connect": read_on("Wired LAN", lit, "Wired LAN Connect")}) is None
     # nothing else of the lift moves: the row itself, and its value, as before
-    assert lift("IP Address Setting  Manual", None) == "IP Address Setting"
+    assert lift("Wired LAN Connect  Off", None) == "Wired LAN Connect"
 
 
 @pytest.mark.parametrize("lit,row,group", [
-    ("WPSIP Address Setting", "IP Address Setting", "Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "Wi-Fi"),
+    ("WPSWired LAN Connect", "Wired LAN Connect", "Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "Wi-Fi"),
     ("NoWi-Fi Connect", "Wi-Fi Connect", "Wi-Fi"), ("DelBluetooth Function", "Bluetooth Function", "Bluetooth"),
     ("PinManage Paired Device", "Manage Paired Device", "Bluetooth"),
     ("OffAirplane Mode", "Airplane Mode", "Network Option"),
     # the same words where the page's group held them: never_open or identity_screen refuses them alone
-    ("WPSIP Address Setting", "IP Address Setting", "WPS Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "PW Wi-Fi"),
+    ("WPSWired LAN Connect", "Wired LAN Connect", "WPS Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "PW Wi-Fi"),
     ("PinManage Paired Device", "Manage Paired Device", "Pin Bluetooth"),
     ("CopyWi-Fi Connect", "Wi-Fi Connect", "Copy Wi-Fi"),        # an action's name: never_open alone names it
 ])
@@ -1994,69 +2051,69 @@ def test_an_icon_that_sets_the_row_in_another_class_is_no_icon():
 
 def test_a_row_opened_through_its_icon_glued_on_is_left_on_its_page_and_the_next_row_opens(tmp_path, monkeypatch):
     """The lock ends where the page the row was opened from is back with its bar on the row as the reading with its
-    icon glued on that opened it ("LANIP Address Setting" still reads so after MENU: safety.bar_on_row); then the next
+    icon glued on that opened it ("LANWired LAN Connect" still reads so after MENU: safety.bar_on_row); then the next
     row opens. Without that reading kept, the lock stayed and the crawl stopped at the next Right (the review of
     2026-11-14)."""
-    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
-    readings = {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "IP Address Setting")}
-    cam = camera(tmp_path, rows, values={"IP Address Setting": ["Automatic"]}, page="menu")
+    rows = decided({**DECISION, "rows": ["Wired LAN Connect"]})
+    readings = {"Wired LAN Connect": read_on("Wired LAN", "LANWired LAN Connect", "Wired LAN Connect")}
+    cam = camera(tmp_path, rows, values={"Wired LAN Connect": ["On"]}, page="menu")
     cam.readings = readings
-    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "Automatic Manual", "inside")
+    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "On Off", "inside")
     cam.presses, cam._seen = 0, cam._moves()
     monkeypatch.setattr(live.time, "sleep", lambda s: None)
-    lit_on(monkeypatch, "LANIP Address Setting  Automatic")
+    lit_on(monkeypatch, "LANWired LAN Connect  On")
     cam.press("right")
-    assert cam.network_open["row"] == "IP Address Setting"
+    assert cam.network_open["row"] == "Wired LAN Connect"
     cam.hdmi.shows("menu", PAGE)                     # MENU: the page, its bar on the glued reading
     cam.press("menu")
     assert cam.network_open is None and events(cam)[-1]["kind"] == "network_row_left"
     cam.press("right")                               # the next row (here the same) opens as ever
     assert cam.link.sent == ["right", "menu", "right"] and cam.network_open is not None
-    assert safety.bar_on_row("LANIP Address Setting  Automatic", "IP Address Setting", readings)
-    assert not safety.bar_on_row("LANIP Address Setting  Automatic", "IP Address Setting")
-    assert not safety.bar_on_row("Automatic", "IP Address Setting", readings)
+    assert safety.bar_on_row("LANWired LAN Connect  On", "Wired LAN Connect", readings)
+    assert not safety.bar_on_row("LANWired LAN Connect  On", "Wired LAN Connect")
+    assert not safety.bar_on_row("On", "Wired LAN Connect", readings)
 
 
 def test_drive_leaves_a_row_opened_through_its_icon_glued_on_and_opens_the_next(tmp_path, monkeypatch, scope_file):
-    """drive.py on its own: Right on "LANIP Address Setting" (the page model's row holds "IP Address Setting" too, on
+    """drive.py on its own: Right on "LANWired LAN Connect" (the page model's row holds "Wired LAN Connect" too, on
     the Wired LAN page), MENU back to the page with that bar, Right again: the lock had ended."""
     model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [
-        {"label": "LANIP Address Setting", "readings": {"label": {"ocr": "LANIP Address Setting",
-                                                                  "vlm": "IP Address Setting"}}}]}}
+        {"label": "LANWired LAN Connect", "readings": {"label": {"ocr": "LANWired LAN Connect",
+                                                                  "vlm": "Wired LAN Connect"}}}]}}
     pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu", "right"],
-                                          ("IP Address Setting",), {**DECISION, "rows": ["IP Address Setting"]},
-                                          ["Automatic", "Manual"], "list", page_lit="LANIP Address Setting",
-                                          open_lit="Automatic", page_kind="menu", model=model)
+                                          ("Wired LAN Connect",), {**DECISION, "rows": ["Wired LAN Connect"]},
+                                          ["On", "Off"], "list", page_lit="LANWired LAN Connect",
+                                          open_lit="On", page_kind="menu", model=model)
     assert pressed == ["menu", "right", "menu", "right"] and line["completed"] is True
     assert logged.count('"network_row_opened"') == 2 and '"network_row_left"' in logged
 
 
 def test_the_runners_give_the_page_models_readings_and_values_to_the_lift(tmp_path, monkeypatch):
     import runner
-    row = {"label": "LANIP Address Setting", "value": "Automatic",
-           "readings": {"label": {"ocr": "LANIP Address Setting", "ocr2": "LAN IP Address Setting",
-                                  "vlm": "IP Address Setting"}, "value": {"vlm": "Automatic"}},
-           "never_open": safety.never_open("LANIP Address Setting")}
-    model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [row, {"label": "Wired LAN Connect", "value": "On"}]}}
-    decided_rows = {"IP Address Setting": DAY}
+    row = {"label": "LANWired LAN Connect", "value": "On",
+           "readings": {"label": {"ocr": "LANWired LAN Connect", "ocr2": "LAN Wired LAN Connect",
+                                  "vlm": "Wired LAN Connect"}, "value": {"vlm": "On"}},
+           "never_open": safety.never_open("LANWired LAN Connect")}
+    model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [row, {"label": "IP Address Setting", "value": "Automatic"}]}}
+    decided_rows = {"Wired LAN Connect": DAY}
     readings = runner.network_readings(decided_rows, model)
-    assert readings == {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "LANIP Address Setting",
-                                                      "LAN IP Address Setting", "IP Address Setting")}
+    assert readings == {"Wired LAN Connect": read_on("Wired LAN", "LANWired LAN Connect", "LANWired LAN Connect",
+                                                      "LAN Wired LAN Connect", "Wired LAN Connect")}
     values = runner.network_values(decided_rows, model)
-    assert values == {"IP Address Setting": ["Automatic"]}
+    assert values == {"Wired LAN Connect": ["On"]}
     # the camera's own press check opens it, and the walk takes the page model's row
-    monkeypatch.setattr(live, "lit_text", lambda image, path: "LANIP Address Setting  Automatic")
+    monkeypatch.setattr(live, "lit_text", lambda image, path: "LANWired LAN Connect  On")
     cam = camera(tmp_path, decided_rows, values=values, page="menu")
     cam.readings = readings
     with pytest.raises(RuntimeError, match="sent"):
         cam.press("right")
-    assert cam.link.sent == ["right"] and cam.network_open["row"] == "IP Address Setting"
+    assert cam.link.sent == ["right"] and cam.network_open["row"] == "Wired LAN Connect"
     cam = camera(tmp_path, decided_rows, values=values, page="menu")                 # no readings: refused
     with pytest.raises(safety.Refused, match="never opened"):
         cam.press("right")
     assert crawl.network_open(row, decided_rows, "Wired LAN")
     assert not crawl.network_open(row, decided_rows)                              # no page group: no icon
-    assert not crawl.network_open({**row, "readings": {"label": {"ocr": "LANIP Address Setting"}}}, decided_rows,
+    assert not crawl.network_open({**row, "readings": {"label": {"ocr": "LANWired LAN Connect"}}}, decided_rows,
                                   "Wired LAN")
     # the walk takes the group off the page's breadcrumb
     cam = RowCamera()
@@ -2779,8 +2836,8 @@ def test_a_network_walk_keeps_only_the_labels_it_knows_in_rows_jsonl_and_the_con
         for r in (RowResult("p", 0, "Bluetooth Function", "notice", network=safety.LIFT_NETWORK,
                             decided="Bluetooth Function"),
                   RowResult("p", 1, f"Wi-Fi Connect{UNKNOWN}", f"incomplete: '{UNKNOWN2}'"),
-                  RowResult("p", 2, "LANIP Address Setting", "walked (network row, looked at only)",
-                            network=safety.LIFT_IDENTITY, decided="IP Address Setting"),
+                  RowResult("p", 2, "LANWired LAN Connect", "walked (network row, looked at only)",
+                            network=safety.LIFT_IDENTITY, decided="Wired LAN Connect"),
                   RowResult("p", 3, "Airplane Mode", "submenu crawled", walk=sub)):
             kw["on_row"](r)
         return SimpleNamespace(stopped=f"position 3: lost at '{UNKNOWN2}'", presses=0, rows=[], recoveries=[])
@@ -2792,9 +2849,9 @@ def test_a_network_walk_keeps_only_the_labels_it_knows_in_rows_jsonl_and_the_con
                                                                       {"label": "Bluetooth Function"}]}}
     results = io.StringIO()
     crawl_run.crawl_from_menu(cam, link, [{"screen": None}], model, None, results,
-                              network={"Bluetooth Function": DAY, "IP Address Setting": DAY})
+                              network={"Bluetooth Function": DAY, "Wired LAN Connect": DAY})
     rows = [json.loads(x) for x in results.getvalue().splitlines()]
-    assert [r["label"] for r in rows] == ["Bluetooth Function", "(withheld)", "IP Address Setting", "Airplane Mode"]
+    assert [r["label"] for r in rows] == ["Bluetooth Function", "(withheld)", "Wired LAN Connect", "Airplane Mode"]
     assert [r["label"] for r in rows[3]["submenu"]] == ["(withheld)", "Airplane Mode"]
     nowhere((results.getvalue(), capsys.readouterr().out), UNKNOWN, UNKNOWN2, "ILCE")
     # without --network the summary is as ever
@@ -2803,15 +2860,15 @@ def test_a_network_walk_keeps_only_the_labels_it_knows_in_rows_jsonl_and_the_con
     assert UNKNOWN in results.getvalue()
 
 
-# ---------------------------------------------------------------- IP Address Setting, gone to and opened (item 2)
+# ---------------------------------------------------------------- a row found by its readings, gone to and opened (item 2)
 
 def test_go_to_finds_a_row_by_any_of_its_readings_or_its_icon_glued_on(monkeypatch, capsys):
-    """crawl_run.go_to: where the page model's label is OCR's "LANIP Address Setting", --path "IP Address Setting" finds
+    """crawl_run.go_to: where the page model's label is OCR's "LANWired LAN Connect", --path "Wired LAN Connect" finds
     the row by the vision reader's reading, or by the Wired LAN page's icon glued on (safety.glued_icon); never by a
     word set before it, an icon that is no word of its page's group, or one naming what the never-open list holds."""
     import crawl_run
 
-    def find(group, row, label="IP Address Setting", bar=None, twice=False):
+    def find(group, row, label="Wired LAN Connect", bar=None, twice=False):
         """go_to on a made-up tab; `bar`: what the lit bar reads on the row gone to (its page model label by default);
         twice: another row of another page reads as the label too."""
         cam, cycle, model = columns(monkeypatch, ["Wi-Fi", group], ["Wi-Fi", group])
@@ -2822,35 +2879,35 @@ def test_go_to_finds_a_row_by_any_of_its_readings_or_its_icon_glued_on(monkeypat
         real = cam.lit
         cam.lit = lambda: (bar or row["label"]) if (cam.focus, cam.group, cam.row) == ("rows", 1, 1) else real()
         return crawl_run.go_to(cam, cycle, model, 0, label)
-    both = {"label": "LANIP Address Setting", "readings": {"label": {"ocr": "LANIP Address Setting",
-                                                                     "vlm": "IP Address Setting"}}}
+    both = {"label": "LANWired LAN Connect", "readings": {"label": {"ocr": "LANWired LAN Connect",
+                                                                     "vlm": "Wired LAN Connect"}}}
     assert find("Wired LAN", both) == 3                                          # its bar, the icon glued on: the row
-    assert find("Wired LAN", both, bar="LANIP Address Setting  Automatic") == 3
-    assert find("Wi-Fi Option", both, bar="IP Address Setting  Automatic") == 3  # a reader read it exactly
+    assert find("Wired LAN", both, bar="LANWired LAN Connect  On") == 3
+    assert find("Wi-Fi Option", both, bar="Wired LAN Connect  On") == 3  # a reader read it exactly
     assert find("Wi-Fi Option", both) is None                                    # but its bar reads no such row
     assert "its bar does not read it" in capsys.readouterr().out
-    ocr_only = {"label": "LANIP Address Setting", "readings": {"label": {"ocr": "LANIP Address Setting"}}}
-    assert find("Wired LAN", ocr_only, bar="IP Address Setting") == 3            # the icon of its own page, glued on
+    ocr_only = {"label": "LANWired LAN Connect", "readings": {"label": {"ocr": "LANWired LAN Connect"}}}
+    assert find("Wired LAN", ocr_only, bar="Wired LAN Connect") == 3            # the icon of its own page, glued on
     assert find("Wired LAN", ocr_only) is None                                   # no reader read the row: no bar is
     capsys.readouterr()
     for group, row in (("Wi-Fi Option", ocr_only),                               # no word of the page's group
-                       ("Wired LAN", {"label": "LAN IP Address Setting"}),       # a word set before it
-                       ("WPS Wired LAN", {"label": "WPSIP Address Setting"}),    # never_open names it alone
-                       ("Wired LAN", {"label": "LANIP Address Settlng"})):       # not the row after the icon
-        assert find(group, row, bar="IP Address Setting") is None, (group, row)
-        assert "no row labelled 'IP Address Setting'" in capsys.readouterr().out
+                       ("Wired LAN", {"label": "LAN Wired LAN Connect"}),       # a word set before it
+                       ("WPS Wired LAN", {"label": "WPSWired LAN Connect"}),    # never_open names it alone
+                       ("Wired LAN", {"label": "LANWired LAN Connecl"})):       # not the row after the icon
+        assert find(group, row, bar="Wired LAN Connect") is None, (group, row)
+        assert "no row labelled 'Wired LAN Connect'" in capsys.readouterr().out
     # exactly one row may read so: two rows of two pages, none is gone to
     assert find("Wired LAN", both, twice=True) is None and "2 rows read as it" in capsys.readouterr().out
     # the old rule first, as ever: a prefix of one or two letters, no check of the bar on arrival
     assert find("Wired LAN", {"label": "SDrive Mode"}, "Drive Mode", bar="something else") == 3
-    assert crawl_run.row_named(both, "IP Address Setting", "") and not crawl_run.row_named(ocr_only, "IP Address Setting", "")
+    assert crawl_run.row_named(both, "Wired LAN Connect", "") and not crawl_run.row_named(ocr_only, "Wired LAN Connect", "")
 
 
 def test_drive_refuses_the_glued_label_as_a_path_before_anything_connects(scope_file):
     """(b): the decided label is the path; the glued reading as a --path label is refused before anything connects."""
-    scope_file({**DECISION, "rows": ["IP Address Setting"]})
-    r = drive("--network", "--path", "LANIP Address Setting")
-    assert r.returncode != 0 and "'LANIP Address Setting'" in r.stderr and "no --allow opens it" in r.stderr, r.stderr
+    scope_file({**DECISION, "rows": ["Wired LAN Connect"]})
+    r = drive("--network", "--path", "LANWired LAN Connect")
+    assert r.returncode != 0 and "'LANWired LAN Connect'" in r.stderr and "no --allow opens it" in r.stderr, r.stderr
 
 
 def test_row_values_gather_every_reading_of_a_page_model_row(made_up_definition):
@@ -2879,24 +2936,25 @@ def test_a_decided_row_with_no_known_value_takes_a_short_tail_naming_nothing(tai
     """safety.network_lifted_row: with no value known for the row at all, what follows the label may be at most two
     words naming nothing never-open, of identity or credentials, with no address shape (unknown_tail); where values are
     known, only one of them, as before."""
-    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
-    lit = f"IP Address Setting  {tail}".strip()
-    lift = lambda **kw: safety.network_lifted_row(lit, rows, labels={"Drive Mode"}, **kw) == "IP Address Setting"  # noqa: E731
-    assert lift(values={}) is lifts and lift(values={"IP Address Setting": []}) is lifts
+    rows = decided({**DECISION, "rows": ["Wired LAN Connect"]})
+    lit = f"Wired LAN Connect  {tail}".strip()
+    lift = lambda **kw: safety.network_lifted_row(lit, rows, labels={"Drive Mode"}, **kw) == "Wired LAN Connect"  # noqa: E731
+    assert lift(values={}) is lifts and lift(values={"Wired LAN Connect": []}) is lifts
     if tail:
-        assert not lift(values={"IP Address Setting": ["Automatic"]})
+        assert not lift(values={"Wired LAN Connect": ["On"]})
         assert safety.network_lifted_row(lit, rows, values={}) is None                  # no labels given: no tail
 
 
-def test_drive_opens_ip_address_setting_with_a_value_none_knew(tmp_path, monkeypatch, scope_file):
-    """drive.py on its own: Right on "LANIP Address Setting  Manual" opens IP Address Setting where the page model's
-    row holds that reading and the vision reader's, and nothing knew Manual as its value."""
+def test_drive_opens_a_decided_row_with_a_value_none_knew(tmp_path, monkeypatch, scope_file):
+    """drive.py on its own: Right on "LANWired LAN Connect  Manual" opens Wired LAN Connect where the page model's
+    row holds that reading and the vision reader's, and nothing knew Manual as its value (no value of the row known)."""
+    monkeypatch.delitem(VALUES, "Wired LAN Connect")
     model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [
-        {"label": "LANIP Address Setting", "readings": {"label": {"ocr": "LANIP Address Setting",
-                                                                  "vlm": "IP Address Setting"}}}]}}
-    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], ("IP Address Setting",),
-                                          {**DECISION, "rows": ["IP Address Setting"]}, ["Automatic", "Manual"],
-                                          "list", page_lit="LANIP Address Setting  Manual", open_lit="Manual",
+        {"label": "LANWired LAN Connect", "readings": {"label": {"ocr": "LANWired LAN Connect",
+                                                                  "vlm": "Wired LAN Connect"}}}]}}
+    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], ("Wired LAN Connect",),
+                                          {**DECISION, "rows": ["Wired LAN Connect"]}, ["Automatic", "Manual"],
+                                          "list", page_lit="LANWired LAN Connect  Manual", open_lit="Manual",
                                           page_kind="menu", model=model)
     assert '"network_row_opened"' in logged, logged
 
@@ -3258,12 +3316,12 @@ def test_a_tail_none_knows_makes_no_other_label_and_the_rows_own_readings_are_it
                                          labels={"Wi-Fi Connect", "Wi-Fi Connect Settings"}) is None, lit
     assert safety.network_lifted_row("Wi-Fi Connect Auto", rows, values={"Wi-Fi Connect": []},
                                      labels={"Wi-Fi Connect", "Wi-Fi Connect Settings"}) == "Wi-Fi Connect"
-    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
-    own = {"IP Address Setting": read_on("Wired LAN", "IP Address Setting", "IP Address Setting Manual")}
-    labels = {"IP Address Setting", "IP Address Setting Manual"}
-    assert safety.network_lifted_row("IP Address Setting  Manual", rows, values={}, labels=labels) is None
-    assert safety.network_lifted_row("IP Address Setting  Manual", rows, values={}, labels=labels,
-                                     readings=own) == "IP Address Setting"
+    rows = decided({**DECISION, "rows": ["Wired LAN Connect"]})
+    own = {"Wired LAN Connect": read_on("Wired LAN", "Wired LAN Connect", "Wired LAN Connect Manual")}
+    labels = {"Wired LAN Connect", "Wired LAN Connect Manual"}
+    assert safety.network_lifted_row("Wired LAN Connect  Manual", rows, values={}, labels=labels) is None
+    assert safety.network_lifted_row("Wired LAN Connect  Manual", rows, values={}, labels=labels,
+                                     readings=own) == "Wired LAN Connect"
 
 
 def test_runner_label_readings_holds_every_label_and_reading(made_up_definition):
@@ -3384,71 +3442,72 @@ def test_the_crawl_steps_out_of_the_group_column_the_menu_reopened_in(monkeypatc
     assert crawl_run.crawl_from_menu(cam, link, cycle, model, None, io.StringIO()) is False and cam.rights == []
 
 
-# The Wired LAN page's IP Address Setting as the a1 II's page scan stores it (2026-11-14), in made-up text of the same
-# shape: its icon read as three capitals, set apart by a space in one OCR reading and glued on in the other, the vision
-# reader's reading the label exactly; its value one word. The lit bar, read live with the row lit, shows the icon with a
-# letter misread and set apart by a space, or with a letter dropped and glued on, then the label and the value
+# The Wired LAN page's IP Address Setting as the a1 II's page scan stored it (2026-11-14), in made-up text of the same
+# shape, Wired LAN Connect standing in for it (no decision opens IP Address Setting since 2026-11-14): its icon read as
+# three capitals, set apart by a space in one OCR reading and glued on in the other, the vision reader's reading the
+# label exactly; its value one word. The lit bar, read live with the row lit, shows the icon with a letter misread and
+# set apart by a space, or with a letter dropped and glued on, then the label and the value
 ICON_VALUE = "Madeup"
-ICON_ROW = {"label": "LANIP Address Setting", "value": ICON_VALUE,
-            "readings": {"label": {"ocr": "LAN IP Address Setting", "ocr2": "LANIP Address Setting",
-                                   "vlm": "IP Address Setting"},
+ICON_ROW = {"label": "LANWired LAN Connect", "value": ICON_VALUE,
+            "readings": {"label": {"ocr": "LAN Wired LAN Connect", "ocr2": "LANWired LAN Connect",
+                                   "vlm": "Wired LAN Connect"},
                          "value": {"ocr": ICON_VALUE, "ocr2": ICON_VALUE, "vlm": ICON_VALUE}}}
-ICON_BARS = [f"LAH IP Address Setting {ICON_VALUE}", f"LAIP Address Setting {ICON_VALUE}"]
-IPS = "IP Address Setting"
+ICON_BARS = [f"LAH Wired LAN Connect {ICON_VALUE}", f"LAWired LAN Connect {ICON_VALUE}"]
+ICON_LABEL = "Wired LAN Connect"
 
 
 def icon_model(row=None, group="Wired LAN"):
-    return {"p": {"breadcrumb": f"Network > {group}", "rows": [{"label": "Wired LAN Connect"}, row or ICON_ROW]}}
+    return {"p": {"breadcrumb": f"Network > {group}", "rows": [{"label": "IP Address Setting"}, row or ICON_ROW]}}
 
 
 def icon_checks(model, known_value=True):
-    """(the decided rows, values, readings, labels) for IP Address Setting on the page model `model`, as kit/drive.py
+    """(the decided rows, values, readings, labels) for Wired LAN Connect on the page model `model`, as kit/drive.py
     and kit/crawl_run.py give them to the checks (runner.network_values, network_readings, label_readings); with no
     value known for the row where known_value is False."""
     import runner
-    rows = decided({**DECISION, "rows": [IPS]})
+    rows = decided({**DECISION, "rows": [ICON_LABEL]})
     values = runner.network_values(rows, model) if known_value else {}
     return rows, values, runner.network_readings(rows, model), runner.label_readings(model)
 
 
 @pytest.mark.parametrize("bar", ICON_BARS)
 @pytest.mark.parametrize("known_value", [True, False])
-def test_ip_address_setting_opens_on_its_live_bar_its_icon_read_otherwise(tmp_path, monkeypatch, bar, known_value):
-    """Item 3: the lit bar of IP Address Setting, read live, shows the page's icon with a letter misread and set apart,
-    or a letter dropped and glued on, which no reading of the page model holds. go_to's arrival check, drive.py's press
-    check, LiveCamera's opening and its release after MENU take it for the row (safety.bar_heads, icon_slip), with its
-    value known or not, where before each refused it."""
+def test_a_row_opens_on_its_live_bar_its_icon_read_otherwise(tmp_path, monkeypatch, bar, known_value):
+    """Item 3 (seen on IP Address Setting, Wired LAN Connect standing in): the lit bar of the row, read live, shows the
+    page's icon with a letter misread and set apart, or a letter dropped and glued on, which no reading of the page
+    model holds. go_to's arrival check, drive.py's press check, LiveCamera's opening and its release after MENU take it
+    for the row (safety.bar_heads, icon_slip), with its value known or not, where before each refused it."""
     import crawl_run
     import drive as D
     model = icon_model()
     rows, values, readings, labels = icon_checks(model, known_value)
-    assert [readings[IPS][0]["group"]] == ["Wired LAN"] and (values.get(IPS) == [ICON_VALUE]) is known_value
+    assert [readings[ICON_LABEL][0]["group"]] == ["Wired LAN"] and (values.get(ICON_LABEL) == [ICON_VALUE]) is known_value
     # go_to: found by the vision reader's reading, its arrival judged on the live bar
     cam, cycle, gmodel = columns(monkeypatch, ["Wi-Fi", "Wired LAN"], ["Wi-Fi", "Wired LAN"])
     cam.focus = "rows"
     gmodel["p1"]["rows"][1] = ICON_ROW
     real = cam.lit
     cam.lit = lambda: bar if (cam.focus, cam.group, cam.row) == ("rows", 1, 1) else real()
-    assert crawl_run.go_to(cam, cycle, gmodel, 0, IPS) == 3
+    assert crawl_run.go_to(cam, cycle, gmodel, 0, ICON_LABEL) == 3
     # drive.py's press check
     assert D.press_refused("right", bar, "", "menu", network=rows, values=values, readings=readings, labels=labels) == ""
-    assert safety.network_lifted_row(bar, rows, False, values, readings, labels) == IPS
+    assert safety.network_lifted_row(bar, rows, False, values, readings, labels) == ICON_LABEL
     # LiveCamera: its opening, then MENU back on the page with the bar on the row ends the lock
     cam = camera(tmp_path, rows, values=values, page="menu")
     cam.readings, cam.labels = readings, labels
-    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "Automatic Manual", "inside")
+    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "On Off", "inside")
     cam.presses, cam._seen = 0, cam._moves()
     monkeypatch.setattr(live, "lit_text", lambda image, path: bar)
     monkeypatch.setattr(live.time, "sleep", lambda s: None)
     cam.press("right")
-    assert cam.network_open is not None and cam.network_open["row"] == IPS
+    assert cam.network_open is not None and cam.network_open["row"] == ICON_LABEL
     cam.hdmi.shows("menu", PAGE)
     cam.press("menu")
     assert cam.network_open is None and events(cam)[-1]["kind"] == "network_row_left"
     # drive.py's own release: MENU, then the page it was opened from with the bar on the row
     page = SimpleNamespace(kind="menu", where=PAGE)
     monkeypatch.setattr(D, "same_position", lambda a, b: a.where == b.where)
-    assert D.network_left(page, page, True, bar, IPS, readings=readings, labels=labels)
+    assert D.network_left(page, page, True, bar, ICON_LABEL, readings=readings, labels=labels)
 
 
 def test_the_live_icon_keeps_every_condition_of_the_glued_one():
@@ -3460,28 +3519,28 @@ def test_the_live_icon_keeps_every_condition_of_the_glued_one():
     rows, values, readings, labels = icon_checks(model)
 
     def lift(bar, readings=readings, labels=labels):
-        return safety.network_lifted_row(bar, rows, False, values, readings, labels) == IPS
+        return safety.network_lifted_row(bar, rows, False, values, readings, labels) == ICON_LABEL
     assert all(lift(bar) for bar in ICON_BARS)
-    for bar in (f"LXY IP Address Setting {ICON_VALUE}",          # two letters off the icon
-                f"No IP Address Setting {ICON_VALUE}",           # a word set before the label, no icon of it
-                f"L IP Address Setting {ICON_VALUE}",            # a single letter
-                "LAH IP Address Setting Other",                  # a value it does not know, its values known
-                f"LAH IP Address Settings {ICON_VALUE}",         # not the label after the icon
-                f"LAHH IP Address Setting {ICON_VALUE}"):        # two letters put in
+    for bar in (f"LXY Wired LAN Connect {ICON_VALUE}",          # two letters off the icon
+                f"No Wired LAN Connect {ICON_VALUE}",           # a word set before the label, no icon of it
+                f"L Wired LAN Connect {ICON_VALUE}",            # a single letter
+                "LAH Wired LAN Connect Other",                  # a value it does not know, its values known
+                f"LAH Wired LAN Connects {ICON_VALUE}",         # not the label after the icon
+                f"LAHH Wired LAN Connect {ICON_VALUE}"):        # two letters put in
         assert not lift(bar), bar
-    assert not lift(ICON_BARS[0], labels=None) and not safety.bar_on_row(ICON_BARS[0], IPS, readings)
-    assert safety.bar_on_row(ICON_BARS[0], IPS, readings, labels)
+    assert not lift(ICON_BARS[0], labels=None) and not safety.bar_on_row(ICON_BARS[0], ICON_LABEL, readings)
+    assert safety.bar_on_row(ICON_BARS[0], ICON_LABEL, readings, labels)
 
     def unknown(bar):
         """the row lifted with no value of it known: a short tail naming nothing takes the value's place"""
-        return safety.network_lifted_row(bar, rows, False, {}, readings, labels) == IPS
-    # nothing alphanumeric right after the label (bar_heads): "Settings" is no IP Address Setting and a value
-    assert unknown("LAN IP Address Setting") and unknown(f"LAH IP Address Setting {ICON_VALUE}")
-    assert not unknown("LAN IP Address Settings") and not unknown(f"LAH IP Address Settings {ICON_VALUE}")
-    assert not safety.bar_on_row("LAN IP Address Settings", IPS, readings, labels)
+        return safety.network_lifted_row(bar, rows, False, {}, readings, labels) == ICON_LABEL
+    # nothing alphanumeric right after the label (bar_heads): "Connects" is no Wired LAN Connect and a value
+    assert unknown("LAN Wired LAN Connect") and unknown(f"LAH Wired LAN Connect {ICON_VALUE}")
+    assert not unknown("LAN Wired LAN Connects") and not unknown(f"LAH Wired LAN Connects {ICON_VALUE}")
+    assert not safety.bar_on_row("LAN Wired LAN Connects", ICON_LABEL, readings, labels)
     # exactly one space between the icon and the label, the icon one word: a letter set apart is no icon
-    for bar in ("l an IP Address Setting", f"l an IP Address Setting {ICON_VALUE}", f"la n IP Address Setting {ICON_VALUE}"):
-        assert not unknown(bar) and not lift(bar) and not safety.bar_on_row(bar, IPS, readings, labels), bar
+    for bar in ("l an Wired LAN Connect", f"l an Wired LAN Connect {ICON_VALUE}", f"la n Wired LAN Connect {ICON_VALUE}"):
+        assert not unknown(bar) and not lift(bar) and not safety.bar_on_row(bar, ICON_LABEL, readings, labels), bar
     # each of icon_slip's two class checks on its own (made-up rows of a Wi-Fi or Bluetooth setting): the prefix set
     # apart before the label forms an identity row that stays closed ("access Point": Access Point), glued on it does
     # not; glued on, the prefix forms one ("wpS": WPS), set apart it does not
@@ -3491,19 +3550,19 @@ def test_the_live_icon_keeps_every_condition_of_the_glued_one():
     assert not safety.icon_slip("access", "Point Wi-Fi Connect", {"access"})
     assert not safety.icon_slip("wp", "S Bluetooth Function", {"wps"})
     # another label the kit knows formed by the bar: refused
-    assert not lift(ICON_BARS[0], labels=labels | {"LAH IP Address Setting"})
+    assert not lift(ICON_BARS[0], labels=labels | {"LAH Wired LAN Connect"})
     # the icon the page model never read glued on (only set apart), nor on a page of a group naming no such word, nor
     # with a reading of the row of another class beside it: no icon of the row at all
-    spaced = {**ICON_ROW, "label": "IP Address Setting",
-              "readings": {"label": {"ocr": "LAN IP Address Setting", "vlm": "IP Address Setting"}}}
+    spaced = {**ICON_ROW, "label": "Wired LAN Connect",
+              "readings": {"label": {"ocr": "LAN Wired LAN Connect", "vlm": "Wired LAN Connect"}}}
     other = {**ICON_ROW, "readings": {"label": {**ICON_ROW["readings"]["label"], "ocr3": "Format"}}}
     for m in (icon_model(spaced), icon_model(group="Wi-Fi Option"), icon_model(other)):
         _, _, r, lab = icon_checks(m)
-        assert safety.row_icons(IPS, r) == set() and not lift(ICON_BARS[0], readings=r, labels=lab), m
-    assert safety.row_icons(IPS, readings) == {"lan"}
+        assert safety.row_icons(ICON_LABEL, r) == set() and not lift(ICON_BARS[0], readings=r, labels=lab), m
+    assert safety.row_icons(ICON_LABEL, readings) == {"lan"}
     # the icon read with a letter misread may name nothing the never-open list or identity holds
-    assert safety.icon_slip("pip", IPS, {"pin"}) and not safety.icon_slip("pin", IPS, {"pip"})
-    assert not safety.icon_slip("la", IPS, {"wi"}) and not safety.icon_slip("wo", IPS, {"wi"})   # a short icon
+    assert safety.icon_slip("pip", ICON_LABEL, {"pin"}) and not safety.icon_slip("pin", ICON_LABEL, {"pip"})
+    assert not safety.icon_slip("la", ICON_LABEL, {"wi"}) and not safety.icon_slip("wo", ICON_LABEL, {"wi"})   # a short icon
     # no word before the label of a row whose page model read no icon: "No Wi-Fi Connect" as ever
     wifi = decided({**DECISION, "rows": ["Wi-Fi Connect"]})
     assert safety.network_lifted_row("No Wi-Fi Connect On", wifi, values=VALUES, labels=set()) is None
@@ -3516,20 +3575,93 @@ def test_drive_says_the_row_it_could_not_reach_and_exits_incomplete(tmp_path, mo
     0; nothing it read off the screen is said."""
     import runner
     exits = []
-    pressed, seen, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], (IPS,),
-                                             {**DECISION, "rows": [IPS]}, ["Automatic", "Manual"], "list",
-                                             page_lit=f"LAH IP Address Setting {UNKNOWN}", open_lit="Manual",
+    pressed, seen, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], (ICON_LABEL,),
+                                             {**DECISION, "rows": [ICON_LABEL]}, ["On", "Off"], "list",
+                                             page_lit=f"LAH Wired LAN Connect {UNKNOWN}", open_lit="Off",
                                              page_kind="menu", reach=False, exits=exits)
     out = capsys.readouterr().out
     assert exits == [runner.EXIT_INCOMPLETE] == [8] and pressed == ["menu"] and line["completed"] is False
-    assert f"could not reach {IPS!r} by the scan" in out and "'(withheld)'" not in out
+    assert f"could not reach {ICON_LABEL!r} by the scan" in out and "'(withheld)'" not in out
     assert "exit status 8" in out and "checked" in seen and line["screens"] == []
     nowhere((out, json.dumps(line), logged), UNKNOWN)
     # reached, the same run ends 0, as ever
     exits = []
-    drive_fake(tmp_path, monkeypatch, scope_file, ["menu"], (IPS,), {**DECISION, "rows": [IPS]}, ["Automatic"], "list",
-               page_lit="IP Address Setting", open_lit="Automatic", page_kind="menu", exits=exits)
+    drive_fake(tmp_path, monkeypatch, scope_file, ["menu"], (ICON_LABEL,), {**DECISION, "rows": [ICON_LABEL]}, ["On"], "list",
+               page_lit="Wired LAN Connect", open_lit="On", page_kind="menu", exits=exits)
     assert exits == []
+
+
+# the polling target's path as the link's command quotes it, a placeholder home folder (2026-11-14: the closing lines
+# printed the real one)
+FRAME_PATH = '"/Users/you/camset/runs/TEST-CAM_fw9.99/kit2_drive/_live.png"'
+LINK_GONE = f"osd {FRAME_PATH}: camera link exited"
+
+
+def test_a_private_runs_closing_lines_withhold_what_its_first_error_line_withholds(monkeypatch, capsys):
+    """2026-11-14: a --network run's first error line withheld the OSD frame's path, a quoted argument of the link's
+    command, and its closing lines printed it whole, home folder and all. camkit.live.close, runner.close_for_restore,
+    runner.restoring and runner.end_session withhold an error's quoted texts on a --network or --owner run; on any other
+    run they print it as before."""
+    import runner
+    from camkit.link import LinkError
+
+    def gone(*a, **k):
+        raise LinkError(LINK_GONE)
+
+    def cam_of(**kw):
+        return SimpleNamespace(cancel_to_menu=gone, refresh=lambda tag: SimpleNamespace(kind="unknown"), read=gone, **kw)
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    monkeypatch.setattr(runner.time, "sleep", lambda s: None)
+    link = SimpleNamespace(press=lambda *a, **k: None)
+    for cam, hidden in ((cam_of(network={"Bluetooth Function": DAY}), True), (cam_of(owner={"Format": {}}), True),
+                        (cam_of(network={}, owner={}), False)):
+        with pytest.raises(SystemExit):
+            live.close(cam, link)                        # each try's line, then it gives up
+        out = capsys.readouterr().out
+        assert out.count("closing: ") == 8 and ("/Users/you" in out) is not hidden and ("'(withheld)'" in out) is hidden
+        # close_for_restore: the close gives up and the last screen cannot be read (the link gone): no restore, exit 4
+        monkeypatch.setattr(runner, "close", lambda c, lk: (_ for _ in ()).throw(SystemExit("could not get back")))
+        with pytest.raises(SystemExit) as e:
+            runner.close_for_restore(cam, link)
+        out = capsys.readouterr().out
+        assert e.value.code == runner.EXIT_UNRESTORED and "cannot be read" in out and "did not finish" in out
+        assert ("/Users/you" in out) is not hidden and ("'(withheld)'" in out) is hidden, out
+        monkeypatch.setattr(runner, "close", gone)    # the close fails outright: said, and the restore goes on
+        runner.close_for_restore(cam, link)
+        out = capsys.readouterr().out
+        assert "restoring all the same" in out and ("/Users/you" in out) is not hidden, out
+    for withhold in (True, False):
+        with pytest.raises(SystemExit) as e, runner.restoring("the restore", withhold=withhold):
+            gone()
+        out = capsys.readouterr().out
+        assert e.value.code == runner.EXIT_UNRESTORED and ("/Users/you" in out) is not withhold, out
+    # end_session: keys (a --network or --owner run, values_withheld) withholds its reach's error too
+    monkeypatch.setattr(runner.session, "finish", lambda *a, **k: "finished")
+    for kw, hidden in ((runner.values_withheld(True), True), ({}, False)):
+        assert runner.end_session(link, None, Path("start.DAT"), "the end", reach=gone, **kw) == "finished"
+        out = capsys.readouterr().out
+        assert "restoring all the same" in out and ("/Users/you" in out) is not hidden, out
+
+
+def test_drive_keeps_a_result_line_when_its_restore_does_not_finish(tmp_path, monkeypatch, scope_file, capsys):
+    """2026-11-14: drive.py's unrestored exit (status 4) left drive.jsonl empty. It keeps a result line saying the run
+    did not finish and was not restored, with what it was asked and no screen at all; its closing lines withhold the
+    link's quoted path as its first error line does."""
+    import drive as D
+    import runner
+    from camkit.link import LinkError
+    exits = []
+    _, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], ("Bluetooth Function",),
+                                    RMT, RMT_LIST, "list", page_lit="Bluetooth Function  On", open_lit="Off",
+                                    exits=exits, end_raises=LinkError(LINK_GONE))
+    out = capsys.readouterr().out
+    assert exits == [runner.EXIT_UNRESTORED] == [4]
+    assert line["restore"] == "not finished" and line["outcome"] == D.UNFINISHED and line["after"] is None
+    assert line["path"] == ["Bluetooth Function"] and line["network"] == {"Bluetooth Function": DAY}
+    assert "screens" not in line and "changes" not in line and line["before"].endswith(".DAT")
+    assert "did not finish" in out and "'(withheld)'" in out
+    for where in (out, json.dumps(line), logged):
+        assert "/Users/you" not in where
 
 
 def test_the_navigation_says_no_length_of_what_it_withholds(monkeypatch, capsys):

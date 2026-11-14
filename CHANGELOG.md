@@ -57,6 +57,30 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A network decision opens an identity or connection row only once the row has been seen to open and close over the
+  link without harm.** On the a1 II a look-only `--network` run opened IP Address Setting over the wired LAN link
+  (Right, then MENU, nothing chosen): its screen read as no known kind, and a second or two after the MENU the camera
+  raised a network error and dropped the link, which did not come back. It had been listed among the rows whose
+  opening starts or ends nothing without anyone having seen it opened over the link, as had USB Connection Mode, USB
+  LUN Setting, USB Power Supply, Language, NTSC/PAL and Area/Date/Time. None of them opens by any network decision now
+  (IP Address Setting never; the others until someone has seen them opened over the link); a decision naming one,
+  such as the one that named IP Address Setting, stops the run before anything connects and says why. The rows that
+  still open, look-only, are those seen so on 2026-11-13 and 2026-11-14 (Wired LAN Connect, Wake On LAN, Remote Shoot
+  Function, Cnct. while Power OFF, Manage Paired Device, Display FTP Result), each with the day it was seen beside it
+  in `kit/camkit/safety.py`, and a test fails if a row is added there without being recorded as seen (decision 8).
+  Under an owner decision (`drive.py --owner`) IP Address Setting is a row whose opening may drop the link: it opens
+  only as the armed last press of a run given `--confirm`, the row under `"confirm"` with `"link_loss": true` and
+  `"values": "logged"`, the person at the terminal typing its name and `RESTORE_BY_HAND.json` written first; a run
+  that would look at it without that stops before anything connects, as one does for every row whose opening may
+  change the network. The USB and region rows stay closed identity rows an owner decision opens to look at, their
+  frames blacked out, at the owner's risk of a dropped link: none has been seen opened over the link. The entries
+  below that name IP Address Setting describe how the kit reads a row's page icon and goes to the row, which holds for
+  any row; IP Address Setting itself no network decision opens.
+- On a `--network` or `--owner` run the closing lines withhold an error's quoted texts as its first error line does:
+  when the link dropped, the first line withheld the OSD frame's path, and the closing lines (the tries to close the
+  camera, the restore that did not finish) printed it whole, the home folder in it. And when `drive.py`'s restore does
+  not finish (exit status 4, or 5 after an armed press), `drive.jsonl` keeps a result line saying the run did not finish
+  and was not restored, with what the run was asked and no screen, where it was left empty.
 - A third look-only `--network` session on the a1 II showed two rules of 2026-11-14 keeping the kit from rows it reached
   before (failing closed: nothing wrong was pressed). The jump by the tab and group columns reads the group column's lit
   bar as the way back out of the column does, the group's name judged whole by its letters and digits, equal or one
@@ -127,9 +151,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   8 and 9, changed 2026-11-13 for the a1 II's owner's camera; every other camera's default is unchanged or stricter:
   SSID/PW Reset joined the Enter check of Initialize and Reset Network Set. for every camera).
 - The Wi-Fi and Bluetooth settings (Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt Ctrl,
-  Airplane Mode), the screens that show the camera's network addresses, and the identity, connection and region rows
-  whose opening starts or ends nothing (Wired LAN Connect, IP Address Setting, Remote Shoot Function, the USB rows but
-  USB Streaming, Language and the others decision 8 lists) stay by hand by default, and no `--allow` opens them; but a
+  Airplane Mode), the screens that show the camera's network addresses, and the identity and connection rows seen to
+  open and close over the link without harm (Wired LAN Connect, Remote Shoot Function and the others decision 8 lists:
+  above) stay by hand by default, and no `--allow` opens them; but a
   dated owner decision in the reviewed scope that names the row (`"lifts": "network"`) opens it for a run given
   `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with `--rows`). A row so named is looked at only: up,
   down and MENU, never Enter, Right, Left or a dial inside it, until the screen read right after a MENU (or an Enter

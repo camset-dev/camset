@@ -812,6 +812,13 @@ def press(cam, key: str, **kw):
             time.sleep(1.0)
 
 
+def withheld_on(cam, text) -> str:
+    """`text` (an error's) as a print shows it on `cam`'s run: on a --network or --owner run (LiveCamera.network,
+    LiveCamera.owner) its quoted texts withheld, as the run's first error line and LiveCamera.refuse withhold them: a
+    command's quoted argument can be the OSD frame's full path, with the home folder in it (2026-11-14)."""
+    return safety.quoted_withheld(text) if getattr(cam, "network", None) or getattr(cam, "owner", None) else str(text)
+
+
 def close(cam, link):
     """Back to the shooting screen. The camera can refuse a button for a moment ("button not
     accepted" right after Select REC Folder opened, while it read the card, 2026-10-29): wait and
@@ -826,7 +833,7 @@ def close(cam, link):
             if cam.refresh("closing").kind == "shooting":
                 return
         except LinkError as e:
-            print(f"closing: {e}; trying again", flush=True)
+            print(f"closing: {withheld_on(cam, e)}; trying again", flush=True)
         time.sleep(1.5)
         cam.refresh("closing")
     raise SystemExit("could not get back to the shooting screen: please close it on the camera by hand")
