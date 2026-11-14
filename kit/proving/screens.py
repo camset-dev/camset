@@ -355,8 +355,11 @@ def _confirm_names() -> tuple:
 
 
 # safety.confirmation's words run together inside one word of the notice ("Deleteall", "Willbelost"; runner.joined, which
-# takes no name read across two words: "camera settings", "presets", "lens end"): a local check until the guards judge
-# words run together themselves
+# takes no name read across two words: "camera settings", "presets", "lens end"). The guards' own run-together view
+# (safety.confirmation_refused, safety.readings beyond safety.plain_view: 2026-11-14) takes every space out, so it reads
+# those across words and would refuse ordinary prose; a notice's text is judged in the plain view and by this check
+# (pass_named_notice), and the camera's own Enter check (camkit.live.LiveCamera.confirm_refused) still judges the notice
+# with confirmation_refused at the press. confirmation's words, a superset of confirmation_refused's run-together ones.
 CONFIRM_NAMES = _confirm_names()
 # a "Don't show this again." box's line, word for word (word_cover's slips allowed), which the phrase need not name
 DONT_SHOW_WORDS = ("don't", "show", "this", "again")
@@ -442,8 +445,9 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
     - the phrase's words are found in the notice's lines, in order (notice_cover), its OK line aside, and a line that
       says "Don't show this again." and nothing else (dont_show), unless the phrase names its words too;
     - no reading of the text holds a question mark;
-    - it reads as no confirmation (safety.confirmation, and its words run together: runner.joined), names nothing the
-      never-open list holds (safety.screen_refused) and nothing of identity or credentials (safety.identity_screen);
+    - it reads as no confirmation (safety.confirmation, and its words run together inside one word: runner.joined),
+      names nothing the never-open list holds (safety.screen_refused) and nothing of identity or credentials
+      (safety.identity_screen);
     - exactly one of its lines is a button's word alone, and that word is OK (BUTTON_LINE);
     - no other line names a second button, a choice or an action in any reading (NOT_BESIDE_OK), and none sits on or
       below the OK line's band (OK_BAND);
@@ -451,6 +455,11 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
       outside its text that holds none of its words, and at most runner.INFO_OK_SLACK of its letters and digits left over
       (an icon read as a letter or two, a slip), so no sentence or button the phrase does not name can ride along;
     - the lit button reads OK (notice_lit), and info_notice_ok, which judges it so too, presses the Enter.
+    Every reading judged is spaced as read (safety.plain_view: as read, folded, OCR's capital I as an l, slips undone):
+    the guards' run-together view takes every space out of the text, so ordinary prose reads as what it never says ("a
+    different screen" holds "ntsc", "camera settings" "erase", "You can change" "canc"; 2026-11-14), and words run
+    together are judged inside one word alone (runner.joined). The camera's own Enter check judges the notice again at
+    the press (camkit.live.LiveCamera.confirm_refused: safety.confirmation_refused, its words run together too).
     Returns {"row", "frame": the notice's frame} once passed, else {"refused": why} with nothing pressed; no text read
     off the screen is in either. Where the phrase leaves more of the notice over, the notice's text is printed (`words`:
     False on a run that withholds what it reads), so that its whole text can be given."""
@@ -473,12 +482,15 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
         cover = notice_cover(phrase, said)          # a phrase that names the box's words too
     if cover is None:
         return {"refused": f"not the notice named ({frame})"}
-    if any(q in r for r in safety.readings(text) for q in "?？"):
+
+    def spaced(t) -> list:
+        return safety.plain_view(safety.readings, t)
+    if any(q in r for r in spaced(text) for q in "?？"):
         return {"refused": f"it asks a question ({frame})"}
     for check, why in ((safety.confirmation, "it reads as a confirmation"),
                        (lambda t: joined(t, CONFIRM_NAMES), "it reads as a confirmation, its words run together"),
-                       (safety.screen_refused, "it names what the never-open list holds"),
-                       (safety.identity_screen, "it names identity or credentials")):
+                       (lambda t: safety.plain_view(safety.screen_refused, t), "it names what the never-open list holds"),
+                       (lambda t: safety.plain_view(safety.identity_screen, t), "it names identity or credentials")):
         if check(text):
             return {"refused": f"{why} ({frame})"}
     buttons = [ln for ln in lines if BUTTON_LINE.fullmatch(ln.text or "")]
@@ -486,7 +498,7 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
         return {"refused": f"not a single OK: {len(buttons)} button lines ({frame})"}
     ok_line = buttons[0]
     others = [ln for ln in lines if ln is not ok_line]
-    if any(NOT_BESIDE_OK.search(r) for ln in others for r in safety.readings(ln.text)):
+    if any(NOT_BESIDE_OK.search(r) for ln in others for r in spaced(ln.text)):
         return {"refused": f"a line beside its OK names a button, a choice or an action ({frame})"}
     if any(ln.y + ln.h / 2 >= ok_line.y - OK_BAND for ln in others):
         return {"refused": f"a line sits on or below its OK's band ({frame})"}

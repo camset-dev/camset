@@ -2046,7 +2046,9 @@ def test_an_icon_that_sets_the_row_in_another_class_is_no_icon():
     assert safety.identity_screen("usb") is None and "class" in safety.glued_icon("USB", row, "USB Wi-Fi")
     assert safety.lifted_readings(row, {row: read_on("USB Wi-Fi", "USBPower Supply Wi-Fi Connect", row)}) == {
         safety.plain(row)}
-    assert safety.glued_icon("lan", "IP Address Setting", "Wired LAN") is None
+    assert safety.glued_icon("lan", "Wired LAN Connect", "Wired LAN") is None
+    # a row of no class a decision lifts (IP Address Setting since 2026-11-14) has no icon to lift either
+    assert safety.glued_icon("lan", "IP Address Setting", "Wired LAN")
 
 
 def test_a_row_opened_through_its_icon_glued_on_is_left_on_its_page_and_the_next_row_opens(tmp_path, monkeypatch):

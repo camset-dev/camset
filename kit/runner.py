@@ -848,9 +848,9 @@ RESTORABLE_KINDS = frozenset({"menu", "submenu", "tiles", "list", "fields", "sid
 
 def restorable_after_close(cam) -> tuple:
     """(the last screen's kind, "") when the restore may be tried over it after camkit.live.close gave up: a kind
-    RESTORABLE_KINDS names whose text safety.confirmation does not take for a confirmation. (None, why not) when the
-    kind is another (unknown, a dialog, a picker), the text asks to execute something, or the frame or its text cannot
-    be read: then no restore is tried, and a person looks."""
+    RESTORABLE_KINDS names whose text safety.confirmation_refused does not take for a confirmation (its words run
+    together too: a refusal only). (None, why not) when the kind is another (unknown, a dialog, a picker), the text asks
+    to execute something, or the frame or its text cannot be read: then no restore is tried, and a person looks."""
     try:
         kind = cam.read().kind
     except Exception as e:
@@ -863,7 +863,7 @@ def restorable_after_close(cam) -> tuple:
         return None, f"the text of its last screen ({kind}) cannot be read ({type(e).__name__}: {e})"
     if not text.strip():
         return None, f"no text could be read on its last screen ({kind}), so no confirmation check can judge it"
-    why = safety.confirmation(text)
+    why = safety.confirmation_refused(text)
     if why:
         return None, f"its last screen ({kind}) reads as a confirmation ({why})"
     return kind, ""
@@ -1007,14 +1007,17 @@ def notice_words(text) -> str:
 
 def joined(text, names) -> str | None:
     """The first of `names` (a never-open name or a confirmation's word, as written: "delete all", "reset") that a reading
-    of `text` (safety.readings) holds run together inside one of its words, its signs left out, or None. A word is what
-    the reading's spaces part, so a name read across two words ("camera settings" holds "erase", "Pre-Capture Settings"
-    "reset", "lens end" "send") is no hit. A name of several words is a hit anywhere inside one word ("Deleteall",
-    "alldata"); a name of one word only where that word holds more than it, and what is beside it is no single letter
-    ("SettingReset", "Formatthe"; never "Rotate" alone, the word "preset" or "deleted"). Names shorter than four letters
-    are left out."""
+    of `text` holds run together inside one of its words, its signs left out, or None. A word is what the reading's
+    spaces part, so a name read across two words ("camera settings" holds "erase", "Pre-Capture Settings" "reset", "lens
+    end" "send") is no hit, and the readings are those spaced as read (safety.plain_view of safety.readings: as read,
+    folded, OCR's capital I as an l, slips undone), never the guards' run-together view, which takes every space out and
+    so reads names across words. A name of several words is a hit anywhere inside one word ("Deleteall", "alldata"); a
+    name of one word only where that word holds more than it, and what is beside it is no single letter ("SettingReset",
+    "Formatthe"; never "Rotate" alone, the word "preset" or "deleted"). Names shorter than four letters are left out.
+    The notice path's one check of words run together (--info-ok: a notice's text, CONFIRM_NAMES in proving.screens, and
+    a row's name, run_together_refused), each word list made from camkit.safety's own."""
     keys = [(n, re.sub(r"[^a-z0-9]", "", n.lower()), " " in n.strip()) for n in names]
-    for r in safety.readings(text):
+    for r in safety.plain_view(safety.readings, text):
         for word in r.split():
             al = re.sub(r"[^a-z0-9]", "", word)
             for name, key, spaced in keys:
@@ -1036,13 +1039,16 @@ def _never_open_words() -> tuple:
 
 
 def run_together_refused(row: str) -> str | None:
-    """Why the row name `row` is refused for --info-ok read with its words run together ("DeleteAll", "SettingReset",
-    "ScreenReader", "Steady.Shot"), or None: a word of any reading of it (safety.readings) that had signs in it is
-    never-open with them left out (safety.never_open: "steady.shot"), or a word holds one of the never-open list's names
-    run together (joined, _never_open_words). A name read across two words, or a word that is a name alone ("File
-    Format", "Zoom Ring Rotate", "Time Code Preset"), is the guards' own to judge as written (safety.path_refused). A local
-    check until the guards judge words run together themselves."""
-    for r in safety.readings(row):
+    """Why the row name `row` is refused for --info-ok read with its words run together inside one word ("Settingreset",
+    "Screenreader", "Steady.Shot"), or None: a word of a reading of it spaced as read (safety.plain_view of
+    safety.readings) that had signs in it is never-open with them left out (safety.never_open, which judges that one
+    word alone: "steady.shot"), or a word holds one of the never-open list's names run together (joined,
+    _never_open_words). A name read across two words, or a word that is a name alone ("File Format", "Zoom Ring Rotate",
+    "Time Code Preset"), is safety.path_refused's to judge, which info_ok_or_exit asks first: since 2026-11-14 it reads a
+    name with its spaces taken out or its CamelCase set apart too ("DeleteAll", "ScreenReader"), as the walker judges the
+    lit row before it opens it (camkit.live), and this check adds the words run together that no space or capital
+    marks."""
+    for r in safety.plain_view(safety.readings, row):
         for word in r.split():
             al = re.sub(r"[^a-z0-9]", "", word)
             why = safety.never_open(al) if al != word else None
@@ -1057,12 +1063,15 @@ def info_ok_or_exit(values, rows=None, labels=None) -> dict:
     written, compared by its letters, digits and single spaces (proving.screens.pass_named_notice). Exits before anything
     connects on a value without "=", a row or a phrase missing, a row named twice, a row with a label that is no row
     label the kit knows (`labels`: the definition's row labels by default, row_labels; the runners add the page model's
-    or the map's), a row of which any label is on the never-open list, of any class (safety.path_refused), or is so read
-    with its words run together (run_together_refused); a phrase with a regular expression's own sign in it
+    or the map's), a row of which any label is on the never-open list, of any class (safety.path_refused, in every
+    reading it judges, its words run together or split too, as the walker judges the lit row), or is so read with its
+    words run together inside one word (run_together_refused); a phrase with a regular expression's own sign in it
     (INFO_OK_SIGNS: it is never a pattern) or a question mark (a notice that asks is never passed), of fewer than
     INFO_OK_WORDS words or INFO_OK_MIN letters and digits, or that itself reads as a confirmation (safety.confirmation) or
-    names what the never-open list holds (safety.screen_refused); and, given `rows` (kit/prove_run.py's --rows), a row
-    --rows does not name. Prints the rows named, as allowed_or_exit does."""
+    names what the never-open list holds (safety.screen_refused, in the readings spaced as read: safety.plain_view, as
+    proving.screens.pass_named_notice judges the notice; a phrase is prose, and read with every space taken out "a
+    different screen" holds "ntsc"); and, given `rows` (kit/prove_run.py's --rows), a row --rows does not name. Prints the
+    rows named, as allowed_or_exit does."""
     known = {safety.plain(x) for x in (row_labels(definition()) if labels is None else labels) if isinstance(x, str)}
     out = {}
     for v in values or ():
@@ -1088,7 +1097,7 @@ def info_ok_or_exit(values, rows=None, labels=None) -> dict:
         if len(phrase.split()) < INFO_OK_WORDS or sum(c.isalnum() for c in phrase) < INFO_OK_MIN:
             sys.exit(f"--info-ok {row!r}: give at least {INFO_OK_WORDS} words and {INFO_OK_MIN} letters: the notice's "
                      "whole text as written")
-        why = safety.confirmation(given) or safety.screen_refused(given)
+        why = safety.confirmation(given) or safety.plain_view(safety.screen_refused, given)
         if why:
             sys.exit(f"--info-ok {row!r}: the phrase reads as what no notice passed may say ({why})")
         if rows is not None and not any(safety.plain(r) == safety.plain(row) for r in rows):

@@ -41,8 +41,17 @@ The screen judged is never one the camera has left behind this camera's back: th
 download, an upload, any press or dial), and when that count has moved since the last read, the screen is grabbed and
 read afresh before the press is judged (_fresh: a refresh, never a refusal).
 Enter on a confirmation is each caller's check (safety.confirmation, as drive.py's press_decision and the provers make
-it before their OK): the choke point does not make it, since what a confirmation looks like differs by screen and no
-one rule could be proved on every prover without the camera.
+it before their OK), and since 2026-11-14 (a review: the lower layer must not rest on drive.py) this camera's too, on a
+notice, or on a dialog or a screen of no known kind that asks (safety.asks: a question mark, Cancel outside quoted
+option names, a lit Enter, OK, Execute or Yes, a lit action's word on a screen that reads as a confirmation without it,
+a lit text unread; never a carousel, which reads as a dialog too and asks nothing: confirm_refused), Enter is refused
+when the whole text reads as a confirmation (safety.confirmation_refused, its words run together too), and on a notice
+whose text reads nothing, a dialog or a screen of no known kind whose text and lit text both read nothing, or a screen
+whose text cannot be read at all (its reading fails), unless the caller judged that very press with
+the check lifted (confirm_once: drive.py's and card_actions.py's --confirm, through press's confirm; pp_reset_run's
+profile reset question) or drive.py allowed it as an owner row's step or armed press (permit). The tools that press OK
+on a notice after their own check (table_walk.py, afreg_run.py, memreg_run.py, mode_switch.py, proving/screens.py)
+check no question of their own and are given no such word: a notice that reads so stops their run.
 
 The orange cursor is found as a bar first (lit_box). A dialog or table that lights its item without one (the White
 Balance chooser's orange text, a two-slot table's narrow cell) is read from the largest orange region instead, on those
@@ -271,6 +280,9 @@ class LiveCamera:
         # one row lifted for one press (kit/provers/pp_reset_run.py's Reset): a predicate (frame, lit) -> bool, set
         # by the caller for its next press and used up by that press; None (unset) changes nothing
         self.may_open_exact = None
+        # the caller's word that it judged its next press with the confirmation check lifted (drive.py --confirm, its
+        # profile reset question for pp_reset_run): used up by that press (confirm_refused)
+        self.confirm_once = False
         self.frame = hdmi.grab("live-start")
         self.screen = screen.read(self.frame)
         self.screen.frame_path = self.frame.path.name
@@ -301,6 +313,8 @@ class LiveCamera:
             self.may_open_exact = None      # one press only, whatever it is
         permit = getattr(self, "permit", None)
         self.permit = None                  # drive.py's word for one owner press: used up by this press, whatever it is
+        confirmed = bool(getattr(self, "confirm_once", False))
+        self.confirm_once = False           # a caller's confirmation check made for one press: used up by it likewise
         arming = self.inside_refused(key, permit)       # inside a network row: look only, or MENU alone
         # a MENU, or an Enter inside_refused let through (an option the decision names), may close the row once it has
         # gone out: only then can the lock end (_inside_after)
@@ -355,6 +369,8 @@ class LiveCamera:
                              "the lit row does not read as the owner row (docs/decisions/0008)")
         if owner and canon in ("enter", "ms_enter"):
             self.wiping_refused(key, arming)    # Initialize's kin: this camera's own check, beside drive.py's
+        if canon in ("enter", "ms_enter"):
+            self.confirm_refused(key, permit, confirmed)    # a confirmation: this camera's own check too
         judged = self.judged_screen(key)
         t = time.monotonic()
         before = self.screen
@@ -496,6 +512,44 @@ class LiveCamera:
         if m and not safety.CAMERA_SETTINGS_RESET.search(lit) and not safety.armed_wiping(armed, m.group(0)):
             self.refuse(key, f"the screen reads {m.group(0)!r} and the press is no armed confirmation of that very "
                              "action (docs/decisions/0005)")
+
+    def confirm_refused(self, key: str, permit, confirmed: bool) -> None:
+        """Refused, logged, for an Enter on a notice, or on a dialog or a screen of no known kind that asks
+        (safety.asks: a question mark, Cancel outside quoted option names, a lit button's or action's word, a lit text
+        that cannot be read), whose whole text reads as a confirmation (safety.confirmation_refused: confirmation, its
+        words run together too), this camera's own check beside drive.py's, so that the lower layer does not rest on it
+        (2026-11-14, a review): unless the caller judged this very press with the confirmation check lifted
+        (`confirmed`, confirm_once: drive.py's and card_actions.py's --confirm through press's confirm, pp_reset_run's
+        profile reset question) or drive.py allowed it as an owner row's step or armed press (`permit`, which
+        owner_inside_refused has judged). A carousel reads as a dialog too (screen.classify: its divider) and asks
+        nothing: Enter on it chooses the lit option, which the provers prove on rows whose own title holds a
+        confirmation's word (32 of the a1 II definition's 3,584 carousel texts: Delete confirm., File Name Format,
+        Custom Key Setting's Delete, File Number's Reset...), and drive.py's check judges every screen alike. Refused
+        too, since nothing could judge them: a screen whose text cannot be read (its reading fails), a notice whose text
+        reads nothing, and a dialog or a screen of no known kind whose text and lit text both read nothing (one with
+        text but nothing lit, Camera Set. Memory's slot screen among them, is judged by its text as above)."""
+        kind = self.screen.kind
+        if kind not in safety.CONFIRM_KINDS and kind != "unknown":
+            return
+        if confirmed or (isinstance(permit, dict) and permit.get("what") in ("step", "confirm", "final", "choose")):
+            return
+        try:
+            text = text_of(self)
+            lit = lit_text(self.frame.image, self.frame.path) if kind != "notice" else ""
+        except Exception as e:
+            self.refuse(key, f"the {kind} screen's text cannot be read ({type(e).__name__}), so the confirmation check "
+                             "cannot judge it")
+        if kind == "notice" and not str(text or "").strip():
+            self.refuse(key, "nothing on the notice can be read, so the confirmation check cannot judge it")
+        if kind != "notice" and not str(text or "").strip() and not str(lit or "").strip():
+            self.refuse(key, f"nothing on the {kind} screen can be read, neither its text nor a lit item, so the "
+                             "confirmation check cannot judge it")
+        if kind != "notice" and not safety.asks(text, lit):
+            return                          # a carousel, or a screen that asks nothing
+        why = safety.confirmation_refused(text)
+        if why:
+            self.refuse(key, f"{why}: Enter on a confirmation goes only where its caller judged that very press with "
+                             "the check lifted (--confirm, an owner decision's armed press)")
 
     def owner_inside_refused(self, key: str, inside: dict, permit):
         """Refused, logged, for a key that may not go out inside the owner row open (inside), else the row when the
@@ -800,11 +854,15 @@ def text_of(cam) -> str:
     return ocr.text_in(ocr.read([f.path])[f.path], (0, 0, 640, 480)).strip()
 
 
-def press(cam, key: str, **kw):
+def press(cam, key: str, confirm: bool = False, **kw):
     """A press the camera may refuse for a moment while it reads the card (Select REC Folder
-    refused Up 0.3 s after opening and took MENU 1.6 s later, 2026-10-29). kw: LiveCamera.press's (on_shooting)."""
+    refused Up 0.3 s after opening and took MENU 1.6 s later, 2026-10-29). kw: LiveCamera.press's (on_shooting).
+    confirm: the caller judged this press with the confirmation check lifted (drive.py --confirm): the camera's own
+    check (LiveCamera.confirm_refused) is lifted for each try of it (confirm_once)."""
     for attempt in range(6):
         try:
+            if confirm:
+                cam.confirm_once = True
             return cam.press(key, **kw)
         except LinkError as e:
             if "not accepted" not in str(e) or attempt == 5:

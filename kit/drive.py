@@ -15,7 +15,9 @@ centre) always needs a regex. A key is judged and sent as camkit.safety names it
 connects. The guards fail closed
 (press_refused): Enter is refused when the lit text cannot be read, when it reads Initialize or Reset Network
 Set., when the screen reads either and the lit text is not Camera Settings Reset, and on a screen that reads
-like a confirmation (safety.confirmation) unless --confirm is given, which never lifts the rest. Right or Enter
+like a confirmation (safety.confirmation_refused: confirmation, its words run together too) unless --confirm is given,
+which never lifts the rest; the camera checks the same on a dialog or a notice (camkit.live.LiveCamera), lifted for a
+press drive.py judged with --confirm (live.press's confirm) or allowed as an owner row's (LiveCamera.permit). Right or Enter
 onto a lit row on the never-open list is refused unless --allow names it, and Right on a menu page whose lit
 row cannot be read is refused.
 "enter!:regex" is Enter vouched by the operator (2026-11-09), for a screen that lights nothing the kit can read (the a1
@@ -365,8 +367,9 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
         m = next((m for r in safety.readings(text or "") for m in [NEVER_ENTER.search(r)] if m), None)
         if m and not CAMERA_SETTINGS_RESET.search(lit) and not armed_wiping(armed_row, m.group(0)):
             return f"the screen reads {m.group(0)!r} and the lit text {lit!r} is not Camera Settings Reset"
-        if safety.confirmation(text) and not confirm:
-            return f"{safety.confirmation(text)} on {(text or '')[:120]!r}"
+        said = safety.confirmation_refused(text)       # its words run together too ("Formatthe memory card?")
+        if said and not confirm:
+            return f"{said} on {(text or '')[:120]!r}"
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
@@ -1345,7 +1348,9 @@ def main():
                             run.log("c4_press", key=key, frame=cam.frame.path.name)
                         cam.press("c4", allow={"c4"})
                     else:
-                        press(cam, key, **shooting_word(cam, run, key, on_shooting))
+                        # an Enter judged here with --confirm: the camera's own confirmation check is lifted for it
+                        press(cam, key, confirm=bool(confirm_now and key in ENTERS),
+                              **shooting_word(cam, run, key, on_shooting))
                         # on the help popup a Down can go unanswered: the cursor stayed on Add to My
                         # Menu in 4 of 8 drives (S&Q, 2026-11-02), 0.3 s or 1.3 s after C4 alike.
                         # Down again while the lit entry still reads Add to My Menu, at most twice

@@ -887,10 +887,12 @@ def test_drive_refuses_a_press_that_meets_the_shooting_screen_unless_named():
     assert drive.shooting_press_refused("help", "shooting", {"left"})
 
 
-def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), kind: str = "shooting", more=()):
+def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), kind: str = "shooting", more=(),
+                      text: str = "", lit: str = ""):
     """drive.py's main() with the camera on the shooting screen all along, or on a screen of `kind` (made up: the menu's
-    way to the row, the cursor bar never at a "key@y" row, the session's end); `more`: other arguments. Returns the
-    presses and dial turns sent with their keywords, the run's events and the drive.jsonl line."""
+    way to the row, the cursor bar never at a "key@y" row, the session's end), the screen's text `text` and its lit
+    text `lit`; `more`: other arguments. Returns the presses and dial turns sent with their keywords (and the camera's
+    confirm word, confirm_once, where drive.py gave it for that press), the run's events and the drive.jsonl line."""
     sys.path.insert(0, str(ROOT / "kit"))
     import drive
     run = Run("kit2_drive", root=tmp_path)
@@ -919,7 +921,8 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
             return SimpleNamespace(kind=kind)
 
         def press(self, key, **kw):
-            sent.append(("cam", key, kw))
+            sent.append(("cam", key, {**kw, "confirm_once": True} if getattr(self, "confirm_once", False) else kw))
+            self.confirm_once = False
 
         def dial(self, name, steps, **kw):
             sent.append(("cam", f"dial {name} {steps}", kw))
@@ -936,7 +939,7 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
                         ("LiveCamera", lambda link, eyes, run, may_open=(), **kw: Cam()),
                         ("find_position", lambda cam, cycle, model: 0), ("go_to", lambda *a: True),
                         ("enter_any", lambda cam, path, i: None), ("bar_at", lambda cam, y: False),
-                        ("screen_text", lambda cam, grip: ""), ("highlighted", lambda image, path: ""),
+                        ("screen_text", lambda cam, grip: text), ("highlighted", lambda image, path: lit),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("close_for_restore", lambda cam, link: sent.append(("closed",))),
                         ("session", SimpleNamespace(ended=lambda link, before, show=30: ending,
@@ -1348,3 +1351,516 @@ def test_the_mode_question_logs_no_property_value(tmp_path, monkeypatch):
                                              "SetPhotographer", "SetCopyright"))
     whole = [e for e in later if e["kind"] == "cmd" and e["cmd"] == "props"][-1]
     assert whole["reply"]["props"] == made_up, "Link.props() logs its own reply as before"
+
+
+# ---------------------------------------------------------------- words OCR runs together or splits (2026-11-14)
+
+def definition_labels() -> list:
+    """The a1 II definition's menu labels and every label of its settings' row paths, as written there."""
+    doc = json.loads((ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    out = {m.get("label") for m in doc.get("menu") or [] if isinstance(m, dict)}
+    out |= {x for s in doc.get("settings") or [] if isinstance(s, dict) for x in s.get("row") or []}
+    return sorted(x for x in out if isinstance(x, str) and x.strip())
+
+
+def run_together(label: str) -> list:
+    """Every reading of `label` with one of its spaces dropped, and with all of them dropped."""
+    words = label.split(" ")
+    out = {label.replace(" ", "")} | {" ".join(words[:i] + [words[i] + words[i + 1]] + words[i + 2:])
+                                      for i in range(len(words) - 1)}
+    return sorted(out - {label})
+
+
+def split_apart(label: str) -> list:
+    """Every reading of `label` with one space put between two of its letters or digits."""
+    return [label[:i] + " " + label[i:] for i in range(1, len(label)) if label[i - 1].isalnum() and label[i].isalnum()]
+
+
+def test_no_never_open_row_of_the_definition_escapes_with_its_words_run_together_or_split():
+    """A reading with one space dropped made an ordinary row of 54 of the a1 II definition's 95 never-open labels (its
+    menu's and its settings' rows: actions, credentials, sound and light, identity rows, network settings), in
+    drive.py's press check and the camera's own: a pattern with a space in it never matched the words run together.
+    Every never-open row of the definition, read with any one of its spaces dropped, with all of them dropped, or with
+    one space put inside a word ("Forma t"), is refused by never_open, the camera's open_refused and drive.py's press
+    check (safety._glued, and the reading with every space taken out in safety._sources)."""
+    import drive
+    labels = [x for x in definition_labels() if safety.never_open(x)]
+    together = [(x, v) for x in labels for v in run_together(x)]
+    apart = [(x, v) for x in labels for v in split_apart(x)]
+    assert len(labels) >= 80 and len(together) >= 150 and len(apart) >= 1000
+    for label, v in together:
+        assert safety.never_open(v), (label, v)
+        assert live.open_refused(v) and drive.press_refused("right", v, "", "menu"), (label, v)
+    for label, v in apart:
+        assert safety.never_open(v) and live.open_refused(v), (label, v)
+
+
+# the a1 II's ordinary rows whose words, run together, hold a word of the never-open list: none is an action, nor any
+# other class of it, for the reading with every space taken out ("fileformat" is no "format": the actions are matched
+# whole)
+ORDINARY_RUN_TOGETHER = ["Av/Tv Rotate", "Bird: Detailed Settings", "Crop Level", "Delete confirm.",
+                         "Delete pressing twice", "File Format", "File Name Format", "Pre-Capture Settings",
+                         "Px Proxy File Format", "Rating Set(Custom Key)", "Time Code Format", "Time Code Preset",
+                         "User Bit Preset", "Zoom Ring Rotate", "Drive Mode", "Focus Area"]
+
+
+@pytest.mark.parametrize("label", ORDINARY_RUN_TOGETHER)
+def test_an_ordinary_row_holding_a_never_open_word_run_together_stays_ordinary(label):
+    assert label in definition_labels()
+    assert safety.never_open(label) is None and live.open_refused(label) == ""
+
+
+def test_each_guard_judges_the_words_run_together_as_it_judges_them_spaced():
+    """safety._glued gives every guard pattern with a space in it a copy without: each guard that judges a label or a
+    screen judges the words run together as it judges them spaced (one assertion per guard, so that leaving _glued out
+    of any one of them fails here), and "WPS Push" run together is WPS ("\\bwps\\b" never matched "wpspush")."""
+    assert safety._glued([r"wake on lan", r"wps\s?push", r"delete slot ?1/2", r"copy"]) == [
+        r"wake on lan", r"wakeonlan", r"wps\s?push", r"wpspush", r"delete slot ?1/2", r"deleteslot1/2", r"copy"]
+    assert safety.never_open("SettingReset") == "action: settingreset"                        # _ACTION_RE
+    assert safety.never_open("ScreenReader").startswith("by hand only")                       # _ANYWHERE_RE
+    assert safety.identity_row("WakeOnLAN")                                                   # _IDENTITY_RE
+    assert safety.never_open("AccessAuthen. Info").startswith("credentials")                  # _CREDENTIALS_RE
+    assert safety.never_open("ShutterWhenPwr OFF").startswith(safety.MOTION)                  # _MOTION_RE
+    assert safety.network_row("AirplaneMode")                                                 # _NETWORK_SETTINGS_RE
+    assert safety.never_open("AirplaneMode").startswith(safety.NETWORK)                       # _NETWORK_RE
+    assert safety.lift_class("WakeOnLAN") == safety.LIFT_IDENTITY                             # _IDENTITY_LIFTABLE_RE
+    assert safety.lift_class("Wake On LAN Access") == safety.LIFT_IDENTITY
+    assert safety.lift_class("Wake On LAN AccessPoint") is None                               # _IDENTITY_FIXED_RE
+    assert safety.lift_class("Wake On LAN ScreenReader") is None                              # _OTHER_BY_HAND_RE
+    assert safety.never_choose("AirplaneMode")                                                # _NEVER_CHOOSE_RE
+    assert "never, whatever is allowed" in safety.never_lifted("AccessAuthen. Info")          # _NEVER_LIFTED_RE
+    assert "never, whatever is allowed" in safety.never_lifted("ResetNetwork Set.")           # reset ?network
+    assert safety.screen_refused("SettingReset")                                              # _ACTION_ANY_RE
+    assert safety.identity_screen("WakeOnLAN")                                                # _IDENTITY_SCREEN_RE
+    assert safety.inside_menu_only(safety.LIFT_IDENTITY, "list", "AccessPoint list")          # _SECRET_SCREEN_RE
+    assert safety.acts_on_open("CreateNewFolder")                                             # _ACTS_ON_OPEN_RE
+    assert safety.link_risk_open("AccessPoint Set.")                                          # _LINK_RISK_OPEN_RE
+    assert safety.registers("FaceMemory")                                                     # _REGISTERS_RE
+    assert safety.writes_card("CreateNewFolder")                                              # _WRITES_CARD_RE
+    assert safety.link_wiping("ResetNetwork Set.")                                            # _LINK_WIPING
+    assert any(safety.LINK_WIPING_ENTER.search(r) for r in safety.readings("ResetNetwork Set."))
+    assert "settingreset" in safety.profile_reset_dialog(                                     # _NOT_PROFILE_RESET
+        "SettingReset? Reset PP1 to the default setting? Enter Cancel", "PP1")
+    assert "start or end a connection" in safety.network_refused("FTPFunction")              # _NOT_LIFTED_WHY
+    for label in ("WPS Push", "WPSPush"):
+        assert safety.identity_row(label) and safety.acts_on_open(label) and safety.link_risk_open(label), label
+        assert safety.inside_menu_only(safety.LIFT_IDENTITY, "list", label), label
+
+
+@pytest.mark.parametrize("split,why", [("Forma t", "action: format"), ("Cop y", "action: copy"),
+                                       ("De lete", "action: delete"), ("Initia lize", "action: initialize"),
+                                       ("Access Auth en. Info", "credentials: accessauthen"),
+                                       ("Scre en Reader", "by hand only: screenreader")])
+def test_a_word_split_by_a_space_is_judged_whole(split, why):
+    """A word OCR splits ("Forma t") is the word: the reading with every space taken out judges it (it only adds
+    refusals: the readings with the space are judged beside it)."""
+    assert safety.never_open(split) == why and live.open_refused(split)
+
+
+def test_a_name_the_run_was_allowed_lifts_its_own_words_run_together_too():
+    """screen_refused: a name given with --allow lifts its words on the screen, in the reading with every space taken out
+    too (and, as before, nothing else); the row's own words on its own screen likewise (owner_menu_only)."""
+    assert safety.screen_refused("Camera Set. Memory  MR 1 2 3")
+    assert safety.screen_refused("Camera Set. Memory  MR 1 2 3", allow=("Camera Set. Memory",)) is None
+    assert safety.screen_refused("Camera Set. Memory  Format", allow=("Camera Set. Memory",))
+    assert safety.owner_menu_only(safety.LIFT_CREDENTIALS, "list", "Access Authen. On Off", "Access Authen.") is None
+    assert safety.owner_menu_only(safety.LIFT_CREDENTIALS, "list", "Access Authen. AccessPoint", "Access Authen.")
+
+
+# ---------------------------------------------------------------- what the run-together view may not permit (2026-11-14)
+
+def one_row(row, **extra) -> dict:
+    return {"decisions": [{"lifts": "network", "date": "2026-11-13", "why": "w", "rows": [row], **extra}]}
+
+
+@pytest.mark.parametrize("row", ["Wired LANConnect", "W ired LAN Connect", "Wake OnLAN", "WakeOn LAN", "Wi-Fi Conn ect",
+                                 "AirplaneMode", "RemoteShoot Function", "Cnct.while Power OFF"])
+def test_a_network_decision_names_a_row_as_the_camera_writes_it(row):
+    """Finding 1: a decision that names a row with its words run together or split was accepted with its options once
+    the never-open list read such a name (2026-11-14, a review): never_choose's word boundaries never matched it, so the
+    USB row's option would have been chosen. A name that reads otherwise as written than run together or split is
+    refused (safety._read_otherwise), and never_choose reads USB and DNS at a word's start."""
+    rows, options, refusals = safety._network_decisions(one_row(row, options={row: ["On"]}))
+    assert rows == {} and options == {} and "name the row as the camera writes it" in refusals[0], refusals
+    assert safety.network_refused(row).startswith("name the row as the camera writes it")
+
+
+def test_never_choose_reads_usb_and_dns_at_a_words_start():
+    """Finding 1: "\\busb\\b" never matched "USBConnection"; never_choose refused the spaced name and passed the glued
+    one."""
+    for row in ("USBConnection Mode", "USB Connection Mode", "USBLUN Setting", "Primary DNSServer", "DNS1", "USB1"):
+        assert safety.never_choose(row), row
+    assert safety.look_refused("enter", "PC Remote", "USBConnection Mode", ["PC Remote"])
+    for row in ("USB Connection Mode", "USBConnection Mode"):               # no network decision opens either
+        rows, _, refusals = safety._network_decisions(one_row(row, options={row: ["PC Remote"]}))
+        assert not rows and any("no option of a row naming 'usb'" in r for r in refusals), refusals
+    # its class alike, but an option chosen only as written: "remoteshoot" run together is Remote Shoot
+    assert "whether no option of it is chosen" in safety.network_refused("Wake On LAN Remoteshoot")
+
+
+@pytest.mark.parametrize("row", ["Shooting > Shooting Mode > RecallCamera Setting",
+                                 "Shooting > Shooting Mode > Re call Camera Setting",
+                                 "Shooting > Shooting Mode > Recall Camera Setting"])
+def test_no_owner_decision_names_recall_camera_setting_however_it_is_read(row):
+    """Finding 1: _LOADS read "recall" with word boundaries, so "RecallCamera Setting" or "Re call Camera Setting" with
+    "confirm" was accepted as an action. Each word of _LOADS is read where a word may start, whatever follows it."""
+    places = [("Shooting", "Shooting Mode", "Recall Camera Setting")]
+    got = safety.owner_decided({"decisions": [{"lifts": "owner", "date": "2026-11-13", "why": "w", "rows": [row],
+                                               "confirm": [row]}]}, places)
+    assert got["rows"] == {} and "loads settings or a file" in got["refusals"][0]
+    for word in ("Download", "Upload", "Reload", "important", "Save/Load Settings", "Save/Load FTP Settings"):
+        assert not any(safety._LOADS_RE.search(r) for r in safety.readings(word)), word
+    for word in ("Load", "Loading...", "LOADPRESET", "Import Root Certificate", "ImportRoot", "RegisterIPTC Info",
+                 "2RegisterIPTC Info", "User1: (No Import)"):
+        assert any(safety._LOADS_RE.search(r) for r in safety.readings(word)), word
+
+
+@pytest.mark.parametrize("label,what", [("DeleteAll", "its class"), ("AccessAuthen.", "its class"),
+                                        ("Access Authen. AccessPoint", "whether its opening acts")])
+def test_an_owner_decision_names_a_row_as_the_camera_writes_it(label, what):
+    """Finding 1 (and 8): an owner decision's row that reads otherwise once its words run together or split (its class,
+    or whether its opening acts: "AccessPoint" acts on opening only run together, which made a "confirm" of a
+    credentials row acceptable) is refused, whatever its path."""
+    places = [("Network", "Network Option", "Access Authen. Settings")]
+    entry = f"Network > Network Option > Access Authen. Settings > {label}"
+    why, _, _ = safety.owner_row_refused(entry, places)
+    assert why.startswith("name the row as the camera writes it") and what in why, why
+    assert safety.owner_row_refused("Network > Network Option > Access Authen. Settings > Access Authen.", places)[0] \
+        == ""
+
+
+@pytest.mark.parametrize("label", ["DeleteAll", "De lete All", "DeleteSlot1/2", "FormatSlot 1", "Forma t",
+                                   "De lete AII"])
+def test_no_allowance_opens_a_card_action_however_its_words_are_read(label):
+    """Finding 2: the never-lifted tier read Format and Delete with word boundaries, so "DeleteAll" was opened by a run
+    that named it (--allow, a LiveCamera's may_open). Format and Delete are read at a word's start in every reading."""
+    import drive
+    assert safety.never_lifted(label) and safety.allow_refused(label).startswith("nothing on the cards"), label
+    if safety.never_open(label):            # "FormatSlot 1" is no row of the list, run together or spaced
+        assert live.open_refused(label, may_open={label})
+        assert drive.press_refused("right", label, "", "menu", allow=(label,))
+        assert safety.path_refused(["Playback", "Delete", label], allowed=(label,))
+
+
+GLUED_QUESTIONS = ["Formatthe memory card? Enter Cancel", "Formatthememorycard?EnterCancel", "PressOKToFormat?",
+                   "ResetPP1 to the default setting? Enter Cancel", "Deletethis image?DeleteCancel"]
+
+
+@pytest.mark.parametrize("text", GLUED_QUESTIONS)
+def test_enter_on_a_confirmation_read_run_together_needs_confirm(text):
+    """Finding 3: confirmation's word boundaries never matched a question OCR ran together, and drive.py's Enter guard
+    is a refusal: Enter went out with no --confirm. confirmation_refused judges the text with its CamelCase set apart
+    and with every space taken out too; confirmation itself, which permits an armed press, is as it was."""
+    import drive
+    assert safety.confirmation(text) is None and safety.confirmation_refused(text)
+    assert "confirmation text" in drive.press_refused("enter", "Enter", text, "dialog")
+    assert drive.press_refused("enter", "Enter", text, "dialog", confirm=True) == ""
+
+
+@pytest.mark.parametrize("text", ["File Format XAVC HS 8K", "FileFormat RAW", "Time Code Preset",
+                                  "Folder Name Standard Form", "This function is currently disabled.", "Complete. OK"])
+def test_the_refusal_check_leaves_ordinary_screens_alone(text):
+    assert safety.confirmation_refused(text) is None, text
+
+
+def test_a_seen_step_on_a_question_read_run_together_is_the_final_press():
+    """Finding 3: owner_enter's seen step takes the refusal check: a slot's screen whose question OCR ran together is no
+    safe step; notice_kept keeps nothing of a notice that reads so."""
+    rows = ("Format", safety.LIFT_CARDS, "list", "Slot 1")
+    assert safety.owner_enter(*rows, "Slot 1 Slot 2", ["Slot 1"], ["Slot 1"]) == ("", "step")
+    assert safety.owner_enter(*rows, "Formatthe memory card Slot 1", ["Slot 1"], ["Slot 1"]) == ("", "final")
+    follows = "This operation or setting not available as follows "
+    assert safety.notice_kept(follows + "Drive Mode", ["Drive Mode"]) == follows + "Drive Mode"
+    assert safety.notice_kept(follows + "ResetAll Settings", ["ResetAll Settings"]) == ""
+    assert "reads as a confirmation" in safety.profile_reset_complete("Complete. ResetAll OK", "OK")
+
+
+class Sent(Exception):
+    pass
+
+
+def asking_camera(tmp_path, monkeypatch, kind, text, lit=None):
+    """A LiveCamera on a screen read as `kind` whose whole text is `text` and lit text `lit` (the whole text when not
+    given); its link raises Sent."""
+    monkeypatch.setattr(live, "lit_text", lambda image, path: text if lit is None else lit)
+    monkeypatch.setattr(live, "text_of", lambda cam: text)
+    cam = camera(tmp_path, kind, text)
+    cam.link = SimpleNamespace(press=lambda *a, **k: (_ for _ in ()).throw(Sent()), moves=0, menus=0)
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    return cam
+
+
+@pytest.mark.parametrize("text", GLUED_QUESTIONS + ["Format the memory card? Enter Cancel", "Formatting... Execute"])
+def test_the_camera_refuses_enter_on_a_confirmation_unless_its_caller_judged_it(tmp_path, monkeypatch, text):
+    """Finding 3: LiveCamera made no confirmation check of its own; it now refuses Enter on a notice, or a dialog that
+    asks, reading as one, unless the caller judged that press with the check lifted (confirm_once: drive.py's
+    --confirm through live.press's confirm) or drive.py allowed it as an owner row's armed press (permit)."""
+    kind = "notice" if "?" not in text else "dialog"
+    cam = asking_camera(tmp_path, monkeypatch, kind, text)
+    with pytest.raises(safety.Refused, match="confirmation text"):
+        cam.press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, kind, text)
+    with pytest.raises(Sent):
+        live.press(cam, "enter", confirm=True)
+    assert cam.confirm_once is False                    # used up by the press
+    cam = asking_camera(tmp_path, monkeypatch, kind, text)
+    cam.permit = {"row": "Format", "what": "confirm"}
+    with pytest.raises(Sent):
+        cam.press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, "list", text)
+    with pytest.raises(Sent):                           # an option list: its Enter chooses, never confirms
+        cam.press("enter")
+
+
+def definition_carousels() -> list:
+    """(title + lit option, lit option) of every option of every row of the a1 II definition, as a carousel shows it."""
+    doc = json.loads((ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    return [(f"{s['row'][-1]} {v[1]}", v[1]) for s in doc.get("settings") or [] if s.get("row")
+            for v in s.get("values") or [] if isinstance(v, list) and len(v) > 1 and isinstance(v[1], str)]
+
+
+def test_the_camera_lets_enter_choose_on_every_carousel_whose_title_holds_a_confirmations_word(tmp_path, monkeypatch):
+    """A carousel reads as a dialog too (its divider) and asks nothing: the provers choose its options. Every one of the
+    a1 II definition's carousels that reads as a confirmation (its title or option holds the word: Delete confirm., File
+    Name Format, Custom Key Setting's Delete, File Number's Reset) asks nothing (safety.asks), so the camera lets its
+    Enter go."""
+    reading = [(t, lit) for t, lit in definition_carousels() if safety.confirmation_refused(t)]
+    assert len(reading) >= 30
+    for text, lit in reading:
+        assert safety.asks(text, lit) is None, (text, lit)
+    for text, lit in reading[:: max(1, len(reading) // 8)]:
+        with pytest.raises(Sent):
+            asking_camera(tmp_path, monkeypatch, "dialog", text, lit).press("enter")
+    quoted = 'Delete confirm. "Delete" first "Cancel" first OK'          # an option's name is no Cancel button
+    assert safety.asks(quoted, '"Delete" first') is None
+
+
+@pytest.mark.parametrize("kind,text,lit", [("dialog", "Delete this image Delete Cancel", "Delete"),
+                                           ("dialog", "Format Enter", "Enter"),
+                                           ("dialog", "Format Slot 1 All data will be deleted. Enter", "Enter"),
+                                           ("dialog", "Reset PP1 to the default setting OK", "OK"),
+                                           ("dialog", "Delete this image Delete", "Delete"),
+                                           ("dialog", "Delete this image Delete Cancel", "Cancel"),
+                                           ("dialog", "Slot 1 Execute", "Execute"),
+                                           ("dialog", "Format the memory card", ""),
+                                           ("unknown", "Delete this image? Delete Cancel", "Delete"),
+                                           ("notice", "", "")])
+def test_the_camera_refuses_enter_on_a_question_whose_mark_or_button_ocr_missed(tmp_path, monkeypatch, kind, text, lit):
+    """Finding B of the second review: a question whose "?" OCR missed, a Cancel unread, a dialog's lit button its only
+    sign, a screen read as no known kind, and a notice that reads nothing: the camera's own check refuses Enter on each
+    (safety.asks), unless the caller judged that press with the check lifted."""
+    with pytest.raises(safety.Refused):
+        asking_camera(tmp_path, monkeypatch, kind, text, lit).press("enter")
+    with pytest.raises(Sent):
+        live.press(asking_camera(tmp_path, monkeypatch, kind, text, lit), "enter", confirm=True)
+
+
+def test_the_camera_refuses_enter_where_it_cannot_read_the_screen(tmp_path, monkeypatch):
+    """confirm_refused: a screen whose text cannot be read is refused, nothing could judge it."""
+    cam = asking_camera(tmp_path, monkeypatch, "dialog", "x")
+    monkeypatch.setattr(live, "text_of", lambda cam: (_ for _ in ()).throw(RuntimeError("no OCR")))
+    with pytest.raises(safety.Refused, match="cannot be read"):
+        cam.press("enter")
+
+
+@pytest.mark.parametrize("label", ["De lete AII", "Dele te AII", "DeIete AII"])
+def test_a_split_word_with_a_capital_i_for_an_l_is_judged_whole(label):
+    """Finding 4: the reading with every space taken out was made from the folded text alone, never with OCR's capital I
+    read as an l, so "De lete AII" escaped Delete All."""
+    assert safety.never_open(label) and safety.never_lifted(label), label
+
+
+@pytest.mark.parametrize("label", ["Pre-AFOn", "PRE-AFON", "pre-afon", "PreAF On", "Pre-AF Off", "RecLamp", "RecLED", "LEDLight", "MonitorVol.",
+                                   "Line OutVol.", "FlashFire", "TestShot", "ResetEV Comp.", "ResetCustomHold", "PWReset",
+                                   "WPSPIN", "wpspin", "WPS PIN", "ResetNetwork"])
+def test_a_word_bounded_at_its_end_is_seen_inside_run_together_words(label):
+    """Finding 5: a pattern with a word boundary at its end (lamp, led, vol., fire, test, reset, pw, wps) never matched
+    inside run-together text; the a1 II's "Pre-AFOn" (Pre-AF's lit bar, its value glued on) escaped motion. The reading
+    with its CamelCase set apart (safety._camel) and "wps pin" catch them, and drive.py's press check with them."""
+    import drive
+    assert safety.never_open(label) and drive.press_refused("right", label, "", "menu"), label
+
+
+def test_screen_refused_lifts_an_allowed_name_only_where_it_stands_whole():
+    """Finding 6: with two names allowed, the reading with every space taken out gained a space after the first and the
+    second lifted nothing; a name lifted part of another word ("Set" in "Reset"); and "Voice Memo" lifted its words out
+    of "Voice Memo Play Vol." before the longer name could. A word is lifted only where it lies wholly within a name's
+    own text, in that reading's form of the name."""
+    both = ("Camera Set. Memory", "Face Memory")
+    assert safety.screen_refused("Camera Set. Memory Face Memory", allow=both) is None
+    assert "face memory" in safety.screen_refused("Camera Set. Memory Face Memory", allow=both[:1])
+    assert safety.screen_refused("Slot 1 Setting Camera Set. Memory",
+                                 allow=("Slot 1 Setting", "Camera Set. Memory")) is None
+    assert safety.screen_refused("Voice Memo Play Vol. 7", allow=("Voice Memo",))
+    for order in (("Voice Memo", "Voice Memo Play Vol."), ("Voice Memo Play Vol.", "Voice Memo")):
+        assert safety.screen_refused("Voice Memo Play Vol. 7", allow=order) is None, order
+    assert safety.screen_refused("Setting Reset", allow=("Set",))
+    assert safety.screen_refused("Video Light Mode", allow=("Light",))
+    assert safety.screen_refused("SteadyShot On", allow=("SteadyShot",)) is None
+    assert safety.screen_refused("VolumeSettings", allow=("Volume Settings",))      # as before: no space, no name
+    assert safety.screen_refused("Volume Settings Beep", allow=("Volume Settings",))
+
+
+def test_no_allowed_name_hides_another_labels_never_open_word():
+    """Finding 6: every name --allow accepts, of the a1 II definition's labels, against every never-open label: the
+    label's own never-open word, where it is no part of the name, still refuses the screen; and after a name."""
+    labels = definition_labels()
+    allowed = [n for n in labels if not safety.allow_refused(n)]
+    closed = [x for x in labels if safety.never_open(x)]
+    assert len(allowed) > 300 and len(closed) > 80
+    for label in closed:
+        word = safety.never_open(label).split(": ", 1)[1].rstrip(".")
+        for name in allowed:
+            forms = [f for f in safety.readings(name) if f.strip()]
+            if any(word in f or word.replace(" ", "") in f for f in forms):
+                continue                            # the label's word is the name's own
+            if not any(f in r for f in forms for r in safety.readings(label)):
+                continue                            # the name is nowhere in the label: it covers nothing
+            assert safety.screen_refused(label, allow=(name,)), (label, name)
+    for name in ("Set", "Light", "Test", "Reset", "Voice Memo", "Memory", "Mode", "Copy", "Reader", "Info"):
+        for label in closed:
+            word = safety.never_open(label).split(": ", 1)[1].rstrip(".")
+            if not any(word in f for f in safety.readings(name)):
+                assert safety.screen_refused(f"{name} {label}", allow=(name,)), (name, label)
+
+
+def test_the_rows_own_label_goes_whole_from_its_screen_and_its_readings_without_a_space_count():
+    """Finding 7: a whitespace-free reading was skipped when the fold put a space in (a spacing diaeresis), so a PW after
+    a zero-width space read as nothing; and the row's own words went out word by word, taking Access Authen.'s words out
+    of "Access Point" beside it. The row's label goes whole, in its readings as written."""
+    cred = (safety.LIFT_CREDENTIALS, "list")
+    assert safety.owner_menu_only(*cred, "Ax​pw¨", "Access Authen.")
+    assert "access point" in safety.owner_menu_only(*cred, "Access Authen. Access Point On Off", "Access Authen.")
+    assert safety.owner_menu_only(*cred, "Access Authen. On Off", "Access Authen.") is None
+    assert safety.owner_menu_only(*cred, "Access Authen. AccessPoint On", "Access Authen.")
+    assert safety.owner_menu_only(*cred, "AccessAuthen. On Off", "Access Authen.")          # run together: as before
+    assert safety.owner_menu_only(*cred, "Access Authen. On Off", "AccessAuthen.")          # a name run together
+    assert safety.owner_menu_only(safety.LIFT_ACTION, "dialog", "SSID/PW Reset Reset? OK Cancel", "SSID/PW Reset") is None
+
+
+def test_what_permits_holds_only_where_the_plain_view_says_so_too():
+    """Finding 8: a reading of a row's class only once its spaces are taken out vouches for no other reading; arming a
+    confirmation needs the action's own word spaced as read; a field name is kept only as read; an armed row arms its
+    own family only as written; a lit bar or an owner row opens only what both views read alike."""
+    row = "Wired LAN Connect"
+    assert safety.row_read_as(row, [row, "LANWired LAN Connect"])
+    assert not safety.row_read_as(row, [row, "LANWired LAN Connect", "WiredLAN Connect"])
+    entry = {row: [{"group": "Wired LAN", "readings": [row, "LANWired LAN Connect", "WiredLAN Connect"]}]}
+    assert safety.lifted_readings(row, entry) == {"wired lan connect"}
+    fmt = ("Format", safety.LIFT_CARDS, "confirm", "dialog", "Enter")
+    assert safety.arm_refused(*fmt, "Format? All data will be lost. Enter Cancel", True, False) == ""
+    assert safety.arm_refused(*fmt, "Forma t? All data will be lost. Enter Cancel", True, False)
+    assert safety.address_fields(["Ser ver"]) == ([], 1) and safety.address_fields(["Server"]) == (["Server"], 0)
+    assert not safety.armed_wiping("ResetNetwork Set.", "reset network")
+    assert safety.armed_wiping("Reset Network Set.", "resetnetwork")
+    assert safety.network_lifted_row("USBConnection Mode", {"USB Connection Mode": "2026-11-13"}) is None
+    assert safety.owner_lifted_row("DeleteAll", {"DeleteAll": {"class": safety.LIFT_CARDS}}) is None
+    for label in ("DeleteAll", "deleteall"):                           # a card action, read run together too
+        assert safety.owner_class(label) == safety.LIFT_CARDS, label
+    assert safety.glued_icon("lan", "Wake OnLAN", "Wired LAN")          # no icon of a row only read run together
+    assert not safety.icon_slip("lam", "Wake OnLAN", {"lan"})
+
+
+@pytest.mark.parametrize("row,why", [("ServerSetting", "the FTP server's login sits behind it"),
+                                     ("SERVERSETTING", "the FTP server's login sits behind it"),
+                                     ("Edit DeviceName", "its opening shows a keyboard"),
+                                     ("EDIT DEVICENAME", "its opening shows a keyboard"),
+                                     ("FTPFunction", "start or end a connection"),
+                                     ("ftpfunction", "start or end a connection")])
+def test_a_closed_identity_row_run_together_is_refused_for_its_own_reason(row, why):
+    """Finding 9: _NOT_LIFTED_WHY reads its rows run together too."""
+    assert why in safety.network_refused(row)
+
+
+# ---------------------------------------------------------------- the second review of 2026-11-14
+
+def test_a_profile_reset_question_is_its_own_only_in_its_readings_spaced_as_read():
+    """A1: the question's words in order were looked for in every reading, the CamelCase set apart among them, so
+    "theDefault" read as "the Default" permitted the reset; the permission is judged on the readings spaced as read."""
+    assert safety.profile_reset_dialog("Reset PP1 to the default setting? Enter Cancel", "PP1") == ""
+    assert safety.profile_reset_dialog("Reset PP1 to theDefault setting? Enter Cancel", "PP1")
+
+
+def test_an_unattended_decision_waives_the_question_only_of_a_never_choose_row_it_names_as_written():
+    """A2: waives_question took a never-choose row from "options" alone, read run together ("USBConnection Mode"), so
+    the decision was no longer refused whole and its row got "unattended". The row must be one the decision names under
+    "rows", written as the camera writes it."""
+    places = [("Setup", "Reset/Save Settings", "Setting Reset"), ("Network", "Wired LAN", "Wired LAN Connect")]
+    bad = {"lifts": "owner", "date": "2026-11-13", "why": "w", "rows": ["Setup > Reset/Save Settings > Setting Reset"],
+           "unattended": True, "link_loss": True, "options": {"USBConnection Mode": ["PC Remote"]}}
+    got = safety.owner_decided({"decisions": [bad]}, places)
+    assert not safety.waives_question(bad) and got["rows"] == {} and "unattended" in got["refusals"][0]
+    row = "Network > Wired LAN > Wired LAN Connect"
+    good = {**bad, "rows": [row], "options": {row: ["Off"]}}
+    assert safety.waives_question(good) and safety.waives_question(good, places)
+    assert not safety.waives_question({**good, "rows": ["Network > Wired LAN > Wired LANConnect"]})
+    glued = "Network > Wired LAN > Wired LANConnect"                       # named alike in rows and options
+    assert not safety.waives_question({**good, "rows": [glued], "options": {glued: ["Off"]}})
+    # given the places, a row owner_row_refused refuses (no top-level place the kit knows) waives nothing either
+    elsewhere = [("Setup", "Reset/Save Settings", "Setting Reset")]
+    assert safety.waives_question(good) and not safety.waives_question(good, elsewhere)
+    assert any("unattended" in r for r in safety.owner_decided({"decisions": [good]}, elsewhere)["refusals"])
+    # an action's options are steps, never a never-choose choice: nothing to waive, whatever its name holds
+    reset = "Setup > Reset/Save Settings > Setting Reset"
+    assert not safety.waives_question({**good, "rows": [reset], "options": {reset: ["USB"]}})
+    assert not safety.waives_question({**good, "rows": ["Network > Wired LAN > USB Reset"],
+                                       "options": {"Network > Wired LAN > USB Reset": ["On"]}})
+
+
+def test_an_approval_lifts_a_row_only_where_both_views_read_it_as_motion():
+    """A3: never_open gives the first reason any reading matches, so a run-together motion reading came before an
+    action read once folded (a Cyrillic е in "Rеset"), and an approval naming that spelling lifted it. The approval
+    holds only where the plain view reads motion too (approved_motion), in path_refused and kit/prove_run.py."""
+    label = "ShutterWhenPwr OFF Rеset"
+    assert safety.never_open(label).startswith(safety.MOTION) and plain_never_open(label).startswith("action")
+    assert not safety.approved_motion(label)
+    assert safety.path_refused(["Silent Mode Settings", label], approved={"Silent Mode Settings > " + label})
+    good = "Shutter When Pwr OFF"
+    assert safety.approved_motion(good)
+    assert safety.path_refused(["Silent Mode Settings", good], approved={"Silent Mode Settings > " + good}) is None
+    assert "safety.approved_motion(" in (ROOT / "kit" / "prove_run.py").read_text(encoding="utf-8")
+
+
+def plain_never_open(label):
+    return safety.plain_view(safety.never_open, label)
+
+
+def test_an_opening_is_armed_only_where_it_acts_in_both_views():
+    """The general pattern of A: arm_refused's "open" took a row whose opening acts only once its words run together
+    ("AccessPoint"); in both views it acts, or it opens to look and no opening is armed."""
+    row = "Access Authen. AccessPoint"
+    assert safety.acts_on_open(row) and not safety.plain_view(safety.acts_on_open, row)
+    assert "opens to look" in safety.arm_refused(row, safety.LIFT_CREDENTIALS, "open", "menu", row, "", True, True)
+    assert safety.arm_refused("WPS Push", safety.LIFT_FIXED, "open", "menu", "WPS Push", "", True, True) == ""
+
+
+def test_a_network_decision_compares_the_class_whole():
+    """C: a name of a lifted class in both views, but another one in each (a Wi-Fi setting written, an address screen
+    with its CamelCase set apart), is refused: the class is compared whole, never as a yes or no."""
+    row = "Wi-Fi Connect xLAN Info"
+    assert safety.lift_class(row) == safety.LIFT_ADDRESS
+    assert safety.plain_view(safety.lift_class, row) == safety.LIFT_NETWORK
+    assert "its class" in safety.network_refused(row)
+
+
+def test_the_camelcase_reading_sets_a_digit_apart_from_its_letters():
+    """C: _camel sets a word apart at a letter followed by a digit ("Test1") and a digit followed by a letter
+    ("1Test"), so a word bounded at its end is seen there too."""
+    assert safety._camel("Test1") == "Test 1" and safety._camel("1Test") == "1 Test"
+    assert safety._camel("Slot1/2") == "Slot 1/2" and safety._camel("PP1to") == "PP1 to"
+    for label in ("Test1", "1Test"):
+        assert safety.never_open(label) == "by hand only: test", label
+        assert safety.plain_view(safety.never_open, label) is None, label
+
+
+def test_drive_gives_the_camera_its_confirm_word_for_an_enter_it_judged_with_confirm(tmp_path, monkeypatch):
+    """C: drive.py passes --confirm on to the camera (live.press's confirm, LiveCamera.confirm_once) for an Enter it
+    judged with it; without it every real --confirm Enter on a confirmation would be refused by the camera's own
+    check. Without --confirm drive.py refuses that Enter itself."""
+    question = "Format the memory card? Enter Cancel"
+    pressed, _, line = drive_on_shooting(tmp_path / "a", monkeypatch, ["enter:memory card"], kind="dialog",
+                                         more=["--confirm"], text=question, lit="Enter")
+    assert ("cam", "enter", {"confirm_once": True}) in pressed and line["completed"] is True
+    pressed, _, line = drive_on_shooting(tmp_path / "b", monkeypatch, ["enter:memory card"], kind="dialog",
+                                         text=question, lit="Enter")
+    assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False

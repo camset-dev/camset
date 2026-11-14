@@ -277,7 +277,8 @@ def test_a_row_the_run_does_not_name_is_left_as_ever(monkeypatch):
     (SENTENCE + [line("Ready？", 220), OK_LINE], "it asks a question"),        # a full-width question mark
     # a confirmation's words, run together or inflected
     (SENTENCE + [line("Deleteall", 220), OK_LINE], "its words run together"),
-    (SENTENCE + [line("The images will be deleted.", 220), OK_LINE], "names a button, a choice or an action"),
+    # "deleted": Delete at a word's start, whatever follows, is what no allowance opens (safety._CARDS, as read too)
+    (SENTENCE + [line("The images will be deleted.", 220), OK_LINE], "it names what the never-open list holds"),
     (SENTENCE + [line("All settings are overwritten.", 220), OK_LINE], "names a button, a choice or an action"),
     (SENTENCE + [line("Executed.", 220), OK_LINE], "names a button, a choice or an action"),
     (SENTENCE + [line("Willbelost", 220), OK_LINE], "its words run together"),
@@ -486,6 +487,26 @@ def test_words_read_across_a_space_are_no_words_run_together(monkeypatch):
             (joined_up, got)
 
 
+def test_a_notice_is_judged_as_read_never_with_every_space_taken_out(monkeypatch):
+    """The guards' run-together view (camkit.safety since 2026-11-14) reads ordinary prose across its spaces: "a different
+    screen" holds "ntsc", "You can change" "canc". A notice's text and the phrase naming it are judged in the readings
+    spaced as read (safety.plain_view), words run together inside one word alone (runner.joined): such a notice is
+    passed, and the parse takes its phrase."""
+    import runner
+    from camkit import safety
+    from proving import screens
+    said = "You can change the setting in a different screen."
+    assert safety.screen_refused(said) and safety.identity_screen(said)             # the run-together view
+    assert not safety.plain_view(safety.screen_refused, said) and not safety.plain_view(safety.identity_screen, said)
+    fake_ocr(monkeypatch, [line("You can change the setting in a", 100), line("different screen.", 140), OK_LINE])
+    cam = NoticeCamera()
+    cam.press("right")
+    phrase = runner.notice_words(said)
+    assert screens.pass_named_notice(cam, ROW, phrase, ROW) == {"row": ROW, "frame": "notice.png"}
+    assert cam.keys == ["right", "enter"]
+    assert parsed(f"{ROW}={said}") == {ROW: phrase}
+
+
 def test_the_runtime_check_refuses_a_confirmation_whatever_the_phrase(monkeypatch):
     """A phrase the parse would refuse ("delete all", a confirmation's words), given straight to the judgement: the
     notice is still refused on the camera, nothing pressed."""
@@ -574,16 +595,23 @@ def test_the_parse_judges_each_refusal_on_its_own():
     from camkit import safety
     assert safety.path_refused(["Format", "Something"]) and not safety.never_open("Format > Something")
     assert safety.path_refused(["WPS Push"]) and runner.run_together_refused("WPS Push") is None
-    assert runner.run_together_refused("DeleteAll") and not safety.path_refused(["DeleteAll"])
-    assert runner.run_together_refused("SettingReset") and not safety.path_refused(["SettingReset"])
-    assert runner.run_together_refused("ScreenReader") and not safety.path_refused(["ScreenReader"])
+    # a name run together where a capital marks a word, or its whole label so: the guards refuse it themselves in their
+    # run-together view (since 2026-11-14), never as read alone (safety.plain_view), and the check of words run
+    # together inside one word does too
+    for name in ("DeleteAll", "SettingReset", "ScreenReader"):
+        assert runner.run_together_refused(name) and safety.path_refused([name]), name
+        assert not safety.plain_view(safety.path_refused, [name]), name
+    # words run together that no space or capital marks: the check of words run together inside one word alone
+    for name in ("Formatthe", "AutoCreateStillImage", "Settingresetx"):
+        assert runner.run_together_refused(name) and not safety.path_refused([name]), name
     # never-open once its sign is left out, by the guards' own patterns, not by a name written out plainly
     assert runner.run_together_refused("Steady.Shot") and not safety.path_refused(["Steady.Shot"])
     assert all(re.sub(r"[^a-z0-9]", "", n) not in "steadyshot" for n in runner._never_open_words())
     assert runner.run_together_refused(ROW) is None
     for phrase, confirms, refused in (("you can restore the settings later", True, False),
                                       ("you can copy the settings later", False, True)):
-        assert bool(safety.confirmation(phrase)) is confirms and bool(safety.screen_refused(phrase)) is refused
+        assert bool(safety.confirmation(phrase)) is confirms
+        assert bool(safety.plain_view(safety.screen_refused, phrase)) is refused
 
 
 # the a1 II's rows whose names hold a never-open name read across two words, or as a word alone: none is run together

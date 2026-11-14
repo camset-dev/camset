@@ -597,7 +597,7 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
     """One connection: prove rows from `pending` (removing them) until done, a row fails, or STOP.
     Always ends on the shooting screen. Returns "done", "failed", "stop" or "error"."""
     cam = LiveCamera(link, hdmi, run, may_open={r.split(" > ")[-1] for r in APPROVED
-                                                if safety.owner_may_approve(safety.never_open(r.split(" > ")[-1]))}
+                                                if safety.approved_motion(r.split(" > ")[-1])}
                      | proving.jobs.ALLOWED, network=proving.jobs.NETWORK, options=proving.jobs.NETWORK_OPTIONS,
                      values=network_values(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None,
                      readings=network_readings(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None,

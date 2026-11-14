@@ -989,6 +989,15 @@ Each line is a symptom, then its cause, then the fix now in the kit.
     checked labels.
   - Tick marks or arrows beside a number ("3•", "15") → read only digit-tall text centred on the
     value.
+  - Words run together or split ("WakeOn LAN", "ResetNetwork Set.", "Forma t", "Pre-AFOn") → a never-open pattern with
+    a space in it, or a word boundary at its end, never matched them: with one space dropped, 54 of the a1 II
+    definition's 95 never-open labels read as ordinary rows in the press checks. The guards judge every such pattern
+    without its spaces too, the reading with
+    every space taken out and the reading with its CamelCase set apart (`camkit.safety._glued`, `_sources`, `_camel`);
+    the actions are matched whole, so "File Format" run together is no "Format". What permits (a class a decision
+    lifts, a row it opens, an armed confirmation) needs the readings spaced as read to agree (`plain_view`), and a
+    decision names its rows as the camera writes them. `kit/tests/test_guards.py` drops and puts in a space in every
+    never-open label of the definition.
 - **The VLM invents an answer on a black frame** (section 5) → read that row through the OSD.
 - **A label carries state, not a name** ("User1: (No Import)", "Spot: Standard") → strip the
   state, or use `VALUE_FIXES`.
@@ -1070,10 +1079,13 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   --info-ok "ROW=PHRASE"`; then `kit/pass1_labels.py`, `kit/tiebreak.py` and `kit/pass1_map.py --own` on that crawl,
   and `kit/prove_run.py --map <that crawl>/map.json --rows ROW --info-ok "ROW=PHRASE"`. The OK goes out once a visit,
   and only where, besides, the lit bar before Right read as ROW, the notice has no question mark, reads as no
-  confirmation (its words run together too) and names nothing never-open, of identity or credentials; exactly one of its
-  lines is a button's word alone, OK; no other line names a second button, a choice or an action ("Cancel", "Back",
-  "Apply", "deleted"), nor sits on or below the OK's line; and the lit button reads OK. Else nothing is pressed, the
-  crawl records `notice (named, not passed: ...)` and the prover fails the row. Never with `--network`.
+  confirmation (its words run together inside one word too) and names nothing never-open, of identity or credentials;
+  exactly one of its lines is a button's word alone, OK; no other line names a second button, a choice or an action
+  ("Cancel", "Back", "Apply", "deleted"), nor sits on or below the OK's line; and the lit button reads OK. Else nothing
+  is pressed, the crawl records `notice (named, not passed: ...)` and the prover fails the row. Never with `--network`.
+  The notice is prose, judged as read (`plain_view`): with every space taken out "a different screen" holds NTSC. The
+  camera's own Enter check judges it again at the press with its words run together, and stops the run on a notice
+  that reads as a confirmation only so ("new folders").
 - **A choice that also rewrites key assignments or other rows** (Flexible Exp. Mode) → keep those
   records as side effects, not as the row's changes.
 - **The table walk got lost** → buttons can keep hidden columns. Re-plan after every press and

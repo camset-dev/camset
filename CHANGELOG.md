@@ -72,13 +72,18 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   explains and asks nothing: the lit bar read as the row before Right; the phrase's words found in the notice in order
   and accounting for all of it but 10 letters or digits (an icon read as a letter or two beside a line's first or last
   word, a slip; never a word of three letters or more, nor a line outside its text; a negation such as "isn't" one
-  word), so no sentence, button or negation the phrase leaves out rides along; no question mark, no confirmation (its words run together too), nothing never-open, of
-  identity or credentials; exactly one line a button's word alone, OK; no other line naming a second button, a choice or
-  an action, nor on or below the OK's line; and the lit button reading OK. Anything else presses nothing, and the crawl
-  records "notice (named, not passed: ...)"; a phrase that leaves part of the notice out prints the notice's text, to
-  give it whole. A row that is no label the definition or the page model knows, or is never-open (its words run
-  together inside one word too), a phrase of fewer than 3 words or 12 letters, with a question mark or a pattern's sign
-  such as `*` or `|`, and `--network` are refused before anything connects.
+  word), so no sentence, button or negation the phrase leaves out rides along; no question mark, no confirmation (its
+  words run together inside one word too), nothing never-open, of identity or credentials; exactly one line a button's
+  word alone, OK; no other line naming a second button, a choice or an action, nor on or below the OK's line; and the
+  lit button reading OK. Anything else presses nothing, and the crawl records "notice (named, not passed: ...)"; a
+  phrase that leaves part of the notice out prints the notice's text, to give it whole. A row that is no label the
+  definition or the page model knows, or is never-open (with its words run together or split too, as the walker reads
+  the lit row), a phrase of fewer than 3 words or 12 letters, with a question mark or a pattern's sign such as `*` or
+  `|`, and `--network` are refused before anything connects. The notice and the phrase are judged as read, words run
+  together counted only inside one word: the guards' reading with every space taken out (below) reads ordinary prose
+  across its spaces ("a different screen" holds NTSC, "camera settings" holds "erase"). The camera's own Enter check
+  (below) still judges the notice at the press, so a notice that reads as a confirmation only with its spaces taken
+  out ("new folders") stops the run there, nothing pressed.
   The crawl's `rows.jsonl` and each proof line keep `info_ok` (the row and the notice's frame), never the notice's
   words, and the menu tree keeps such a row's mark that an information notice comes first. Without the flag nothing
   changes. A new checklist setting's tab is now its row's tab in the definition's menu, where the writer had a table of
@@ -107,6 +112,61 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   camera, the restore that did not finish) printed it whole, the home folder in it. And when `drive.py`'s restore does
   not finish (exit status 4, or 5 after an armed press), `drive.jsonl` keeps a result line saying the run did not finish
   and was not restored, with what the run was asked and no screen, where it was left empty.
+- Words OCR runs together or splits no longer make a never-open row an ordinary one, on every run. A pattern of the
+  never-open list with a space in it never matched the words run together: of the 95 never-open labels in the a1 II's
+  definition (its menu's and its settings' rows), 54 read as an ordinary row in `drive.py`'s press check and the
+  camera's own with one of their spaces dropped (actions such as Reset Network Set., Setting Reset, Camera Set. Memory,
+  Create New Folder and Pixel Mapping; Access Authen. Info and Settings; Shutter When Pwr OFF, Screen Reader, Audio
+  Signal, Video Light; IP Address Setting, Wired LAN Connect, Wake On LAN, the USB rows, Edit Device Name, Remote Shoot
+  Function, Access Point Set., WPS Push; Airplane Mode, Bluetooth Function). Every guard pattern now has a copy without
+  its spaces, and the reading with every space taken out and the reading with its CamelCase set apart are judged beside
+  the others: a word split by a space ("Forma t", "De lete AII") is the word, and a word bounded at its end is seen
+  inside run-together words ("Pre-AFOn", Pre-AF's lit bar with its value; "PWReset", "TestShot", "RecLamp" on other
+  bodies). "WPS Push" and "WPS PIN" run together are WPS; USB and DNS (whose options are never chosen), Format and
+  Delete (never opened, whatever a run is allowed: "DeleteAll") and Load, Recall and Import (what no decision names) are
+  read at a word's start. The actions are still matched whole: "File Format", "Time Code Preset" and "Zoom Ring Rotate"
+  run together are no actions.
+- What permits is judged on the readings spaced as read too, so the readings above only refuse: a decision that names
+  a row with its words run together or split, so that it reads otherwise than as written ("USBConnection Mode",
+  "Access Authen. AccessPoint"), is refused ("name the row as the camera writes it"); a lit bar, an owner row, a page
+  model's reading, an armed confirmation ("Forma t?" arms nothing), a kept field name ("Ser ver"), an armed reset's
+  family, an owner's approval of a motion row ("ShutterWhenPwr OFF" with an action read through a Cyrillic letter is
+  no motion row to approve), a profile's own reset question ("theDefault" set apart is no "default"), an armed opening
+  and an "unattended" decision's waiver (only of a never-choose row it names as written, whose option it may take) hold
+  only where both readings agree. A name given with `--allow` lifts a word on a screen only where the word lies wholly
+  within the name ("Set" lifts no "Reset", "Light" no "Video Light"); and the row's own label is taken off its owner
+  screen whole, never word by word ("Access Point" beside Access Authen. stays an access point).
+- `drive.py`'s Enter guard reads a confirmation run together too ("Formatthe memory card? Enter Cancel"), and the camera
+  now makes that check itself (`LiveCamera`): Enter is refused on a notice that reads as a confirmation or reads
+  nothing, on a dialog or a screen of no known kind whose text and lit text both read nothing (one with text and
+  nothing lit, such as Camera Set. Memory's slot screen, is judged by its text), and on a dialog or a screen of no known
+  kind that asks (a question mark, Cancel outside quoted option names,
+  a lit Enter, OK, Execute or Yes, a lit action word whose screen still reads as a confirmation without it, or a lit
+  text that cannot be read) and reads as a confirmation, unless the press was judged with `--confirm` (`drive.py`,
+  `card_actions.py`), is `pp_reset_run.py`'s own checked question, or is an owner decision's armed press. A carousel
+  asks nothing (its title and its lit option): the 32 of the a1 II definition's carousels that read as a confirmation
+  (Delete confirm., File Name Format, Custom Key Setting's Delete, File Number's Reset...) still take Enter. What changes
+  for ordinary runs: the tools that press OK on a notice after their own `safety.confirmation` check now stop with a
+  refusal where the notice reads as a confirmation only to the new check (its words run together) or reads nothing:
+  `table_walk.py`'s "not available" or "invalid" notices, `afreg_run.py`'s Mode Dial Control Set note and its "not
+  available" notices after a choice, `memreg_run.py`'s "not available" notice, `mode_switch.py`'s Mode Dial Control Set
+  note (checked for "mode dial" alone) and `proving/screens.py`'s blocker notice and first-time note. None of them
+  checks a question of its own, so none is given `--confirm`'s word: a notice that reads so is not the information the
+  tool expects, and the run stops there, nothing pressed on it. A session whose closing gave up restores over its last
+  screen only where that screen reads as no confirmation with its words run together either.
+- Measured against the kit before (4f18908) over 27,865 strings (the a1 II's data and definition, every test literal,
+  every label with a space dropped, all dropped, one put in or CamelCase-joined, every question with a space dropped or
+  run together in CamelCase, every never-open label with a letter read as its Cyrillic twin) and 266 verdicts of the
+  guards, the decisions and `drive.py`'s and the camera's press checks: 264,771 verdicts refuse more, and the seven that
+  refuse less are two changes. With "Voice Memo" and "Voice Memo Play Vol." both allowed, the screen "Voice Memo Play Vol." is
+  no longer refused for "Play Vol." (the shorter name, lifted first, left it). And an owner's approval may name
+  "Pre-AFOn", which is Pre-AF to the kit now, where before it was no never-open row at all and opened with no approval.
+  The classes beneath them (`lift_class`, `identity_liftable`, `owner_class`, and `owner_may_approve` of `never_open`'s
+  reason) class more run-together readings, which no permission takes unless the readings spaced as read class them
+  alike. On the a1 II's own texts no definition label became never-open;
+  `drive.py`'s Enter guard refuses two help texts more ("newfolder" run together); a vouched Enter (`enter!:`, nothing
+  lit) is refused on the list of the setting the definition writes "AutoCreateStillImage", run together, which reads
+  "Create Still Image" with its CamelCase set apart, as it would spaced (kept so: a vouched Enter judges least).
 - A third look-only `--network` session on the a1 II showed two rules of 2026-11-14 keeping the kit from rows it reached
   before (failing closed: nothing wrong was pressed). The jump by the tab and group columns reads the group column's lit
   bar as the way back out of the column does, the group's name judged whole by its letters and digits, equal or one

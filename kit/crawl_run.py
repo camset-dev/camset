@@ -17,7 +17,7 @@ ignored in it and in the notice (runner.notice_words). The OK goes out only on a
 order (a negation such as "isn't" one word; a letter or two glued on only to a line's first or last word, where an icon
 sits), and at most 10 of the notice's letters and digits left over (an icon read as a letter or two, a slip), never a
 word of three letters or more nor a line outside its text, its OK line and a line saying "Don't show this again." and
-nothing else aside; no question mark; no confirmation (its words run together too), nothing
+nothing else aside; no question mark; no confirmation (its words run together inside one word too), nothing
 never-open, of identity or credentials; exactly one line a button's word alone, OK; no other line naming a second
 button, a choice or an action, nor on or below the OK's band; and the lit button reading OK. Else nothing is pressed and
 the row is recorded "notice (named, not passed: ...)"; where the phrase leaves more of the notice over, the notice's text

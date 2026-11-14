@@ -890,12 +890,13 @@ def test_card_actions_judges_each_press_as_drive_does(monkeypatch):
     cam = SimpleNamespace(read=lambda: SimpleNamespace(kind=now["kind"]), frame=SimpleNamespace(image=None, path=P("x.png")))
     monkeypatch.setattr(C, "text_of", lambda c: now["text"])
     monkeypatch.setattr(C.drive, "highlighted", lambda image, path: now["lit"])
-    monkeypatch.setattr(C, "press", lambda c, key: sent.append(key))
+    monkeypatch.setattr(C, "press", lambda c, key, confirm=False: sent.append((key, confirm)))
     assert "confirmation text" in C.press_judged(cam, "enter:folder", False, ["Create New Folder"])
     assert "does not match" in C.press_judged(cam, "enter:no such words", True, ["Create New Folder"])
-    assert C.press_judged(cam, "enter:folder", True, ["Create New Folder"]) == "" and sent == ["enter"]
+    # judged with --confirm: the camera's own confirmation check is lifted for that press (live.press's confirm)
+    assert C.press_judged(cam, "enter:folder", True, ["Create New Folder"]) == "" and sent == [("enter", True)]
     now.update(text="Setting Reset Camera Settings Reset Initialize", lit="Initialize")
     assert "Initialize" in C.press_judged(cam, "enter:reset", True, [])
     now.update(kind="shooting", text="", lit="")
     assert "shooting screen" in C.press_judged(cam, "down", False, [])
-    assert sent == ["enter"]
+    assert sent == [("enter", True)]

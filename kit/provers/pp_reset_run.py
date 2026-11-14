@@ -1036,6 +1036,7 @@ def reset_one(cam, cycle, model, profile: str, say, open_key: str = "right", nee
     if why:
         back_out(cam, f"{profile}: Enter refused: {why}")
     ok_frame = cam.frame.path.name
+    cam.confirm_once = True                 # the question judged above: the camera's own confirmation check, this press
     cam.press("enter")
     after = after_ok(cam, profile)
     if after["seen"] == "unknown":

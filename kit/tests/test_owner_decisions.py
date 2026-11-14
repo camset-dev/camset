@@ -2044,15 +2044,23 @@ def test_drive_sends_nothing_but_up_and_down_between_the_walk_and_the_opening(tm
 @pytest.mark.parametrize("misread", ["Formal", "Fomat", "Forma t"])
 def test_the_camera_opens_no_row_but_the_owner_row_once_drive_has_walked_to_it(tmp_path, monkeypatch, shipped, misread):
     """Finding 1 on the camera's side: owner_only, set by drive.py after its walk, refuses any opening press whose lit
-    row is not the owner row, and any Enter outside it, on any screen."""
+    row is not the owner row, and any Enter outside it, on any screen. A word split by a space ("Forma t") is Format to
+    the never-open list itself since 2026-11-14 (the reading with every space taken out: safety._sources), so its
+    opening is refused even before the flag; the other misreads name no row of the list."""
     states = {**FORMAT_STATES, "page": ("submenu", "Shooting > Media Format", misread)}
     cam = camera(tmp_path, monkeypatch, info_of(FORMAT, {"rows": [FORMAT], "confirm": [FORMAT]}), states)
-    cam.press("right")                                  # before the flag, as before: a row of no list opens
-    assert cam.link.sent == ["right"]
+    if " " in misread:
+        with pytest.raises(safety.RowRefused, match="never opened"):
+            cam.press("right")                          # before the flag: Format, by the never-open list alone
+        assert cam.link.sent == [] and safety.never_open(misread) == "action: format"
+    else:
+        cam.press("right")                              # before the flag, as before: a row of no list opens
+        assert cam.link.sent == ["right"]
     cam = camera(tmp_path, monkeypatch, info_of(FORMAT, {"rows": [FORMAT], "confirm": [FORMAT]}), states)
     cam.owner_only = True
     for key in ("right", "enter", "ms_right", "ms_enter"):
-        with pytest.raises(safety.Refused, match="no row but the owner row opens"):
+        # the split misread is refused first as Format, by the never-open list
+        with pytest.raises(safety.Refused, match="never opened" if " " in misread else "no row but the owner row opens"):
             cam.press(key)
     states = {**FORMAT_STATES, "page": ("dialog", SURE, "Enter")}
     cam = camera(tmp_path, monkeypatch, info_of(FORMAT, {"rows": [FORMAT], "confirm": [FORMAT]}), states)

@@ -31,9 +31,12 @@ The guards:
   kept_screen(kind, lines)   what a --network or --owner run keeps of every screen, from its start to its end: row
                              labels, field names, a list's known option names, a notice as notice_kept keeps it, the
                              count withheld; the shooting screen as its kind alone (kept_said, as the console says it).
-  confirmation(text)         dialog text asking to execute something; never press Enter on it.
+  confirmation(text)         dialog text asking to execute something; never press Enter on it. confirmation_refused,
+                             the same with its words run together too: a refusal only (drive.py's and the camera's
+                             Enter checks), never what permits an armed press.
   fold(text)                 a reading as the checks compare it: Unicode look-alikes, dashes and spacing mended.
-  readings(text)             every reading a guard judges (as read, folded, slips undone): any one matching refuses.
+  readings(text)             every reading a guard judges (as read, folded, slips undone, run together): any one
+                             matching refuses; plain_view, the readings spaced as read alone, which a permission needs too.
   owner_may_approve(reason)  whether a dated owner decision can lift a never_open reason for one row (sound, light
                              or motion: decision 2); actions and credentials never.
   allow_refused(label)       why a run's --allow cannot name a row: the cards, Initialize, Reset Network Set.,
@@ -66,8 +69,23 @@ readers return Cyrillic look-alikes ("С.Temp", camkit.match), a vision reader w
 hyphen, OCR doubles a space or adds a full stop. The folded readings are judged beside the others, never instead of
 them (readings): folding can also turn a character into letters that hide a slip ("①lnitialize" folds to
 "1lnitialize", where deslip's word-start rule no longer sees the "l"), so a guard refuses when any reading matches,
-and a fold only adds refusals.
+and a fold only adds refusals. OCR also runs words together ("WakeOn LAN", "ResetNetwork Set.", "Pre-AFOn") and
+splits one ("Forma t"): every pattern with a space in it has a copy without (_glued), and the folded text with every
+space taken out, and with its CamelCase set apart, are more readings (_sources, _camel), so neither slip makes a
+never-open row an ordinary one (2026-11-14, a review: one space dropped made ordinary rows of 54 of the a1 II
+definition's 95 never-open labels). The actions are matched whole, so "File Format" run together is still no
+"Format". That run-together view only adds refusals where a
+guard refuses; where a check permits (a class a decision lifts, a lit row a decision or an owner row opens, an armed
+confirmation, a field name kept, an armed reset's family) the plain view, each reading spaced as read and each pattern as
+written, must say so too (plain_view, _agreed), and a decision that names a row with its words run together or split, so
+that the two views judge it otherwise, is refused (_read_otherwise). What is not refusal-only, measured over every string
+of the a1 II's data and definition, every test literal and every label with a space dropped, all dropped or one put in
+(2026-11-14): a name given with --allow lifts its own words on a screen in each reading (screen_refused), so a longer
+name is no longer cut by a shorter one inside it ("Voice Memo" and "Voice Memo Play Vol." both allowed: the screen
+"Voice Memo Play Vol." is lifted, where the shorter name, lifted first, left "Play Vol." refused); and an approval may
+name "Pre-AFOn", motion in both views now (_MOTION), where before it was no never-open row and opened unapproved.
 """
+import contextvars
 import re
 import unicodedata
 
@@ -310,7 +328,7 @@ _WIFI = r"wi\s?-?\s?f[il1|!]\s?"
 _IDENTITY = [
     # identity, connection, region
     r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
-    r"usb streaming", r"wired lan connect", r"ip address", r"ssid", r"\bwps\b",
+    r"usb streaming", r"wired lan connect", r"ip address", r"ssid", r"\bwps\b", r"wps push", r"wps pin",
     r"access point", r"access authen", r"pairing", r"paired",
     r"cloud", r"streaming", r"tether", r"device name", r"root certif",
     # FTP: the server and its login stay by hand, FTP Function starts a connection to that server
@@ -350,15 +368,15 @@ _IDENTITY_FIXED = [p for p in _IDENTITY if p not in _IDENTITY_LIFTABLE]
 # Why network_refused refuses the identity rows _IDENTITY_LIFTABLE left out on 2026-11-13 (a review), in the words a
 # run stops with: matched in every reading of the row a decision names
 _NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
-    (r"smartphone|cloud|streaming|tether|ftp function",
+    (r"smartphone|cloud|streaming|tether|ftp ?function",
      "its opening may itself start or end a connection or act, and nobody has yet seen on the camera what Right does "
      "there"),
-    (r"server setting", "the FTP server's login sits behind it (credentials, docs/decisions/0009)"),
-    (r"device name", "its opening shows a keyboard and the device's name, which no settings file holds"),
+    (r"server ?setting", "the FTP server's login sits behind it (credentials, docs/decisions/0009)"),
+    (r"device ?name", "its opening shows a keyboard and the device's name, which no settings file holds"),
     # taken out of _IDENTITY_LIFTABLE on 2026-11-14: a row is lifted only once it has been seen to open over the link
-    (r"ip address", "opening or leaving it over the network link dropped the link on the a1 II (2026-11-14); by the "
-                    "owner's hand only"),
-    (r"date/time|^area/|ntsc|language|usb connection|usb lun|usb power", "not yet seen opened; by the owner's hand"),
+    (r"ip ?address", "opening or leaving it over the network link dropped the link on the a1 II (2026-11-14); by the "
+                     "owner's hand only"),
+    (r"date/time|^area/|ntsc|language|usb ?connection|usb ?lun|usb ?power", "not yet seen opened; by the owner's hand"),
 )]
 # Rows of the classes a network decision opens in which no option is ever chosen, whatever a decision names: the choice
 # drops the link a run needs (Wired LAN Connect, USB, the IP address settings; Airplane Mode, which drops the Wi-Fi and
@@ -369,7 +387,9 @@ _NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
 # the row's name as a decision names it (never_choose)
 _NEVER_CHOOSE = [
     r"wired lan connect", r"remote shoot", r"connection method", r"pairing", r"paired", r"ip address", r"subnet",
-    r"gateway", r"\bdns\b", r"smartphone", r"cnct\. while", r"cloud", r"streaming", r"tether", r"\busb\b", r"language",
+    # a word's start, never its end: "USBConnection Mode" run together is USB (2026-11-14, a review)
+    r"gateway", r"(?<![a-z])dns", r"smartphone", r"cnct\. while", r"cloud", r"streaming", r"tether", r"(?<![a-z])usb",
+    r"language",
     r"ntsc", r"^area/", r"date/time", r"device name", r"ftp", r"server",
     _WIFI + r"connect", r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)",
     r"airplane mode",
@@ -419,25 +439,119 @@ _ANYWHERE = _IDENTITY + [
 _CREDENTIALS = [r"access authen", _WIFI + r"d[il1|]rect", r"password", r"\bpw\b"]
 # Motion (decision 2; the playbook's rule 1): lens motors (Pre-AF, Eye-Start AF), the shutter curtain (Shutter When
 # Pwr OFF) and SteadyShot. By hand only, unless a dated owner decision names the row (the a1 II's owner allowed
-# Shutter When Pwr OFF and SteadyShot from the menu on 2026-10-29). Added 2026-11-05.
-_MOTION = [r"pre-?\s?af\b", r"eye-?\s?start", r"shutter when pwr", r"steady\s?shot"]
-# a whole label, with any stop, colon or question mark a reader puts after it ("Format.", "Copy?")
-_ACTION_RE = re.compile(r"^(" + "|".join(_ACTIONS) + r")[\s.:;,!?…]*$")
+# Shutter When Pwr OFF and SteadyShot from the menu on 2026-10-29). Added 2026-11-05. "Pre-AF" with its hyphen whatever
+# follows it, "Pre-AFOn" with the lit bar's value glued on (2026-11-14, a review)
+_MOTION = [r"pre-\s?af", r"pre\s?af\b", r"eye-?\s?start", r"shutter when pwr", r"steady\s?shot"]
+
+
+def _glued(patterns) -> list:
+    """Each pattern, and after it a copy with its spaces taken out (r"\\s?", " ?" and " "): OCR runs words together
+    ("WakeOn LAN", "ResetNetwork Set.", "AccessAuthen. Info"), which a pattern with a space in it never matched, so the
+    row was judged an ordinary one (2026-11-14, a review: one space dropped made ordinary rows of 54 of the a1 II
+    definition's 95 never-open labels). The copy matches the words run together, and the readings with every space
+    taken out (_sources) too; a pattern with no space is kept
+    once. The copies, like those readings, are the run-together view (_Rx): a guard that refuses refuses on either view,
+    and what permits (a class a decision lifts, a lit row it opens, a confirmation that arms) holds only where the plain
+    view, each reading spaced as read and each pattern as written, says so too (plain_view). A pattern bounded by a word
+    boundary at its end (r"\\bpw\\b", r"\\btest\\b") never matches inside run-together text: those words are judged on
+    the reading with its CamelCase set apart ("PWReset", "TestShot": _camel)."""
+    out = []
+    for p in patterns:
+        out += [p, p.replace(r"\s?", "").replace(" ?", "").replace(" ", "")]
+    return list(dict.fromkeys(out))
+
+
+# Whether the guards judge in the plain view (plain_view): each reading as the kit read it before 2026-11-14 (as read,
+# folded, with OCR's capital I as an l, each with its slips undone) and each pattern as written; otherwise also the
+# run-together view (the readings with every space taken out or CamelCase set apart, each pattern's space-free copy)
+_PLAIN = contextvars.ContextVar("camkit_safety_plain_view", default=False)
+
+
+class _Rx:
+    """A guard's patterns compiled twice: with each pattern's space-free copy (_glued), as every guard judges, and as
+    written alone, for the plain view (plain_view). search as re.Pattern.search, in the view in force; parts, each
+    pattern alone in the run-together view (screen_refused's --allow judges every match of every one)."""
+
+    def __init__(self, patterns, head: str = "", tail: str = ""):
+        self.head, self.tail, self._patterns = head, tail, list(patterns)
+        self.glued = re.compile(head + "(?:" + "|".join(_glued(patterns)) + ")" + tail)
+        self.plain = re.compile(head + "(?:" + "|".join(patterns) + ")" + tail)
+        self._parts = None
+
+    def search(self, text):
+        return (self.plain if _PLAIN.get() else self.glued).search(text)
+
+    @property
+    def parts(self) -> list:
+        if self._parts is None:
+            self._parts = [re.compile(self.head + "(?:" + p + ")" + self.tail) for p in _glued(self._patterns)]
+        return self._parts
+
+
+def plain_view(fn, *args, **kw):
+    """fn(*args, **kw) judged in the plain view: each reading spaced as the reader gave it (as read, folded, OCR's
+    capital I as an l, each with its slips undone) and each pattern as written, none of the run-together view (a reading
+    with its spaces taken out or its CamelCase set apart, a pattern's space-free copy: _glued, _sources). A permission is
+    judged in both views and holds only where they agree (_agreed); a name a decision gives is judged so too, and one
+    that only the run-together view puts in a class is refused (network_refused, owner_row_refused)."""
+    token = _PLAIN.set(True)
+    try:
+        return fn(*args, **kw)
+    finally:
+        _PLAIN.reset(token)
+
+
+def _agreed(fn, label):
+    """fn(label) where the plain view gives the same (plain_view), else None: a class a permission rests on is no
+    class only the run-together view gives, nor one it takes away."""
+    got = fn(label)
+    return got if got == plain_view(fn, label) else None
+
+
+def _in_both(fn, *args):
+    """fn(*args) where the plain view says so too (plain_view), else None: a permission that rests on a guard's match (a
+    never-choose row that may waive a question, an opening that acts and so may be armed) never rests on a match only
+    the run-together view makes."""
+    got = fn(*args)
+    return got if got and plain_view(fn, *args) else None
+
+
+def _read_otherwise(label, judges) -> str:
+    """What a name a decision gives is judged otherwise in the plain view than in the run-together view (plain_view), by
+    the first of `judges` that differs ((what, fn, whole): fn's value compared whole, or only whether it is given), or
+    "" where every one agrees: a decision names a row as the camera writes it, never with its words run together or
+    split, which only the run-together view reads ("USBConnection Mode", "Access Authen. AccessPoint")."""
+    for what, fn, whole in judges:
+        got, said = fn(label), plain_view(fn, label)
+        if (got != said) if whole else (bool(got) != bool(said)):
+            return what
+    return ""
+
+
+def _named_otherwise(row: str, what: str, written: str) -> str:
+    return (f"name the row as the camera writes it: {row.strip()!r}, read with its words as written, differs in {what} "
+            f"from its words run together or split, and a decision names a row as {written} write it "
+            "(docs/decisions/0008)")
+
+
+# a whole label, with any stop, colon or question mark a reader puts after it ("Format.", "Copy?"): anchored, so a
+# reading with its spaces taken out names an action only where it is that action whole ("fileformat" is no "format")
+_ACTION_RE = _Rx(_ACTIONS, r"^(", r")[\s.:;,!?…]*$")
 # Words that make a row an action wherever they appear: every row named with "reset" is one
 # (Setting Reset, SSID/PW Reset, Forced File Number Reset...), and Picture Profile's settings have a
 # bare "Reset" row (2026-10-28)
-_ACTION_WORD_RE = re.compile(r"\breset\b")
-_ANYWHERE_RE = re.compile("|".join(_ANYWHERE))
-_IDENTITY_RE = re.compile("|".join(_IDENTITY))
-_CREDENTIALS_RE = re.compile("|".join(_CREDENTIALS))
-_MOTION_RE = re.compile("|".join(_MOTION))
-_NETWORK_SETTINGS_RE = re.compile("|".join(_NETWORK_SETTINGS))
-_ADDRESS_RE = re.compile("|".join(_ADDRESS_SCREENS))
-_NETWORK_RE = re.compile("|".join(_NETWORK_SETTINGS + _ADDRESS_SCREENS))
-_IDENTITY_LIFTABLE_RE = re.compile("|".join(_IDENTITY_LIFTABLE))
-_IDENTITY_FIXED_RE = re.compile("|".join(_IDENTITY_FIXED))
-_OTHER_BY_HAND_RE = re.compile("|".join(_ANYWHERE[len(_IDENTITY):]))     # sound, light, flash, Auto Power OFF Temp.
-_NEVER_CHOOSE_RE = re.compile("|".join(_NEVER_CHOOSE))
+_ACTION_WORD_RE = _Rx([r"\breset\b"])
+_ANYWHERE_RE = _Rx(_ANYWHERE)
+_IDENTITY_RE = _Rx(_IDENTITY)
+_CREDENTIALS_RE = _Rx(_CREDENTIALS)
+_MOTION_RE = _Rx(_MOTION)
+_NETWORK_SETTINGS_RE = _Rx(_NETWORK_SETTINGS)
+_ADDRESS_RE = _Rx(_ADDRESS_SCREENS)
+_NETWORK_RE = _Rx(_NETWORK_SETTINGS + _ADDRESS_SCREENS)
+_IDENTITY_LIFTABLE_RE = _Rx(_IDENTITY_LIFTABLE)
+_IDENTITY_FIXED_RE = _Rx(_IDENTITY_FIXED)
+_OTHER_BY_HAND_RE = _Rx(_ANYWHERE[len(_IDENTITY):])    # sound, light, flash, Auto Power OFF Temp.
+_NEVER_CHOOSE_RE = _Rx(_NEVER_CHOOSE)
 MOTION = "sound, light or motion"          # the reason's prefix a dated owner decision can lift for one row
 NETWORK = "network setting or address screen"   # the reason's prefix only a dated decision naming the row lifts
 NETWORK_LIFT = "network"                   # a decision's "lifts" that opens such rows (network_decided)
@@ -483,17 +597,40 @@ def _capital_i(text: str) -> str:
     return re.sub(r"(?<=[A-Za-z])I", "l", text)
 
 
+# Where a word starts inside run-together text, told by its case: a capital after a small letter or a digit after a
+# letter ("TestShot", "Slot1"), the last of a run of capitals before a capital and a small letter ("PWReset",
+# "USBConnection"), a letter after a digit ("PP1to")
+_CAMEL = re.compile(r"(?<=[a-z])(?=[A-Z0-9])|(?<=[A-Z])(?=[A-Z][a-z])|(?<=[0-9])(?=[A-Za-z])")
+
+
+def _camel(text: str) -> str:
+    """The text with a space where its case says a word starts inside run-together words ("ResetEV Comp." is "Reset EV
+    Comp.", "PWReset" "PW Reset", "Pre-AFOn" "Pre-AF On"): a word bounded at its end ("\\breset\\b", "\\bpw\\b") is
+    then seen whole. Made from a reading in its own case, never from one lower-cased."""
+    return _CAMEL.sub(" ", text)
+
+
 def _sources(text) -> list:
-    """The text as read, folded, and folded with OCR's capital I read as an l: in their own case, which clean_label
-    needs to tell an icon from a label."""
+    """The readings of a text the guards judge, in their own case (clean_label needs it to tell an icon from a label,
+    _camel to see a word start): as read, folded, and folded with OCR's capital I read as an l; and, in the run-together
+    view (not plain_view), each of the last two with every space taken out ("WakeOn LAN" is "WakeOnLAN", as the
+    patterns' glued copies match it, _glued; "Forma t" is "Format"; "De lete AII" is "DeleteAll"), and with its
+    CamelCase set apart (_camel: "ResetPP1" is "Reset PP1"). A guard refuses when any reading matches (readings)."""
     folded = fold(text)
-    return list(dict.fromkeys((str(text or ""), folded, _capital_i(folded))))
+    plain = [str(text or ""), folded, _capital_i(folded)]
+    if _PLAIN.get():
+        return list(dict.fromkeys(plain))
+    joined = re.sub(r"\s+", "", folded)
+    return list(dict.fromkeys(plain + [joined, re.sub(r"\s+", "", _capital_i(folded)), _capital_i(joined),
+                                       _camel(folded), _camel(_capital_i(folded))]))
 
 
 def readings(text) -> list:
-    """Every reading of a text the guards judge, in lower case: as read, folded (fold) and folded with OCR's capital I
-    read as an l, each also with the usual OCR slips undone (deslip). A guard refuses when any of them matches, so
-    another reading only ever adds a refusal (never_lifted; drive.py's Enter guard once it takes it)."""
+    """Every reading of a text the guards judge (_sources), in lower case: as read, folded (fold), folded with OCR's
+    capital I read as an l, and in the run-together view folded with every space taken out (words run together or
+    split) or its CamelCase set apart, each also with the usual OCR slips undone (deslip). A guard that refuses refuses
+    when any of them matches, so another reading only ever adds a refusal there (never_lifted; drive.py's Enter guard);
+    a permission is judged in the plain view too (plain_view)."""
     out = []
     for s in _sources(text):
         low = s.lower()
@@ -672,8 +809,10 @@ def never_choose(row) -> str | None:
 
 # Never entered whatever a run is allowed (drive.py --allow, an owner decision): anything on the cards, settings
 # included (decision 4), Initialize and Reset Network Set. (decision 5), and credentials (decision 9); never_lifted adds
-# the camera's identity, its connections and its region (decision 8: identity_row)
-_NEVER_LIFTED_RE = re.compile(r"\b(?:format|delete)\b|initiali[sz]e|reset network|" + "|".join(_CREDENTIALS))
+# the camera's identity, its connections and its region (decision 8: identity_row). Format and Delete at a word's start,
+# whatever follows ("DeleteAll", "DeleteSlot1/2", "De lete All" with its spaces taken out: 2026-11-14, a review)
+_CARDS = r"(?<![a-z])(?:format|delete)"
+_NEVER_LIFTED_RE = _Rx([_CARDS, r"initiali[sz]e", r"reset ?network", *_CREDENTIALS])
 
 
 def identity_row(label: str) -> str | None:
@@ -703,7 +842,10 @@ def never_lifted(label: str) -> str | None:
 
 # an action's name anywhere in a screen's text, as a word ("Camera Set. Memory" in a title, "Delete" on a button):
 # screen_refused judges a whole screen with it, where never_open judges one row's label whole
-_ACTION_ANY_RE = re.compile(r"(?<![a-z])(" + "|".join(_ACTIONS) + r")(?![a-z])")
+_ACTION_ANY_RE = _Rx(_ACTIONS, r"(?<![a-z])(", r")(?![a-z])")
+# what screen_refused judges a screen by once no word of what no allowance lifts is on it: an allowed name may lift these
+_SCREEN_WORDS = (("action", _ACTION_ANY_RE), ("action", _ACTION_WORD_RE), ("credentials", _CREDENTIALS_RE),
+                 ("by hand only", _ANYWHERE_RE), (MOTION, _MOTION_RE))
 
 
 def screen_refused(text: str, allow=()) -> str | None:
@@ -713,7 +855,14 @@ def screen_refused(text: str, allow=()) -> str | None:
     light or motion, "reset"). A name the run was given (drive.py --allow) lifts its own words on the screen, never what
     never_lifted names (the cards, Initialize, Reset Network Set., credentials, and the camera's identity, a connection
     or its region: decision 8), nor a Wi-Fi or Bluetooth setting or an address screen, whatever a decision names: a
-    vouched Enter never goes out where one is named. Fails closed: a word in a footer or a description refuses too."""
+    vouched Enter never goes out where one is named. Fails closed: a word in a footer or a description refuses too.
+    A name lifts a word only where the word lies wholly within the name's own text on the screen, never part of another
+    word ("Set" lifts no "Reset", "Light" no "Video Light") nor a word that reaches past it ("Voice Memo" lifts no "Voice
+    Memo Play Vol."; each name is judged on its own, so a longer one is lifted whole whatever their order). In a reading
+    spaced as read (plain_view) a name lifts its own text as given, as it always did; in a reading with every space
+    taken out or its CamelCase set apart, each of its own readings (readings): so "VolumeSettings" on the screen is
+    refused for "Volume Settings" as before 2026-11-14, and "Volume Settings" on the screen is lifted in every reading
+    of it (2026-11-14, a review)."""
     for r in readings(text):
         m = _NEVER_LIFTED_RE.search(r)
         if m:
@@ -725,15 +874,27 @@ def screen_refused(text: str, allow=()) -> str | None:
         if m:
             return (f"the screen reads {m.group(0)!r}: a Wi-Fi or Bluetooth setting or an address screen, never vouched "
                     "for (docs/decisions/0008)")
-    names = [n for n in (clean_label(fold(m)) for m in allow) if n]
+    names = list(dict.fromkeys(n for n in (clean_label(fold(m)) for m in allow) if n))
+    if not names:
+        for r in readings(text):
+            for why, rx in _SCREEN_WORDS:
+                m = rx.search(r)
+                if m:
+                    return f"the screen reads {m.group(0)!r} ({why})"
+        return None
+    spaced = set(plain_view(readings, text))
+    # each name's own readings, from the name as given too (its case tells _camel where "SteadyShot" splits)
+    every = list(dict.fromkeys(f for m in allow for x in (fold(m), clean_label(fold(m))) for f in readings(x)
+                               if f.strip() and clean_label(fold(m))))
     for r in readings(text):
-        for n in names:
-            r = r.replace(n, " ")
-        for why, rx in (("action", _ACTION_ANY_RE), ("action", _ACTION_WORD_RE), ("credentials", _CREDENTIALS_RE),
-                        ("by hand only", _ANYWHERE_RE), (MOTION, _MOTION_RE)):
-            m = rx.search(r)
-            if m:
-                return f"the screen reads {m.group(0)!r} ({why})"
+        covers = [(m.start(), m.end()) for f in (names if r in spaced else every) for m in re.finditer(re.escape(f), r)]
+        for why, rx in _SCREEN_WORDS:
+            if not rx.search(r):
+                continue
+            for part in rx.parts:              # every match of every pattern: none hides behind another's
+                for m in part.finditer(r):
+                    if not any(a <= m.start() and m.end() <= b for a, b in covers):
+                        return f"the screen reads {m.group(0)!r} ({why})"
     return None
 
 
@@ -741,6 +902,14 @@ def owner_may_approve(reason: str | None) -> bool:
     """A never_open reason a dated owner decision may lift for the one row it names (decision 2: "the owner may
     approve one change at a time when it is harmless"). Actions, credentials and identity rows never."""
     return bool(reason) and reason.startswith(MOTION + ":")
+
+
+def approved_motion(label) -> bool:
+    """Whether a dated owner decision naming the row `label` may lift its never_open reason (owner_may_approve), in both
+    views: never_open gives the first reason any reading matches, so a reading run together can name motion before an
+    action matched only once folded ("ShutterWhenPwr OFF Rеset", a Cyrillic е: an action as written, motion run
+    together; 2026-11-14, a review). path_refused and kit/prove_run.py's approved rows lift a row so only."""
+    return owner_may_approve(never_open(label)) and owner_may_approve(plain_view(never_open, label))
 
 
 def approved_rows(scope: dict) -> set:
@@ -761,8 +930,9 @@ def allow_refused(label: str) -> str | None:
     runner.allowed_or_exit, before anything connects; path_refused, live.open_refused and screen_refused refuse those
     rows however a run named them. A Wi-Fi or Bluetooth setting or an address screen (network_words, whatever else the
     label is) is refused too: only a dated owner decision naming the row opens it, for a run given --network
-    (network_lifted), never a run's --allow."""
-    if re.search(r"\b(format|delete)\b", label, re.I):
+    (network_lifted), never a run's --allow. Format and Delete are judged at a word's start in every reading
+    ("DeleteAll", "De lete All": _CARDS)."""
+    if any(re.search(_CARDS, r) for r in readings(label)):
         return "nothing on the cards is formatted or deleted remotely, not even its settings (docs/decisions/0004)"
     hard = never_lifted(label)
     if hard:
@@ -797,7 +967,8 @@ def path_refused(path: list, approved: set = frozenset(), allowed=(), network=fr
     Pwr OFF"), a label the run was given with --allow (never what allow_refused refuses), or a Wi-Fi or Bluetooth
     setting a network decision names (`network`, network_decided's rows, for a run given --network: network_lifted,
     never an address screen). A label with a network setting's or an address screen's words in it is lifted by the
-    last alone, whatever other reason it reads as."""
+    last alone, whatever other reason it reads as. The approval holds only for a label motion in both views
+    (approved_motion)."""
     name = " > ".join(path)
     for label in path:
         why = never_open(label)
@@ -807,7 +978,7 @@ def path_refused(path: list, approved: set = frozenset(), allowed=(), network=fr
             continue
         if label in allowed and not allow_refused(label):
             continue
-        if not (owner_may_approve(why) and name in approved and not network_words(label)):
+        if not (approved_motion(label) and name in approved and not network_words(label)):
             return why
     return None
 
@@ -825,6 +996,11 @@ def _valid_day(text) -> bool:
     return day <= datetime.date.today()
 
 
+# What a name a network decision gives must be judged alike as written and with its words run together or split
+# (_read_otherwise): its class (lift_class), and whether no option of it is chosen (never_choose)
+NETWORK_JUDGES = (("its class", lift_class, True), ("whether no option of it is chosen", never_choose, False))
+
+
 def network_refused(row) -> str | None:
     """Why a network decision cannot name `row`, or None: the row must be one label as the camera writes it (no path),
     of a class a network decision lifts (lift_class: a Wi-Fi or Bluetooth setting, an address screen, or an identity,
@@ -832,12 +1008,19 @@ def network_refused(row) -> str | None:
     Network Set., an action (SSID/PW Reset, WPS Push, Pairing, Reset Transfer Status), the identity rows that stay
     closed (_IDENTITY_FIXED: the serial number among them, and the rows whose opening may start or end a connection or
     act, _NOT_LIFTED_WHY saying why), anything that reads as another class too, and a name the list does not know or
-    that names a group ("Wi-Fi") are refused."""
+    that names a group ("Wi-Fi") are refused. So is a name that reads otherwise once its words are run together or
+    split than as written, in its class or in whether no option of it is chosen ("USBConnection Mode", "Wake OnLAN",
+    "Wi-Fi Conn ect": _read_otherwise): a decision names the row as the camera writes it, as the definition and the page
+    model write it (2026-11-14, a review: such a name got past never_choose's word boundaries)."""
     if not isinstance(row, str) or not row.strip():
         return "a row is named by its label, as the camera writes it"
     if ">" in row:
         return "a row is named by its own label, not a path"
-    if lift_class(row):
+    cls = lift_class(row)
+    what = _read_otherwise(row, NETWORK_JUDGES) if cls else ""
+    if what:
+        return _named_otherwise(row, what, "the definition and the page model")
+    if cls:
         return None
     for rx, why in _NOT_LIFTED_WHY:
         if any(rx.search(r) for r in readings(row)):
@@ -974,12 +1157,14 @@ def row_read_as(row: str, texts) -> bool:
     identity row that stays closed, sound, light or motion, or another class, and none names nothing the list holds). A
     reader that read the row right then vouches for the readings beside it ("LANIP Address Setting", OCR's reading of
     the Wired LAN page's icon glued to "IP Address Setting", with the vision reader's "IP Address Setting"), and no
-    reading of the row widens the class the row is judged by."""
-    cls, want = lift_class(row), plain(row)
+    reading of the row widens the class the row is judged by. Each class is judged in both views and holds only where
+    they agree (_agreed): a reading of the class only once its spaces are taken out ("IPAddress Setting") vouches for
+    nothing, as before 2026-11-14."""
+    cls, want = _agreed(lift_class, row), plain(row)
     texts = [t for t in texts or () if isinstance(t, str) and t.strip()]
     if cls is None or not want or want not in {plain(t) for t in texts}:
         return False
-    return all(lift_class(t) == cls for t in texts)
+    return all(_agreed(lift_class, t) == cls for t in texts)
 
 
 # What OCR reads a row's icon as, glued to the front of its label: the a1 II's Wired LAN page draws a LAN icon, read as
@@ -1005,7 +1190,8 @@ def glued_icon(prefix: str, row: str, group) -> str | None:
     why = never_open(p) or identity_screen(p)
     if why:
         return f"{p!r} reads as what the never-open list or identity holds ({why})"
-    if lift_class(f"{p} {row}") != lift_class(row):
+    cls = _agreed(lift_class, row)
+    if cls is None or _agreed(lift_class, f"{p} {row}") != cls:
         return f"{row!r} read with {p!r} before it is of another class"
     return None
 
@@ -1061,8 +1247,9 @@ def icon_slip(prefix: str, row: str, icons) -> bool:
         return False
     if never_open(prefix) or identity_screen(prefix):
         return False
-    cls = lift_class(row)
-    return lift_class(f"{prefix} {row}") == cls and lift_class(f"{prefix}{row}") == cls
+    cls = _agreed(lift_class, row)
+    return cls is not None and _agreed(lift_class, f"{prefix} {row}") == cls \
+        and _agreed(lift_class, f"{prefix}{row}") == cls
 
 
 def bar_heads(seen: str, row: str, readings=None, labels=None) -> list:
@@ -1116,8 +1303,10 @@ def network_lifted_row(lit: str, decided, screens: bool = False, values=None, re
     where the row's values are known; "LANIP Address Setting" opens IP Address Setting only where the page model's row
     on the Wired LAN page holds both readings, and so does that icon read on the live bar with a letter misread, glued on
     or set apart, where `labels` are given and the bar forms no other label (bar_heads, icon_slip). An address screen
-    only where the caller looks at one (`screens`: kit/drive.py alone), never for the walker or the provers."""
-    cls = lift_class(lit) if decided else None
+    only where the caller looks at one (`screens`: kit/drive.py alone), never for the walker or the provers. The lit
+    text's class is judged in both views and holds only where they agree (_agreed: a bar of the class only once its
+    spaces are taken out, or of another class so, opens nothing)."""
+    cls = _agreed(lift_class, lit) if decided else None
     if cls is None or (cls == LIFT_ADDRESS and not screens):
         return None
     seen = plain(lit)
@@ -1235,13 +1424,14 @@ _IDENTITY_SCREEN = [r"pairing", r"paired", r"ssid", r"access point", r"device na
                     r"mac\s?addr", r"ip\s?addr", r"password", r"pass\s?key", r"\bpw\b", r"\bwps\b", r"\bpin\b",
                     r"searching", r"awaiting\s?connect", r"connecting", r"connected to", r"connect\s?to\b", r"user\s?name",
                     r"account", r"server"]
-_IDENTITY_SCREEN_RE = re.compile("|".join(_IDENTITY_SCREEN + _IDENTITY + _CREDENTIALS + _ADDRESS_SCREENS))
+_IDENTITY_SCREEN_RE = _Rx(_IDENTITY_SCREEN + _IDENTITY + _CREDENTIALS + _ADDRESS_SCREENS)
 # What, on a screen met inside an identity or connection row a decision opened, gets MENU alone and nothing of its text
 # kept: credentials, and a connection, a pairing or a network list in the making (an SSID list, an access point, a
 # pass key or PIN, "Searching...", "Connecting...")
 _SECRET_SCREEN = [r"ssid", r"access point", r"password", r"pass\s?key", r"\bpw\b", r"\bpin\b", r"pairing",
-                  r"searching", r"awaiting\s?connect", r"connecting", r"connected to", r"connect\s?to\b", r"\bwps\b"]
-_SECRET_SCREEN_RE = re.compile("|".join(_SECRET_SCREEN + _CREDENTIALS))
+                  r"searching", r"awaiting\s?connect", r"connecting", r"connected to", r"connect\s?to\b", r"\bwps\b",
+                  r"wps push", r"wps pin"]
+_SECRET_SCREEN_RE = _Rx(_SECRET_SCREEN + _CREDENTIALS)
 # the kinds of screen whose text may be shown inside such a row when it holds no such word: the row's own list or
 # carousel, a notice, and the menu pages around it; any other kind (unknown above all) is shown as its field names
 SHOWN_KINDS = frozenset({"list", "dialog", "sidelist", "checklist", "notice", "menu", "submenu", "tiles", "shooting"})
@@ -1298,14 +1488,15 @@ def notice_kept(text, labels=(), values=None) -> str:
     follows" where that is a row label the kit knows, alone or with one of that row's known values (blocker_known,
     `labels` and `values` as runner.known_labels and runner.row_values give them), never the value (the blocking row's
     current state: "... as follows Airplane Mode"), else the fixed sentence alone. Nothing at all where
-    the text holds a question, reads as a confirmation anywhere (confirmation, on the whole text and on what follows "as
-    follows"), names identity or credentials (identity_screen: an SSID, a device's name, a pairing, an address, a
-    connection) or anything no allowance opens (never_lifted), or is of no shape the kit knows: then the frame is the
-    evidence, as before 2026-11-13."""
+    the text holds a question, reads as a confirmation anywhere (confirmation_refused, its words run together too, on
+    the whole text and on what follows "as follows"), names identity or credentials (identity_screen: an SSID, a
+    device's name, a pairing, an address, a connection) or anything no allowance opens (never_lifted), or is of no shape
+    the kit knows: then the frame is the evidence, as before 2026-11-13."""
     t = _NOTICE_OK.sub("", " ".join(fold(text).split())).strip()
     m = _NOTICE_FOLLOWS.fullmatch(t)
     tail = t[m.start(2):].strip() if m else ""
-    if not t or "?" in t or confirmation(t) or confirmation(tail) or identity_screen(t) or never_lifted(t):
+    if not t or "?" in t or confirmation_refused(t) or confirmation_refused(tail) or identity_screen(t) \
+            or never_lifted(t):
         return ""
     if any(rx.fullmatch(t.lower()) for rx in _NOTICE_SHAPES):
         return t
@@ -1391,7 +1582,8 @@ def address_fields(lines, values=()) -> tuple[list, int]:
     writes it, never as the line reads; any other line (a value: an address, an SSID, a device name), a field name
     with anything after it on its line, and a line that is wholly one of `values` (the values the definition and the
     page model know for the menu's rows: runner.known_values), counts as withheld. Never a value: what a run shows of
-    such a screen."""
+    such a screen. A field name is told in a line's readings spaced as read alone (_spaced_sources): a line that names
+    one only once its spaces are taken out ("Ser ver") is withheld, as before 2026-11-14."""
     told = {plain(v) for v in values or () if isinstance(v, str) and plain(v)}
     names, withheld = [], 0
     for ln in lines or ():
@@ -1402,7 +1594,7 @@ def address_fields(lines, values=()) -> tuple[list, int]:
             withheld += 1
             continue
         found, whole = None, False
-        for s in _sources(text):
+        for s in _spaced_sources(text):
             for r in (s.lower(), deslip(s.lower())):
                 r = re.sub(r"^[^a-z0-9]+", "", r)
                 for name, rx in _FIELD_RES:
@@ -1418,6 +1610,11 @@ def address_fields(lines, values=()) -> tuple[list, int]:
             names.append(found)
         withheld += not (found and whole)
     return names, withheld
+
+
+def _spaced_sources(text) -> list:
+    """The readings of the plain view (_sources in plain_view): as read, folded, and with OCR's capital I as an l."""
+    return plain_view(_sources, text)
 
 
 # A line this short (once plain) is as often an icon or a value read as letters as a row's label: the definition has
@@ -1529,7 +1726,7 @@ def kept_said(kept: dict) -> str:
 PROFILE_RESET = "Picture Profile Reset"
 PROFILE_NAME = re.compile(r"PP(\d{1,2})")
 # words a profile's reset question never holds: another reset's (the camera's settings, the network, everything)
-_NOT_PROFILE_RESET = re.compile(r"\b(?:all|camera|network|initiali[sz]e|format|delete|setting reset)\b")
+_NOT_PROFILE_RESET = re.compile(r"\b(?:all|camera|network|initiali[sz]e|format|delete|setting ?reset)\b")
 
 
 def _profile_number(profile) -> str | None:
@@ -1686,7 +1883,8 @@ def profile_reset_dialog(text: str, profile: str) -> str:
     other = [x for x in profile_names_in(text) if x != profile]
     if other:
         return f"the screen names {', '.join(other)} (the digits' look-alikes read as digits), not {profile} alone"
-    if not any(re.search(rf"\breset\b.*\bpp\s*{n}\b.*\bdefault\b", r, re.S) for r in rs):
+    # a permission: the question is read in the readings spaced as read alone ("theDefault" set apart is no default)
+    if not any(re.search(rf"\breset\b.*\bpp\s*{n}\b.*\bdefault\b", r, re.S) for r in plain_view(readings, text)):
         return f"the screen does not read as 'Reset {profile} to the default setting?'"
     return ""
 
@@ -1701,7 +1899,8 @@ _PROFILE_COMPLETE_SECOND = re.compile(r"\s*complete\s*\.?\s*(?:ok\s*\.?\s*)?")
 def profile_reset_complete(text: str, lit: str, second: str | None = None) -> str:
     """Why the screen after OK on a profile's reset question is not the camera's completion notice, or "" when it is:
     every reading of its whole text (readings) is "Complete." and "OK" and nothing else, the lit button reads OK alone,
-    nothing in it reads as a confirmation (confirmation), a question, Cancel or what no allowance opens (never_lifted),
+    nothing in it reads as a confirmation (confirmation_refused, its words run together too), a question, Cancel or what
+    no allowance opens (never_lifted),
     and, where the vision model's reading `second` is given (its text and buttons as one text; None: not reachable),
     that reading is "Complete." alone too, OK aside. Anything else ("This function is currently disabled.", "Unable
     to...", another question) is not, nor is a reading with one word more: the run stops on it."""
@@ -1717,8 +1916,8 @@ def profile_reset_complete(text: str, lit: str, second: str | None = None) -> st
             return f"{said} offers Cancel ({' '.join(what.split())!r})"
         if never_lifted(what):
             return f"{said} reads {never_lifted(what)}"
-        if confirmation(what):
-            return f"{said} reads as a confirmation ({confirmation(what)})"
+        if confirmation_refused(what):
+            return f"{said} reads as a confirmation ({confirmation_refused(what)})"
     if not all(_PROFILE_COMPLETE.fullmatch(r) for r in readings(t)):
         return f"the screen reads {' '.join(t.split())!r}, not 'Complete.' and OK alone"
     if not all(re.fullmatch(r"\s*ok\s*\.?\s*", r) for r in readings(lit)) or not str(lit or "").strip():
@@ -1741,11 +1940,11 @@ _QUOTED = re.compile(r"[\"“”]([^\"“”]*)[\"“”]")
 _SECONDS = re.compile(r"(?<=\d)[\"“”]")
 
 
-def _names_left_out(t: str) -> str:
-    """The text with each quoted menu item name left out; a quoted span that is no name (a sentence, a question, a
-    long passage) stays whole, and seconds marks pair with nothing."""
+def _names_left_out(t: str, gap: str = " ") -> str:
+    """The text with each quoted menu item name left out (`gap` in its place); a quoted span that is no name (a
+    sentence, a question, a long passage) stays whole, and seconds marks pair with nothing."""
     t = _SECONDS.sub("″", t)
-    return _QUOTED.sub(lambda m: " " if len(m[1]) <= 40 and not re.search(r"[?!\n]", m[1]) else m[0], t)
+    return _QUOTED.sub(lambda m: gap if len(m[1]) <= 40 and not re.search(r"[?!\n]", m[1]) else m[0], t)
 
 
 def confirmation(text: str) -> str | None:
@@ -1779,6 +1978,86 @@ def _confirms(text: str) -> str | None:
         m = _CONFIRM_RE.search(judged)
         if m:
             return f"confirmation text: {m.group(0)}"
+    return None
+
+
+# confirmation's words in a text with every space taken out ("Formatthememorycard?EnterCancel"), each where a word may
+# start (the text's start, or after what is no letter), whatever follows it; and its phrases whole. Send, Fire and Clean
+# are left to confirmation alone: run together they start too many words
+_CONFIRM_GLUED_RE = re.compile(r"(?<![a-z])(?:execute|format|delete|erase|initiali[sz]e|resets?|restore|update|"
+                               r"overwrite)|alldata|willbelost|areyousure|newfolder|testflash")
+
+
+def _confirms_glued(text: str) -> str | None:
+    """_confirms on the text with every space taken out: what follows "not available as follows", "File Format", the
+    Delete warning and each quoted name left out first (each as a sign, so no letters are joined across it), then
+    _CONFIRM_GLUED_RE."""
+    t = re.split(r"not\s*available\s*as\s*follows", text, flags=re.I)[0]
+    t = re.sub(r"file\s*format", "|", t, flags=re.I)
+    t = re.sub(r"if\s*the\s*delete\s*button\s*is\s*pressed\s*in\s*the\s*delete\s*confirmation\s*screen,?\s*the\s*target"
+               r"\s*image\s*is\s*deleted\.\s*be\s*careful\s*not\s*to\s*accident(?:al)?ly\s*delete\.?", "|", t, flags=re.I)
+    t = t.strip()
+    if len(t) > 1 and t[0] in "\"“”" and t[-1] in "\"“”" and not re.search(r"[\"“”]", t[1:-1]):
+        t = t[1:-1]
+    for judged in (_names_left_out(t, "|"), _QUOTED.sub("|", t)):
+        m = _CONFIRM_GLUED_RE.search(re.sub(r"\s+", "", judged).lower())
+        if m:
+            return f"confirmation text, its words run together: {m.group(0)}"
+    return None
+
+
+def confirmation_refused(text) -> str | None:
+    """Why Enter may not go on a screen whose whole text is `text` as a confirmation, or None: a REFUSAL only, never a
+    permission. confirmation, and confirmation of the text with its CamelCase set apart ("ResetPP1 to the default
+    setting?": _camel) and of the text with every space taken out (_confirms_glued: "Formatthe memory card? Enter
+    Cancel", "Formatthememorycard?EnterCancel"), as read and folded: OCR runs words together, which confirmation's word
+    boundaries never matched (2026-11-14, a review). Used where a confirmation refuses: kit/drive.py's Enter guard,
+    camkit.live.LiveCamera's own, notice_kept, profile_reset_complete and owner_enter's seen step. Never where it
+    permits: an armed confirmation (action_confirmation), a profile's own reset question (profile_reset_dialog), Camera
+    Settings Reset and the link-wiping families (armed_wiping) are judged on confirmation, the text as read."""
+    why = confirmation(text)
+    if why:
+        return why
+    for t in dict.fromkeys((str(text or ""), fold(text))):
+        why = _confirms(_camel(t)) or _confirms_glued(t)
+        if why:
+            return why
+    return None
+
+
+# The lit words a dialog's own button may read, or an action's: the buttons that confirm and the actions a question names
+ASKING_LIT = frozenset({"enter", "ok", "execute", "yes", "delete", "format", "reset", "initialize", "initialise", "erase",
+                        "overwrite", "restore", "update"})
+
+
+def asks(text, lit) -> str | None:
+    """Why a screen read as a dialog (or of no known kind) asks something, or None: a question mark; the word Cancel in
+    any reading, quoted option names left out (_names_left_out: Delete confirm.'s "Cancel" first is an option's name,
+    no button); a dialog's two buttons (confirm_pair, quoted names left out); a lit text that cannot be read; a lit
+    text that is a button's word (Enter, OK, Execute, Yes); or a lit text that is an action's word whose screen, that
+    word taken off its end, still reads as a confirmation ("Delete this image Delete": a "?" and Cancel OCR missed). A
+    carousel asks nothing: its title and its lit option ("Custom Key Setting Delete", "File Number Reset": the title
+    alone reads as no confirmation). What camkit.live.LiveCamera's own confirmation check judges a dialog by."""
+    t = str(text or "")
+    if "?" in t:
+        return "a question mark"
+    named_out = _names_left_out(fold(t))
+    if any(re.search(r"\bcancel\b", r) for r in readings(named_out)):
+        return "Cancel"
+    pair = confirm_pair(named_out, "")
+    if pair:
+        return pair
+    seen = plain(lit)
+    if not seen:
+        return "a lit text that cannot be read"
+    if seen in CONFIRM_BUTTONS:
+        return f"the lit button {seen!r}"
+    if seen in ASKING_LIT:
+        ft, word = fold(t), fold(lit).lower().strip()
+        cut = ft.lower().rfind(word)
+        rest = (ft[:cut] + ft[cut + len(word):]) if word and cut >= 0 else ft
+        if confirmation_refused(rest):
+            return f"the lit {seen!r} on a screen that reads as a confirmation without it"
     return None
 
 
@@ -1820,8 +2099,11 @@ CONFIRM_BUTTONS = frozenset({"enter", "ok", "execute", "yes"})          # with t
 # files the camera wrote go back, checked by their bytes). Save/Load Settings may be named, to look and to Save; its
 # Load never ("save/load" is the row's name, not a load). IPTC Information's Register IPTC Info reads a preset from the
 # card (2026-11-14, a fourth review); Manage User LUTs' Import, Import Root Certificate and Recall Camera Setting are
-# caught by their words; nothing else on the a1 II's menu reads a file from a card
-_LOADS = r"(?<!save/)(?<!save /)\bload(?:s|ing)?\b|\brecall\b|\bimport\b|\bregister\s?iptc"
+# caught by their words; nothing else on the a1 II's menu reads a file from a card. Each word judged where a word may
+# start, whatever follows it ("RecallCamera Setting", and "Re call Camera Setting" with its spaces taken out: 2026-11-14,
+# a review), so "Download", "Upload" and "important" are none
+_LOADS = (r"(?<!save/)(?<!save /)(?<![a-z])load|(?<![a-z])recall|(?<![a-z])import(?!ant)|"
+          r"(?<![a-z])register\s?iptc")
 _LOADS_RE = re.compile(_LOADS)
 # Rows no decision ever names, whatever it says (OWNER_NEVER): checked in every reading
 OWNER_NEVER = [
@@ -1848,17 +2130,18 @@ _OWNER_NEVER_RES = [(re.compile(rx), why) for rx, why in OWNER_NEVER]
 # never opened as a plain look
 _ACTS_ON_OPEN = [r"\bwps\b", r"pairing", r"access point", r"select on cam", r"root certif", r"create new folder",
                  r"forced file number reset", r"tether", r"cloud", r"streaming", r"smartphone", r"ftp function",
-                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"ip address"]
-_ACTS_ON_OPEN_RE = re.compile("|".join(_ACTS_ON_OPEN))
+                 r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"wps push", r"wps pin",
+                 r"ip address"]
+_ACTS_ON_OPEN_RE = _Rx(_ACTS_ON_OPEN)
 # Of those, the ones whose opening may change or drop the network the run's link is on: they need "link_loss" too, and
 # the run then restores by hand (loses_link)
-_LINK_RISK_OPEN_RE = re.compile("|".join([r"\bwps\b", r"pairing", r"access point", r"select on cam", r"tether", r"cloud",
-                                          r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b",
-                                          r"ip address"]))
+_LINK_RISK_OPEN_RE = _Rx([r"\bwps\b", r"wps push", r"wps pin", r"pairing", r"access point", r"select on cam", r"tether",
+                          r"cloud", r"streaming", r"smartphone", r"ftp function", r"ftp transfer", r"\bsend\b",
+                          r"ip address"])
 # The actions whose confirmation wipes the network setup and the access authentication, and the run's link with them;
 # kit/drive.py's NEVER_ENTER and camkit.live.LiveCamera's own check refuse Enter on a lit text or a screen reading one
 # (LINK_WIPING_ENTER), the screen only when the press is the run's armed confirmation of that very action (armed_wiping)
-_LINK_WIPING = r"initiali[sz]e|reset network|ssid\s?/?\s?pw\s?reset"
+_LINK_WIPING = r"initiali[sz]e|reset ?network|ssid\s?/?\s?pw\s?reset"
 _LINK_WIPING_RE = re.compile(_LINK_WIPING)
 LINK_WIPING_ENTER = re.compile(_LINK_WIPING, re.I)
 # the one reset decision 5 allows, which shares its dialog with Initialize (Setting Reset's two items)
@@ -1886,13 +2169,14 @@ OPENS_TO_LOOK = frozenset({
 })
 # Rows whose first Enter inside registers or acts, whatever it lands on (Camera Set. Memory's slot, a hold, an item):
 # no step of theirs is ever marked seen ("steps_seen"), so their first Enter is the run's armed last press
-_REGISTERS_RE = re.compile(r"camera set\. memory|reg\. custom shoot set|face memory|add item|sort item|delete item|"
-                           r"delete page|delete all|del\. regist\. af area")
+_REGISTERS_RE = _Rx([r"camera set\. memory", r"reg\. custom shoot set", r"face memory", r"add item", r"sort item",
+                     r"delete item", r"delete page", r"delete all", r"del\. regist\. af area"])
 # The actions beside Format and Delete that write to a card (a folder, a file, an image's protection, rating or turn, a
 # copy, a crop, a still from a clip, the image database, a settings file saved): what they write no settings file puts
 # back, and the terminal question says so (kit/drive.py armed_words; a fifth review)
-_WRITES_CARD_RE = re.compile(r"create new folder|forced file number reset|recover image db|\bprotect\b|\brotate\b|"
-                             r"\bcopy\b|\bcrop\b|\brating\b|photo capture|create still image|clip flag|save/load")
+_WRITES_CARD_RE = _Rx([r"create new folder", r"forced file number reset", r"recover image db", r"\bprotect\b",
+                       r"\brotate\b", r"\bcopy\b", r"\bcrop\b", r"\brating\b", r"photo capture", r"create still image",
+                       r"clip flag", r"save/load"])
 # Words a step never holds: a button's or a go-ahead's, whose Enter answers the action's question (2026-11-13, a review:
 # "Continue" on Format's own question passed for a step), each judged as a word in every reading (look-alikes folded,
 # OCR's slips undone)
@@ -1941,7 +2225,7 @@ def owner_class(label) -> str | None:
     for text, _raw in _pairs(label):
         last = clean_label(text.rsplit(">", 1)[-1])
         if _ACTION_RE.search(text) or _ACTION_RE.search(last) or _ACTION_WORD_RE.search(text):
-            return LIFT_CARDS if any(re.search(r"\b(?:format|delete)\b", r) for r in rs) else LIFT_ACTION
+            return LIFT_CARDS if any(re.search(_CARDS, r) for r in rs) else LIFT_ACTION
     if any(_CREDENTIALS_RE.search(t) or _CREDENTIALS_RE.search(r) for t, r in _pairs(label)):
         return LIFT_CREDENTIALS
     return LIFT_FIXED if identity_row(label) else None
@@ -1975,7 +2259,12 @@ def armed_wiping(armed_row, word) -> bool:
     """Whether the Initialize, Reset Network Set. or SSID/PW Reset a screen reads (`word`, LINK_WIPING_ENTER's match) is
     the very action the run armed as its last press (`armed_row`, an owner decision's row under "confirm" with
     "link_loss"): only then may Enter go on that screen (kit/drive.py press_refused, camkit.live.LiveCamera). Any other
-    armed row, or none, never."""
+    armed row, or none, never. A permission: the armed row is judged in its readings spaced as read alone (plain_view),
+    never with its CamelCase set apart ("ResetNetwork Set." arms no Reset Network Set.)."""
+    return plain_view(_armed_wiping, armed_row, word)
+
+
+def _armed_wiping(armed_row, word) -> bool:
     if not armed_row or not link_wiping(armed_row):
         return False
     w = str(word or "").lower()
@@ -2048,12 +2337,14 @@ def action_confirmation(text, row) -> str | None:
     """confirmation of a screen's whole text, as read and never with anything taken out (2026-11-13, a review: taking
     the row's own label out made "Format the memory card in Slot 1?" read as no confirmation), when that text also
     names the action `row` by one of its own words (_own_words): "Initialize? ... Enter Cancel" for Initialize, "Reset
-    network settings?" for Reset Network Set.; None otherwise."""
+    network settings?" for Reset Network Set.; None otherwise. A permission (arm_refused arms on it): the word is looked
+    for in the readings spaced as read alone (plain_view), so "Forma t? All data will be lost." arms nothing for Format
+    (2026-11-14, a review)."""
     said = confirmation(text)
     if not said:
         return None
     words = [w for w in _own_words(row) if len(w) >= 4]
-    if words and any(re.search(rf"\b{re.escape(w)}\b", r) for r in readings(text) for w in words):
+    if words and any(re.search(rf"\b{re.escape(w)}\b", r) for r in plain_view(readings, text) for w in words):
         return said
     return None
 
@@ -2091,13 +2382,37 @@ def confirm_pair(text, row) -> str | None:
 
 
 def _without_own_words(text, row) -> list:
-    """Every reading of `text` with the row's own words (_own_words) taken out as whole words: what the MENU-only check
-    of an action's, a credentials list's or an identity row's screen judges, so that SSID/PW Reset's own question, or
-    Access Authen.'s own list, does not read as a connection or credentials screen. Never what a confirmation is
-    judged on (action_confirmation)."""
-    own = _own_words(row)
-    rx = re.compile(r"\b(?:" + "|".join(map(re.escape, own)) + r")\b") if own else None
-    return [rx.sub(" ", r) if rx else r for r in readings(text)]
+    """Every reading of `text` with the row's own label taken out where it stands whole (in its readings spaced as
+    written, folded or with its slips undone: plain_view), and each of those with every space then taken out: what the
+    MENU-only check of an action's, a credentials list's or an identity row's screen judges, so that SSID/PW Reset's own
+    question, or Access Authen.'s own list, does not read as a connection or credentials screen. The label goes whole,
+    never word by word: "Access Point" beside Access Authen.'s own name stays an access point (2026-11-14, a review);
+    the label run together on the screen ("AccessAuthen. On Off") is not taken out, as before. The readings of the text
+    are those spaced as read and with their CamelCase set apart (which lose the label so set apart too), each with its
+    slips undone; the reading with every space taken out is made from what is left once the label is out (the one made
+    from the whole text would still hold it run together, "accessauthen.onoff"). Never what a confirmation is judged on
+    (action_confirmation)."""
+    def label(forms):
+        forms = sorted({f.strip() for f in forms if f.strip()}, key=len, reverse=True)
+        return re.compile(r"(?<![a-z0-9])(?:" + "|".join(map(re.escape, forms)) + r")(?![a-z0-9])") if forms else None
+
+    spaced = plain_view(readings, row)
+    row_folded = fold(row)
+    # a reading with its CamelCase set apart loses the label so set apart too ("SSlD/PW", OCR's capital I read as an l
+    # in "SSID/PW", is "S Sl D/PW" so): never one run together
+    camel = spaced + [g for s in (_camel(row_folded), _camel(_capital_i(row_folded))) for g in (s.lower(),
+                                                                                                deslip(s.lower()))]
+    own, own_camel = label(spaced), label(camel)
+    if own is None:
+        return readings(text)
+    folded = fold(text)
+    out = []
+    for s, rx in [(s, own) for s in _spaced_sources(text)] + [(_camel(folded), own_camel),
+                                                              (_camel(_capital_i(folded)), own_camel)]:
+        for r in (s.lower(), deslip(s.lower())):
+            kept = rx.sub(" ", r)
+            out += [kept, re.sub(r"\s+", "", kept)]
+    return list(dict.fromkeys(out))
 
 
 def owner_menu_only(cls, kind, text, row, blank: bool = False) -> str | None:
@@ -2181,13 +2496,27 @@ def _places_of(places) -> tuple:
     return tops, counts, at
 
 
+# What a row an owner decision names must be judged alike as written and with its words run together or split
+# (_read_otherwise): each of these decides what the decision may say of the row and what a run does in it
+OWNER_JUDGES = (("its class", owner_class, True), ("whether its opening acts", acts_on_open, False),
+                ("whether its opening may change the network", link_risk_open, False),
+                ("whether its confirmation wipes the link", link_wiping, False),
+                ("whether its first Enter registers", registers, False),
+                ("whether no option of it is chosen", never_choose, False),
+                ("whether no option of it is ever chosen", hard_never_choose, False))
+
+
 def owner_row_refused(entry, places=()) -> tuple:
     """(why an owner decision may not name `entry`, or "", its row's label, its place: the path as written, or for a
     label alone the one place the kit knows it in, [tab, group, row, ...]). A row is named by its label as the camera
     writes it, or by its path, "Tab > Group > Row [> Row ...]" as the definition and the Help Guide name its place. The label must be of a class owner_class gives and of nothing owner_never names. A path's tab, group
     and first row must be a top-level place the kit knows (`places`); a label alone must be one the kit knows in
     exactly one place, and never an action's or a card's (their names, Delete, Format, Reset, recur inside rows the kit
-    never opens and so never sees): those are named by their path (2026-11-13, a review)."""
+    never opens and so never sees): those are named by their path (2026-11-13, a review). A label that reads otherwise
+    once its words are run together or split than as written (OWNER_JUDGES: its class, whether its opening acts or may
+    change the network, whether its confirmation wipes the link, whether its first Enter registers, whether no option of
+    it is chosen; "DeleteAll", "Wake OnLAN", "Access Authen. AccessPoint": _read_otherwise) is refused: a decision names
+    the row as the camera writes it (2026-11-14, a review)."""
     if not isinstance(entry, str) or not entry.strip():
         return "a row is named by its label as the camera writes it, or by its path", "", None
     parts = [p.strip() for p in entry.split(">")]
@@ -2203,6 +2532,9 @@ def owner_row_refused(entry, places=()) -> tuple:
         why = never_open(label)
         return ((f"{why}: no decision opens that" if why else "not a row the never-open list names: the name of a group, or "
                  "an unknown name, opens nothing"), label, None)
+    what = _read_otherwise(label, OWNER_JUDGES)
+    if what:
+        return _named_otherwise(label, what, "the definition and the Help Guide"), label, None
     tops, counts, at = _places_of(places)
     if len(parts) > 1:
         if len(parts) < 3:
@@ -2284,7 +2616,7 @@ def owner_decided(scope, places=()) -> dict:
                "its \"unattended\" is not true or false" if not isinstance(alone, bool) else
                "it says \"unattended\" and names nothing under \"confirm\", nor a never-choose row's \"options\" with "
                "\"link_loss\": true: it waives the terminal question of an armed press alone"
-               if alone and not waives_question(d) else
+               if alone and not waives_question(d, places) else
                "its \"values\" is not \"logged\" (leave it out to keep them withheld)" if said not in (None, "logged")
                else "its \"options\" is not an object naming, for a row it names, the options the kit may choose"
                if options is not None and not isinstance(options, dict) else
@@ -2353,7 +2685,7 @@ def owner_decided(scope, places=()) -> dict:
                 why = hard_never_choose(label)
             elif never_choose(label) and not lose:
                 why = f"{never_choose(label)} without \"link_loss\": true (the choice may drop the link)"
-            elif info["class"] == LIFT_CREDENTIALS and not never_choose(label):
+            elif info["class"] == LIFT_CREDENTIALS and not _in_both(never_choose, label):
                 why = "the options of a credentials row are chosen only on its own On/Off list (Access Authen., Wi-Fi Direct)"
             elif info["class"] in ACTION_CLASSES and not info["confirm"]:
                 why = "the steps of an action lead to its confirmation: name the action under \"confirm\" too"
@@ -2387,11 +2719,11 @@ def owner_lifted_row(lit: str, owner, values=None) -> str | None:
     `lit` opens, or None: the lit text, compared whole (plain), starts with the row's label, what follows it is nothing
     or one of the row's own values (`values`, as network_lifted_row takes them), and the lit text is of the very class
     the decision lifted the row from (owner_class(lit) == the row's class: a value that reads as another class, a
-    pairing after a connection row's name, opens nothing)."""
+    pairing after a connection row's name, opens nothing), in both views (_agreed: plain_view gives that class too)."""
     seen = plain(lit)
     if not owner or not seen:
         return None
-    cls = owner_class(lit)
+    cls = _agreed(owner_class, lit)
     for label, info in owner.items():
         want = plain(label)
         if not want or not seen.startswith(want) or seen[len(want):len(want) + 1].isalnum():
@@ -2424,7 +2756,8 @@ def owner_enter(row: str, cls, kind, lit, text, options=(), seen=()) -> tuple:
     know for an unseen body whether Enter on a slot acts at once (2026-11-13, a review): an Enter is a "step" only where
     its lit text is a step the decision names (`options`) that it also marks seen safe on this camera (`seen`, its
     "steps_seen": the owner has seen that Enter on it only leads to a question), on a screen that is no dialog or notice
-    (CONFIRM_KINDS), holds no question mark, reads as no confirmation once its own title is off (_title_off) and shows
+    (CONFIRM_KINDS), holds no question mark, reads as no confirmation once its own title is off (_title_off;
+    confirmation_refused, its words run together too) and shows
     no dialog's two buttons (confirm_pair: Enter, OK or Execute with Cancel); a named
     step that is not all of that is "final", the run's armed last press; any other Enter there is the action's
     "confirm", armed too. The caller makes a step "final" as well when no Enter follows it in the run. Elsewhere an
@@ -2445,7 +2778,7 @@ def owner_enter(row: str, cls, kind, lit, text, options=(), seen=()) -> tuple:
             return "", "confirm"
         body = _title_off(text, row)
         safe = (shown in {plain(o) for o in seen or ()} and not registers(row) and kind not in CONFIRM_KINDS
-                and "?" not in body and not confirmation(body) and not action_confirmation(body, row)
+                and "?" not in body and not confirmation_refused(body) and not action_confirmation(body, row)
                 and not confirm_pair(text, row))
         return "", ("step" if safe else "final")
     if cls == LIFT_CREDENTIALS and kind not in LIST_KINDS:
@@ -2506,7 +2839,7 @@ def arm_refused(row: str, cls, what: str, kind, lit, text, confirm: bool = False
             return f"a step of {row!r} may wipe the link: only with \"link_loss\": true"
         return ""
     if what == "open":
-        if not opens_acting(row, cls, place):
+        if not _in_both(opens_acting, row, cls, place):
             return f"{row!r} opens to look: its opening is no armed press"
         if not confirm:
             return f"{row!r} acts on opening, and the owner decision does not name it under \"confirm\""
@@ -2559,17 +2892,34 @@ def asks_person(info) -> bool:
     return bool(info) and not info.get("unattended")
 
 
-def waives_question(d) -> bool:
+def waives_question(d, places=None) -> bool:
     """Whether the owner decision `d`, as written, has an armed press whose terminal question "unattended": true may
     waive: a row under "confirm", or a never-choose row's "options" with "link_loss": true (an option chosen there is
-    the run's armed last press). Its rows and options are judged later, each on its own (owner_decided)."""
+    the run's armed last press): a row the decision names under "rows" too, written as the camera writes it (it reads
+    alike in both views, _read_otherwise: "USBConnection Mode" waives nothing, 2026-11-14, a review), of a class an
+    owner decision lifts whose option owner_decided may take as a never-choose choice (no action, serial number or
+    address screen, reset that wipes the link, opening that acts, or Language, NTSC/PAL or Area/Date/Time row), and,
+    where the menu places the kit knows are given (`places`, as owner_decided gives them), a row owner_row_refused
+    takes. Its rows and options are judged later, each on its own (owner_decided)."""
     if not isinstance(d, dict):
         return False
     if d.get("confirm"):
         return True
     options = d.get("options")
+    named = {r.strip() for r in d.get("rows") or [] if isinstance(r, str)} if isinstance(d.get("rows"), list) else set()
+
+    def waivable(entry) -> bool:
+        label = entry.split(">")[-1].strip()
+        if entry.strip() not in named or not never_choose(label) or _read_otherwise(label, OWNER_JUDGES):
+            return False
+        # a row whose option owner_decided may take as a never-choose choice: never an action's steps, a screen with
+        # no option, a reset that wipes the link, an opening that acts, Language, NTSC/PAL or Area/Date/Time
+        if owner_class(label) in ACTION_CLASSES | {None, LIFT_ADDRESS, LIFT_SERIAL} or link_wiping(label) \
+                or acts_on_open(label) or hard_never_choose(label):
+            return False
+        return places is None or not owner_row_refused(entry, places)[0]
     return d.get("link_loss") is True and isinstance(options, dict) and any(
-        isinstance(e, str) and never_choose(e.split(">")[-1].strip()) for e in options)
+        isinstance(e, str) and waivable(e) for e in options)
 
 
 def owner_allowance(rows) -> str:

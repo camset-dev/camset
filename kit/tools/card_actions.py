@@ -96,7 +96,7 @@ def press_judged(cam, p: str, confirm: bool, allow) -> str:
         why, _ = drive.press_decision(p, key, lit, t, kind, confirm, allow)
     if why:
         return f"{key} refused: {why}"
-    press(cam, key)
+    press(cam, key, confirm=bool(confirm and key in drive.ENTERS))     # judged with --confirm: the camera's check too
     return ""
 
 
