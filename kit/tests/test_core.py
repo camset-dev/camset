@@ -1841,6 +1841,29 @@ def test_session_steps_off_a_never_open_group_before_entering_the_rows(monkeypat
     assert status == "done" and cam.keys == ["menu", "up", "right"], cam.keys
 
 
+def test_session_sends_no_right_on_a_group_read_one_letter_off_or_off_the_column(monkeypatch):
+    """session(): a group whose name reads one letter off a never-open one ("FTP Transter", which open_refused lets
+    through) is stepped off like a never-open one (safety.group_refused), and no Right goes out while every group lit
+    reads so, or once the screen no longer reads as the group column: the session fails closed, nothing opened."""
+    import prove_run as P
+    cam = FakeMenuOpening(focus="groups")
+    monkeypatch.setattr(P, "lit_text", lambda image, path: "FTP Transter")
+    P, status, _, _ = _session(monkeypatch, cam)
+    assert status == "error" and cam.keys == ["menu", "up", "down", "down"], cam.keys
+    cam = FakeMenuOpening(focus="groups")
+    real_press = cam.press
+
+    def press(key):
+        real_press(key)
+        if key == "up":
+            cam.focus = "rows"                      # the screen now reads as a page of rows
+    cam.press = press
+    lit = iter(["FTP Transter", "Wi-Fi", "Wi-Fi", "Wi-Fi"])
+    monkeypatch.setattr(P, "lit_text", lambda image, path: next(lit))
+    P, status, _, _ = _session(monkeypatch, cam)
+    assert status == "error" and cam.keys == ["menu", "up"], cam.keys
+
+
 def test_live_camera_looks_again_while_the_menu_slides(monkeypatch):
     """LiveCamera.rest: a menu read with no focus (the rows panel between its two places) is looked at again, with a
     longer quiet window, until it is at rest, at most three times; a menu at rest is left alone."""

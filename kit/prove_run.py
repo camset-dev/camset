@@ -69,8 +69,8 @@ from camkit.session import check_restore, verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from page_model import same_text  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
-                    changes_of, end_session, load_scan, log_network_decided, network_decided_or_exit, network_values,
-                    read_json, restoring)
+                    changes_of, end_session, known_groups, load_scan, log_network_decided, network_decided_or_exit,
+                    network_readings, network_values, read_json, restoring)
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
@@ -527,7 +527,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
     cam = LiveCamera(link, hdmi, run, may_open={r.split(" > ")[-1] for r in APPROVED
                                                 if safety.owner_may_approve(safety.never_open(r.split(" > ")[-1]))}
                      | proving.jobs.ALLOWED, network=proving.jobs.NETWORK, options=proving.jobs.NETWORK_OPTIONS,
-                     values=network_values(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None)
+                     values=network_values(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None,
+                     readings=network_readings(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None)
     status = "done"
     try:
         cam.press("menu")
@@ -540,11 +541,21 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
             # page's rows, which is where every scan position is (it chooses nothing). Only with the menu at
             # rest (cam.press waits out the slide): on a row, Right opens it (2026-11-06). A never-open group
             # left lit in the column (Accessibility, the Screen Reader's; failed attempts left the cursor on
-            # it, 2026-11-07) is stepped off first, since Right is refused on it
+            # it, 2026-11-07) is stepped off first, since Right is refused on it; so is one whose name reads one letter
+            # off a never-open group's or action's name ("FTP Transter", safety.group_refused, 2026-11-13), and no
+            # Right goes out while the lit group is one of those or the screen no longer reads as the group column
+            known = known_groups(model)
+
+            def refused() -> str:
+                lit = lit_text(cam.frame.image, cam.frame.path)
+                return open_refused(lit, cam.may_open) or safety.group_refused(lit, known) or ""
             for key in ("up", "down", "down"):
-                if not open_refused(lit_text(cam.frame.image, cam.frame.path), cam.may_open):
+                if not refused():
                     break
                 cam.press(key)
+            if refused() or cam.read().kind != "menu" or cam.read().focus != "groups":
+                raise Failed("the menu reopened in the group column, and no group lit there may be stepped into (or "
+                             "the screen no longer reads as the column): no Right; closed with MENU")
             cam.press("right")
             if cam.read().kind not in ("menu", "tiles"):
                 # Right opened something after all: MENU cancels it (it chose nothing), and the session stops

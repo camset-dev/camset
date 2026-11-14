@@ -50,6 +50,9 @@ class RowResult:
     # row's frames later ask local readers only (its run folder is marked: camkit.vlm.local_only_runs), and of an
     # identity or connection row's frames keep no reader's text (kit/pass1_labels.py leaves them out)
     network: str = ""
+    # a Wi-Fi or Bluetooth setting's notice, the row greyed ("This function is currently disabled."), as the kit keeps it
+    # (safety.notice_kept: a notice it knows, naming no identity or credentials); "" for every other row
+    notice: str = ""
 
 
 @dataclass
@@ -85,12 +88,14 @@ class Counted:
 
 def crawl(cam, cycle: list, model: dict, tabs=("Shooting", "Exposure/Color", "Focus", "Network", "Setup"),
           stop=lambda: False, max_rows: int | None = None, on_row=None, labels=None, panels=False,
-          network=frozenset()) -> Crawl:
+          network=frozenset(), notices=None) -> Crawl:
     """cycle: the page scan's positions in Down order, each {"page": key, "row": slot, "signature",
     "kind"}; model: page key -> {"breadcrumb", "page", "rows": [{"label", "never_open", ...}]}.
     max_rows: stop after opening that many rows (skipped rows do not count). on_row(result) is
     called after each row (the live run writes its results file from it). network: the Wi-Fi and Bluetooth settings a
-    dated owner decision opens ({row: date}, crawl_run.py --network; network_open)."""
+    dated owner decision opens ({row: date}, crawl_run.py --network; network_open). notices: (read(cam), the screen's
+    text now: camkit.live.text_of; the row labels the kit knows; the values it knows by row label: runner.known_labels,
+    runner.row_values), for the notice such a setting answers with (visit_row); None reads none."""
     cam = Counted(cam)
     out = Crawl()
     opened = 0
@@ -115,7 +120,8 @@ def crawl(cam, cycle: list, model: dict, tabs=("Shooting", "Exposure/Color", "Fo
         if pos["kind"] != "tiles" and page is not None and page["breadcrumb"].startswith(tabs):
             row = page["rows"][pos["row"]] if pos["row"] is not None and pos["row"] < len(page["rows"]) else None
             if row is not None:
-                out.rows.append(visit_row(cam, s, page, pos["row"], row, labels, panels=panels, network=network))
+                out.rows.append(visit_row(cam, s, page, pos["row"], row, labels, panels=panels, network=network,
+                                          notices=notices))
                 opened += not out.rows[-1].outcome.startswith("skipped")
                 if on_row:
                     on_row(out.rows[-1])
@@ -137,13 +143,15 @@ def row_readings(row: dict) -> list:
     return [str(t) for t in got or [] if t]
 
 
-def network_open(row: dict, network) -> bool:
+def network_open(row: dict, network, group: str = "") -> bool:
     """Whether the crawl opens a never-open row because a dated owner decision names it (network, crawl_run.py
     --network): the label is of a class a network decision lifts (safety.lift_class: a Wi-Fi or Bluetooth setting, or an
     identity or connection row), never an address screen; the row's stored reason (the page model's or the live read's,
     if any) is of the same kind as a fresh never_open of its label, so a page model built before the Wi-Fi and Bluetooth
     class existed ("by hand only: bluetooth function") fails closed; every reading kept beside the label is harmless or
-    of the same class; and the decision names the row (safety.network_lifted)."""
+    of the same class; and the decision names the row (safety.network_lifted), its label or, read with an icon of its
+    page glued on, where another reading of the row is the decided row exactly and the glued letters are a word of the
+    page's group (`group`, the page's breadcrumb's second part: safety.lifted_readings)."""
     label = row.get("label") or ""
     cls, fresh, stored = safety.lift_class(label), safety.never_open(label), row.get("never_open")
     if not network or cls in (None, safety.LIFT_ADDRESS):
@@ -152,21 +160,27 @@ def network_open(row: dict, network) -> bool:
         return False
     if any(safety.never_open(t) and safety.lift_class(t) != cls for t in row_readings(row)):
         return False
-    return safety.network_lifted(label, network)
+    entry = {"group": group or "", "readings": [label, *row_readings(row)]}
+    return safety.network_lifted(label, network, readings={r: [entry] for r in network})
 
 
 def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=None, panels=False,
-              index: int = 0, network=frozenset()) -> RowResult:
+              index: int = 0, network=frozenset(), notices=None) -> RowResult:
     """Open one row (Right), walk what opens, come back to the row. `parent` is how to get back
     here if MENU throws us out (camkit.crawl.Place), and `index` the row's place in its submenu (Downs from its
     first row), which that way back counts; `labels(cam)` -> (page key, [labels]) reads a
     submenu page's labels live, so submenu rows are checked against the never-open list before
     any Right; without it submenus are recorded and left. network: the Wi-Fi and Bluetooth settings a dated owner
-    decision opens (network_open)."""
+    decision opens (network_open). notices, (read(cam), the row labels the kit knows, the values it knows by row label):
+    a Wi-Fi or Bluetooth setting (never an identity row or an address screen) a decision opened that answers Right with
+    a notice keeps the notice's text, where it is one the kit knows and names no identity or credentials, and what it
+    names after "as follows" only where that is a known row label with its value (safety.notice_kept, RowResult.notice);
+    any other keeps none."""
     label = row.get("label") or ""
     r = RowResult(page.get("page", ""), slot, label, "")
     why = row.get("never_open") or safety.never_open(label)
-    if why and not network_open(row, network):
+    crumb = str(page.get("breadcrumb") or "").split(" > ")
+    if why and not network_open(row, network, crumb[1] if len(crumb) > 1 else ""):
         r.outcome = f"skipped: {why}"
         return r
     looked_at = bool(why)           # a row a network decision opens: its options are read, nothing is committed
@@ -188,6 +202,12 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
                 r.outcome = f"incomplete: {type(e).__name__}"
         else:
             r.outcome = f"network row: a {s.kind} screen, left unwalked (looked at only)"
+            if s.kind == "notice" and r.network == safety.LIFT_NETWORK and notices is not None:
+                read, words, told = notices
+                try:
+                    r.notice = safety.notice_kept(read(cam), words, told)
+                except Exception:                # a text that cannot be read keeps nothing, as before
+                    r.notice = ""
     elif s.kind == "notice":
         r.outcome = "notice"                     # the frame is the evidence (blocker and its value)
     elif s.kind in WALKERS:
@@ -201,7 +221,7 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             r.outcome = f"incomplete: {type(e).__name__}"
     elif s.kind == "submenu" and labels is not None and len(path) < MAX_DEPTH:
         here = Place(row_screen, parent, index)
-        sub = crawl_submenu(cam, labels, path + (label,), here, network=network)
+        sub = crawl_submenu(cam, labels, path + (label,), here, network=network, notices=notices)
         r.walk, r.outcome = sub, ("submenu crawled" if not sub.stopped else f"submenu: {sub.stopped}")
         if sub.stopped.startswith("lost"):
             r.outcome = "lost"
@@ -285,7 +305,7 @@ class SubCrawl:
     stopped: str = ""
 
 
-def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()) -> SubCrawl:
+def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset(), notices=None) -> SubCrawl:
     """Every row of the submenu just opened: Down until its first screen comes back (submenus wrap
     like lists). At each row its label is read live first (labels(cam) -> (page key, [rows]),
     each row a label or {"label", "never_open"}, cached per page) and checked against the
@@ -308,7 +328,8 @@ def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()
         if not entry.get("label"):  # noqa: SIM108 (two long arms read apart)
             res = RowResult(page["page"], slot, "", "skipped: no label read")
         else:
-            res = visit_row(cam, s, page, slot, entry, labels, path, parent, index=index, network=network)
+            res = visit_row(cam, s, page, slot, entry, labels, path, parent, index=index, network=network,
+                            notices=notices)
         out.rows.append(res)
         if res.outcome == "lost":
             out.stopped = f"lost at {entry.get('label')!r}"

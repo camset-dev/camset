@@ -1059,21 +1059,25 @@ def drive_address(tmp_path, monkeypatch, scope_file, presses: list, path=("Displ
 
 
 def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision, open_lines, open_kind, page_lit,
-               open_lit, page_kind="submenu", slow=False, misread=(), misread_lit=False, menu_does="page"):
+               open_lit, page_kind="submenu", slow=False, misread=(), misread_lit=False, menu_does="page",
+               page_lines=None, own="", model=None):
     """drive.py's main() on a made-up camera, no LiveCamera under it: the path's row lit (page_lit) on a page of
     page_kind until a Right or an Enter goes out, then a screen of open_kind showing open_lines, its lit bar open_lit;
     MENU, or Enter there, brings the page back, at the place it was (drive.same_position: the same kind at the same
-    place). slow: the press that opens the row still shows the page after it (a camera slow to draw); misread: the keys
-    after which the open screen reads as the page, at its very place, its bar still reading open_lit (page_lit with
-    misread_lit, the worst case). menu_does, inside the row: "page" (MENU closes it), "ignored" (the camera ignores
-    MENU), "list-as-page" (MENU closes a notice onto the row's list, which reads as the page, its bar on an option).
-    Returns (the keys pressed, the console, drive.jsonl's line, the run's events)."""
+    place; drive.same_state alike). slow: the press that opens the row still shows the page after it (a camera slow to
+    draw); misread: the keys after which the open screen reads as the page, at its very place, its bar still reading
+    open_lit (page_lit with misread_lit, the worst case). menu_does, inside the row: "page" (MENU closes it), "ignored"
+    (the camera ignores MENU), "list-as-page" (MENU closes a notice onto the row's list, which reads as the page, its
+    bar on an option). page_lines: the page's lines (by default two group names and the lit row); own: the kind the
+    camera's own picture of the screen reads as (drive.osd_kind); model: the page scan's page model. A read without a
+    press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys pressed, the console,
+    drive.jsonl's line, the run's events)."""
     import drive as D
     from camkit import vlm
     scope_file(decision)
     run = Run("kit2_drive", root=tmp_path)
     sent, state = [], {"open": False, "shown": False, "misread": False}
-    lines = {True: list(open_lines), False: ["Bluetooth", "Wi-Fi", page_lit]}        # the page, its row lit
+    lines = {True: list(open_lines), False: list(page_lines or ["Bluetooth", "Wi-Fi", page_lit])}   # the page, its row lit
 
     class Link:
         def __init__(self, r):
@@ -1117,6 +1121,7 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
             sent.append(("cam", f"dial {name}"))
 
         def refresh(self, tag):
+            state["shown"] = state["shown"] or (state["open"] and not state["misread"])    # drawn by now
             return self.read()
     seen = {}
 
@@ -1125,7 +1130,7 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
         return Cam()
     ending = SimpleNamespace(after=tmp_path / "after.DAT", changes=[], uploaded=False)
     for name, value in (("check_readers", lambda: seen.setdefault("local_only", vlm.LOCAL_ONLY)),
-                        ("load_scan", lambda scan: ([], {})), ("Run", lambda name: run),
+                        ("load_scan", lambda scan: ([], model or {})), ("Run", lambda name: run),
                         ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None,
                                                                        close=lambda: None)),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
@@ -1138,6 +1143,8 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("highlighted", lambda image, path: page_lit if not state["shown"] or
                          (state["misread"] and misread_lit) else open_lit),
                         ("same_position", lambda a, b: a.kind == b.kind and a.where == b.where),
+                        ("same_state", lambda a, b: a.kind == b.kind and a.where == b.where),
+                        ("osd_kind", lambda link: own),
                         ("network_values", lambda rows, model: {r: v for r, v in VALUES.items() if r in rows}),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("close_for_restore", lambda cam, link: sent.append(("closed",))),
@@ -1766,3 +1773,638 @@ def test_the_crawl_and_the_proofs_write_the_class_a_decision_lifted_the_row_from
     other = RowCamera()
     plain = crawl.visit_row(other, other.read(), {"page": "x"}, 0, {"label": "Drive Mode"})
     assert plain.network == "" and "network" not in crawl_run.summary(plain)
+
+
+# ---------------------------------------------------------------- the look-only session of 2026-11-13: its defects
+
+# a made-up definition in the shapes docs/DATA_CONTRACTS.md gives: a row path that names an option of its row ("Subject
+# Pick > Madeup Option > Depth Level", as "Recognition Target > Auto > Car/Train"), and one with its under_option
+# ("Profile Pick > PQ1 > Gamma Row", as "Picture Profile > PP1 > Gamma"). "Madeup Option" is also the value the made-up
+# camera shows for IP Address Setting
+OPTION = "Madeup Option"
+MADE_UP_DEFINITION = {
+    "menu": [{"tab": "Network", "group": "Wired LAN", "label": "IP Address Setting"},
+             {"tab": "Network", "group": "Wired LAN", "label": "Display Wired LAN Info."},
+             {"tab": "Network", "group": "FTP Transfer", "label": "FTP Transfer Func."},
+             {"tab": "Focus", "group": "Subject", "label": "Subject Pick"}],
+    "settings": [{"name": "Subject Pick", "row": ["Subject Pick"], "values": [[0, OPTION], [1, "Other Choice"]]},
+                 {"name": "Depth", "row": ["Subject Pick", OPTION, "Depth Level"], "values": [[0, "1"], [1, "2"]]},
+                 {"name": "Gamma", "row": ["Profile Pick", "PQ1", "Gamma Row"], "under_option": "PQ1", "values": []},
+                 # a value that is also a field name an address screen shows (safety.ADDRESS_FIELDS)
+                 {"name": "Target", "row": ["Transfer Target"], "values": [[0, "Server"], [1, "Phone"]]},
+                 {"name": "Unplaced", "values": [[0, "IP Address Setting"]]}]}     # a My Menu item's shape: on no row
+
+
+@pytest.fixture
+def made_up_definition(tmp_path, monkeypatch):
+    """The camera's definition is MADE_UP_DEFINITION (camkit.definitions.active)."""
+    from camkit import definitions
+    target = tmp_path / "made_up_definition.json"
+    target.write_text(json.dumps(MADE_UP_DEFINITION), encoding="utf-8")
+    monkeypatch.setattr(definitions, "active", lambda required=False: target)
+    return target
+
+
+def test_the_known_labels_are_row_labels_never_an_option_or_a_value(made_up_definition):
+    """runner.row_labels leaves out an option a row path names (the row's own setting's value names, or the setting's
+    under_option); runner.known_values holds every value name of a setting placed on a row and the page model's value
+    column; runner.known_labels holds none of those."""
+    import runner
+    doc = json.loads(made_up_definition.read_text(encoding="utf-8"))
+    assert runner.row_labels(doc) == {"IP Address Setting", "Display Wired LAN Info.", "FTP Transfer Func.",
+                                      "Subject Pick", "Depth Level", "Profile Pick", "Gamma Row", "Transfer Target"}
+    model = {"p": {"breadcrumb": "Network > Wired LAN",
+                   "rows": [{"label": "IP Address Setting", "value": "Automatic",
+                             "readings": {"label": {}, "value": {"vlm": "Automatic", "ocr": "Autornatic"}}},
+                            {"label": "Wake Up Row", "value": None},
+                            {"label": "Other Choice", "value": None},           # a row label read that is a value
+                            {"label": "Wake Up Row", "value": "Depth Level"}]}}  # and a value that is a row label
+    told = runner.known_values(model)
+    assert {OPTION, "Other Choice", "1", "2", "PQ1", "Automatic", "Autornatic", "Depth Level"} <= told
+    assert "IP Address Setting" not in told                    # a value of a setting on no row only
+    labels = runner.known_labels(model)
+    assert OPTION not in labels and "PQ1" not in labels and "Automatic" not in labels
+    assert "Other Choice" not in labels and "Depth Level" not in labels      # a value, though some path's row label
+    assert {"IP Address Setting", "Gamma Row", "Wake Up Row"} <= labels
+    assert runner.known_groups(model) == {"Wired LAN", "FTP Transfer", "Subject"}
+
+
+def test_screen_fields_never_keep_a_known_value_even_one_named_a_label():
+    names, hidden = safety.screen_fields([OPTION, "IP Address Setting", "IP Address", IP],
+                                         labels={OPTION, "IP Address Setting"}, values={OPTION})
+    assert names == ["IP Address Setting", "IP Address"] and hidden == 2
+    assert safety.address_fields(["Automatic", "IP Address", IP], values={"automatic"}) == (["IP Address"], 2)
+    assert safety.address_fields(["IP Address"], values={"IP Address"}) == ([], 1)      # failing closed
+
+
+@pytest.mark.parametrize("where", ["address screen", "page after MENU"])
+def test_drive_keeps_no_value_named_as_an_option_on_an_address_screen_or_the_page_after_menu(
+        tmp_path, monkeypatch, scope_file, made_up_definition, capsys, where):
+    """The leak of 2026-11-13, with made-up names: the value the camera shows for IP Address Setting is a word a row
+    path of the definition names as an option. On Display Wired LAN Info. and on the Wired LAN page after MENU, what is
+    printed, drive.jsonl and the run's events keep the row labels and field names, never that word; nor "Server", a value
+    of Transfer Target that is also a field name an address screen shows (drive passes the known values to
+    safety.screen_fields)."""
+    page = ["Wired LAN", "IP Address Setting", OPTION, "Display Wired LAN Info.", "Server"]
+    info = ["Display Wired LAN Info.", "IP Address", IP, OPTION, "Server"]
+    pressed, _, line, logged = drive_fake(
+        tmp_path, monkeypatch, scope_file, ["right", "menu"], ("Display Wired LAN Info.",),
+        {**DECISION, "rows": ["Display Wired LAN Info."]}, info if where == "address screen" else ["IP Address", IP],
+        "unknown", page_lit="Display Wired LAN Info.", open_lit="", page_kind="menu",
+        page_lines=page if where == "page after MENU" else ["Wired LAN", "Display Wired LAN Info."])
+    out = capsys.readouterr().out
+    assert pressed == ["menu", "right", "menu"] and line["completed"] is True
+    assert all("text" not in s for s in line["screens"])
+    fields = [f for s in line["screens"] for f in s["fields"]]
+    assert "IP Address" in fields and "Display Wired LAN Info." in fields
+    if where == "page after MENU":
+        assert "IP Address Setting" in fields                   # a row label: kept
+    assert "Server" not in fields
+    for said in (out, json.dumps(line), logged):
+        assert OPTION not in said and IP not in said
+
+
+def test_a_page_models_label_with_a_value_glued_on_is_no_label(tmp_path, monkeypatch):
+    """runner.label_alone: a row's label read with one of its known values glued on, with a space or none, an icon's
+    letter or two before it or not, is no label alone ("Wi-Fi ConnectOn", "GAirplane Mode On"), whether the row's
+    label is the definition's or one the page model read; a longer label that only starts like one is kept."""
+    import runner
+    from camkit import definitions
+    target = tmp_path / "def.json"
+    target.write_text(json.dumps({"menu": [{"label": "Airplane Mode"}, {"label": "Wi-Fi Connect"}], "settings": []}),
+                      encoding="utf-8")
+    monkeypatch.setattr(definitions, "active", lambda required=False: target)
+    glued = ["Wi-Fi ConnectOn", "Wi-Fi ConnectOff", "GAirplane Mode On", "G Airplane Mode Off", "AirPlane ModeOn",
+             "SBluetooth FunctionOn"]
+    model = {"p": {"rows": [{"label": "Airplane Mode", "value": "On", "readings": {"value": {"vlm": "Off"}}},
+                            {"label": "Wi-Fi Connect", "value": "Off", "readings": {"value": {"vlm": "On"}}},
+                            {"label": "Bluetooth Function", "value": "On"}, {"label": "Wi-Fi Connection Info"},
+                            *({"label": x} for x in glued)]}}
+    labels = runner.known_labels(model)
+    assert not set(glued) & labels, set(glued) & labels
+    assert {"Airplane Mode", "Wi-Fi Connect", "Bluetooth Function", "Wi-Fi Connection Info"} <= labels
+    names, hidden = safety.screen_fields(["Wi-Fi ConnectOn", "Airplane Mode"], labels, runner.known_values(model))
+    assert names == ["Airplane Mode"] and hidden == 1
+
+
+def read_on(group, *texts) -> list:
+    """runner.network_readings' entries for one page-model row: every reading of it, on a page of `group`."""
+    return [{"group": group, "readings": list(texts)}]
+
+
+def test_a_row_read_with_its_icon_glued_on_lifts_only_where_another_reader_read_the_row():
+    """The Wired LAN page's icon read as letters glued to the label ("LANIP Address Setting"): the lift takes it for IP
+    Address Setting only where the page model keeps, for the same row, a reading that is the row exactly, every reading
+    of it is of the row's class, and what the reading adds is a word of the page's own group name, glued on, of at most
+    safety.ICON_MAX letters (safety.lifted_readings, glued_icon)."""
+    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
+    values = {"IP Address Setting": ["Automatic", "Manual"]}
+    two = {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "LAN IP Address Setting",
+                                         "IP Address Setting")}
+    lift = lambda lit, readings: safety.network_lifted_row(lit, rows, values=values, readings=readings)  # noqa: E731
+    assert lift("LANIP Address Setting", two) == "IP Address Setting"
+    assert lift("LANIP Address Setting  Automatic", two) == "IP Address Setting"
+    assert lift("LANIP Address Setting  Elsewhere", two) is None                   # no value of its own
+    assert lift("LANIP Address Setting", None) is None                              # no second reading
+    assert lift("LAN IP Address Setting", two) is None                              # a word in front: no icon
+    assert lift("LANIP Address Setting", {"IP Address Setting": [["LANIP Address Setting", "IP Address Setting"]]}) \
+        is None                                                                     # no page group known
+    assert lift("LANIP Address Setting", {"IP Address Setting": read_on("Wi-Fi", "LANIP Address Setting",
+                                                                        "IP Address Setting")}) is None   # not its group
+    assert lift("LANIP Address Setting", {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting",
+                                                                        "IP Adress Setting")}) is None  # differs
+    assert lift("LANIP Address Setting", {"IP Address Setting": read_on(
+        "Wired LAN", "LANIP Address Setting", "IP Address Setting", "IP Address Password")}) is None   # credentials
+    assert lift("LANIP Address Setting", {"IP Address Setting": read_on(
+        "Wired LAN", "LANIP Address Setting", "IP Address Setting", "IP Address Setting Reset")}) is None  # an action
+    assert lift("WiredIP Address Setting", {"IP Address Setting": read_on(
+        "Wired LAN", "WiredIP Address Setting", "IP Address Setting")}) is None      # a word of 5 letters: no icon
+    assert lift("LANIP Address Settlng", {"IP Address Setting": read_on(
+        "Wired LAN", "LANIP Address Settlng", "IP Address Setting")}) is None        # not the row itself after the icon
+    for lit in ("LAN Access Point Set.", "LANAccess Point Set."):
+        assert lift(lit, {"IP Address Setting": read_on("Wired LAN", lit, "IP Address Setting")}) is None
+    # nothing else of the lift moves: the row itself, and its value, as before
+    assert lift("IP Address Setting  Manual", None) == "IP Address Setting"
+
+
+@pytest.mark.parametrize("lit,row,group", [
+    ("WPSIP Address Setting", "IP Address Setting", "Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "Wi-Fi"),
+    ("NoWi-Fi Connect", "Wi-Fi Connect", "Wi-Fi"), ("DelBluetooth Function", "Bluetooth Function", "Bluetooth"),
+    ("PinManage Paired Device", "Manage Paired Device", "Bluetooth"),
+    ("OffAirplane Mode", "Airplane Mode", "Network Option"),
+    # the same words where the page's group held them: never_open or identity_screen refuses them alone
+    ("WPSIP Address Setting", "IP Address Setting", "WPS Wired LAN"), ("PWWi-Fi Connect", "Wi-Fi Connect", "PW Wi-Fi"),
+    ("PinManage Paired Device", "Manage Paired Device", "Pin Bluetooth"),
+    ("CopyWi-Fi Connect", "Wi-Fi Connect", "Copy Wi-Fi"),        # an action's name: never_open alone names it
+])
+def test_a_word_glued_on_is_no_icon_unless_it_is_the_pages_group_and_harmless(lit, row, group):
+    """What the review of 2026-11-14 found lifting: a real word glued on (WPS, PW, No, Del, Pin, Off), whose
+    word-boundary patterns never fire on glued text. Each is refused: no word of the row's page's group, or one that
+    never_open or identity_screen names alone."""
+    rows = decided({**DECISION, "rows": [row]})
+    assert safety.network_lifted_row(lit, rows, values=VALUES, readings={row: read_on(group, lit, row)}) is None
+    assert safety.glued_icon(lit[:-len(row)], row, group)
+
+
+def test_an_icon_that_sets_the_row_in_another_class_is_no_icon():
+    """glued_icon: the label read with the glued word set apart must keep the row's class. A made-up row of the Wi-Fi
+    class whose glued word "USB" would read, set apart, as USB Power (an identity row): no icon, though "USB" names
+    nothing alone and is a word of the made-up group."""
+    row = "Power Supply Wi-Fi Connect"
+    assert safety.lift_class(row) == safety.LIFT_NETWORK and not safety.never_open("usb")
+    assert safety.identity_screen("usb") is None and "class" in safety.glued_icon("USB", row, "USB Wi-Fi")
+    assert safety.lifted_readings(row, {row: read_on("USB Wi-Fi", "USBPower Supply Wi-Fi Connect", row)}) == {
+        safety.plain(row)}
+    assert safety.glued_icon("lan", "IP Address Setting", "Wired LAN") is None
+
+
+def test_a_row_opened_through_its_icon_glued_on_is_left_on_its_page_and_the_next_row_opens(tmp_path, monkeypatch):
+    """The lock ends where the page the row was opened from is back with its bar on the row as the reading with its
+    icon glued on that opened it ("LANIP Address Setting" still reads so after MENU: safety.bar_on_row); then the next
+    row opens. Without that reading kept, the lock stayed and the crawl stopped at the next Right (the review of
+    2026-11-14)."""
+    rows = decided({**DECISION, "rows": ["IP Address Setting"]})
+    readings = {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "IP Address Setting")}
+    cam = camera(tmp_path, rows, values={"IP Address Setting": ["Automatic"]}, page="menu")
+    cam.readings = readings
+    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "Automatic Manual", "inside")
+    cam.presses, cam._seen = 0, cam._moves()
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    lit_on(monkeypatch, "LANIP Address Setting  Automatic")
+    cam.press("right")
+    assert cam.network_open["row"] == "IP Address Setting"
+    cam.hdmi.shows("menu", PAGE)                     # MENU: the page, its bar on the glued reading
+    cam.press("menu")
+    assert cam.network_open is None and events(cam)[-1]["kind"] == "network_row_left"
+    cam.press("right")                               # the next row (here the same) opens as ever
+    assert cam.link.sent == ["right", "menu", "right"] and cam.network_open is not None
+    assert safety.bar_on_row("LANIP Address Setting  Automatic", "IP Address Setting", readings)
+    assert not safety.bar_on_row("LANIP Address Setting  Automatic", "IP Address Setting")
+    assert not safety.bar_on_row("Automatic", "IP Address Setting", readings)
+
+
+def test_drive_leaves_a_row_opened_through_its_icon_glued_on_and_opens_the_next(tmp_path, monkeypatch, scope_file):
+    """drive.py on its own: Right on "LANIP Address Setting" (the page model's row holds "IP Address Setting" too, on
+    the Wired LAN page), MENU back to the page with that bar, Right again: the lock had ended."""
+    model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [
+        {"label": "LANIP Address Setting", "readings": {"label": {"ocr": "LANIP Address Setting",
+                                                                  "vlm": "IP Address Setting"}}}]}}
+    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu", "right"],
+                                          ("IP Address Setting",), {**DECISION, "rows": ["IP Address Setting"]},
+                                          ["Automatic", "Manual"], "list", page_lit="LANIP Address Setting",
+                                          open_lit="Automatic", page_kind="menu", model=model)
+    assert pressed == ["menu", "right", "menu", "right"] and line["completed"] is True
+    assert logged.count('"network_row_opened"') == 2 and '"network_row_left"' in logged
+
+
+def test_the_runners_give_the_page_models_readings_and_values_to_the_lift(tmp_path, monkeypatch):
+    import runner
+    row = {"label": "LANIP Address Setting", "value": "Automatic",
+           "readings": {"label": {"ocr": "LANIP Address Setting", "ocr2": "LAN IP Address Setting",
+                                  "vlm": "IP Address Setting"}, "value": {"vlm": "Automatic"}},
+           "never_open": safety.never_open("LANIP Address Setting")}
+    model = {"p": {"breadcrumb": "Network > Wired LAN", "rows": [row, {"label": "Wired LAN Connect", "value": "On"}]}}
+    decided_rows = {"IP Address Setting": DAY}
+    readings = runner.network_readings(decided_rows, model)
+    assert readings == {"IP Address Setting": read_on("Wired LAN", "LANIP Address Setting", "LANIP Address Setting",
+                                                      "LAN IP Address Setting", "IP Address Setting")}
+    values = runner.network_values(decided_rows, model)
+    assert values == {"IP Address Setting": ["Automatic"]}
+    # the camera's own press check opens it, and the walk takes the page model's row
+    monkeypatch.setattr(live, "lit_text", lambda image, path: "LANIP Address Setting  Automatic")
+    cam = camera(tmp_path, decided_rows, values=values, page="menu")
+    cam.readings = readings
+    with pytest.raises(RuntimeError, match="sent"):
+        cam.press("right")
+    assert cam.link.sent == ["right"] and cam.network_open["row"] == "IP Address Setting"
+    cam = camera(tmp_path, decided_rows, values=values, page="menu")                 # no readings: refused
+    with pytest.raises(safety.Refused, match="never opened"):
+        cam.press("right")
+    assert crawl.network_open(row, decided_rows, "Wired LAN")
+    assert not crawl.network_open(row, decided_rows)                              # no page group: no icon
+    assert not crawl.network_open({**row, "readings": {"label": {"ocr": "LANIP Address Setting"}}}, decided_rows,
+                                  "Wired LAN")
+    # the walk takes the group off the page's breadcrumb
+    cam = RowCamera()
+    r = crawl.visit_row(cam, cam.read(), model["p"], 0, row, network=decided_rows)
+    assert r.network == safety.LIFT_IDENTITY and cam.keys == ["right", "menu"]
+
+
+def test_a_group_one_letter_from_a_never_open_one_is_refused_before_any_press():
+    """safety.group_refused: the page model's "FTP Transter" is "FTP Transfer" (an action) but for one letter; a group
+    name one letter from a never-open group name the kit knows (known) is refused too; the real group names are not."""
+    assert safety.never_open("FTP Transter") is None
+    assert "ftp transfer" in safety.group_refused("FTP Transter") and "one letter" in safety.group_refused("FTP Transter")
+    assert safety.group_refused("FTP Transfer") == safety.never_open("FTP Transfer")
+    assert safety.group_refused("FTP Transfr")                                      # a letter dropped
+    assert safety.group_refused("Streamlng") is None and safety.group_refused("Streamlng", ["Streaming"])
+    for name in ("Wired LAN", "Wi-Fi", "Bluetooth", "Network Option", "Cnct./Remote Sht.", "File", "Edit", "Media",
+                 "Shooting Mode", "Image Quality/Rec", "Setup Option", "Touch Operation", "Zoom", "Flash"):
+        assert safety.group_refused(name, ["Streaming", "FTP Transfer", "Accessibility", "Delete"]) is None, name
+    # only a name of safety.GROUP_MIN letters and digits or more is compared one letter apart
+    assert safety.GROUP_MIN == 5
+    assert safety.group_refused("Sent") is None                                     # "send" but for a letter: short
+    assert safety.group_refused("Delet")                                            # five letters, "delete" less one
+    # the one-letter comparison is made on every reading, its slips undone: "Forrnal" is "formal", "format" less one
+    assert safety.never_open("Forrnal") is None and "format" in safety.group_refused("Forrnal")
+
+
+class ColumnCamera:
+    """One tab of a menu (Network), each of its groups one page of `rows` rows, as the tab column, the group column and
+    the rows show it: Left from the rows goes to the group column, Left again to the tab column, Right back; Up and Down
+    in the group column light another group (ignored, `stuck`, or two groups at once, `skip`, for the keys named), Right
+    there steps into the lit group's first row; Down and Up in the rows step a row (onto the next group's page at a
+    page's end, the last group's onto the first's). The lit bar in the group column reads the group's name as the camera
+    draws it (`drawn`); after a key named in `misfocus` the screen reads as the rows (focus "rows") though the cursor is
+    in the group column, its lit bar reading `misfocus[key]`. Every Right in the group column is kept with what it lit."""
+    def __init__(self, drawn, at=0, stuck=(), rows=2, skip=(), misfocus=None):
+        self.drawn, self.focus, self.group, self.row, self.keys, self.rights = drawn, "groups", at, 0, [], []
+        self.stuck, self.skip, self.misfocus, self.misread = list(stuck), list(skip), dict(misfocus or {}), None
+        self.may_open, self.rows = frozenset(), rows
+        self.frame = SimpleNamespace(image=None, path=Path("00001_menu.png"))
+
+    def press(self, key):
+        self.keys.append(key)
+        self.misread = self.misfocus.pop(key, None)
+        if self.focus == "tabs":
+            if key == "right":
+                self.focus = "groups"
+        elif self.focus == "groups":
+            if key in self.stuck:
+                self.stuck.remove(key)
+            elif key in ("up", "down"):
+                step = 2 if key in self.skip else 1
+                self.skip = [k for k in self.skip if k != key]
+                self.group = max(0, min(len(self.drawn) - 1, self.group + (step if key == "down" else -step)))
+            elif key == "right":
+                self.rights.append(self.drawn[self.group])
+                self.focus, self.row = "rows", 0
+            elif key == "left":
+                self.focus = "tabs"
+        elif key == "left":
+            self.focus = "groups"
+        elif key in ("up", "down"):
+            at = self.group * self.rows + self.row + (1 if key == "down" else -1)
+            self.group, self.row = divmod(at % (self.rows * len(self.drawn)), self.rows)
+
+    def read(self):
+        focus = "rows" if self.misread is not None else self.focus
+        return SimpleNamespace(kind="menu", focus=focus, where=(focus, self.group, self.row))
+
+    def lit(self):
+        if self.misread is not None:
+            return self.misread
+        return self.drawn[self.group] if self.focus == "groups" else f"{self.drawn[self.group]} row {self.row}"
+
+
+def columns(monkeypatch, scanned, drawn, at=0, stuck=(), rows=2, skip=(), misfocus=None):
+    """A ColumnCamera, and the page scan's cycle and page model of its tab as the scan read the group names
+    (`scanned`), crawl_run's seams faked on it."""
+    import crawl_run
+    cam = ColumnCamera(drawn, at, stuck, rows, skip, misfocus)
+    cycle = [{"kind": "menu", "page": f"p{g}", "row": r,
+              "screen": SimpleNamespace(kind="menu", focus="rows", where=("rows", g, r))}
+             for g in range(len(scanned)) for r in range(rows)]
+    model = {f"p{g}": {"breadcrumb": f"Network > {n}", "rows": [{"label": f"{n} row {r}"} for r in range(rows)]}
+             for g, n in enumerate(scanned)}
+    monkeypatch.setattr(crawl_run, "same_position", lambda a, b: a.where == b.where)
+    monkeypatch.setattr(crawl_run, "lit_text", lambda image, path: cam.lit())
+    monkeypatch.setattr(crawl_run, "menu_text", lambda c: "Network 7/9")
+    return cam, cycle, model
+
+
+def test_from_the_group_column_navigation_steps_into_a_group_it_may_enter(monkeypatch):
+    """The menu reopens with the cursor in the group column on the group a jump was refused on ("FTP Transfer", which
+    the scan read as "FTP Transter"): find_position goes Up to the nearest group it may enter and Right there, never on
+    the refused one, and go_to goes on by the scan to a row on another page."""
+    import crawl_run
+    scanned = ["Wi-Fi", "FTP Transter", "Wired LAN"]
+    cam, cycle, model = columns(monkeypatch, scanned, ["Wi-Fi", "FTP Transfer", "Wired LAN"], at=1)
+    j = crawl_run.find_position(cam, cycle, model)
+    assert j == 0 and cam.keys == ["up", "right"] and cam.rights == ["Wi-Fi"]
+    assert crawl_run.go_to(cam, cycle, model, j, "Wired LAN row 0") == 4
+    assert cam.rights == ["Wi-Fi"] and len(cam.keys) == 4 and set(cam.keys[2:]) <= {"up", "down"}
+    # the menu reopens in the column on a group it may enter: Right at once
+    cam, cycle, model = columns(monkeypatch, scanned, ["Wi-Fi", "FTP Transfer", "Wired LAN"], at=2)
+    assert crawl_run.find_position(cam, cycle, model) == 4 and cam.keys == ["right"]
+
+
+def test_from_the_group_column_nothing_is_pressed_where_every_group_is_refused(monkeypatch):
+    """Every group of the tab is one the column never enters: find_position presses nothing (the caller's MENU closes
+    the menu); and where the Up meant for a group it may enter is not taken, so the refused group is still lit, no
+    Right goes out."""
+    import crawl_run
+    refused = ["FTP Transter", "Creators' Cloud", "Streaming"]
+    cam, cycle, model = columns(monkeypatch, refused, ["FTP Transfer", "Creators' Cloud", "Streaming"], at=0)
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == [] and cam.focus == "groups"
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "FTP Transter"], ["Wi-Fi", "FTP Transfer"], at=1, stuck=["up"])
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == ["up"] and cam.rights == []
+
+
+def test_from_the_group_column_the_lit_group_and_the_focus_are_judged_before_the_right(monkeypatch):
+    """from_groups sends its Right only where the lit bar, read just before it, names the very group it went to (judged
+    whole: group_near) and no group the column never enters (safety.group_refused, on the page model's name and on the
+    bar as read), and the screen still reads as the group column."""
+    import crawl_run
+    # the page model's name ("Creators' Clond") passes, the bar read there ("Creators' Cloud") does not: no Right
+    cam, cycle, model = columns(monkeypatch, ["FTP Transter", "Creators' Clond"], ["FTP Transfer", "Creators' Cloud"])
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == ["down"] and cam.rights == []
+    # the same where the menu reopened on that group: it is stepped off, not entered
+    cam, cycle, model = columns(monkeypatch, ["Creators' Clond", "Wi-Fi"], ["Creators' Cloud", "Wi-Fi"])
+    assert crawl_run.find_position(cam, cycle, model) == 2 and cam.keys == ["down", "right"] and cam.rights == ["Wi-Fi"]
+    # an Up that moved two groups lands on another group than the one meant, harmless or not: no Right
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth", "FTP Transter"], ["Wi-Fi", "Bluetooth", "FTP Transfer"],
+                                at=2, skip=["up"])
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == ["up"] and cam.rights == []
+    # after the Up the screen reads as a page of rows: no Right, whatever its bar reads
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "FTP Transter"], ["Wi-Fi", "FTP Transfer"], at=1,
+                                misfocus={"up": "Wi-Fi"})
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == ["up"] and cam.rights == []
+    # the focus read as the group column on a page of rows: the lit row's text names no group ("File Format  RAW" is no
+    # "File"), so nothing is pressed
+    cam, cycle, model = columns(monkeypatch, ["File", "Media"], ["File Format  RAW", "Media"])
+    assert crawl_run.find_position(cam, cycle, model) is None and cam.keys == []
+
+
+def test_a_lit_group_is_named_whole_and_by_one_group_only():
+    import crawl_run
+    names = ["File", "Media Option", "FTP Transter"]
+    assert crawl_run.group_near("File", names) == 0 and crawl_run.group_near("File Format  RAW", names) is None
+    assert crawl_run.group_near("FTP Transfer", names) == 2 and crawl_run.group_near("DFTP Transfer", names) is None
+    assert crawl_run.group_near("Media Optlon", names) == 1
+    assert crawl_run.group_near("Fil", names) is None                         # one letter off a short name: none
+    assert crawl_run.group_near("Media Optin", ["Media Option", "Media Opton"]) is None     # two groups: none
+
+
+def test_jump_sends_no_right_where_the_lit_group_reads_as_one_never_entered(monkeypatch):
+    """crawl_run.jump: its last Right goes out only where the lit group, as read there, is no group the column never
+    enters (group_closed), whatever the page model read ("Creators' Clond" for "Creators' Cloud")."""
+    import crawl_run
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Creators' Clond"], ["Wi-Fi", "Creators' Cloud"])
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 2, model) is None
+    assert cam.keys == ["left", "left", "right", "down"] and cam.rights == []
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth"], ["Wi-Fi", "Bluetooth"])
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 2, model) == 2 and cam.rights == ["Bluetooth"]
+
+
+def test_a_network_runs_navigation_prints_no_text_it_read(monkeypatch, capsys):
+    """On a --network run (the camera given a decision's rows) from_groups and jump print the length of what they read
+    off the screen, never the text, which may hold a device's name or an address."""
+    import crawl_run
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth"], [f"ILCE-made-up {IP}", "Bluetooth"])
+    cam.network = {"Bluetooth Function": DAY}
+    assert crawl_run.find_position(cam, cycle, model) is None
+    out = capsys.readouterr().out
+    assert "withheld" in out and IP not in out and "ILCE-made-up" not in out
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth"], ["Wi-Fi", "FTP Transfr"])
+    cam.focus, cam.network = "rows", {"Bluetooth Function": DAY}
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 2, model) is None
+    out = capsys.readouterr().out
+    assert "one letter" in out and "FTP Transfr" not in out
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth"], [f"ILCE-made-up {IP}", "Bluetooth"])
+    assert crawl_run.find_position(cam, cycle, model) is None
+    assert "ILCE-made-up" in capsys.readouterr().out                        # without --network, as ever
+
+
+def test_go_to_walks_rather_than_jump_into_a_group_read_one_letter_off(monkeypatch):
+    """go_to's jump by the columns is refused before any press when the target's group, as the scan read it, is one
+    letter from a never-open name: the rows are walked to, Down by Down."""
+    import crawl_run
+    scanned = ["Wi-Fi", "Bluetooth", "FTP Transter", "Wired LAN"]
+    cam, cycle, model = columns(monkeypatch, scanned, scanned, at=0, rows=6)
+    cam.focus = "rows"
+    monkeypatch.setattr(crawl_run, "jump", lambda *a, **k: pytest.fail("jumped by the columns"))
+    assert crawl_run.go_to(cam, cycle, model, 0, "FTP Transter row 1") == 13
+    assert cam.keys == ["up"] * 11 and cam.rights == []
+    # the same walk to a group it may jump into goes by the columns (jump), as ever
+    jumped = []
+    monkeypatch.setattr(crawl_run, "jump", lambda cam, cycle, groups, target, model: jumped.append(target) or target)
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth", "Network Option", "Wired LAN"],
+                                ["Wi-Fi", "Bluetooth", "Network Option", "Wired LAN"], at=0, rows=6)
+    cam.focus = "rows"
+    assert crawl_run.go_to(cam, cycle, model, 0, "Network Option row 1") == 13 and jumped == [13] and cam.keys == []
+
+
+def test_a_rows_own_screen_read_as_the_shooting_screen_keeps_menu_alone(tmp_path, monkeypatch):
+    """Right on Manage Paired Device opens what reads as the shooting screen: no MENU has gone out, so it is the row's
+    own screen misread. It is judged as no known kind (MENU alone, no reader); a MENU after which the same screen still
+    reads so leaves nothing; one after which another frame reads as the shooting screen ends the row only when the
+    camera's own picture says so too (live.osd_kind)."""
+    from camkit import vlm
+    cam = inside_camera(tmp_path, monkeypatch, kind="shooting", where="inside", row="Manage Paired Device",
+                        lit="Manage Paired Device", words="Manage Paired Device Made-up Phone")
+    assert cam.network_open["suspect"] is not None and cam.identity_open and vlm.HELD
+    assert [e["kind"] for e in events(cam)][-2:] == ["shooting_inside", "identity_screen"]
+    with pytest.raises(safety.Refused, match="no key but MENU"):
+        cam.press("down")
+    monkeypatch.setattr(live.screen, "same_state", lambda a, b: a.where == b.where and a.kind == b.kind)
+    monkeypatch.setattr(live, "osd_kind", lambda link: "shooting")
+    cam.press("menu")                                    # the same screen, still read as the shooting screen
+    assert cam.network_open is not None and cam.identity_open
+    cam.hdmi.shows("shooting", "shooting")
+    monkeypatch.setattr(live, "osd_kind", lambda link: "")
+    cam.press("menu")                                    # another frame, but the camera's own picture cannot say
+    assert cam.network_open is not None
+    monkeypatch.setattr(live, "osd_kind", lambda link: "shooting")
+    cam.press("menu")
+    assert cam.network_open is None and cam.identity_open is None and vlm.HELD is None
+    assert cam.link.sent == ["right", "menu", "menu", "menu"]
+
+
+def test_a_shooting_screen_after_a_menu_inside_a_row_whose_screen_read_right_ends_it_as_before(tmp_path, monkeypatch):
+    monkeypatch.setattr(live, "osd_kind", lambda link: pytest.fail("the camera's own picture asked"))
+    cam = inside_camera(tmp_path, monkeypatch, **WIRED)
+    assert cam.network_open.get("suspect") is None and cam.identity_open is None
+    cam.hdmi.shows("shooting", "shooting")
+    cam.press("menu")
+    assert cam.network_open is None
+
+
+def test_drive_sends_menu_alone_on_a_rows_screen_read_as_the_shooting_screen(tmp_path, monkeypatch, scope_file, capsys):
+    """drive.py on its own: Right on Manage Paired Device opens what reads as the shooting screen. Down is refused (MENU
+    alone), and a MENU the camera ignores, the screen still read so, leaves nothing, whatever the camera's own picture
+    reads."""
+    import drive as D
+    paired = {"path": ("Manage Paired Device",), "decision": {**DECISION, "rows": ["Manage Paired Device"]},
+              "open_lines": ["Manage Paired Device", "Made-up Phone"], "open_kind": "shooting",
+              "page_lit": "Manage Paired Device", "open_lit": "", "page_kind": "menu"}
+    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "down"], **paired)
+    out = capsys.readouterr().out
+    assert pressed == ["menu", "right"] and line["completed"] is False and "no key but MENU" in out
+    assert '"shooting_inside"' in logged and "Made-up Phone" not in out + json.dumps(line)
+    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu", "down"], **paired,
+                                          menu_does="ignored", own="shooting")
+    assert pressed == ["menu", "right", "menu"] and line["completed"] is False
+    assert '"network_row_left"' not in logged
+    page, suspect = SimpleNamespace(kind="menu", where=PAGE), SimpleNamespace(kind="shooting", where="inside")
+    real = SimpleNamespace(kind="shooting", where="shooting")
+    monkeypatch.setattr(D, "same_state", lambda a, b: a.where == b.where)
+    row = "Manage Paired Device"
+    assert D.network_left(real, page, True, "", row) is True                         # no suspect: as before
+    assert D.network_left(real, page, True, "", row, suspect, lambda: "shooting") is True
+    assert D.network_left(real, page, True, "", row, suspect, lambda: "") is False
+    assert D.network_left(real, page, True, "", row, suspect, None) is False
+    assert D.network_left(suspect, page, True, "", row, suspect, lambda: "shooting") is False
+
+
+def test_drive_marks_a_rows_screen_read_as_the_shooting_screen_at_the_wait_too(tmp_path, monkeypatch, scope_file):
+    """A camera slow to draw: the frame after Right on Bluetooth Function still shows the page, and the frame read after
+    the wait reads as the shooting screen, the row still open. That screen is the row's own, misread: kept as its field
+    names alone, never its text (a Wi-Fi or Bluetooth setting's own screen read as the shooting screen would otherwise
+    be shown whole)."""
+    pressed, _, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right"], ("Bluetooth Function",), RMT,
+                                          ["Bluetooth Function", "On", "Off"], "shooting",
+                                          page_lit="Bluetooth Function  On", open_lit="", slow=True)
+    assert pressed == ["menu", "right"] and line["completed"] is True
+    wait = line["screens"][-1]
+    assert wait["after"] == "wait" and wait["kind"] == "shooting" and "text" not in wait and "fields" in wait
+    assert '"shooting_inside"' in logged and '"key": "wait"' in logged
+
+
+def test_a_screen_of_no_known_kind_inside_any_lifted_row_gets_menu_alone_and_field_names():
+    """No kind "info" is added (the information screens, Display Wired LAN Info., Display FTP Result, cannot be told
+    from a keyboard or an entry screen without the camera's frames): a screen read as no known kind inside a row a
+    decision opened, of any class, gets MENU alone, and drive.py keeps its field names and whole row labels alone."""
+    import drive as D
+    for cls in (safety.LIFT_NETWORK, safety.LIFT_IDENTITY, safety.LIFT_ADDRESS):
+        assert safety.inside_menu_only(cls, "unknown", "Bluetooth Function On Off"), cls
+    assert safety.inside_menu_only(safety.LIFT_NETWORK, "list", "Bluetooth Function On Off") is None
+    assert D.network_shown("unknown", "Server Result: made-up", {"class": safety.LIFT_NETWORK}, False, True)
+
+
+def test_drive_keeps_display_ftp_results_field_names_alone(tmp_path, monkeypatch, scope_file, capsys):
+    lines = ["Display FTP Result", "Server", "made-up.example", "Result: 3 sent"]
+    pressed, _, line, _ = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "down"], ("Display FTP Result",),
+                                     {**DECISION, "rows": ["Display FTP Result"]}, lines, "unknown",
+                                     page_lit="Display FTP Result", open_lit="", page_kind="menu")
+    out = capsys.readouterr().out
+    assert pressed == ["menu", "right"] and line["completed"] is False                # MENU alone on it
+    assert line["screens"][0]["fields"] == ["Server"] and "text" not in line["screens"][0]
+    for said in (out, json.dumps(line)):
+        assert "made-up.example" not in said and "3 sent" not in said
+
+
+# the row labels and their values the kit knows, as runner.known_labels and runner.row_values give them (made up but for
+# the a1 II's own row names); "Account Info", "Forrnat Media" ("rn" read for "m") and "Update Firmware" are made-up
+# labels whose words name identity, a card action (only with the slip undone) and a confirmation
+NOTICE_LABELS = {"Airplane Mode", "Wired LAN Connect", "Account Info", "Forrnat Media", "Update Firmware"}
+NOTICE_VALUES = {"Airplane Mode": ["On", "Off"], "Wired LAN Connect": ["On", "Off"], "Account Info": ["Set"],
+                 "Forrnat Media": ["Slot 1"], "Update Firmware": ["Ready"]}
+FOLLOWS = "This operation or setting not available as follows"
+
+
+@pytest.mark.parametrize("text,kept", [
+    ("This function is currently disabled. OK", "This function is currently disabled."),
+    ("This function is currently disabled.", "This function is currently disabled."),
+    ("This operation or setting not available.  ● OK", "This operation or setting not available."),
+    (f"{FOLLOWS} Airplane Mode On OK", f"{FOLLOWS} Airplane Mode On"),       # a known label and one of its values
+    (f"{FOLLOWS} Airplane Mode OK", f"{FOLLOWS} Airplane Mode"),             # a known label alone
+    (f"{FOLLOWS} Airplane Mode Maybe", FOLLOWS),                              # no value of its own: the sentence alone
+    (f"{FOLLOWS} {IP}", FOLLOWS),                                             # an address: the sentence alone
+    (f"{FOLLOWS} {MAC}", FOLLOWS),
+    (f"{FOLLOWS} ILCE-made-up", FOLLOWS),                                     # a device's name
+    (f"{FOLLOWS} DIRECT-madeup", FOLLOWS),                                    # an SSID-like string
+    (f"{FOLLOWS} someone@example.com", FOLLOWS),                              # an e-mail address
+    ("Connected to DIRECT-madeup. Cannot be executed. OK", ""),                 # names a connection: nothing
+    (f"{FOLLOWS} Wired LAN Connect On", ""),                                  # names an identity row: nothing
+    (f"{FOLLOWS} SSID madeup", ""),
+    (f"{FOLLOWS} Account Info Set", ""),                                      # identity_screen alone names it
+    (f"{FOLLOWS} Forrnat Media Slot 1", ""),                                  # never_lifted alone, slips undone
+    (f"{FOLLOWS} Update Firmware Ready", ""),                                 # a confirmation's word after it
+    ("Something else happened. OK", ""),                                      # a shape the kit does not know
+    ("Reset the setting? Cancel OK", ""),
+    ("", ""),
+])
+def test_a_notice_is_kept_only_in_a_shape_the_kit_knows_naming_no_identity(text, kept):
+    """safety.notice_kept: a notice the kit knows, and from a blocker notice what it names after "as follows" only where
+    that is a row label the kit knows, alone or with one of that row's known values; an address, a device's name, an
+    SSID or an e-mail address there keeps the fixed sentence alone; identity, a card action or a confirmation anywhere
+    keeps nothing."""
+    assert safety.notice_kept(text, NOTICE_LABELS, NOTICE_VALUES) == kept
+    if kept.startswith(FOLLOWS) and kept != FOLLOWS:
+        assert safety.notice_kept(text) == FOLLOWS                          # no labels known: the sentence alone
+
+
+def test_crawl_run_gives_the_walk_its_known_labels_and_values_for_the_notices(monkeypatch):
+    """crawl_run.crawl_from_menu: on a --network walk the notices are read with camkit.live.text_of and judged by the
+    row labels and values the kit knows (runner.known_labels, runner.row_values); without --network none is read."""
+    import crawl_run
+    got = {}
+    monkeypatch.setattr(crawl_run, "crawl", lambda cam, cycle, model, **kw: got.update(kw) or SimpleNamespace(
+        stopped="", presses=0, rows=[], recoveries=[]))
+    monkeypatch.setattr(crawl_run, "same_position", lambda a, b: True)
+    cam = SimpleNamespace(press=lambda key: None, read=lambda: SimpleNamespace(kind="menu"))
+    link = SimpleNamespace(press=lambda key, cleanup=False: None)
+    model = {"p": {"breadcrumb": "Network > Network Option", "rows": [{"label": "Airplane Mode", "value": "On"}]}}
+    crawl_run.crawl_from_menu(cam, link, [{"screen": None}], model, None, io.StringIO(), network={"Bluetooth Function": DAY})
+    read, labels, values = got["notices"]
+    assert read is crawl_run.text_of and "Airplane Mode" in labels and values["Airplane Mode"] == {"On"}
+    got.clear()
+    crawl_run.crawl_from_menu(cam, link, [{"screen": None}], model, None, io.StringIO())
+    assert got["notices"] is None
+
+
+def test_the_crawl_keeps_a_greyed_network_settings_notice_and_nothing_else():
+    """camkit.crawl.visit_row: a Wi-Fi or Bluetooth setting a decision opened that answers Right with a notice keeps the
+    notice's text where safety.notice_kept takes it; an identity row's notice, one naming identity, one in a shape the
+    kit does not know, or a walk given no way to read text, keeps none (crawl_run.summary writes it as "notice")."""
+    import crawl_run
+    row = {"label": "Bluetooth Function", "never_open": NETWORK_REASON}
+    wired = {"label": "Wired LAN Connect", "never_open": safety.never_open("Wired LAN Connect")}
+    disabled = "This function is currently disabled. OK"
+    for r, network, text, notice in (
+            (row, {"Bluetooth Function": DAY}, disabled, "This function is currently disabled."),
+            (row, {"Bluetooth Function": DAY}, f"{FOLLOWS} Airplane Mode On", f"{FOLLOWS} Airplane Mode On"),
+            (row, {"Bluetooth Function": DAY}, f"{FOLLOWS} {IP}", FOLLOWS),
+            (row, {"Bluetooth Function": DAY}, "Connected to DIRECT-madeup. Cannot be executed.", ""),
+            (row, {"Bluetooth Function": DAY}, "Something else happened.", ""),
+            (wired, {"Wired LAN Connect": DAY}, disabled, ""),
+            (row, {"Bluetooth Function": DAY}, None, "")):
+        cam = RowCamera()
+        got = crawl.visit_row(cam, cam.read(), {"page": "Network > Bluetooth"}, 0, r, network=network,
+                              notices=None if text is None else ((lambda c, t=text: t), NOTICE_LABELS, NOTICE_VALUES))
+        assert got.outcome.startswith("network row: a notice screen") and got.notice == notice, (r["label"], text)
+        assert crawl_run.summary(got).get("notice", "") == notice
+        assert cam.keys == ["right", "menu"]

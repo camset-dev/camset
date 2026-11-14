@@ -102,6 +102,8 @@ and the default is no.
    them. A row so named is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
    read right after a MENU (or an Enter on a named option) is the shooting screen, or the page it was opened from with
    its lit bar on the row itself; never on what kind of screen the camera seems to show alone, nor on a later read.
+   Where the row's own screen read as the shooting screen before any MENU, it is taken as a screen of no known kind
+   (MENU alone), and a later frame read as the shooting screen ends the row only when the camera's own picture agrees.
    Choosing an option needs the decision to name it, `"options": {"<row>": ["<option>"]}` (never one character, a
    button's word or a name of the never-open list), and no option is ever chosen in a row whose choice drops a link,
    starts a connection or a pairing, or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl, Airplane
@@ -976,7 +978,14 @@ Each line is a symptom, then its cause, then the fix now in the kit.
 - **The menu reopens after a download with the focus in the group column** → the position matches no page of the
   scan. A session that opens the menu that way presses Right once, onto the page's rows, before it matches the scan;
   a menu that still matches no page fails closed ("the menu opened on a screen the scan does not know") and the
-  restore puts the start file back; run it again.
+  restore puts the start file back; run it again. The Right goes out only on a group the column may enter: a group
+  never-open, or whose name reads one letter off a never-open group's or action's name ("FTP Transter" for FTP
+  Transfer), is stepped off first by Up or Down (`drive.py` and the My Menu prover go to the nearest group of the tab
+  that may be entered, `kit/crawl_run.py` `from_groups`), and only while the screen still reads as the group column
+  with its bar naming that very group (a bar that reads a row, "File Format RAW", names none); with no such group in
+  the tab nothing is pressed and the run stops. A jump by the columns that would end on such a group is refused before
+  any press (the rows are walked to instead), or, when only the bar read there shows it, stops before its last Right,
+  leaving the cursor in the column for the next run to step out of so.
 - **No HDMI frames, and no OSD image either, at the start of a session** → the camera's monitor is asleep (or the
   HDMI cable is out): the capture gives no frames while the monitor sleeps or the cable is out, and the SDK's OSD
   image is unavailable while the monitor sleeps. A session the owner runs by hand starts with the camera awake: ask

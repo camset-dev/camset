@@ -20,6 +20,12 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   choose, from the reviewed scope, or a stop before anything connects;
                                                   the words for a proof's allowance (camkit.vlm.LOCAL_ONLY set)
     network_values(rows, model)                   the values the page model and the definition know for those rows
+    network_readings(rows, model)                 every reading the page model keeps of each such row, and its page's group
+                                                  (an icon of the page glued on)
+    known_labels(model); known_values(model)      the menu's row labels, never an option or a value, and the values, for
+                                                  what a --network run keeps of a screen it withholds; row_values(model),
+                                                  the values by row label
+    known_groups(model)                           the menu's group names, for safety.group_refused
 
 Only camkit is imported at the top: crawl_run imports this, and prove_run's parts import crawl_run, so the prover's
 own pieces (to_shooting) are imported where they are used.
@@ -1003,67 +1009,224 @@ def network_decided_or_exit(run=None) -> tuple:
     return rows, options, safety.network_allowance(rows, options)
 
 
-def known_labels(model=None) -> set:
-    """The menu's row labels the kit knows: every menu and setting row label of the camera's definition, and those
-    row labels of the page model (model: {page key: page}) that look like a label alone (label_alone): a page model's
-    label is a reading, and one read with the row's value glued on ("Edit Device Name ILCE-...", "IP Address:
-    192.0.2.10") would otherwise be kept whole. A row's label is no value: safety.screen_fields keeps a line that is
-    wholly one of these, and withholds the rest of a screen whose text a --network run withholds."""
+_DEFINITION = {}          # the camera's definition as last read, by its file's path, time and size (definition)
+
+
+def definition() -> dict:
+    """The camera's definition (camkit.definitions.active) as read, {} when there is none or it cannot be read; read
+    again only when its file changed (crawl_run.go_to asks for its group names on every row a run goes to)."""
     from camkit import definitions
-    defined = set()
     target = definitions.active(required=False)
-    if target is not None and target.exists():
+    try:
+        st = target.stat() if target is not None else None
+    except OSError:
+        st = None
+    if st is None:
+        return {}
+    key = (str(target), st.st_mtime_ns, st.st_size)
+    if key not in _DEFINITION:
         try:
             doc = read_json(target)
         except (OSError, ValueError):
             doc = {}
-        defined |= {m.get("label") for m in doc.get("menu") or [] if isinstance(m, dict)}
-        defined |= {x for s in doc.get("settings") or [] if isinstance(s, dict) for x in s.get("row") or []}
-    defined = {x for x in defined if isinstance(x, str) and x.strip()}
-    read = {row.get("label") for page in (model or {}).values() for row in (page or {}).get("rows") or []}
-    return defined | {x for x in read if isinstance(x, str) and x.strip() and label_alone(x, defined)}
+        _DEFINITION.clear()
+        _DEFINITION[key] = doc if isinstance(doc, dict) else {}
+    return _DEFINITION[key]
 
 
-def label_alone(label: str, defined=frozenset()) -> bool:
+def _settings(doc) -> list:
+    return [s for s in (doc or {}).get("settings") or [] if isinstance(s, dict)]
+
+
+def _path(s: dict) -> list:
+    """A definition setting's `row` path, a list of labels ([] when it has none, or one that is not)."""
+    path = s.get("row")
+    return path if isinstance(path, list) and path and all(isinstance(x, str) for x in path) else []
+
+
+def value_names(s: dict) -> set:
+    """The names a definition's setting gives its values and options (docs/DATA_CONTRACTS.md): each label of its
+    `values`, each main option of its `option_tree` and each choice under one, and its `under_option`."""
+    out = {v[1] for v in s.get("values") or [] if isinstance(v, list) and len(v) > 1 and isinstance(v[1], str)}
+    for o in s.get("option_tree") or []:
+        if isinstance(o, dict):
+            out |= {o["label"]} if isinstance(o.get("label"), str) else set()
+            out |= {v[1] for v in o.get("options") or [] if isinstance(v, list) and len(v) > 1 and isinstance(v[1], str)}
+    if isinstance(s.get("under_option"), str):
+        out.add(s["under_option"])
+    return {x for x in out if x.strip()}
+
+
+def row_labels(doc) -> set:
+    """The row labels of a camera's definition: its menu's, and each setting's `row` path but the options in it. A path
+    names an option of a row and then the rows of the page that option opens (docs/DATA_CONTRACTS.md, "Where a setting
+    sits on the camera": "Picture Profile > PP2 > Black Gamma > Level", "Recognition Target > Auto > Car/Train"): an
+    element that is the setting's `under_option`, or one of the value or option names (value_names) of a setting placed
+    on the path up to it (the row's own setting), is that option, never a row label."""
+    settings = _settings(doc)
+    own = {}
+    for s in settings:
+        if _path(s):
+            own.setdefault(tuple(_path(s)), set()).update(value_names(s))
+    out = {m.get("label") for m in (doc or {}).get("menu") or [] if isinstance(m, dict)}
+    for s in settings:
+        path = _path(s)
+        out |= {x for i, x in enumerate(path) if not i or (x != s.get("under_option") and x not in own.get(tuple(path[:i]), ()))}
+    return {x for x in out if isinstance(x, str) and x.strip()}
+
+
+def _model_rows(model) -> list:
+    return [row for _, row in _page_rows(model)]
+
+
+def _page_rows(model) -> list:
+    """[(the page's group: its breadcrumb's second part, or "", a row)] for each row of each page of the page model."""
+    out = []
+    for page in (model or {}).values():
+        if isinstance(page, dict):
+            crumb = str(page.get("breadcrumb") or "").split(" > ")
+            out += [(crumb[1] if len(crumb) > 1 else "", row) for row in page.get("rows") or [] if isinstance(row, dict)]
+    return out
+
+
+def _shown_values(row: dict) -> set:
+    """Every value a page model shows beside one row: its value, and each reader's reading of it."""
+    said = [row.get("value"), *(((row.get("readings") or {}).get("value") or {}).values())]
+    return {v for v in said if isinstance(v, str) and v.strip()}
+
+
+def row_values(model=None) -> dict:
+    """{a row's label: the values the kit knows for it}: each value and option name (value_names) of every setting of the
+    camera's definition whose row path ends in that label, and every value each page of the page model (model: {page
+    key: page}) shows beside a row of that label, every reader's reading of it included. safety.blocker_known and
+    label_alone judge a row's label and a value together by it."""
+    out = {}
+    for s in _settings(definition()):
+        if _path(s):
+            out.setdefault(_path(s)[-1], set()).update(value_names(s))
+    for row in _model_rows(model):
+        label = row.get("label")
+        if isinstance(label, str) and label.strip():
+            out.setdefault(label, set()).update(_shown_values(row))
+    return out
+
+
+def known_values(model=None) -> set:
+    """The values the kit knows for the menu's rows: each value and option name (value_names) of every setting of the
+    camera's definition that is placed on a row (`row`: the options a row path names among them, row_labels), and every
+    value each page of the page model (model: {page key: page}) shows beside a row, every reader's reading of it
+    included ("Auto" beside IP Address Setting). safety.screen_fields and safety.address_fields never keep a line that
+    is one of these, and known_labels holds none of them. A function list's values (a Custom Key's, an Fn Menu slot's)
+    are row labels too: they count as values, failing closed (such a label is withheld where a --network run withholds a
+    screen); a setting on no row (a My Menu item, whose values are every row label) gives none."""
+    out = set()
+    for s in _settings(definition()):
+        if _path(s):
+            out |= value_names(s)
+    for row in _model_rows(model):
+        out |= _shown_values(row)
+    return out
+
+
+def known_labels(model=None) -> set:
+    """The menu's row labels the kit knows: every menu and setting row label of the camera's definition (row_labels:
+    never an option a setting's row path names, such as Recognition Target's "Auto"), and those row labels of the page
+    model (model: {page key: page}) that look like a label alone (label_alone): a page model's label is a reading, and
+    one read with the row's value glued on ("Edit Device Name ILCE-...", "IP Address: 192.0.2.10", "Wi-Fi ConnectOn")
+    would otherwise be kept whole; none that is one of the values the kit knows (known_values: a value that is also some
+    row's label, "Auto" or a Custom Key's function, is withheld). A row's label is no value: safety.screen_fields keeps a
+    line that is wholly one of these, and withholds the rest of a screen whose text a --network run withholds."""
+    defined = row_labels(definition())
+    told = {safety.plain(v) for v in known_values(model)}
+    read = {x for x in (row.get("label") for row in _model_rows(model)) if isinstance(x, str) and x.strip()}
+    values = row_values(model)
+    labels = defined | {x for x in read if label_alone(x, defined, values, read)}
+    return {x for x in labels if safety.plain(x) not in told}
+
+
+def known_groups(model=None) -> set:
+    """The menu's group names the kit knows, for safety.group_refused: the camera's definition's menu groups and each
+    page model page's group (its breadcrumb's second part, "Network > FTP Transfer")."""
+    out = {m.get("group") for m in definition().get("menu") or [] if isinstance(m, dict)}
+    for page in (model or {}).values():
+        crumb = str((page or {}).get("breadcrumb") or "").split(" > ") if isinstance(page, dict) else []
+        out |= {crumb[1]} if len(crumb) > 1 else set()
+    return {x for x in out if isinstance(x, str) and x.strip()}
+
+
+# what OCR reads a row's icon as, glued to its label or set before it: a letter or two ("G" in "GAirplane Mode On")
+_ICON_BEFORE = re.compile(r"[0-9a-z]{1,2} ?")
+
+
+def label_alone(label: str, defined=frozenset(), values=None, bases=()) -> bool:
     """Whether a page model's row label may be kept whole on a screen a --network run withholds (known_labels): a label
     the definition has (`defined`), or one with no "label: value" shape (a colon), no address- or number-like part (two
     numbers joined by a stop or a colon, a run of digits), nothing that names identity or credentials
-    (safety.identity_screen: a device's name, an SSID, a pairing), and not a label the definition has with more after
-    it (a value read glued on: "Wi-Fi Connect On")."""
+    (safety.identity_screen: a device's name, an SSID, a pairing), not a label the definition has with more after it (a
+    value read glued on: "Wi-Fi Connect On"), and not a row's label (of `defined`, or of `bases`: the labels the page
+    model read) followed, with a space or none, by one of that row's known values (`values`, {label: [values]}:
+    row_values), with an icon's letter or two read before it or not ("Wi-Fi ConnectOn", "GAirplane Mode On")."""
     if label in defined:
         return True
     seen = safety.plain(label)
     if ":" in label or re.search(r"\d[.:]\d|\d{3}", label) or safety.identity_screen(label):
         return False
-    return not any(seen.startswith(safety.plain(d) + " ") for d in defined if safety.plain(d))
+    if any(seen.startswith(safety.plain(d) + " ") for d in defined if safety.plain(d)):
+        return False
+    told = {}
+    for k, vs in (values or {}).items():
+        if isinstance(k, str) and safety.plain(k):
+            told.setdefault(safety.plain(k), set()).update(safety.plain(v) for v in vs
+                                                           if isinstance(v, str) and safety.plain(v))
+    for base in {safety.plain(b) for b in (*defined, *bases) if isinstance(b, str)} - {"", seen}:
+        for v in told.get(base, ()):
+            for whole in (base + v, f"{base} {v}"):
+                if seen == whole or (seen.endswith(whole) and _ICON_BEFORE.fullmatch(seen[:-len(whole)])):
+                    return False
+    return True
+
+
+def row_readings(row: dict) -> list:
+    """Every reading a page model keeps of one menu row's label: its label, then each reader's reading of it."""
+    said = [row.get("label"), *(((row.get("readings") or {}).get("label") or {}).values())]
+    return [t for t in said if isinstance(t, str) and t.strip()]
+
+
+def network_readings(decided, model=None) -> dict:
+    """{row: [{"group", "readings"}]} for the rows a network decision opens: for each menu row of the page model (model:
+    {page key: page}) one of whose readings is that row exactly (plain), every reading the page model keeps of it and
+    the group of the page it is on (its breadcrumb's second part, "Wired LAN"). safety.network_lifted_row takes another
+    reading of it, the row with its page's icon read as letters glued on ("LANIP Address Setting"), only where every
+    reading of the row is of the row's class and the glued letters are a word of that group's name (safety.row_read_as,
+    glued_icon, lifted_readings)."""
+    out = {r: [] for r in decided}
+    for group, row in _page_rows(model):
+        texts = row_readings(row)
+        said = {safety.plain(t) for t in texts}
+        for r in decided:
+            if safety.plain(r) in said:
+                out[r].append({"group": group, "readings": texts})
+    return {r: g for r, g in out.items() if g}
 
 
 def network_values(decided, model=None) -> dict:
     """{row: the values the kit knows for it} for the rows a network decision opens: the value each page of the page
-    model (model: {page key: page}) shows beside a row of that label, every reader's reading of it included, and the
+    model (model: {page key: page}) shows beside a row of that label, or beside a row another reader read as that label
+    (safety.row_read_as: every reading of it of the row's class), every reader's reading of the value included, and the
     values the camera's definition gives the settings whose menu row ends in that label. A menu row's bar carries its
     value after its label: safety.network_lifted_row lets that through only where the value is one of these."""
-    from camkit import definitions
     out = {r: set() for r in decided}
 
     def of(label):
         return [r for r in decided if safety.plain(r) == safety.plain(label or "")]
-    for page in (model or {}).values():
-        for row in (page or {}).get("rows") or []:
-            for r in of(row.get("label")):
-                said = [row.get("value"), *(((row.get("readings") or {}).get("value") or {}).values())]
-                out[r] |= {v for v in said if isinstance(v, str) and v.strip()}
-    target = definitions.active(required=False)
-    if target is not None and target.exists():
-        try:
-            settings = read_json(target).get("settings") or []
-        except (OSError, ValueError, AttributeError):
-            settings = []
-        for s in settings:
-            path = s.get("row") if isinstance(s, dict) else None
-            if path and isinstance(path[-1], str):
-                for r in of(path[-1]):
-                    out[r] |= {str(v[1]) for v in s.get("values") or [] if isinstance(v, list) and len(v) > 1}
+    for row in _model_rows(model):
+        for r in dict.fromkeys([*of(row.get("label")), *(r for r in decided if safety.row_read_as(r, row_readings(row)))]):
+            out[r] |= _shown_values(row)
+    for s in _settings(definition()):
+        path = s.get("row")
+        if path and isinstance(path, list) and isinstance(path[-1], str):
+            for r in of(path[-1]):
+                out[r] |= {str(v[1]) for v in s.get("values") or [] if isinstance(v, list) and len(v) > 1}
     return {r: sorted(v) for r, v in out.items()}
 
 

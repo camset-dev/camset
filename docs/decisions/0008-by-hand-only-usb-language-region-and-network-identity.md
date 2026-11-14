@@ -38,20 +38,23 @@ A dated owner decision in the camera's reviewed scope that names the row, `{"dat
 A row so named is looked at only: the kit opens it, reads its options with up and down, and leaves it with MENU; it
 presses no Enter, no Right or Left and turns no dial there, which could choose or commit an option, until it is back
 where it opened the row: until the screen read right after a MENU, or after an Enter on an option the decision
-names, is the shooting screen, or the page the row was opened from with its lit bar on the row itself. Each MENU or
-Enter counts for the one read after it, and a MENU the camera did not take counts for none. What kind of screen the
-camera seems to show never ends it alone: a camera slow to draw the row's list still shows the page after the press
-that opened it, a list or a popup over the dimmed page can read as that page, and its lit bar then reads an option,
-never the row. Choosing an option of these rows needs the decision to name it, `"options": {"<row>": ["<option>",
-...]}`, and then only that option is chosen, its lit text read as exactly that; an option named by one character, by
-a button's word (OK, Execute, Cancel, Done) or by a name the never-open list or identity holds stops the run. No
-option is ever chosen, whatever a decision names, where the choice drops a link, starts a connection or a pairing or
-changes what no file puts back: Wi-Fi Connect (On joins the access point), Bluetooth Rmt Ctrl (On opens Pairing),
-Airplane Mode (it drops the Wi-Fi and Bluetooth links), Wired LAN Connect, Remote Shoot Function, IP Address Setting,
-Cnct. while Power OFF, Manage Paired Device, Display FTP Result, the USB rows, Language, NTSC/PAL and Area/Date/Time;
-on the a1 II that leaves Bluetooth Function, Wi-Fi Frequency Band and Wake On LAN as the rows whose options a decision
-may name. The kit names these classes only when no other reason matches the row, so a misread that also looks like
-credentials or an action keeps that reason.
+names, is the shooting screen, or the page the row was opened from with its lit bar on the row itself (its label, or
+the reading with its page's icon glued on that opened it). Each MENU or Enter counts for the one read after it, and a
+MENU the camera did not take counts for none. What kind of screen the camera seems to show never ends it alone: a
+camera slow to draw the row's list still shows the page after the press that opened it, a list or a popup over the
+dimmed page can read as that page, and its lit bar then reads an option, never the row. A row's own screen read as
+the shooting screen before any MENU (Manage Paired Device's list did, 2026-11-13) is taken as a screen of no known
+kind, MENU alone, and from then on a frame read as the shooting screen ends the row only when it is not that screen
+and the camera's own picture of its screen reads as the shooting screen too. Choosing an option of these rows needs
+the decision to name it, `"options": {"<row>": ["<option>", ...]}`, and then only that option is chosen, its lit text
+read as exactly that; an option named by one character, by a button's word (OK, Execute, Cancel, Done) or by a name
+the never-open list or identity holds stops the run. No option is ever chosen, whatever a decision names, where the
+choice drops a link, starts a connection or a pairing or changes what no file puts back: Wi-Fi Connect (On joins the
+access point), Bluetooth Rmt Ctrl (On opens Pairing), Airplane Mode (it drops the Wi-Fi and Bluetooth links), Wired LAN
+Connect, Remote Shoot Function, IP Address Setting, Cnct. while Power OFF, Manage Paired Device, Display FTP Result,
+the USB rows, Language, NTSC/PAL and Area/Date/Time; on the a1 II that leaves Bluetooth Function, Wi-Fi Frequency Band
+and Wake On LAN as the rows whose options a decision may name. The kit names these classes only when no other reason
+matches the row, so a misread that also looks like credentials or an action keeps that reason.
 
 A run given `--network` asks only local readers, those whose address is this computer's or a private network's,
 never a paid service, and marks its run folder so; every tool that reads that folder's frames later

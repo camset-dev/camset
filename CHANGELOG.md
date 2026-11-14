@@ -82,6 +82,35 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   decision naming one stops the run before anything connects. Without `--network` every row is refused as before
   (decision 8, changed 2026-11-13: the a1 II's owner decided so for their camera; another camera's owner decides for
   theirs, the playbook's rule 3).
+- A `--network` run's look at the a1 II's Network menus showed what to mend, and it is mended. What the run prints and
+  keeps of a screen it withholds (an address screen, a page after MENU) holds no value any more: the row labels it
+  keeps are the definition's and the page model's, never an option a setting's menu path names (such as Recognition
+  Target's Auto) nor a label read with its value glued on ("Wi-Fi ConnectOn"), and no line that is a value the
+  definition or the page model knows is kept, though it matches a label or a field's name. A row OCR reads with its
+  page's icon glued on ("LANIP Address Setting" on the Wired LAN page) opens as the decided row only where another
+  reader read the same row of the page model as that row exactly, every reading of it is of the row's class, and what
+  is glued on is a word of the page's own group name of at most four letters that names nothing on the never-open list
+  or of identity ("WPSIP...", "NoWi-Fi..." stay closed); MENU back to the page with that bar on it ends the row. A row's
+  own screen read as the shooting screen before any MENU (Manage Paired Device's list) is taken as a screen of no known
+  kind: MENU alone, its field names only, and a later frame read as the shooting screen ends the row only when the
+  camera's own picture says so too. A screen of no known kind inside any row a decision opened gets MENU alone (no new
+  kind of screen is added for the information screens, which cannot be told from a keyboard without the camera's
+  frames). The walk keeps the notice a greyed Wi-Fi or Bluetooth setting answers with (`"notice"` in `rows.jsonl`) when
+  it is one the kit knows ("This function is currently disabled.") and names no identity or credentials; from a
+  blocker notice it keeps what follows "as follows" only where that is a row label it knows with one of that row's
+  values, else the sentence alone. On a `--network` run the menu navigation prints no text it read off the screen, only
+  its length.
+- The menu navigation every run shares (`kit/crawl_run.py`, which `drive.py`, the walk and every prover go by) changes
+  with or without `--network`: a group whose name the page model read one letter off a never-open group's or action's
+  name ("FTP Transter" for FTP Transfer) is never jumped into by the group column, refused before any press, and the
+  row is walked to instead; the jump sends its last Right into a group only where the group's bar, read there, names no
+  such group, else it stops there and the run ends restoring its start file, where before only the camera's own check
+  judged that Right, by the never-open list alone; a menu that opens with the cursor in the group column (where such a
+  stop leaves it) is stepped into the rows of the nearest group of that tab that may be entered, by Up or Down and one
+  Right, only while the screen still reads as the group column and the bar names that very group, pressing nothing
+  when no group of the tab may be entered (`drive.py` and the My Menu prover stopped there before, "could not reach
+  ... by the scan"); and the prover's own way out of the group column now also steps off a group read one letter off a
+  never-open one, and sends no Right while every group it lit reads so or the screen no longer reads as the column.
 - The kit no longer opens Bluetooth Rmt Ctrl or Wi-Fi Frequency Band unasked, Wi-Fi and Bluetooth settings that the
   playbook's rule 3 keeps for the owner's hand and that no pattern of the never-open list caught, so the walker opened
   them and a prover could change them; nor the screens that show the camera's network addresses, Display Wi-Fi Info.
