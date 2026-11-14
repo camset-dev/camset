@@ -9,17 +9,22 @@ import numpy as np
 
 from camkit import camset, ocr, safety, screen
 from camkit.frames import load
+from camkit.live import lit_text
 from page_model import same_text
-from runner import changes_of
+from runner import changes_of, info_ok_for
 
 from . import nav
 from .base import Failed, finish_attempt, frame_file
 from .nav import after_download, to_row
 from .putback import mirrored_boxes, put_back_leftovers, say_put_back
-from .screens import option_key, place, same_place, vlm_option
+from .screens import option_key, pass_named_notice, place, same_place, vlm_option
 
 CHECK_LATER = ("DISP",)          # DISP (Screen Disp) Set: radio sub-options inside, done last, by itself (--rows names it)
 OK_RIGHT = ("DISP (Screen Disp) Set",)   # checklists whose OK/Cancel sit in a column right of the boxes (Down wraps)
+# --info-ok: {row: the notice's whole text as its words} (runner.info_ok_or_exit), set by kit/prove_run.py's main(): the information notice Right
+# opens on such a row before its checklist (the a1 II's Different Set for Still/Mv) is taken with its OK on each visit,
+# by pass_named_notice's judgement; a row not named, or a notice it refuses, fails as before
+INFO_OK: dict = {}
 
 DISP_MODES = {"global:0x04e5", "global:0x04e6"}   # the display mode in use, on the monitor and in the finder
 
@@ -155,8 +160,12 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
     A box the camera will not untick on its own (the only one ticked: Rating Set's "Item not
     selected.", 2026-10-29) is proved afterwards together with the box below it, then both put back.
     Records written on every OK whatever the boxes (Rating Set's second copy of the 1-star box stays
-    0 until the screen is first saved) do not fail the last visit; they are kept as "written_on_ok"."""
+    0 until the screen is first saved) do not fail the last visit; they are kept as "written_on_ok".
+    A row --info-ok names (INFO_OK) has its information notice taken with its OK after each Right, once a visit, where
+    pass_named_notice passes it (the lit bar read before Right as the row); each proof line then carries "info_ok":
+    {"row", "passed": true, "frame"}. A notice it refuses fails the row, nothing pressed on it."""
     path, name, labels = job["path"], " > ".join(job["path"]), job["labels"]
+    phrase = info_ok_for(INFO_OK, name)
     attempt = f"{run.dir.name}-{time.time_ns():x}"
     n = len(labels)
     partner: dict = {}                          # radio sub-option -> the one it is put back with
@@ -174,7 +183,14 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
             to_row(cam, path, top, row_place)
             if not same_place(place(cam), row_place):
                 raise Failed(f"{name}: back at the row, the page or cursor row is not the one proved before")
+        lit = lit_text(cam.frame.image, cam.frame.path) if phrase is not None else ""
         cam.press("right")
+        info = None
+        if phrase is not None and cam.read().kind == "notice":
+            got = pass_named_notice(cam, name, phrase, lit)
+            if "refused" in got:
+                raise Failed(f"{name}: Right opened a notice, not passed: {got['refused']}")
+            info = {"row": got["row"], "passed": True, "frame": got["frame"]}
         if cam.read().kind != "checklist" or cam.read().focus != "rows":
             raise Failed(f"{name}: Right opened {cam.read().kind}, not the checklist's rows")
         at, changed_boxes = 0, []
@@ -223,7 +239,7 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
         rec = {"path": path, "kind": "checklist", "index": index, "label": label, "attempt": attempt,
                "boxes": changed_boxes, "chosen_frame": chosen, "vlm": seen_vlm, "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "notice": notice, "applied": not refused, **extra,
-               "changes": changes_of(changes)}
+               **({"info_ok": info} if info else {}), "changes": changes_of(changes)}
         out.write(json.dumps(rec) + "\n")
         out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"

@@ -57,6 +57,27 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A row whose screen sits behind an information notice can be walked and proved, where a run names it.** The a1 II's
+  Different Set for Still/Mv answers Right with a notice ("You can set different settings for still image mode and
+  movie mode in the next screen. ...", a single OK) before its checklist of seven boxes; the crawl, which never presses
+  Enter, recorded it as a notice, so pass 1's map had no row for it and the checklist prover stopped at the notice.
+  `kit/crawl_run.py` and `kit/prove_run.py` take `--info-ok "ROW=PHRASE"` (repeatable, one row each; the prover's rows
+  named in `--rows` too), PHRASE the notice's whole text as written, compared by its letters, digits and single spaces
+  (punctuation and glyphs ignored): after Right on that row, the notice's OK is taken once, and only for a notice that
+  explains and asks nothing: the lit bar read as the row before Right; the phrase's words found in the notice in order
+  and accounting for all of it but 10 letters or digits (an icon read as a letter or two beside a line's first or last
+  word, a slip; never a word of three letters or more, nor a line outside its text; a negation such as "isn't" one
+  word), so no sentence, button or negation the phrase leaves out rides along; no question mark, no confirmation (its words run together too), nothing never-open, of
+  identity or credentials; exactly one line a button's word alone, OK; no other line naming a second button, a choice or
+  an action, nor on or below the OK's line; and the lit button reading OK. Anything else presses nothing, and the crawl
+  records "notice (named, not passed: ...)"; a phrase that leaves part of the notice out prints the notice's text, to
+  give it whole. A row that is no label the definition or the page model knows, or is never-open (its words run
+  together inside one word too), a phrase of fewer than 3 words or 12 letters, with a question mark or a pattern's sign
+  such as `*` or `|`, and `--network` are refused before anything connects.
+  The crawl's `rows.jsonl` and each proof line keep `info_ok` (the row and the notice's frame), never the notice's
+  words, and the menu tree keeps such a row's mark that an information notice comes first. Without the flag nothing
+  changes. A new checklist setting's tab is now its row's tab in the definition's menu, where the writer had a table of
+  five rows (the playbook, section 8, "A row whose screen sits behind an information notice").
 - **A network decision opens an identity or connection row only once the row has been seen to open and close over the
   link without harm.** On the a1 II a look-only `--network` run opened IP Address Setting over the wired LAN link
   (Right, then MENU, nothing chosen): its screen read as no known kind, and a second or two after the MENU the camera

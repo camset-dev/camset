@@ -149,20 +149,32 @@ def fields_of(row: dict) -> list:
     return out
 
 
+INFO_FIRST = "an information notice comes first"
+
+
+def is_notice(outcome: str) -> bool:
+    """A crawl outcome that is a notice the walk stopped at: "notice", or "notice (named, not passed: ...)" for one a run
+    named with --info-ok and did not pass (kit/crawl_run.py)."""
+    return outcome == "notice" or outcome.startswith("notice (")
+
+
 def state_of(summary: dict, greyed: bool) -> tuple:
-    """(state, why) of a row the crawl visited, in the schema's words."""
+    """(state, why) of a row the crawl visited, in the schema's words. A row whose notice a run passed with --info-ok
+    (its summary's "info_ok") keeps the mark that an information notice comes first, walked or not."""
     outcome = summary.get("outcome") or ""
     if outcome == "walked":
-        return "walked", ""
-    if outcome.startswith("skipped:"):
+        state, why = "walked", ""
+    elif outcome.startswith("skipped:"):
         return "never", outcome.split(":", 1)[1].strip()
-    if outcome.startswith("submenu"):
-        return "submenu", "" if outcome in ("submenu crawled",) else outcome
-    if outcome == "notice":
-        return ("greyed", "") if greyed else ("info", "an information notice comes first")
-    if outcome.startswith("left for"):
-        return "unhandled", outcome
-    return "unhandled", outcome
+    elif outcome.startswith("submenu"):
+        state, why = "submenu", "" if outcome in ("submenu crawled",) else outcome
+    elif is_notice(outcome):
+        return ("greyed", "") if greyed else ("info", INFO_FIRST)
+    else:
+        state, why = "unhandled", outcome
+    if summary.get("info_ok") and INFO_FIRST not in why:
+        why = f"{INFO_FIRST}; {why}" if why else INFO_FIRST
+    return state, why
 
 
 def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bool = False, never: str = None) -> dict:
@@ -172,7 +184,7 @@ def row_of(label: str, summary: dict | None, path: tuple, maps: dict, greyed: bo
         return {"label": label, "state": state, "why": why or "", "kind": ""}
     state, why = state_of(summary, greyed)
     kind = summary.get("kind") or ""
-    out = {"label": label, "state": state, "why": why, "kind": "notice" if summary.get("outcome") == "notice" else kind}
+    out = {"label": label, "state": state, "why": why, "kind": "notice" if is_notice(summary.get("outcome") or "") else kind}
     m = maps.get(path)
     if m and kind == "fields":
         out["fields"] = fields_of(m)

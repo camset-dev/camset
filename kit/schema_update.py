@@ -514,9 +514,21 @@ def picker_groups() -> dict:
     return groups
 
 
-def new_setting(key: str, row: str, proved: dict) -> dict | None:
+def menu_tab(menu, row: str) -> str:
+    """The tab of the definition's menu row (its "menu": [{"tab", "group", "label", "order"}]) that a proof's row names,
+    by its first label (the menu lists the top-level rows; a proof context in brackets aside), compared as
+    page_model.key_text compares labels; "" when the menu names no such row, or names it on more than one tab."""
+    from page_model import key_text
+    want = key_text(re.sub(r"\s*\[[^\]]*\]", "", row).split(" > ")[0]).lower()
+    tabs = {m.get("tab") for m in menu or () if isinstance(m, dict) and m.get("tab")
+            and key_text(m.get("label") or "").lower() == want}
+    return tabs.pop() if want and len(tabs) == 1 else ""
+
+
+def new_setting(key: str, row: str, proved: dict, menu=()) -> dict | None:
     """A schema entry for a record proved through a checklist that the schema lacked, with the size,
-    slot count and memory-set presence read from the run's start file."""
+    slot count and memory-set presence read from the run's start file, and its tab the one the definition's menu
+    (`menu`) gives its row (menu_tab)."""
     from camkit import camset
     m = re.fullmatch(r"global:0x([0-9a-f]+)(?:\[(\d+)\])?", key)
     if not m:
@@ -545,9 +557,7 @@ def new_setting(key: str, row: str, proved: dict) -> dict | None:
                 "tab": "Shooting", "group": f"Recall Custom hold {slot + 1}", "order": 1233, "values": values,
                 "note": "Reg. Custom Shoot Set", "in_sets": cs.get(1, rid) is not None, "scalar": True,
                 "size": rec.size, "count": rec.count, "modes": ""}
-    tab = {"Recognition Target": "Focus", "Reg. Flash Shooting Set": "Exposure/Color",
-           "Rating Set(Custom Key)": "Playback", "DISP (Screen Disp) Set": "Setup",
-           "Focus Area Limit": "Focus"}.get(row.split(" > ")[0], "")
+    tab = menu_tab(menu, row)
     radio = not any(lab.endswith((": ticked", ": unticked")) for lab in proved)
     if radio:                       # a radio sub-option pair (DISP Set's Exposure: On / TimeOut): its two labels
         values = sorted([v, clean(lab)] for lab, v in proved.items())
@@ -1169,7 +1179,7 @@ def main():
                 continue
             if kinds.get(row) != "checklist" and not row.startswith("Reg. Custom Shoot Set"):
                 continue
-            s = new_setting(k, row, r["proved"])
+            s = new_setting(k, row, r["proved"], doc.get("menu"))
             if s is None:
                 continue
             doc["settings"].append(s)

@@ -48,6 +48,18 @@ in the run's owner-only folder. The reviewed scope's
 "exclude" still keeps a row out; each proof line carries "allowance": "the owner decided on <date> that the kit may
 open <row> remotely and choose <options>".
 
+--info-ok "ROW=PHRASE" (repeatable, one row each, every one named with --rows and a label the definition or the map
+knows: runner.info_ok_or_exit; PHRASE the notice's whole text as written, compared by its letters, digits and single
+spaces, punctuation and glyphs ignored) proves a checklist that sits behind an information notice (the a1 II's Different
+Set for Still/Mv): on each visit, after Right, the OK of the notice whose whole text is PHRASE is taken once
+(proving.checklists.INFO_OK), only where proving.screens.pass_named_notice passes it (the lit bar before Right read as
+the row; the phrase accounting for all of the notice but 10 letters or digits; no question mark, no confirmation,
+nothing never-open, of identity or credentials; one button line, OK, lit; no other line naming a button, a choice or an
+action, or on or below the OK's band), and each proof line carries "info_ok": {"row", "passed", "frame"}; a notice it
+refuses fails the row with nothing pressed on it. A row with no map row of its own is mapped first:
+kit/crawl_run.py --start-label ROW --limit 1 --info-ok ..., then pass1_labels.py, tiebreak.py and pass1_map.py --own,
+and --map that map. Only for checklist jobs, and not with --network or --help-text.
+
 Results: runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, one line per option; frames and downloads numbered on.
 
 The parts are in kit/proving/ (its __init__ lists them): the screen readers, the way to a row and back, the job
@@ -79,9 +91,11 @@ from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, a
                     changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
                     log_network_decided, network_decided_or_exit, network_readings, network_values, read_json,
                     restoring, row_values, values_withheld)
+from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels  # noqa: E402
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
+import proving.checklists  # noqa: E402
 import proving.jobs  # noqa: E402
 import proving.sidelists  # noqa: E402
 import proving.tables  # noqa: E402,F401
@@ -778,11 +792,22 @@ def network_jobs_or_exit(todo: list, named: dict, options: dict) -> list:
     return todo
 
 
+def info_ok_jobs_or_exit(todo: list, named: dict) -> None:
+    """--info-ok passes a notice before a checklist only (proving.checklists.INFO_OK): stops before anything connects
+    when a row it names (`named`) is proved as another kind of job."""
+    other = sorted({r for r in named for j in todo
+                    if safety.plain(" > ".join(j["path"])) == safety.plain(r) and j["kind"] != "checklist"})
+    if other:
+        sys.exit(f"--info-ok passes a notice before a checklist only: {', '.join(map(repr, other))} is proved as "
+                 "another kind")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", action="append", default=None, help="prove only these rows (path with ' > ')")
     add_allow_argument(ap)
     add_network_argument(ap)
+    add_info_ok_argument(ap)
     ap.add_argument("--limit", type=int, default=None, help="stop after this many rows")
     ap.add_argument("--list", action="store_true", help="print the rows and options the run would prove, then stop (no camera)")
     ap.add_argument("--retry-failed", action="store_true", help="include rows that failed in earlier runs")
@@ -838,6 +863,12 @@ def main():
     if a.network and (a.help_text or a.looks or a.look_base or a.wb or a.wb_corners or a.tables):
         sys.exit("--network proves a Wi-Fi or Bluetooth setting's list options only: not with --help-text, --looks, "
                  "--look-base, --wb, --wb-corners or --tables")
+    if a.info_ok and not a.rows:
+        sys.exit("--info-ok passes a notice for the checklist rows named with --rows only")
+    if a.info_ok and a.network:
+        sys.exit("--info-ok passes no notice on a --network run: its rows are looked at, or chosen in, only")
+    if a.info_ok and a.help_text:
+        sys.exit("--info-ok passes no notice with --help-text, which reads the help and passes none")
     allowance = allowed_or_exit(a.allow)
     proving.jobs.ALLOWED.update(a.allow)
     network = {}
@@ -854,6 +885,10 @@ def main():
         PPS[:] = a.pp.split(",")
     if a.map:
         proving.base.MAP = Path(a.map)
+    if a.info_ok:              # a row named by a label the definition or the map knows, before anything connects
+        mapped = read_json(proving.base.MAP).get("rows") if Path(proving.base.MAP).exists() else []
+        known = row_labels(definition()) | {x for r in mapped or [] for x in r.get("path") or [] if isinstance(x, str)}
+        proving.checklists.INFO_OK.update(info_ok_or_exit(a.info_ok, a.rows, labels=known))
     body = models.current(Run(a.run).root)
     if body is None:
         sys.exit("no settings file downloaded yet tells which camera this is: run pass 1 (or any download) first")
@@ -892,6 +927,7 @@ def main():
         missing = set(a.rows) - {" > ".join(j["path"]) for j in todo} - {job_key(j) for j in todo}
         if missing:
             sys.exit(f"not provable rows in the scope: {sorted(missing)}")
+    info_ok_jobs_or_exit(todo, proving.checklists.INFO_OK)
     if network:
         todo = network_jobs_or_exit(todo, network, proving.jobs.NETWORK_OPTIONS)
     cycle, model = load_scan(a.scan)

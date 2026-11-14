@@ -566,7 +566,10 @@ folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left
 4. **Crawl.** This opens every safe row and walks its options, read-only, with MENU to cancel and
    a download diff before and after that must be empty:
    `kit/crawl_run.py --scan <scan> --run kit2_crawl[_mode]`. Use `--tabs Playback` for the
-   Playback tab, and `--start-label ROW --limit 1` for a single row.
+   Playback tab, and `--start-label ROW --limit 1` for a single row. A row whose Right opens an information notice
+   is recorded as `notice` and left with MENU: the crawl never presses Enter, so the screen behind the notice is not
+   mapped. Where that notice is a plain explanation with a single OK, name the row and the notice's whole text for one
+   run, `--info-ok "ROW=PHRASE"` (section 8, "A row whose screen sits behind an information notice").
 5. **Option labels and the map:**
    1. `kit/pass1_labels.py <crawl>`
    2. `kit/tiebreak.py <crawl>`, the third reader on disagreements
@@ -587,7 +590,8 @@ folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left
   job for every value it lists; without the file no second axis is proved.
 - **Ordinary rows** (lists, carousels, number fields, checklists, side lists):
   `kit/prove_run.py [--scan S --map M --context C] --start FILE [--rows ROW ...]`.
-  Without `--rows` it resumes: rows already proved, or failed, are skipped (use `--retry-failed`).
+  Without `--rows` it resumes: rows already proved, or failed, are skipped (use `--retry-failed`). A checklist behind
+  an information notice is proved with the same `--info-ok "ROW=PHRASE"` its crawl took, the row named in `--rows`.
 - **Assignment screens** (Fn Menu, Custom Key/Dial, My Dial, Image Quality tables):
   - Walk them read-only first with `kit/table_walk.py --rows ...`.
   - Then prove with `kit/prove_run.py --tables --picker-sample`: one full list per identical
@@ -1049,6 +1053,27 @@ Each line is a symptom, then its cause, then the fix now in the kit.
 - **An information screen after OK** (it may have a "Don't show this again" box) → take its OK
   only if the text is not a confirmation, never ticking the box (`info_notice_ok`). A notice that
   starts "not available as follows" is a refusal: the proof records it as not applied.
+- **A row whose screen sits behind an information notice** (the a1 II's Different Set for Still/Mv: "You can set
+  different settings for still image mode and movie mode in the next screen. The setting set for ☑ is independent.",
+  a single OK, then its checklist): the crawl records it as `notice`, so pass 1's map has no row for it, and the
+  checklist prover fails at the notice. Only for a notice that explains and asks nothing: no "?", no Cancel or second
+  button, nothing OK starts, applies, sends or deletes; give the notice's whole text as one unbroken phrase; when
+  unsure, ask the owner. Look at the notice's frame first. Then walk the row alone, naming the row as the camera writes
+  it and the notice's whole text as written (one row per `--info-ok`; never a never-open row). The phrase is compared
+  by its letters, digits and single spaces alone: punctuation and glyphs (the ☑ above) are ignored in it and in the
+  notice, so sentence ends may be written or left out; a question mark or a pattern's sign (`*`, `[`, `|`) is refused.
+  Its words must be found in the notice in order and account for all of it but 10 letters or digits (an icon read as a
+  letter or two beside a line's first or last word, an OCR slip; never a word of three letters or more, nor a line
+  outside the text; a negation such as "isn't" is one word), the OK and a line saying "Don't show this again." and
+  nothing else aside: a phrase that leaves a sentence or a button out is refused, and the notice's text is printed so
+  you can give it whole. `kit/crawl_run.py --start-label ROW --limit 1
+  --info-ok "ROW=PHRASE"`; then `kit/pass1_labels.py`, `kit/tiebreak.py` and `kit/pass1_map.py --own` on that crawl,
+  and `kit/prove_run.py --map <that crawl>/map.json --rows ROW --info-ok "ROW=PHRASE"`. The OK goes out once a visit,
+  and only where, besides, the lit bar before Right read as ROW, the notice has no question mark, reads as no
+  confirmation (its words run together too) and names nothing never-open, of identity or credentials; exactly one of its
+  lines is a button's word alone, OK; no other line names a second button, a choice or an action ("Cancel", "Back",
+  "Apply", "deleted"), nor sits on or below the OK's line; and the lit button reads OK. Else nothing is pressed, the
+  crawl records `notice (named, not passed: ...)` and the prover fails the row. Never with `--network`.
 - **A choice that also rewrites key assignments or other rows** (Flexible Exp. Mode) → keep those
   records as side effects, not as the row's changes.
 - **The table walk got lost** → buttons can keep hidden columns. Re-plan after every press and

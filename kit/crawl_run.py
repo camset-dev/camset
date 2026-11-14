@@ -4,7 +4,25 @@
 
 Uses the page scan's Down cycle and confirmed page model (camkit.crawl): before acting at any
 position the screen must match what the scan recorded there. Presses: MENU, the arrows, never
-Enter. Rows on the never-open list are skipped by their confirmed label.
+Enter, but the OK of an information notice that --info-ok names for its row. Rows on the never-open list are skipped
+by their confirmed label.
+
+--info-ok "ROW=PHRASE" (repeatable, one row each: runner.info_ok_or_exit, which refuses a row that is no label the
+definition or the page model knows or is never-open, and a phrase of fewer than 3 words or 12 letters, with a question
+mark or a pattern's sign such as * [ ] |) takes, after Right on ROW, the OK of the information notice whose whole text is
+PHRASE, once, and walks the screen behind it where it is one the walkers know (the a1 II's Different Set for Still/Mv: a
+notice, then its checklist). PHRASE is compared by its letters, digits and single spaces alone, punctuation and glyphs
+ignored in it and in the notice (runner.notice_words). The OK goes out only on a notice that explains and asks nothing
+(proving.screens.pass_named_notice): the lit bar before Right read as ROW; the phrase's words found in the notice in
+order (a negation such as "isn't" one word; a letter or two glued on only to a line's first or last word, where an icon
+sits), and at most 10 of the notice's letters and digits left over (an icon read as a letter or two, a slip), never a
+word of three letters or more nor a line outside its text, its OK line and a line saying "Don't show this again." and
+nothing else aside; no question mark; no confirmation (its words run together too), nothing
+never-open, of identity or credentials; exactly one line a button's word alone, OK; no other line naming a second
+button, a choice or an action, nor on or below the OK's band; and the lit button reading OK. Else nothing is pressed and
+the row is recorded "notice (named, not passed: ...)"; where the phrase leaves more of the notice over, the notice's text
+is printed, to give it whole. rows.jsonl keeps "info_ok": {"row", "frame"} for a row passed. Not with --network, whose
+rows are looked at only.
 
 Settings are downloaded before and after and diffed (pass 1 must change nothing); if anything changed, the
 start file is uploaded and the restore checked (docs/decisions/0015). --limit stops
@@ -65,6 +83,7 @@ from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_network_
                     close_for_restore, end_session, known_groups, known_labels, label_readings, load_scan,
                     network_decided_or_exit, network_readings, network_values, restore_checked, row_readings,
                     row_values, values_withheld, wait_shooting)
+from runner import add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels  # noqa: E402
 
 
 def summary(r) -> dict:
@@ -86,6 +105,8 @@ def summary(r) -> dict:
         out["decided"] = r.decided                          # the decided row it was opened as (camkit.crawl.network_row)
     if getattr(r, "notice", ""):
         out["notice"] = r.notice                            # why a greyed network setting is unavailable (notice_kept)
+    if getattr(r, "info_ok", None):
+        out["info_ok"] = r.info_ok                          # the notice --info-ok named, taken with its OK (its frame)
     frames = option_frames(w)
     if frames:
         out["frames"] = frames                              # per option, the saved frame it was seen on
@@ -577,8 +598,13 @@ def main():
     ap.add_argument("--panels", action="store_true",
                     help="open carousel › panels (commits the option); the start file is uploaded afterwards")
     add_network_argument(ap)
+    add_info_ok_argument(ap)
     a = ap.parse_args()
+    if a.info_ok and a.network:
+        sys.exit("--info-ok passes no notice on a --network run: its rows are looked at only")
     cycle, model = load_scan(a.scan)      # signatures from the current reader, not the one at scan time
+    # before anything connects; a row is named by a label the definition or the page model knows
+    named = info_ok_or_exit(a.info_ok, labels=known_labels(model) | row_labels(definition())) if a.info_ok else {}
     run = Run(a.run)
     if a.network:
         run.make_private()                # owner-only from here (camkit.runs), checked at the end (seal)
@@ -603,7 +629,8 @@ def main():
                              labels=label_readings(model) if network else None)
             try:
                 complete = crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
-                                           tuple(a.tabs.split(",")) if a.tabs else None, network=network)
+                                           tuple(a.tabs.split(",")) if a.tabs else None, network=network,
+                                           info_ok=info_ok_pass(named))
             except StopRequested:                           # a STOP: cancelled as ever, and no failure
                 print("STOP file: cancelling", flush=True)
                 complete = True
@@ -649,8 +676,26 @@ def network_settings_or_exit(run) -> dict:
     return settings
 
 
+def info_ok_pass(named: dict):
+    """camkit.crawl's info_ok for --info-ok (`named`: runner.info_ok_or_exit's {row: phrase}), or None when it names
+    none: for a row named, the lit bar read on the frame before Right (camkit.live.lit_text) and the notice judged and
+    passed by proving.screens.pass_named_notice ({"row", "frame"}, or {"refused": why} with nothing pressed); None for a
+    row not named, which is left as ever."""
+    if not named:
+        return None
+
+    def passed(cam, name, before):
+        from proving.screens import pass_named_notice       # here: runner and camkit stay free of the prover's parts
+        phrase = info_ok_for(named, name)
+        if phrase is None:
+            return None
+        lit = lit_text(before.image, before.path) if before is not None else ""
+        return pass_named_notice(cam, name, phrase, lit)
+    return passed
+
+
 def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
-                    network=frozenset()) -> bool:
+                    network=frozenset(), info_ok=None) -> bool:
     """MENU, find where it opened in the scan's cycle (find_position, kit/drive.py's way: a menu reopened with the
     cursor in the group column, where a refused jump left it, is stepped into the rows of a group it may enter
     (from_groups); one opened on a page the scan does not match goes by the columns to the Shooting tab's first group),
@@ -685,7 +730,8 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
             out = crawl(cam, cycle[j:] + cycle[:j], model, max_rows=limit, on_row=on_row, labels=submenu_labels,
                         **({"tabs": tabs} if tabs else {}),
                         panels=panels, network=network,
-                        notices=(text_of, known_labels(model), row_values(model)) if network else None)
+                        notices=(text_of, known_labels(model), row_values(model)) if network else None,
+                        **({"info_ok": info_ok} if info_ok is not None else {}))
             print(f"crawl ended: {(safety.quoted_withheld(out.stopped) if network else out.stopped) or 'lap complete'}; "
                   f"{out.presses} presses, "
                   f"{len(out.rows)} rows; the menu closed by itself {len(out.recoveries)} times "

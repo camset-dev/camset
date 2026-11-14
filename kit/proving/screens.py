@@ -12,6 +12,7 @@ import numpy as np
 from camkit import match, ocr, safety, screen
 from camkit.vlm import PROMPTS, ask_role
 from page_model import key_text, same_text
+from runner import INFO_OK_SLACK, joined, notice_words
 
 from .base import Blocked, Failed
 
@@ -315,9 +316,7 @@ def info_notice_ok(cam, name: str, kinds: tuple = ("notice", "unknown"), words: 
     if not text or safety.confirmation(text) or not re.search(r"\bOK\b", text):
         raise Failed(f"{name}: a notice came up ({cam.frame.path.name}){said}")
     for _ in range(3):
-        box = notice_focus(cam.frame.image)
-        focused = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path],
-                              (box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else ""
+        focused = notice_lit(cam)
         if re.fullmatch(r"\W*OK\W*", focused or ""):
             if words:
                 print(f"   information after the choice, taken with its OK: {text[:70]!r}", flush=True)
@@ -327,3 +326,181 @@ def info_notice_ok(cam, name: str, kinds: tuple = ("notice", "unknown"), words: 
             break
         cam.press("down")                    # off the "Don't show this again." box, never Enter on it
     raise Failed(f"{name}: the notice's OK could not be reached ({cam.frame.path.name}){said}")
+
+
+def notice_lit(cam) -> str:
+    """OCR of the notice's lit (orange-filled) bar on the frame on screen (notice_focus), "" when none is lit."""
+    box = notice_focus(cam.frame.image)
+    return ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path],
+                       (box[0], box[1], box[0] + box[2], box[1] + box[3])) if box else ""
+
+
+# a line of a notice that is a button's word alone (safety.BUTTON_WORDS), its dot or bullet aside: a notice passed with
+# --info-ok has one, its OK
+BUTTON_LINE = re.compile(r"[\s•●.]*(" + "|".join(sorted(safety.BUTTON_WORDS)) + r")[\s•●.]*", re.I)
+# what no line of such a notice but its OK may say, in any reading of the line (safety.readings): a second button, read
+# whole or not ("Cance1", "x Cancel", "Back"), or a word of a choice or an action, inflected too ("Apply", "deleted",
+# "overwritten", "Executed.")
+NOT_BESIDE_OK = re.compile(r"canc|\b(?:yes|no|back|close|execute|enter|start|apply|register|proceed|continue|confirm|"
+                           r"delete|format|reset|overwrit|eras|initiali[sz])")
+
+
+def _confirm_names() -> tuple:
+    """safety.confirmation's own words as written ("delete", "all data", "initialize" and "initialise", "reset"), for
+    joined: the same list, never a copy of it."""
+    out = []
+    for word in re.sub(r"^\\b\(|\)\\b$", "", safety._CONFIRM_RE.pattern).split("|"):
+        out += [word.replace("[sz]", "s"), word.replace("[sz]", "z")] if "[sz]" in word else [re.sub(r"s\?$", "", word)]
+    return tuple(dict.fromkeys(out))
+
+
+# safety.confirmation's words run together inside one word of the notice ("Deleteall", "Willbelost"; runner.joined, which
+# takes no name read across two words: "camera settings", "presets", "lens end"): a local check until the guards judge
+# words run together themselves
+CONFIRM_NAMES = _confirm_names()
+# a "Don't show this again." box's line, word for word (word_cover's slips allowed), which the phrase need not name
+DONT_SHOW_WORDS = ("don't", "show", "this", "again")
+# what an icon glued to a line's first or last word is never taken for: letters that would negate it ("unset",
+# "isnt" read without its apostrophe)
+NEGATING_BEFORE, NEGATING_AFTER = frozenset({"un", "in", "im", "il", "ir", "no"}), frozenset({"n", "nt"})
+OK_BAND = 4          # px: a line whose middle is lower than this above the OK line's top sits on or below the OK's band
+
+
+def letters(word: str) -> int:
+    """The letters and digits of a word (an apostrophe inside it is none)."""
+    return sum(c.isalnum() for c in word)
+
+
+def word_cover(w: str, t: str, edge: bool = False) -> int | None:
+    """How many letters of the notice's word `t` the phrase's word `w` accounts for, or None when it is not that word: the
+    word as it stands; for a word of four letters or more, one letter read for another, dropped or put in
+    (safety.one_apart: that letter is not accounted for); or, for a word of two letters or more that is the first or the
+    last of its line (`edge`, where an icon sits beside the text), the word with one or two letters or digits glued on
+    before or after it, never ones that negate it (NEGATING_BEFORE, NEGATING_AFTER): those are not accounted for."""
+    if t == w:
+        return letters(w)
+    if letters(w) >= 4 and safety.one_apart(t, w):
+        return min(letters(t), letters(w)) - (len(t) == len(w))
+    if edge and letters(w) >= 2 and 0 < len(t) - len(w) <= 2:
+        glued = t[:len(t) - len(w)] if t.endswith(w) else t[len(w):] if t.startswith(w) else ""
+        if glued.isalnum() and glued not in (NEGATING_BEFORE if t.endswith(w) else NEGATING_AFTER):
+            return letters(w)
+    return None
+
+
+def dont_show(ln) -> bool:
+    """Whether an OCR line is a "Don't show this again." box's line and nothing else (DONT_SHOW_WORDS, word by word,
+    word_cover's slips allowed: "Dont show this again")."""
+    got = notice_words(ln.text).split()
+    return len(got) == len(DONT_SHOW_WORDS) and all(word_cover(w, t) is not None
+                                                    for w, t in zip(DONT_SHOW_WORDS, got, strict=True))
+
+
+def notice_cover(phrase: str, lines: list) -> tuple | None:
+    """How the phrase's words (`phrase`, runner.notice_words) account for a notice's lines (OCR lines, its OK and its
+    "Don't show this again." line left out): None when its words are not all found in the lines' words, in order (each by
+    word_cover); else (the letters and digits of the lines left unaccounted for, why the phrase does not account for the
+    notice, "" where it does). It does not where a word it skips has three letters or more (an icon is read as a letter or
+    two: "Stop", "Later" or a sentence is no icon), or where a line that holds none of its words lies outside the lines
+    that hold them (a mark or a stray letter stacked above the OK)."""
+    seen = []                                       # (line, word, the line's first or last word)
+    for k, ln in enumerate(lines):
+        got = notice_words(ln.text).split()
+        seen += [(k, t, j in (0, len(got) - 1)) for j, t in enumerate(got)]
+    matched, covered, i = set(), 0, 0
+    for w in phrase.split():
+        while i < len(seen):
+            got = word_cover(w, seen[i][1], seen[i][2])
+            i += 1
+            if got is not None:
+                covered += got
+                matched.add(i - 1)
+                break
+        else:
+            return None
+    left_over = sum(letters(t) for _, t, _ in seen) - covered
+    if any(letters(t) >= 3 for j, (_, t, _) in enumerate(seen) if j not in matched):
+        return left_over, "a word it does not name"
+    held = {seen[j][0] for j in matched}
+    top = min((lines[k].y for k in held), default=0)
+    bottom = max((lines[k].y + lines[k].h for k in held), default=0)
+    if any(not top <= ln.y + ln.h / 2 <= bottom for k, ln in enumerate(lines) if k not in held):
+        return left_over, "a line outside its text"
+    return left_over, ""
+
+
+def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool = True) -> dict:
+    """--info-ok (runner.info_ok_or_exit): the information notice Right opened on the row `name` ("A > B" for a submenu's
+    row) taken with its OK, so the screen behind it opens (Different Set for Still/Mv on the a1 II: "You can set
+    different settings for still image mode and movie mode in the next screen. The setting set for ☑ is independent.",
+    a single OK, 2026-11-03). Only for a notice that explains and asks nothing, whose whole text the run gives
+    (`phrase`, runner.notice_words: letters, digits and single spaces; punctuation and glyphs ignored in both). Enter goes
+    out once, and only when all hold:
+    - the screen is a notice;
+    - the lit bar read before Right (`lit_before`) is the row's last label (safety.bar_on_row, or page_model.same_text
+      with its short first word kept: keeps_lead);
+    - the phrase's words are found in the notice's lines, in order (notice_cover), its OK line aside, and a line that
+      says "Don't show this again." and nothing else (dont_show), unless the phrase names its words too;
+    - no reading of the text holds a question mark;
+    - it reads as no confirmation (safety.confirmation, and its words run together: runner.joined), names nothing the
+      never-open list holds (safety.screen_refused) and nothing of identity or credentials (safety.identity_screen);
+    - exactly one of its lines is a button's word alone, and that word is OK (BUTTON_LINE);
+    - no other line names a second button, a choice or an action in any reading (NOT_BESIDE_OK), and none sits on or
+      below the OK line's band (OK_BAND);
+    - the phrase accounts for the whole notice (notice_cover): no word of three letters or more it skips, no line
+      outside its text that holds none of its words, and at most runner.INFO_OK_SLACK of its letters and digits left over
+      (an icon read as a letter or two, a slip), so no sentence or button the phrase does not name can ride along;
+    - the lit button reads OK (notice_lit), and info_notice_ok, which judges it so too, presses the Enter.
+    Returns {"row", "frame": the notice's frame} once passed, else {"refused": why} with nothing pressed; no text read
+    off the screen is in either. Where the phrase leaves more of the notice over, the notice's text is printed (`words`:
+    False on a run that withholds what it reads), so that its whole text can be given."""
+    frame = cam.frame.path.name
+    if cam.read().kind != "notice":
+        return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
+    row = name.split(" > ")[-1]
+    if not (safety.bar_on_row(lit_before, row) or (same_text(lit_before, row) and keeps_lead(lit_before, row))):
+        return {"refused": "the lit bar read before Right is not the row named"}
+    lines = ocr.read([cam.frame.path])[cam.frame.path]
+    text = " ".join(ln.text for ln in lines).strip()
+
+    def an_ok(ln) -> bool:
+        m = BUTTON_LINE.fullmatch(ln.text or "")
+        return bool(m) and m[1].lower() == "ok"
+    said = [ln for ln in lines if not an_ok(ln)]
+    aside = [ln for ln in said if not dont_show(ln)]
+    cover = notice_cover(phrase, aside)
+    if cover is None and len(aside) < len(said):
+        cover = notice_cover(phrase, said)          # a phrase that names the box's words too
+    if cover is None:
+        return {"refused": f"not the notice named ({frame})"}
+    if any(q in r for r in safety.readings(text) for q in "?？"):
+        return {"refused": f"it asks a question ({frame})"}
+    for check, why in ((safety.confirmation, "it reads as a confirmation"),
+                       (lambda t: joined(t, CONFIRM_NAMES), "it reads as a confirmation, its words run together"),
+                       (safety.screen_refused, "it names what the never-open list holds"),
+                       (safety.identity_screen, "it names identity or credentials")):
+        if check(text):
+            return {"refused": f"{why} ({frame})"}
+    buttons = [ln for ln in lines if BUTTON_LINE.fullmatch(ln.text or "")]
+    if [BUTTON_LINE.fullmatch(ln.text)[1].lower() for ln in buttons] != ["ok"]:
+        return {"refused": f"not a single OK: {len(buttons)} button lines ({frame})"}
+    ok_line = buttons[0]
+    others = [ln for ln in lines if ln is not ok_line]
+    if any(NOT_BESIDE_OK.search(r) for ln in others for r in safety.readings(ln.text)):
+        return {"refused": f"a line beside its OK names a button, a choice or an action ({frame})"}
+    if any(ln.y + ln.h / 2 >= ok_line.y - OK_BAND for ln in others):
+        return {"refused": f"a line sits on or below its OK's band ({frame})"}
+    left_over, why = cover
+    if why or left_over > INFO_OK_SLACK:
+        if words:
+            print(f"   the notice reads {text!r}: give its whole text as written with --info-ok", flush=True)
+        return {"refused": f"the notice has {left_over} letters or digits beyond the phrase{f', {why}' if why else ''}: "
+                           f"give its whole text as written ({frame})"}
+    if not re.fullmatch(r"\W*OK\W*", notice_lit(cam) or ""):
+        return {"refused": f"the lit button is not OK ({frame})"}
+    try:
+        if info_notice_ok(cam, name, kinds=("notice",), words=False) is None:
+            return {"refused": f"no notice was up for its OK ({frame})"}
+    except Failed:
+        return {"refused": f"its OK could not be taken ({frame})"}
+    return {"row": name, "frame": frame}

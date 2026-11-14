@@ -975,6 +975,138 @@ def allowed_or_exit(labels) -> str:
     return safety.allowance(labels)
 
 
+# --info-ok: the phrase naming a notice is the notice's whole text as written (info_ok_or_exit), compared by its letters,
+# digits and single spaces alone (notice_words: punctuation and glyphs ignored, in the phrase and in the notice alike)
+INFO_OK_MIN = 12                # letters and digits, at least
+INFO_OK_WORDS = 3               # words, at least
+INFO_OK_SLACK = 10              # the notice's letters and digits the phrase may leave unaccounted for (an icon, a slip)
+INFO_OK_SIGNS = set("\\^$*+{}[]|")     # a regular expression's own signs, which no notice's text holds: refused
+
+
+def add_info_ok_argument(ap) -> None:
+    """--info-ok "ROW=PHRASE", repeatable, one row each, as kit/crawl_run.py and kit/prove_run.py take it: after Right on
+    that row, the OK of the information notice whose whole text PHRASE is (by its letters, digits and spaces: notice_words)
+    is taken, so the screen behind it is walked or proved (proving.screens.pass_named_notice judges the notice). Without
+    it nothing changes: a notice is recorded, never passed."""
+    ap.add_argument("--info-ok", action="append", default=[], metavar="ROW=PHRASE",
+                    help="after Right on ROW, take the OK of the information notice whose whole text is PHRASE, as "
+                         "written (its letters, digits and spaces are compared, punctuation and glyphs ignored; at most "
+                         f"{INFO_OK_SLACK} of the notice's letters may go unaccounted for), only where the notice asks "
+                         "nothing and shows OK alone; one row each, repeatable; without it a notice is recorded, never "
+                         "passed")
+
+
+def notice_words(text) -> str:
+    """A notice's text, or a phrase naming one, as --info-ok compares them: folded (safety.fold), case folded, its words
+    alone, one space between ("Still/Mv." is "still mv"); a word is a run of letters and digits, an apostrophe inside it
+    kept, so a negation stays one word ("isn't", "can't"; a curly apostrophe written straight); punctuation and glyphs
+    ("☑") left out."""
+    t = safety.fold(text).casefold().replace("\u2019", "'")
+    return " ".join(re.findall(r"[^\W_]+(?:'[^\W_]+)*", t))
+
+
+def joined(text, names) -> str | None:
+    """The first of `names` (a never-open name or a confirmation's word, as written: "delete all", "reset") that a reading
+    of `text` (safety.readings) holds run together inside one of its words, its signs left out, or None. A word is what
+    the reading's spaces part, so a name read across two words ("camera settings" holds "erase", "Pre-Capture Settings"
+    "reset", "lens end" "send") is no hit. A name of several words is a hit anywhere inside one word ("Deleteall",
+    "alldata"); a name of one word only where that word holds more than it, and what is beside it is no single letter
+    ("SettingReset", "Formatthe"; never "Rotate" alone, the word "preset" or "deleted"). Names shorter than four letters
+    are left out."""
+    keys = [(n, re.sub(r"[^a-z0-9]", "", n.lower()), " " in n.strip()) for n in names]
+    for r in safety.readings(text):
+        for word in r.split():
+            al = re.sub(r"[^a-z0-9]", "", word)
+            for name, key, spaced in keys:
+                at = al.find(key) if len(key) >= 4 else -1
+                while at >= 0:
+                    beside = [x for x in (al[:at], al[at + len(key):]) if x]
+                    if spaced or (beside and all(len(x) >= 2 for x in beside)):
+                        return name
+                    at = al.find(key, at + 1)
+    return None
+
+
+def _never_open_words() -> tuple:
+    """The never-open list's names written out plainly: its actions', each other pattern that is letters, digits, spaces
+    and signs alone ("screen reader", "audio signal", "access authen"), and "reset", for run_together_refused."""
+    plain = [p for p in (*safety._IDENTITY, *safety._CREDENTIALS, *safety._ANYWHERE, *safety._MOTION,
+                         *safety._NETWORK_SETTINGS) if re.fullmatch(r"[a-z0-9 ./&'-]+", p)]
+    return tuple(sorted({*safety._ACTION_NAMES, *plain, "reset"}))
+
+
+def run_together_refused(row: str) -> str | None:
+    """Why the row name `row` is refused for --info-ok read with its words run together ("DeleteAll", "SettingReset",
+    "ScreenReader", "Steady.Shot"), or None: a word of any reading of it (safety.readings) that had signs in it is
+    never-open with them left out (safety.never_open: "steady.shot"), or a word holds one of the never-open list's names
+    run together (joined, _never_open_words). A name read across two words, or a word that is a name alone ("File
+    Format", "Zoom Ring Rotate", "Time Code Preset"), is the guards' own to judge as written (safety.path_refused). A local
+    check until the guards judge words run together themselves."""
+    for r in safety.readings(row):
+        for word in r.split():
+            al = re.sub(r"[^a-z0-9]", "", word)
+            why = safety.never_open(al) if al != word else None
+            if why:
+                return why
+    name = joined(row, _never_open_words())
+    return f"never-open: {name} (its words run together)" if name else None
+
+
+def info_ok_or_exit(values, rows=None, labels=None) -> dict:
+    """--info-ok's values as {row: the phrase's words (notice_words)}: each one row and the notice's whole text as
+    written, compared by its letters, digits and single spaces (proving.screens.pass_named_notice). Exits before anything
+    connects on a value without "=", a row or a phrase missing, a row named twice, a row with a label that is no row
+    label the kit knows (`labels`: the definition's row labels by default, row_labels; the runners add the page model's
+    or the map's), a row of which any label is on the never-open list, of any class (safety.path_refused), or is so read
+    with its words run together (run_together_refused); a phrase with a regular expression's own sign in it
+    (INFO_OK_SIGNS: it is never a pattern) or a question mark (a notice that asks is never passed), of fewer than
+    INFO_OK_WORDS words or INFO_OK_MIN letters and digits, or that itself reads as a confirmation (safety.confirmation) or
+    names what the never-open list holds (safety.screen_refused); and, given `rows` (kit/prove_run.py's --rows), a row
+    --rows does not name. Prints the rows named, as allowed_or_exit does."""
+    known = {safety.plain(x) for x in (row_labels(definition()) if labels is None else labels) if isinstance(x, str)}
+    out = {}
+    for v in values or ():
+        row, _, given = str(v).partition("=")
+        row, phrase = " ".join(row.split()), notice_words(given)
+        if not safety.plain(row) or not given.strip():          # no "=" leaves no phrase
+            sys.exit(f"--info-ok {v!r}: give one row and the notice's whole text, ROW=PHRASE")
+        if any(safety.plain(r) == safety.plain(row) for r in out):
+            sys.exit(f"--info-ok: {row!r} is named twice")
+        unknown = [x for x in row.split(" > ") if safety.plain(x) not in known]
+        if unknown:
+            sys.exit(f"--info-ok: {', '.join(map(repr, unknown))} is no row label the kit knows (the definition's menu or "
+                     "the page model): name the row as the camera writes it")
+        why = safety.path_refused(row.split(" > ")) or run_together_refused(row)
+        if why:
+            sys.exit(f"--info-ok: {row!r} is never opened ({why}), so no notice of it is passed")
+        if INFO_OK_SIGNS & set(given):
+            sys.exit(f"--info-ok {row!r}: give the notice's whole text as written, one unbroken phrase with no sign such "
+                     f"as {' '.join(sorted(INFO_OK_SIGNS & set(given)))} (it is compared word for word, never as a "
+                     "pattern)")
+        if "?" in safety.fold(given):
+            sys.exit(f"--info-ok {row!r}: the phrase asks a question, and a notice that asks is never passed")
+        if len(phrase.split()) < INFO_OK_WORDS or sum(c.isalnum() for c in phrase) < INFO_OK_MIN:
+            sys.exit(f"--info-ok {row!r}: give at least {INFO_OK_WORDS} words and {INFO_OK_MIN} letters: the notice's "
+                     "whole text as written")
+        why = safety.confirmation(given) or safety.screen_refused(given)
+        if why:
+            sys.exit(f"--info-ok {row!r}: the phrase reads as what no notice passed may say ({why})")
+        if rows is not None and not any(safety.plain(r) == safety.plain(row) for r in rows):
+            sys.exit(f"--info-ok: {row!r} is not one of the rows named with --rows")
+        out[row] = phrase
+    for row, phrase in out.items():
+        print(f"--info-ok: after Right on {row!r} the OK of the information notice reading {phrase!r} is taken",
+              flush=True)
+    return out
+
+
+def info_ok_for(named: dict, row: str):
+    """The phrase --info-ok names for the row `row` ("A > B" for a submenu's row; info_ok_or_exit's {row: phrase},
+    compared as safety.plain compares them, whole), or None."""
+    want = safety.plain(row)
+    return next((p for r, p in (named or {}).items() if want and safety.plain(r) == want), None)
+
+
 SCOPE_FILE = "pass2_scope_draft.json"       # the camera's reviewed scope, in pass 1's run (proving.jobs reads it)
 
 
