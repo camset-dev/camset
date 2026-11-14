@@ -492,10 +492,14 @@ What follows an edit is the copies rule: an editor writes every copy that held t
 one when the setting is edited; changing a copy that was in step with its setting in the file as opened changes the
 setting and every copy in step with it, and changing one that was not in step changes that copy alone. Whether a
 family's Stills and Movie values are shared or kept apart is the camera's own setting, Different Set for Still/Mv,
-one box per family: with a box unticked a change in one mode moves both copies, with it ticked only that mode's. The
-kit has not proved those boxes yet (the row opens on an information notice the walker stopped at, and no setting of
-the definition holds them), so the copies rule, right in both states but for moving an equal copy when the box is
-ticked, is what an editor follows; once the boxes are proved the definition will name each family's box. `copy_for`
+one box per family: with a box unticked a change in one mode moves both copies, with it ticked only that mode's. On
+the a1 II each box is a setting of the definition, proved by ticking and unticking it, and what a box does to its
+family's copies is proved for White Balance and the Picture Profile in use, in Stills and Movie mode: unticked, a
+choice in either mode writes the setting and both copies; ticked, the setting and that mode's copy only; ticking the
+box on the camera writes the box alone, and unticking it sets the setting and both copies to 0 (Auto, Off), whatever
+they held (the camera's page, its Different Set for Still/Mv row, says what is not proved yet). The definition does
+not tie a family to its box, so the copies rule, right in both states but for moving an equal copy when the box is
+ticked, is what an editor follows, and a box changed in a file changes the box alone. `copy_for`
 and `camera.live_mode` are for checking a file, not for deciding what follows: where a section's mode is known and the
 family's copies carry `copy_for`, a section in which the setting does not equal the copy for its mode is a counted
 issue in the save and write windows, an edit or a Revert that would make it so is refused outside Expert mode, and

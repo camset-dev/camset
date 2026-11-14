@@ -32368,7 +32368,7 @@
      "Custom 3"
     ]
    ],
-   "note": "",
+   "note": "The stills copy of White Balance: a White Balance choice in Stills mode writes it with the one in use (0x0367); one in Movie mode writes it too while Different Set for Still/Mv's White Balance box (0x0187) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Auto.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -33006,7 +33006,7 @@
      "PP11"
     ]
    ],
-   "note": "",
+   "note": "The stills copy of the Picture Profile in use: a Picture Profile choice in Stills mode writes it with the one in use (0x0053); one in Movie mode writes it too while Different Set for Still/Mv's Picture Profile box (0x0188) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Off.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -211572,7 +211572,7 @@
      "Custom 3"
     ]
    ],
-   "note": "",
+   "note": "Movie mode's copy of White Balance: a White Balance choice in Movie mode writes it with the one in use (0x0367); one in Stills mode writes it too while Different Set for Still/Mv's White Balance box (0x0187) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Auto.",
    "in_sets": true,
    "size": 1,
    "count": 1,
@@ -211706,7 +211706,7 @@
      "User4"
     ]
    ],
-   "note": "",
+   "note": "Movie mode's copy of the Picture Profile in use: a Picture Profile choice in Movie mode writes it with the one in use (0x0053); one in Stills mode writes it too while Different Set for Still/Mv's Picture Profile box (0x0188) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Off.",
    "in_sets": true,
    "size": 1,
    "count": 1,
@@ -216976,7 +216976,7 @@
      "Ticked"
     ]
    ],
-   "note": "One checkbox of this menu row.",
+   "note": "One checkbox of this menu row. Ticked, White Balance is kept apart for stills and movies: a White Balance choice writes the one in use (0x0367) and only the copy of the mode it is made in, the stills copy (0x0e0e) in Stills mode, the movie copy (0x0e10) in Movie mode. Not ticked, a choice in either mode writes the one in use and both copies. On the camera, ticking the box writes nothing but the box, and unticking it sets White Balance to Auto in the one in use and in both copies, whatever they held. Not proved yet: what the box does to the colour temperature and the fine-tune; an untick in S&Q or Time-lapse, or in Stills mode with the two copies apart and neither on Auto; and what the camera does on loading a file whose box was changed.",
    "in_sets": false,
    "scalar": true,
    "size": 1,
@@ -217014,7 +217014,7 @@
      "Ticked"
     ]
    ],
-   "note": "One checkbox of this menu row.",
+   "note": "One checkbox of this menu row. Ticked, the Picture Profile in use is kept apart for stills and movies: a Picture Profile choice writes the one in use (0x0053) and only the copy of the mode it is made in, the stills copy (0x0e12) in Stills mode, the movie copy (0x0e14) in Movie mode. Not ticked, a choice in either mode writes the one in use and both copies. On the camera, ticking the box writes nothing but the box, and unticking it sets Picture Profile to Off in the one in use and in both copies, whatever they held. Not proved yet: what the box does to the profiles' parameters; an untick in S&Q or Time-lapse, or in Stills mode with the two copies apart and neither Off; and what the camera does on loading a file whose box was changed.",
    "in_sets": false,
    "scalar": true,
    "size": 1,

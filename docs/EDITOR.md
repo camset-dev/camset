@@ -267,7 +267,8 @@ it (on the page too, and on hover in Compare, the Main tiles and the Memories pa
   value when this file was opened or read, so the editor keeps them together. Expert mode (⚙ Settings > Editing &
   Compare) changes this one alone."). A copy that held another value is changed and reverted alone, and stays as it
   is when its setting changes. Whether the camera moves a family's Stills and Movie values together is a setting of
-  its own that no proof has read yet, so the shooting mode never decides what follows.
+  its own (the a1 II's Different Set for Still/Mv, one box per family), which the editor does not follow, so the
+  shooting mode never decides what follows, and a box changed in a file changes nothing else.
 - What is checked: where a set's shooting mode is known (the definition's `camera.live_mode` names the live record
   that says the mode the file was saved in; a memory set's mode is the one `camera.memory_sets.modes` lists it under)
   and the copies say whose mode they are (`copy_for`), the setting must equal the copy for that mode, as in every file

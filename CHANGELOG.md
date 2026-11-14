@@ -52,6 +52,18 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   Ticked or Not ticked, each proved on the camera by ticking and unticking its box. A ticked box keeps that setting
   apart for stills and for movies; what a change then writes to each mode's copy is not proved yet, so the editor's
   handling of the copies is as before.
+- **What the a1 II's White Balance and Picture Profile boxes of Different Set for Still/Mv do to the copies is
+  proved,** in Stills and Movie mode, for White Balance and the Picture Profile in use, each kept in the one in use and
+  a stills and a movie copy. With the box not ticked, a choice in either mode writes the one in use and both copies;
+  ticked, the one in use and only that mode's copy. Ticking a box writes nothing but the box, and unticking it sets
+  the one in use and both copies to White Balance Auto or Picture Profile Off, whatever they held. The notes on the
+  two boxes and the four copies say so (in Expert mode), and the camera's page has a Different Set for Still/Mv row.
+  Still not proved: whether that Auto or Off is a default or a value the camera keeps elsewhere; what the boxes do to
+  White Balance's colour temperature and fine-tune and to the profiles' parameters; the other five boxes; an untick in
+  S&Q or Time-lapse, or in Stills mode with the copies apart and neither Auto nor Off; White Balance options past
+  Shade (Cloudy in Stills mode only) and PP3 and later; and what the camera does on loading a file whose box was
+  changed. The editor handles the copies as before: it does not read the boxes, and unticking one in a file changes the
+  box alone.
 - A value shown as "7 (no name yet)" says in Expert mode that no choice on the camera wrote it when the setting was
   mapped, and that the camera's list may not offer it, where it said the value was not chosen on the camera, which
   was wrong for one the list never offers.

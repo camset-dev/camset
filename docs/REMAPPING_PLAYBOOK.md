@@ -831,7 +831,9 @@ The Still/Movie/S&Q switch is physical, so the owner moves it.
    served there.
 4. Prove the rows no stills proof covers.
 5. Prove again the rows "Different Set for Still/Mv" splits: each keeps a stills record and a movie record beside
-   the record in use (the a1 II's: its page, the Movie / stills row).
+   the record in use (the a1 II's: its page, the Movie / stills row). Prove too what each box does to them, with the
+   box ticked and unticked and from each mode, and what ticking and unticking it writes: on the a1 II unticking a box
+   set the record in use and both copies to 0 (its page, the Different Set for Still/Mv row).
 
 ### Phase 5: sessions with the owner
 
