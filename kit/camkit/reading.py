@@ -63,6 +63,10 @@ the setting holds 0.4"; with no options, a zero and a space before a digit, and 
 agreement loses, and the test lists each such case with its reason. No caller reads through this module yet: camkit.match, page_model.key_text, camkit.safety and the other look-alike tables still compare as
 they did, and every run decides and presses as before. The callers move onto it site by site once the
 census has measured what that changes; the tests already say where canonical differs from each old table.
+Since 2026-11-13 also: one question to the reader per kind of screen (QUESTIONS, region; camkit.vlm's ".v2" prompts),
+which kit/tools/reader_census.py --questions measures against the old questions on recorded frames and no caller asks
+yet; and, for finding a row, an icon OCR read as letters in front of its label left out before the reading is judged
+(icon_left_out, doubts' find), as page_model.same_text leaves it out.
 
 The eyes go through one seam each, so that a test fakes them in one place (kit/tests/conftest.py, eyes):
   _ocr_lines(frame, eng)                       camkit.ocr.read on the frame's file (eng: the second engine)
@@ -518,13 +522,90 @@ def choice_of(text, expect: str, choices) -> int | None:
     return _choice(str(text or ""), expect, tuple(str(o) for o in choices or ()))
 
 
-def doubts(text, expect: str, *, lines=(), choices=(), lit: bool = False) -> list:
+# A row's icon as OCR reads it in front of the row's label, as page_model.key_text and same_text leave it out: the signs
+# before the first letter, digit or bracket ("& Priority Set in AWB"), but a number's own sign ("+3", "-1.0 EV"), then
+# (safety.clean_label) a word of one or two letters or digits before a capital or a bracket, or a small letter glued
+# before a capital
+_ICON_SIGNS = re.compile(r"^(?:(?![+\-\u00B1]\d)[^A-Za-z0-9(])+")
+_ICON_WORD = re.compile(r"^(?:[A-Za-z0-9]{1,2}\s+)(?=[A-Z(])|^[a-z](?=[A-Z])")
+
+
+def without_icon(text) -> str:
+    """A reading, canonical, without the icon OCR reads as letters in front of a row's label (_ICON_SIGNS, then
+    _ICON_WORD): "& Priority Set in AWB" is "Priority Set in AWB". Case kept. A label of the camera's own that starts
+    so ("Tv Auto/Manual Switch") loses its first word too: only a reading is ever cut so, never the options it is
+    judged against (icon_left_out)."""
+    return _ICON_WORD.sub("", _ICON_SIGNS.sub("", canonical(text)).strip()).strip()
+
+
+def _icon_leads(t: str) -> tuple:
+    """A canonical reading's other readings with a leading icon left out, each way page_model.same_text leaves one out:
+    without_icon's (whose word rule can take a short word of digits before a capital, as safety.clean_label does: "10
+    Sec" gives "Sec"), then one or two characters glued in front, spacing not counted ("SAF Frame Move Amt" for AF
+    Frame Move Amt, "v dFor viewfinder" for For viewfinder), a cut that never takes a digit nor stops before one
+    ("10Sec" never gives "0Sec"). The reading itself is not among them; icon_left_out takes one only where it is an
+    option's exact name."""
+    out = []
+    bare = without_icon(t)
+    out.append(bare)
+    for n in (1, 2):
+        m = re.match(rf"\s*(?:\S\s*){{{n}}}", bare)
+        if m is None:
+            continue
+        cut, kept = re.sub(r"\s", "", m.group(0)), bare[m.end():]
+        if not re.search(r"\d", cut) and kept and not kept[0].isdigit():
+            out.append(kept)
+    return tuple(s for s in dict.fromkeys(out) if s and s != t)
+
+
+def icon_left_out(text, choices) -> str | None:
+    """A label reading with the icon OCR read in front of it left out (_icon_leads), where that names exactly one of
+    choices by its exact name, and the reading as read names none exactly and no other loosely: the label as finding a
+    row takes it ("SAF Frame Move Amt", "& Priority Set in AWB"). None otherwise, and with no choices. Only the
+    reading loses its front, never an option, so a short first word that tells two rows apart still does: "Tv
+    Auto/Manual Switch" never names Av Auto/Manual Switch (proving.screens.keeps_lead, 2026-10-31). What is left must
+    be PLAIN_MIN characters or more."""
+    choices = tuple(str(o) for o in choices or ())
+    t = canonical(text)
+    if not choices or not t:
+        return None
+    exact, named = _hits(t, "label", choices)
+    if exact:
+        return None
+    found = {}
+    for s in _icon_leads(t):
+        if len(re.sub(r"\s", "", s)) < PLAIN_MIN:
+            continue
+        hit, _ = _hits(s, "label", choices)
+        if len(hit) > 1:
+            return None
+        if hit:
+            found.setdefault(hit[0], s)
+    if len(found) != 1:
+        return None
+    (i, s), = found.items()
+    return None if set(named) - {i} else s
+
+
+def _kept_raw(raw: str, kept: str) -> str:
+    """The end of a raw reading whose cleaning is kept (a reading with its icon left out), or the whole reading when
+    none is: the characters of the icon left out are no doubt about the label."""
+    for i in range(len(raw)):
+        if canonical(raw[i:]) == kept:
+            return raw[i:]
+    return raw
+
+
+def doubts(text, expect: str, *, lines=(), choices=(), lit: bool = False, find: bool = False) -> list:
     """Why OCR's reading `text` of something of the kind `expect` ("label", "number", "code", "button", "text") is not
     plain enough to be trusted alone, as short reasons whose words before ":" are the kind (the census counts by it);
     [] for a plain reading. Pure: no I/O. lines: the ocr.Line list the reading was made of (their confidence, once
     CONF_FLOOR is set); choices: the options expected there (no option, several, loose are judged only with them);
     lit: something is lit there, so an empty reading is a doubt ("empty"), where an empty reading of a place with
-    nothing lit is none.
+    nothing lit is none. find: the reading finds a row (the stakes "find"), a label: an icon OCR read as letters in
+    front of it is left out first where what is left names one option exactly (icon_left_out), as page_model.same_text
+    leaves it out, and the doubts are judged on what is left, its characters only (without it most menu rows read
+    "loose" and the reader would be asked about them for nothing).
       lookalike: <NAME>    a letter or digit outside ASCII that canonical makes Latin (a Cyrillic ES in "C.Temp")
       foreign: <NAME>      one it does not (a Cyrillic ZE read for a 3, a German sharp s, a Chinese character)
       cleaned: <NAME>      any other character the cleaning changes (a circled M, the numero sign, a combining mark on
@@ -544,6 +625,10 @@ def doubts(text, expect: str, *, lines=(), choices=(), lit: bool = False) -> lis
     canon = canonical(raw)
     if not canon:
         return ["empty"] if lit else []
+    if find and expect == "label" and choices:
+        left = icon_left_out(canon, choices)
+        if left is not None:
+            raw, canon = _kept_raw(raw, left), left
     out = [f"{kind}: {name}" for kind, name in _cleaned(raw)]
     core = re.sub(r"\s", "", canon)
     digit = bool(re.search(r"\d", core))
@@ -624,7 +709,8 @@ class Vote:
     """One eye's reading of a place. eye: "ocr" (the OCR engine configured), "ocr2" (the second OCR engine, where one
     is installed), "reader" (the "second" reader), "third" (the "third" reader, of another model), "check" (a site's
     own check that is no reader); source: what read it, "ocr:<engine>", "reader:<model>" or "check:site"; text: as read
-    (None: asked, and no answer); frame: the file name of the frame it was read on."""
+    (None: asked, and no answer), but where read() finds a row an OCR engine's label reading without the icon it read
+    in front of it (icon_left_out; Reading.raw keeps it as read); frame: the file name of the frame it was read on."""
     eye: str
     source: str
     text: str | None
@@ -723,8 +809,9 @@ def _highlighted(answer: dict):
 @dataclass(frozen=True)
 class Region:
     """A place on the screen and the question the reader is asked about it. box: (x0, y0, x1, y1) in the 640 x 480
-    frame, or None for the lit item, found on the frame (camkit.live.lit_found). prompt: a camkit.vlm.PROMPTS key, the
-    questions the kit asks today, so that the answers already cached are used. pick: the reading in the answer."""
+    frame, or None for the lit item, found on the frame (camkit.live.lit_found). prompt: a camkit.vlm.PROMPTS key: the
+    questions the kit asks today for the Regions below (LIT, TITLE, CAROUSEL ...: their answers are cached already), a
+    kind of screen's own ".v2" question for one region() makes. pick: the reading in the answer, a text or None."""
     name: str
     box: tuple | None
     prompt: str
@@ -747,6 +834,62 @@ def FIELD(k: int, box: tuple) -> Region:
 def BOX(x0: int, y0: int, x1: int, y1: int, prompt: str = "option", pick: str = "selected") -> Region:
     """Any other place, with the question to ask there and the answer's field to read."""
     return Region(f"box {x0},{y0},{x1},{y1}", (x0, y0, x1, y1), prompt, _text(pick))
+
+
+class Question(NamedTuple):
+    """The reader's question about one kind of screen: prompt, a camkit.vlm.PROMPTS key; field, the answer's field that
+    holds the reading (a number-entry screen's "fields" is a list, a box each; a checklist's "boxes" a list of
+    {"label", "ticked"}; the white balance grid's answer has a field per readout, "A-B" and "G-M"; a Creative Look
+    scale's "top" and "bottom"); expect, what is read there (doubts, agree); box, where OCR reads the same thing (None:
+    the lit item, found on the frame)."""
+    prompt: str
+    field: str
+    expect: str
+    box: tuple | None = None
+
+
+# One question per kind of screen, each asking for exactly the thing the kit reads there, in a pinned form, those that
+# read a lit item that may be missing with "none" for it (camkit.vlm's ".v2" prompts; the owner, 2026-11-13: "keep OCR
+# as main and VLM as back up, maybe we can feed a better prompt to the VLM"). Measured against the questions the kit
+# asks today by kit/tools/reader_census.py --questions, on frames already recorded, with the options expected there
+# handed to the reader and without; no caller asks them yet (the Regions above keep the old questions, whose answers
+# are cached).
+QUESTIONS = {
+    "list": Question("lit.v2", "selected", "label"),
+    "side list": Question("lit.v2", "selected", "label"),
+    "table picker": Question("lit.v2", "selected", "label"),
+    "scale": Question("scale.v2", "selected", "number"),
+    "star rating": Question("stars.v2", "selected", "number"),
+    "checklist": Question("checklist.v2", "boxes", "label"),
+    "number field": Question("fields.v2", "fields", "number"),
+    "carousel": Question("carousel.v2", "selected", "label", CAROUSEL.box),
+    "axis": Question("carousel.v2", "selected", "label", CAROUSEL.box),
+    "axis cell": Question("cell.v2", "selected", "code"),
+    "look": Question("look.v2", "selected", "number"),
+    "look scale": Question("lookscale.v2", "top", "number"),
+    "look base": Question("carousel.v2", "selected", "code", CAROUSEL.box),
+    "wb grid": Question("wbgrid.v2", "A-B", "text"),
+    "notice": Question("notice.v2", "text", "text", NOTICE.box),
+    "title": Question("title.v2", "title", "label", TITLE.box),
+}
+
+
+# answer fields that hold no one reading: a list of boxes, one reading each (read by its k), and a list of objects
+LISTED = {"fields": "a box each: give the box's k", "boxes": "a list of {label, ticked}, no one reading of a place"}
+
+
+def region(kind: str, box: tuple | None = None, k: int | None = None, field: str | None = None) -> Region:
+    """The Region read() reads one kind of screen by, with its question of QUESTIONS: at box (default the question's,
+    else the lit item), the answer's field (default the question's) or, for a number-entry screen's "fields", its k-th
+    box. A kind QUESTIONS does not name raises KeyError; a field that holds no one reading (LISTED: "fields" without k,
+    a checklist's "boxes" at all) raises ValueError, where a pick would give a list's text."""
+    q = QUESTIONS[kind]
+    name = field or q.field
+    if name == "boxes" or (name in LISTED and k is None):
+        raise ValueError(f"region({kind!r}): the answer's {name!r} is {LISTED[name]}")
+    pick = _nth(name, k) if k is not None else _text(name)
+    where = tuple(box) if box is not None else q.box
+    return Region(f"{kind}{'' if k is None else f' {k}'} ({q.prompt})", where, q.prompt, pick)
 
 
 # ------------------------------------------------------------------------------------------------ the eyes
@@ -974,17 +1117,23 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
         return Reading("", None, "none", raw, [], None, "nothing is lit", name)
     lines = [ln for ln in every if ln.inside(box)]
     said_ocr = " ".join(ln.text for ln in lines).strip()
-    raw["ocr"] = said_ocr
-    votes = [Vote("ocr", f"ocr:{first}", said_ocr, name)]
+    raw["ocr"] = said_ocr                # as read, always
+    find = stakes == "find"
+    # finding a row judges OCR's reading without the icon it read in front of the label (doubts' find), and votes with
+    # it so: the vote, the doubts and the comparison all take what is left
+    def as_judged(text):
+        return (icon_left_out(text, choices) if find and expect == "label" else None) or text
+    judged = as_judged(said_ocr)
+    votes = [Vote("ocr", f"ocr:{first}", judged, name)]
 
     def read_ocr2():
         if other and not any(v.eye == "ocr2" for v in votes):
             raw["ocr2"] = " ".join(ln.text for ln in _ocr_lines(frame, other) if ln.inside(box)).strip()
-            votes.append(Vote("ocr2", f"ocr:{other}", raw["ocr2"], name))
+            votes.append(Vote("ocr2", f"ocr:{other}", as_judged(raw["ocr2"]), name))
 
     if stakes == "guard":
         read_ocr2()
-    ds = doubts(said_ocr, expect, lines=lines, choices=choices, lit=lit)
+    ds = doubts(said_ocr, expect, lines=lines, choices=choices, lit=lit, find=find)
     if apart_before:
         ds = [*ds, "apart before"]       # once the readers were apart, a plain OCR reading on a later frame is a vote
     asking = stakes in ("press", "proof") or (stakes in ("guard", "find") and bool(ds or not said_ocr))
@@ -994,7 +1143,7 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
     raw["reader"] = said
     if asking:
         votes.append(Vote("reader", f"reader:{model_id(asked.model or asked.name)}", said, name))
-    canon = canonical(said_ocr)
+    canon = canonical(judged)
 
     def third_reader():
         """A reader of another model than any that voted (the "third" role), when one is configured."""
@@ -1057,7 +1206,7 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
         if text is None:
             return out(canonical(said), "reader", "one reader's reading never clears a guard alone")
         return out(text, "votes")
-    how = outcome(said_ocr, said, expect, choices, ds)
+    how = outcome(judged, said, expect, choices, ds)
     if how == "plain":
         return out(canon, "both" if said and agree(canon, said, expect, choices) else "ocr")
     if how == "stands on both":
@@ -1091,7 +1240,9 @@ def read(frame, where: Region, expect: str, stakes: str, *, choices=None, fresh:
                a disagreement is read again on up to `fresh` frames grabbed afresh, where a plain OCR reading is a vote
                like the others (never a way out of the disagreement), and the third vote is asked only on the last of
                them; with a frame, on that frame
-      where    a Region: LIT, LIT_ROW, TITLE, CAROUSEL, FOOTER, NOTICE, FIELD(k, box) or BOX(x0, y0, x1, y1)
+      where    a Region: LIT, LIT_ROW, TITLE, CAROUSEL, FOOTER, NOTICE, FIELD(k, box) or BOX(x0, y0, x1, y1), which
+               ask the questions the kit asks today, or region(kind), which asks that kind of screen's own question
+               (QUESTIONS)
       expect   what is read there: "label", "number", "code", "button" or "text" (doubts, agree)
       stakes   what rides on it, which decides when the reader is asked and what may stand:
                  guard   the second OCR engine reads too, the reader on a doubt or an empty reading; never read again on
@@ -1102,7 +1253,9 @@ def read(frame, where: Region, expect: str, stakes: str, *, choices=None, fresh:
                          frame is kept for the guard to judge (Reading.texts)
                  press   the reader always; a lone reader's reading stands only with a second, independent vote
                  proof   the reader always; a lone reader's reading where OCR read nothing stands, said so in by
-                 find    the reader on a doubt only, before any fuzzy fallback of the caller's
+                 find    the reader on a doubt only, before any fuzzy fallback of the caller's; for a label, an icon
+                         OCR read in front of it is left out first where what is left names one option exactly
+                         (icon_left_out), and the reading kept is what is left
                  note    OCR alone, cleaned, never the reader; refused only where nothing is lit
       choices  the options expected there (their labels), one of which the reading names (Reading.choice)
       second   a check of the site's own, one more vote where the readers are apart or one reader stands alone: a

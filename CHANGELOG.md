@@ -109,7 +109,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   calls it yet.
   `kit/tools/reader_census.py` counts, over runs already made, how often the rule would doubt OCR, ask the reader,
   keep or refuse a reading, and what a third vote by the second OCR engine would settle; it only reads the runs, asks
-  no reader unless `--ask`, and prints counts alone.
+  no reader unless `--ask` or `--questions`, and prints counts alone.
+- One question to the reader per kind of screen beside the old ones (`camkit.reading.QUESTIONS`), measured against
+  them on recorded frames by `kit/tools/reader_census.py --questions`, and finding a row judged without the icon OCR
+  reads in front of its label; no run asks, decides or presses differently.
 - A copy of `kit/config.example.json` names nothing to contact until it is filled in: its camera address is empty and
   it lists no reader. Its first reader was a server at an example address on the local network, to which a copy left
   as it was sent pictures of the camera's screen; the readers it shows are all under `readers_examples` now.

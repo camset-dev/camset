@@ -927,6 +927,121 @@ def test_the_lit_item_is_read_inside_the_cursor_and_nothing_lit_is_said(eyes):
     assert (n.by, n.refused, n.choice, eyes.asked) == ("none", "nothing is lit", None, [])
 
 
+ICON_LEFT_OUT = [
+    # (OCR's reading of a row, the rows on the page, what finding a row takes it for, or None: judged as read)
+    ("SAF Frame Move Amt", ["AF Frame Move Amt", "AF Area"], "AF Frame Move Amt"),       # an icon glued in front
+    ("& Priority Set in AWB", ["Priority Set in AWB", "White Balance"], "Priority Set in AWB"),
+    ("v dFor viewfinder", ["For viewfinder", "Monitor Off"], "For viewfinder"),    # two characters, spacing aside
+    (f"{I_CIRCUMFLEX} Fixed Speed STBY", ["Fixed Speed STBY", "Fixed Speed REC"], "Fixed Speed STBY"),
+    ("Tv Auto/Manual Switch", ["Av Auto/Manual Switch"], None),    # a short first word tells two rows apart
+    ("Tv Auto/Manual Switch", ["Av Auto/Manual Switch", "Tv Auto/Manual Switch"], None),   # named as read
+    ("10Sec", ["0Sec", "5 Sec"], None),                            # never a digit left out, nor one before a digit
+    ("S Off", ["Off", "On"], None),                                # what is left is too short to be plain
+    ("uir Rear Dial R", ["Rear Dial R", "Rear Dial L"], None),     # three letters: page_model.same_text's limit too
+    ("SAF Frame", ["AF Frame", "SAF Frames"], None),               # it names another row loosely as read
+    ("SAF Frame Move Amt", [], None),                              # no rows to name
+]
+
+
+def test_finding_a_row_leaves_out_the_icon_ocr_read_in_front_of_its_label():
+    """Most menu rows OCR reads with their icon in front read "loose" (the census): finding a row leaves the icon out
+    first, as page_model.same_text does, where what is left names one row exactly; only the reading loses its front,
+    never a row's label, so "Tv" and "Av" rows stay apart."""
+    for text, rows, want in ICON_LEFT_OUT:
+        assert reading.icon_left_out(text, rows) == want, (text, rows)
+        found = doubts(text, "label", choices=rows, find=True)
+        if want is not None:
+            assert found == [] and doubts(text, "label", choices=rows) != [], text
+        else:
+            assert found == doubts(text, "label", choices=rows), text
+    assert reading.without_icon("& Priority Set in AWB") == "Priority Set in AWB"
+    assert doubts("SAF Frame Move Amt", "number", choices=["AF Frame Move Amt"], find=True) != []   # labels only
+
+
+def test_read_finds_a_row_without_the_icon_and_keeps_the_label(eyes):
+    f = eyes.frame("00014_down.png", bar=(140, 212, 560, 252))
+    eyes.see(f, "SAF Frame Move Amt", box=(150, 215, 400, 250))
+    rows = ["AF Frame Move Amt", "AF Area", "Focus Area"]
+    assert doubts("SAF Frame Move Amt", "label", choices=rows) == ["loose"]     # as read, it names no row exactly
+    r = reading.read(f, reading.LIT, "label", "find", choices=rows)
+    assert (r.text, r.choice, r.by, r.refused, r.doubts, eyes.asked) == ("AF Frame Move Amt", 0, "ocr", "", [], [])
+    assert r.raw["ocr"] == "SAF Frame Move Amt"                     # the reading as read stays the evidence
+    # OCR votes with what it judged, so the vote that made the reading is one that agrees with it (census and read()
+    # run the one rule)
+    assert (r.agreed, [(v.eye, v.text) for v in r.votes]) == (["ocr"], [("ocr", "AF Frame Move Amt")])
+    assert r.evidence()["ocr"] == "SAF Frame Move Amt" and r.independent() == 1
+    eyes.answer("option", {"selected": "AF Frame Move Amt"})
+    p = reading.read(f, reading.LIT, "label", "proof", choices=rows)  # a proof judges it as read, and asks
+    assert (p.doubts, p.by, p.choice, eyes.asked) == (["loose"], "both", 0, ["option"])
+
+
+OLD_PROMPTS = {"dialog": "1b3b30c7a27da116", "menu": "e2882d49e3ecef0d", "notice": "c362fb838cf2f179",
+               "option": "6bd26e33cfdc9f59", "fields": "6dbde91f9090b179", "any": "dd3babc8f5e633f7"}
+
+
+def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
+    """The old questions keep their text (the answers already cached are keyed by it, and every caller asks them); each
+    kind of screen's new question is a key of its own and asks for its field in one pinned JSON line, in plain ASCII;
+    those that read a lit item that may be missing say to answer "none" then. A region of a field that holds no one
+    reading (a checklist's boxes, a number-entry screen's boxes without k) is refused, where a pick would give a
+    list's text."""
+    import hashlib
+
+    from camkit import vlm
+    for key, digest in OLD_PROMPTS.items():
+        assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
+    for kind, q in reading.QUESTIONS.items():
+        text = vlm.PROMPTS[q.prompt]
+        assert q.prompt.endswith(".v2") and q.prompt not in OLD_PROMPTS, kind
+        assert text.isascii() and "Reply with JSON only, on one line: {" in text and f'"{q.field}"' in text, kind
+        assert q.expect in reading.EXPECTS and len(text) < 600, kind
+    assert [k for k, v in vlm.PROMPTS.items() if k.endswith(".v2") and "write none" in v] == \
+        ["lit.v2", "cell.v2", "stars.v2"]
+    assert reading.region("number field", k=1).pick({"fields": ["5", "6"]}) == "6"
+    assert reading.region("carousel").box == CAROUSEL.box and reading.region("list").box is None
+    assert reading.region("wb grid", field="G-M").pick({"A-B": "A7", "G-M": "M1.5"}) == "M1.5"
+    with pytest.raises(KeyError):
+        reading.region("no such kind")
+    for kind, k in (("checklist", None), ("checklist", 0), ("number field", None)):
+        with pytest.raises(ValueError):
+            reading.region(kind, k=k)
+
+
+# what reads through the new questions, and the tool that measures them: nowhere else in the kit until a caller is
+# switched, kind by kind (docs/REMAPPING_PLAYBOOK.md, section 5)
+NEW_QUESTION_NAMES = re.compile(r'\.v2["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\(|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\('
+                                r'|\breading\.read\(')
+MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
+
+
+def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
+    """Every caller still asks the questions it asked before 2026-11-13: none names a ".v2" question, QUESTIONS,
+    reading.region, reading.read, vlm.with_options or vlm.ask_named_reader (provers/pp_reset_run.py's own ask_reader is
+    another function, asking the old questions)."""
+    found = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "kit").rglob("*.py")
+                   if "tests" not in p.parts and "__pycache__" not in p.parts
+                   and p.relative_to(ROOT).as_posix() not in MAY_NAME_THEM
+                   and NEW_QUESTION_NAMES.search(p.read_text(encoding="utf-8")))
+    assert found == [], f"these name the new questions or read through camkit.reading.read: {found}"
+
+
+def test_read_asks_a_kinds_own_question_when_given_its_region(eyes):
+    f = eyes.frame("00015_right.png")
+    eyes.see(f, "1/25", box=CAROUSEL.box)
+    eyes.answer("carousel.v2", {"selected": "1/250"})
+    r = reading.read(f, reading.region("carousel"), "number", "proof", choices=["1/25", "1/250"])
+    assert eyes.asked == ["carousel.v2"] and r.raw["reader"] == "1/250"
+
+
+def test_the_options_are_handed_to_the_reader_before_its_json_line():
+    from camkit import vlm
+    q = vlm.with_options(vlm.PROMPTS["lit.v2"], ["Off", f"Add Rating ({STAR})"])
+    assert q.index("one of these") < q.index("Reply with JSON only") and f'"Add Rating ({STAR})"' in q
+    assert q.startswith(vlm.PROMPTS["lit.v2"].split("Reply with JSON")[0])
+    boxes = vlm.with_options(vlm.PROMPTS["fields.v2"], {"box 1": ["5", "6"], "box 2": []})
+    assert 'The box 1 should be one of these: "5", "6".' in boxes and "box 2" not in boxes
+
+
 def test_note_takes_ocr_alone_whatever_its_doubts(eyes):
     f = eyes.frame("00013_down.png")
     eyes.see(f, f"120{CYR_ER}", box=CAROUSEL.box)
@@ -1150,3 +1265,258 @@ def test_the_census_asks_the_reader_only_when_told_and_keeps_no_answer_in_the_ru
     assert files_of(root) == before
     with pytest.raises(SystemExit):
         reader_census.main([str(root), "--limit", "3"])
+
+
+# ---------------------------------------------------------------------------------------------- reader_census.py --questions
+
+Q_ANSWERS = {
+    # frame: (a marker the options question holds and the decoy question leaves out, {question: the fake's answer})
+    "00001.png": ('"Zqx Alpha"', {"option": {"selected": "Zqx Alpha"}, "new": {"selected": "Zqx Alpha"},
+                                  "decoy": {"selected": "Zqx Beta"}}),
+    "00002.png": ('"Zqx Beta"', {"option": {"selected": "Mode"}, "new": {"selected": "Zqx Beta"}}),
+    "00003.png": ('"Zqx Gamma"', {"option": {"selected": "Zqx Beta"}, "new": {"selected": "Zqx Gamma"}}),
+    "00004.png": ('"5"', {"option": {"selected": "Minimum"}, "fields": {"fields": ["5", "6"], "active": 0},
+                          "new": {"fields": ["5", "6"], "active": 0}, "decoy": {"fields": ["7", "6"], "active": 0}}),
+    "00005.png": ('"7"', {"option": {"selected": "7"}, "fields": {"fields": ["7", "6"], "active": 0},
+                          "new": {"fields": ["7 sec", "6"], "active": 0}}),
+    "00006.png": ('"A7"', {"option": {"selected": "Auto"}, "new": {"A-B": "A7", "G-M": "0"}}),
+    "00007.png": ('"B7"', {"option": {"selected": "Auto"}, "new": {"A-B": "B 7", "G-M": "0"}}),
+    "00008.png": ("", {"option": {"selected": "Enter"},
+                       "new": {"boxes": [{"label": "Zqx One", "ticked": False}, {"label": "Zqx Two", "ticked": True}]}}),
+}
+
+
+def questions_run(tmp_path) -> Path:
+    """A made-up camera's run root with proofs of four kinds (made-up labels), a picture of its own for each frame and
+    one black frame."""
+    import numpy as np
+    from PIL import Image
+    root = tmp_path / "TEST-CAM_fw9.99"
+    run = root / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    proofs = [
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Alpha", "shown": "Zqx Alpha", "vlm": "Zqx Alpha",
+         "chosen_frame": "00001.png"},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Beta", "shown": "Zqx Beta", "vlm": "Mode",
+         "chosen_frame": "00002.png"},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Gamma", "shown": "Zqx Gamma", "chosen_frame": "00003.png"},
+        {"path": ["Zqx Mode"], "kind": "list", "label": "Zqx Delta", "shown": "", "chosen_frame": "00009.png"},
+        {"path": ["Zqx Level"], "kind": "fields", "label": "5 | 6", "shown": "5 | 6", "value": "5", "vlm": "Minimum",
+         "chosen_frame": "00004.png"},
+        {"path": ["Zqx Level"], "kind": "fields", "label": "7 | 6", "shown": "7 | 6", "value": "7",
+         "chosen_frame": "00005.png"},
+        {"path": ["White Balance"], "kind": "wbgrid", "option": "grid 0", "axis": "A-B", "label": "Auto A-B -7000",
+         "value": -7000, "vlm": "Auto", "chosen_frame": "00006.png"},
+        {"path": ["White Balance"], "kind": "wbgrid", "option": "grid 0", "axis": "A-B", "label": "Auto A-B 7000",
+         "value": 7000, "chosen_frame": "00007.png"},
+        {"path": ["Zqx Set"], "kind": "checklist", "label": "Zqx Two", "vlm": "Enter", "chosen_frame": "00008.png",
+         "boxes": [{"box": 0, "label": "Zqx One", "ticked": False}, {"box": 1, "label": "Zqx Two", "ticked": True}]},
+    ]
+    (run / "proofs.jsonl").write_text("".join(json.dumps(p) + "\n" for p in proofs), encoding="utf-8")
+    for n in range(1, 10):
+        level = 0 if n == 9 else 60 + n
+        Image.fromarray(np.full((480, 640, 3), level, np.uint8)).save(run / "shots" / f"{n:05d}.png")
+    return root
+
+
+class QuestionsReader:
+    """A reader faked for the census's --questions: its answer by the frame and the question (Q_ANSWERS)."""
+
+    def __init__(self, shots: Path, asked: list):
+        self.by_bytes = {p.read_bytes(): p.name for p in shots.glob("*.png")}
+        self.asked = asked
+
+    def answer(self, image: bytes, prompt: str, waits=None):
+        from camkit import vlm
+        name = self.by_bytes[image]
+        marker, said = Q_ANSWERS[name]
+        which = ("option" if prompt == vlm.PROMPTS["option"] else "fields" if prompt == vlm.PROMPTS["fields"]
+                 else "decoy" if "one of these" in prompt and marker not in prompt and "decoy" in said else "new")
+        self.asked.append((name, which))
+        return said.get(which) or said["new"]
+
+
+def test_the_census_measures_each_kinds_questions_against_the_option_proved(tmp_path, monkeypatch, capsys):
+    import reader_census
+    from camkit import vlm
+    root = questions_run(tmp_path)
+    asked = []
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": [{"name": "fake", "url": "http://127.0.0.1:9/v1",
+                                                              "model": "m", "parallel": 2}]})
+    monkeypatch.setattr(vlm, "CACHE", None)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: QuestionsReader(root / "kit2_pass2" / "shots", asked))
+    before = files_of(root)
+    answers = tmp_path / "answers"
+    assert reader_census.main([str(root), "--questions", "--json", "--cache", str(answers)]) == 0
+    got = json.loads(capsys.readouterr().out)
+    s = got["scores"]
+    assert got["readers"] == ["fake"] and got["black frames left out"] == 1
+    assert s["list"]["old: option"]["fake"] == {"right": 1, "no option": 1, "another option": 1}
+    assert s["list"]["new"]["fake"] == {"right": 3} and s["list"]["new + options"]["fake"] == {"right": 3}
+    assert s["list"]["new + decoy"]["fake"] == {"right": 2, "another option": 1}     # the list's pick: a wrong one
+    # a number-entry screen: the box the proof changed, which its file proved (the others are as the run planned them)
+    assert s["number field"]["old: option"]["fake"] == {"no option": 1, "right": 1}
+    assert s["number field"]["old: fields"]["fake"] == {"right": 2} == s["number field"]["new"]["fake"]
+    assert s["number field"]["new + decoy"]["fake"] == {"right": 1, "another option": 1}
+    assert s["wb grid"]["old: option"]["fake"] == {"no option": 2} and s["wb grid"]["new"]["fake"] == {"right": 2}
+    assert s["checklist"]["old: option"]["fake"] == {"no option": 1} and s["checklist"]["new"]["fake"] == {"right": 1}
+    assert got["sampled"]["list"] == {"frames": 3, "items": 3, "agreed": 1, "apart": 1, "none": 1}
+    assert got["asked"]["fake"]["asked"] == len(asked) and "00009.png" not in {n for n, _ in asked}
+    assert files_of(root) == before and any(answers.iterdir())          # the runs only read, the answers kept apart
+    asked.clear()
+    assert reader_census.main([str(root), "--questions", "--minutes", "0", "--cache", str(answers)]) == 0
+    text = capsys.readouterr().out
+    assert asked == [] and "from a cache" in text                      # --minutes 0: the caches alone
+    for said in ("Zqx", "Minimum", "Auto", "Enter", "00001", ".png"):
+        assert said not in text, said
+    with pytest.raises(SystemExit):
+        reader_census.main([str(root), "--questions", "--reader", "nobody"])
+    with pytest.raises(SystemExit):
+        reader_census.main([str(root), "--questions", "--kinds", "no such kind"])
+    with pytest.raises(SystemExit):
+        reader_census.main([str(root), "--reader", "fake"])                # --reader goes with --questions
+
+
+def test_the_census_judges_each_answer_by_its_kind_of_screen():
+    import reader_census as rc
+    assert [rc.number_of(t) for t in ("ISO 2500", f"{PLUS_MINUS}0", "-0", "+9", "02", "1,5 sec", "Minimum")] == \
+        ["2500", "0", "0", "9", "2", "1.5", None]
+    assert [rc.star_count(t) for t in (STAR * 3, "2", "4 stars", "**", "off", "none")] == [3, 2, 4, 2, 0, None]
+    assert [rc.wb_value("A-B", t) for t in ("A7", "B 0.5", "A-B: A7", "0", "G2")] == [-7000, 500, -7000, 0, None]
+    assert rc.wb_readout("G-M", 1250) == "M1.25" and rc.wb_readout("A-B", -7000) == "A7"
+    base = rc.Item("look base", Path("f.png"), "PT", ["ST", "PT", "NT"])
+    assert [rc.judge(base, t) for t in ("PT (Portrait)", "PT(Portrait)", "NT", "Look")] == \
+        ["right", "right", "another option", "no option"]
+    pick = rc.Item("table picker", Path("f.png"), "& Priority Set in AWB", ["White Balance", "& Priority Set in AWB"],
+                   extra={"expect": "label"})
+    assert rc.judge(pick, "Priority Set in AWB") == "right" and rc.judge(pick, "AF/MF") == "no option"
+    stars = rc.Item("star rating", Path("f.png"), 2, [1, 2, 3])
+    assert [rc.judge(stars, t) for t in ("2", STAR, "none")] == ["right", "another option", "no option"]
+    title = rc.Item("title", Path("f.png"), "Grid Line Type")
+    assert [rc.judge(title, t) for t in ("Grid Line Type", "Grid Line", "none")] == ["right", "another option",
+                                                                                     "no option"]
+    note = rc.Item("notice", Path("f.png"), "The input value is invalid. Please verify and input again. OK")
+    assert rc.judge(note, "The input value is invalid. Please verify and input again.") == "right"
+    # a run's labels as OCR recorded them (an icon glued on, a letter lost, stars) against what a reader reads drawn
+    assert rc.names("Rating Only (*****)", [f"Rating Only ({STAR * 4})", f"Rating Only ({STAR * 5})"], "label") == 1
+    assert rc.names("Fixed Speed STBY", [f"{I_CIRCUMFLEX} Fixed Speed SBY", "Fixed Speed REC"], "label") == 0
+    assert rc.names("Right 1/2", ["LRight 1/2", "Left 1/2"], "label") == 0
+    assert rc.names("Fixed Speed", ["Fixed Speed STBY", "Fixed Speed REC"], "label") is None    # close to both
+    assert rc.drawn_alike("LRight 1/2", ["LRight 1/2", "Right 1/2"]) and not rc.drawn_alike("+3", ["+3", "3"])
+    assert reading.without_icon("+3 EV") == "+3 EV" and reading.without_icon("- 5") == "5"
+    # only the reading loses an icon in front, never the label, and a label's short first word must be read too
+    assert not rc.drawn_alike("AF On", ["AF On", "MF On"]) and not rc.drawn_alike("MF On", ["AF On", "MF On"])
+    assert rc.names("Tv Auto/Manual Switch", ["Av Auto/Manual Switch"], "label") is None
+    av = rc.Item("list", Path("f.png"), "Av Auto/Manual Switch", ["Av Auto/Manual Switch", "Off"],
+                 extra={"expect": "label"})
+    assert rc.judge(av, "Tv Auto/Manual Switch") == "no option" and rc.judge(av, "Av Auto/Manual Switch") == "right"
+    assert rc.judge(rc.Item("title", Path("f.png"), "Av Auto/Manual Switch"), "Tv Auto/Manual Switch") == \
+        "another option"
+    rating = rc.Item("checklist", Path("f.png"), [(STAR * 2, True)], [STAR, STAR * 2], extra={"label": STAR * 2})
+    assert rc.judge(rating, [{"label": "2", "ticked": True}, {"label": "1", "ticked": False}]) == "right"
+    assert rc.judge(rating, [{"label": "2", "ticked": False}]) == "another option"
+    assert rc.judge(rating, [{"label": "3", "ticked": True}]) == "no option"
+
+
+class FailingReader:
+    """A reader whose every question fails (a server short of memory: HTTP 507), counting the questions put to it."""
+
+    def __init__(self, asked: list):
+        self.asked = asked
+
+    def answer(self, image: bytes, prompt: str, waits=None):
+        self.asked.append(prompt)
+        raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+
+
+def census_config(monkeypatch, reader):
+    from camkit import vlm
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": [{"name": "fake", "url": "http://127.0.0.1:9/v1",
+                                                              "model": "m", "parallel": 1}]})
+    monkeypatch.setattr(vlm, "CACHE", None)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: reader)
+
+
+def test_a_readers_failures_are_its_own_and_stop_it_after_a_run_of_them(tmp_path, monkeypatch, capsys):
+    """A reader that fails (HTTP 507, a timeout, a refusal, no JSON) is counted "reader failed", never a question's
+    "no answer", and is left out of the right rate; after FAIL_RUN failures in a row it is asked nothing more ("not
+    asked"), and the run says so once, rather than waiting out --minutes."""
+    import reader_census
+    root, asked = questions_run(tmp_path), []
+    census_config(monkeypatch, FailingReader(asked))
+    assert reader_census.main([str(root), "--questions", "--json", "--cache", str(tmp_path / "answers")]) == 0
+    said = capsys.readouterr()
+    got = json.loads(said.out)
+    a = got["asked"]["fake"]
+    assert a["failed"] == reader_census.FAIL_RUN == len(asked) and a["stopped after failures"] == 1
+    assert a["not asked"] > 0 and "asked" not in a and "failed 8 questions in a row" in said.err
+    every = collections_merge(got["scores"])
+    assert set(every) == {"reader failed", "not asked"} and every["reader failed"] == reader_census.FAIL_RUN
+
+
+def collections_merge(scores: dict) -> dict:
+    out = {}
+    for by_question in scores.values():
+        for by_reader in by_question.values():
+            for counts in by_reader.values():
+                for k, v in counts.items():
+                    out[k] = out.get(k, 0) + v
+    return out
+
+
+def test_once_time_is_up_nothing_is_asked_and_only_usable_answers_are_taken(tmp_path, monkeypatch, capsys):
+    """--minutes 0 takes the answers already kept and asks nothing: an entry of the camera's own cache that is garbled
+    ({"_unparsed": ...}) or cut short is no answer kept, so it is "not asked", never asked and never counted as from a
+    cache."""
+    import reader_census
+    from camkit import vlm
+    root, asked = questions_run(tmp_path), []
+    census_config(monkeypatch, FailingReader(asked))
+    image = (root / "kit2_pass2" / "shots" / "00001.png").read_bytes()
+    own = root / "_cache" / "vlm"
+    own.mkdir(parents=True)
+    (own / f"{vlm.cache_key(image, vlm.PROMPTS['option'], 'm')}.json").write_text('{"_unparsed": "x"}', encoding="utf-8")
+    (own / f"{vlm.cache_key(image, vlm.PROMPTS['lit.v2'], 'm')}.json").write_text('{"selected": "Zq', encoding="utf-8")
+    (own / f"{vlm.cache_key(image, vlm.PROMPTS['fields'], 'm')}.json").write_text('{"fields": []}', encoding="utf-8")
+    before = files_of(root)
+    assert reader_census.main([str(root), "--questions", "--json", "--minutes", "0",
+                               "--cache", str(tmp_path / "answers")]) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert asked == [] and "from a cache" not in got["asked"]["fake"] and files_of(root) == before
+    assert vlm.usable({"selected": "A"}) and not vlm.usable({"_unparsed": "x"}) and not vlm.usable({"_error": "x"})
+
+
+def test_the_census_keeps_its_answers_outside_the_runs(tmp_path, monkeypatch, own_runs, capsys):
+    import reader_census
+    root = questions_run(tmp_path)
+    census_config(monkeypatch, FailingReader([]))
+    for inside in (root / "answers", root / "kit2_pass2" / "_cache", own_runs / "answers"):
+        for mode in (["--questions"], ["--ask"]):
+            with pytest.raises(SystemExit):
+                reader_census.main([str(root), *mode, "--cache", str(inside)])
+            assert not inside.exists()
+    reader_census.main([str(root), "--minutes", "3", "--per-kind", "2"])
+    assert "--per-kind, --minutes go with --questions" in capsys.readouterr().err
+
+
+def test_the_census_samples_the_same_frames_every_time_a_smaller_sample_the_start_of_a_larger():
+    import collections
+
+    import reader_census as rc
+    items = [rc.Item("list", Path(f"run/shots/{n:05d}.png"), "A", ["A", "B"], old="A" if n % 2 else "B",
+                     extra={"expect": "label"}) for n in range(40)]
+    small, large = rc.sample(items, 6)["list"], rc.sample(items, 20)["list"]
+    assert [u[0].frame for u in small] == [u[0].frame for u in rc.sample(list(reversed(items)), 6)["list"]]
+    assert {u[0].frame for u in small} <= {u[0].frame for u in large}
+    assert collections.Counter(rc.old_split(u) for u in small) == {"agreed": 3, "apart": 3}
+    dark = {small[0][0].frame}
+    assert small[0][0].frame not in {u[0].frame for u in rc.sample(items, 6, lambda f: f not in dark)["list"]}
+
+
+def test_the_menus_census_leaves_out_the_icon_before_judging_a_row():
+    import reader_census
+    t = reader_census.Tally()
+    rows = ["AF Frame Move Amt", "AF Area"]
+    assert t.add("menu row", "SAF Frame Move Amt", "AF Frame Move Amt", None, "label", rows, find=True) == "plain"
+    assert t.add("menu row", "SAF Frame Move Amt", "AF Frame Move Amt", None, "label", rows) == "reader needed"
+    assert t.c["icon left out"] == 1 and t.sites["menu row"]["plain"] == 1

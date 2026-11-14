@@ -14,7 +14,10 @@ with no camera. Inside a run a missing reader is an ordinary exception (NoReader
 Every question a run asks about a frame goes through ask_role, which takes up a stand-in when the reader playing the
 role will not connect, and says once per reader, on standard error and in the run's events.jsonl, when one first fails
 during the run. The batch tools that read a whole run's frames afterwards build their readers themselves
-(make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py.
+(make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py;
+kit/tools/reader_census.py --questions, which measures the questions themselves on recorded frames, asks a reader it
+names through ask_named_reader. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
+screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet.
 """
 import base64
 import contextlib
@@ -46,24 +49,32 @@ def cache_key(image: bytes, prompt: str, model: str) -> str:
     return hashlib.sha1(image + prompt.encode() + model.encode()).hexdigest()
 
 
-def cached(key: str) -> dict | None:
-    """The answer kept under key, or None: none kept, or a file a crash or another thread left unreadable (asked
-    again). An answer that was not JSON is never kept (keep), and is asked again if an older kit kept one."""
+def usable(answer) -> bool:
+    """An answer that can be read: a JSON object, neither garbled ({"_unparsed": ...}, not JSON) nor a refusal
+    ({"_error": ...}, camkit.claude_reader). Neither is ever kept (keep, ClaudeReader.ask), so a kept answer that is
+    not usable is a file an older kit, a crash or another tool left: asked again."""
+    return isinstance(answer, dict) and "_unparsed" not in answer and "_error" not in answer
+
+
+def cached(key: str, folder=None) -> dict | None:
+    """The answer kept under key (in folder, default cache_dir()), or None: none kept, or one that is not usable (a
+    file a crash or another thread left unreadable, a garbled answer an older kit kept): asked again."""
     try:
-        answer = json.loads((cache_dir() / f"{key}.json").read_text(encoding="utf-8"))
+        answer = json.loads((Path(folder or cache_dir()) / f"{key}.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    return answer if isinstance(answer, dict) and "_unparsed" not in answer else None
+    return answer if usable(answer) else None
 
 
-def keep(key: str, answer: dict) -> dict:
-    """The answer, kept under key unless it was not JSON (a garbled answer is asked again next time). Written whole or
-    not at all: readers ask in parallel, and two threads can keep the same frame's answer at once. The cache is best
-    effort: a write that fails (a full disk; on Windows, replacing a file another thread is reading) keeps nothing and
-    leaves no part file, and the answer, paid for with a hosted reader, still goes back to the caller."""
-    if "_unparsed" in answer:
+def keep(key: str, answer: dict, folder=None) -> dict:
+    """The answer, kept under key (in folder, default cache_dir()) unless it is not usable (a garbled answer is asked
+    again next time). Written whole or not at all: readers ask in parallel, and two threads can keep the same frame's
+    answer at once. The cache is best effort: a write that fails (a full disk; on Windows, replacing a file another
+    thread is reading) keeps nothing and leaves no part file, and the answer, paid for with a hosted reader, still goes
+    back to the caller."""
+    if not usable(answer):
         return answer
-    f = cache_dir() / f"{key}.json"
+    f = Path(folder or cache_dir()) / f"{key}.json"
     part = f.with_name(f"{f.name}.{os.getpid()}.{threading.get_ident()}.part")
     try:
         f.parent.mkdir(parents=True, exist_ok=True)
@@ -105,6 +116,106 @@ PROMPTS = {
         'shooting | playback | keyboard | other, "title": main title text, "selected": highlighted item text, '
         '"text": all other visible text (list)}'),
 }
+
+# The questions asked one kind of screen at a time (2026-11-13: the owner's "keep OCR as main and VLM as back up,
+# maybe we can feed a better prompt to the VLM"; camkit.reading.QUESTIONS says which kind asks which). Each asks for
+# exactly the thing the kit reads there, in a pinned form; the three that read a lit item that may be missing (lit.v2,
+# cell.v2, stars.v2) say to answer "none" then. The keys above
+# keep their text: the answers already cached are keyed by it, and every caller asks them. Nothing asks these during a
+# run yet: kit/tools/reader_census.py --questions measures them against the old ones on frames already recorded
+# (docs/REMAPPING_PLAYBOOK.md, section 5), and a caller moves onto one only once that has been measured.
+_JSON = "Reply with JSON only, on one line: "
+PROMPTS.update({
+    # the item on the orange bar or in the orange box: a list, a side list, a table's function picker
+    "lit.v2": (
+        "This is a Sony camera menu screen. One item is highlighted: it sits on an orange bar or inside an orange "
+        "box. Copy that item's own text exactly as drawn, every letter, digit, sign and space, in its case. Leave out "
+        "any icon, radio button or check box before it and any value written to its right. If no item is "
+        "highlighted, write none. " + _JSON + '{"selected": "<the text>"}'),
+    # the orange line under a carousel's title: the option, and its second axis's value after a colon
+    "carousel.v2": (
+        "This is a Sony camera setting screen. At the top is a white title, and right under it one line of orange "
+        "text names the option chosen now. Copy that orange line exactly as drawn, all of it, including any part "
+        "after a colon. Do not read the icons in the column at the left or the small cells near the bottom. "
+        + _JSON + '{"selected": "<the orange line>"}'),
+    # the lit cell of a carousel option's second axis, drawn as a strip of cells
+    "cell.v2": (
+        "This is a Sony camera setting screen. Near the bottom, between a left and a right arrow, is a row of small "
+        "cells, and one of them is orange. Copy the text inside the orange cell exactly as drawn: it is short, one to "
+        "three letters or digits. If no cell is orange, or the orange cell holds only an icon, write none. "
+        + _JSON + '{"selected": "<the text>"}'),
+    # every box of a number-entry screen
+    "fields.v2": (
+        "This is a Sony camera number-entry screen: one or more boxes side by side, each holding a value, and one of "
+        "them orange. Read every box from left to right and copy its value exactly as drawn, with its sign or decimal "
+        "point, without the unit and without the words above or beside the boxes. "
+        + _JSON + '{"fields": ["<first box>", "<second box>"], "active": <the orange box, counted from 0>}'),
+    # a Creative Look panel's lit parameter
+    "look.v2": (
+        "This is a Sony camera Creative Look screen. Along the bottom is a row of boxes, each a small icon and a "
+        "value, and one box is orange. Copy the value in the orange box exactly as drawn, with its sign (a plus, a "
+        "minus or a plus-minus sign), and the orange word just above the row, which names that value. "
+        + _JSON + '{"name": "<the orange word>", "selected": "<the value>"}'),
+    # a Creative Look panel's vertical scale: its two ends
+    "lookscale.v2": (
+        "This is a Sony camera screen with a vertical scale at the right: a column of ticks with a number at its top "
+        "end and a number at its bottom end. Copy those two numbers exactly as drawn, with their signs. "
+        + _JSON + '{"top": "<the number at the top>", "bottom": "<the number at the bottom>"}'),
+    # the value a horizontal scale stands at, written over it
+    "scale.v2": (
+        "This is a Sony camera setting screen with a horizontal scale: a bar, a row of marks or a line of ticks "
+        "between a minus and a plus or between two words. Just above the scale, the value chosen now is written in "
+        "orange, with small arrows beside it. Copy that value exactly as drawn, with its sign. "
+        + _JSON + '{"selected": "<the value>"}'),
+    # a grid of rating stars: the lit box's count
+    "stars.v2": (
+        "This is a Sony camera screen with boxes of rating stars, and one box is highlighted in orange. Count the "
+        "stars drawn in the orange box, every star in every row (they may stand in two or three rows), and write the "
+        "count as a digit; if that box shows OFF, write off; if no box is orange, write none. Also say whether its "
+        "check box is ticked. "
+        + _JSON + '{"selected": "<the count>", "ticked": true or false}'),
+    # a list of check boxes: each box's label and whether it is ticked
+    "checklist.v2": (
+        "This is a Sony camera screen with a list of check boxes. For every check box, copy its label exactly as "
+        "drawn and say whether the box is ticked. For a label made only of stars, count every star in every row "
+        "(they may stand in two or three rows) and write the count as a digit. Leave out the buttons, such as OK, "
+        "Enter or Cancel. "
+        + _JSON + '{"boxes": [{"label": "<the label>", "ticked": true or false}]}'),
+    # the white balance fine-tune grid's two readouts
+    "wbgrid.v2": (
+        'This is a Sony camera white balance fine-tune screen: a small colour grid, and two readouts, one starting '
+        '"A-B:" and one starting "G-M:". Copy the value after each colon exactly as drawn: a letter and a number, '
+        'or 0. ' + _JSON + '{"A-B": "<the value>", "G-M": "<the value>"}'),
+    # a message: its text, without its buttons
+    "notice.v2": (
+        "This is a message on a Sony camera screen. Copy the message exactly as drawn, its lines joined with single "
+        "spaces, without the buttons and without any check box under it. Then list the buttons. "
+        + _JSON + '{"text": "<the message>", "buttons": ["<a button>"]}'),
+    # a screen's title
+    "title.v2": (
+        "This is a Sony camera screen. Copy the title at the top left exactly as drawn, without any icon before it "
+        "and without the page counter at the top right. " + _JSON + '{"title": "<the title>"}'),
+})
+
+
+def with_options(prompt: str, options) -> str:
+    """A question's text (a PROMPTS value) with the options expected there handed to the reader, said just before its
+    "Reply with JSON" line: options a list of texts, or {part: [texts]} for a screen read in parts (a number-entry
+    screen's boxes, the white balance grid's two readouts), each part said in turn. It tells the reader to copy what
+    the screen shows where that is none of them. Whether handing them over helps or makes the reader pick one of them
+    against the screen is what kit/tools/reader_census.py --questions measures (its "options" and "decoy" questions);
+    nothing asks it during a run."""
+    def said(texts) -> str:
+        return ", ".join(json.dumps(str(t), ensure_ascii=False) for t in texts)
+    if isinstance(options, dict):
+        parts = [f"The {part} should be one of these: {said(texts)}." for part, texts in options.items() if texts]
+        tail = "If what is drawn is none of them, copy what is drawn instead."
+    else:
+        parts = [f"It should be one of these: {said(options)}."]
+        tail = "If the screen shows something else, copy what it shows instead."
+    hint = " ".join(parts + [tail]) + " "
+    at = prompt.rfind(_JSON)
+    return prompt[:at] + hint + prompt[at:] if at >= 0 else prompt + " " + hint.strip()
 
 
 def make_reader(cfg: dict, **override):
@@ -825,6 +936,27 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     except Exception as e:
         failing(cfg, e, max(timeout, 60))
         raise
+
+
+def ask_named_reader(cfg: dict, image: bytes, prompt: str, cache, timeout: float = 60.0, read_only=(),
+                     ask: bool = True) -> dict | None:
+    """One question to the reader a private/config.json "readers" entry describes, for a tool that measures the
+    questions themselves on frames already recorded (kit/tools/reader_census.py --questions), outside any run: no role,
+    no stand-in, no start check. prompt is the question's whole text (a PROMPTS value, or one with_options made); cache
+    the folder its answers are kept in, given outright (never cache_dir(), the camera's runs). The answer is keyed as
+    the reader keys it (its model, a default one included: make_reader) and comes from cache, else from a folder of
+    read_only (another cache, such as a camera's own runs/<model>_fw<fw>/_cache/vlm: looked in, never written), each
+    only when usable; else, with ask, it is asked and kept in cache (keep: an answer that is not usable is not kept),
+    and without ask (the tool's time is up) None. A failure raises, as the reader raised it."""
+    reader = make_reader(cfg, timeout=timeout)
+    key = cache_key(image, prompt, str(getattr(reader, "model", None) or cfg.get("model")))
+    for folder in (cache, *read_only):
+        answer = cached(key, folder)
+        if answer is not None:
+            return answer
+    if not ask:
+        return None
+    return keep(key, reader.answer(image, prompt), cache)
 
 
 BUSY_WAITS = (2, 5, 15, None)    # s between a run's tries at a busy gateway (502/503/504), then it gives up

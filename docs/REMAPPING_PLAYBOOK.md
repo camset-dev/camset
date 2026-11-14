@@ -375,9 +375,22 @@ measured.
   is measured low. This stage was put to the owner for confirmation; it is not a final rule. Until then a plain
   reading that is another option's own text (a point lost whole, "F11" for F1.1) stands even where the reader reads
   the right option, which is one reason a contradicted plain reading is to become a vote.
+- **In place since 2026-11-13, with no caller switched:** one question to the reader per kind of screen
+  (`camkit.reading.QUESTIONS`: the `.v2` prompts beside the old ones, whose text, and so the answers already cached,
+  stays), each asking for exactly the thing the kit reads there in one pinned JSON line (those that read a lit item
+  that may be missing say to answer "none" then); and finding a row judges OCR's reading without the icon it reads as
+  letters in front of a row's label, as `page_model.same_text` leaves it out (`reading.icon_left_out`, the stakes
+  `find`), which no caller uses yet either. `kit/tools/reader_census.py --questions` asks the old questions and each
+  kind's new one about the same sample of that kind's proof frames every time, also with the options expected there
+  handed to the reader and with every option but the one proved (a decoy list), and judges each answer against the
+  option the proof's file proved; a reader's failures are counted apart from the question's answers. A kind's caller
+  moves onto its new question only once that shows, with each reader the owner uses, the new question naming the
+  proved option on nearly every sampled frame and never less often than the old one, and its wrong options rare;
+  options are handed to the reader only where the decoy list shows no wrong picks from the list against the screen.
+  A kind that falls short keeps its old question until a better one measures so.
 - **Next, after the census:** `camkit.match.key` and `page_model.key_text` take the one cleaning, and the other tables
-  go. Finding a row must first leave out the icon OCR reads as letters in front of a row's label, as
-  `page_model.same_text` does, or the reader would be asked about most rows for nothing.
+  go. Finding a row leaves out the icon OCR reads as letters in front of a row's label first (in the building blocks
+  since 2026-11-13), or the reader would be asked about most rows for nothing.
 - **Then, site by site, one change each:** finding a row asks the reader before taking the closest reading; a Picture
   Profile is entered by its name with the digits' look-alikes read (PP3); one OCR match with a doubt needs the reader's
   agreement; a look's number needs the reader to agree with OCR or with the marker, never to override both; side
