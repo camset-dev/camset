@@ -3,7 +3,8 @@
 # warnings as errors. Nothing here talks to a camera, and nothing touches Sony's Camera Remote SDK: the editor needs
 # none, and kit/sdk/ is never in the repository. The packages themselves are built by editor-release.yml; on Windows
 # this workflow compiles the installer as the release does (packaging/windows/installer.iss), so a broken script, or a
-# runner without Inno Setup, shows on the pull request rather than on the day of a release.
+# runner without Inno Setup, shows on the pull request rather than on the day of a release. Nothing built here is
+# published or attested: only a release's files get checksums and build provenance (editor-release.yml, its attest job).
 #
 # Every action is pinned to a full commit, its version in the comment beside it: checkout and rust-toolchain as in
 # editor-release.yml, actions/cache looked up 2026-11-06. Move a pin to a newer release by its commit.

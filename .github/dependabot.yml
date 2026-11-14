@@ -1,0 +1,48 @@
+# Dependabot proposes, once a week, newer versions of what the project pins: the workflows' actions (each pinned by
+# commit, its version in the comment beside it, which Dependabot moves with the commit), the editor's crates
+# (editor/Cargo.toml and Cargo.lock) and the kit's Python packages (kit/requirements.txt). Each kind comes as one
+# pull request of all its updates together, so a week brings at most three; CI tests each as any pull request, and a
+# pin is raised only when its pull request is merged (docs/RELEASING.md, "Dependencies"). Dependabot's commits carry
+# no sign-off, so the sign-off check (dco.yml) fails on its pull requests: the maintainer takes a bump over in a
+# signed-off commit of their own. A known vulnerability shows sooner, in the weekly audit (workflows/audit.yml).
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+    # pinned to a commit of its stable branch, which carries no release tag for Dependabot to follow: moved by hand
+    ignore:
+      - dependency-name: dtolnay/rust-toolchain
+    commit-message:
+      prefix: CI
+
+  - package-ecosystem: cargo
+    directory: "/editor"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      crates:
+        patterns: ["*"]
+    commit-message:
+      prefix: Editor
+
+  - package-ecosystem: pip
+    directory: "/kit"
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      packages:
+        patterns: ["*"]
+    # pinned twice, by Python version (the older pin is the newest numpy for Python 3.11): an update could write a
+    # numpy 3.11 cannot run over that pin, so numpy is moved by hand
+    ignore:
+      - dependency-name: numpy
+    commit-message:
+      prefix: Kit

@@ -77,15 +77,64 @@ workflow_dispatch):
    crates, and the fonts egui builds in, from `editor/about.hbs`), and the package for that system (on Windows the zip
    and the installer built from the same folder), which carries the project's `LICENSE` and that page, kept as a
    build artifact;
-3. **release:** on a version tag pushed to GitHub only, a GitHub Release for the tag with the packages attached
+3. **attest:** from the release after 0.2.1, on a version tag pushed to GitHub only, `SHA256SUMS`, the SHA-256
+   checksum of every package and of the viewer, each file the release attaches but `SHA256SUMS` itself (written with
+   `sha256sum`, by the release's own file patterns, so a kind of package missing stops the job), and GitHub's build
+   provenance for each file it lists
+   (`actions/attest-build-provenance`: an artifact attestation, signed through Sigstore's public instance and kept
+   by GitHub, that names this workflow, the repository, the tag's commit and the run that built the file). Only
+   this job may ask for the signing identity and store attestations (`id-token: write`, `attestations: write`); the
+   release job, which runs a third-party action with write access to the repository, has neither. Run by hand, or
+   on Gitea, which has no attestations, this job skips itself, and `editor-ci.yml`, which publishes nothing, attests
+   nothing. Written 2026-11-14, not yet run;
+4. **release:** on a version tag pushed to GitHub only, a GitHub Release for the tag with the packages attached
    (`softprops/action-gh-release`) and, from 0.2.1, `camset-viewer.html`, always under that one name, so
-   <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest one's address.
+   <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest one's address;
+   from the release after 0.2.1 also `SHA256SUMS`, once the files to attach, taken by the same patterns, have
+   checksummed to exactly its bytes (`sha256sum ... | cmp - SHA256SUMS`: none changed, none missing, none added).
    Run by hand, or on Gitea, which has no GitHub Releases API, this job skips itself.
 
 Each action the workflow uses is pinned to a full commit, with its version in a comment, and `cargo-about` to a
 version, so a tag moved upstream cannot change what builds or publishes a release; and every `cargo build`, `cargo
 test` and `cargo about` of the workflow and of the packaging scripts it runs takes `--locked`, so the crates are the
 ones `editor/Cargo.lock` names, or the build stops.
+
+Once a release is published, check one of its downloads as a user would, with the commands in the README's
+[Check a download](https://github.com/camset-dev/camset#check-a-download): `SHA256SUMS` matches it and
+`gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml`
+passes (with `--source-ref refs/tags/v<version>` it also requires that release's tag). `SHA256SUMS` shows that a file
+arrived whole; the attestation, that this workflow, and no other in the repository, built it from this repository:
+`--repo` alone would accept an attestation made by any of the repository's workflows.
+
+**Dependencies.** `.github/workflows/audit.yml` checks the editor's crates and the kit's Python packages against the
+public lists of known vulnerabilities, every Monday (so a new advisory against a crate or package already pinned
+shows with no push), by hand, and on a pull request or a push to `main` that changes `editor/Cargo.lock`,
+`editor/Cargo.toml`, `editor/.cargo/audit.toml` or `kit/requirements.txt`. `cargo audit` (cargo-audit 0.22.2, the
+newest the pinned install-action carries with its checksum) reads `editor/Cargo.lock` against the RustSec database
+and fails on a known vulnerability, warning only of a crate that is unmaintained, unsound or yanked; it was chosen
+over `cargo deny check advisories` because it does this one check from the lock file alone, with nothing to
+configure but the advisories set aside, and `cargo about` already handles the licences. An advisory is set aside in
+`editor/.cargo/audit.toml` only with what it is, where it comes from and what clears it, and its line goes with that
+change; a run by hand, `cargo audit` from `editor/` after `cargo install --locked cargo-audit --version 0.22.2`,
+reads the same file.
+`pip-audit` (2.10.1) resolves `kit/requirements.txt` and every package it pulls in, on Python 3.11 and 3.14 (the two
+numpy pins), and checks them against PyPI's advisories. On 2026-11-14 the audit found, in the editor, two
+high-severity advisories in `quick-xml` 0.30.0 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195, fixed in 0.41.0), which
+only the Linux build takes in, through eframe's accessibility crates: it is compiled into the Linux editor as a
+regular dependency of `atspi-common` (through `zbus-lockstep` and `zbus_xml`), but called only by that crate's
+compile-time check and its own tests, never at run time (read from the crates' source; no built program was
+inspected). Both are set aside until a newer eframe takes them out. It warned of five unmaintained crates and one yanked, all
+under eframe too, and found nothing in the kit's packages. Those were runs by hand; the workflow, written that day, has
+not yet run on GitHub.
+
+`.github/dependabot.yml` has Dependabot propose, every Monday, newer versions of the workflows' actions (moving each
+commit pin with the version in its comment, all but `dtolnay/rust-toolchain`, pinned to its stable branch and moved
+by hand), the editor's crates and the kit's packages (all but numpy, pinned twice by Python version, where a newer
+numpy for Python 3.12 and later could be written over the older pin Python 3.11 needs: moved by hand): one pull
+request for each of the three, all its updates together. A pin is raised only when its pull request is merged, after
+CI has tested it. Dependabot's commits carry no
+sign-off, so the sign-off check fails on its pull requests: the maintainer takes the bump over in a signed-off commit
+of their own.
 
 The workflow ran on GitHub for 0.1.0: a build job that GitHub's macOS runner cancelled before any step was rebuilt
 with Re-run failed jobs on the run's page, and the release job, which waits for every build, ran after it. It has not

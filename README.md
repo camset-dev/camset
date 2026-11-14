@@ -49,7 +49,8 @@ open today's camera definitions), and 0.2.0 has no Windows zip.
 **Code signing policy:** the Windows downloads are not signed. SignPath Foundation declined the project's application
 for free code signing for now, as the project is too new, and the project will apply again later; the
 [code signing policy](https://camset-dev.github.io/camset/CODE_SIGNING_POLICY/) says what would be signed, and by
-whom, once an application is accepted.
+whom, once an application is accepted. From the release after 0.2.1 you can check that a download is the one the
+project built: [Check a download](#check-a-download), below.
 
 Then open a settings file from your camera's card, or the built-in sample to look around without a camera. The
 downloaded editor works with the files on the card:
@@ -65,6 +66,38 @@ Reading and writing the camera directly, without the card, needs the camera help
 [What the editor does](#what-the-editor-does) is further down; the whole guide is [docs/EDITOR.md](docs/EDITOR.md).
 Which version you have is at the right end of the status bar; a click on it opens ⚙ Settings > About, with the
 build, Changes (what changed, release by release) and Third-party licences. The web page has the same.
+
+### Check a download
+
+From the release after 0.2.1, each release also holds `SHA256SUMS`, the SHA-256 checksum of every package and of the
+definition viewer, and GitHub keeps a signed record for each of them (its build provenance) that the project's
+release workflow built it from this repository. Download `SHA256SUMS` into the folder with your download, and in a
+terminal in that folder:
+
+- **macOS:** `shasum -a 256 -c --ignore-missing SHA256SUMS`
+- **Linux:** `sha256sum -c --ignore-missing SHA256SUMS`
+
+  Each prints your file's name and OK; anything else means the file is not the one released: download it again.
+- **Windows,** in PowerShell, with your file's name in the first quotes:
+
+  ```powershell
+  $f = "camset-editor-<version>-windows-x64-setup.exe"; (Get-FileHash $f -Algorithm SHA256).Hash -eq ((Get-Content SHA256SUMS | Where-Object { $_.EndsWith("  $f") }) -split ' ')[0]
+  ```
+
+  It prints True when the file's checksum is the one in `SHA256SUMS`; `(Get-FileHash <file>).Hash` alone shows the
+  checksum, to compare by eye with the file's line there (the letters' case aside).
+
+The checksums come from the same page as the file, so they show that it arrived whole, not who made it. The build
+provenance does: with GitHub's command-line tool ([gh](https://cli.github.com/), signed in with `gh auth login`),
+
+```sh
+gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml
+```
+
+checks the file against it and names the commit that built it; a file changed after it was built, or built by any
+other workflow or anywhere else, fails. To also require a given release, add `--source-ref refs/tags/v<version>`
+(`v0.2.2`, say). Neither check stands in for the code signature the Windows downloads still lack, and Windows does not
+read them.
 
 ## Warning
 

@@ -1,0 +1,85 @@
+# Checks the editor's crates and the kit's Python packages against the public lists of known vulnerabilities: on a
+# pull request or a push to main that changes what they are pinned by (or this file), every Monday, and by hand. The
+# weekly run is the one that matters most: a new advisory against a crate or package already pinned shows within a
+# week, with no push. GitHub stops a scheduled workflow after 60 days without activity in the repository; Actions >
+# this workflow > Enable workflow starts it again. GitHub notifies a failed scheduled run to whoever last changed the
+# schedule line.
+#
+# - The editor: cargo audit reads editor/Cargo.lock (every crate of every system's build) against the RustSec
+#   advisory database, fetched fresh each run, and fails on a known vulnerability; an unmaintained, unsound or yanked
+#   crate is printed as a warning only. cargo audit rather than cargo deny: it does this one check from the lock file
+#   alone, with no configuration but the advisories set aside, each with its reason, in editor/.cargo/audit.toml,
+#   which a run by hand from editor/ reads too; the crates' licences are cargo about's (editor-release.yml).
+# - The kit: pip-audit resolves kit/requirements.txt, the one list kit/setup.py and CI install (the pinned packages
+#   and all they pull in), and checks each against PyPI's advisories, on Python 3.11 (CI's, and the older numpy pin)
+#   and on 3.14 (the newest kit/setup.py makes .venv with, and the newer numpy pin).
+#
+# Nothing here builds or needs a secret, and the runner's Python gets pip-audit alone, never the kit's packages. The
+# actions are pinned by commit, with the release tag beside each, as in the other workflows; cargo-audit by the
+# version the pinned install-action carries a checksum for (0.22.2: install-action v2.90.3 lists no newer one), and
+# pip-audit by its version (PyPI, 2026-11-14).
+name: Dependency audit
+on:
+  pull_request:
+    paths:
+      - "editor/Cargo.lock"
+      - "editor/Cargo.toml"
+      - "editor/.cargo/audit.toml"
+      - "kit/requirements.txt"
+      - ".github/workflows/audit.yml"
+  push:
+    branches: [main]
+    paths:
+      - "editor/Cargo.lock"
+      - "editor/Cargo.toml"
+      - "editor/.cargo/audit.toml"
+      - "kit/requirements.txt"
+      - ".github/workflows/audit.yml"
+  schedule:
+    - cron: "41 4 * * 1"          # Mondays, 04:41 UTC
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  # as in kit-ci.yml: a pull request's newer push cancels its older run; any other run is a group of its own
+  group: audit-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+jobs:
+  crates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: editor
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # the stable branch: the current stable Rust
+      - uses: taiki-e/install-action@cfdb7ed4ccc7c7dce37759eae89dc5674b469b39 # v2.90.3
+        with:
+          tool: cargo-audit@0.22.2
+      - name: Known vulnerabilities in the editor's crates (cargo audit, editor/Cargo.lock)
+        run: cargo audit
+
+  packages:
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.14"]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pip-audit
+        run: python -m pip install pip-audit==2.10.1
+      # pip-audit has pip resolve the requirements in a virtual environment of its own, made and removed for the
+      # check (a dry run: nothing is installed), so what it audits is what kit/requirements.txt brings on this
+      # Python, nothing of the runner's; --strict fails the run when a package cannot be checked at all
+      - name: Known vulnerabilities in the kit's packages (pip-audit, kit/requirements.txt)
+        run: pip-audit --requirement kit/requirements.txt --strict --desc on --progress-spinner off

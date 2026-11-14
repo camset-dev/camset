@@ -1,0 +1,20 @@
+# cargo audit's settings for the editor's crates: read by `cargo audit` run from editor/, as
+# .github/workflows/audit.yml runs it, and as anyone runs it by hand. cargo audit fails on a crate with a known
+# vulnerability (the RustSec advisory database) and only warns about one that is unmaintained, unsound or yanked.
+#
+# An advisory set aside here is one the editor cannot be rid of without a dependency upgrade that is a change of its
+# own: each with what it is, where it comes from and what clears it. Take its line out with that upgrade, and add none
+# without the same three.
+[advisories]
+ignore = [
+    # quick-xml 0.30.0, two high-severity advisories (CVSS 7.5) of 2026-06-29: unbounded memory for namespace
+    # declarations in NsReader (RUSTSEC-2026-0195) and quadratic time on a start tag's duplicate attribute names
+    # (RUSTSEC-2026-0194), both fixed in quick-xml 0.41.0. Only the Linux build takes it in: eframe 0.31.1 >
+    # egui-winit > accesskit_winit > accesskit_unix (the screen reader's link over D-Bus) > atspi-common >
+    # zbus-lockstep > zbus_xml 4.0.0, which atspi-common uses only while it is compiled (the zbus-lockstep-macros
+    # check of its types against the D-Bus interface files it ships) and in its own tests, so the editor never runs
+    # it on anything. A newer eframe whose accessibility crates take quick-xml 0.41 or later clears both (set aside
+    # 2026-11-14).
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
+]

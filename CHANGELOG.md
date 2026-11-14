@@ -28,6 +28,22 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - The security policy, the code of conduct and the new-issue page are written for the public repository: a security
   problem goes through the repository's Security tab (Report a vulnerability), or, where that is not offered, a Bug
   report titled "Security contact" with no details, and the new-issue page points there and to the documentation.
+- A download can be checked: each release from this one holds `SHA256SUMS`, the SHA-256 checksum of every package
+  and of the definition viewer, and GitHub keeps each one's build provenance, signed when the release workflow built
+  it. `shasum -a 256 -c --ignore-missing SHA256SUMS` on macOS (`sha256sum` on Linux, `Get-FileHash` on Windows)
+  shows that a file arrived whole, and
+  `gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml`
+  that the project's release workflow built it from this repository (the README, "Check a download"). Neither is a
+  code signature: the Windows downloads are still not signed.
+- The editor's crates and the kit's Python packages are checked against the known vulnerabilities (`cargo audit` on
+  `editor/Cargo.lock`, `pip-audit` on `kit/requirements.txt`) every week, so a new advisory shows with no change
+  pushed, and whenever a pull request changes their pins; Dependabot proposes newer actions, crates and packages once
+  a week, one pull request for each of the three. The first audit, on 2026-11-14, found two high-severity advisories
+  in `quick-xml` 0.30.0, fixed in 0.41.0, which only the Linux editor takes in, through eframe's accessibility
+  crates: it is compiled into the Linux editor as a regular dependency of `atspi-common`, but called only by that
+  crate's compile-time check and its own tests, never at run time (read from the crates' source; no built program
+  was inspected). Both are set aside, each with its reason, until a newer eframe takes them out. The kit's packages
+  had none.
 
 ### The editor
 

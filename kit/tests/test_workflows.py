@@ -2,9 +2,10 @@
 pins and with kit/setup.py, which a contributor runs instead of it; and of the editor's release workflow
 (.github/workflows/editor-release.yml), which can only run on a pushed tag: that it builds only a tag on main, what
 its Windows packages hold (the zip, and the installer built from the same folder by
-editor/packaging/windows/installer.iss, whose promises are checked here too), and that it carries the definition viewer
-as one file; and of the editor's CI (.github/workflows/editor-ci.yml): that its Windows build is checked, and its
-installer compiled, as the release's."""
+editor/packaging/windows/installer.iss, whose promises are checked here too), that it carries the definition viewer
+as one file, and SHA256SUMS with build provenance for what it attaches; of the editor's CI
+(.github/workflows/editor-ci.yml): that its Windows build is checked, and its installer compiled, as the release's;
+and of the dependency audit (.github/workflows/audit.yml) and Dependabot's settings (.github/dependabot.yml)."""
 import ast
 import fnmatch
 import os
@@ -18,6 +19,8 @@ from camkit import ROOT
 WORKFLOW = ROOT / ".github" / "workflows" / "kit-ci.yml"
 RELEASE = ROOT / ".github" / "workflows" / "editor-release.yml"
 EDITOR_CI = ROOT / ".github" / "workflows" / "editor-ci.yml"
+AUDIT = ROOT / ".github" / "workflows" / "audit.yml"
+DEPENDABOT = ROOT / ".github" / "dependabot.yml"
 
 # The check on the built Windows program, the same lines in both editor workflows: its version details (which build.rs
 # links with the icon, from one .res file; a build that cannot make it only warns) name Camset Editor and Cargo.toml's
@@ -119,6 +122,9 @@ def iss_entries(section: str) -> list[dict[str, str]]:
     return out
 
 
+RELEASE_IF = "github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && github.server_url == 'https://github.com'"
+
+
 def zip_names(lines: list[str]) -> set[str]:
     """What a staging step's Copy-Item lines put into the package's folder ($dir), by the name each has there."""
     names = set()
@@ -127,6 +133,24 @@ def zip_names(lines: list[str]) -> set[str]:
             src, dest = shlex.split(line.removeprefix("Copy-Item -Recurse ").removeprefix("Copy-Item "))
             names.add(src.rsplit("/", 1)[-1] if dest == "$dir" else dest.removeprefix("$dir/"))
     return names
+
+
+def test_every_action_is_pinned_by_commit_with_its_version_beside_it():
+    """Every action every workflow uses (.github/workflows/*.yml, each step of each job as YAML reads it; no job calls
+    another workflow) is pinned to a full commit, so a tag moved upstream changes nothing that runs; and every line
+    that names one carries the comment with its version (or branch) beside it, which the maintainer and Dependabot
+    read to move the pin."""
+    files = sorted((ROOT / ".github" / "workflows").glob("*.yml"))
+    assert RELEASE in files and EDITOR_CI in files and AUDIT in files and WORKFLOW in files
+    for path in files:
+        text = path.read_text(encoding="utf-8")
+        jobs = yaml.safe_load(text)["jobs"]
+        assert all("uses" not in job for job in jobs.values()), path.name
+        used = [s["uses"] for job in jobs.values() for s in job["steps"] if "uses" in s]
+        assert used and all(re.fullmatch(r"[\w.-]+/[\w.-]+@[0-9a-f]{40}", u) for u in used), (path.name, used)
+        lines = [ln for ln in text.splitlines() if re.search(r"\buses:", ln) and not ln.lstrip().startswith("#")]
+        assert len(lines) == len(used), path.name
+        assert all(re.search(r"uses:\s+\S+\s+#\s", ln) for ln in lines), path.name
 
 
 def test_ci_runs_ruff_at_the_version_the_hook_pins():
@@ -261,13 +285,16 @@ def test_release_carries_the_definition_viewer_as_one_file():
     assert test["permissions"] == {"contents": "read"}
     release = wf["jobs"]["release"]
     downloads = [s for s in release["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
-    assert len(downloads) == 2 and downloads[0]["uses"] == downloads[1]["uses"]
+    assert len(downloads) == 3 and len({d["uses"] for d in downloads}) == 1
     assert downloads[1]["with"] == {"name": "camset-viewer", "path": "dist"}
-    assert release["needs"] == "build" and wf["jobs"]["build"]["needs"] == "test", "the release needs the job that built the viewer"
+    assert release["needs"] == "attest" and wf["jobs"]["attest"]["needs"] == "build" and wf["jobs"]["build"]["needs"] == "test", \
+        "the release needs the job that built the viewer"
     attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
-    assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip", "dist/*.exe", "dist/camset-viewer.html"]
-    assert [s.get("uses", "").split("@")[0] for s in release["steps"]] == ["actions/download-artifact", "actions/download-artifact",
-                                                                           "softprops/action-gh-release"]
+    assert attach["with"]["files"].split() == ["dist/*.dmg", "dist/*.tar.gz", "dist/*.zip", "dist/*.exe", "dist/camset-viewer.html",
+                                               "dist/SHA256SUMS"]
+    # the three downloads (the packages, the viewer, the checksums), the check of the files against SHA256SUMS, the
+    # release
+    assert [s.get("uses", "").split("@")[0] for s in release["steps"]] == ["actions/download-artifact"] * 3 + ["", "softprops/action-gh-release"]
 
 
 def test_release_builds_only_a_tag_on_main():
@@ -278,7 +305,7 @@ def test_release_builds_only_a_tag_on_main():
     the test job, so after it fails nothing is built or released."""
     wf = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))
     on = wf.get("on", wf.get(True))                                   # YAML 1.1 reads the key on as true
-    assert list(on["push"]) == ["tags"] and "workflow_dispatch" in on
+    assert set(on) == {"push", "workflow_dispatch"} and list(on["push"]) == ["tags"]          # no pull request event of any kind
     checkout, check = wf["jobs"]["test"]["steps"][:2]
     assert re.fullmatch(r"actions/checkout@[0-9a-f]{40}", checkout["uses"])
     assert checkout["with"] == {"persist-credentials": False, "fetch-depth": 0}
@@ -289,7 +316,71 @@ def test_release_builds_only_a_tag_on_main():
     errors = [ln for ln in lines if "::error::" in ln]
     assert len(errors) == 2 == lines.count("  exit 1") and all("Nothing was built" in ln for ln in errors)
     assert "push main first, then re-run this job" in errors[1]                   # a tag pushed before main was
-    assert wf["jobs"]["build"]["needs"] == "test" and wf["jobs"]["release"]["needs"] == "build"
+    assert wf["jobs"]["build"]["needs"] == "test" and wf["jobs"]["attest"]["needs"] == "build" and wf["jobs"]["release"]["needs"] == "attest"
+
+
+def test_release_lists_checksums_and_attests_what_it_attaches():
+    """From the release after 0.2.1 (written 2026-11-14), a release carries SHA256SUMS, the SHA-256 of every file it
+    attaches but SHA256SUMS itself (the packages and the viewer), and GitHub's build provenance for each of them (an
+    artifact attestation; the README's "Check a download" says how a download is checked against both). The attest
+    job, after the builds and before the release, and only when the release runs (a tag pushed to GitHub: never by
+    hand, never on Gitea), downloads what the release does, writes SHA256SUMS by the release's own patterns (a pattern
+    no file matches stops it) and attests every file it lists, with the action pinned by commit; it alone may ask for
+    the signing identity and store attestations, nothing else in this workflow or in editor CI may. The release job
+    downloads SHA256SUMS by name, checksums the files it attaches with the attest job's very line and compares the
+    result byte for byte with SHA256SUMS (a file changed, missing or added stops it), then attaches it with them."""
+    wf = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))
+    jobs = wf["jobs"]
+    attest, release = jobs["attest"], jobs["release"]
+    assert set(attest) == {"needs", "if", "runs-on", "permissions", "steps"} and set(release) == set(attest)
+    assert attest["needs"] == "build" and release["needs"] == "attest"
+    assert attest["if"] == release["if"] == RELEASE_IF
+    assert attest["permissions"] == {"contents": "read", "id-token": "write", "attestations": "write"}
+    assert release["permissions"] == {"contents": "write"}
+    ci = yaml.safe_load(EDITOR_CI.read_text(encoding="utf-8"))
+    for where, others in (("editor-release", {n: j for n, j in jobs.items() if n != "attest"}), ("editor-ci", ci["jobs"])):
+        for name, job in others.items():
+            assert not {"id-token", "attestations"} & set(job.get("permissions", {})), (where, name)
+            assert not any("attest" in s.get("uses", "") for s in job["steps"]), (where, name)
+    assert not {"id-token", "attestations"} & (set(wf.get("permissions", {})) | set(ci.get("permissions", {})))
+    # the attest job: the release's two downloads, SHA256SUMS, the attestation, SHA256SUMS kept for the release
+    download = [s for s in release["steps"] if s.get("uses", "").startswith("actions/download-artifact@")]
+    steps = attest["steps"]
+    assert len(steps) == 5 and steps[:2] == download[:2]
+    sums = steps[2]
+    assert set(sums) == {"name", "working-directory", "run"} and sums["name"].startswith("SHA256SUMS") and sums["working-directory"] == "dist"
+    lines = sums["run"].splitlines()
+    assert len(lines) == 3 and lines[0] == "shopt -s failglob" and lines[1].endswith(" > SHA256SUMS") and lines[2] == "cat SHA256SUMS"
+    listed = lines[1].removesuffix(" > SHA256SUMS")             # the one line both jobs run
+    cmd = shlex.split(listed)
+    assert cmd[:2] == ["sha256sum", "--"] and not {">", "|", ";", "&&"} & set(cmd)
+    attach = next(s for s in release["steps"] if s.get("uses", "").startswith("softprops/action-gh-release@"))
+    assert [f"dist/{p}" for p in cmd[2:]] + ["dist/SHA256SUMS"] == attach["with"]["files"].split(), "every file the release attaches"
+    signed = steps[3]
+    assert re.fullmatch(r"actions/attest-build-provenance@[0-9a-f]{40}", signed["uses"])
+    assert signed == {"uses": signed["uses"], "with": {"subject-checksums": "dist/SHA256SUMS"}}
+    pinned = next(s["uses"] for s in jobs["build"]["steps"] if s.get("uses", "").startswith("actions/upload-artifact@"))
+    assert steps[4] == {"uses": pinned, "with": {"name": "camset-checksums", "path": "dist/SHA256SUMS", "if-no-files-found": "error"}}
+    # the release job: SHA256SUMS by name; the attest job's line run again over the files to attach, its output the
+    # very bytes of SHA256SUMS, before anything is attached
+    assert download[2] == {"uses": download[0]["uses"], "with": {"name": "camset-checksums", "path": "dist"}}
+    check = step(release, "SHA256SUMS lists")
+    assert check == {"name": check["name"], "working-directory": "dist", "run": f"shopt -s failglob\n{listed} | cmp - SHA256SUMS\n"}
+    assert release["steps"].index(download[2]) < release["steps"].index(check) < release["steps"].index(attach)
+
+
+def test_the_docs_verify_a_download_against_the_release_workflow():
+    """The command the README gives for checking a download's build provenance, and every other place that gives it
+    (the changelog, docs/RELEASING.md), names the repository (Cargo.toml's) and the release workflow by its path:
+    --repo alone accepts an attestation made by any workflow of the repository."""
+    repo = re.search(r'^repository = "https://github\.com/(.*)"$', (ROOT / "editor" / "Cargo.toml").read_text(encoding="utf-8"), re.M).group(1)
+    want = f"gh attestation verify <file> --repo {repo} --signer-workflow {repo}/{RELEASE.relative_to(ROOT).as_posix()}"
+    for doc in ("README.md", "CHANGELOG.md", "docs/RELEASING.md"):
+        text = (ROOT / doc).read_text(encoding="utf-8")
+        found = re.findall(r"gh attestation verify[^`\n]*", text)
+        assert found and all(f == want for f in found), (doc, found)
+    readme = (ROOT / "README.md").read_text(encoding="utf-8").splitlines()
+    assert readme[readme.index(want) - 1] == "```sh" and "### Check a download" in readme
 
 
 def test_the_released_program_is_built_from_the_locked_crates():
@@ -538,3 +629,57 @@ def test_editor_ci_compiles_the_windows_installer_as_the_release_builds_it():
     assert zip_names(staged) | {"THIRD_PARTY_LICENSES.html"} == zip_names(release)
     assert [ln for ln in staged if ln.startswith("Set-Content")] == [
         'Set-Content "$dir/THIRD_PARTY_LICENSES.html" "<!doctype html><title>Stand-in</title><p>The release writes this page with cargo about."']
+
+
+def test_the_dependency_audit_runs_weekly_and_when_a_pin_changes():
+    """The dependency audit (written 2026-11-14) runs every week, by hand, and on a pull request or a push to main that
+    changes a file the pins live in (editor/Cargo.lock and Cargo.toml, the advisories set aside in
+    editor/.cargo/audit.toml, kit/requirements.txt) or itself, with no write permission: cargo audit run from editor/,
+    where it reads that file, installed by the release's own install-action pin at a version; pip-audit at a version
+    over kit/requirements.txt, failing on a package it cannot check, on CI's Python and on the newest kit/setup.py makes
+    .venv with, so both numpy pins are checked. Dependabot proposes updates of the actions, the crates and the kit's
+    packages weekly, one grouped pull request each, and leaves rust-toolchain, pinned to its stable branch, and numpy,
+    pinned twice, to the maintainer."""
+    wf = yaml.safe_load(AUDIT.read_text(encoding="utf-8"))
+    on = wf.get("on", wf.get(True))                                   # YAML 1.1 reads the key on as true
+    assert set(on) == {"pull_request", "push", "schedule", "workflow_dispatch"} and len(on["schedule"]) == 1
+    paths = ["editor/Cargo.lock", "editor/Cargo.toml", "editor/.cargo/audit.toml", "kit/requirements.txt", ".github/workflows/audit.yml"]
+    assert on["pull_request"] == {"paths": paths} and on["push"] == {"branches": ["main"], "paths": paths}
+    assert all((ROOT / p).is_file() for p in paths)
+    assert wf["permissions"] == {"contents": "read"} and set(wf["jobs"]) == {"crates", "packages"}
+    crates, packages = wf["jobs"]["crates"], wf["jobs"]["packages"]
+    # each job and step whole, so nothing is added that would let a finding pass (continue-on-error, an if, a
+    # permission, an argument): the checkout and rust-toolchain steps as the release's build job writes them, the
+    # install-action pin as it has it
+    assert crates == {"runs-on": "ubuntu-latest", "timeout-minutes": crates["timeout-minutes"], "defaults": {"run": {"working-directory": "editor"}},
+                      "steps": crates["steps"]} and 0 < crates["timeout-minutes"] <= 30
+    build = yaml.safe_load(RELEASE.read_text(encoding="utf-8"))["jobs"]["build"]
+    checkout, toolchain = (next(s for s in build["steps"] if s.get("uses", "").startswith(a)) for a in ("actions/checkout@", "dtolnay/rust-toolchain@"))
+    install = next(s["uses"] for s in build["steps"] if s.get("uses", "").startswith("taiki-e/install-action@"))
+    tool = crates["steps"][2]["with"]["tool"]
+    assert re.fullmatch(r"cargo-audit@\d+\.\d+\.\d+", tool)
+    assert crates["steps"] == [checkout, toolchain, {"uses": install, "with": {"tool": tool}},
+                               {"name": "Known vulnerabilities in the editor's crates (cargo audit, editor/Cargo.lock)", "run": "cargo audit"}]
+    newest = re.search(r"^NEWEST_PY = \((\d+), (\d+)\)$", (ROOT / "kit" / "setup.py").read_text(encoding="utf-8"), re.M).groups()
+    kit_python = next(s for s in workflow()["jobs"]["kit"]["steps"] if s.get("uses", "").startswith("actions/setup-python@"))
+    assert packages == {"strategy": {"fail-fast": False, "matrix": {"python": [kit_python["with"]["python-version"], ".".join(newest)]}},
+                        "runs-on": "ubuntu-latest", "timeout-minutes": packages["timeout-minutes"], "steps": packages["steps"]}
+    install_audit = packages["steps"][2]
+    assert re.fullmatch(r"python -m pip install pip-audit==\d+\.\d+\.\d+", install_audit["run"])
+    assert packages["steps"] == [checkout, {"uses": kit_python["uses"], "with": {"python-version": "${{ matrix.python }}"}},
+                                 {"name": "Install pip-audit", "run": install_audit["run"]},
+                                 {"name": "Known vulnerabilities in the kit's packages (pip-audit, kit/requirements.txt)",
+                                  "run": "pip-audit --requirement kit/requirements.txt --strict --desc on --progress-spinner off"}]
+    bot = yaml.safe_load(DEPENDABOT.read_text(encoding="utf-8"))
+    assert bot["version"] == 2
+    assert [(u["package-ecosystem"], u["directory"]) for u in bot["updates"]] == [("github-actions", "/"), ("cargo", "/editor"), ("pip", "/kit")]
+    for u in bot["updates"]:
+        assert u["schedule"]["interval"] == "weekly" and [g["patterns"] for g in u["groups"].values()] == [["*"]], u["package-ecosystem"]
+    # moved by hand: rust-toolchain (a commit of its stable branch, no release tag to follow) and numpy (pinned twice,
+    # by Python version, where a grouped update could raise the older pin past what Python 3.11 runs)
+    assert bot["updates"][0]["ignore"] == [{"dependency-name": "dtolnay/rust-toolchain"}] and "ignore" not in bot["updates"][1]
+    assert bot["updates"][2]["ignore"] == [{"dependency-name": "numpy"}]
+    numpy = [ln for ln in (ROOT / "kit" / "requirements.txt").read_text(encoding="utf-8").splitlines() if ln.startswith("numpy==")]
+    assert len(numpy) == 2 and any('python_version < "3.12"' in ln for ln in numpy)
+    assert all("dtolnay/rust-toolchain@" not in ln or "the stable branch" in ln
+               for p in (ROOT / ".github" / "workflows").glob("*.yml") for ln in p.read_text(encoding="utf-8").splitlines())

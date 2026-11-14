@@ -31,7 +31,10 @@ silicon, a tarball for Linux and, since 0.2.1, a zip for Windows, with an instal
 download to take, and how to open the macOS app or the Windows program the first time. Since 0.2.1 each release also
 carries the definition viewer as one file,
 [camset-viewer.html](https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html), to open in a
-browser with no internet.
+browser with no internet. From the release after 0.2.1 each release lists the SHA-256 checksum of every package and
+of the viewer in `SHA256SUMS`, and GitHub keeps each one's build provenance: the README's
+[Check a download](https://github.com/camset-dev/camset#check-a-download) says how to check that a download is the
+one the project built.
 
 **Code signing policy:** the Windows downloads are not signed. SignPath Foundation declined the project's application
 for free code signing for now, as the project is too new, and the project will apply again later; the

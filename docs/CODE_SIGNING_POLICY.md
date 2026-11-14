@@ -30,6 +30,12 @@ builds on their own computer from Sony's Camera Remote SDK and which no package 
 program, the camera definitions (each with its sample), the project's licence and the third-party licences page:
 nothing from Sony's SDK, and the program in them is the one the workflow built from this repository's source.
 
+Apart from code signing, from the release after 0.2.1 every package of a release, and its definition viewer, has its
+SHA-256 checksum in the release's `SHA256SUMS` and GitHub build provenance (an artifact attestation, signed through Sigstore, that the release
+workflow built it from this repository), which anyone can check
+([Check a download](https://github.com/camset-dev/camset#check-a-download)). Neither is a code signature, and Windows
+reads neither.
+
 ## How a signed release is built
 
 A release is cut as [Releasing](RELEASING.md#installers) says: the version set and the changelog written, the commit

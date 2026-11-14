@@ -30,7 +30,10 @@ editor can edit; any other camera is **not mapped yet**, and the README's
 - **On every pull request, automatically:** the kit's tests, the publish guard over every tracked file
   (`kit/tools/check_public.py --all`) and, by the same rules, over every file each commit of the pull request adds or changes (`--commits`), the camera helpers' own test and every data file, a new camera's folder
   included, against its JSON Schema (`.github/workflows/kit-ci.yml`); the editor's build, tests and lints on macOS,
-  Windows and Linux (`.github/workflows/editor-ci.yml`); and the sign-offs (`.github/workflows/dco.yml`). The docs
+  Windows and Linux (`.github/workflows/editor-ci.yml`); the sign-offs (`.github/workflows/dco.yml`); and, when a pull
+  request changes `editor/Cargo.lock`, `editor/Cargo.toml`, `editor/.cargo/audit.toml` or `kit/requirements.txt`, the
+  crates and packages against
+  the known vulnerabilities (`.github/workflows/audit.yml`, which also runs every week). The docs
   site's build (`zensical build --strict`) is checked by the pre-commit hooks, which the template asks you to run; it
   does not run on the pull request yet.
 - **By hand:** the pass-2 report's counts and conflicts and the writer's gate line (`kit/schema_update.py` without

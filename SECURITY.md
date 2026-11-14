@@ -21,6 +21,15 @@ The Sony Camera Remote SDK is Sony's; report a problem in it to Sony. A camera's
 You get an acknowledgement within a week. A fix is made before anything is disclosed, and the report is credited if
 you want it to be.
 
+## Releases and dependencies
+
+- From the release after 0.2.1, every package of a release, and its definition viewer, has its SHA-256 checksum in
+  the release's `SHA256SUMS` and GitHub build provenance, which says that the release workflow built it from this
+  repository; the README's
+  [Check a download](README.md#check-a-download) says how to check both.
+- The editor's crates and the kit's Python packages are checked against the known vulnerabilities every week and
+  whenever their pins change (`.github/workflows/audit.yml`; [Releasing](docs/RELEASING.md), "Dependencies").
+
 ## The project's own safety rules
 
 - The kit never reads, types or stores a camera's credentials, and nothing it learns leaves the computer unless you
