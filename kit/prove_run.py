@@ -29,6 +29,18 @@ and the camera may open that label and no other never-open row; never the cards,
 credentials. The run prints the rows allowed and each proof line carries "allowance": "the owner allowed <row>
 remotely, <date>". A row the crawl never opened has no job (it is not in the map): pass 1 must map it first.
 
+--network (with --rows) proves a Wi-Fi or Bluetooth setting a dated owner decision in the reviewed scope names
+({"lifts": "network", "date", "rows", "why", "options": {"<row>": ["<option>"]}}: runner.network_decided_or_exit,
+docs/decisions/0008), and only the options that decision names (network_jobs_or_exit): the others are said to stay by
+hand. The run stops before anything connects when a decision names what none opens (credentials, identity, an action,
+the serial number), when none of --rows holds a decided row, when a decided row names no option (it is opened to look
+only), or when its job is not a list of options. The camera may open those rows and no other never-open row, never an
+address screen, and chooses there only a named option (camkit.live); a row whose saved option is not named is left for
+the session's upload to put back (RestoreAfter); a notice there naming identity or credentials is kept and said as its
+field names alone, and no OK goes out on a screen nobody reads; the run asks local readers only. The reviewed scope's
+"exclude" still keeps a row out; each proof line carries "allowance": "the owner decided on <date> that the kit may
+open <row> remotely and choose <options>".
+
 Results: runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, one line per option; frames and downloads numbered on.
 
 The parts are in kit/proving/ (its __init__ lists them): the screen readers, the way to a row and back, the job
@@ -56,7 +68,8 @@ from camkit.screen import same_position  # noqa: E402
 from camkit.session import check_restore, verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from page_model import same_text  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of, end_session, load_scan,  # noqa: E402
+from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
+                    changes_of, end_session, load_scan, log_network_decided, network_decided_or_exit, network_values,
                     read_json, restoring)
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
@@ -121,6 +134,11 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     if c is None:
         raise Failed(f"{name}: could not tell which option the {kind} opened on ({text(cam)!r})")
     order = [(c + i) % n for i in range(1, n)] + [c]
+    choose = job.get("choose")          # a network row: only the options its decision names (network_jobs_or_exit)
+    network_row = job.get("network_row")
+    identity_row = job.get("network_class") == safety.LIFT_IDENTITY
+    if choose is not None:
+        order = [k for k in order if k in choose]
     print(f"{name}: saved value {labels[c]!r}; proving {[labels[k] for k in order]}", flush=True)
     last, prev = base_path, c
     for step, k in enumerate(order):
@@ -141,6 +159,11 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             raise Failed(f"{name}: the cursor is not on {labels[k]!r} ({text(cam)!r})")
         chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)                   # evidence: the option under the cursor
         shown = text(cam)                              # as the camera shows it now (a carousel: with its axis value)
+        if network_row and any(safety.network_withheld(kind, x or "") for x in (shown, seen_vlm)):
+            shown, seen_vlm = "(withheld)", "(withheld)"
+        if identity_row:            # inside an identity row only the map's own option names are kept
+            names = {safety.plain(x) for x in labels}
+            shown, seen_vlm = (x if safety.plain(x or "") in names else "(withheld)" for x in (shown, seen_vlm))
         cam.press("enter")
         s = cam.read()
         notice, refused = None, False
@@ -150,13 +173,22 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             # closes the menu too), never OK; the download shows what applied. A confirmation fails.
             # "Not available as follows <blocker>" refuses the choice (Flash Mode = Flash Off in Manual
             # Exposure, 2026-10-29): the proof says so and names the blocker; the value stays as it was.
-            text_n = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+            lines = ocr.read([cam.frame.path])[cam.frame.path]
+            text_n = ocr.text_in(lines, (0, 0, 640, 480))
             why = safety.confirmation(text_n)
             if why:
                 raise Failed(f"{name}: after OK on {labels[k]!r} a confirmation came up ({why}; {cam.frame.path.name})")
             refused = bool(re.search(r"not available|invalid", text_n, re.I))
-            notice = {"text": text_n, "frame": cam.frame.path.name}
-            print(f"   {'refused' if refused else 'notice after OK'}: {text_n[:90]!r}", flush=True)
+            if network_row and (identity_row or safety.network_withheld("notice", text_n)):
+                # inside a network row, a notice naming identity or credentials (a pairing screen, a connecting
+                # notice), and any notice inside an identity row: its field names alone are kept and said, never its
+                # text; MENU alone closes it
+                names, hidden = safety.address_fields(lines)
+                notice = {"withheld": hidden, "fields": names, "frame": cam.frame.path.name}
+                print(f"   notice after OK, its text withheld ({hidden} lines; fields {names})", flush=True)
+            else:
+                notice = {"text": text_n, "frame": cam.frame.path.name}
+                print(f"   {'refused' if refused else 'notice after OK'}: {text_n[:90]!r}", flush=True)
             cam.press("menu")
         elif s.kind == "shooting":
             # some choices close the menu (Focus Area = Wide went straight to the shooting screen with
@@ -169,12 +201,13 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             # recorded place for that row, so its label decides
             notice = {"text": "the camera went back to the menu page after OK", "frame": cam.frame.path.name}
             print("   back on the menu page after OK", flush=True)
-        elif s.kind == "unknown" and not same_place(place(cam), row_place):
+        elif s.kind == "unknown" and not network_row and not same_place(place(cam), row_place):
             # an information screen without a notice's frame lines, "Don't show this again." over its
             # OK (Framing Stabilizer = On: Center, Movie mode, 2026-10-30): taken as the table prover
-            # takes one, never ticking the box; anything else still fails the row
+            # takes one, never ticking the box; anything else still fails the row. Inside a network row no OK goes
+            # out on a screen nobody reads: the row fails, and MENU cancels it
             notice = info_notice_ok(cam, name)
-        elif s.kind == "table" and not same_place(place(cam), row_place):
+        elif s.kind == "table" and not network_row and not same_place(place(cam), row_place):
             # an information screen with buttons after the choice (Exposure Ctrl Type = Flexible Exp. Mode: "Changes
             # keys assigned to suit this mode", a Custom Key/Dial Set. link beside its OK, 2026-11-07): its OK applies
             # the choice, and the download shows what else it rewrote; a confirmation fails the row
@@ -192,7 +225,10 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         rec = {"path": path, "kind": kind, "index": k, "label": labels[k], "shown": shown, "chosen_frame": chosen, "vlm": seen_vlm,
                "row_frame": back, "dat": dat.name, "base": base_path.name,
                "changes": changes_of(changes),
-               "notice": notice, "applied": not refused, "attempt": attempt}
+               "notice": notice, "applied": not refused, "attempt": attempt,
+               # the class a network decision lifted the row from: the tools that read the proof's frames later keep
+               # no reader's text of an identity row's (kit/tools/reread_proofs.py, kit/tools/reader_census.py)
+               **({"network": job.get("network_class") or safety.LIFT_IDENTITY} if network_row else {})}
         out.write(json.dumps(rec) + "\n")
         out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
@@ -205,6 +241,9 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                 raise Failed(f"{name}: back on the saved value, {len(changes)} records still differ from the start")
             say_put_back(name, put_back)
     finish_attempt(run, attempt, name, put_back)
+    if choose is not None and c not in choose:
+        # the saved option is not one the decision lets the kit choose: the session's upload puts it back
+        raise RestoreAfter(f"{name}: its saved option is not one the decision names; the session's upload puts it back")
     to_row(cam, path, top, row_place)
     return last
 
@@ -487,7 +526,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
     Always ends on the shooting screen. Returns "done", "failed", "stop" or "error"."""
     cam = LiveCamera(link, hdmi, run, may_open={r.split(" > ")[-1] for r in APPROVED
                                                 if safety.owner_may_approve(safety.never_open(r.split(" > ")[-1]))}
-                     | proving.jobs.ALLOWED)
+                     | proving.jobs.ALLOWED, network=proving.jobs.NETWORK, options=proving.jobs.NETWORK_OPTIONS,
+                     values=network_values(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None)
     status = "done"
     try:
         cam.press("menu")
@@ -580,8 +620,10 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
                 status = "restore"
                 break
             except Failed as e:
-                print(f"row failed: {e}; cancelling", flush=True)
-                failures.write(json.dumps({"path": job["path"], "why": str(e), "frame": cam.frame.path.name,
+                # inside a network row a failure's quoted texts (a screen's, an option's) are withheld
+                why = safety.quoted_withheld(e) if job.get("network_row") else str(e)
+                print(f"row failed: {why}; cancelling", flush=True)
+                failures.write(json.dumps({"path": job["path"], "why": why, "frame": cam.frame.path.name,
                                            **({"kind": job["kind"], "option": job["option"]}
                                               if job["kind"] in ("axis", "table") else {})})
                                + "\n")
@@ -594,10 +636,11 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
         print("STOP file: cancelling", flush=True)
         status = "stop"
     except Failed as e:
-        print(f"stopped: {e}", flush=True)
+        print(f"stopped: {safety.quoted_withheld(e) if proving.jobs.NETWORK else e}", flush=True)
         status = "error"
     except Exception as e:
-        print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
+        said = f"{type(e).__name__}: {e}"
+        print(f"error: {safety.quoted_withheld(said) if proving.jobs.NETWORK else said}; cancelling", flush=True)
         status = "error"
     try:
         cancel(cam, link)
@@ -611,10 +654,65 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
     return status
 
 
+def network_rows_or_exit(rows: list) -> tuple:
+    """--network for the rows named with --rows: ({row: date} of the Wi-Fi and Bluetooth settings a dated owner decision
+    in the reviewed scope names and some label of --rows' paths is (safety.network_lifted: never an address screen,
+    which only drive.py opens), {row: [the options the decision lets the kit choose]}, the words each proof line's
+    allowance carries for them). Stops before anything connects when the decisions name what none opens
+    (runner.network_decided_or_exit), when none of --rows holds such a row, or when one of them is opened to look only
+    (no option named: nothing to prove by choosing)."""
+    decided, options, _ = network_decided_or_exit()
+    settings = {r: d for r, d in decided.items() if not safety.address_screen(r)}
+    named = {r: d for r, d in settings.items()
+             if any(safety.network_lifted(label, {r: d}) for p in rows for label in p.split(" > "))}
+    if not named:
+        sys.exit("--network: none of the rows named with --rows is a Wi-Fi or Bluetooth setting the decision names "
+                 f"({', '.join(settings) or 'it names only address screens, which only drive.py opens'}): nothing was "
+                 "sent to the camera")
+    looks = [r for r in named if not options.get(r)]
+    if looks:
+        sys.exit(f"--network: the owner's decision opens {', '.join(map(repr, looks))} to look only: a proof chooses an "
+                 "option, so it proves only options the decision names (\"options\": {\"<row>\": [\"<option>\"]}, "
+                 "docs/decisions/0008); nothing was sent to the camera")
+    chosen = {r: options[r] for r in named}
+    return named, chosen, safety.network_allowance(named, chosen)
+
+
+def network_jobs_or_exit(todo: list, named: dict, options: dict) -> list:
+    """The jobs of a --network run, each one whose path holds a row a network decision opens (named) marked with that
+    row ("network_row") and the indices of its options the decision names ("choose", as the map labels them, compared
+    folded: safety.plain); the others are said to stay by hand. Stops before anything connects for such a job that is
+    not a list of options (a carousel's second axis, number fields, a panel: Right, Left or a dial would commit there)
+    or for an option the decision names that the map's labels do not hold."""
+    for j in todo:
+        row = next((r for label in j["path"] for r in [safety.network_lifted_row(label, named)] if r), None)
+        if row is None:
+            continue
+        if j["kind"] != "list":
+            sys.exit(f"--network: {job_key(j)!r} is a {j['kind']} job, and a row a network decision opens is proved "
+                     "only as a list of options (anything else can commit an option with Right, Left or a dial): "
+                     "nothing was sent to the camera")
+        want = {safety.plain(o): o for o in options.get(row) or ()}
+        have = {safety.plain(lab): i for i, lab in enumerate(j["labels"])}
+        lost = [o for k, o in want.items() if k not in have]
+        if lost:
+            sys.exit(f"--network: the decision names {', '.join(map(repr, lost))} for {row!r}, which pass 1's map does "
+                     f"not list among its options ({', '.join(map(repr, j['labels']))}): nothing was sent to the camera")
+        j["network_row"], j["choose"] = row, sorted(have[k] for k in want)
+        j["network_class"] = next(c for label in j["path"] if safety.network_lifted_row(label, named)
+                                  for c in [safety.lift_class(label)])
+        by_hand = [lab for i, lab in enumerate(j["labels"]) if i not in j["choose"]]
+        if by_hand:
+            print(f"{job_key(j)}: proving {', '.join(want.values())}; by hand: {', '.join(by_hand)} (the decision names "
+                  "no other option)", flush=True)
+    return todo
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--rows", action="append", default=None, help="prove only these rows (path with ' > ')")
     add_allow_argument(ap)
+    add_network_argument(ap)
     ap.add_argument("--limit", type=int, default=None, help="stop after this many rows")
     ap.add_argument("--list", action="store_true", help="print the rows and options the run would prove, then stop (no camera)")
     ap.add_argument("--retry-failed", action="store_true", help="include rows that failed in earlier runs")
@@ -665,8 +763,19 @@ def main():
     a = ap.parse_args()
     if a.allow and not a.rows:
         sys.exit("--allow opens a never-open row for the rows named with --rows only")
+    if a.network and not a.rows:
+        sys.exit("--network opens a Wi-Fi or Bluetooth setting for the rows named with --rows only")
+    if a.network and (a.help_text or a.looks or a.look_base or a.wb or a.wb_corners or a.tables):
+        sys.exit("--network proves a Wi-Fi or Bluetooth setting's list options only: not with --help-text, --looks, "
+                 "--look-base, --wb, --wb-corners or --tables")
     allowance = allowed_or_exit(a.allow)
     proving.jobs.ALLOWED.update(a.allow)
+    network = {}
+    if a.network:
+        network, chosen, words = network_rows_or_exit(a.rows)
+        proving.jobs.NETWORK.update(network)
+        proving.jobs.NETWORK_OPTIONS.update(chosen)
+        allowance = "; ".join(x for x in (allowance, words) if x)
     proving.jobs.HELP_TEXT = a.help_text            # before jobs(): help reads rows proofs leave out
     proving.jobs.OSD_ROWS = a.eyes in ("osd", "osd-all")
     if a.eyes == "osd-all" and a.start:
@@ -713,6 +822,8 @@ def main():
         missing = set(a.rows) - {" > ".join(j["path"]) for j in todo} - {job_key(j) for j in todo}
         if missing:
             sys.exit(f"not provable rows in the scope: {sorted(missing)}")
+    if network:
+        todo = network_jobs_or_exit(todo, network, proving.jobs.NETWORK_OPTIONS)
     cycle, model = load_scan(a.scan)
     CYCLE[:] = cycle
     MODEL.update(model)
@@ -723,6 +834,8 @@ def main():
             order.setdefault(model[p["page"]]["rows"][p["row"]]["label"].lower(), i)
     todo.sort(key=lambda j: next((v for k, v in order.items() if same_text(k, j["path"][0])), 10 ** 6))
     run = Run(a.run)
+    if network:
+        log_network_decided(run, network, proving.jobs.NETWORK_OPTIONS)
     done, failed, done_labels = {}, set(), {}
     help_text = proving.jobs.HELP_TEXT
     proofs, fails = ("option_help.jsonl", "help_failures.jsonl") if help_text else ("proofs.jsonl", "failures.jsonl")

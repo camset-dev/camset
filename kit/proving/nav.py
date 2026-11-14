@@ -8,7 +8,7 @@ import contextlib
 import re
 import time
 
-from camkit import ocr, safety, screen
+from camkit import ocr, safety, screen, vlm
 from camkit.link import LinkError
 from camkit.screen import same_position, same_state
 from camkit.session import osd_shooting
@@ -173,7 +173,7 @@ def enter_any(cam, path, start: int):
 
 def to_shooting(link, hdmi, why: str, tries: int = 6):
     """Back to the shooting screen with MENU (cleanup presses: OK only on an information notice that
-    refuses MENU), looking after each press.
+    refuses MENU and names no identity or credentials, never on a --network run), looking after each press.
     After a row failed on a screen the reader misread, the cancel can stop short (a PP carousel left
     open, 2026-10-29); this run holds the only remote connection, so it must close what is open
     itself rather than wait for a hand on the camera. Falls back to waiting if MENU does not do it."""
@@ -187,17 +187,25 @@ def to_shooting(link, hdmi, why: str, tries: int = 6):
         except LinkError as e:
             # an information notice can take only OK ("not available as follows Picture Profile On":
             # MENU was refused and the run crashed before its restore, 2026-10-29). OK it when its
-            # text is no confirmation; never otherwise
+            # text is no confirmation and names no identity or credentials ("Connect to <SSID>?"); never otherwise,
+            # and never on a --network run (camkit.vlm.LOCAL_ONLY): a row a decision opened may be behind it, whose
+            # look-only lock this press, sent straight through the link, would pass by (docs/decisions/0008). The
+            # wait below then fails closed
             text = ""
-            if kind == "notice":
+            if kind == "notice" and not vlm.LOCAL_ONLY:
                 tmp = run_tmp_png(f)
                 try:
                     text = ocr.text_in(ocr.read([tmp])[tmp], (0, 0, 640, 480))
                 finally:
                     tmp.unlink(missing_ok=True)
-            if kind == "notice" and text and not safety.confirmation(text):
+            if kind == "notice" and text and not safety.confirmation(text) and not vlm.LOCAL_ONLY \
+                    and not safety.identity_screen(text):
                 print(f"   an information notice took only OK: {text[:70]!r}", flush=True)
                 link.press("enter", cleanup=True, screen=kind)       # on the notice read: the link's guards judge it
+            elif kind == "notice" and (vlm.LOCAL_ONLY or safety.identity_screen(text)):
+                why = "a --network run sends it no OK" if vlm.LOCAL_ONLY else "it names identity or credentials"
+                print(f"   an information notice refused MENU, and {why} (its text withheld); waiting", flush=True)
+                time.sleep(3.0)
             else:
                 print(f"   MENU refused ({e}); waiting", flush=True)
                 time.sleep(3.0)             # a busy camera (after a heavy profile change) answers later

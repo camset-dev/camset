@@ -7,14 +7,28 @@ The guards:
   check_property(name)       camera properties the link may set through the SDK: the live exposure only, and never
                              one that makes sound, light or motion, holds credentials or identity, or acts.
   never_open(label)          menu rows the walker must not enter: actions, credentials, identity/connection/region
-                             settings, and anything that makes sound, light or motion (user rules).
+                             settings, anything that makes sound, light or motion (user rules), and the Wi-Fi and
+                             Bluetooth settings and address screens (NETWORK, judged last).
+  network_decided(scope)     the Wi-Fi and Bluetooth rows, address screens and identity rows (lift_class) a dated owner
+                             decision ("lifts": "network") names, and why each other row such a decision names is
+                             refused (decision 8); option_refused, an option it may not name.
+  network_lifted(lit, rows)  whether such a decision opens the lit row: a row it names, its label followed by nothing
+                             or one of its own values, never an address screen unless the caller looks at one (drive.py
+                             alone), never anything else.
+  look_refused(key, lit, row, options)  inside such a row: up, down and MENU, and Enter only on an option the decision
+                             names (network_options); a row with none named is looked at only. The callers' locks
+                             (camkit.live.LiveCamera, kit/drive.py) end only once a MENU or such an Enter has gone out
+                             and the page the row was opened from, or the shooting screen, is back.
+  identity_screen(text)      a screen naming identity or credentials (pairing, an SSID...): MENU alone inside such a row.
+  address_fields(lines)      the field names an address screen shows (MAC Address, IP Address...), never a value.
   confirmation(text)         dialog text asking to execute something; never press Enter on it.
   fold(text)                 a reading as the checks compare it: Unicode look-alikes, dashes and spacing mended.
   readings(text)             every reading a guard judges (as read, folded, slips undone): any one matching refuses.
   owner_may_approve(reason)  whether a dated owner decision can lift a never_open reason for one row (sound, light
                              or motion: decision 2); actions and credentials never.
   allow_refused(label)       why a run's --allow cannot name a row: the cards, Initialize, Reset Network Set.,
-                             credentials, and the camera's identity, a connection or its region (decision 8).
+                             credentials, the camera's identity, a connection or its region, and the Wi-Fi and
+                             Bluetooth settings and address screens, which only a dated decision opens (decision 8).
   shooting_refused(key, kind, named)  a key on the shooting screen: MENU only, unless the caller names it (decision 21).
   profile_reset_row(lit, title, profile)   why the lit row is not a Picture Profile's own Reset row, or "".
   profile_reset_dialog(text, profile)      why a screen is not that row's own "Reset PPn to the default setting?".
@@ -269,25 +283,84 @@ _WIFI = r"wi\s?-?\s?f[il1|!]\s?"
 _IDENTITY = [
     # identity, connection, region
     r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
-    r"usb streaming", r"wired lan connect", _WIFI + r"connect", r"ip address", r"ssid", r"\bwps\b",
-    r"access point", r"access authen", r"pairing", r"paired", r"bluetooth function", r"airplane mode",
+    r"usb streaming", r"wired lan connect", r"ip address", r"ssid", r"\bwps\b",
+    r"access point", r"access authen", r"pairing", r"paired",
     r"cloud", r"streaming", r"tether", r"device name", r"root certif",
     # FTP: the server and its login stay by hand, FTP Function starts a connection to that server
     # (asked separately), and the Display rows are reports, not settings
     r"ftp function", r"server setting", r"save/load ftp", r"display ftp",
     r"remote shoot function", r"cnct\. while", r"wake on lan", r"smartphone", r"copyright", r"iptc",
     r"select on cam",   # Select on Cam & Send: sends images to a phone
-    # Wi-Fi and Bluetooth settings no pattern above caught, though the playbook's rule 3 names them (2026-11-13, a
-    # review): Bluetooth Rmt Ctrl and Wi-Fi Frequency Band. And the screens that show the camera's addresses (its MAC
-    # and IP addresses, its Bluetooth device address) or its serial number, which every saved frame, the OCR output and
-    # a hosted reader's request would then hold: Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address and
-    # Display Serial Number on the a1 II, and a MAC address row another body may show. Each pattern takes the slips a
-    # reader makes in its row's own words (a space dropped or put in; 1, l or | for i or l; 0 for o; rn or n for m; 8
-    # for B; a letter dropped; Addr. for Address) and names those words only, so the group names (Wi-Fi, Bluetooth,
-    # Wired LAN), the other Display rows and Write Serial Number are walked as before.
+    # the screen that shows the body's serial number, which every saved frame, the OCR output and a hosted reader's
+    # request would then hold: Display Serial Number on the a1 II (2026-11-13, a review); Write Serial Number, whether
+    # pictures carry the number, is walked
+    r"disp(?:lay|\.)?\s?serial",
+]
+# Of those, the identity, connection and region rows a dated owner decision naming the row may open to look at (decision
+# 8, the a1 II's owner's of 2026-11-13: "you have my full permission to open any menu and map items"), still never by
+# --allow and never without --network: identity_liftable. Only rows whose opening is known to start or end nothing:
+# Right on them opens an option list (Wired LAN Connect, Cnct. while Power OFF, Wake On LAN, the USB rows, Language), a
+# submenu (Remote Shoot Function, IP Address Setting, Area/Date/Time Setting) or an information screen (Manage Paired
+# Device's list, Display FTP Result, NTSC/PAL Selector's message). What stays never opened whatever is decided
+# (_IDENTITY_FIXED), with credentials and every action (never_open's other classes): the SSID, WPS, access point,
+# access authentication and pairing rows, Import Root Certificate, Save/Load FTP Settings, the copyright and IPTC rows,
+# Select on Cam & Send and Display Serial Number; and the rows whose opening may itself start or end a connection or act,
+# which nobody has yet seen Right do on the camera (2026-11-13, a review: look-only governs the presses after the
+# opening, never the opening): Smartphone Connection, Cloud Connection and Cloud Information, Network Streaming and USB
+# Streaming, Tethering Connection and Tethering Disconnection, FTP Function; and Server Setting, behind which the FTP
+# login sits (credentials, decision 9), and Edit Device Name, whose opening shows a keyboard and the device's name, and
+# which no settings file holds
+_IDENTITY_LIFTABLE = [
+    r"date/time", r"^area/", r"ntsc", r"language", r"usb connection", r"usb lun", r"usb power",
+    r"wired lan connect", r"ip address", r"paired", r"display ftp", r"remote shoot function", r"cnct\. while",
+    r"wake on lan",
+]
+_IDENTITY_FIXED = [p for p in _IDENTITY if p not in _IDENTITY_LIFTABLE]
+# Why network_refused refuses the identity rows _IDENTITY_LIFTABLE left out on 2026-11-13 (a review), in the words a
+# run stops with: matched in every reading of the row a decision names
+_NOT_LIFTED_WHY = [(re.compile(rx), why) for rx, why in (
+    (r"smartphone|cloud|streaming|tether|ftp function",
+     "its opening may itself start or end a connection or act, and nobody has yet seen on the camera what Right does "
+     "there"),
+    (r"server setting", "the FTP server's login sits behind it (credentials, docs/decisions/0009)"),
+    (r"device name", "its opening shows a keyboard and the device's name, which no settings file holds"),
+)]
+# Rows of the classes a network decision opens in which no option is ever chosen, whatever a decision names: the choice
+# drops the link a run needs (Wired LAN Connect, USB, the IP address settings; Airplane Mode, which drops the Wi-Fi and
+# Bluetooth links), starts a connection or a pairing (Remote Shoot Function and all under it, Smartphone Connection,
+# Cnct. while Power OFF, Wi-Fi Connect's On, which joins the access point, Bluetooth Rmt Ctrl's On, which opens the
+# Pairing screen (the a1 II's notes), Cloud, streaming, tethering, FTP), or changes what no settings file puts back or
+# what every other setting means (Language, NTSC/PAL, Area/Date/Time, the device's name, a paired device). Matched in
+# the row's name as a decision names it (never_choose)
+_NEVER_CHOOSE = [
+    r"wired lan connect", r"remote shoot", r"connection method", r"pairing", r"paired", r"ip address", r"subnet",
+    r"gateway", r"\bdns\b", r"smartphone", r"cnct\. while", r"cloud", r"streaming", r"tether", r"\busb\b", r"language",
+    r"ntsc", r"^area/", r"date/time", r"device name", r"ftp", r"server",
+    _WIFI + r"connect", r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)",
+    r"airplane mode",
+]
+# The Wi-Fi and Bluetooth settings and the screens that show the camera's network addresses (decision 8, as it stands
+# since 2026-11-13): by hand only, like _IDENTITY, and no --allow opens them; but unlike _IDENTITY, a dated owner
+# decision that names the row ({"lifts": "network", "date", "rows", "why"} in the reviewed scope, network_decided) opens
+# it for a run given --network (network_lifted). never_open names them last (NETWORK), only when no other class of the
+# list matches any reading, so a misread that also looks like credentials, an action or an identity row keeps that
+# reason. The patterns were found on 2026-11-13 (a review): Wi-Fi Connect, Bluetooth Function and Airplane Mode were
+# identity rows before, and Bluetooth Rmt Ctrl and Wi-Fi Frequency Band were on no list though the playbook's rule 3
+# names them. Each pattern takes the slips a reader makes in its row's own words (a space dropped or put in; 1, l or |
+# for i or l; 0 for o; rn or n for m; 8 for B; a letter dropped; Addr. for Address) and names those words only, so the
+# group names (Wi-Fi, Bluetooth, Wired LAN) and the other Display rows are walked as before.
+_NETWORK_SETTINGS = [
+    _WIFI + r"connect", r"bluetooth function", r"airplane mode",
     r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)", _WIFI + r"freq",
-    r"frequency\s?band", _WIFI + r"[il1|]nf", r"(?:wired\s?|(?<![a-z]))[il1|]an\s?[il1|]nf",
-    r"(?:dev[il1|!]ce|mac)\s?addr", r"disp(?:lay|\.)?\s?serial",
+    r"frequency\s?band",
+]
+# The screens that show the camera's addresses (its MAC and IP addresses, its Bluetooth device address), which every
+# saved frame, the OCR output and a hosted reader's request would then hold: Display Wi-Fi Info., Display Wired LAN
+# Info. and Disp Device Address on the a1 II, and a MAC address row another body may show. A decision opens one only in
+# kit/drive.py, which shows the screen's field names alone (address_fields), asks local readers only and sends no key
+# but MENU once it is open; the walker and the provers never open one (network_lifted's screens).
+_ADDRESS_SCREENS = [
+    _WIFI + r"[il1|]nf", r"(?:wired\s?|(?<![a-z]))[il1|]an\s?[il1|]nf", r"(?:dev[il1|!]ce|mac)\s?addr",
 ]
 _ANYWHERE = _IDENTITY + [
     r"auto power off temp",
@@ -317,7 +390,16 @@ _ANYWHERE_RE = re.compile("|".join(_ANYWHERE))
 _IDENTITY_RE = re.compile("|".join(_IDENTITY))
 _CREDENTIALS_RE = re.compile("|".join(_CREDENTIALS))
 _MOTION_RE = re.compile("|".join(_MOTION))
+_NETWORK_SETTINGS_RE = re.compile("|".join(_NETWORK_SETTINGS))
+_ADDRESS_RE = re.compile("|".join(_ADDRESS_SCREENS))
+_NETWORK_RE = re.compile("|".join(_NETWORK_SETTINGS + _ADDRESS_SCREENS))
+_IDENTITY_LIFTABLE_RE = re.compile("|".join(_IDENTITY_LIFTABLE))
+_IDENTITY_FIXED_RE = re.compile("|".join(_IDENTITY_FIXED))
+_OTHER_BY_HAND_RE = re.compile("|".join(_ANYWHERE[len(_IDENTITY):]))     # sound, light, flash, Auto Power OFF Temp.
+_NEVER_CHOOSE_RE = re.compile("|".join(_NEVER_CHOOSE))
 MOTION = "sound, light or motion"          # the reason's prefix a dated owner decision can lift for one row
+NETWORK = "network setting or address screen"   # the reason's prefix only a dated decision naming the row lifts
+NETWORK_LIFT = "network"                   # a decision's "lifts" that opens such rows (network_decided)
 
 
 # Look-alikes of Latin letters beyond camkit.match's table, for the guards only (an extra one only adds a refusal):
@@ -378,17 +460,27 @@ def readings(text) -> list:
     return list(dict.fromkeys(out))
 
 
+def _pairs(label) -> list:
+    """(the label cleaned of its icon, the label as read), in lower case, for each source (_sources) and each also with
+    the usual slips undone (deslip): every text never_open judges. The second of each pair is readings()'s."""
+    pairs = []
+    for s in _sources(label):
+        text, raw = clean_label(s), s.lower()
+        pairs += [(text, raw), (deslip(text), deslip(raw))]
+    return list(dict.fromkeys(pairs))
+
+
 def never_open(label: str) -> str | None:
     """Reason the row must not be entered, or None. A label that carries its breadcrumb
     ("Playback > Delete > Delete Slot1/2") is judged by its last part too, and an OCR reading also as it
     reads with the usual slips undone ("lnitialize", "Forrnat"), folded ("Fоrmat", "Wi‑Fi Direct"), with a capital I
     read for an l ("Delete AII"), and with a stop or a colon after it ("Format."): a slip never opens a row. Each
-    reading is judged beside the others (readings), so none takes another's refusal away."""
-    pairs = []
-    for s in _sources(label):
-        text, raw = clean_label(s), s.lower()
-        pairs += [(text, raw), (deslip(text), deslip(raw))]
-    for text, raw in dict.fromkeys(pairs):
+    reading is judged beside the others (readings), so none takes another's refusal away. A Wi-Fi or Bluetooth setting
+    or an address screen (NETWORK) is named only when no reading matches any other class: every reading is judged for an
+    action, credentials, a by-hand row and motion first, so a reading that also looks like one of those keeps that
+    reason, which no network decision lifts."""
+    pairs = _pairs(label)
+    for text, raw in pairs:
         last = clean_label(text.rsplit(">", 1)[-1])
         m = _ACTION_RE.search(text) or _ACTION_RE.search(last) or _ACTION_WORD_RE.search(text)
         if m:
@@ -402,6 +494,85 @@ def never_open(label: str) -> str | None:
         m = _MOTION_RE.search(text) or _MOTION_RE.search(raw)
         if m:
             return f"{MOTION}: {m.group(0)}"
+    for text, raw in pairs:
+        m = _NETWORK_RE.search(text) or _NETWORK_RE.search(raw)
+        if m:
+            return f"{NETWORK}: {m.group(0)}"
+    return None
+
+
+def _network_match(label, rx) -> str | None:
+    """The words of `label` the pattern `rx` matches in any text never_open judges (_pairs), or None."""
+    for text, raw in _pairs(label):
+        m = rx.search(text) or rx.search(raw)
+        if m:
+            return m.group(0)
+    return None
+
+
+def network_row(label: str) -> str | None:
+    """Why `label` is a Wi-Fi or Bluetooth setting (_NETWORK_SETTINGS) in any reading, or None: whatever else it is too.
+    A row so named is never opened by --allow, an approved motion decision or a run's may_open (decision 8), only by a
+    dated decision naming it when never_open names nothing else (network_lifted)."""
+    m = _network_match(label, _NETWORK_SETTINGS_RE)
+    return f"a Wi-Fi or Bluetooth setting: {m}" if m else None
+
+
+def address_screen(label: str) -> str | None:
+    """Why `label` is a screen that shows the camera's network addresses (_ADDRESS_SCREENS) in any reading, or None.
+    Only kit/drive.py opens one, where a decision names it (network_lifted's screens)."""
+    m = _network_match(label, _ADDRESS_RE)
+    return f"a screen with the camera's addresses: {m}" if m else None
+
+
+def network_words(label: str) -> str | None:
+    """network_row or address_screen: the words that keep `label` from every allowance but a network decision."""
+    return network_row(label) or address_screen(label)
+
+
+def identity_liftable(label: str) -> str | None:
+    """The words that make `label` an identity, connection or region row a dated network decision may open to look at
+    (_IDENTITY_LIFTABLE), or None: every reading (as never_open judges them) is judged, and any reading that names
+    anything else of the never-open list (an action, "reset", credentials, the cards or Initialize, sound, light or
+    motion, a Wi-Fi or Bluetooth setting or an address screen, or an identity row that stays closed, _IDENTITY_FIXED)
+    gives None. Such a row stays refused by never_open, identity_row, never_lifted and allow_refused as ever: only
+    network_lifted, for a run given --network whose decision names it, opens it, to look only (never_choose)."""
+    found = None
+    for text, raw in _pairs(label):
+        last = clean_label(text.rsplit(">", 1)[-1])
+        if _ACTION_RE.search(text) or _ACTION_RE.search(last) or _ACTION_WORD_RE.search(text):
+            return None
+        for rx in (_CREDENTIALS_RE, _NEVER_LIFTED_RE, _MOTION_RE, _OTHER_BY_HAND_RE, _IDENTITY_FIXED_RE, _NETWORK_RE):
+            if rx.search(text) or rx.search(raw):
+                return None
+        m = _IDENTITY_LIFTABLE_RE.search(text) or _IDENTITY_LIFTABLE_RE.search(raw)
+        found = found or (m.group(0) if m else None)
+    return found
+
+
+# The classes a network decision lifts a row from (lift_class): the words the logs and the decision's print use
+LIFT_NETWORK, LIFT_ADDRESS, LIFT_IDENTITY = "Wi-Fi or Bluetooth setting", "address screen", "identity or connection row"
+
+
+def lift_class(label: str) -> str | None:
+    """The class of the never-open list a network decision may lift `label` from, or None: a Wi-Fi or Bluetooth setting
+    or an address screen (never_open names NETWORK and nothing else, never_lifted nothing), or an identity, connection
+    or region row (identity_liftable)."""
+    why = never_open(label)
+    if not why:
+        return None
+    if why.startswith(NETWORK + ":") and not never_lifted(label):
+        return LIFT_ADDRESS if address_screen(label) else LIFT_NETWORK
+    return LIFT_IDENTITY if identity_liftable(label) else None
+
+
+def never_choose(row) -> str | None:
+    """Why no option of `row` is ever chosen, whatever a decision names (_NEVER_CHOOSE: the choice drops the link,
+    starts a connection or a pairing, or changes what no file puts back), or None."""
+    for r in readings(row):
+        m = _NEVER_CHOOSE_RE.search(r)
+        if m:
+            return f"no option of a row naming {m.group(0)!r} is chosen, whatever a decision names"
     return None
 
 
@@ -414,7 +585,9 @@ _NEVER_LIFTED_RE = re.compile(r"\b(?:format|delete)\b|initiali[sz]e|reset networ
 def identity_row(label: str) -> str | None:
     """Why no allowance may let a run set this row, or None: the camera's identity, a connection or the region (USB,
     language, NTSC/PAL, area and date, network identity: decision 8), every reading judged, as in never_open. A by-hand
-    row of sound or light (a volume) is not one: the owner's word for the row may open it."""
+    row of sound or light (a volume) is not one: the owner's word for the row may open it. Nor is a Wi-Fi or Bluetooth
+    setting or an address screen (network_words): no --allow opens one either (allow_refused), but a dated decision
+    naming the row may (network_lifted)."""
     for text in readings(label):
         m = _IDENTITY_RE.search(text)
         if m:
@@ -445,7 +618,8 @@ def screen_refused(text: str, allow=()) -> str | None:
     names, anywhere, what the never-open list holds (an action's name as a word, credentials, a by-hand row, sound,
     light or motion, "reset"). A name the run was given (drive.py --allow) lifts its own words on the screen, never what
     never_lifted names (the cards, Initialize, Reset Network Set., credentials, and the camera's identity, a connection
-    or its region: decision 8). Fails closed: a word in a footer or a description refuses too."""
+    or its region: decision 8), nor a Wi-Fi or Bluetooth setting or an address screen, whatever a decision names: a
+    vouched Enter never goes out where one is named. Fails closed: a word in a footer or a description refuses too."""
     for r in readings(text):
         m = _NEVER_LIFTED_RE.search(r)
         if m:
@@ -453,6 +627,10 @@ def screen_refused(text: str, allow=()) -> str | None:
         m = _IDENTITY_RE.search(r)
         if m:
             return f"the screen reads {m.group(0)!r}: by hand only, whatever is allowed (docs/decisions/0008)"
+        m = _NETWORK_RE.search(r)
+        if m:
+            return (f"the screen reads {m.group(0)!r}: a Wi-Fi or Bluetooth setting or an address screen, never vouched "
+                    "for (docs/decisions/0008)")
     names = [n for n in (clean_label(fold(m)) for m in allow) if n]
     for r in readings(text):
         for n in names:
@@ -472,10 +650,12 @@ def owner_may_approve(reason: str | None) -> bool:
 
 
 def approved_rows(scope: dict) -> set:
-    """The rows a dated owner decision in a reviewed scope names: {"date": "YYYY-MM-DD", "rows": [...], "why"}."""
+    """The rows a dated owner decision in a reviewed scope names: {"date": "YYYY-MM-DD", "rows": [...], "why"}. A
+    decision that says what it lifts ("lifts": a network decision, network_decided) is no such approval and is left
+    out."""
     out = set()
     for d in scope.get("decisions") or []:
-        if isinstance(d, dict) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(d.get("date", ""))):
+        if isinstance(d, dict) and "lifts" not in d and re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(d.get("date", ""))):
             out |= {str(r) for r in d.get("rows") or []}
     return out
 
@@ -485,11 +665,19 @@ def allow_refused(label: str) -> str | None:
     credentials (decisions 4, 5 and 9), and the camera's identity, a connection or its region (decision 8), whatever the
     owner said: never_lifted. drive.py and card_actions.py judge their --allow so, and every prover through
     runner.allowed_or_exit, before anything connects; path_refused, live.open_refused and screen_refused refuse those
-    rows however a run named them."""
+    rows however a run named them. A Wi-Fi or Bluetooth setting or an address screen (network_words, whatever else the
+    label is) is refused too: only a dated owner decision naming the row opens it, for a run given --network
+    (network_lifted), never a run's --allow."""
     if re.search(r"\b(format|delete)\b", label, re.I):
         return "nothing on the cards is formatted or deleted remotely, not even its settings (docs/decisions/0004)"
     hard = never_lifted(label)
-    return f"{hard}; no --allow opens it" if hard else None
+    if hard:
+        return f"{hard}; no --allow opens it"
+    net = network_words(label)
+    if net:
+        return (f"{net}: by hand only, and opened remotely only where a dated owner decision names the row (--network, "
+                "docs/decisions/0008); no --allow opens it")
+    return None
 
 
 def named(label: str, allow) -> bool:
@@ -509,18 +697,383 @@ def allowance(labels, today: str | None = None) -> str:
     return "; ".join(f"the owner allowed {x} remotely, {day}" for x in labels)
 
 
-def path_refused(path: list, approved: set = frozenset(), allowed=()) -> str | None:
+def path_refused(path: list, approved: set = frozenset(), allowed=(), network=frozenset()) -> str | None:
     """Why a row (its path of labels) is not opened, or None: never_open on any label of the path, except a
     sound/light/motion reason for a row a dated owner decision names ("Silent Mode Settings > ... > Shutter When
-    Pwr OFF"), or a label the run was given with --allow (never what allow_refused refuses)."""
+    Pwr OFF"), a label the run was given with --allow (never what allow_refused refuses), or a Wi-Fi or Bluetooth
+    setting a network decision names (`network`, network_decided's rows, for a run given --network: network_lifted,
+    never an address screen). A label with a network setting's or an address screen's words in it is lifted by the
+    last alone, whatever other reason it reads as."""
     name = " > ".join(path)
     for label in path:
         why = never_open(label)
-        if why and label in allowed and not allow_refused(label):
+        if not why:
             continue
-        if why and not (owner_may_approve(why) and name in approved):
+        if network and network_lifted(label, network):
+            continue
+        if label in allowed and not allow_refused(label):
+            continue
+        if not (owner_may_approve(why) and name in approved and not network_words(label)):
             return why
     return None
+
+
+def _valid_day(text) -> bool:
+    """A calendar day written YYYY-MM-DD, today or before ("2026-11-13"; never "2026-13-45", "someday" or a day still to
+    come: a decision is one the owner has made)."""
+    import datetime
+    if not isinstance(text, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", text):
+        return False
+    try:
+        day = datetime.date.fromisoformat(text)
+    except ValueError:
+        return False
+    return day <= datetime.date.today()
+
+
+def network_refused(row) -> str | None:
+    """Why a network decision cannot name `row`, or None: the row must be one label as the camera writes it (no path),
+    of a class a network decision lifts (lift_class: a Wi-Fi or Bluetooth setting, an address screen, or an identity,
+    connection or region row of _IDENTITY_LIFTABLE) and of nothing else. Credentials, the cards, Initialize, Reset
+    Network Set., an action (SSID/PW Reset, WPS Push, Pairing, Reset Transfer Status), the identity rows that stay
+    closed (_IDENTITY_FIXED: the serial number among them, and the rows whose opening may start or end a connection or
+    act, _NOT_LIFTED_WHY saying why), anything that reads as another class too, and a name the list does not know or
+    that names a group ("Wi-Fi") are refused."""
+    if not isinstance(row, str) or not row.strip():
+        return "a row is named by its label, as the camera writes it"
+    if ">" in row:
+        return "a row is named by its own label, not a path"
+    if lift_class(row):
+        return None
+    for rx, why in _NOT_LIFTED_WHY:
+        if any(rx.search(r) for r in readings(row)):
+            return f"{why}: no decision opens it (docs/decisions/0008)"
+    hard = never_lifted(row)
+    if hard:
+        return hard
+    why = never_open(row)
+    if not why:
+        return ("not a row the never-open list names that a decision may open: a group's or an unknown name opens "
+                "nothing")
+    return f"{why}: no decision opens that"
+
+
+def plain(text) -> str:
+    """A label, an option or a value as the network checks compare them: folded (fold), the signs at either end that an
+    icon, a radio button or a stop reads as left out (a + or - sign kept), spacing one space, case folded. No short
+    first word is dropped (clean_label drops one for the other guards, an icon OCR reads as letters): the whole text is
+    compared, so "No Wi-Fi Connect" is never "Wi-Fi Connect"."""
+    t = re.sub(r"^[^0-9A-Za-z(+\-±]+|[^0-9A-Za-z)+\-±%]+$", "", fold(text).strip())
+    return " ".join(t.split()).casefold()
+
+
+# The words a button or a key says (an OK, a Cancel, a keyboard's Done), which no decision names as an option: Enter on
+# one commits or cancels, whatever the decision meant (option_refused)
+BUTTON_WORDS = frozenset({"ok", "enter", "execute", "yes", "no", "cancel", "set", "done"})
+
+
+def option_refused(option) -> str:
+    """Why a network decision may not name `option` as one the kit chooses, or "": an option is a row's own value as
+    the list writes it ("On", "Off", "Enable", "5GHz"), compared folded (plain). Refused: no text, one character (a
+    keyboard's key, a lone digit), a button's word (BUTTON_WORDS: OK, Execute, Cancel, Done...), and anything the
+    never-open list names (never_open: credentials, an action, an identity or connection row) or that names identity or
+    credentials on a screen (identity_screen: a password, an SSID, a PIN, a pairing)."""
+    seen = plain(option) if isinstance(option, str) else ""
+    if not seen:
+        return "an option is named by its text, as the list writes it"
+    if len(seen) == 1:
+        return "one character is a keyboard's key or a digit, never an option a decision names"
+    if seen in BUTTON_WORDS:
+        return "a button's word, which commits or cancels, never an option a decision names"
+    why = never_open(option) or identity_screen(option)
+    return f"it reads as what no decision lets the kit choose ({why})" if why else ""
+
+
+def _network_decisions(scope) -> tuple:
+    """(rows {row: date}, options {row: [options a decision lets the kit choose]}, refusals) of a reviewed scope's
+    network decisions: network_decided's reading, with each decision's "options"."""
+    rows, options, refusals = {}, {}, []
+    decisions = scope.get("decisions") if isinstance(scope, dict) else None
+    for i, d in enumerate(decisions if isinstance(decisions, list) else []):
+        if not isinstance(d, dict) or d.get("lifts") != NETWORK_LIFT:
+            continue
+        where, day = f"decision {i + 1}", d.get("date")
+        if not _valid_day(day):
+            refusals.append(f"{where}: its date {day!r} is not a day written YYYY-MM-DD, today or before, so it lifts "
+                            "nothing")
+            continue
+        if not isinstance(d.get("why"), str) or not d["why"].strip():
+            refusals.append(f"{where} ({day}): it says no why, so it lifts nothing")
+            continue
+        named = d.get("rows")
+        if not isinstance(named, list) or not named:
+            refusals.append(f"{where} ({day}): it names no rows")
+            continue
+        accepted = []
+        for row in named:
+            why = network_refused(row)
+            if why:
+                refusals.append(f"{where} ({day}) names {row!r}: {why}")
+            else:
+                rows.setdefault(row.strip(), day)
+                accepted.append(row.strip())
+        chosen = d.get("options")
+        if chosen is None:
+            continue
+        if not isinstance(chosen, dict):
+            refusals.append(f"{where} ({day}): its \"options\" is not an object naming, for a row it names, the options "
+                            "the kit may choose ({\"<row>\": [\"<option>\", ...]})")
+            continue
+        listed = {r.strip() for r in named if isinstance(r, str)}
+        for row, opts in chosen.items():
+            if not isinstance(row, str) or row.strip() not in listed:
+                refusals.append(f"{where} ({day}): its \"options\" name {row!r}, a row it does not name in \"rows\"")
+            elif not isinstance(opts, list) or not opts or not all(isinstance(o, str) and plain(o) for o in opts):
+                refusals.append(f"{where} ({day}): its \"options\" for {row!r} are not a list of option names")
+            elif any(option_refused(o) for o in opts):
+                bad = next(o for o in opts if option_refused(o))
+                refusals.append(f"{where} ({day}): its \"options\" for {row!r} name {bad!r}: {option_refused(bad)}")
+            elif address_screen(row):
+                refusals.append(f"{where} ({day}): its \"options\" name {row!r}, an address screen, which has no "
+                                "option to choose")
+            elif never_choose(row):
+                refusals.append(f"{where} ({day}): its \"options\" name {row!r}: {never_choose(row)} (the choice drops "
+                                "the link, starts a connection or a pairing, or changes what no file puts back)")
+            elif row.strip() in accepted:
+                have = options.setdefault(row.strip(), [])
+                have += [o.strip() for o in opts if plain(o) not in {plain(x) for x in have}]
+    return rows, options, refusals
+
+
+def network_decided(scope) -> tuple[dict, list]:
+    """({row: the decision's date}, [why each other thing is refused]) of a reviewed scope's dated owner decisions that
+    open Wi-Fi and Bluetooth rows: {"lifts": "network", "date": "YYYY-MM-DD", "rows": [labels], "why": "...", and,
+    to let the kit choose some options, "options": {"<row>": ["<option>", ...]}} under "decisions" (decision 8). A
+    decision without "lifts": "network" counts for nothing here (a motion decision, or one that names a row to keep it
+    by hand, as the a1 II's owner's of 2026-10-30 named Bluetooth Rmt Ctrl); one with it but no valid date (a day today
+    or before), no why or no rows is refused whole; each row it names that network_refused refuses (credentials,
+    identity, an action, the serial number, a vague name) is refused alone, and so is an "options" that is no object, or
+    names a row the decision does not name, an address screen, no list of options or an option option_refused refuses
+    (one character, a button's word, a name of the never-open list or of identity). A row named twice keeps its first
+    date. The options are network_options'."""
+    rows, _, refusals = _network_decisions(scope)
+    return rows, refusals
+
+
+def network_options(scope) -> dict:
+    """{row: [the options a dated owner decision lets the kit choose in it]} for the rows network_decided accepts. A
+    row with none is opened to look only: its options are read, and none is chosen (look_refused)."""
+    return _network_decisions(scope)[1]
+
+
+def network_lifted_row(lit: str, decided, screens: bool = False, values=None) -> str | None:
+    """The row of `decided` (a network decision's rows) that opens the row whose text, as read, is `lit`, or None.
+    The text must be of a class a network decision lifts and of nothing else (lift_class: a Wi-Fi or Bluetooth setting
+    or an address screen, never_lifted naming nothing; or an identity, connection or region row of _IDENTITY_LIFTABLE,
+    identity_liftable); the text, compared whole (plain: no first word dropped), must start with a row the decision
+    names (each one a decision may name: network_refused), and what follows the label must be nothing or one of that
+    row's own values (`values`, {row: [values]} as the page model and the definition know them: a menu row's bar
+    carries its value after its label); with no values known for the row, nothing may follow. So "Wi-Fi Connect On"
+    opens Wi-Fi Connect where On is one of its values, and "Wi-Fi Connect Settings" or "No Wi-Fi Connect" never do. An
+    address screen only where the caller looks at one (`screens`: kit/drive.py alone), never for the walker or the
+    provers."""
+    cls = lift_class(lit) if decided else None
+    if cls is None or (cls == LIFT_ADDRESS and not screens):
+        return None
+    seen = plain(lit)
+    for row in decided:
+        if network_refused(row) or (not screens and address_screen(row)):
+            continue
+        want = plain(row)
+        if not want or not seen.startswith(want) or seen[len(want):len(want) + 1].isalnum():
+            continue
+        rest = plain(seen[len(want):])
+        if not rest or rest in {plain(v) for v in (values or {}).get(row, ()) if plain(v)}:
+            return row
+    return None
+
+
+def network_lifted(lit: str, decided, screens: bool = False, values=None) -> bool:
+    """Whether a network decision opens the row whose text is `lit` (network_lifted_row)."""
+    return network_lifted_row(lit, decided, screens, values) is not None
+
+
+def network_allowance(decided, options=None) -> str:
+    """The words a proof line carries for the rows a network decision opened ("" when none): {row: date}, and the
+    options it lets the kit choose ({row: [options]})."""
+    def chosen(row) -> str:
+        opts = (options or {}).get(row)
+        return f" and choose {', '.join(opts)}" if opts else ", to look only"
+    return "; ".join(f"the owner decided on {day} that the kit may open {row} remotely{chosen(row)}"
+                     for row, day in decided.items())
+
+
+# Inside a row a network decision opened (its list, its panel, whatever it led to), the keys that read its options or
+# close it; every other key can choose or commit an option (Enter, a carousel's or a panel's Right, a dial)
+LOOK_KEYS = frozenset({"up", "down", "ms_up", "ms_down", "menu"})
+
+
+def look_refused(key, lit, row: str, options=()) -> str:
+    """Why `key` may not go out while the row `row` a network decision opened is open, or "": up, down and MENU
+    (LOOK_KEYS) read its options or close it; Enter (or the multi-selector's centre) chooses only an option the decision
+    names for the row (`options`), the lit text (`lit`, as read now) being that option once folded (plain): an
+    unreadable or misread one refuses. Every other key (Right, Left, a dial, C4...) can commit a carousel's or a
+    panel's option and is refused. A row with no option named is opened to look only."""
+    k = canonical_input(key)
+    if k in LOOK_KEYS:
+        return ""
+    if k in ("enter", "ms_enter"):
+        if never_choose(row):
+            return f"inside {row!r}: {never_choose(row)} (docs/decisions/0008)"
+        if not options:
+            return (f"the owner's decision opens {row!r} to look only: no option of it is chosen unless the decision names "
+                    "it (\"options\", docs/decisions/0008)")
+        if not plain(lit):
+            return f"the lit option inside {row!r} cannot be read, so nothing is chosen"
+        if plain(lit) not in {plain(o) for o in options}:
+            return f"the lit option {str(lit).strip()!r} is not one the decision lets the kit choose in {row!r}"
+        return ""
+    return (f"{key!r} could choose or commit an option inside {row!r}, which a decision opens to look at its options: "
+            "only up, down, MENU and Enter on an option the decision names go out there (docs/decisions/0008)")
+
+
+# What a screen met inside a row a network decision opened may hold that names the camera's identity, a connection or
+# credentials: a pairing screen ("Pairing", "Searching..."), a connecting notice naming an SSID, an access point or a
+# device's name, an address. Every pattern of _IDENTITY, _CREDENTIALS and _ADDRESS_SCREENS, and these words besides
+_IDENTITY_SCREEN = [r"pairing", r"paired", r"ssid", r"access point", r"device name", r"dev[il1|!]ce\s?addr",
+                    r"mac\s?addr", r"ip\s?addr", r"password", r"pass\s?key", r"\bpw\b", r"\bwps\b", r"\bpin\b",
+                    r"searching", r"awaiting\s?connect", r"connecting", r"connected to", r"connect\s?to\b", r"user\s?name",
+                    r"account", r"server"]
+_IDENTITY_SCREEN_RE = re.compile("|".join(_IDENTITY_SCREEN + _IDENTITY + _CREDENTIALS + _ADDRESS_SCREENS))
+# What, on a screen met inside an identity or connection row a decision opened, gets MENU alone and nothing of its text
+# kept: credentials, and a connection, a pairing or a network list in the making (an SSID list, an access point, a
+# pass key or PIN, "Searching...", "Connecting...")
+_SECRET_SCREEN = [r"ssid", r"access point", r"password", r"pass\s?key", r"\bpw\b", r"\bpin\b", r"pairing",
+                  r"searching", r"awaiting\s?connect", r"connecting", r"connected to", r"connect\s?to\b", r"\bwps\b"]
+_SECRET_SCREEN_RE = re.compile("|".join(_SECRET_SCREEN + _CREDENTIALS))
+# the kinds of screen whose text may be shown inside such a row when it holds no such word: the row's own list or
+# carousel, a notice, and the menu pages around it; any other kind (unknown above all) is shown as its field names
+SHOWN_KINDS = frozenset({"list", "dialog", "sidelist", "checklist", "notice", "menu", "submenu", "tiles", "shooting"})
+
+
+def identity_screen(text) -> str | None:
+    """Why a screen's whole text names the camera's identity, a connection or credentials (any reading:
+    _IDENTITY_SCREEN), or None. Inside a row a network decision opened, such a screen gets MENU alone, no reader, and
+    its text is shown and kept as its field names only (network_withheld)."""
+    for r in readings(text):
+        m = _IDENTITY_SCREEN_RE.search(r)
+        if m:
+            return f"identity or credentials: {m.group(0)}"
+    return None
+
+
+_QUOTED_TEXT = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
+
+
+def quoted_withheld(message) -> str:
+    """A message with every quoted text in it withheld: what a run prints or keeps of a refusal or an error inside a
+    network row, or on an address run, whose quoted parts can be a screen's or a row's text."""
+    return _QUOTED_TEXT.sub("'(withheld)'", str(message))
+
+
+def inside_menu_only(cls: str, kind, text) -> str | None:
+    """Why only MENU may go out on a screen met inside a row a network decision opened from class `cls` (lift_class),
+    or None, its kind and whole text as read: an address screen always; inside an identity, connection or region row,
+    a screen of a kind whose text is not shown (SHOWN_KINDS: a keyboard, an address entry read as no known kind) or one
+    naming credentials or a connection or network list in the making (_SECRET_SCREEN); inside a Wi-Fi or Bluetooth
+    setting, a screen naming identity or credentials at all (identity_screen). Then no reader is asked either, and
+    nothing of the text is kept but its field names."""
+    if cls == LIFT_ADDRESS:
+        return "an address screen"
+    if cls == LIFT_IDENTITY:
+        if kind not in SHOWN_KINDS:
+            return f"a {kind!r} screen inside an identity row (a keyboard or an entry screen)"
+        for r in readings(text):
+            m = _SECRET_SCREEN_RE.search(r)
+            if m:
+                return f"credentials or a connection: {m.group(0)}"
+        return None
+    return identity_screen(text)
+
+
+def network_withheld(kind, text) -> str | None:
+    """Why a screen met inside a row a network decision opened is shown and kept as its field names alone
+    (address_fields), never as read, or None when its text may be: a kind not in SHOWN_KINDS, or a text naming identity
+    or credentials (identity_screen)."""
+    if kind not in SHOWN_KINDS:
+        return f"the screen reads as {kind!r}, no kind whose text is shown inside a network row"
+    return identity_screen(text)
+
+
+# The field names an address screen shows (Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address), each
+# with the readings a reader gives it: kit/drive.py shows and keeps these alone, never a value (address_fields)
+ADDRESS_FIELDS = {
+    "MAC Address": r"mac\s?addr(?:ess|\.)?",
+    "IP Address": r"ip\s?addr(?:ess|\.)?",
+    "Subnet Mask": r"subnet\s?mask",
+    "Default Gateway": r"default\s?gateway",
+    "Primary DNS Server": r"primary\s?dns(?:\s?server)?",
+    "Secondary DNS Server": r"secondary\s?dns(?:\s?server)?",
+    "IPv6 Link-local Address": r"ipv6\s?link\s?-?\s?local\s?addr(?:ess|\.)?",
+    "IPv6 Address": r"ipv6\s?addr(?:ess|\.)?",
+    "Link-local Address": r"link\s?-?\s?local\s?addr(?:ess|\.)?",
+    "Device Address": r"dev[il1|!]ce\s?addr(?:ess|\.)?",
+    "SSID": r"ssid",
+    "Device Name": r"dev[il1|!]ce\s?name",
+    "User Name": r"user\s?name",
+    "Server": r"server",
+}
+_FIELD_RES = [(name, re.compile(rx + r"(?![a-z0-9])")) for name, rx in ADDRESS_FIELDS.items()]
+
+
+def address_fields(lines) -> tuple[list, int]:
+    """(the field names, each once and in order, the count of lines withheld) of an address screen's OCR lines (each a
+    camkit.ocr Line or a text): a line that starts with a field name ADDRESS_FIELDS knows gives that name, as the list
+    writes it, never as the line reads; any other line (a value: an address, an SSID, a device name), and a field name
+    with anything after it on its line, counts as withheld. Never a value: what a run shows of such a screen."""
+    names, withheld = [], 0
+    for ln in lines or ():
+        text = str(getattr(ln, "text", ln) or "")
+        if not text.strip():
+            continue
+        found, whole = None, False
+        for s in _sources(text):
+            for r in (s.lower(), deslip(s.lower())):
+                r = re.sub(r"^[^a-z0-9]+", "", r)
+                for name, rx in _FIELD_RES:
+                    m = rx.match(r)
+                    if m:
+                        found, whole = name, bool(re.fullmatch(r"[\s.:;]*", r[m.end():]))
+                        break
+                if found:
+                    break
+            if found:
+                break
+        if found and found not in names:
+            names.append(found)
+        withheld += not (found and whole)
+    return names, withheld
+
+
+def screen_fields(lines, labels=()) -> tuple[list, int]:
+    """address_fields, keeping besides each line that is wholly one of `labels` (the menu's row labels, as the page model
+    and the definition know them: a row's label is no value) as that label is written there, never as the line reads:
+    what a --network run shows and keeps of a screen whose text it withholds. A row's value beside its label ("IP
+    Address Setting  Manual") is no whole label, and is withheld with it."""
+    known = {plain(x): x for x in labels or () if isinstance(x, str) and plain(x)}
+    names, withheld = [], 0
+    for ln in lines or ():
+        text = str(getattr(ln, "text", ln) or "")
+        if not text.strip():
+            continue
+        label = known.get(plain(text))
+        if label:
+            names += [label] if label not in names else []
+            continue
+        got, hidden = address_fields([text])
+        names += [n for n in got if n not in names]
+        withheld += hidden
+    return names, withheld
 
 
 # The one reset an owner's word lets a run open (decision 5; the a1 II's owner, 2026-11-11, for the public sample): a
@@ -669,7 +1222,8 @@ def profile_reset_dialog(text: str, profile: str) -> str:
     takes it for a confirmation (confirmation), some reading of it says reset, the profile's name and default in that
     order ("Reset PP1 to the default setting?"), every profile it names is that one (PP1, never PP10 or PP11 for it), and
     no reading names what no allowance opens (never_lifted: the cards, Initialize, Reset Network Set., credentials, the
-    camera's identity) or another reset's words (all, camera, network, Setting Reset). Anything else is no permission."""
+    camera's identity; network_words: a Wi-Fi or Bluetooth setting, an address screen) or another reset's words (all,
+    camera, network, Setting Reset). Anything else is no permission."""
     n = _profile_number(profile)
     if n is None:
         return f"{profile!r} is not a Picture Profile's name (PP and its number)"
@@ -677,8 +1231,8 @@ def profile_reset_dialog(text: str, profile: str) -> str:
         return "no text could be read on the screen"
     if not confirmation(text):
         return "the screen does not read as a confirmation"
-    if never_lifted(text):
-        return f"the screen reads {never_lifted(text)}"
+    if never_lifted(text) or network_words(text):
+        return f"the screen reads {never_lifted(text) or network_words(text)}"
     rs = readings(text)
     for r in rs:
         m = _NOT_PROFILE_RESET.search(r)

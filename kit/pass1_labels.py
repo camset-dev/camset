@@ -7,6 +7,13 @@ fields), reads the text under the cursor with Apple OCR, cropped where the pixel
 cursor (primary: the VLM took the saved radio item for the highlighted one, 2026-10-28), and asks
 vLLM (8 in parallel; cached by image) the same question as a second opinion ("agreed"). Writes
 <run>/options.jsonl: one line per option with its row path, index, frame and both readings.
+
+A run folder a --network run marked (camkit.vlm.LOCAL_MARKER: its frames may show what a network or identity row
+holds) is read with a local reader only (camkit.vlm.local_only_runs), and the tool stops before it reads a frame when
+the second reader is not local. A row such a run opened under a decision carries its class ("network", written by
+kit/crawl_run.py): a Wi-Fi or Bluetooth setting's options are read as any other's ("network" kept on each option's
+line for kit/tiebreak.py), an identity or connection row's are left out, no reader asked and no text kept
+(docs/decisions/0008).
 """
 import json
 import re
@@ -15,9 +22,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, ocr, paths, screen  # noqa: E402
+from camkit import jsonl, ocr, paths, safety, screen, vlm  # noqa: E402
 from camkit.frames import load  # noqa: E402
-from camkit.vlm import PROMPTS, make_reader, readers, role  # noqa: E402
+from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from runner import OcrUnavailable, read_frames  # noqa: E402
 from page_model import same_text  # noqa: E402
 
@@ -42,23 +49,37 @@ def main():
     shots = run / "shots"
     if not (run / "rows.jsonl").exists():          # nothing to read: never an empty options.jsonl over the old one
         sys.exit(f"{run}: no rows.jsonl (kit/crawl_run.py writes it); nothing read, options.jsonl left as it is")
+    vlm.local_only_runs(run)                  # a --network run's frames: local readers only (make_reader)
     rows = jsonl.read(run / "rows.jsonl")
-    jobs = []
+    jobs, left_out = [], 0
     for path, r in rows_with_frames(rows, ()):
+        net = r.get("network") or ""
+        if net and net != safety.LIFT_NETWORK:
+            # an identity or connection row (or a class not known here) a network decision opened: no reader asked,
+            # no text kept (docs/decisions/0008)
+            left_out += 1
+            continue
         frames = r["frames"]
         if frames and isinstance(frames[0], list):              # fields / grid: one list per field or row
             for fi, fl in enumerate(frames):
                 for k, fr in enumerate(fl):
                     if fr:
-                        jobs.append((path, r["kind"], (fi, k), fr))
+                        jobs.append((path, r["kind"], (fi, k), net, fr))
         else:
             for k, fr in enumerate(frames):
                 if fr:
-                    jobs.append((path, r["kind"], k, fr))
+                    jobs.append((path, r["kind"], k, net, fr))
     readers(stop=True)                        # none listed: its sentence, before any frame is read
+    if left_out:
+        print(f"{left_out} identity or connection rows a --network run opened: left out, no reader asked "
+              "(docs/decisions/0008)", flush=True)
     print(f"{len(jobs)} option frames to read", flush=True)
     cfg = role("second")
-    reader = make_reader(cfg)
+    try:
+        reader = make_reader(cfg)
+    except NoReader as e:                     # a --network run's frames, and a second reader that is not local
+        sys.exit(f"{e}: give the second role to a local reader (private/config.json \"roles\"); nothing read, "
+                 f"{run / 'options.jsonl'} left as it is")
     # one torn frame must not end a batch of thousands, nor pass for a frame without text: it is named, its OCR
     # reading left empty with the reason beside it ("ocr_unread"), and it never agrees, so pass1_map lists it for review
     try:
@@ -100,7 +121,7 @@ def main():
         return ocr.text_in(lines, (0, 52, 640, 420)).strip()
 
     def one(job):
-        path, kind, idx, fr = job
+        path, kind, idx, net, fr = job
         prompt = PROMPTS["fields" if kind == "fields" else "option"]
         try:
             v = reader.ask((shots / fr).read_bytes(), prompt)
@@ -120,7 +141,8 @@ def main():
         agree = (bool(o) and bool(vsel) and same_text(o, vsel)) or bool(stars)
         why = unread.get(shots / fr)
         return {"path": list(path), "kind": kind, "index": idx, "frame": fr, "label": o or vsel,
-                "agreed": agree and why is None, "vlm": v, "ocr": o[:200], **({"ocr_unread": why} if why else {})}
+                "agreed": agree and why is None, "vlm": v, "ocr": o[:200], **({"ocr_unread": why} if why else {}),
+                **({"network": net} if net else {})}
     with ThreadPoolExecutor(cfg.get("parallel", 8)) as ex, open(run / "options.jsonl", "w", encoding="utf-8", newline="\n") as out:
         for n, rec in enumerate(ex.map(one, jobs), 1):
             out.write(json.dumps(rec) + "\n")

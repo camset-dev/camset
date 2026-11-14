@@ -57,13 +57,38 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
-- The kit never opens Bluetooth Rmt Ctrl or Wi-Fi Frequency Band, Wi-Fi and Bluetooth settings that the playbook's
-  rule 3 keeps for the owner's hand (decision 8's network identity) and that no pattern of the never-open list caught,
-  so the walker opened them and a prover could change them; nor the screens that show the camera's network addresses,
-  Display Wi-Fi Info. and Display Wired LAN Info. (its MAC and IP addresses) and Disp Device Address (its Bluetooth
-  address), which saved frames, the OCR output and a reader's request would have held. As with the camera's other
-  identity and connection rows, no `--allow` opens them (`kit/camkit/safety.py`), and their proofs come from the
-  owner's hand changes. Display Serial Number, refused before as an action that an owner's `--allow` could still open,
+- The Wi-Fi and Bluetooth settings (Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt Ctrl,
+  Airplane Mode), the screens that show the camera's network addresses, and the identity, connection and region rows
+  whose opening starts or ends nothing (Wired LAN Connect, IP Address Setting, Remote Shoot Function, the USB rows but
+  USB Streaming, Language and the others decision 8 lists) stay by hand by default, and no `--allow` opens them; but a
+  dated owner decision in the reviewed scope that names the row (`"lifts": "network"`) opens it for a run given
+  `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with `--rows`). A row so named is looked at only: up,
+  down and MENU, never Enter, Right, Left or a dial inside it, until the screen read right after a MENU (or an Enter
+  on an option the decision names) is the shooting screen, or the page it was opened from with its lit bar on the row
+  itself: a camera slow to draw the row's list, a MENU the camera ignored, or a list or popup misread as a menu page,
+  never ends it. An option is chosen only where the decision names it (`"options"`; never one character, a button's
+  word or a name of the never-open list), never in a row whose choice drops a link, starts a connection or a pairing
+  or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl and Airplane Mode among them). A `--network` run
+  asks local readers only and marks its folder (`LOCAL_ONLY`), so every tool that reads its frames later
+  (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `kit/tools/reread_proofs.py`,
+  `kit/tools/reader_census.py`) builds local readers only and asks none about an identity row's frames; a prover's way
+  back to the shooting screen sends no OK to a notice that refuses MENU during such a run, nor ever to one that names
+  identity or credentials; a screen inside such a row that names identity or
+  credentials gets MENU alone and no reader; inside an identity row or on an address screen (`drive.py` only) the run
+  shows and keeps field names and row labels alone, never a value. Credentials, the SSID, WPS, access point and
+  pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a connection
+  (Smartphone Connection, Cloud Connection, Cloud Information, Network Streaming, USB Streaming, Tethering Connection
+  and Disconnection, FTP Function), Server Setting and Edit Device Name stay closed whatever a decision names, and a
+  decision naming one stops the run before anything connects. Without `--network` every row is refused as before
+  (decision 8, changed 2026-11-13: the a1 II's owner decided so for their camera; another camera's owner decides for
+  theirs, the playbook's rule 3).
+- The kit no longer opens Bluetooth Rmt Ctrl or Wi-Fi Frequency Band unasked, Wi-Fi and Bluetooth settings that the
+  playbook's rule 3 keeps for the owner's hand and that no pattern of the never-open list caught, so the walker opened
+  them and a prover could change them; nor the screens that show the camera's network addresses, Display Wi-Fi Info.
+  and Display Wired LAN Info. (its MAC and IP addresses) and Disp Device Address (its Bluetooth address), which saved
+  frames, the OCR output and a reader's request would have held. No `--allow` opens them (`kit/camkit/safety.py`):
+  only a dated owner decision naming the row, with `--network` (above). Display Serial Number, refused before as an
+  action that an owner's `--allow` could still open,
   is now never opened whatever is allowed: the body's serial number would be in every frame. These rows, Wi-Fi Connect
   and Wi-Fi Direct are refused too as a reader misreads them ("Wi-Fl", "Wi-FiInfo.", "Wired IAN Info.", "Dev1ce
   Addr.", "Bluetoth Rnt Ctrl"). No other row of the a1 II's menus is refused that was not before.

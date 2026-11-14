@@ -6,7 +6,16 @@ LiveCamera.press is the one way a walker, a prover or drive.py presses, so the r
 that opens the lit row (Right, Enter, the multi-selector's right or centre, however the key is spelled) on a menu or
 submenu page is refused when the lit row's text is on the never-open list (safety.never_open), unless the run named
 that row as one it may open (may_open: drive.py --allow, a dated owner decision) and the reason is one such a name can
-lift. It fails closed as drive.py does: when an orange bar is drawn but OCR reads no text in it, the vision reader is
+lift. A Wi-Fi or Bluetooth setting, an address screen or an identity row is lifted only by a dated owner decision that
+names the row, for a run given --network (network, safety.network_lifted; an address screen only where kit/drive.py
+looks at one, screens). Once such a row is open it is looked at only: up, down and MENU go out, Enter only on an option
+the decision names (options), never Right, Left or a dial, which can commit a carousel's or a panel's option
+(inside_refused, safety.look_refused); on an address screen, or a screen naming identity or credentials (a pairing
+screen: safety.identity_screen), MENU alone, and no reader is asked (camkit.vlm.HELD). The lock ends only when the
+screen read right after a MENU (or such an Enter) is the shooting screen, or the page the row was opened from with its
+lit bar on the row itself (network_left): never on a screen's kind alone, never on a later read, so a camera slow to
+draw the row's list, a MENU the camera ignored, or a list or a popup misread as a menu page, keeps it.
+It fails closed as drive.py does: when an orange bar is drawn but OCR reads no text in it, the vision reader is
 asked once for the row's label (reader_label), and the label it gives is judged the same way; when it gives none, the
 press is refused, since the never-open check cannot judge a row it cannot read (2026-11-08).
 
@@ -34,13 +43,16 @@ from pathlib import Path
 
 import numpy as np
 
-from . import ocr, safety, screen
+from . import ocr, safety, screen, vlm
 from .link import LinkError
 from .vlm import PROMPTS, ask_role, log_to, scrub
 
 
 # Presses that open the row under the cursor, and the screens whose lit bar is a row
 OPENS = frozenset({"right", "enter", "ms_right", "ms_enter"})
+# Inside a row a network decision opened, the presses that may close it: MENU, and an Enter inside_refused lets through
+# (an option the decision names); a network row's lock ends only after one of them (LiveCamera.network_left)
+CLOSES = frozenset({"menu", "enter", "ms_enter"})
 ROW_SCREENS = frozenset({"menu", "submenu"})
 UNREAD = "the row under the cursor could not be read: the never-open check cannot judge it"
 READER_TIMEOUT = 25.0   # s the vision reader gets to name an unread row (submenu_labels gives it as long)
@@ -150,17 +162,26 @@ def reader_label(path, timeout: float = READER_TIMEOUT) -> tuple[str, str]:
     return (label, "") if label else ("", "the vision reader gave the lit row no label")
 
 
-def open_refused(lit: str, may_open=frozenset()) -> str:
+def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: bool = False, values=None) -> str:
     """Why a press may not open the lit row, or "": the row's text is never-open, and no name the run was given
     lifts it (drive.py --allow lifts what it may; never what safety.never_lifted names: the cards, Initialize, Reset
-    Network Set., credentials, and the camera's identity, a connection or its region, decision 8)."""
+    Network Set., credentials, and the camera's identity, a connection or its region, decision 8). A Wi-Fi or Bluetooth
+    setting or an address screen (safety.NETWORK, or its words in a row of another reason) is lifted only by a dated
+    owner decision naming the row (`network`, safety.network_decided's rows, for a run given --network:
+    safety.network_lifted, its label followed by nothing or one of its `values`, an address screen only with
+    `screens`), never by the substring match of `may_open`."""
     why = safety.never_open(lit)
     if not why:
         return ""
+    if network and safety.network_lifted(lit, network, screens, values):
+        return ""                       # a network decision names it: a Wi-Fi or Bluetooth setting, an identity row
+    if why.startswith(safety.NETWORK + ":"):
+        return (f"the lit row {lit.strip()!r} is never opened ({why}; only a dated owner decision naming the row opens "
+                "it, with --network)")
     # a name and the reading compared as the guards fold them: "Pre-AF" names a "Pre‑AF" read with a no-break hyphen
     seen = safety.clean_label(safety.fold(lit))
     named = any(safety.clean_label(safety.fold(m)) and safety.clean_label(safety.fold(m)) in seen for m in may_open)
-    if named and not safety.never_lifted(lit):
+    if named and not safety.never_lifted(lit) and not safety.network_words(lit):
         return ""
     return f"the lit row {lit.strip()!r} is never opened ({why})"
 
@@ -192,10 +213,22 @@ def osd_kind(link) -> str:
 
 
 class LiveCamera:
-    def __init__(self, link, hdmi, run, may_open=()):
+    def __init__(self, link, hdmi, run, may_open=(), network=(), screens: bool = False, options=None, values=None):
         self.link, self.hdmi, self.run = link, hdmi, run
         log_to(run)                     # a reader that fails during the run is logged in its events.jsonl (camkit.vlm)
         self.may_open = frozenset(may_open)            # never-open rows this run was told it may open
+        # the Wi-Fi and Bluetooth rows, address screens and identity rows a dated owner decision opens for this run
+        # (--network: safety.network_decided's {row: date}), whether an address screen among them may open (kit/drive.py
+        # alone: screens), the options the decision lets the kit choose in each ({row: [options]}: none, look only) and
+        # the values the kit knows for each (runner.network_values: a menu row's bar carries its value after its label).
+        # While such a row is open (network_open, until network_left) only what safety.look_refused lets through goes
+        # out; on an address screen (address_open) or a screen naming identity or credentials (identity_open), MENU
+        # alone, and no reader is asked (camkit.vlm.HELD)
+        self.network = dict(network) if isinstance(network, dict) else frozenset(network)
+        self.screens = bool(screens)
+        self.options = dict(options or {})
+        self.values = dict(values or {})
+        self.network_open = self.address_open = self.identity_open = None
         # one row lifted for one press (kit/provers/pp_reset_run.py's Reset): a predicate (frame, lit) -> bool, set
         # by the caller for its next press and used up by that press; None (unset) changes nothing
         self.may_open_exact = None
@@ -227,26 +260,50 @@ class LiveCamera:
         exact = getattr(self, "may_open_exact", None)
         if exact is not None:
             self.may_open_exact = None      # one press only, whatever it is
+        self.inside_refused(key)            # inside a network row: look only, or MENU alone
+        # a MENU, or an Enter inside_refused let through (an option the decision names), may close the row once it has
+        # gone out: only then can the lock end (_inside_after)
+        closes = getattr(self, "network_open", None) is not None and safety.canonical_input(key) in CLOSES
         self._fresh(key)                    # the screen the press is judged on is never one the camera has left
         # the never-open check judges the key as the guards read it (" right" and "Right" are Right), so a padded or
         # look-alike spelling never skips it; the link then refuses any spelling that is not the key's own name
+        network, screens = getattr(self, "network", ()), getattr(self, "screens", False)
+        values, opened, address, cls = getattr(self, "values", {}), None, False, None
         if safety.canonical_input(key) in OPENS and self.screen.kind in ROW_SCREENS:
             lit = lit_text(self.frame.image, self.frame.path)
             if not lit.strip() and lit_box(self.frame.image) is not None:
                 lit = self.unread_row(key)          # a bar OCR read nothing in: the reader names it, or no press
-            why = open_refused(lit, self.may_open)
-            if why and exact is not None and not safety.never_lifted(lit) and exact(self.frame, lit):
+            why = open_refused(lit, self.may_open, network, screens, values)
+            if why and exact is not None and not safety.never_lifted(lit) and not safety.network_words(lit) \
+                    and exact(self.frame, lit):
                 self.run.log("press_lifted_exact", key=key, frame=self.frame.path.name, lit=lit)
                 why = ""
             if why:
-                self.run.log("press_refused", key=key, frame=self.frame.path.name, why=why)
-                raise safety.Refused(f"{key}: {why}")
+                self.refuse(key, why)
+            if network and getattr(self, "network_open", None) is None:
+                opened = safety.network_lifted_row(lit, network, screens, values)
+                cls = safety.lift_class(lit) if opened else None
+                address = cls == safety.LIFT_ADDRESS
         judged = self.judged_screen(key)
         t = time.monotonic()
         before = self.screen
         # the safety allow-list, the STOP check, C4's screen check and the shooting screen's live there: the screen
         # read last goes with it
         self.link.press(key, hold_ms, allow=allow, screen=judged, on_shooting=on_shooting)
+        if closes:
+            self.menu_went_out()
+        if opened is not None:
+            # a row a network decision opens: from here, whatever its screen reads as, look only (inside_refused), and
+            # on an address screen MENU alone, no reader asked, until a MENU (or an Enter on a named option) has gone
+            # out and the page it was opened from, or the shooting screen, is back (_inside_after). "menus": the
+            # link's count of MENU presses now, so that a MENU sent past this camera (a cleanup press) counts too
+            self.network_open = {"row": opened, "address": address, "class": cls, "frame": self.frame.path.name,
+                                 "from": before, "closing": False, "menus": getattr(self.link, "menus", None)}
+            self.run.log("network_row_opened", key=key, frame=self.frame.path.name, row=opened, lifted_from=cls)
+            if address:
+                self.address_open = self.frame.path.name
+                vlm.HELD = "an address screen is open"
+                self.run.log("address_screen_opened", key=key, frame=self.frame.path.name)
         # every press expects a change: a press that seems ignored gets a full second before it counts
         # as "nothing happened" (Picture Profile: a Down showed no change within 0.5 s, 2026-10-28)
         f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
@@ -276,6 +333,98 @@ class LiveCamera:
         self._seen = self._moves()
         self.run.log("press", key=key, frame=f.path.name, screen=self.screen.kind, moved=moved,
                      timing=self.hdmi.timing)
+        self._inside_after()
+
+    def inside_refused(self, key: str) -> None:
+        """Refused, logged, for a key that may not go out while a row a network decision opened is open
+        (network_open): on an address screen or a screen naming identity or credentials, any key but MENU; else what
+        safety.look_refused refuses (anything but up, down, MENU, and Enter on an option the decision names, read off
+        the lit bar now). Whatever kind the screen reads as."""
+        inside = getattr(self, "network_open", None)
+        if inside is None:
+            return
+        canon = safety.canonical_input(key)
+        if inside["address"] or getattr(self, "identity_open", None):
+            why = "" if canon in safety.SHOOTING_FREE else (
+                f"{'an address screen' if inside['address'] else 'a screen naming identity or credentials'} is open "
+                f"(on {getattr(self, 'address_open', None) or self.identity_open}): no key but MENU goes out on it "
+                "(docs/decisions/0008)")
+        else:
+            lit = lit_text(self.frame.image, self.frame.path) if canon in ("enter", "ms_enter") else ""
+            why = safety.look_refused(key, lit, inside["row"], getattr(self, "options", {}).get(inside["row"]))
+        if why:
+            self.refuse(key, why)
+
+    def refuse(self, key: str, why: str) -> None:
+        """A press refused: logged in the run's events.jsonl and raised (safety.Refused). On a --network run (network
+        given) the reason's quoted texts are withheld in both, since a row's bar can carry an identity value (a device's
+        name, an SSID, an address): safety.quoted_withheld."""
+        said = safety.quoted_withheld(why) if getattr(self, "network", None) else why
+        self.run.log("press_refused", key=key, frame=self.frame.path.name, why=said)
+        raise safety.Refused(f"{key}: {said}")
+
+    def menu_went_out(self) -> None:
+        """A MENU (or an Enter inside_refused let through) has gone out while a row a network decision opened is open:
+        the next read may end the lock, if it shows the row's page again (network_left, which spends this). Called by
+        press, by cancel_to_menu and by close (live.close), for the MENU presses they send past press."""
+        inside = getattr(self, "network_open", None)
+        if inside is not None:
+            inside["closing"] = True
+
+    def network_left(self) -> bool:
+        """Whether the row a network decision opened has been left: a MENU, or an Enter on an option the decision names,
+        has gone out just before this read (menu_went_out, or the link's count of MENU presses moved on), AND the screen
+        is the shooting screen, or the page the row was opened from (same_position) with its lit bar reading the row
+        itself (a popup over the dimmed page lights an option, never the row; a bar that cannot be read keeps the lock).
+        The evidence of that MENU or Enter is used once: whatever this read says, it is spent here, so the release is
+        judged on the screen read right after the closing key and never on a later one (a MENU the camera ignored, then
+        a Down onto a frame that reads as the page, ends nothing). Never on a screen's kind alone: a camera slow to draw
+        the row's list still shows the page after the press that opened it, and a list misread as a menu page reads as
+        one; MENU that lands on another page leaves the lock as it is, and another MENU closes the menu."""
+        inside = getattr(self, "network_open", None)
+        if inside is None:
+            return True
+        menus = getattr(self.link, "menus", None)
+        closing = inside.get("closing") or (isinstance(menus, int) and isinstance(inside.get("menus"), int)
+                                            and menus > inside["menus"])
+        inside["closing"], inside["menus"] = False, menus           # spent: a later read needs a new MENU
+        if not closing:
+            return False
+        if getattr(self.screen, "kind", None) == "shooting":
+            return True
+        try:
+            if not screen.same_position(self.screen, inside["from"]):
+                return False
+            lit = lit_text(self.frame.image, self.frame.path)
+        except Exception:                       # a screen or a bar that cannot be read is no way out
+            return False
+        row, seen = safety.plain(inside["row"]), safety.plain(lit or "")
+        return bool(row) and seen.startswith(row) and not seen[len(row):len(row) + 1].isalnum()
+
+    def _inside_after(self) -> None:
+        """After a press or a read while a row a network decision opened is open: the row is left once a MENU (or an
+        Enter on a named option) has gone out and the page it was opened from, or the shooting screen, is back
+        (network_left), and its locks go; else the screen's text is judged, and one naming identity or credentials
+        (safety.identity_screen: a pairing screen, a connecting notice naming an SSID) leaves MENU alone and no reader
+        asked (camkit.vlm.HELD) until the row is left. The log names the frame, never the text."""
+        inside = getattr(self, "network_open", None)
+        if inside is None:
+            return
+        kind = getattr(self.screen, "kind", None)
+        if self.network_left():
+            self.network_open = self.address_open = self.identity_open = None
+            vlm.HELD = None
+            self.run.log("network_row_left", frame=self.frame.path.name, row=inside["row"])
+            return
+        if getattr(self, "identity_open", None) is None:
+            try:
+                why = safety.inside_menu_only(inside.get("class"), kind, text_of(self))
+            except Exception:                   # a screen whose text cannot be read is no permission
+                why = "identity or credentials: the screen's text could not be read"
+            if why:
+                self.identity_open = self.frame.path.name
+                vlm.HELD = "a screen naming identity or credentials is open"
+                self.run.log("identity_screen", frame=self.frame.path.name)
 
     def judged_screen(self, key: str):
         """The screen a press or turn of `key` is judged on at the link: the screen read last, except a screen read as
@@ -299,6 +448,9 @@ class LiveCamera:
         """A dial turned `steps` (drive.py's dial.NAME.STEPS), judged at the link on the screen read last as a press is
         (judged_screen; on the shooting screen a dial changes the live exposure: on_shooting must name the dial); the
         screen read again after it."""
+        if getattr(self, "network_open", None) is not None:
+            self.refuse(name, f"a row a network decision opened ({self.network_open['row']!r}) is open: no dial is "
+                              "turned there, which could choose or commit an option (docs/decisions/0008)")
         self._fresh(name)
         self.link.dial(name, steps, screen=self.judged_screen(name), on_shooting=on_shooting)
         time.sleep(0.6)
@@ -310,7 +462,9 @@ class LiveCamera:
         as an OCR reading is."""
         label, why_not = reader_label(self.frame.path)
         if label:
-            self.run.log("lit_row_by_reader", key=key, frame=self.frame.path.name, label=label)
+            # on a --network run the label is not logged: a bar can carry an identity value after it
+            self.run.log("lit_row_by_reader", key=key, frame=self.frame.path.name,
+                         label="(withheld)" if getattr(self, "network", None) else label)
             return label
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=UNREAD, reader=why_not, by_hand=True)
         print(f"{key} refused on {self.frame.path.name}: {UNREAD} ({why_not}); if the row is one to open, open it on "
@@ -327,6 +481,7 @@ class LiveCamera:
         self.screen.frame_path = self.frame.path.name
         self.rest(f"{tag}-rest")
         self._seen = self._moves()
+        self._inside_after()
         return self.screen
 
     def rest(self, tag: str, tries: int = 3) -> screen.Screen:
@@ -346,12 +501,16 @@ class LiveCamera:
         """After a STOP or an error: MENU (cleanup presses skip the STOP check) until a menu page."""
         for _ in range(tries):
             if self.screen.kind in ("menu", "tiles", "shooting"):
+                self._inside_after()
                 return True
             t = time.monotonic()
             self.link.press("menu", cleanup=True)
+            self.menu_went_out()
             f, _ = self.hdmi.settle(self.frame, "cancel", expect_change=True, sent_at=t)
             self.frame, self.screen = f, screen.read(f)
             self._seen = self._moves()
+            self._inside_after()                # judged on the read right after this MENU (network_left spends it)
+        self._inside_after()
         return self.screen.kind in ("menu", "tiles", "shooting")
 
 
@@ -416,6 +575,7 @@ def close(cam, link):
             cam.cancel_to_menu()
             if cam.read().kind in ("menu", "tiles", "submenu"):
                 link.press("menu", cleanup=True)
+                getattr(cam, "menu_went_out", lambda: None)()       # a network row's lock may end on the shooting screen
                 time.sleep(1.0)
             if cam.refresh("closing").kind == "shooting":
                 return

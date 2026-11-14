@@ -16,7 +16,10 @@ role will not connect, and says once per reader, on standard error and in the ru
 during the run. The batch tools that read a whole run's frames afterwards build their readers themselves
 (make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py;
 kit/tools/reader_census.py --questions, which measures the questions themselves on recorded frames, asks a reader it
-names through ask_named_reader. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
+names through ask_named_reader. A --network run (docs/decisions/0008) asks local readers only (LOCAL_ONLY) and marks
+its run folder so (LOCAL_MARKER); every tool that reads a run folder's frames afterwards looks for that mark
+(local_only_runs) before it builds a reader, and make_reader builds no reader that is not local while LOCAL_ONLY is
+set. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
 screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet.
 """
 import base64
@@ -231,8 +234,12 @@ def with_options(prompt: str, options) -> str:
 
 def make_reader(cfg: dict, **override):
     """The reader a private/config.json "readers" entry describes: "kind": "anthropic" is Claude
-    (camkit.claude_reader), anything else an OpenAI-compatible /v1 server (Reader)."""
+    (camkit.claude_reader), anything else an OpenAI-compatible /v1 server (Reader). While LOCAL_ONLY is set (a --network
+    run, or a tool reading a run folder such a run marked: local_only_runs), a reader that is not local
+    (local_reader) is never built, and while HELD none is: NoReader, nothing sent (local_only). Every reader the kit
+    asks is built here, the batch tools' too."""
     cfg = {**cfg, **override}
+    local_only(cfg)
     if cfg.get("kind") == "anthropic":
         from .claude_reader import ClaudeReader
         return ClaudeReader(**cfg)
@@ -690,6 +697,10 @@ def _unasked(r: dict, roles: tuple, why: str) -> Check:
     return Check(str(r["name"]), kind_of(r), shown_model(r.get("model")), paid(r), tuple(roles), not_asked=why)
 
 
+# why a reader is not asked during a --network run (LOCAL_ONLY): verdict takes a local stand-in for its role
+NOT_LOCAL = "not a local reader, and a --network run asks only local readers (docs/decisions/0008)"
+
+
 def plan(listed: list, players: dict, ask_paid: str = "needed") -> tuple:
     """(the readers asked first, the paid ones asked only when no local reader of the first answered, the Checks of
     those never asked), in the order listed. The readers a run can use: each local one (it plays a role or may stand
@@ -701,7 +712,9 @@ def plan(listed: list, players: dict, ask_paid: str = "needed") -> tuple:
     first, later, skipped = [], [], []
     for r in listed:
         roles = players.get(r["name"], ())
-        if ask_paid == "all" or not paid(r):
+        if LOCAL_ONLY and not local_reader(r):
+            skipped.append(_unasked(r, roles, NOT_LOCAL))
+        elif ask_paid == "all" or not paid(r):
             first.append(r)
         elif not roles:
             skipped.append(_unasked(r, roles, "a run never asks it: a paid reader plays only the roles private/"
@@ -752,11 +765,16 @@ def verdict(checks: list) -> tuple:
     stand_ins, why = {}, ""
     for name in ("second", "third"):
         own = next((c for c in checks if name in c.roles), None)
-        if own is None or own.ok or not own.asked:
+        not_local = own is not None and not own.asked and own.not_asked == NOT_LOCAL      # a --network run's
+        if own is None or own.ok or (not own.asked and not not_local):
             continue
-        sub = next((r for r in good if str(r["name"]) != own.name and may_stand_in(r)), None)
+        sub = next((r for r in good if str(r["name"]) != own.name and may_stand_in(r)
+                    and (local_reader(r) or not LOCAL_ONLY)), None)
         if sub is not None:
             stand_ins[name] = sub
+        elif name == "second" and not_local:
+            why = (f"the second reader, {own.name!r}, is not a local reader, which a --network run asks only, and no "
+                   "local reader answered to stand in for it")
         elif name == "second":
             why = _second_missing(own, checks, listed)
     if not why and not good:
@@ -811,8 +829,8 @@ def _passed(checks: list) -> None:
     for name, sub in stand_ins.items():
         own = next(c for c in checks if name in c.roles)
         assign_role(name, sub)
-        print(f"reader {own.name!r} does not answer: {sub['name']!r} stands in as the {name} reader for this run",
-              flush=True)
+        print(f"reader {own.name!r} {'is not local' if own.not_asked == NOT_LOCAL else 'does not answer'}: "
+              f"{sub['name']!r} stands in as the {name} reader for this run", flush=True)
     for name in ("second", "third"):
         own = next((c for c in checks if name in c.roles), None)
         if own is not None and own.name in _SKIPPED and name not in stand_ins:
@@ -825,6 +843,17 @@ def _passed(checks: list) -> None:
 
 _FAILING: set = set()          # the readers whose failure during this run has been said (failing)
 _RUN = None                    # the run whose events.jsonl that is logged in (log_to), or None
+# Set by every --network run (runner.network_decided_or_exit: kit/drive.py, kit/crawl_run.py, kit/prove_run.py, which
+# may open a Wi-Fi or Bluetooth row a dated owner decision names, docs/decisions/0008): only a local reader (local_reader:
+# not paid, and its "url" a loopback, private or link-local address written as such, or localhost) is asked anything.
+# The start check asks no other, and takes a local one that answered as the stand-in for a role whose reader is not
+# local (plan, verdict); stand_in brings in no other; ask_role raises NoReader for any other before a request is sent,
+# cache or not, and the caller takes it as no answer
+LOCAL_ONLY = False
+# Set while a screen that names the camera's identity, a connection or credentials, or its addresses, is open inside a
+# network row (camkit.live.LiveCamera; safety.identity_screen): the reason, or None. ask_role asks no reader at all
+# meanwhile, local or not
+HELD = None
 
 
 def log_to(run) -> None:
@@ -852,8 +881,8 @@ def failing(cfg: dict, e: BaseException, timeout: float | None = None) -> None:
 def forget() -> None:
     """A run's readers' state cleared: the start check's verdict, the readers it skipped, the stand-ins, the failures
     said and the run they are logged in (a new run in the same process; the tests)."""
-    global _CHECKED, _RUN
-    _CHECKED, _RUN = None, None
+    global _CHECKED, _RUN, LOCAL_ONLY, HELD
+    _CHECKED, _RUN, LOCAL_ONLY, HELD = None, None, False, None
     _SKIPPED.clear()
     _FAILING.clear()
     _STANDING_IN.clear()
@@ -913,6 +942,8 @@ def stand_in(name: str, failed: dict) -> dict | None:
     for r in readers():
         if r["name"] == failed.get("name") or not may_stand_in(r) or r["name"] in _SKIPPED:
             continue
+        if LOCAL_ONLY and not local_reader(r):          # not even the tiny request goes to it
+            continue
         try:
             make_reader(r, timeout=20).ping()
         except Exception:
@@ -923,6 +954,96 @@ def stand_in(name: str, failed: dict) -> dict | None:
     return None
 
 
+# the networks a reader's address must be in to count as local: loopback, and the private and link-local ranges (RFC
+# 1918, RFC 3927, RFC 4193, RFC 4291), each as (its first address as a number, its prefix length), which
+# kit/tools/check_public.py reads as no address of anyone's
+_LOCAL_NETS = ((127 << 24, 8), (10 << 24, 8), ((172 << 24) | (16 << 16), 12), ((192 << 24) | (168 << 16), 16),
+               ((169 << 24) | (254 << 16), 16), (1, 128, 6), (0xFC << 120, 7, 6), (0xFE80 << 112, 10, 6))
+
+
+def _local_networks() -> list:
+    """_LOCAL_NETS as ipaddress networks (a third number 6: an IPv6 one)."""
+    import ipaddress
+    out = []
+    for net in _LOCAL_NETS:
+        address = ipaddress.IPv6Address(net[0]) if len(net) > 2 else ipaddress.IPv4Address(net[0])
+        out.append(ipaddress.ip_network((address, net[1])))
+    return out
+
+
+def local_reader(cfg: dict) -> bool:
+    """A reader on this computer or on the owner's own network: not paid (paid: no Claude, no "api_key_env"), and its
+    "url" an http:// or https:// address whose host is written as a loopback, private or link-local address
+    (_LOCAL_NETS), or is localhost. private/config.json marks no reader local or hosted, so a host written as a name
+    the kit cannot place (a server's name, which could resolve anywhere) counts as not local."""
+    import ipaddress
+    import urllib.parse
+    if paid(cfg) or cfg.get("kind") == "anthropic" or url_refused(cfg):
+        return False
+    try:
+        host = urllib.parse.urlsplit(str(cfg.get("url")).strip()).hostname or ""
+        ip = None if host.lower() == "localhost" else ipaddress.ip_address(host.split("%")[0])
+    except ValueError:
+        return False
+    return ip is None or any(ip in net for net in _local_networks() if net.version == ip.version)
+
+
+def local_only(cfg: dict, name: str | None = None) -> None:
+    """NoReader, before anything is sent: while HELD (an identity screen open), for every reader; while LOCAL_ONLY (a
+    --network run, or a tool reading a run folder one marked: local_only_runs), for a reader that is not local
+    (local_reader). name: the role asked, for the words."""
+    what = f"the {name} reader's question goes unanswered" if name else "it is not asked"
+    if HELD:
+        raise NoReader(f"no reader is asked while {HELD} (docs/decisions/0008), so {what}")
+    if LOCAL_ONLY and not local_reader(cfg):
+        raise NoReader(f"reader {cfg.get('name')!r} is not a local reader (a paid service, or an address that is not "
+                       f"this computer's or a private network's), and frames of a --network run go only to local "
+                       f"readers (docs/decisions/0008), so {what}")
+
+
+# The file a --network run writes in its run folder (runner.log_network_decided): its frames may show what a network or
+# identity row holds, so every tool that reads that folder's frames later asks local readers only (local_only_runs)
+LOCAL_MARKER = "LOCAL_ONLY"
+
+
+def mark_local_only(folder) -> Path:
+    """LOCAL_MARKER written in a run's folder: a --network run's, whose frames go to local readers only, now and
+    whenever a tool reads them (local_only_runs). Returns its path."""
+    f = Path(folder) / LOCAL_MARKER
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_text("frames of a --network run: local readers only (docs/decisions/0008)\n", encoding="utf-8")
+    return f
+
+
+def local_only_runs(*places) -> list:
+    """The run folders among `places` (each a run folder, or a file or folder inside one) that hold LOCAL_MARKER, looked
+    for in each place and the folders above it up to the runs folder (camkit.paths.runs_top); when any does, LOCAL_ONLY
+    is set for the rest of the process, and said once: every reader the tool then builds is a local one (make_reader).
+    Where a batch tool resolves the run folders it reads, it calls this before it builds a reader."""
+    global LOCAL_ONLY
+    try:
+        top = paths.runs_top().resolve()
+    except Exception:                       # no runs folder known: each place and its parents are looked in
+        top = None
+    found = []
+    for p in places:
+        if p is None:
+            continue
+        here = Path(p).resolve()
+        for folder in (here, *here.parents):
+            if top is not None and folder == top:
+                break
+            if (folder / LOCAL_MARKER).is_file():
+                found.append(folder)
+                break
+    found = list(dict.fromkeys(found))
+    if found and not LOCAL_ONLY:
+        LOCAL_ONLY = True
+        print(f"{', '.join(paths.shown(f) for f in found)}: frames of a --network run, so only local readers are asked "
+              "(docs/decisions/0008)", file=sys.stderr, flush=True)
+    return found
+
+
 def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     """The answer of the reader playing a role ("second", "third"); when it will not connect, the next configured
     reader that answers takes the role for the rest of the run (stand_in): the remote server was off, 2026-11-06.
@@ -930,8 +1051,11 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     submenu_labels, camkit.reading.ask); the batch tools the module docstring names are the exception. A reader that
     fails is said once in the run (failing); the failure goes on to the caller as before. A role whose reader did not
     answer the run's start check, with no reader standing in, raises NoReader at once, asking nothing: every caller
-    takes it as no answer, as from a reader that failed, without the timeout each question would cost."""
+    takes it as no answer, as from a reader that failed, without the timeout each question would cost. While LOCAL_ONLY
+    is set, a reader that is not local (local_reader) is never asked, and while HELD none is: NoReader at once, nothing
+    sent (local_only)."""
     cfg = playing(name)
+    local_only(cfg, name)
     if str(cfg.get("name")) in _SKIPPED:
         raise NoReader(f"reader {cfg.get('name')!r} did not answer the run's start check, and no reader stands in for "
                        f"it: the {name} reader's questions go unanswered for this run")
@@ -942,6 +1066,7 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
         if not isinstance(e, urllib.error.URLError) or standing_in(name) is not None or stand_in(name, role(name)) is None:
             raise
     cfg = playing(name)
+    local_only(cfg, name)
     try:
         return make_reader(cfg, timeout=max(timeout, 60)).ask(image, prompt)
     except Exception as e:

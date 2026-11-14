@@ -933,7 +933,7 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
                                                                        close=lambda: None)),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
                         ("wait_for", lambda *a, **k: None), ("Link", Link),
-                        ("LiveCamera", lambda link, eyes, run, may_open=(): Cam()),
+                        ("LiveCamera", lambda link, eyes, run, may_open=(), **kw: Cam()),
                         ("find_position", lambda cam, cycle, model: 0), ("go_to", lambda *a: True),
                         ("enter_any", lambda cam, path, i: None), ("bar_at", lambda cam, y: False),
                         ("screen_text", lambda cam, grip: ""), ("highlighted", lambda image, path: ""),
@@ -1105,7 +1105,8 @@ def test_live_camera_hands_a_dial_the_black_frame_judgement(tmp_path, monkeypatc
 # ---------------------------------------------------------------- decision 8: no allowance opens identity rows
 
 IDENTITY_ROWS = ["Language", "USB Connection Mode", "NTSC/PAL Selector", "Area/Date/Time Setting", "Date/Time Setup",
-                 "Wi-Fi Connect", "Device Name", "Bluetooth Function", "Airplane Mode", "USB LUN Setting"]
+                 "Device Name", "USB LUN Setting", "Wired LAN Connect", "IP Address Setting", "WPS Push",
+                 "Access Point Set.", "Pairing", "Manage Paired Device", "Edit Device Name"]
 
 
 @pytest.mark.parametrize("label", IDENTITY_ROWS)
@@ -1132,9 +1133,12 @@ def test_the_rows_an_owner_may_still_allow_stay_allowed():
 # draws them, then as a reader returns them (a capital I for an l, zeros, "rn" or "n" for "m", 1, l or | for i or l, 8
 # for B, a letter dropped, a space dropped or put in, Addr. for Address, Freq. for Frequency, Remote for Rmt, Cyrillic
 # and full-width look-alikes, a no-break hyphen or an en dash, a zero-width or no-break space, two spaces, a line
-# break, a stop after the label); and Wi-Fi Connect, which a pattern caught only as written before
+# break, a stop after the label); and Wi-Fi Connect, which a pattern caught only as written before. Since the owner's
+# decision of 2026-11-13 (decision 8) they are a class of their own, with Wi-Fi Connect, Bluetooth Function and Airplane
+# Mode (identity rows before): no --allow, approved motion decision, may_open or vouched Enter opens them, and only a
+# dated decision naming the row does (test_network_rows.py)
 NETWORK_ROWS = ["Bluetooth Rmt Ctrl", "Wi-Fi Frequency Band", "Display Wi-Fi Info.", "Display Wired LAN Info.",
-                "Disp Device Address"]
+                "Disp Device Address", "Wi-Fi Connect", "Bluetooth Function", "Airplane Mode"]
 NETWORK_READ_AS = [
     # Bluetooth Rmt Ctrl
     "BIuetooth Rmt Ctrl", "Bluet00th Rmt Ctrl", "Bluetooth Rrnt Ctrl", "Bluetooth Rnt Ctrl", "Bluetoth Rmt Ctrl",
@@ -1159,17 +1163,19 @@ NETWORK_READ_AS = [
 
 
 @pytest.mark.parametrize("label", NETWORK_ROWS + NETWORK_READ_AS)
-def test_wifi_and_bluetooth_rows_and_the_address_screens_never_open_whatever_is_allowed(label):
+def test_wifi_and_bluetooth_rows_and_the_address_screens_open_by_no_allowance(label):
     why = safety.never_open(label)
-    assert why and why.startswith("by hand only") and not safety.owner_may_approve(why), why
-    assert safety.path_refused([label]) and safety.path_refused(["Network", label])          # no allowance
+    assert why and why.startswith(safety.NETWORK + ":") and not safety.owner_may_approve(why), why
+    assert safety.identity_row(label) is None and safety.never_lifted(label) is None         # a class of its own
+    assert safety.network_words(label)
+    assert safety.path_refused([label]) and safety.path_refused(["Network", label])          # no decision
     assert live.open_refused(label) and safety.screen_refused(f"{label} MENU OK")
-    assert safety.identity_row(label) and safety.never_lifted(label)                          # an allowance naming it
+    assert safety.path_refused([label], {label})                     # a dated decision without "lifts": approved
     assert "0008" in safety.allow_refused(label) and "no --allow opens it" in safety.allow_refused(label)
     assert safety.path_refused([label], {label}, allowed=[label])
     assert safety.path_refused(["Network", label], allowed=["Network", label])
-    assert live.open_refused(label, {label})
-    assert safety.screen_refused(f"{label} MENU OK", allow=[label])
+    assert live.open_refused(label, {label})                         # may_open: drive.py's --allow, a prover's
+    assert safety.screen_refused(f"{label} MENU OK", allow=[label])  # a vouched Enter
 
 
 # Wi-Fi Direct Info. as a reader returns it: credentials (decision 9) however it is spelt, whatever is allowed
@@ -1211,8 +1217,9 @@ NETWORK_NEAR_WALKED = ["Wi-Fi", "Bluetooth", "Wired LAN", "Network Option", "Dis
                        "Display Quality", "Display Rotation", "Display All Info.", "Display as Group", "No Disp. Info.",
                        "Remote Shoot Setting", "Remote Zoom", "Lets a Bluetooth remote commander control the camera.",
                        "Write Serial Number", "Flicker Freq."]
-NETWORK_NEAR_REFUSED = {"Bluetooth Function": "by hand only: bluetooth function", "Pairing": "by hand only: pairing",
-                        "Manage Paired Device": "by hand only: paired", "Wi-Fi Connect": "by hand only: wi-fi connect",
+NETWORK_NEAR_REFUSED = {"Bluetooth Function": "network setting or address screen: bluetooth function",
+                        "Pairing": "by hand only: pairing", "Manage Paired Device": "by hand only: paired",
+                        "Wi-Fi Connect": "network setting or address screen: wi-fi connect",
                         "Wired LAN Connect": "by hand only: wired lan connect", "Wi-Fi Direct Info.": "credentials: wi-fi direct",
                         "IP Address Setting": "by hand only: ip address", "SSID/PW Reset": "action: ssid/pw reset",
                         "Display Serial Number": "action: display serial number"}

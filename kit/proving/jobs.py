@@ -9,7 +9,7 @@ OSD_ROWS and HELP_TEXT are the run's (main() sets jobs.OSD_ROWS and jobs.HELP_TE
 import re
 
 from camkit import ROOT, safety
-from runner import read_json
+from runner import read_json, reviewed_scope
 
 from . import base
 from .base import number
@@ -55,6 +55,14 @@ APPROVED: set = set()
 # never-open labels the operator named with --allow (the owner's word, per row): jobs() keeps the rows whose path
 # holds one even where the reviewed scope excludes it, and the camera may open those labels only
 ALLOWED: set = set()
+# the Wi-Fi and Bluetooth settings a dated owner decision in the reviewed scope opens for a --network run ({row: date},
+# prove_run's network_rows_or_exit; decision 8): jobs() lets a row whose path holds one through the never-open check
+# (safety.path_refused's network, never an address screen), and the camera may open them. Unlike ALLOWED it adds no row
+# to the scope: a row the reviewed scope excludes stays out of the proofs
+NETWORK: dict = {}
+# the options those decisions let the kit choose ({row: [options]}): the only options of such a row a proof chooses
+# (prove_run.network_jobs_or_exit sets each job's "choose"; the camera refuses any other, camkit.live)
+NETWORK_OPTIONS: dict = {}
 
 
 def scope_rows(scope: dict, map_rows: list) -> tuple:
@@ -72,7 +80,7 @@ def scope_rows(scope: dict, map_rows: list) -> tuple:
 
 def jobs(scope_names=None):
     """List rows of the map in the reviewed scope: {"path": [...], "labels": [option labels in order]}."""
-    reviewed = base.PASS1 / "pass2_scope_draft.json"
+    reviewed = reviewed_scope()
     # a fresh machine, or a new camera, has no reviewed scope yet (runs/ is not versioned): the template's exclusions
     scope = read_json(reviewed if reviewed.exists() else ROOT / "data" / "pass2_scope_template.json")
     allowed, excluded, approved = scope_rows(scope, read_json(base.MAP)["rows"])
@@ -97,7 +105,7 @@ def jobs(scope_names=None):
         if r["kind"] not in KINDS or (r["kind"] != "sidelist" and name not in allowed) or \
                 (r["kind"] != "sidelist" and scope_names and name not in scope_names):
             continue
-        if safety.path_refused(r["path"], approved, ALLOWED):
+        if safety.path_refused(r["path"], approved, ALLOWED, network=NETWORK):
             continue
         if r["kind"] == "fields":
             out[name] = iso_range_job(r) if name in COUPLED else fields_job(r)
@@ -105,7 +113,7 @@ def jobs(scope_names=None):
         if r["kind"] == "checklist":
             later = name.startswith(CHECK_LATER) and not (scope_names and name in scope_names)
             if name in allowed and not later and (not scope_names or name in scope_names) and \
-                    not safety.path_refused(r["path"], approved, ALLOWED):
+                    not safety.path_refused(r["path"], approved, ALLOWED, network=NETWORK):
                 out[name] = check_job(r)
             continue
         if r["kind"] == "sidelist":
@@ -227,6 +235,8 @@ def planned(job) -> set:
         return set(range(len(job["labels"]) + 1))            # each box, then the visit that restores the last
     if job["kind"] == "table":                               # functions with screens of their own MENU does not
         return {k for k in range(len(job["labels"])) if table_planned(job, k)}      # leave are passed over
+    if job.get("choose") is not None:                        # a network row: the options its decision names
+        return set(job["choose"])
     return set(range(len(job["labels"])))
 
 

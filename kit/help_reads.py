@@ -10,7 +10,8 @@ agreement the first vision reader's text is used and the frame is listed for rev
 
 Results: runs/<model>_fw<fw>/kit2_help/help_reads.jsonl (the camera's runs, camkit.paths), one line per guide (its
 first frame), which schema_update uses for the text. Answers are cached (runs/<model>_fw<fw>/_cache/vlm), so a rerun
-after more walking asks only the new frames.
+after more walking asks only the new frames. A help run folder a --network run marked (camkit.vlm.LOCAL_MARKER) is
+read by local readers only (camkit.vlm.local_only_runs).
 """
 import json
 import re
@@ -19,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths  # noqa: E402
+from camkit import jsonl, paths, vlm  # noqa: E402
 from camkit.vlm import make_reader, readers  # noqa: E402
 
 RUN = paths.module_root() / "kit2_help"
@@ -68,8 +69,22 @@ def decide(ocr: str, first: str, second) -> tuple[str, str]:
     return first or ocr, "review"
 
 
+def built_readers() -> list:
+    """The readers listed (none listed: its sentence, and nothing asked), each built; while camkit.vlm.LOCAL_ONLY is
+    set (the help run's folder a --network run marked: local_only_runs), the ones that are not local are left out
+    (make_reader builds none), and with none left the tool stops before it asks anything."""
+    listed = readers(stop=True)
+    if vlm.LOCAL_ONLY:
+        listed = [r for r in listed if vlm.local_reader(r)]
+        if not listed:
+            sys.exit("the help run's frames are a --network run's (docs/decisions/0008), and no local reader is listed: "
+                     "nothing asked")
+    return [make_reader(r) for r in listed]
+
+
 def main():
-    asked = [make_reader(r) for r in readers(stop=True)]       # none listed: its sentence, and nothing asked
+    vlm.local_only_runs(RUN)                 # a --network run's frames: local readers only (make_reader)
+    asked = built_readers()
     done = {}
     out_path = RUN / "help_reads.jsonl"
     for r in jsonl.read(out_path):

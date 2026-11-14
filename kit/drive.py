@@ -45,9 +45,9 @@ default: a run sends one only when --c4-press names it (--c4-press c4set, --c4-p
 run, and a --press using one without it is refused before anything connects; the word is said in the console, the
 run's events.jsonl and drive.jsonl, as --on-shooting's is. "help" (guarded Help) needs no word: AGENTS.md allows it.
 Rows on the never-open list are refused unless named with --allow; no --allow opens anything on the cards,
-Initialize, Reset Network Set., a credentials screen or the camera's identity, a connection or its region (decision 8:
-safety.allow_refused, judged on every --allow and every --path label before anything connects, and safety.never_lifted
-on the camera). A path "Picture Profile", "PP3", ... opens that profile's own panel (opening it makes it the Picture
+Initialize, Reset Network Set., a credentials screen or the camera's identity, a connection or its region, nor a Wi-Fi
+or Bluetooth setting or an address screen (decision 8: safety.allow_refused, judged on every --allow and every --path
+label before anything connects, and safety.never_lifted on the camera; --network below). A path "Picture Profile", "PP3", ... opens that profile's own panel (opening it makes it the Picture
 Profile in use).
 On the shooting screen a key does what the body makes of it (decision 21): a --press that meets the
 shooting screen, a "key@y" press among them, is refused there, and the screen cancelled, unless --on-shooting names the
@@ -59,6 +59,23 @@ Enter there still meets the Initialize and confirmation checks. camkit.link refu
 named for the press. A key named for the shooting screen changes what no settings file holds (a focus frame's place,
 the live exposure): the run's restore does not put it back, so the operator names, and presses, the keys that do (a
 frame moved with ms_left is put back with ms_right, both named).
+--network opens the Wi-Fi and Bluetooth rows, address screens and identity rows a dated owner decision in the reviewed
+scope names ({"lifts": "network", "date", "rows", "why"}: runner.network_decided_or_exit, docs/decisions/0008); without
+it, or for a row no decision names, they stay closed, and no --allow opens one. A --path label such a decision names
+needs no --allow. A decision naming credentials, an identity row that stays closed, an action or the serial number
+stops the run before anything connects. A --network run asks local readers only (camkit.vlm.LOCAL_ONLY) and marks its
+folder so (runner.log_network_decided) for the tools that read its frames later. Once a press has opened such a row it
+is looked at only (inside_refused, safety.look_refused) until the screen read right after a MENU, or an Enter on a
+named option, is the shooting screen or the page it was opened from with its lit bar on the row itself (network_left;
+never on a screen's kind alone, never on a later press): up, down and MENU go out, Enter only on an option the
+decision names ("options": {"<row>": ["<option>"]}), never Right, Left, a dial or C4;
+a screen there that names identity or credentials (safety.identity_screen: a pairing screen, a connecting notice) gets
+MENU alone, and any screen there whose kind the kit does not show or that names them is printed and kept as its field
+names alone (safety.network_withheld), as are the quoted texts of a refusal or an error. An address screen (Display
+Wi-Fi Info., Display Wired LAN Info., Disp Device Address: safety.address_screen) opens only here, only as the last
+label of --path and only where a decision names it: the run prints and keeps every screen as its field names alone
+(safety.address_fields: never an OCR text, in the console, drive.jsonl or the run's events), asks no reader once it is
+open (camkit.vlm.HELD), and once a press has opened a row, whatever the screen reads as, no key but MENU goes out.
 Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same run folder. The settings are downloaded before
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
 checked (docs/decisions/0015: every run ends restoring its start file).
@@ -77,10 +94,12 @@ from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused, press, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
+from camkit.screen import same_position  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import enter_any  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore, load_scan,  # noqa: E402
+from runner import (EXIT_UNRESTORED, add_network_argument, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
+                    known_labels, load_scan, log_network_decided, network_decided_or_exit, network_values,
                     restore_checked, restoring)
 
 
@@ -220,7 +239,8 @@ def shooting_press_refused(key: str, kind: str, on_shooting=()) -> str:
 
 
 def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
-                  vouched: bool = False, on_shooting=()) -> str:
+                  vouched: bool = False, on_shooting=(), network=frozenset(), screens: bool = False,
+                  values=None) -> str:
     """Why drive.py may not send this press, or "" when it may. Fails closed: a lit text that cannot be read is
     no permission (decisions 5 and 9). lit: the text in the orange cursor (highlighted); text: the whole screen's.
     --confirm (confirm) allows Enter on a confirmation, never on Initialize or Reset Network Set. The key is judged as
@@ -232,7 +252,9 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     on_shooting (--on-shooting, keys as canonical_input gives them): on a screen read as the shooting screen a key named
     there is judged by that naming (decision 21): it has no row to open, so the refusals of a lit text that cannot be
     read, and the lit row's never-open check, are not made; Enter still meets the Initialize and confirmation checks.
-    On every other screen, "unknown" among them, nothing changes."""
+    On every other screen, "unknown" among them, nothing changes.
+    network, screens, values (--network): the Wi-Fi and Bluetooth rows a dated owner decision opens, whether an
+    address screen among them may, and the values known for each (live.open_refused); --allow never lifts those rows."""
     canon = canonical_key(key)
     if canon is None:
         return f"{key!r} is not a key drive.py sends"
@@ -259,19 +281,127 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
-        return open_refused(lit, allow)
+        return open_refused(lit, allow, network, screens, values)
     return ""
 
 
 def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
-                   on_shooting=()) -> tuple:
+                   on_shooting=(), network=frozenset(), screens: bool = False, values=None) -> tuple:
     """(why the press is refused or "", whether it goes as vouched) for the --press `p` whose key is `key`, on a screen
     whose lit text is `lit`, whole text `text` and kind `kind`, as main() sends it: a press written enter!:regex is
     vouched for (press_refused's vouched) only when it is Enter, and goes as vouched only when nothing lit could be
-    read and nothing refuses it. on_shooting: the keys --on-shooting named (press_refused)."""
+    read and nothing refuses it. on_shooting: the keys --on-shooting named; network, screens, values: --network's
+    (press_refused)."""
     vouched = vouched_press(p) and key in ENTERS and not (kind == "shooting" and key in on_shooting)    # named instead
-    why = press_refused(key, lit, text, kind, confirm, allow, vouched, on_shooting)
+    why = press_refused(key, lit, text, kind, confirm, allow, vouched, on_shooting, network=network, screens=screens,
+                        values=values)
     return why, bool(vouched and not why and not (lit or "").strip())
+
+
+def inside_refused(key: str, cam, inside: dict, options) -> str:
+    """Why drive.py may not send `key` while a row a network decision opened is open (inside: {"row", "address",
+    "identity"}), or "", whatever the screen reads as: on an address screen, or once a screen named identity or
+    credentials, any key but MENU; else what safety.look_refused refuses (anything but up, down, MENU and Enter on an
+    option the decision names for the row, `options`, the lit bar read now)."""
+    name = press_name(key)
+    if inside["address"] or inside["identity"]:
+        return "" if name in safety.SHOOTING_FREE else (
+            f"{'an address screen' if inside['address'] else 'a screen naming identity or credentials'} is open inside "
+            f"{inside['row']!r}: no key but MENU goes out on it (docs/decisions/0008)")
+    lit = highlighted(cam.frame.image, cam.frame.path) if key in ENTERS else ""      # a dial or C4 is refused there too
+    return safety.look_refused(key, lit, inside["row"], (options or {}).get(inside["row"]))
+
+
+# Inside a row a network decision opened, the presses after which it may be left: MENU, and an Enter inside_refused
+# let through (an option the decision names)
+CLOSES = ("menu", *ENTERS)
+
+
+def network_left(now, opened_from, closing: bool, lit: str = "", row: str = "") -> bool:
+    """Whether the row a network decision opened has been left, the screen read right after the press being `now`:
+    only when that press was a MENU, or an Enter on an option the decision names (`closing`: CLOSES; main() spends it
+    on this one read, so a MENU the camera ignored never ends the row on a later press), AND `now` is the shooting
+    screen, or the page the row was opened from (`opened_from`, the screen read before the press that opened it:
+    same_position) with its lit bar (`lit`, as read now) reading the row `row` itself: a popup over the dimmed page
+    lights an option, never the row, and a bar that cannot be read keeps the row open. Never on a screen's kind alone,
+    never on the press that opened the row: a camera slow to draw the row's list still shows the page after it, and a
+    list misread as a menu page reads as one. MENU that lands on another page, or on the Main tiles, leaves the row
+    open: another MENU closes the menu onto the shooting screen."""
+    if not closing:
+        return False
+    if getattr(now, "kind", None) == "shooting":
+        return True
+    try:
+        if not same_position(now, opened_from):
+            return False
+    except Exception:                       # a screen that cannot be compared is no way out
+        return False
+    want, seen = safety.plain(row or ""), safety.plain(lit or "")
+    return bool(want) and seen.startswith(want) and not seen[len(want):len(want) + 1].isalnum()
+
+
+def network_path(paths: list, network) -> tuple:
+    """(the --path labels a dated owner decision opens, the address screen the path ends on or None, why the path is
+    refused or "") for --network's rows `network` ({row: date}; empty without --network). A label a decision names
+    (safety.network_lifted, an address screen included) needs no --allow; any other label is judged as before
+    (main). An address screen is looked at only as the last label of --path, and only one: enter_any would press Right
+    on any label before the last, taking it for a submenu."""
+    lifted = [x for x in paths if network and safety.network_lifted(x, network, screens=True)]
+    addresses = [x for x in paths if safety.address_screen(x)]
+    if addresses and (len(addresses) > 1 or addresses[-1] != paths[-1]):
+        return lifted, None, (f"--path {addresses[0]!r}: an address screen is opened only as the last label of --path, "
+                              "one per run, and looked at with one press (docs/decisions/0008)")
+    return lifted, (addresses[-1] if addresses and addresses[-1] in lifted else None), ""
+
+
+def camera_network(network, address) -> dict:
+    """The rows the camera's own checks may open for a --network run (LiveCamera, press_refused): the Wi-Fi and
+    Bluetooth settings the decision names, and the address screen the path ends on (address) when one does, never
+    another address screen the decision names."""
+    out = {r: d for r, d in network.items() if not safety.address_screen(r)}
+    if address:
+        out.update({r: d for r, d in network.items()
+                    if safety.address_screen(r) and safety.network_lifted(address, {r: d}, screens=True)})
+    return out
+
+
+def screen_lines(cam, grip: str | None) -> list:
+    """The texts of the OCR lines on the screen (and, held vertically, on the frame turned upright that screen_text
+    saved): what safety.address_fields reads an address screen from."""
+    f = cam.frame
+    out = [ln.text for ln in ocr.read([f.path])[f.path]]
+    up = f.path.with_name(f"{f.path.stem}_upright.png")
+    if grip and up.exists():
+        out += [ln.text for ln in ocr.read([up])[up]]
+    return out
+
+
+def shown_screen(cam, grip: str | None, text: str, hide: bool, labels=()) -> tuple:
+    """(what the console shows of a screen, what drive.jsonl keeps of it): its text, or, hidden, its field names and
+    whole row labels alone and the count of lines withheld (safety.screen_fields; labels: the menu's row labels as the
+    page model and the definition know them), never a value."""
+    if not hide:
+        return repr((text or "")[:150]), {"text": text}
+    names, withheld = safety.screen_fields(screen_lines(cam, grip), labels)
+    return f"fields {names}, {withheld} lines withheld", {"fields": names, "withheld": withheld}
+
+
+def network_shown(kind: str, text: str, inside, address: bool, network: bool) -> bool:
+    """Whether a screen is shown and kept as its field names and row labels alone (shown_screen's hide): every screen
+    of an address run; on a --network run, every screen inside an identity or connection row or an address screen a
+    decision opened, and any other screen whose kind the kit does not show or whose text names identity or credentials
+    (safety.network_withheld: a page whose rows carry a device's name, an SSID or an address beside their labels among
+    them). A run without --network shows every screen as ever."""
+    if address:
+        return True
+    if not network:
+        return False
+    if inside and inside.get("class") != safety.LIFT_NETWORK:
+        return True
+    return bool(safety.network_withheld(kind, text))
+
+
+withheld = safety.quoted_withheld        # a refusal's or an error's quoted texts withheld (address runs, network rows)
 
 
 # "help" presses C4, the trash button, which opens the In-Camera Guide on these screens when their
@@ -359,14 +489,24 @@ def main():
     ap.add_argument("--note", default="", help="what this drive tests (kept with the result)")
     add_scan_argument(ap)
     ap.add_argument("--grip", choices=sorted(GRIPS), help="the camera is held vertically: read turned screens upright")
+    add_network_argument(ap)
     a = ap.parse_args()
     for label in a.allow:
         # nothing on the cards (2026-11-01, the owner: "Please don't delete the cards"), Initialize, Reset Network Set.,
-        # credentials, nor the camera's identity, a connection or its region (decisions 4, 5, 8 and 9)
+        # credentials, nor the camera's identity, a connection or its region (decisions 4, 5, 8 and 9), nor a Wi-Fi or
+        # Bluetooth setting or an address screen, which only a dated decision opens (--network)
         why = safety.allow_refused(label)
         if why:
             sys.exit(f"--allow {label!r}: {why}")
+    # the dated owner decisions that open Wi-Fi and Bluetooth rows, read before anything connects (a decision naming
+    # what none opens stops the run here); logged in the run once it is open
+    network, options, _ = network_decided_or_exit() if a.network else ({}, {}, "")
+    lifted, address, why = network_path(a.path, network)
+    if why:
+        sys.exit(why)
     for label in a.path:
+        if label in lifted:
+            continue                # a dated owner decision names it (--network): no --allow, which none would give
         hard = safety.allow_refused(label)
         if hard:
             sys.exit(f"{label!r}: {hard}")
@@ -377,8 +517,31 @@ def main():
     if why:
         sys.exit(why)
     on_shooting = frozenset(safety.canonical_input(k) for k in a.on_shooting)
+    cam_network = camera_network(network, address)
+    # a row a network decision opened, while it is open: {"row", "class", "address", "identity", "from": the screen it
+    # was opened from, "closing": whether a MENU or an Enter on a named option has gone out since}
+    inside = None
+
+    def say(message: str) -> str:
+        """A refusal or an error as printed: its quoted texts withheld on a --network run (a row's bar can carry an
+        identity value) and on an address run."""
+        return withheld(message) if address or a.network else message
+
+    def shown(t: str) -> tuple:
+        """(console, record) of a screen whose text is t (network_shown): on a --network run its field names and whole
+        row labels alone wherever it may hold an identity value."""
+        hide = network_shown(cam.read().kind, t, inside, bool(address), a.network)
+        return shown_screen(cam, a.grip, t, hide, labels)
     cycle, model = load_scan(a.scan)
+    values = network_values(cam_network, model) if a.network else {}
+    labels = known_labels(model) if a.network else set()
     run = Run(a.run)
+    if a.network:
+        log_network_decided(run, network, options)
+    if address:
+        print(f"address screen {address!r}: each screen is shown and kept as its field names alone, no reader is asked "
+              "once it is open, and no key but MENU goes out (docs/decisions/0008)", flush=True)
+        run.log("address_run", row=address)
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     log = open(run.dir / "drive.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
@@ -400,8 +563,10 @@ def main():
             wait_for(hdmi, ("shooting",), "the settings download", link=link)
             before = link.download("before")
             time.sleep(5)
-            cam = LiveCamera(link, hdmi, run, may_open=a.allow)
+            cam = LiveCamera(link, hdmi, run, may_open=a.allow, network=cam_network, screens=bool(address),
+                             options=options, values=values)
             screens, ok = [], True
+            opened = None           # on an address run, the frame a press opened a row on: from then MENU only
             try:
                 cam.press("menu")
                 j = find_position(cam, cycle, model)
@@ -412,10 +577,26 @@ def main():
                     # the key as the guards judge it and as it is sent (canonical_key; press_args_refused saw that
                     # every key is one)
                     key, y, want = parse_press(p)
+                    if opened and key != "menu":
+                        # the address screen is open, whatever it reads as: nothing on it is chosen or scrolled
+                        print(f"{key} refused: a row was opened on this address run ({opened}): no key but MENU goes "
+                              "out on it (docs/decisions/0008); cancelling", flush=True)
+                        run.log("press_refused", key=key, frame=cam.frame.path.name,
+                                why="an address screen is open: no key but MENU")
+                        ok = False
+                        break
+                    if inside:
+                        # a row a network decision opened is open, whatever its screen reads as: look only
+                        why = inside_refused(key, cam, inside, options)
+                        if why:
+                            print(f"{key} refused: {say(why)}; cancelling", flush=True)
+                            run.log("press_refused", key=key, frame=cam.frame.path.name, why=say(why))
+                            ok = False
+                            break
                     if y is not None:
                         t = screen_text(cam, a.grip) if want else ""
                         if want and not re.search(want, t, re.I):
-                            print(f"the screen does not match {want!r}: {t[:160]!r}; cancelling", flush=True)
+                            print(f"the screen does not match {want!r}: {shown(t)[0]}; cancelling", flush=True)
                             ok = False
                             break
                         refused = ""
@@ -439,7 +620,7 @@ def main():
                         continue
                     t = screen_text(cam, a.grip)
                     if want and not re.search(want, t, re.I):
-                        print(f"the screen does not match {want!r}: {t[:160]!r}; cancelling", flush=True)
+                        print(f"the screen does not match {want!r}: {shown(t)[0]}; cancelling", flush=True)
                         ok = False
                         break
                     why = shooting_press_refused(key, cam.read().kind, on_shooting)
@@ -470,16 +651,23 @@ def main():
                             break
                     if key in ENTERS and cam.read().kind == "helppop" and not re.search(r"in-?camera guide", lit, re.I):
                         # the popup's other entry, Add to My Menu, writes the file
-                        print(f"Enter refused on the help popup: the cursor is on {lit!r}; cancelling", flush=True)
+                        print(f"Enter refused on the help popup: the cursor is on {say(repr(lit))}; cancelling", flush=True)
                         ok = False
                         break
-                    why, vouched = press_decision(p, key, lit, t, cam.read().kind, a.confirm, a.allow, on_shooting)
+                    why, vouched = press_decision(p, key, lit, t, cam.read().kind, a.confirm, a.allow, on_shooting,
+                                                  network=cam_network, screens=bool(address), values=values)
                     if vouched:
-                        print(f"Enter vouched by the operator on {t[:120]!r}", flush=True)
+                        print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
-                        print(f"{key} refused: {why}; cancelling", flush=True)
+                        print(f"{key} refused: {say(why)}; cancelling", flush=True)
                         ok = False
                         break
+                    # the row this press opens, when a network decision opens it: from then on it is looked at only,
+                    # until a MENU or an Enter on a named option (closes) brings back the page it is opened from now
+                    opens = (safety.network_lifted_row(lit, cam_network, bool(address), values)
+                             if key in ENTERS + RIGHTS and lit and not inside else None)
+                    opened_from = cam.read() if opens else None
+                    closes = bool(inside) and key in CLOSES          # inside_refused let it through above
                     if key.startswith("dial."):
                         # "dial.NAME.STEPS:regex": turn a dial, only on the screen the regex names
                         # (on the shooting screen a dial changes the live exposure, which no file holds)
@@ -501,21 +689,50 @@ def main():
                                 break
                             print("   the popup's cursor did not move: Down again", flush=True)
                             press(cam, "down")
+                    if address and key in ENTERS + RIGHTS and not opened:
+                        # whatever the screen it opened reads as (an address screen reads as no known kind)
+                        opened = cam.frame.path.name
+                        run.log("address_screen_opened", key=key, frame=opened)
                     t = screen_text(cam, a.grip)
-                    screens.append({"after": p, "frame": cam.frame.path.name, "kind": cam.read().kind, "text": t,
+                    if closes:
+                        inside["closing"] = True
+                    if opens:
+                        cls = safety.lift_class(lit)
+                        inside = {"row": opens, "class": cls, "address": cls == safety.LIFT_ADDRESS, "identity": False,
+                                  "from": opened_from, "closing": False}
+                        run.log("network_row_opened", key=key, frame=cam.frame.path.name, row=opens, lifted_from=cls)
+                    elif inside:
+                        # judged on this read alone, right after the closing key: the evidence is spent either way
+                        if network_left(cam.read(), inside["from"], inside["closing"],
+                                        highlighted(cam.frame.image, cam.frame.path) if inside["closing"] else "",
+                                        inside["row"]):
+                            run.log("network_row_left", key=key, frame=cam.frame.path.name, row=inside["row"])
+                            inside = None
+                        else:
+                            inside["closing"] = False
+                    if inside and not inside["identity"] and safety.inside_menu_only(inside["class"], cam.read().kind, t):
+                        # a pairing screen, a keyboard, credentials: MENU alone from here, its text never shown
+                        inside["identity"] = True
+                        run.log("identity_screen", key=key, frame=cam.frame.path.name)
+                    console, kept = shown(t)
+                    screens.append({"after": p, "frame": cam.frame.path.name, "kind": cam.read().kind, **kept,
                                     **({"vouched": True} if vouched else {}),
                                     **({"on_shooting": True} if shooting else {}),
                                     **({"c4_allowed": True} if key in C4_OWNER_PRESSES else {})})
-                    print(f"{p:32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {t[:150]!r}", flush=True)
+                    print(f"{p:32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {console}", flush=True)
                 if ok:
                     time.sleep(a.wait)
                     cam.refresh("after-presses")
                     t = screen_text(cam, a.grip)
-                    screens.append({"after": "wait", "frame": cam.frame.path.name, "kind": cam.read().kind, "text": t})
-                    print(f"{'(after ' + str(a.wait) + ' s)':32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {t[:150]!r}",
+                    if inside and not inside["identity"] and safety.inside_menu_only(inside["class"], cam.read().kind, t):
+                        inside["identity"] = True
+                        run.log("identity_screen", key="wait", frame=cam.frame.path.name)
+                    console, kept = shown(t)
+                    screens.append({"after": "wait", "frame": cam.frame.path.name, "kind": cam.read().kind, **kept})
+                    print(f"{'(after ' + str(a.wait) + ' s)':32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {console}",
                           flush=True)
             except Exception as e:
-                print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
+                print(f"error: {say(f'{type(e).__name__}: {e}')}; cancelling", flush=True)
                 ok = False
             # whatever ends the restore early (close giving up, a STOP while waiting, an upload refused) exits
             # EXIT_UNRESTORED (runner.restoring)
@@ -533,6 +750,8 @@ def main():
                 log.write(json.dumps({"path": a.path, "presses": a.press, "note": a.note, "completed": ok,
                                       **({"on_shooting": sorted(on_shooting)} if on_shooting else {}),
                                       **({"c4_allowed": c4_allowed} if c4_allowed else {}),
+                                      **({"network": dict(network)} if a.network else {}),
+                                      **({"address_screen": address} if address else {}),
                                       "screens": screens, "before": before.name,
                                       "after": ending.after.name if ending.after else None,
                                       "changes": changes_of(ending.changes)}) + "\n")

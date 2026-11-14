@@ -4,7 +4,8 @@
     .venv/bin/python kit/page_model.py --mode Stills kit2_page_scan    # only record the mode an older scan was made in
 
 With --vlm, runs the VLM page-reading pass (asking the "second" reader, 8 at a time, or the reader --reader NAME
-names when that one is away) before building the model.
+names when that one is away) before building the model; a scan folder a --network run marked (camkit.vlm.LOCAL_MARKER)
+is read by a local reader only (camkit.vlm.local_only_runs), and the tool stops before asking anything otherwise.
 For each scanned page it lines up the pixel reader's rows (how many, which are greyed: authoritative
 for structure), OCR (and a second OCR engine as "ocr2" when one is installed), and each VLM's reading (only answers already in the VLM cache are
 used: this never calls a server). Labels the user confirmed (<run>/user_labels.json, keyed by page
@@ -35,7 +36,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import config, ocr, paths, safety  # noqa: E402
 from camkit.screen import MENU_ROW_PITCH, MENU_ROW_TOP  # noqa: E402
-from camkit.vlm import PROMPTS, cache_key, cached, make_reader, readers, role  # noqa: E402
+from camkit.vlm import PROMPTS, NoReader, cache_key, cached, local_only_runs, make_reader, readers, role  # noqa: E402
 from runner import (SCAN_MODES, OcrUnavailable, read_frames, read_json, record_mode, record_model,  # noqa: E402
                     scan_mode, scan_unready, write_json)
 
@@ -60,6 +61,12 @@ def vlm_read_pages(root: Path, reader_name: str | None = None):
     cfg = role("second") if not reader_name else next((r for r in listed if r["name"] == reader_name), None)
     if cfg is None:
         sys.exit(f"--reader {reader_name!r}: no reader of that name in private/config.json")
+    # a run folder a --network run marked: local readers only, refused before even the first "alive" request
+    local_only_runs(root)
+    try:
+        reader = make_reader(cfg)
+    except NoReader as e:
+        sys.exit(f"{e}: name a local reader with --reader; nothing asked")
     for _ in range(40):
         if cfg.get("kind") == "anthropic" or alive(cfg):     # Claude: the SDK retries for itself
             break
@@ -70,7 +77,6 @@ def vlm_read_pages(root: Path, reader_name: str | None = None):
     for r in read_json(root / "scan_rekeyed.json"):
         if r["kind"] == "menu":
             firsts.setdefault(r["page"], r)
-    reader = make_reader(cfg)
 
     def one(rec):
         try:

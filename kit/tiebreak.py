@@ -6,12 +6,17 @@ takes the majority of three.
 Reads <run>/options.jsonl (kit/pass1_labels.py) and appends to <run>/tiebreak.jsonl, one line per
 option of a list, checklist or side list the two readers disagreed on; options already there are
 skipped, so it resumes. Carousels, grids and number fields are left to pass1_map's own rules.
+
+A run folder a --network run marked (camkit.vlm.LOCAL_MARKER) is read with a local third reader only
+(camkit.vlm.local_only_runs: the tool stops when the third is not local), and an option of an identity or connection
+row a network decision opened ("network" on its line, other than a Wi-Fi or Bluetooth setting's) is never asked about
+(docs/decisions/0008).
 """
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths  # noqa: E402
+from camkit import jsonl, paths, safety, vlm  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from page_model import same_text  # noqa: E402
 
@@ -21,14 +26,15 @@ def main():
         sys.exit("usage: kit/tiebreak.py RUN (a run in the camera's runs/<model>_fw<fw>/, or a path)")
     readers(stop=True)                        # none listed: its sentence, and nothing read
     run = paths.run_path(sys.argv[1])
+    vlm.local_only_runs(run)                  # a --network run's frames: local readers only (make_reader)
     recs = jsonl.read(run / "options.jsonl")
     try:
         r = make_reader(role("third"), timeout=240)
-    except NoReader as e:                     # one reader listed: the third role has none
+    except NoReader as e:                     # one reader listed: the third role has none; or it is not local
         sys.exit(str(e))
     done = {t["frame"] for t in jsonl.read(run / "tiebreak.jsonl")}
     todo = [x for x in recs if not x["agreed"] and x["kind"] in ("list", "checklist", "sidelist")
-            and x["frame"] not in done]
+            and x["frame"] not in done and x.get("network", safety.LIFT_NETWORK) == safety.LIFT_NETWORK]
     print(len(todo), "to tie-break", flush=True)
     for i, x in enumerate(todo, 1):
         try:

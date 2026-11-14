@@ -87,12 +87,37 @@ and the default is no.
 3. **By hand only:** network identity and connection settings (Wired LAN, Wi-Fi, Bluetooth, access
    authentication, FTP server), USB connection mode, language, NTSC/PAL, area and date, and Auto
    Power OFF Temp. (Decision 8. The a1 II's owner allowed Auto Power OFF Temp. remotely from 2026-11-02; ask yours.)
-   The screens that show the camera's network addresses or its serial number (on the a1 II, Display Wi-Fi Info.,
-   Display Wired LAN Info., Disp Device Address and Display Serial Number) are never opened either, since every frame
-   is kept as evidence.
+   The screen that shows the body's serial number (Display Serial Number on the a1 II) is never opened either, since
+   every frame is kept as evidence.
    No `--allow` opens the camera's identity, its connections or its region, whatever the owner said: `drive.py`,
    `card_actions.py` and every prover refuse such a label before anything connects (`safety.allow_refused`), and the
    checks on the camera refuse the row however a run named it (`safety.never_lifted`).
+   The default is no, by hand, and stays so unless your owner decides otherwise for a named row; ask yours. A dated
+   owner decision in the reviewed scope, `{"date": "YYYY-MM-DD", "lifts": "network", "rows": ["<the row as the camera
+   writes it>"], "why": "<their words>"}`, used by a run given `--network` (`drive.py`, `crawl_run.py`, `prove_run.py`
+   with `--rows`), may open a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth
+   Function, Bluetooth Rmt Ctrl, Airplane Mode), a screen that shows the camera's network addresses (Display Wi-Fi
+   Info., Display Wired LAN Info., Disp Device Address: `drive.py` only, as the last label of `--path`), or an identity,
+   connection or region row whose opening starts or ends nothing (decision 8 lists them). No `--allow` opens any of
+   them. A row so named is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
+   read right after a MENU (or an Enter on a named option) is the shooting screen, or the page it was opened from with
+   its lit bar on the row itself; never on what kind of screen the camera seems to show alone, nor on a later read.
+   Choosing an option needs the decision to name it, `"options": {"<row>": ["<option>"]}` (never one character, a
+   button's word or a name of the never-open list), and no option is ever chosen in a row whose choice drops a link,
+   starts a connection or a pairing, or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl, Airplane
+   Mode, Wired LAN Connect, Remote Shoot Function, Cnct. while Power OFF, the IP and USB rows, Language, NTSC/PAL,
+   Area/Date/Time). Such a run asks local readers only and marks its folder, so the tools that read its frames later
+   (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `reread_proofs.py`, `reader_census.py`)
+   ask local readers only too and none about an identity row's frames, and a prover's way back to the shooting screen
+   sends no OK to a notice that refuses MENU (nor, on any run, to one naming identity); a screen inside the row
+   that names identity or credentials gets MENU alone and no reader, and inside an identity row or on an address
+   screen the run shows and keeps field names and whole row labels alone, never a value. Credentials, the SSID, WPS,
+   access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
+   connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
+   Right does there), Server Setting and Edit Device Name stay by hand whatever is decided, and a decision naming one
+   stops the run before anything connects. (The a1 II's owner
+   decided on 2026-11-13 that the kit may open their camera's network and identity rows this way: "Yes map as much as
+   we can"; "you have my full permission to open any menu and map items".)
 4. **Credentials:**
    - Never type, read, OCR, screenshot or store a password. That includes the camera's own Access
      Authen. Info screen: never navigate the kit there, because every frame is kept as evidence.
@@ -710,7 +735,8 @@ folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left
   allowed it on their own camera (2026-11-09), and rule 8's default is no Enter on an unknown screen. Even then
   `drive.py` refuses it on a menu, submenu, the Main tiles or the shooting screen, on a screen whose text reads
   nothing, on a screen whose text names a never-open row (`--allow` lifts its own row's name, never the cards,
-  Initialize, Reset Network Set., credentials or the camera's identity, a connection or its region), and wherever
+  Initialize, Reset Network Set., credentials, the camera's identity, a connection or its region, nor a Wi-Fi or
+  Bluetooth setting or an address screen, whatever a decision names), and wherever
   plain Enter is refused; the log says "vouched". A press
   that meets the shooting screen is refused unless `--on-shooting KEY` names it, your owner's word (rule 14). Then
   record the proof yourself, keeping side effects (records an information screen's OK also rewrote) out of `changes`:

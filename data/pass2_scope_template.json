@@ -1,5 +1,5 @@
 {
- "note": "Template for a new body's reviewed scope (copy to runs/kit2_pass1/pass2_scope_draft.json and review it): the exclusion groups and the a1 II's rows in them, which use Sony's menu names and so mostly carry over. 'prove' is empty: a pass-1 map's rows are its scope. Write each decision, dated, under 'decisions'.",
+ "note": "Template for a new body's reviewed scope (copy to runs/kit2_pass1/pass2_scope_draft.json and review it): the exclusion groups and the a1 II's rows in them, which use Sony's menu names and so mostly carry over. 'prove' is empty: a pass-1 map's rows are its scope. Write each decision, dated, under 'decisions': {\"date\": \"YYYY-MM-DD\", \"rows\": [...], \"why\": \"...\"}. A decision that opens Wi-Fi and Bluetooth settings, address screens or identity and connection rows also says \"lifts\": \"network\" and names each row by its own label: each opens to look only, and \"options\": {\"<row>\": [\"<option>\"]} names the options the kit may choose; a run uses it only with --network, and the default is none (docs/decisions/0008). A row under 'exclude' stays out of the proofs whatever is decided.",
  "prove": [],
  "exclude": {
   "governs the remote session itself": [

@@ -14,6 +14,9 @@ The camera is not touched: only frames already saved are read. Restartable: fram
 skipped (--all asks again, also for proofs with a reading of their own). The reader is the "second" one (the next that
 answers stands in when it is off, camkit.vlm.stand_in), or the configured reader --reader names (omlx, the local
 one). Answers are cached (camkit.vlm), so asking again costs nothing. --limit N reads N frames, for a trial.
+A run folder a --network run marked (camkit.vlm.LOCAL_MARKER) is read by a local reader only
+(camkit.vlm.local_only_runs: the tool stops when the reader is not local), and a proof of an identity or connection
+row a network decision opened is never asked about (docs/decisions/0008).
 """
 import argparse
 import datetime
@@ -23,20 +26,23 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import jsonl, paths, vlm  # noqa: E402
+from camkit import jsonl, paths, safety, vlm  # noqa: E402
 
 KINDS = ("list", "dialog", "sidelist", "axis", "table")
 
 
 def todo(run: Path, redo: bool) -> list:
     """The proofs to read, one per chosen frame, in the order they were written: no reading yet (any with redo), the
-    frame on disk, and not already in readings.jsonl unless redo."""
+    frame on disk, and not already in readings.jsonl unless redo; never a proof of an identity or connection row a
+    network decision opened ("network" other than a Wi-Fi or Bluetooth setting's: docs/decisions/0008)."""
     done = set() if redo else {r.get("frame") for r in jsonl.read(run / "readings.jsonl")}
     out, seen = [], set()
     for r in jsonl.read(run / "proofs.jsonl"):
         f = r.get("chosen_frame")
         if r.get("kind") not in KINDS or not f or f in seen or f in done or (r.get("vlm") and not redo):
             continue
+        if r.get("network", safety.LIFT_NETWORK) != safety.LIFT_NETWORK:
+            continue                    # an identity row a network decision opened: no reader is asked about it
         if not (run / "shots" / f).exists():
             continue
         seen.add(f)
@@ -69,7 +75,11 @@ def main(argv=None):
     run = Path(a.run)
     from pass2_report import row_name
     from prove_run import PROMPTS, ask_second
+    vlm.local_only_runs(run)                 # a --network run's frames: local readers only (ask_role, make_reader)
     reader = use_reader(a.reader)
+    if vlm.LOCAL_ONLY and not vlm.local_reader(vlm.playing("second")):
+        sys.exit(f"reader {reader!r} is not a local reader, and {paths.shown(run)} holds a --network run's frames "
+                 "(docs/decisions/0008): name a local one with --reader; nothing asked")
     jobs = todo(run, a.all)[:a.limit] if a.limit else todo(run, a.all)
     print(f"{len(jobs)} frames to read with {reader!r} -> {paths.shown(run / 'readings.jsonl')}", flush=True)
     t0, n = time.monotonic(), 0

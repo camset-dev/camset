@@ -79,6 +79,10 @@ they part is counted (pairs). --dry-run asks nothing and says what a run would a
 it; --parallel asks a local server several questions at once (at most its config's "parallel" and 8); --fail-run sets
 the failures in a row after which a reader is asked nothing more.
 
+Decision 8 (docs/decisions/0008): a run a --network run marked (camkit.vlm.LOCAL_MARKER) is asked about by local
+readers only (camkit.vlm.local_only_runs: --questions leaves out a reader named that is not local, and stops when none
+is left), and no reader is asked about a proof of an identity or connection row a network decision opened.
+
 Decision 16 (docs/decisions/0016): the counts are for the owner's terminal. The tool prints no reading, no label and
 no value, only counts, the kinds of sites and doubts and the Unicode names of letters; still, its output is made from
 the owner's runs, so it stays out of commits, issues and the docs unless the owner chooses to send the counts.
@@ -99,7 +103,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import config, jsonl, match, paths, reading, vlm  # noqa: E402
+from camkit import config, jsonl, match, paths, reading, safety, vlm  # noqa: E402
 
 NUMBER_KINDS = {"look", "wbgrid", "fields"}          # proofs whose label is a number set
 NOT_READERS = {"ocr", "ocr2", "user", "checked"}     # a page model's sources that are not vision readers
@@ -108,6 +112,13 @@ NOT_READERS = {"ocr", "ocr2", "user", "checked"}     # a page model's sources th
 CODE = re.compile(r"(?!F\d)[A-Za-z]{1,4} ?\d{1,2}")
 NUMBERISH = re.compile(r"[\d\s.,/:+\-\"'\u00B1\u2212]+")   # digits and a number's signs (PLUS-MINUS, MINUS SIGN)
 SECOND_ENGINE_KEYS = ("shown2", "ocr2")              # where a proof line would keep a second OCR engine's reading
+
+
+def identity_line(r: dict) -> bool:
+    """Whether a proof line is of an identity or connection row a network decision opened (prove_run writes the class
+    it was lifted from as "network"; a Wi-Fi or Bluetooth setting's is not one): no reader is asked about its frame,
+    and --questions samples none (docs/decisions/0008)."""
+    return r.get("network", safety.LIFT_NETWORK) != safety.LIFT_NETWORK
 
 
 def runs_in(where: Path) -> tuple:
@@ -273,7 +284,7 @@ def census_proofs(run: Path, cache: Cache, tally: Tally, asker: Asker | None) ->
             source = "cache" if said else "none"
         expect, choices = expect_of(r), list(dict.fromkeys(rows[row_of(run, r)]))
         shown = str(r.get("shown") or "")
-        if said is None and asker is not None and r.get("chosen_frame") \
+        if said is None and asker is not None and r.get("chosen_frame") and not identity_line(r) \
                 and reading.doubts(shown, expect, choices=choices, lit=True):
             said = asker(frame)
             source = "asked" if said else "none"
@@ -1285,18 +1296,30 @@ def measure(places: list, args) -> dict:
     if set(kinds) - set(reading.QUESTIONS):
         sys.exit(f"--kinds: some of {', '.join(reading.QUESTIONS)}")
     cache = answers_folder(args.cache, places)
-    items, read_only, runs = [], [], 0
+    items, read_only, runs, found_in = [], [], 0, []
     for place in places:
         if not place.is_dir():
             sys.exit(f"{place} is not a folder")
         root, found = runs_in(place)
         read_only.append(root / "_cache" / "vlm")
-        for run in found:
-            runs += 1
-            lines = jsonl.read(run / "proofs.jsonl", bad="skip")
-            reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
-                      if r.get("frame") and r.get("reading")}
-            items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
+        vlm.local_only_runs(*found)          # a --network run's frames: local readers only (make_reader)
+        found_in += found
+    if vlm.LOCAL_ONLY:
+        kept = [c for c in cfgs if vlm.local_reader(c)]
+        for c in cfgs:
+            if c not in kept:
+                print(f"{c['name']!r} is not a local reader, and the runs hold a --network run's frames: not asked "
+                      "(docs/decisions/0008)", file=sys.stderr, flush=True)
+        cfgs = kept
+        if not cfgs:
+            sys.exit("--questions: the runs hold a --network run's frames, which go to local readers only, and no "
+                     "reader named is local (docs/decisions/0008): nothing asked")
+    for run in found_in:
+        runs += 1
+        lines = [r for r in jsonl.read(run / "proofs.jsonl", bad="skip") if not identity_line(r)]
+        reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
+                  if r.get("frame") and r.get("reading")}
+        items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
     lit = {}
 
     def usable(frame) -> bool:           # never asked about a black frame (camkit.reading.ask's rule)
@@ -1428,8 +1451,8 @@ def pairs(verdicts: dict) -> dict:
 def hosted_refused(item: Item, text: str, kind: str | None) -> str | None:
     """Why a frame may not go to a hosted reader (is_hosted), or None: its run is named for a network or address look
     (NETWORK_RUN), its menu path or label names the camera's identity, a connection or a credential
-    (camkit.safety.never_lifted, as the guards judge a row: Display Wi-Fi Info., Display Wired LAN Info., an address or
-    a serial number's screen), the screen reader takes it for no menu or option screen (MENU_SCREENS), or the text OCR
+    (camkit.safety.never_lifted and network_words, as the guards judge a row: Display Wi-Fi Info., Display Wired LAN
+    Info., an address or a serial number's screen), the screen reader takes it for no menu or option screen (MENU_SCREENS), or the text OCR
     reads on the whole frame names any of those or holds what camkit.vlm.scrub takes out (an address, a key, an e-mail
     address, a home folder). Fails closed: a frame whose text cannot be read, or on which OCR read nothing, is refused
     too."""
@@ -1438,13 +1461,13 @@ def hosted_refused(item: Item, text: str, kind: str | None) -> str | None:
     if NETWORK_RUN.search(run):
         return "a network run"
     for part in [*item.extra.get("path", ()), item.truth if isinstance(item.truth, str) else ""]:
-        if part and safety.never_lifted(str(part)):
+        if part and (safety.never_lifted(str(part)) or safety.network_words(str(part))):
             return "its menu path"
     if kind not in MENU_SCREENS:
         return "no menu screen"
     if not (text or "").strip():
         return "no text read"
-    if safety.never_lifted(text) or safety.identity_row(text):
+    if safety.never_lifted(text) or safety.identity_row(text) or safety.network_words(text):
         return "its screen's words"
     if vlm.scrub(text) != text:
         return "an address on screen"
@@ -1762,6 +1785,7 @@ def census(places: list, args) -> dict:
             sys.exit(f"{place} is not a folder")
         root, found = runs_in(place)
         if args.ask:
+            vlm.local_only_runs(*found)      # a --network run's frames: local readers only (ask_role, make_reader)
             vlm.CACHE = answers_folder(args.cache or Path(tempfile.gettempdir()) / "camset_reader_census" / root.name,
                                        places)
             asker = asker or Asker(args.limit)

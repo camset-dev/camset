@@ -243,6 +243,9 @@ class Link:
         self.model = None
         self.events = []          # SDK events (disconnects, warnings) as they arrive
         self.moves = 0            # commands sent that can change the screen (MOVES), LiveCamera's own among them
+        # MENU presses sent, a cleanup's among them: a network row's lock (camkit.live.LiveCamera.network_left) ends only
+        # after one, however it was sent
+        self.menus = 0
         self._mode_listed = None  # whether the body lists MODE_PROPERTY, once props has said (mode_listed)
 
     # -------------------------------------------------------------- lifetime
@@ -393,6 +396,8 @@ class Link:
         except OSError:
             pass                # camlink has exited (a signal): its last reply, if any, is waiting in the queue
         r = self._reply(timeout, want=n)
+        if verb == "press" and args[:1] == ["menu"] and isinstance(r, dict) and r.get("ok"):
+            self.menus += 1                     # a MENU the camera took: one it refused, or no answer, counts none
         self.run.log("cmd", cmd=command, id=n, reply=r if logged is None else logged(r),
                      ms=round((time.monotonic() - t0) * 1000))
         return r

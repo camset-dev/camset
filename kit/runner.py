@@ -15,6 +15,11 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   the body, and the end above, the restore checked (s.restored)
     sys.exit(EXIT_UNRESTORED)                     a runner's exit when the camera is not known to be as its start file
     with restoring(): ...                         a restore that raises is said and exits EXIT_UNRESTORED
+    add_network_argument(ap)                      --network: the Wi-Fi and Bluetooth rows a dated owner decision names
+    rows, options, words = network_decided_or_exit(run)   those rows ({row: date}) and the options they let the kit
+                                                  choose, from the reviewed scope, or a stop before anything connects;
+                                                  the words for a proof's allowance (camkit.vlm.LOCAL_ONLY set)
+    network_values(rows, model)                   the values the page model and the definition know for those rows
 
 Only camkit is imported at the top: crawl_run imports this, and prove_run's parts import crawl_run, so the prover's
 own pieces (to_shooting) are imported where they are used.
@@ -22,6 +27,7 @@ own pieces (to_shooting) are imported where they are used.
 import contextlib
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -919,3 +925,145 @@ def allowed_or_exit(labels) -> str:
     if labels:
         print(f"operator allowed these never-open rows: {', '.join(repr(x) for x in labels)}", flush=True)
     return safety.allowance(labels)
+
+
+SCOPE_FILE = "pass2_scope_draft.json"       # the camera's reviewed scope, in pass 1's run (proving.jobs reads it)
+
+
+def reviewed_scope() -> Path:
+    """The camera's reviewed scope, runs/<model>_fw<fw>/kit2_pass1/pass2_scope_draft.json: the file proving.jobs takes
+    the rows to prove and the owner's dated decisions from (proving.base.PASS1)."""
+    from proving import base
+    return base.PASS1 / SCOPE_FILE
+
+
+def add_network_argument(ap) -> None:
+    """--network, as drive.py, crawl_run.py and prove_run.py take it: open the Wi-Fi and Bluetooth rows a dated owner
+    decision in the reviewed scope names ({"lifts": "network", ...}: network_decided_or_exit). Without it nothing
+    changes: every such row stays closed (docs/decisions/0008)."""
+    ap.add_argument("--network", action="store_true",
+                    help="open the Wi-Fi and Bluetooth rows a dated owner decision in the reviewed scope names "
+                         "(\"lifts\": \"network\"; docs/decisions/0008), to look only unless it names options; "
+                         "without it they stay closed")
+
+
+def log_network_decided(run, rows: dict, options=None) -> None:
+    """The rows a network decision opens for this run, in its events.jsonl ("network_decided": {row: date}, and the
+    options it lets the kit choose), and the run's folder marked as a --network run's (camkit.vlm.LOCAL_MARKER): the
+    tools that read its frames later (kit/pass1_labels.py, kit/tiebreak.py, kit/tools/reread_proofs.py...) then ask
+    local readers only (camkit.vlm.local_only_runs)."""
+    from camkit import vlm
+    vlm.mark_local_only(run.dir)
+    run.log("network_decided", rows=dict(rows), options=dict(options or {}), scope=str(reviewed_scope()))
+
+
+def network_decided_or_exit(run=None) -> tuple:
+    """({row: the decision's date}, {row: [the options it lets the kit choose]}, the words a proof's allowance carries)
+    of the dated owner decisions in the reviewed scope (reviewed_scope) that open Wi-Fi and Bluetooth rows
+    (camkit.safety.network_decided, network_options), for a run given --network: stops, before anything connects and
+    with nothing sent, when the camera has no reviewed scope (the template's decisions are no owner's), when the file
+    cannot be read, when any such decision, a row or an "options" it names is refused (credentials, identity, an action,
+    the serial number, a vague name, no valid date or no why), or when no decision opens a row. Sets camkit.vlm.LOCAL_ONLY
+    (a --network run asks local readers only), prints the dated rows (an address screen marked: only drive.py opens one;
+    a row with no option named: to look only) and, given the run, logs them (log_network_decided); a run that knows its
+    folder only later logs them itself."""
+    from camkit import paths, vlm
+    f = reviewed_scope()
+    if not f.is_file():
+        sys.exit(f"--network opens only the rows a dated owner decision in the camera's reviewed scope names, and there "
+                 f"is no reviewed scope ({paths.shown(f)}): nothing was sent to the camera. Copy "
+                 "data/pass2_scope_template.json there, review it, and write the owner's decision under \"decisions\": "
+                 "{\"date\": \"YYYY-MM-DD\", \"lifts\": \"network\", \"rows\": [\"<row as the camera writes it>\"], "
+                 "\"why\": \"<the owner's words>\"}, and \"options\": {\"<row>\": [\"<option>\"]} for the options the "
+                 "kit may choose (docs/decisions/0008).")
+    try:
+        scope = read_json(f)
+    except (OSError, ValueError) as e:
+        sys.exit(f"--network: the reviewed scope {paths.shown(f)} cannot be read ({type(e).__name__}): nothing was sent "
+                 "to the camera")
+    rows, refusals = safety.network_decided(scope)
+    if refusals:
+        sys.exit("--network: the reviewed scope's network decisions name what no decision opens, so nothing was sent "
+                 f"to the camera ({paths.shown(f)}):\n" + "\n".join(f"  {r}" for r in refusals)
+                 + "\nTake those rows out of the decision (they stay by hand, docs/decisions/0008 and 0009), then run "
+                   "again.")
+    if not rows:
+        sys.exit(f"--network: no dated owner decision in {paths.shown(f)} opens a row (\"lifts\": \"network\", \"date\", "
+                 "\"rows\", \"why\"): nothing was sent to the camera")
+    options = safety.network_options(scope)
+    vlm.LOCAL_ONLY = True
+    print("the owner decided that the kit may open these Wi-Fi and Bluetooth rows remotely (--network; local readers "
+          "only):", flush=True)
+    for row, day in rows.items():
+        how = ("an address screen: only drive.py opens it, field names only" if safety.address_screen(row) else
+               f"may choose {', '.join(options[row])}" if options.get(row) else "to look only")
+        print(f"   {row}, {day} ({safety.lift_class(row)}; {how})", flush=True)
+    if run is not None:
+        log_network_decided(run, rows, options)
+    return rows, options, safety.network_allowance(rows, options)
+
+
+def known_labels(model=None) -> set:
+    """The menu's row labels the kit knows: every menu and setting row label of the camera's definition, and those
+    row labels of the page model (model: {page key: page}) that look like a label alone (label_alone): a page model's
+    label is a reading, and one read with the row's value glued on ("Edit Device Name ILCE-...", "IP Address:
+    192.0.2.10") would otherwise be kept whole. A row's label is no value: safety.screen_fields keeps a line that is
+    wholly one of these, and withholds the rest of a screen whose text a --network run withholds."""
+    from camkit import definitions
+    defined = set()
+    target = definitions.active(required=False)
+    if target is not None and target.exists():
+        try:
+            doc = read_json(target)
+        except (OSError, ValueError):
+            doc = {}
+        defined |= {m.get("label") for m in doc.get("menu") or [] if isinstance(m, dict)}
+        defined |= {x for s in doc.get("settings") or [] if isinstance(s, dict) for x in s.get("row") or []}
+    defined = {x for x in defined if isinstance(x, str) and x.strip()}
+    read = {row.get("label") for page in (model or {}).values() for row in (page or {}).get("rows") or []}
+    return defined | {x for x in read if isinstance(x, str) and x.strip() and label_alone(x, defined)}
+
+
+def label_alone(label: str, defined=frozenset()) -> bool:
+    """Whether a page model's row label may be kept whole on a screen a --network run withholds (known_labels): a label
+    the definition has (`defined`), or one with no "label: value" shape (a colon), no address- or number-like part (two
+    numbers joined by a stop or a colon, a run of digits), nothing that names identity or credentials
+    (safety.identity_screen: a device's name, an SSID, a pairing), and not a label the definition has with more after
+    it (a value read glued on: "Wi-Fi Connect On")."""
+    if label in defined:
+        return True
+    seen = safety.plain(label)
+    if ":" in label or re.search(r"\d[.:]\d|\d{3}", label) or safety.identity_screen(label):
+        return False
+    return not any(seen.startswith(safety.plain(d) + " ") for d in defined if safety.plain(d))
+
+
+def network_values(decided, model=None) -> dict:
+    """{row: the values the kit knows for it} for the rows a network decision opens: the value each page of the page
+    model (model: {page key: page}) shows beside a row of that label, every reader's reading of it included, and the
+    values the camera's definition gives the settings whose menu row ends in that label. A menu row's bar carries its
+    value after its label: safety.network_lifted_row lets that through only where the value is one of these."""
+    from camkit import definitions
+    out = {r: set() for r in decided}
+
+    def of(label):
+        return [r for r in decided if safety.plain(r) == safety.plain(label or "")]
+    for page in (model or {}).values():
+        for row in (page or {}).get("rows") or []:
+            for r in of(row.get("label")):
+                said = [row.get("value"), *(((row.get("readings") or {}).get("value") or {}).values())]
+                out[r] |= {v for v in said if isinstance(v, str) and v.strip()}
+    target = definitions.active(required=False)
+    if target is not None and target.exists():
+        try:
+            settings = read_json(target).get("settings") or []
+        except (OSError, ValueError, AttributeError):
+            settings = []
+        for s in settings:
+            path = s.get("row") if isinstance(s, dict) else None
+            if path and isinstance(path[-1], str):
+                for r in of(path[-1]):
+                    out[r] |= {str(v[1]) for v in s.get("values") or [] if isinstance(v, list) and len(v) > 1}
+    return {r: sorted(v) for r, v in out.items()}
+
+

@@ -102,8 +102,9 @@ def main():
     ap.add_argument("--run", default="kit2_help")
     ap.add_argument("--limit", type=int, default=0, help="stop after this many rows (a trial)")
     ap.add_argument("--by-hand-rows", action="store_true",
-                    help="also read the help of settings that are changed by hand only (network, sound, USB...): "
-                         "the guide only shows text; Access Authen. stays passed over")
+                    help="also read the help of settings that are changed by hand only (network, sound, USB, the Wi-Fi "
+                         "and Bluetooth settings and address screens...): the guide only shows text, the row is not "
+                         "opened; Access Authen. stays passed over")
     a = ap.parse_args()
     cycle, model = load_scan(a.scan)
     run = Run(a.run)
@@ -158,7 +159,8 @@ def walk(cam, cycle, model, done, out, a) -> None:
         if pos["kind"] == "menu" and page and pos["row"] is not None and pos["row"] < len(page["rows"]):
             label, crumb = page["rows"][pos["row"]]["label"], page["breadcrumb"]
             never = safety.never_open(label)
-            if a.by_hand_rows and never and never.startswith("by hand only") and not NEVER_HELP.search(label):
+            if a.by_hand_rows and never and never.startswith(("by hand only", safety.NETWORK + ":")) \
+                    and not NEVER_HELP.search(label):
                 never = None                    # the guide shows text; the row is not opened
             skip = ("passed over" if SKIP_PAGES.match(crumb) else
                     never or help_refused(cam.read().kind, cam.frame.image))

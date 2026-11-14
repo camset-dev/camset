@@ -11,6 +11,14 @@ start file is uploaded and the restore checked (docs/decisions/0015). --limit st
 after opening N rows (for supervised tries). A STOP file (<run>/STOP) cancels any open
 dialog with MENU and stops. It never disconnects with a menu open.
 
+--network walks the Wi-Fi and Bluetooth settings and identity rows a dated owner decision in the reviewed scope names
+({"lifts": "network", ...}: runner.network_decided_or_exit, docs/decisions/0008), looked at only: Down round the row's
+list or carousel, never a second axis, a panel or a submenu (--panels too), and nothing chosen whatever options a
+decision names; never an address screen (only kit/drive.py opens one), never a row the page model stored another
+reason for (a model built before the class existed says "by hand only": build it again with kit/page_model.py). The run
+asks local readers only (camkit.vlm.LOCAL_ONLY), marks its folder so (camkit.vlm.LOCAL_MARKER: the tools that read its
+frames later ask local readers only too), and writes each such row's class in rows.jsonl ("network").
+
 Results: kit2_crawl/rows.jsonl (one line per row), frames and presses in shots/ and events.jsonl. Every run folder
 named here is in the camera's runs/<model>_fw<fw>/ (camkit.paths).
 """
@@ -31,8 +39,8 @@ from camkit.live import lit_text, LiveCamera, submenu_labels  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
-                    restore_checked, wait_shooting)
+from runner import (EXIT_UNRESTORED, add_network_argument, add_scan_argument, close_for_restore, end_session,  # noqa: E402
+                    load_scan, network_decided_or_exit, network_values, restore_checked, wait_shooting)
 
 
 def summary(r) -> dict:
@@ -48,6 +56,8 @@ def summary(r) -> dict:
                 {k: len(v[0]) for k, v in w.axes.items()})
     out = {"page": r.page, "slot": r.slot, "label": r.label, "outcome": r.outcome, "kind": r.kind,
            "options": opts, "presses": r.presses, "note": getattr(w, "note", "") if w else ""}
+    if getattr(r, "network", ""):
+        out["network"] = r.network                          # opened under a network decision: safety.lift_class
     frames = option_frames(w)
     if frames:
         out["frames"] = frames                              # per option, the saved frame it was seen on
@@ -281,9 +291,11 @@ def main():
                                                 "and My Menu), e.g. Playback")
     ap.add_argument("--panels", action="store_true",
                     help="open carousel › panels (commits the option); the start file is uploaded afterwards")
+    add_network_argument(ap)
     a = ap.parse_args()
     cycle, model = load_scan(a.scan)      # signatures from the current reader, not the one at scan time
     run = Run(a.run)
+    network = network_settings_or_exit(run) if a.network else {}
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
@@ -298,10 +310,11 @@ def main():
             before = link.download("before")
             print(f"settings saved: {before.name}", flush=True)
             time.sleep(5)                                  # MENU within ~3 s of a download locks the menu
-            cam = LiveCamera(link, hdmi, run)
+            # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused)
+            cam = LiveCamera(link, hdmi, run, network=network, values=network_values(network, model))
             try:
                 crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
-                                tuple(a.tabs.split(",")) if a.tabs else None)
+                                tuple(a.tabs.split(",")) if a.tabs else None, network=network)
             except Exception as e:                          # never leave a dialog or the menu open
                 print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
                 close_for_restore(cam, link)            # cleanup presses; when they fail too, the restore all the same
@@ -316,8 +329,22 @@ def main():
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
 
 
-def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None):
-    """MENU, find where it opened in the scan's cycle, crawl from there, close the menu."""
+def network_settings_or_exit(run) -> dict:
+    """--network for the walk: the Wi-Fi and Bluetooth settings a dated owner decision names ({row: date},
+    runner.network_decided_or_exit, logged in the run), without the address screens, which only kit/drive.py opens;
+    a stop before anything connects when the decision names only those."""
+    rows, _, _ = network_decided_or_exit(run)       # the walk chooses nothing, whatever options a decision names
+    settings = {r: d for r, d in rows.items() if not safety.address_screen(r)}
+    if not settings:
+        sys.exit("--network: the decision names only address screens, which the walk never opens (kit/drive.py does): "
+                 "nothing was sent to the camera")
+    return settings
+
+
+def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
+                    network=frozenset()):
+    """MENU, find where it opened in the scan's cycle, crawl from there, close the menu. network: the Wi-Fi and
+    Bluetooth settings a dated owner decision opens (camkit.crawl.network_open)."""
     cam.press("menu")
     s = cam.read()
     j = next((i for i, p in enumerate(cycle) if same_position(s, p["screen"])), None)
@@ -335,7 +362,7 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
         try:
             out = crawl(cam, cycle[j:] + cycle[:j], model, max_rows=limit, on_row=on_row, labels=submenu_labels,
                         **({"tabs": tabs} if tabs else {}),
-                        panels=panels)
+                        panels=panels, network=network)
             print(f"crawl ended: {out.stopped or 'lap complete'}; {out.presses} presses, "
                   f"{len(out.rows)} rows; the menu closed by itself {len(out.recoveries)} times "
                   f"(reopened with MENU)", flush=True)
