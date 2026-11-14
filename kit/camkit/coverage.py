@@ -594,7 +594,7 @@ def _load_runs(src: Sources, root: Path) -> None:
         if (d / "map_all.json").exists():
             for r in (_read_json(d / "map_all.json") or {}).get("rows") or []:
                 if isinstance(r, dict) and isinstance(r.get("path"), list):
-                    n = len({o.get("index") for o in r.get("options") or [] if isinstance(o, dict)})
+                    n = len({json.dumps(o.get("index")) for o in r.get("options") or [] if isinstance(o, dict)})   # a panel's index is a list
                     if n and r.get("wrapped", True) is not False:
                         src.maps[tuple(r["path"])] = n
     src.downloads = _jsonl(root / "downloads.jsonl")

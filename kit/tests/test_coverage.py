@@ -1396,3 +1396,14 @@ def test_a_commit_range_builds_each_commits_public_form_from_that_commit(camera,
     # the commit's own files, not the tree's: a seen file changed in a commit is built with that commit's form
     assert C.coverage_commit_problems(git("rev-parse", "HEAD"), [f"data/{CAM}/seen_{CAM}.json"], C._Objects(repo),
                                       repo) == []
+
+
+def test_a_map_whose_options_sit_on_a_panel_is_counted(camera):
+    """A panel's option holds its place as a list (row, column): the map's count takes it as it takes a number."""
+    d = camera.runs / "kit2_pass1"
+    d.mkdir()
+    (d / "map_all.json").write_text(json.dumps({"rows": [
+        {"path": ["Alpha"], "options": [{"index": [0, 0]}, {"index": [0, 1]}, {"index": [0, 1]}]},
+        {"path": ["Bravo"], "options": [{"index": 0}, {"index": 1}]}]}), encoding="utf-8")
+    src = coverage.load_sources(CAM, records=RECORDS)
+    assert src.maps[("Alpha",)] == 2 and src.maps[("Bravo",)] == 2
