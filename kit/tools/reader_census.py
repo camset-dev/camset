@@ -1088,11 +1088,16 @@ def is_hosted(cfg: dict) -> bool:
     return vlm.paid(cfg) or cfg.get("kind") == "claude-cli" or not local_url(cfg.get("url"))
 
 
+def cli_env_names(osname: str) -> tuple:
+    """The variables a call of the command line keeps on the operating system osname ("nt" is Windows)."""
+    return CLI_ENV + (CLI_ENV_WINDOWS if osname == "nt" else ())
+
+
 def cli_env(environ=None) -> dict:
     """The environment a call of the command line gets: CLI_ENV's variables that are set, and LC_*, from environ
     (os.environ)."""
     environ = os.environ if environ is None else environ
-    keep = CLI_ENV + (CLI_ENV_WINDOWS if os.name == "nt" else ())
+    keep = cli_env_names(os.name)
     return {k: v for k, v in environ.items() if k in keep or k.startswith("LC_")}
 
 
@@ -1123,7 +1128,9 @@ class CliReader:
         work = Path(tempfile.mkdtemp(prefix="q-", dir=self.base))
         try:
             (work / "frame.png").write_bytes(image)
-            cmd = [os.environ.get("CAMSET_CLAUDE_CLI") or CLI, "-p", "--model", self.model, *CLI_FLAGS, prompt]
+            exe = os.environ.get("CAMSET_CLAUDE_CLI") or CLI
+            run = [sys.executable, exe] if exe.endswith(".py") else [exe]    # a .py stands in (tests): Windows starts no shebang
+            cmd = [*run, "-p", "--model", self.model, *CLI_FLAGS, prompt]
             t = time.monotonic()
             p = subprocess.run(cmd, cwd=work, env=cli_env(), capture_output=True, text=True, timeout=self.timeout)
             took = time.monotonic() - t

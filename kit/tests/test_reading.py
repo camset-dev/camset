@@ -1761,9 +1761,9 @@ def fake_cli(tmp_path, monkeypatch) -> Path:
     import os
     import sys as _sys
     log = tmp_path / "cli.log"
-    script = tmp_path / "fake_claude"
-    script.write_text(FAKE_CLI.format(python=_sys.executable, log=str(log)), encoding="utf-8")
-    os.chmod(script, 0o755)
+    script = tmp_path / ("fake_claude.py" if os.name == "nt" else "fake_claude")    # Windows starts no shebang script:
+    script.write_text(FAKE_CLI.format(python=_sys.executable, log=str(log)), encoding="utf-8")   # the reader runs a .py
+    os.chmod(script, 0o755)                                                                      # with this Python
     monkeypatch.setenv("CAMSET_CLAUDE_CLI", str(script))
     return log
 
@@ -1842,6 +1842,14 @@ def test_the_claude_command_line_gets_no_api_key_base_url_or_session_variable(tm
         assert {"PATH", "CLAUDE_CODE_OAUTH_TOKEN", "LC_CTYPE"} <= env
     assert set(reader_census.cli_env({"PATH": "/bin", "HOME": "/h", "ANTHROPIC_API_KEY": "k", "LC_ALL": "C",
                                       "CLAUDE_CODE_SSE_PORT": "1"})) == {"PATH", "HOME", "LC_ALL"}
+
+
+def test_the_command_lines_environment_names_per_system():
+    import reader_census as rc
+    posix, win = set(rc.cli_env_names("posix")), set(rc.cli_env_names("nt"))
+    assert {"PATH", "HOME", "CLAUDE_CODE_OAUTH_TOKEN"} <= posix and not posix & set(rc.CLI_ENV_WINDOWS)
+    assert posix < win and {"SYSTEMROOT", "PATHEXT", "COMSPEC", "USERPROFILE", "APPDATA"} <= win
+    assert not win & {"ANTHROPIC_API_KEY", "ANTHROPIC_BASE_URL", "CLAUDECODE"}
 
 
 def test_the_claude_command_lines_model_is_a_name_never_an_option(tmp_path, monkeypatch, capsys):
