@@ -3830,7 +3830,10 @@ function drawBackups() {
   if (drawnFor("backups", JSON.stringify([b, state.file ? state.file.changes : 0]))) return;
   const d = (b && b.dirs) || state.dirs || {};
   const list = b ? b.list : [];
-  const open = (x) => () => replaceAct("open_backup", { index: x.index, name: x.name }, null, "Open a kept copy", opening(x.name), "Open anyway");
+  // a copy by its folder and name; not opened (a copy no longer kept, say), the list is fetched again as it is now
+  const open = (x) => async () => {
+    if (!(await replaceAct("open_backup", { folder: x.folder, name: x.name }, null, "Open a kept copy", opening(x.name), "Open anyway")) && pageInUse()) loadBackups();
+  };
   fillWindow("backups", "Backups",
     el("p", { class: "small" }, "The editor never writes into a file it opened. It keeps every settings file as first opened (and any file a Save As replaces), and the camera's settings at every read, just before every write and after it. To go back, open a copy and write it to the camera or Save As."),
     el("p", { class: "small weak", style: { "white-space": "pre-wrap" } }, `Originals: ${d.originals}\nCamera: ${d.camera}`),

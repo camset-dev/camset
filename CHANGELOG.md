@@ -43,6 +43,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   SmartScreen warns the first time ("Windows protected your PC": More info, then Run anyway), and Smart App Control,
   where it is on, blocks them with no Run anyway, until code signing is arranged. The installer's Properties > Details
   name Camset Editor and the program's version, as the program's do.
+- On the web page, Open in Backups opens the copy you chose even when the editor kept more copies after the list was
+  shown (a read from the camera, a write, a file opened), which go at the top and move the rest down. It said "That is
+  not one of the copies the editor keeps." until you pressed Refresh, and now it says so only for a copy no longer kept,
+  then shows the list as it is. A page left open from before this version asks to be reloaded first.
 
 ### The definition viewer
 

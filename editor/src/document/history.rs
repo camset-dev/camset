@@ -6,6 +6,9 @@ use crate::*;
 pub(crate) struct Backup {
     pub(crate) when: String,
     pub(crate) kind: &'static str,
+    /// The folder it is in, "originals" or "camera" (`originals_dir`, `camera_dir`): a file name is the copy's own
+    /// within its folder only.
+    pub(crate) folder: &'static str,
     pub(crate) path: PathBuf,
 }
 
@@ -28,7 +31,8 @@ impl App {
     /// Every kept copy, newest first: originals, and the camera's settings at each read and around each write.
     pub(crate) fn list_backups() -> Vec<Backup> {
         let mut v = Vec::new();
-        for (dir, camera) in [(Self::originals_dir(), false), (Self::camera_dir(), true)] {
+        for (dir, folder) in [(Self::originals_dir(), "originals"), (Self::camera_dir(), "camera")] {
+            let camera = folder == "camera";
             let Ok(rd) = std::fs::read_dir(&dir) else { continue };
             for e in rd.flatten() {
                 let path = e.path();
@@ -40,7 +44,7 @@ impl App {
                     else if name.starts_with("SEND_") { "Written to the camera" }
                     else { "Camera, read" };
                 let modified = e.metadata().and_then(|m| m.modified()).ok();
-                v.push((modified, Backup { when: modified.map(|t| when_words(&stamp_of(t))).unwrap_or_default(), kind, path }));
+                v.push((modified, Backup { when: modified.map(|t| when_words(&stamp_of(t))).unwrap_or_default(), kind, folder, path }));
             }
         }
         v.sort_by_key(|b| std::cmp::Reverse(b.0));

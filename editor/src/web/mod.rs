@@ -1971,16 +1971,10 @@ impl App {
                 Err((status, why)) => WebReply::error(status, &why),
             },
             "backups" => WebReply::json(self.web_backups()),
-            "open_backup" => {
-                // only a copy the Backups window lists, by its place in the list; its name too, when the page gives it,
-                // so a list that changed since (a read adds a copy at the top) never opens another copy
-                let name = body["name"].as_str();
-                let named = |b: &Backup| name.is_none_or(|n| b.path.file_name().is_some_and(|f| f.to_string_lossy() == n));
-                match index("index").and_then(|i| Self::list_backups().into_iter().nth(i)).filter(named) {
-                    Some(b) => self.web_open(b.path, discard),
-                    None => WebReply::error(400, "That is not one of the copies the editor keeps."),
-                }
-            }
+            "open_backup" => match Self::listed_backup(Self::list_backups(), body["folder"].as_str(), body["name"].as_str()) {
+                Ok(b) => self.web_open(b.path, discard),
+                Err(no) => no,
+            },
             "history" => WebReply::json(self.web_history()),
             "revert_history" => {
                 let (Some(step), Some(si), Some(id)) = (index("step"), index("section"), body["id"].as_u64().and_then(|i| u16::try_from(i).ok())) else {
@@ -2561,12 +2555,32 @@ impl App {
     }
 
     /// The Backups window's list (`list_backups`), newest first, and the two folders it comes from (home as "~").
-    /// Each copy by its place in the list ("index", which `open_backup` takes with its "name") and its file name: no
-    /// folder of this computer.
+    /// Each copy by its folder ("originals" or "camera") and its file name, which `open_backup` takes: no folder of
+    /// this computer.
     fn web_backups(&self) -> Value {
-        let list: Vec<Value> = Self::list_backups().iter().enumerate().map(|(i, b)| json!({ "index": i, "when": b.when, "kind": b.kind,
+        let list: Vec<Value> = Self::list_backups().iter().map(|b| json!({ "when": b.when, "kind": b.kind, "folder": b.folder,
             "name": b.path.file_name().unwrap_or_default().to_string_lossy() })).collect();
         json!({ "dirs": { "originals": shown_path(&Self::originals_dir()), "camera": shown_path(&Self::camera_dir()) }, "list": list })
+    }
+
+    /// The copy `open_backup` opens, out of the Backups list as it is now (`list`): only a copy it holds, which the page
+    /// names by its folder ("originals" or "camera") and its file name, the copy's own within its folder. The list may
+    /// have changed since the page was given it (a read, a write or a file opened adds copies at the top and moves the
+    /// rest down, and the other folder may hold a copy of the same name): the copy named is opened wherever it is in
+    /// the list now, or none. A page older than the editor names no folder and is asked to reload. Two names in one
+    /// folder that read the same as text (a name that is not valid Unicode) are refused rather than either opened.
+    fn listed_backup(list: Vec<Backup>, folder: Option<&str>, name: Option<&str>) -> Result<Backup, WebReply> {
+        let not_kept = || WebReply::error(400, "That is not one of the copies the editor keeps.");
+        let Some(name) = name else { return Err(not_kept()) };
+        let Some(folder) = folder else {
+            return Err(WebReply::error(400, "This page is older than the editor: reload the page, then open the copy again."));
+        };
+        let mut same = list.into_iter().filter(|b| b.folder == folder && b.path.file_name().is_some_and(|f| f.to_string_lossy() == name));
+        match (same.next(), same.next()) {
+            (Some(b), None) => Ok(b),
+            (None, _) => Err(not_kept()),
+            (Some(_), Some(_)) => Err(WebReply::error(409, "Two copies in that folder have names the page cannot tell apart: open the copy from Backups in the desktop app.")),
+        }
     }
 
     /// The Edit history window: every record each edit of the session changed, with its value before and after
@@ -3956,12 +3970,40 @@ pub(crate) mod tests {
         let kinds = ["Original, as first opened", "Camera, just before a write", "Camera, read back after a write", "Written to the camera", "Camera, read"];
         assert!(list.iter().all(|x| kinds.contains(&x["kind"].as_str().unwrap())));
         let kept = list.iter().find(|x| x["name"].as_str().unwrap().starts_with("WEBTEST1_")).expect("the copy kept on opening").clone();
-        assert_eq!(kept["kind"], "Original, as first opened");
-        assert!(list.iter().all(|x| x.get("path").is_none()), "no folder of this computer in the list");
-        for bad in [json!({ "path": file.to_str().unwrap() }), json!({}), json!({ "index": 9999 }), json!({ "index": kept["index"], "name": "WEBTEST1.DAT" })] {
+        assert_eq!((&kept["kind"], &kept["folder"]), (&json!("Original, as first opened"), &json!("originals")));
+        assert!(list.iter().all(|x| x.get("path").is_none() && ["originals", "camera"].contains(&x["folder"].as_str().unwrap())), "no folder of this computer in the list");
+        let name = kept["name"].as_str().unwrap();
+        for bad in [json!({ "path": file.to_str().unwrap() }), json!({}), json!({ "index": 9999 }), json!({ "folder": "originals" }),
+            json!({ "folder": "originals", "name": 7 }), json!({ "folder": "originals", "name": "WEBTEST1.DAT" }), json!({ "folder": "camera", "name": name }),
+            json!({ "folder": "..", "name": name }), json!({ "folder": "originals", "name": format!("../originals/{name}") })] {
             assert_eq!(answer(&mut app, "open_backup", bad.clone()).status, 400, "{bad}");
         }
-        ask(&mut app, "open_backup", json!({ "index": kept["index"], "name": kept["name"] }));
+        // a page older than the editor (a place in the list and a name, no folder) is asked to reload
+        let old = answer(&mut app, "open_backup", json!({ "index": 0, "name": name }));
+        assert!(old.status == 400 && String::from_utf8_lossy(&old.body).contains("reload the page"), "{}", String::from_utf8_lossy(&old.body));
+        // since the list was shown, a copy of the same name kept in the camera folder (by a read, or by another test of
+        // this run: the editor's folders are the whole run's), newer, so at the top: the copy shown moved down and its
+        // name is in the list twice. Each opens from the folder named, never the other folder's
+        /// A file this test put in the editor's folders, removed however the test ends.
+        struct RemovedAtEnd(PathBuf);
+        impl Drop for RemovedAtEnd {
+            fn drop(&mut self) {
+                let _ = std::fs::remove_file(&self.0);
+            }
+        }
+        std::fs::create_dir_all(App::camera_dir()).unwrap();
+        let twin = App::camera_dir().join(name);
+        std::fs::write(&twin, c.to_bytes()).unwrap();
+        let _twin = RemovedAtEnd(twin.clone());
+        let later = std::time::SystemTime::now() + std::time::Duration::from_secs(3600);
+        std::fs::File::options().write(true).open(&twin).unwrap().set_modified(later).unwrap();
+        let now = App::list_backups();
+        let at = |folder: &str| now.iter().position(|b| b.folder == folder && b.path.file_name().is_some_and(|f| f.to_string_lossy() == name));
+        assert!(at("camera").is_some_and(|t| at("originals").is_some_and(|k| t < k)), "the twin above the copy: {:?} {:?}", at("camera"), at("originals"));
+        ask(&mut app, "open_backup", json!({ "folder": "camera", "name": name }));
+        assert_eq!(app.doc.as_ref().unwrap().path, twin);
+        ask(&mut app, "open_backup", json!({ "folder": kept["folder"], "name": name }));
+        assert_eq!(app.doc.as_ref().unwrap().path, App::originals_dir().join(name));
         let s = ask(&mut app, "state", json!({}));
         assert_eq!(s["file"]["name"], kept["name"]);
         assert_eq!(s["recent"][0]["name"], kept["name"], "the copy opened is now the latest recent file");
@@ -3970,6 +4012,45 @@ pub(crate) mod tests {
         ask(&mut app, "clear_recent", json!({}));
         assert!(app.prefs.recent.is_empty());
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// The copy the page names (its folder and its name) out of the list as it is now: found wherever it moved, the copy
+    /// of that name in the other folder never taken for it; a page older than the editor (no folder) asked to reload; no
+    /// name, or a name or folder the list does not hold, refused; two names in one folder that read the same as text
+    /// refused rather than either opened.
+    #[test]
+    fn a_copy_named_from_the_page_is_found_where_it_is_now() {
+        let (o, c) = ("originals", "camera");
+        let list = |names: &[(&'static str, &str)]| names.iter().map(|&(d, n)| Backup { when: String::new(), kind: "", folder: d, path: Path::new(d).join(n) }).collect::<Vec<_>>();
+        let pick = |l: Vec<Backup>, folder: Option<&str>, name: Option<&str>| App::listed_backup(l, folder, name).map(|b| b.path).map_err(|e| e.status);
+        let (ob, cb) = (Path::new(o).join("B.DAT"), Path::new(c).join("B.DAT"));
+        // shown as B (originals), A, B (camera): each B from its own folder
+        let shown = [(o, "B.DAT"), (o, "A.DAT"), (c, "B.DAT")];
+        assert_eq!(pick(list(&shown), Some(o), Some("B.DAT")), Ok(ob.clone()));
+        assert_eq!(pick(list(&shown), Some(c), Some("B.DAT")), Ok(cb.clone()));
+        // since, a read put N at the top and the camera's B is gone: the page's first row is the second now, and the only
+        // B left is the other folder's, which is not the one asked for
+        let now = [(c, "N.DAT"), (o, "B.DAT"), (o, "A.DAT")];
+        assert_eq!(pick(list(&now), Some(o), Some("B.DAT")), Ok(ob.clone()));
+        assert_eq!(pick(list(&now), Some(c), Some("B.DAT")), Err(400), "the camera's B is gone");
+        // a B kept in the camera folder since, at the top: the originals' B moved down, still the one asked for
+        let twin = [(c, "B.DAT"), (o, "B.DAT"), (o, "A.DAT")];
+        assert_eq!(pick(list(&twin), Some(o), Some("B.DAT")), Ok(ob.clone()));
+        assert_eq!(pick(list(&twin), Some(c), Some("B.DAT")), Ok(cb.clone()));
+        for (folder, name) in [(Some(o), None), (None, None), (Some("elsewhere"), Some("A.DAT")), (Some(c), Some("A.DAT")), (Some(o), Some("Z.DAT")), (Some(o), Some("originals/A.DAT"))] {
+            assert_eq!(pick(list(&now), folder, name), Err(400), "{folder:?} {name:?}");
+        }
+        let old = App::listed_backup(list(&now), None, Some("A.DAT")).err().unwrap();
+        assert!(old.status == 400 && String::from_utf8_lossy(&old.body).contains("reload the page"), "a page older than the editor names no folder");
+        // names that are not valid Unicode read alike as text: one alone opens, two are refused
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStrExt;
+            let odd_name = |b: &[u8]| Path::new(o).join(std::ffi::OsStr::from_bytes(b));
+            let odd = |b: &[u8]| Backup { when: String::new(), kind: "", folder: o, path: odd_name(b) };
+            assert_eq!(pick(vec![odd(b"B\xff.DAT")], Some(o), Some("B\u{fffd}.DAT")), Ok(odd_name(b"B\xff.DAT")));
+            assert_eq!(pick(vec![odd(b"B\xff.DAT"), odd(b"B\xfe.DAT")], Some(o), Some("B\u{fffd}.DAT")), Err(409));
+        }
     }
 
     /// Export CSV as a download: Edit mode's set, one line per setting shown (the page's search and Only edited
@@ -4891,7 +4972,9 @@ mod safety_tests {
         let kept = dir.join("KEPT.DAT");
         std::fs::write(&kept, SAMPLE).unwrap();
         app.prefs.recent = vec![kept.display().to_string()];
-        let backup = App::list_backups().into_iter().next().map(|_| 0);
+        // an original: no test removes one, where a copy a test put in the camera folder may be gone when it is asked for
+        let backup = App::list_backups().into_iter().find(|b| b.folder == "originals")
+            .map(|b| json!({ "folder": b.folder, "name": b.path.file_name().unwrap_or_default().to_string_lossy() }));
         let link = app.prefs.link.clone();
         let mut refused = vec![
             ("sample", request(&mut app, "sample", json!({}), None)),
@@ -4901,7 +4984,7 @@ mod safety_tests {
             ("open_recent", request(&mut app, "open_recent", json!({ "index": 0 }), None)),
         ];
         if let Some(b) = &backup {
-            refused.push(("open_backup", request(&mut app, "open_backup", json!({ "index": b }), None)));
+            refused.push(("open_backup", request(&mut app, "open_backup", b.clone(), None)));
         }
         for (name, r) in refused {
             assert!(r.status == 409 && said(&r).contains("unsaved edits"), "{name}: {} {}", r.status, said(&r));
