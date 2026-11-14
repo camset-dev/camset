@@ -53,6 +53,34 @@ enums:
       id: aperture_block
       doc: Aperture (F-number) [Exposure/Color > Memory exposure (stored per memory)]. memory sets; 5 of 5 settings
         on it proved on the camera.
+    0x0182:
+      id: different_set_for_still_mv_aperture
+      doc: 'Different Set for Still/Mv: Aperture [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked. live
+        settings; 1 of 1 settings on it proved on the camera.'
+    0x0183:
+      id: different_set_for_still_mv_shutter_speed
+      doc: 'Different Set for Still/Mv: Shutter Speed [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked.
+        live settings; 1 of 1 settings on it proved on the camera.'
+    0x0184:
+      id: different_set_for_still_mv_iso
+      doc: 'Different Set for Still/Mv: ISO [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x0185:
+      id: different_set_for_still_mv_exposure_comp
+      doc: 'Different Set for Still/Mv: Exposure Comp. [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked.
+        live settings; 1 of 1 settings on it proved on the camera.'
+    0x0186:
+      id: different_set_for_still_mv_metering_mode
+      doc: 'Different Set for Still/Mv: Metering Mode [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked.
+        live settings; 1 of 1 settings on it proved on the camera.'
+    0x0187:
+      id: different_set_for_still_mv_white_balance
+      doc: 'Different Set for Still/Mv: White Balance [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked.
+        live settings; 1 of 1 settings on it proved on the camera.'
+    0x0188:
+      id: different_set_for_still_mv_picture_profile
+      doc: 'Different Set for Still/Mv: Picture Profile [Setup > Different Set for Still/Mv]: 0 Not ticked, 1 Ticked.
+        live settings; 1 of 1 settings on it proved on the camera.'
     0x018b:
       id: network_block
       doc: Network block (holds a Cnct. while Power OFF flag) [Network > Cnct./Remote Sht.]. live settings; 0 of

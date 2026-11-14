@@ -240560,6 +240560,272 @@
      "linear": null
     }
    }
+  },
+  {
+   "key": "global:0x0182",
+   "area": "global",
+   "id": 386,
+   "name": "Different Set for Still/Mv: Aperture",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0183",
+   "area": "global",
+   "id": 387,
+   "name": "Different Set for Still/Mv: Shutter Speed",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0184",
+   "area": "global",
+   "id": 388,
+   "name": "Different Set for Still/Mv: ISO",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0185",
+   "area": "global",
+   "id": 389,
+   "name": "Different Set for Still/Mv: Exposure Comp.",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0186",
+   "area": "global",
+   "id": 390,
+   "name": "Different Set for Still/Mv: Metering Mode",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0187",
+   "area": "global",
+   "id": 391,
+   "name": "Different Set for Still/Mv: White Balance",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
+  },
+  {
+   "key": "global:0x0188",
+   "area": "global",
+   "id": 392,
+   "name": "Different Set for Still/Mv: Picture Profile",
+   "tab": "Setup",
+   "group": "Different Set for Still/Mv",
+   "order": 9000,
+   "row": [
+    "Different Set for Still/Mv"
+   ],
+   "row_at": [
+    10
+   ],
+   "row_group": "Operation Customize",
+   "values": [
+    [
+     0,
+     "Not ticked"
+    ],
+    [
+     1,
+     "Ticked"
+    ]
+   ],
+   "note": "One checkbox of this menu row.",
+   "in_sets": false,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1
+    ]
+   }
   }
  ],
  "menu": [

@@ -31,6 +31,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Different Set for Still/Mv is read and edited.** Its seven boxes (Aperture, Shutter Speed, ISO,
+  Exposure Comp., Metering Mode, White Balance, Picture Profile) are seven settings on the Setup tab, one record each,
+  Ticked or Not ticked, each proved on the camera by ticking and unticking its box. A ticked box keeps that setting
+  apart for stills and for movies; what a change then writes to each mode's copy is not proved yet, so the editor's
+  handling of the copies is as before.
 - On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
   page and in Copy details: "Windows 11 build 26100 (x86_64)" (or Windows 10, or Windows Server), where it said
   "Windows (x86_64)". Windows itself gives the numbers, with no console window and nothing more to install.

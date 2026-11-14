@@ -25,6 +25,13 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         unknown = 203
         s_q_motion_or_time_lapse_active = 368
         aperture_block = 384
+        different_set_for_still_mv_aperture = 386
+        different_set_for_still_mv_shutter_speed = 387
+        different_set_for_still_mv_iso = 388
+        different_set_for_still_mv_exposure_comp = 389
+        different_set_for_still_mv_metering_mode = 390
+        different_set_for_still_mv_white_balance = 391
+        different_set_for_still_mv_picture_profile = 392
         network_block = 395
         memory_1_aperture_block = 396
         zone_position = 410
