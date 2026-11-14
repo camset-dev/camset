@@ -16,7 +16,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths, safety, vlm  # noqa: E402
+from camkit import jsonl, paths, runs, safety, vlm  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from page_model import same_text  # noqa: E402
 
@@ -26,6 +26,7 @@ def main():
         sys.exit("usage: kit/tiebreak.py RUN (a run in the camera's runs/<model>_fw<fw>/, or a path)")
     readers(stop=True)                        # none listed: its sentence, and nothing read
     run = paths.run_path(sys.argv[1])
+    runs.private_if_marked(run)               # a --network or --owner run's folder: tiebreak.jsonl 0600 in it too
     vlm.local_only_runs(run)                  # a --network run's frames: local readers only (make_reader)
     recs = jsonl.read(run / "options.jsonl")
     try:

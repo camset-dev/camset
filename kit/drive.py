@@ -134,7 +134,10 @@ Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
 checked (docs/decisions/0015: every run ends restoring its start file). On an address, --network or --owner run the
 records that differ are said and kept by key and count alone, never a value (runner.values_withheld, changes_kept),
-unless the owner row's decision logs values.
+unless the owner row's decision logs values. A run whose first --path label the scan does not reach (find_position,
+crawl_run.go_to) sends none of its presses, says the label as it was given (the run's own argument, on every run),
+restores its start file and, once that checks out, exits EXIT_INCOMPLETE (8; kit/exit_status.py), so a chain or an
+agent can tell it from a run that did its presses.
 """
 import argparse
 import contextlib
@@ -156,11 +159,22 @@ from camkit.screen import same_position, same_state  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
-from runner import (EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, add_network_argument,  # noqa: E402
-                    add_owner_argument, add_scan_argument, changes_kept, close_for_restore, defined_values,
-                    known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
-                    network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restore_checked,
-                    restoring, row_values, values_withheld)
+from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED,  # noqa: E402
+                    add_network_argument, add_owner_argument, add_scan_argument, changes_kept, close_for_restore,
+                    defined_values, known_labels, known_values, label_readings, load_scan, log_network_decided,
+                    log_owner_decided, network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
+                    restore_checked, restoring, row_values, values_withheld)
+
+
+class NotReached(RuntimeError):
+    """The --path's first label was not reached by the scan (find_position, go_to): the run cancels, restores and exits
+    EXIT_INCOMPLETE. Its message names the label as the run was given it (`label`, the run's own argument, never a text
+    read off the screen), shown on every run, a --network or --owner one too (2026-11-14: "could not reach
+    '(withheld)'" withheld the very row the decision names)."""
+
+    def __init__(self, label: str):
+        super().__init__(f"could not reach {label!r} by the scan")
+        self.label = label
 
 
 def bar_at(cam, y: int) -> bool:
@@ -675,20 +689,22 @@ CLOSES = ("menu", *ENTERS)
 
 
 def network_left(now, opened_from, closing: bool, lit: str = "", row: str = "", suspect=None, own=None,
-                 readings=None) -> bool:
+                 readings=None, labels=None) -> bool:
     """Whether the row a network decision opened has been left, the screen read right after the press being `now`:
     only when that press was a MENU, or an Enter on an option the decision names (`closing`: CLOSES; main() spends it
     on this one read, so a MENU the camera ignored never ends the row on a later press), AND `now` is the shooting
     screen, or the page the row was opened from (`opened_from`, the screen read before the press that opened it:
     same_position) with its lit bar (`lit`, as read now) reading the row `row` itself, as its label or as a reading of
-    it with its page's icon glued on (`readings`, runner.network_readings: safety.bar_on_row): a popup over the dimmed
-    page lights an option, never the row, and a bar that cannot be read keeps the row open. Never on a screen's kind alone,
-    never on the press that opened the row: a camera slow to draw the row's list still shows the page after it, and a
-    list misread as a menu page reads as one. MENU that lands on another page, or on the Main tiles, leaves the row
-    open: another MENU closes the menu onto the shooting screen. Where the row's own screen read as the shooting screen
-    before any closing key (`suspect`, that screen: main() marks it), a frame read as the shooting screen ends the row
-    only when it is not that screen (same_state) and the camera's own picture of the screen reads as the shooting screen
-    too (`own()`, its kind: live.osd_kind); a picture that cannot be had keeps the row open (camkit.live.menu_closed)."""
+    it with its page's icon glued on (`readings`, runner.network_readings: safety.bar_on_row), or with that icon as the
+    live bar shows it where the run's known labels are given (`labels`, runner.label_readings: icon_slip): a popup over
+    the dimmed page lights an option, never the row, and a bar that cannot be read keeps the row open. Never on a
+    screen's kind alone, never on the press that opened the row: a camera slow to draw the row's list still shows the
+    page after it, and a list misread as a menu page reads as one. MENU that lands on another page, or on the Main
+    tiles, leaves the row open: another MENU closes the menu onto the shooting screen. Where the row's own screen read
+    as the shooting screen before any closing key (`suspect`, that screen: main() marks it), a frame read as the
+    shooting screen ends the row only when it is not that screen (same_state) and the camera's own picture of the screen
+    reads as the shooting screen too (`own()`, its kind: live.osd_kind); a picture that cannot be had keeps the row open
+    (camkit.live.menu_closed)."""
     if not closing:
         return False
     if getattr(now, "kind", None) == "shooting":
@@ -705,7 +721,7 @@ def network_left(now, opened_from, closing: bool, lit: str = "", row: str = "", 
             return False
     except Exception:                       # a screen that cannot be compared is no way out
         return False
-    return safety.bar_on_row(lit, row or "", readings)
+    return safety.bar_on_row(lit, row or "", readings, labels)
 
 
 def network_path(paths: list, network) -> tuple:
@@ -747,14 +763,15 @@ def screen_lines(cam, grip: str | None) -> list:
 
 
 def shown_screen(cam, grip: str | None, text: str, hide: bool, labels=(), values=(), logged: bool = False,
-                 kind: str | None = None, options=(), by_row=None) -> tuple:
+                 kind: str | None = None, options=(), by_row=None, page=()) -> tuple:
     """(what the console shows of a screen, what drive.jsonl keeps of it): its text, or, hidden, what
     safety.kept_screen keeps of it (by its kind: the shooting screen as its kind alone; else its whole row labels and
     field names, a list's known option names, a notice as safety.notice_kept keeps it) and the count of lines withheld,
     never a value (labels: the menu's row labels as the page model and the definition know them, runner.known_labels;
     values: the values they know for the rows, runner.known_values, never kept; options: the definition's value names
-    for the row whose list this is, runner.defined_values; by_row: runner.row_values, for a notice). logged (an owner
-    decision's "values": "logged", inside its row): the console as hidden, saying "(values in drive.jsonl)", and
+    for the row whose list this is, runner.defined_values; by_row: runner.row_values, for a notice; page: the page
+    model's row labels of the scan page shown, page_labels, without which no line of a letter or two is kept). logged
+    (an owner decision's "values": "logged", inside its row): the console as hidden, saying "(values in drive.jsonl)", and
     drive.jsonl keeps the text besides: the run's files hold the values, never the console (which a hosted agent may
     read). A blanked row's screen (cam.blank) is kept as "blanked" alone: its frame is black and was never read."""
     if getattr(cam, "blank", False):
@@ -764,10 +781,22 @@ def shown_screen(cam, grip: str | None, text: str, hide: bool, labels=(), values
     if kind is None:
         with contextlib.suppress(Exception):
             kind = cam.read().kind
-    kept = safety.kept_screen(kind, screen_lines(cam, grip), labels, values, options, by_row)
+    kept = safety.kept_screen(kind, screen_lines(cam, grip), labels, values, options, by_row, page)
     if logged:
         return f"{safety.kept_said(kept)} (values in drive.jsonl)", {**kept, "text": text}
     return safety.kept_said(kept), kept
+
+
+def page_labels(now, cycle, model) -> list:
+    """The page model's row labels of the scan page the screen read as `now` is (camkit.screen.same_position against the
+    scan's cycle), or [] when it is none (a row's own list, a notice, a screen the scan does not know): the only labels a
+    withheld screen keeps a line of a letter or two for (safety.screen_fields' page)."""
+    try:
+        j = next((i for i, p in enumerate(cycle or ()) if same_position(now, p["screen"])), None)
+    except Exception:                       # a screen that cannot be compared is no page
+        return []
+    page = (model or {}).get(cycle[j].get("page")) if j is not None else None
+    return [r["label"] for r in (page or {}).get("rows") or [] if isinstance(r, dict) and isinstance(r.get("label"), str)]
 
 
 def network_shown(kind: str, text: str, inside, address: bool, network: bool) -> bool:
@@ -964,7 +993,9 @@ def main():
         hide = network_shown(kind, t, inside, bool(address), a.network or a.owner)
         logged = bool(inside and inside.get("owner") and inside.get("logged"))
         names = defined.get(inside["row"], ()) if inside else ()       # the definition's option names for the row
-        return shown_screen(cam, a.grip, t, hide, labels, told, logged, kind, names, by_row)
+        # a line of a letter or two is kept only as a row label of the scan page shown, never inside a row
+        here = page_labels(cam.read(), cycle, model) if hide and not inside else []
+        return shown_screen(cam, a.grip, t, hide, labels, told, logged, kind, names, by_row, here)
     cycle, model = scan if scan is not None else load_scan(a.scan)
     values = network_values(cam_network, model) if a.network else {}
     if owner_info:
@@ -1030,6 +1061,7 @@ def main():
     # with MENU; "answered" when the link answered with another screen. None: no such press, or it was refused before it
     # went (the marker taken away again)
     byhand, marker, question, stuck, unfinished, why_by_hand = None, None, None, False, False, ""
+    unreached = None        # the --path label the scan did not reach (NotReached): the run exits EXIT_INCOMPLETE
     try:
         with Link(run) as link:
             hdmi.attach(link)
@@ -1052,7 +1084,7 @@ def main():
                 # checked to be there before anything goes further (owner_place)
                 there = {"place": owner_place[:2]} if owner_info else {}
                 if j is None or go_to(cam, cycle, model, j, a.path[0], **there) is None:
-                    raise RuntimeError(f"could not reach {a.path[0]!r} by the scan")
+                    raise NotReached(a.path[0])
                 if owner_info:
                     why = place_refused(screen_text(cam, a.grip), *owner_place[:2])
                     if why:
@@ -1328,7 +1360,7 @@ def main():
                                         inside["row"], inside.get("suspect"),
                                         # the camera's own picture, into its own folder while a withheld row is open
                                         lambda: (cam.osd_seen() if hasattr(cam, "osd_seen")
-                                                 else osd_kind(getattr(cam, "link", None))), readings):
+                                                 else osd_kind(getattr(cam, "link", None))), readings, known):
                             run.log("network_row_left", key=key, frame=cam.frame.path.name, row=inside["row"])
                             inside = None
                         else:
@@ -1366,6 +1398,11 @@ def main():
                     screens.append({"after": "wait", "frame": cam.frame.path.name, "kind": cam.read().kind, **kept})
                     print(f"{'(after ' + str(a.wait) + ' s)':32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {console}",
                           flush=True)
+            except NotReached as e:
+                # the row's name is the run's own argument: said as given, on every run; nothing read off the screen in
+                # it (go_to's and find_position's own lines withhold what they read: crawl_run.said)
+                print(f"error: {e}; cancelling", flush=True)
+                ok, unreached = False, e.label
             except Exception as e:
                 print(f"error: {say(f'{type(e).__name__}: {e}')}; cancelling", flush=True)
                 ok = False
@@ -1451,6 +1488,11 @@ def main():
         sys.exit(EXIT_RESTORE_BY_HAND)       # the start file goes back by hand, once the link is back (exit_status)
     if not restored:
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
+    if unreached is not None:
+        # nothing was pressed on the row: a chain or an agent tells it from a run that did its presses (exit_status)
+        print(f"{unreached!r} was not reached by the scan: its start file is back and checked, and none of the run's "
+              f"presses went out on it (exit status {EXIT_INCOMPLETE})", flush=True)
+        sys.exit(EXIT_INCOMPLETE)
 
 
 if __name__ == "__main__":

@@ -35,6 +35,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import config, ocr, paths, safety  # noqa: E402
+from camkit.runs import private_if_marked  # noqa: E402
 from camkit.screen import MENU_ROW_PITCH, MENU_ROW_TOP  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, cache_key, cached, local_only_runs, make_reader, readers, role  # noqa: E402
 from runner import (SCAN_MODES, OcrUnavailable, read_frames, read_json, record_mode, record_model,  # noqa: E402
@@ -144,6 +145,7 @@ def main():
     if a.mode and a.run is None:
         sys.exit("page_model: --mode records the mode of the scan named: page_model.py --mode MODE <run>")
     run = Path(a.run or paths.run_arg("kit2_page_scan"))
+    private_if_marked(run)              # a --network or --owner run's folder: model.json 0600 in it too
     if a.mode:
         if a.vlm or a.reader:
             sys.exit("page_model: --mode only records the scan's mode; run --vlm on its own")

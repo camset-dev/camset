@@ -34,9 +34,11 @@ press on the row, cancels the lap. Once its start file is back and checked, a ru
 the crawl lost or off the scan) EXIT_INCOMPLETE (8); a STOP, the lap complete or --limit reached exit 0; a restore that
 did not check out exits EXIT_UNRESTORED (4) (kit/exit_status.py; kit/tools/chain.py stops on each).
 
-Navigation guesses nothing: where the lit group in the group column cannot be read, it is read again once after a short
-settle, then on the camera's own picture of its screen (the SDK's OSD image); if none names it, nothing more is pressed
-and the row is not reached (jump, from_groups: lit_group).
+Navigation guesses nothing: the lit group in the group column is read whole, by its letters and digits, whatever icon
+glyph the bar or the scan glued on (group_near); where it cannot be read, it is read again once after a short settle,
+then on the camera's own picture of its screen (the SDK's OSD image); if none names it, nothing more is pressed and the
+row is not reached (jump, from_groups: lit_group). The menu found reopened with the cursor in the group column is stepped
+into a group it may enter before the lap begins (find_position, as kit/drive.py finds it).
 
 Results: kit2_crawl/rows.jsonl (one line per row), frames and presses in shots/ and events.jsonl. Every run folder
 named here is in the camera's runs/<model>_fw<fw>/ (camkit.paths).
@@ -199,11 +201,12 @@ def go_to(cam, cycle, model, j, label, place=None):
             return None
     if fallback:
         # a row found by another reading: its lit bar, read now, must be the row (safety.bar_on_row: its label, or the
-        # reading with its page's icon glued on where another reader read the row exactly), else nothing more
+        # reading with its page's icon glued on where another reader read the row exactly, or that icon as the live bar
+        # shows it, a letter misread, glued on or set apart, forming no other label the kit knows), else nothing more
         row = model[cycle[j]["page"]]["rows"][cycle[j]["row"]]
         entry = {"group": page_group(model[cycle[j]["page"]]), "readings": [row.get("label") or "", *row_readings(row)]}
         lit = lit_text(cam.frame.image, cam.frame.path)
-        if not safety.bar_on_row(lit, label, {label: [entry]}):
+        if not safety.bar_on_row(lit, label, {label: [entry]}, label_readings(model)):
             print(f"the row the page model reads as {label!r} is lit, but its bar does not read it: "
                   f"{said(cam, lit)}", flush=True)
             return None
@@ -302,12 +305,17 @@ def menu_text(cam) -> str:
     return ocr.text_in(ocr.read([f.path])[f.path], (0, 0, 640, 480)).strip()
 
 
+TEXT_WITHHELD = "(the text read withheld)"
+
+
 def said(cam, text: str) -> str:
-    """What a print shows of a text read off the screen now: the text, but on a --network run (the camera given a
-    network decision's rows: LiveCamera.network) its length alone, since it may hold a device's name or an address
-    (drive.py's say() withholds alike)."""
-    text = str(text or "")
-    return f"(the text read withheld, {len(text)} characters)" if getattr(cam, "network", None) else repr(text[:60])
+    """What a print shows of a text read off the screen now: the text, but on a --network or --owner run (the camera
+    given a network decision's rows or an owner decision's row: LiveCamera.network, LiveCamera.owner) nothing of it,
+    not even its length, which can tell a row's values apart (2026-11-14), since it may hold a device's name, an address
+    or a value (drive.py's say() withholds alike)."""
+    if getattr(cam, "network", None) or getattr(cam, "owner", None):
+        return TEXT_WITHHELD
+    return repr(str(text or "")[:60])
 
 
 def group_near(text: str, names: list) -> int | None:
@@ -330,8 +338,8 @@ def from_groups(cam, cycle, model):
     there, each judged with its slips) and one Right into its rows, only on a screen still read as the menu with the
     focus in the group column and its lit bar naming that very group. Up and Down in the column only light another
     group. Returns the scan position landed on, or None; when the tab or the lit group cannot be read, or no group of the
-    tab may be entered, it presses nothing (the caller's MENU closes the menu). On a --network run nothing it read off
-    the screen is printed but its length (said)."""
+    tab may be entered, it presses nothing (the caller's MENU closes the menu). On a --network or --owner run nothing it
+    read off the screen is printed (said)."""
     groups = page_groups(cycle, model)
     known = known_groups(model)
     tab = tab_shown(menu_text(cam))
@@ -431,11 +439,12 @@ def osd_lit(cam) -> str:
 
 
 def lit_group(cam, names: list, lit, named=None):
-    """Which of a tab's groups (`names`) the group column's lit bar names (`named`: group_shown, or group_near, judged
-    whole), or None: read as it is, then once more after GROUP_SETTLE s (the camera's own frame read afresh where the
-    camera can: cam.refresh), then on the camera's own picture of its screen (osd_lit). Nothing is pressed here, and
-    nothing guessed: None leaves the caller to press nothing more."""
-    named = named or group_shown
+    """Which of a tab's groups (`names`) the group column's lit bar names (`named`: group_near by default, the name judged
+    whole by its letters and digits, whatever icon glyph the bar or the scan glued on), or None: read as it is, then
+    once more after GROUP_SETTLE s (the camera's own frame read afresh where the camera can: cam.refresh), then on the
+    camera's own picture of its screen (osd_lit). Nothing is pressed here, and nothing guessed: None leaves the caller
+    to press nothing more."""
+    named = named or group_near
     at = named(lit(), names)
     if at is not None:
         return at
@@ -454,10 +463,14 @@ def lit_group(cam, names: list, lit, named=None):
 def jump(cam, cycle, groups, target, model):
     """From a page's rows to the target row's group by the columns: Left twice to the tabs, Up/Down to
     its tab (read off the screen), Right, Down to its group, Right into its rows. Returns the position
-    landed on, as the scan recorded it, or None. The last Right goes out only where the lit group, as read there, is no
-    group the column never enters (safety.group_refused, its slips judged): else nothing more is pressed, and the
-    caller's MENU closes the menu with the cursor in the column, where find_position steps back into the rows from. On a
-    --network run nothing it read off the screen is printed but its length (said)."""
+    landed on, as the scan recorded it, or None. The lit group is read as from_groups reads it (lit_group, group_near:
+    the name judged whole by its letters and digits, equal or, for one of at least safety.GROUP_MIN, one letter apart,
+    exactly one group of the tab; a bar read with another icon glyph than the scan's, "(Cnct./Remote Sht." for the
+    scan's "[Cnct./Remote Sht.", is the same group, 2026-11-14). The last Right goes out only where the lit group, as
+    read there, is the target's and no group the column never enters (safety.group_refused, its slips judged), and the
+    screen still reads as the menu with the focus in the group column: else nothing more is pressed, and the caller's
+    MENU closes the menu with the cursor in the column, where find_position steps back into the rows from. On a
+    --network or --owner run nothing it read off the screen is printed (said)."""
     tab, group = groups[cycle[target]["page"]]
     for _ in range(2):
         cam.press("left")
@@ -476,7 +489,9 @@ def jump(cam, cycle, groups, target, model):
     # Customize reached Accessibility, 2026-11-07): the breadcrumb names the lit group, so the move is relative
     names = group_names(cycle, groups, model, tab)
     lit = lambda: lit_text(cam.frame.image, cam.frame.path)       # the breadcrumb says only the tab here
-    at = lit_group(cam, names, lit, group_shown)
+    # the lit bar judged as from_groups judges it (group_near, by default): whole, by its letters and digits, so an icon
+    # glyph read otherwise than the scan read it ("0Cnct./Remote Sht.", "(Cnct./Remote Sht.") names the same group
+    at = lit_group(cam, names, lit)
     if at is None:
         # never a guess before a Down or a Right (2026-11-14: "taking it as the first" moved from a group nobody read)
         print(f"the lit group could not be read in {said(cam, lit())}, nor on a second look or the camera's own picture: "
@@ -485,15 +500,22 @@ def jump(cam, cycle, groups, target, model):
     d = group - at
     for _ in range(abs(d)):
         cam.press("down" if d > 0 else "up")
-    if d and lit_group(cam, names, lit, group_shown) != group:
+    if d and lit_group(cam, names, lit) != group:
         # the group reached must be read as the one meant: one that cannot be read gets no Right either
         print(f"the group column did not reach group {group + 1} of {tab!r}, or its lit group could not be read: "
               f"{said(cam, lit())}", flush=True)
         return None
     refused = group_closed(cam, lit(), known_groups(model))
     if refused:
-        refused = safety.quoted_withheld(refused) if getattr(cam, "network", None) else refused
+        private = getattr(cam, "network", None) or getattr(cam, "owner", None)
+        refused = safety.quoted_withheld(refused) if private else refused
         print(f"the lit group reads as one never entered from the group column ({refused}): no Right", flush=True)
+        return None
+    screen_now = cam.read()
+    if screen_now.kind != "menu" or screen_now.focus != "groups":
+        # as from_groups: the Right goes out only on a screen still read as the group column
+        print(f"the screen no longer reads as the group column ({screen_now.kind}, focus {screen_now.focus}): no Right",
+              flush=True)
         return None
     cam.press("right")
     j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
@@ -629,13 +651,15 @@ def network_settings_or_exit(run) -> dict:
 
 def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
                     network=frozenset()) -> bool:
-    """MENU, find where it opened in the scan's cycle, crawl from there, close the menu. network: the Wi-Fi and
-    Bluetooth settings a dated owner decision opens (camkit.crawl.network_open). True when the lap ended as it should
-    (complete, --limit reached, or a STOP); False when the menu opened on a screen the scan does not know, the start
-    label was not reached, or the crawl stopped short (off the scan, lost, an error)."""
+    """MENU, find where it opened in the scan's cycle (find_position, kit/drive.py's way: a menu reopened with the
+    cursor in the group column, where a refused jump left it, is stepped into the rows of a group it may enter
+    (from_groups); one opened on a page the scan does not match goes by the columns to the Shooting tab's first group),
+    crawl from there, close the menu. network: the Wi-Fi and Bluetooth settings a dated owner decision opens
+    (camkit.crawl.network_open). True when the lap ended as it should (complete, --limit reached, or a STOP); False when
+    the menu opened on a screen the scan does not know and none of those ways reached one it does, the start label was
+    not reached, or the crawl stopped short (off the scan, lost, an error)."""
     cam.press("menu")
-    s = cam.read()
-    j = next((i for i, p in enumerate(cycle) if same_position(s, p["screen"])), None)
+    j = find_position(cam, cycle, model)
     complete, reached = False, True
     if j is not None and start_label:
         j = go_to(cam, cycle, model, j, start_label)

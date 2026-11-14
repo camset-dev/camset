@@ -603,8 +603,9 @@ class LiveCamera:
         except Exception:                       # a screen or a bar that cannot be read is no way out
             return False
         # the bar on the row itself: its label, or a reading of it with its page's icon glued on that opened it
-        # (safety.bar_on_row: "LANIP Address Setting" still reads so after MENU)
-        return safety.bar_on_row(lit, inside["row"], getattr(self, "readings", {}))
+        # (safety.bar_on_row: "LANIP Address Setting" still reads so after MENU), or that icon as the live bar shows it
+        # where the run knows its labels (the icon read with a letter misread, glued on or set apart: icon_slip)
+        return safety.bar_on_row(lit, inside["row"], getattr(self, "readings", {}), getattr(self, "labels", None))
 
     def closing_seen(self, inside: dict) -> bool:
         """Whether a MENU, or an Enter on an option the decision names, has gone out since the screen was last judged

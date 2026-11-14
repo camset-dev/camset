@@ -5,7 +5,8 @@
 Each crawl's map goes into <crawl>/map.json, and every crawl's rows together into kit2_pass1/map_all.json, the map
 kit/prove_run.py, kit/axis_walk.py, kit/schema_update.py and the proof viewer read; each row there names its crawl
 ("run"), whose shots/ hold its frames. A map_all.json that differs from the one made now is replaced only with
---replace (the differences are listed); --dry-run writes nothing.
+--replace (the differences are listed); --dry-run writes nothing. Into a run folder a --network or --owner run marked,
+it writes owner-only (camkit.runs.private_if_marked).
 
 Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + vLLM) and, if present,
 <run>/tiebreak.jsonl (omlx as a third reader where those two disagreed) and <run>/checked_labels.json
@@ -28,6 +29,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, paths  # noqa: E402
+from camkit.runs import private_if_marked  # noqa: E402
 from runner import read_json  # noqa: E402
 
 BUTTONS = re.compile(r"^(ok|cancel|ok cancel)$", re.I)
@@ -131,6 +133,10 @@ def main(argv=None):
                          "(kit/pass3_run.py) is no part of pass 1's map")
     a = ap.parse_args(argv)
     runs = [paths.run_path(c) for c in a.crawls]
+    if not a.dry_run:
+        # a --network or --owner run's folder: map.json, and the map of them all where it is one, 0600 in it too
+        root = paths.run_root(required=False)
+        private_if_marked(*runs, *([root / "kit2_pass1"] if root is not None else []))
     maps = []
     for run in runs:
         m = build(run)

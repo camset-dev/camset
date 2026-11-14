@@ -1711,6 +1711,7 @@ def main():
                          f"proof runs (those marked {runs.PROOF_RUN}; proof_runs)")
     a = ap.parse_args()
     run = Path(a.run)
+    runs.private_if_marked(run)                    # a --network or --owner run's folder: the report 0600 in it too
     if not (run / "proofs.jsonl").exists():        # never an empty report over the one before
         sys.exit(f"{run}: no proofs.jsonl (kit/prove_run.py writes it); no report made, report.json and report.md "
                  "left as they are")

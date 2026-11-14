@@ -13,7 +13,8 @@ holds) is read with a local reader only (camkit.vlm.local_only_runs), and the to
 the second reader is not local. A row such a run opened under a decision carries its class ("network", written by
 kit/crawl_run.py): a Wi-Fi or Bluetooth setting's options are read as any other's ("network" kept on each option's
 line for kit/tiebreak.py), an identity or connection row's are left out, no reader asked and no text kept
-(docs/decisions/0008).
+(docs/decisions/0008). Into a run folder a --network or --owner run marked, options.jsonl is written owner-only (0600,
+the folder checked 0700: camkit.runs.private_if_marked), as the run left the rest of it.
 """
 import json
 import re
@@ -22,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, ocr, paths, safety, screen, vlm  # noqa: E402
+from camkit import jsonl, ocr, paths, runs, safety, screen, vlm  # noqa: E402
 from camkit.frames import load  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from runner import OcrUnavailable, read_frames  # noqa: E402
@@ -49,6 +50,7 @@ def main():
     shots = run / "shots"
     if not (run / "rows.jsonl").exists():          # nothing to read: never an empty options.jsonl over the old one
         sys.exit(f"{run}: no rows.jsonl (kit/crawl_run.py writes it); nothing read, options.jsonl left as it is")
+    runs.private_if_marked(run)               # a --network or --owner run's folder: options.jsonl 0600 in it too
     vlm.local_only_runs(run)                  # a --network run's frames: local readers only (make_reader)
     rows = jsonl.read(run / "rows.jsonl")
     jobs, left_out = [], 0

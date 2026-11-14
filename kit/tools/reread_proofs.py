@@ -27,6 +27,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import jsonl, paths, safety, vlm  # noqa: E402
+from camkit.runs import private_if_marked  # noqa: E402
 
 KINDS = ("list", "dialog", "sidelist", "axis", "table")
 
@@ -75,6 +76,7 @@ def main(argv=None):
     run = Path(a.run)
     from pass2_report import row_name
     from prove_run import PROMPTS, ask_second
+    private_if_marked(run)                   # a --network or --owner run's folder: what it writes there 0600 too
     vlm.local_only_runs(run)                 # a --network run's frames: local readers only (ask_role, make_reader)
     reader = use_reader(a.reader)
     if vlm.LOCAL_ONLY and not vlm.local_reader(vlm.playing("second")):

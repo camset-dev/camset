@@ -16,7 +16,8 @@ The guards:
                              or one of its own values, never an address screen unless the caller looks at one (drive.py
                              alone), never anything else; or the same row read with its page's icon glued on ("LANIP
                              Address Setting" on Wired LAN) where another reader of it read the row exactly
-                             (lifted_readings, row_read_as, glued_icon); bar_on_row, the lit bar back on such a row.
+                             (lifted_readings, row_read_as, glued_icon), that icon read live with a letter misread
+                             (icon_slip); bar_on_row, the lit bar back on such a row.
   group_refused(name, known) a group the menu's group column must not step into: never_open, or one letter from a
                              never-open group's or action's name ("FTP Transter").
   look_refused(key, lit, row, options)  inside such a row: up, down and MENU, and Enter only on an option the decision
@@ -1023,13 +1024,70 @@ def lifted_readings(row: str, readings=None) -> set:
     return out
 
 
-def bar_on_row(lit, row: str, readings=None) -> bool:
+# What a lit bar reads such an icon as, live: on the a1 II's Wired LAN page the page model's readings of IP Address
+# Setting (read off the page with another row lit) show its icon as letters, glued on in one reading and set apart in
+# another, and the lit bar, read on the camera with the row lit, shows the same icon with a letter misread or dropped,
+# set apart by a space or glued on (2026-11-14, the third look at the network rows). An icon of at least this many
+# letters may be read so on the bar (icon_slip)
+ICON_SLIP_MIN = 3
+
+
+def row_icons(row: str, readings=None) -> set:
+    """The icons (plain) the page model's readings show glued to the decided row `row`'s label: the letters before the
+    label in each reading lifted_readings takes (a word of the page's own group name, glued on, in an entry of
+    `readings` that stands for the row: row_read_as, glued_icon)."""
+    want = plain(row)
+    return {w[:-len(want)] for w in lifted_readings(row, readings) if want and w != want and w.endswith(want)}
+
+
+def icon_slip(prefix: str, row: str, icons) -> bool:
+    """Whether `prefix` (plain), what a lit bar shows before the decided row `row`'s label, glued on or set apart by one
+    space, is one of the row's own icons (`icons`, row_icons: each a word of its page's group the page model read glued
+    on) read with at most one letter misread, dropped or put in (one_apart): only an icon of at least ICON_SLIP_MIN
+    letters, the prefix two letters or digits or more and nothing else, naming nothing never_open or identity_screen
+    holds, and the label read with it, set apart or glued on, of `row`'s own class (lift_class). A word the page model
+    never read glued to that row ("No" before "Wi-Fi Connect") is no icon of it."""
+    if not re.fullmatch(r"[0-9a-z]{2,}", prefix or ""):
+        return False
+    if not any(len(c) >= ICON_SLIP_MIN and one_apart(prefix, c) for c in icons or ()):
+        return False
+    if never_open(prefix) or identity_screen(prefix):
+        return False
+    cls = lift_class(row)
+    return lift_class(f"{prefix} {row}") == cls and lift_class(f"{prefix}{row}") == cls
+
+
+def bar_heads(seen: str, row: str, readings=None, labels=None) -> list:
+    """Where, in a lit bar's text (`seen`, plain), the decided row `row`'s name ends, each place followed by nothing
+    alphanumeric (its value may follow): after a text lifted_readings takes that the bar starts with (the row's label,
+    or the page model's reading of it with its page's icon glued on), longest first; then, only where the kit's known
+    labels are given (`labels`, runner.label_readings), after the label preceded by one of the row's own icons as the
+    bar shows it live (icon_slip: a letter misread, glued on or set apart by one space), where the bar forms no other
+    label the kit knows (other_label, the row's own readings left out). [] where the bar is not on the row."""
+    want = plain(row)
+    out = [len(w) for w in sorted(lifted_readings(row, readings), key=len, reverse=True)
+           if w and seen.startswith(w) and not seen[len(w):len(w) + 1].isalnum()]
+    icons = row_icons(row, readings)
+    if not want or not icons or labels is None:
+        return out
+    k = seen.find(want, 1)
+    while k > 0:
+        end = k + len(want)
+        head = seen[:k][:-1] if seen[k - 1] == " " else seen[:k]
+        if not seen[end:end + 1].isalnum() and icon_slip(head, row, icons) \
+                and not other_label(seen, labels, own_readings(row, readings), row):
+            out.append(end)
+        k = seen.find(want, k + 1)
+    return out
+
+
+def bar_on_row(lit, row: str, readings=None, labels=None) -> bool:
     """Whether a lit bar, as read (`lit`), is on the decided row `row`: it starts with the row's label, or with a reading
-    of it lifted_readings takes (the row's icon glued on), followed by nothing alphanumeric (its value may follow). A
-    network row's lock ends on its page only with the bar on the row itself (camkit.live and kit/drive.py
-    network_left)."""
-    seen = plain(lit or "")
-    return any(w and seen.startswith(w) and not seen[len(w):len(w) + 1].isalnum() for w in lifted_readings(row, readings))
+    of it lifted_readings takes (the row's icon glued on), or, where the kit's known labels are given (`labels`), with
+    the label after one of the row's icons as the bar shows it live (bar_heads, icon_slip), followed by nothing
+    alphanumeric (its value may follow). A network row's lock ends on its page only with the bar on the row itself
+    (camkit.live and kit/drive.py network_left)."""
+    return bool(bar_heads(plain(lit or ""), row, readings, labels))
 
 
 def network_lifted_row(lit: str, decided, screens: bool = False, values=None, readings=None,
@@ -1048,8 +1106,9 @@ def network_lifted_row(lit: str, decided, screens: bool = False, values=None, re
     no such tail). So "Wi-Fi Connect On"
     opens Wi-Fi Connect where On is one of its values, and "No Wi-Fi Connect" never does, nor "Wi-Fi Connect Settings"
     where the row's values are known; "LANIP Address Setting" opens IP Address Setting only where the page model's row
-    on the Wired LAN page holds both readings. An address screen only where the caller looks at one (`screens`:
-    kit/drive.py alone), never for the walker or the provers."""
+    on the Wired LAN page holds both readings, and so does that icon read on the live bar with a letter misread, glued on
+    or set apart, where `labels` are given and the bar forms no other label (bar_heads, icon_slip). An address screen
+    only where the caller looks at one (`screens`: kit/drive.py alone), never for the walker or the provers."""
     cls = lift_class(lit) if decided else None
     if cls is None or (cls == LIFT_ADDRESS and not screens):
         return None
@@ -1058,10 +1117,8 @@ def network_lifted_row(lit: str, decided, screens: bool = False, values=None, re
         if network_refused(row) or (not screens and address_screen(row)):
             continue
         known = {plain(v) for v in (values or {}).get(row, ()) if plain(v)}
-        for want in sorted(lifted_readings(row, readings), key=len, reverse=True):
-            if not seen.startswith(want) or seen[len(want):len(want) + 1].isalnum():
-                continue
-            rest = plain(seen[len(want):])
+        for end in bar_heads(seen, row, readings, labels):
+            rest = plain(seen[end:])
             if not rest or rest in known:
                 return row
             if not known and labels is not None and unknown_tail(rest) \
@@ -1355,15 +1412,25 @@ def address_fields(lines, values=()) -> tuple[list, int]:
     return names, withheld
 
 
-def screen_fields(lines, labels=(), values=()) -> tuple[list, int]:
+# A line this short (once plain) is as often an icon or a value read as letters as a row's label: the definition has
+# rows labelled one letter (Picture Profile > Color Depth's "B"), and a withheld screen kept a "B" as a field name on a
+# page that has no such row (2026-11-14). screen_fields keeps one only where it is a row label of the very page shown
+SHORT_LINE = 2
+
+
+def screen_fields(lines, labels=(), values=(), page=()) -> tuple[list, int]:
     """address_fields, keeping besides each line that is wholly one of `labels` (the menu's row labels, as the page model
     and the definition know them: a row's label is no value) as that label is written there, never as the line reads:
     what a --network run shows and keeps of a screen whose text it withholds. A row's value beside its label ("IP
     Address Setting  Manual") is no whole label, and is withheld with it; a line that is wholly one of `values` (the
     values the definition and the page model know for the menu's rows, runner.known_values: "Auto", an option's name)
-    is withheld whatever `labels` hold, so a value that is also some row's or some path's label is never kept."""
+    is withheld whatever `labels` hold, so a value that is also some row's or some path's label is never kept. A line of
+    SHORT_LINE characters or fewer is kept only where it is also a row label of the page the kit is on (`page`: the page
+    model's row labels of the scan page the screen is, compared plain; none, as on a screen inside a row, keeps none),
+    never for a label the definition has somewhere else."""
     told = {plain(v) for v in values or () if isinstance(v, str) and plain(v)}
     known = {plain(x): x for x in labels or () if isinstance(x, str) and plain(x)}
+    here = {plain(x) for x in page or () if isinstance(x, str) and plain(x)}
     names, withheld = [], 0
     for ln in lines or ():
         text = str(getattr(ln, "text", ln) or "")
@@ -1373,6 +1440,9 @@ def screen_fields(lines, labels=(), values=()) -> tuple[list, int]:
             withheld += 1
             continue
         label = known.get(plain(text))
+        if label and len(plain(text)) <= SHORT_LINE and plain(text) not in here:
+            withheld += 1           # a letter or two: a label of another page, an icon or a value read as one
+            continue
         if label:
             names += [label] if label not in names else []
             continue
@@ -1387,16 +1457,17 @@ def screen_fields(lines, labels=(), values=()) -> tuple[list, int]:
 OPTION_KINDS = frozenset({"list", "checklist"})
 
 
-def kept_screen(kind, lines, labels=(), values=(), options=(), by_row=None) -> dict:
+def kept_screen(kind, lines, labels=(), values=(), options=(), by_row=None, page=()) -> dict:
     """What a run that withholds every screen's text keeps of one screen ({"fields", "withheld", and "options" or
     "notice" where there are any}): every --network run and every --owner run (kit/drive.py, kit/crawl_run.py,
     kit/prove_run.py; docs/decisions/0008 and 0009), from its start to its end, never a line as read. `lines`: the
     screen's OCR lines (camkit.ocr Lines or texts). Kept: the screen's kind (the caller's); the whole row labels and the
     field names (screen_fields, `labels` and `values` as runner.known_labels and runner.known_values give them: never a
-    line that is a known value); on an option list (OPTION_KINDS) the row's option names (`options`: the definition's
-    for that row, runner.defined_values) only where the names on the screen are that whole set, never which one is lit,
-    current or saved (a set short of one, OCR missing the lit line, or a window of a longer list would tell it), else
-    their count alone ("option_count"); on a notice, what notice_kept keeps of it (`by_row`:
+    line that is a known value; a line of a letter or two only where it is a row label of the page shown, `page`, the
+    page model's labels of that scan page); on an option list (OPTION_KINDS) the row's option names (`options`: the
+    definition's for that row, runner.defined_values) only where the names on the screen are that whole set, never which
+    one is lit, current or saved (a set short of one, OCR missing the lit line, or a window of a longer list would tell
+    it), else their count alone ("option_count"); on a notice, what notice_kept keeps of it (`by_row`:
     runner.row_values); and the count of lines withheld. The shooting screen is kept as its kind alone: its status line
     is the owner's shooting values."""
     texts = [t for t in (str(getattr(ln, "text", ln) or "") for ln in lines or ()) if t.strip()]
@@ -1418,7 +1489,7 @@ def kept_screen(kind, lines, labels=(), values=(), options=(), by_row=None) -> d
             continue
         if notice and plain(t) and re.search(r"(?<![0-9a-z])" + re.escape(plain(t)) + r"(?![0-9a-z])", said):
             continue                # a line the kept notice holds whole, word for word
-        got, hidden = screen_fields([t], labels, values)
+        got, hidden = screen_fields([t], labels, values, page)
         names += [n for n in got if n not in names]
         withheld += hidden
     return {"fields": names, **out, "withheld": withheld}

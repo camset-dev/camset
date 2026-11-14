@@ -138,6 +138,53 @@ def private_modes() -> bool:
     return os.name == "posix"
 
 
+def private_umask() -> None:
+    """On POSIX, the process's umask set to 0077 or tighter (UMASK_FLOOR), whatever the person's own: every file the
+    process creates from here is 0600 and every folder 0700 (Run.make_private, private_if_marked)."""
+    global UMASK_FLOOR
+    if not private_modes():
+        return
+    UMASK_FLOOR = 0o077
+    os.umask(os.umask(0o077) | 0o077)           # read and set at once: tighter than before, never looser
+
+
+def tighten_folder(folder) -> list:
+    """A private run's folder made owner-only, on POSIX: every folder in it 0700 and every file 0600 (symbolic links
+    left as they are, never followed). The paths whose modes were looser, relative to the folder; [] elsewhere."""
+    folder = Path(folder)
+    if not private_modes() or not folder.is_dir():
+        return []
+    fixed = []
+    for p in [folder, *sorted(folder.rglob("*"))]:
+        try:
+            if p.is_symlink():
+                continue
+            st = p.stat()
+            want = PRIVATE_DIR if p.is_dir() else PRIVATE_FILE
+            if stat.S_IMODE(st.st_mode) & 0o077:
+                os.chmod(p, want)
+                fixed.append(p.relative_to(folder).as_posix() or ".")
+        except OSError:
+            continue
+    return fixed
+
+
+def private_if_marked(*places) -> list:
+    """The run folders among `places` (each a run folder, or a file or folder inside one, looked for up to the runs
+    folder) that a --network or --owner run marked (camkit.vlm.LOCAL_MARKER, NO_READER_MARKER: camkit.vlm.marked_runs),
+    each made owner-only now (tighten_folder) and the process's umask set to 0077 (private_umask), as Run.make_private
+    makes a private run's own: every file a tool then writes into one (kit/pass1_labels.py's options.jsonl,
+    kit/pass1_map.py's map.json, kit/tiebreak.py's tiebreak.jsonl...) is 0600 and every folder 0700, on POSIX
+    (2026-11-14: options.jsonl was written 0644 into a run folder the run had sealed owner-only). [] when none is."""
+    from . import vlm
+    found = vlm.marked_runs(*places)
+    if found:
+        private_umask()
+        for folder in found:
+            tighten_folder(folder)
+    return found
+
+
 class Run:
     def __init__(self, name: str, root: Path = None, private: bool = False):
         """root: the camera's run root (camkit.paths.run_root()) unless given. private: a --network or --owner run's
@@ -168,32 +215,16 @@ class Run:
         anything is written in its folder but the folders themselves): on POSIX the process's umask set to 0077 or
         tighter (UMASK_FLOOR), whatever the person's own, and the folder made owner-only now (tighten). The paths
         tightened."""
-        global UMASK_FLOOR
         self.private = True
         if not private_modes():
             return []
-        UMASK_FLOOR = 0o077
-        os.umask(os.umask(0o077) | 0o077)           # read and set at once: tighter than before, never looser
+        private_umask()
         return self.tighten()
 
     def tighten(self) -> list:
-        """A private run's folder made owner-only, on POSIX: every folder in it 0700 and every file 0600 (symbolic links
-        left as they are, never followed). The paths whose modes were looser, relative to the folder; [] elsewhere."""
-        if not private_modes() or not self.dir.is_dir():
-            return []
-        fixed = []
-        for p in [self.dir, *sorted(self.dir.rglob("*"))]:
-            try:
-                if p.is_symlink():
-                    continue
-                st = p.stat()
-                want = PRIVATE_DIR if p.is_dir() else PRIVATE_FILE
-                if stat.S_IMODE(st.st_mode) & 0o077:
-                    os.chmod(p, want)
-                    fixed.append(p.relative_to(self.dir).as_posix() or ".")
-            except OSError:
-                continue
-        return fixed
+        """A private run's folder made owner-only, on POSIX (tighten_folder). The paths whose modes were looser, relative
+        to the folder; [] elsewhere."""
+        return tighten_folder(self.dir)
 
     def seal(self) -> list:
         """A private run's end: the eyes' polling target left at the top of the folder taken away (POLL_LEFT: a real

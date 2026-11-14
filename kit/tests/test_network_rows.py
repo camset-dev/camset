@@ -1069,7 +1069,8 @@ def drive_address(tmp_path, monkeypatch, scope_file, presses: list, path=("Displ
 
 def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision, open_lines, open_kind, page_lit,
                open_lit, page_kind="submenu", slow=False, misread=(), misread_lit=False, menu_does="page",
-               page_lines=None, own="", model=None, shooting_lines=None, changes=(), definition=None):
+               page_lines=None, own="", model=None, shooting_lines=None, changes=(), definition=None, reach=True,
+               exits=None):
     """drive.py's main() on a made-up camera, no LiveCamera under it: the path's row lit (page_lit) on a page of
     page_kind until a Right or an Enter goes out, then a screen of open_kind showing open_lines, its lit bar open_lit;
     MENU, or Enter there, brings the page back, at the place it was (drive.same_position: the same kind at the same
@@ -1080,9 +1081,10 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
     bar on an option). page_lines: the page's lines (by default two group names and the lit row); own: the kind the
     camera's own picture of the screen reads as (drive.osd_kind); model: the page scan's page model; shooting_lines: MENU
     inside the row closes the menu onto the shooting screen, which shows these lines (its status line); changes: the
-    records the session's end finds differing; definition: the camera's definition (camkit.definitions.active). A read
-    without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys pressed, the
-    console, drive.jsonl's line, the run's events)."""
+    records the session's end finds differing; definition: the camera's definition (camkit.definitions.active); reach:
+    whether the scan reaches the path's first label (crawl_run.go_to); exits: a list that takes the exit status main()
+    exits with, where it exits (else the exit is raised). A read without a press (the wait's) finds the open screen
+    drawn, a slow camera's included. Returns (the keys pressed, the console, drive.jsonl's line, the run's events)."""
     import drive as D
     from camkit import definitions, vlm
     scope_file(decision)
@@ -1159,7 +1161,8 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
                         ("wait_for", lambda *a, **k: None), ("Link", Link),
                         ("LiveCamera", camera),
-                        ("find_position", lambda cam, cycle, model: 0), ("go_to", lambda *a: True),
+                        ("find_position", lambda cam, cycle, model: 0),
+                        ("go_to", lambda *a, **k: True if reach else None),
                         ("enter_any", lambda cam, path, i: None), ("bar_at", lambda cam, y: False),
                         ("screen_text", lambda cam, grip: " ".join(now_lines())),
                         ("screen_lines", lambda cam, grip: now_lines()),
@@ -1177,7 +1180,12 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
         monkeypatch.setattr(D, name, value)
     argv = ["drive.py", "--network", *[x for p in path for x in ("--path", p)], *[x for p in presses for x in ("--press", p)]]
     monkeypatch.setattr(sys, "argv", argv)
-    D.main()
+    try:
+        D.main()
+    except SystemExit as e:
+        if exits is None:
+            raise
+        exits.append(e.code)
     line = json.loads((run.dir / "drive.jsonl").read_text(encoding="utf-8").splitlines()[-1])
     logged = (run.dir / "events.jsonl").read_text(encoding="utf-8")
     return [s[1] for s in sent if s[0] == "cam"], seen, line, logged
@@ -2711,7 +2719,8 @@ def test_crawl_from_menu_says_whether_the_lap_ended_as_asked(monkeypatch, capsys
     scan does not know, a start label not reached (its own message), or a crawl stopped off the scan or lost."""
     import crawl_run
     from camkit.link import StopRequested
-    cam = SimpleNamespace(press=lambda key: None, read=lambda: SimpleNamespace(kind="menu"), cancel_to_menu=lambda: None)
+    cam = SimpleNamespace(press=lambda key: None, read=lambda: SimpleNamespace(kind="menu", focus="rows"),
+                          cancel_to_menu=lambda: None)
     link = SimpleNamespace(press=lambda key, cleanup=False: None)
     monkeypatch.setattr(crawl_run, "same_position", lambda a, b: True)
 
@@ -2729,7 +2738,8 @@ def test_crawl_from_menu_says_whether_the_lap_ended_as_asked(monkeypatch, capsys
     assert crawl_run.crawl_from_menu(cam, link, [{"screen": None}], {}, None, io.StringIO(), "Drive Mode") is False
     assert "the start label 'Drive Mode' could not be reached by the scan" in capsys.readouterr().out
     monkeypatch.setattr(crawl_run, "same_position", lambda a, b: False)
-    assert crawl_run.crawl_from_menu(cam, link, [{"screen": None}], {}, None, io.StringIO()) is False
+    unknown = [{"screen": None, "kind": "menu", "page": "p", "row": 0}]      # a scan position the menu does not show
+    assert crawl_run.crawl_from_menu(cam, link, unknown, {}, None, io.StringIO()) is False
     assert "a screen the scan does not know" in capsys.readouterr().out
 
 
@@ -2942,8 +2952,11 @@ def test_a_one_or_two_character_label_is_no_label_unless_the_definition_has_it(t
     model = {"p": {"rows": [{"label": x} for x in ("B", "Q7", "AF", "Drive Mode", "Zoom")]}}
     labels = runner.known_labels(model)
     assert {"AF", "Drive Mode", "Zoom"} <= labels and not {"B", "Q7"} & labels
-    names, hidden = safety.screen_fields(["B", "AF", "Drive Mode", "Q7"], labels)
+    # a label of a letter or two is kept only on the page it is a row of (2026-11-14: screen_fields' page)
+    names, hidden = safety.screen_fields(["B", "AF", "Drive Mode", "Q7"], labels, page=["AF", "Drive Mode"])
     assert names == ["AF", "Drive Mode"] and hidden == 2
+    names, hidden = safety.screen_fields(["B", "AF", "Drive Mode", "Q7"], labels)
+    assert names == ["Drive Mode"] and hidden == 3
 
 
 def test_wi_fi_frequency_band_is_never_chosen():
@@ -3290,3 +3303,313 @@ def test_find_row_says_no_bar_text_on_a_network_or_owner_run(monkeypatch, capsys
         assert nav.find_row(cam, "Row") is True
         said = capsys.readouterr().out
         assert "row 'Row' reads" in said and (UNKNOWN in said) is shown, local
+
+
+# ---------------------------------------------------------------- the third look of 2026-11-14: what it showed to mend
+
+# The Network tab's groups as a page scan stores them: the scan read Cnct./Remote Sht.'s icon glyph as "[" and FTP
+# Transfer one letter off ("FTP Transter"); the group column's lit bar shows them otherwise, glyph and all
+THIRD_SCANNED = ["Wi-Fi", "[Cnct./Remote Sht.", "FTP Transter", "Wired LAN"]
+
+
+@pytest.mark.parametrize("drawn", ["[Cnct./Remote Sht.", "0Cnct./Remote Sht.", "(Cnct./Remote Sht."])
+def test_the_jump_reads_the_lit_group_whole_whatever_glyph_the_bar_draws(monkeypatch, drawn):
+    """crawl_run.jump judges the group column's lit bar as from_groups does (group_near: its letters and digits, whole,
+    equal or one letter apart, exactly one group): a bar read with another icon glyph than the scan stored, or with a
+    glyph where the scan read none, is the same group, where group_shown, wanting the scan's text, read none and the
+    jump pressed nothing more (item 1)."""
+    import crawl_run
+    monkeypatch.setattr(crawl_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(crawl_run, "osd_lit", lambda c: "")
+    shown = ["Wi-Fi", drawn, "FTP Transfer", "Wired LAN"]
+    # the column opens on the group of the page the jump left (Cnct./Remote Sht.), and steps down to Wired LAN
+    cam, cycle, model = columns(monkeypatch, THIRD_SCANNED, shown, at=1)
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 6, model) == 6
+    assert cam.keys == ["left", "left", "right", "down", "down", "right"] and cam.rights == ["Wired LAN"]
+    # it opens on FTP Transfer (the scan's "FTP Transter") and steps up to the glyph-drawn group: Right into it
+    cam, cycle, model = columns(monkeypatch, THIRD_SCANNED, shown, at=2)
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 2, model) == 2
+    assert cam.keys == ["left", "left", "right", "up", "right"] and cam.rights == [drawn]
+    assert crawl_run.lit_group(cam, THIRD_SCANNED, lambda: drawn) == 1
+
+
+def test_the_jump_still_refuses_what_it_cannot_tell_and_rechecks_the_column_before_its_right(monkeypatch):
+    """jump, judging the bar whole: a bar naming no group of the tab, or two, presses nothing more; a group the column
+    never enters is refused on the lit text (group_refused); and the screen read as the rows after the Downs gets no
+    Right (the kind and focus checked again just before it, as from_groups does)."""
+    import crawl_run
+    monkeypatch.setattr(crawl_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(crawl_run, "osd_lit", lambda c: "")
+    for drawn in ("Cnct./Remote Sht. Wi-Fi", "Remote"):
+        cam, cycle, model = columns(monkeypatch, THIRD_SCANNED, ["Wi-Fi", drawn, "FTP Transfer", "Wired LAN"], at=1)
+        cam.focus = "rows"
+        assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 6, model) is None
+        assert "down" not in cam.keys and cam.rights == []
+    # the target group drawn as the never-open action it is one letter from: no Right
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "[Cnct./Remote Sht.", "Wired LAN"],
+                                ["Wi-Fi", "(Cnct./Remote Sht.", "FTP Transfer"], at=1)
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 4, model) is None and cam.rights == []
+    # after the Down the screen reads as a page of rows, its bar the very group meant: no Right
+    cam, cycle, model = columns(monkeypatch, THIRD_SCANNED, ["Wi-Fi", "(Cnct./Remote Sht.", "FTP Transfer", "Wired LAN"],
+                                at=2, misfocus={"down": "Wired LAN"})
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 6, model) is None
+    assert cam.keys == ["left", "left", "right", "down"] and cam.rights == []
+
+
+def test_the_crawl_steps_out_of_the_group_column_the_menu_reopened_in(monkeypatch, capsys):
+    """crawl_run.crawl_from_menu finds where the menu opened as find_position does (item 2): a menu reopened with the
+    cursor in the group column, on the group a refused jump left it on, is stepped into a group it may enter
+    (from_groups) and the lap crawls from there, where before the crawl stopped at once (a screen the scan does not
+    know, exit status 8)."""
+    import crawl_run
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "FTP Transter", "Wired LAN"], ["Wi-Fi", "FTP Transfer", "Wired LAN"],
+                                at=1)
+    link = SimpleNamespace(press=lambda key, cleanup=False: cam.keys.append(f"link {key}"))
+    began = []
+
+    def fake(cam, cycle, model, **kw):
+        began.append(cycle[0]["page"])
+        return SimpleNamespace(stopped="", presses=0, rows=[], recoveries=[])
+    monkeypatch.setattr(crawl_run, "crawl", fake)
+    assert crawl_run.crawl_from_menu(cam, link, cycle, model, None, io.StringIO()) is True
+    assert began == ["p0"] and cam.rights == ["Wi-Fi"] and cam.keys[:3] == ["menu", "up", "right"]
+    assert "a screen the scan does not know" not in capsys.readouterr().out
+    # every group of the tab refused: nothing pressed in the column, the lap not begun (the run exits 8, as before)
+    cam, cycle, model = columns(monkeypatch, ["FTP Transter"], ["FTP Transfer"], at=0)
+    link = SimpleNamespace(press=lambda key, cleanup=False: None)
+    assert crawl_run.crawl_from_menu(cam, link, cycle, model, None, io.StringIO()) is False and cam.rights == []
+
+
+# The Wired LAN page's IP Address Setting as the a1 II's page scan stores it (2026-11-14), in made-up text of the same
+# shape: its icon read as three capitals, set apart by a space in one OCR reading and glued on in the other, the vision
+# reader's reading the label exactly; its value one word. The lit bar, read live with the row lit, shows the icon with a
+# letter misread and set apart by a space, or with a letter dropped and glued on, then the label and the value
+ICON_VALUE = "Madeup"
+ICON_ROW = {"label": "LANIP Address Setting", "value": ICON_VALUE,
+            "readings": {"label": {"ocr": "LAN IP Address Setting", "ocr2": "LANIP Address Setting",
+                                   "vlm": "IP Address Setting"},
+                         "value": {"ocr": ICON_VALUE, "ocr2": ICON_VALUE, "vlm": ICON_VALUE}}}
+ICON_BARS = [f"LAH IP Address Setting {ICON_VALUE}", f"LAIP Address Setting {ICON_VALUE}"]
+IPS = "IP Address Setting"
+
+
+def icon_model(row=None, group="Wired LAN"):
+    return {"p": {"breadcrumb": f"Network > {group}", "rows": [{"label": "Wired LAN Connect"}, row or ICON_ROW]}}
+
+
+def icon_checks(model, known_value=True):
+    """(the decided rows, values, readings, labels) for IP Address Setting on the page model `model`, as kit/drive.py
+    and kit/crawl_run.py give them to the checks (runner.network_values, network_readings, label_readings); with no
+    value known for the row where known_value is False."""
+    import runner
+    rows = decided({**DECISION, "rows": [IPS]})
+    values = runner.network_values(rows, model) if known_value else {}
+    return rows, values, runner.network_readings(rows, model), runner.label_readings(model)
+
+
+@pytest.mark.parametrize("bar", ICON_BARS)
+@pytest.mark.parametrize("known_value", [True, False])
+def test_ip_address_setting_opens_on_its_live_bar_its_icon_read_otherwise(tmp_path, monkeypatch, bar, known_value):
+    """Item 3: the lit bar of IP Address Setting, read live, shows the page's icon with a letter misread and set apart,
+    or a letter dropped and glued on, which no reading of the page model holds. go_to's arrival check, drive.py's press
+    check, LiveCamera's opening and its release after MENU take it for the row (safety.bar_heads, icon_slip), with its
+    value known or not, where before each refused it."""
+    import crawl_run
+    import drive as D
+    model = icon_model()
+    rows, values, readings, labels = icon_checks(model, known_value)
+    assert [readings[IPS][0]["group"]] == ["Wired LAN"] and (values.get(IPS) == [ICON_VALUE]) is known_value
+    # go_to: found by the vision reader's reading, its arrival judged on the live bar
+    cam, cycle, gmodel = columns(monkeypatch, ["Wi-Fi", "Wired LAN"], ["Wi-Fi", "Wired LAN"])
+    cam.focus = "rows"
+    gmodel["p1"]["rows"][1] = ICON_ROW
+    real = cam.lit
+    cam.lit = lambda: bar if (cam.focus, cam.group, cam.row) == ("rows", 1, 1) else real()
+    assert crawl_run.go_to(cam, cycle, gmodel, 0, IPS) == 3
+    # drive.py's press check
+    assert D.press_refused("right", bar, "", "menu", network=rows, values=values, readings=readings, labels=labels) == ""
+    assert safety.network_lifted_row(bar, rows, False, values, readings, labels) == IPS
+    # LiveCamera: its opening, then MENU back on the page with the bar on the row ends the lock
+    cam = camera(tmp_path, rows, values=values, page="menu")
+    cam.readings, cam.labels = readings, labels
+    cam.hdmi = InsideCamera(tmp_path, monkeypatch, "list", "Automatic Manual", "inside")
+    cam.presses, cam._seen = 0, cam._moves()
+    monkeypatch.setattr(live, "lit_text", lambda image, path: bar)
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    cam.press("right")
+    assert cam.network_open is not None and cam.network_open["row"] == IPS
+    cam.hdmi.shows("menu", PAGE)
+    cam.press("menu")
+    assert cam.network_open is None and events(cam)[-1]["kind"] == "network_row_left"
+    # drive.py's own release: MENU, then the page it was opened from with the bar on the row
+    page = SimpleNamespace(kind="menu", where=PAGE)
+    monkeypatch.setattr(D, "same_position", lambda a, b: a.where == b.where)
+    assert D.network_left(page, page, True, bar, IPS, readings=readings, labels=labels)
+
+
+def test_the_live_icon_keeps_every_condition_of_the_glued_one():
+    """What icon_slip and bar_heads take is only the row's own icon as the page model read it glued on (a word of its
+    page's group, every reading of the row of its class, a reader reading the label exactly), read with one letter
+    misread, dropped or put in, naming nothing, forming no other label the kit knows; and only where the labels are
+    given."""
+    model = icon_model()
+    rows, values, readings, labels = icon_checks(model)
+
+    def lift(bar, readings=readings, labels=labels):
+        return safety.network_lifted_row(bar, rows, False, values, readings, labels) == IPS
+    assert all(lift(bar) for bar in ICON_BARS)
+    for bar in (f"LXY IP Address Setting {ICON_VALUE}",          # two letters off the icon
+                f"No IP Address Setting {ICON_VALUE}",           # a word set before the label, no icon of it
+                f"L IP Address Setting {ICON_VALUE}",            # a single letter
+                "LAH IP Address Setting Other",                  # a value it does not know, its values known
+                f"LAH IP Address Settings {ICON_VALUE}",         # not the label after the icon
+                f"LAHH IP Address Setting {ICON_VALUE}"):        # two letters put in
+        assert not lift(bar), bar
+    assert not lift(ICON_BARS[0], labels=None) and not safety.bar_on_row(ICON_BARS[0], IPS, readings)
+    assert safety.bar_on_row(ICON_BARS[0], IPS, readings, labels)
+
+    def unknown(bar):
+        """the row lifted with no value of it known: a short tail naming nothing takes the value's place"""
+        return safety.network_lifted_row(bar, rows, False, {}, readings, labels) == IPS
+    # nothing alphanumeric right after the label (bar_heads): "Settings" is no IP Address Setting and a value
+    assert unknown("LAN IP Address Setting") and unknown(f"LAH IP Address Setting {ICON_VALUE}")
+    assert not unknown("LAN IP Address Settings") and not unknown(f"LAH IP Address Settings {ICON_VALUE}")
+    assert not safety.bar_on_row("LAN IP Address Settings", IPS, readings, labels)
+    # exactly one space between the icon and the label, the icon one word: a letter set apart is no icon
+    for bar in ("l an IP Address Setting", f"l an IP Address Setting {ICON_VALUE}", f"la n IP Address Setting {ICON_VALUE}"):
+        assert not unknown(bar) and not lift(bar) and not safety.bar_on_row(bar, IPS, readings, labels), bar
+    # each of icon_slip's two class checks on its own (made-up rows of a Wi-Fi or Bluetooth setting): the prefix set
+    # apart before the label forms an identity row that stays closed ("access Point": Access Point), glued on it does
+    # not; glued on, the prefix forms one ("wpS": WPS), set apart it does not
+    assert safety.lift_class("Point Wi-Fi Connect") == safety.lift_class("S Bluetooth Function") == safety.LIFT_NETWORK
+    assert safety.lift_class("access Point Wi-Fi Connect") is None and safety.lift_class("wpS Bluetooth Function") is None
+    assert safety.lift_class("wp S Bluetooth Function") == safety.LIFT_NETWORK
+    assert not safety.icon_slip("access", "Point Wi-Fi Connect", {"access"})
+    assert not safety.icon_slip("wp", "S Bluetooth Function", {"wps"})
+    # another label the kit knows formed by the bar: refused
+    assert not lift(ICON_BARS[0], labels=labels | {"LAH IP Address Setting"})
+    # the icon the page model never read glued on (only set apart), nor on a page of a group naming no such word, nor
+    # with a reading of the row of another class beside it: no icon of the row at all
+    spaced = {**ICON_ROW, "label": "IP Address Setting",
+              "readings": {"label": {"ocr": "LAN IP Address Setting", "vlm": "IP Address Setting"}}}
+    other = {**ICON_ROW, "readings": {"label": {**ICON_ROW["readings"]["label"], "ocr3": "Format"}}}
+    for m in (icon_model(spaced), icon_model(group="Wi-Fi Option"), icon_model(other)):
+        _, _, r, lab = icon_checks(m)
+        assert safety.row_icons(IPS, r) == set() and not lift(ICON_BARS[0], readings=r, labels=lab), m
+    assert safety.row_icons(IPS, readings) == {"lan"}
+    # the icon read with a letter misread may name nothing the never-open list or identity holds
+    assert safety.icon_slip("pip", IPS, {"pin"}) and not safety.icon_slip("pin", IPS, {"pip"})
+    assert not safety.icon_slip("la", IPS, {"wi"}) and not safety.icon_slip("wo", IPS, {"wi"})   # a short icon
+    # no word before the label of a row whose page model read no icon: "No Wi-Fi Connect" as ever
+    wifi = decided({**DECISION, "rows": ["Wi-Fi Connect"]})
+    assert safety.network_lifted_row("No Wi-Fi Connect On", wifi, values=VALUES, labels=set()) is None
+
+
+def test_drive_says_the_row_it_could_not_reach_and_exits_incomplete(tmp_path, monkeypatch, scope_file, capsys):
+    """Items 4 and 7: a --network run whose first --path label the scan does not reach sends none of its presses,
+    names the decided row as the run was given it (its own argument, where before it said "could not reach
+    '(withheld)'"), restores its start file and, once that checks out, exits EXIT_INCOMPLETE (8), where before it exited
+    0; nothing it read off the screen is said."""
+    import runner
+    exits = []
+    pressed, seen, line, logged = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], (IPS,),
+                                             {**DECISION, "rows": [IPS]}, ["Automatic", "Manual"], "list",
+                                             page_lit=f"LAH IP Address Setting {UNKNOWN}", open_lit="Manual",
+                                             page_kind="menu", reach=False, exits=exits)
+    out = capsys.readouterr().out
+    assert exits == [runner.EXIT_INCOMPLETE] == [8] and pressed == ["menu"] and line["completed"] is False
+    assert f"could not reach {IPS!r} by the scan" in out and "'(withheld)'" not in out
+    assert "exit status 8" in out and "checked" in seen and line["screens"] == []
+    nowhere((out, json.dumps(line), logged), UNKNOWN)
+    # reached, the same run ends 0, as ever
+    exits = []
+    drive_fake(tmp_path, monkeypatch, scope_file, ["menu"], (IPS,), {**DECISION, "rows": [IPS]}, ["Automatic"], "list",
+               page_lit="IP Address Setting", open_lit="Automatic", page_kind="menu", exits=exits)
+    assert exits == []
+
+
+def test_the_navigation_says_no_length_of_what_it_withholds(monkeypatch, capsys):
+    """Item 6: on a --network or --owner run crawl_run.said prints nothing of a text read off the screen, not even its
+    length (which can tell a row's options apart); without either, the text as before."""
+    import crawl_run
+    text = f"Wi-Fi Connect {UNKNOWN}"
+    for cam in (SimpleNamespace(network={"Wi-Fi Connect": DAY}), SimpleNamespace(owner={"Format": {}}),
+                SimpleNamespace(network={"Wi-Fi Connect": DAY}, owner={})):
+        assert crawl_run.said(cam, text) == crawl_run.TEXT_WITHHELD
+        assert not any(ch.isdigit() for ch in crawl_run.said(cam, text)) and "characters" not in crawl_run.said(cam, text)
+    assert crawl_run.said(SimpleNamespace(network={}, owner={}), text) == repr(text)
+    cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth"], [f"ILCE-made-up {IP}", "Bluetooth"])
+    cam.owner = {"Format": {}}
+    assert crawl_run.find_position(cam, cycle, model) is None
+    out = capsys.readouterr().out
+    assert "withheld" in out and "characters" not in out and "ILCE-made-up" not in out
+
+
+def test_a_withheld_screen_keeps_a_letter_or_two_only_as_a_row_label_of_its_own_page(tmp_path, monkeypatch, scope_file):
+    """Item 6: the definition has a row labelled "B" (a Picture Profile's Color Depth row, made up here); a withheld
+    screen keeps a line of a letter or two only where it is a row label of the scan page shown (drive.page_labels, the
+    page model's rows of that page: safety.screen_fields' page), never because the definition has it somewhere."""
+    import drive as D
+    labels = {"B", "Drive Mode", "Bluetooth Function"}
+    assert safety.screen_fields(["B", "Drive Mode"], labels)[0] == ["Drive Mode"]
+    assert safety.screen_fields(["B", "Drive Mode"], labels, page=["B", "Drive Mode"])[0] == ["B", "Drive Mode"]
+    assert safety.kept_screen("menu", ["B", "Drive Mode"], labels)["fields"] == ["Drive Mode"]
+    assert safety.kept_screen("menu", ["B", "Drive Mode"], labels, page=["B"])["fields"] == ["B", "Drive Mode"]
+    assert safety.screen_fields(["B"], set(), page=["B"])[0] == []        # on the page, but no label the kit knows
+    # drive.page_labels: the page model's row labels of the scan page the screen is, none elsewhere
+    cycle = [{"page": "p1", "screen": SimpleNamespace(where="one")}, {"page": "p2", "screen": SimpleNamespace(where="two")}]
+    model = {"p1": {"rows": [{"label": "B"}, {"label": "Drive Mode"}]}, "p2": {"rows": [{"label": "Zoom"}]}}
+    monkeypatch.setattr(D, "same_position", lambda a, b: a.where == b.where)
+    assert D.page_labels(SimpleNamespace(where="one"), cycle, model) == ["B", "Drive Mode"]
+    assert D.page_labels(SimpleNamespace(where="inside"), cycle, model) == []
+    # drive.py on its own: a page line "B" the definition names as some other page's row is withheld
+    definition = {"menu": [{"tab": "Network", "group": "Bluetooth", "label": "Bluetooth Function"},
+                           {"tab": "Exposure/Color", "group": "Color Depth", "label": "B"}], "settings": []}
+    pressed, _, line, _ = drive_fake(tmp_path, monkeypatch, scope_file, ["right", "menu"], ("Bluetooth Function",),
+                                     DECISION, ["On", "Off"], "list", page_lit="Bluetooth Function  On", open_lit="On",
+                                     page_lines=["B", "Bluetooth", "Bluetooth Function"], definition=definition)
+    page_screens = [s for s in line["screens"] if s["kind"] == "submenu"]
+    assert page_screens and all("B" not in s["fields"] for s in page_screens), line["screens"]
+    assert all("Bluetooth Function" in s["fields"] for s in page_screens)
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="POSIX modes")
+def test_a_tool_writes_owner_only_into_a_folder_a_network_run_marked(own_runs, monkeypatch):
+    """Item 5: kit/pass1_labels.py wrote options.jsonl 0644 into a run folder the --network run had sealed owner-only.
+    A tool that writes into a run folder carrying the LOCAL_ONLY (or NO_READER) marker makes the process write
+    owner-only and the folder owner-only (camkit.runs.private_if_marked, Run.make_private's helpers): options.jsonl
+    0600, one left from before tightened too; a folder without the marker as ever."""
+    import os
+    import stat
+
+    import pass1_labels
+    from camkit import runs, vlm
+    run = Run("kit2_net", root=own_runs / TEST_CAMERA)
+    (run.dir / "rows.jsonl").write_text(json.dumps({"label": "Drive Mode", "frames": []}) + "\n", encoding="utf-8")
+    vlm.mark_local_only(run.dir)
+    (run.dir / "options.jsonl").write_text("", encoding="utf-8")
+    os.chmod(run.dir / "options.jsonl", 0o644)
+    os.chmod(run.dir, 0o755)
+    for name, value in (("readers", lambda stop=False: [{"name": "local"}]), ("role", lambda name: {"parallel": 1}),
+                        ("make_reader", lambda cfg, **kw: SimpleNamespace(ask=lambda b, p: {})),
+                        ("read_frames", lambda frames: ({}, {}))):
+        monkeypatch.setattr(pass1_labels, name, value)
+    monkeypatch.setattr(sys, "argv", ["pass1_labels.py", str(run.dir)])
+    pass1_labels.main()
+    assert stat.S_IMODE((run.dir / "options.jsonl").stat().st_mode) == 0o600
+    assert stat.S_IMODE(run.dir.stat().st_mode) == 0o700 and runs.UMASK_FLOOR == 0o077
+    # a file written new after it is owner-only too
+    (run.dir / "later.json").write_text("{}", encoding="utf-8")
+    assert stat.S_IMODE((run.dir / "later.json").stat().st_mode) == 0o600
+    # NO_READER marks a folder alike; one with neither is left as it is
+    held = Run("kit2_owner", root=own_runs / TEST_CAMERA)
+    vlm.mark_no_reader(held.dir)
+    plain_run = Run("kit2_plain", root=own_runs / TEST_CAMERA)
+    (plain_run.dir / "options.jsonl").write_text("", encoding="utf-8")
+    os.chmod(plain_run.dir / "options.jsonl", 0o644)
+    assert runs.private_if_marked(held.dir / "shots", plain_run.dir) == [held.dir.resolve()]
+    assert stat.S_IMODE((plain_run.dir / "options.jsonl").stat().st_mode) == 0o644

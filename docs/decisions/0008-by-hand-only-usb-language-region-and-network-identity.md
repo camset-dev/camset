@@ -42,7 +42,8 @@ A row so named is looked at only: the kit opens it, reads its options with up an
 presses no Enter, no Right or Left and turns no dial there, which could choose or commit an option, until it is back
 where it opened the row: until the screen read right after a MENU, or after an Enter on an option the decision
 names, is the shooting screen, or the page the row was opened from with its lit bar on the row itself (its label, or
-the reading with its page's icon glued on that opened it). Each MENU or Enter counts for the one read after it, and a
+the reading with its page's icon glued on that opened it, that icon read live with at most one letter misread, glued on
+or set apart, forming no other label the kit knows). Each MENU or Enter counts for the one read after it, and a
 MENU the camera did not take counts for none. What kind of screen the camera seems to show never ends it alone: a
 camera slow to draw the row's list still shows the page after the press that opened it, a list or a popup over the
 dimmed page can read as that page, and its lit bar then reads an option, never the row. A row's own screen read as
@@ -64,18 +65,20 @@ A run given `--network` asks only local readers, those whose address is this com
 never a paid service, and marks its run folder so; every tool that reads that folder's frames later
 (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `tools/reread_proofs.py`,
 `tools/reader_census.py`) asks local readers only too, builds no other, and asks none about the frames of an identity
-or connection row; and a prover's way back to the shooting screen sends no OK to a notice that refuses MENU during
+or connection row, and every tool that writes into that folder writes owner-only, as the run left it; and a prover's way back to the shooting screen sends no OK to a notice that refuses MENU during
 such a run, nor anywhere to one that names identity or credentials ("Connect to ...?"). A screen met inside such a row that names identity or credentials (a pairing screen, a connecting
 notice, an SSID, a keyboard) gets MENU alone, and no reader is asked; so does an address screen. From such a run's
 start to its end no screen's text is printed or kept, whatever its kind (`camkit.safety.kept_screen`): what the console,
 `drive.jsonl`, `rows.jsonl`, the proofs and `events.jsonl` keep of a screen is its kind, the whole row labels the kit
-knows (the definition's, the page model's that are a label alone, the decision's own rows) and the field names, on an
+knows (the definition's, the page model's that are a label alone, the decision's own rows; one of a letter or two only
+where it is a row label of the page shown) and the field names, on an
 option list the option names the definition gives that row only where the screen shows that whole set, else their
 count (never which one is lit, current or saved; never a carousel's, which shows the lit one alone, nor a side
 list's, a window centred on it), on a notice what `notice_kept` keeps (a notice the kit knows, and a blocker's row
 label where it is one the kit knows, never that row's value, its current state), and the count of lines withheld; the
 shooting screen as its kind alone, since its status line is the owner's shooting values; a row label the kit does not
-know as "(withheld)"; a refusal's or an error's quoted texts withheld; the records that differ at the session's end by
+know as "(withheld)", the row a decision names as the run was given it; a text the navigation read as "(the text read
+withheld)", never its length; a refusal's or an error's quoted texts withheld; the records that differ at the session's end by
 key and count alone, never a value, in the console and in `drive.jsonl` (unless the owner row's decision logs values).
 A proof of a network row says nothing of the option it was saved on: the named options are proved in their own order,
 each said as "proof i of N", the records they changed said by key, and every such row ends with the session's upload of

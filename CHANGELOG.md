@@ -57,6 +57,33 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- A third look-only `--network` session on the a1 II showed two rules of 2026-11-14 keeping the kit from rows it reached
+  before (failing closed: nothing wrong was pressed). The jump by the tab and group columns reads the group column's lit
+  bar as the way back out of the column does, the group's name judged whole by its letters and digits, equal or one
+  letter apart, one group of the tab only: a bar drawn with another icon glyph than the page scan stored ("(Cnct./Remote
+  Sht." for the scan's "[Cnct./Remote Sht."), or one the scan read a letter off ("FTP Transter"), no longer ends the jump
+  with nothing pressed, and its last Right goes out only on a screen still read as the group column. `crawl_run.py`
+  finds where the menu opened as `drive.py` does: a menu reopened with the cursor in the group column is stepped into a
+  group it may enter, and one on a page the scan does not match goes to the Shooting tab by the columns, where the crawl
+  stopped at once (exit 8). Both on every run, not only `--network` ones.
+- IP Address Setting opens on its live bar. Read with the row lit, the bar shows the Wired LAN page's icon with a letter
+  misread and set apart by a space (or, by the second OCR engine, a letter dropped and glued on), which no reading of the
+  page scan holds, so `drive.py --network` stopped at the row ("its bar does not read it"). The page's icon as the page
+  scan read it glued on is now taken on the live bar with at most one letter misread, dropped or put in, glued on or set
+  apart, where every other condition holds: a word of the page's own group, every reading of the row of its class, a
+  reader reading the label exactly, nothing never-open or of identity named, no other label the kit knows formed. The
+  arrival on the row, `drive.py`'s press check, the camera's own check and the end of the look after MENU alike.
+- `drive.py` exits 8 (EXIT_INCOMPLETE), once its start file is back and checked, when the scan did not reach its first
+  `--path` label, where it exited 0, so a chain or an agent can tell the row was not reached; it names that label as it
+  was given on every run, where a `--network` run said "could not reach '(withheld)'".
+- A tool that writes into a run folder a `--network` or `--owner` run marked (`pass1_labels.py`, `pass1_map.py`,
+  `tiebreak.py`, `help_reads.py`, `page_model.py`, `pass2_report.py`, `tools/reread_proofs.py`) writes owner-only (files
+  0600, folders 0700) on macOS and Linux, as the run left it; `pass1_labels.py` wrote `options.jsonl` readable by other
+  users.
+- A `--network` or `--owner` run says nothing of a text it withholds, not even its length, which could tell a row's
+  options apart; and on a withheld screen a line of one or two characters is kept only where it is a row label of the
+  page shown (the page scan's rows of that page), never because the definition has such a row somewhere (a "B" was kept
+  as a field name).
 - A dated owner decision that says `"lifts": "owner"` may name rows of the never-open list a network decision cannot:
   credentials, the serial number screen, the closed identity rows, actions and resets, a card's Format and Delete;
   never a firmware update or the Version screen, anything that loads a file or settings (Save/Load Settings' Load,

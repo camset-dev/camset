@@ -111,7 +111,7 @@ and the default is no.
    Mode, Wi-Fi Frequency Band, Wired LAN Connect, Remote Shoot Function, Cnct. while Power OFF, the IP and USB rows,
    Language, NTSC/PAL, Area/Date/Time). Such a run asks local readers only and marks its folder, so the tools that read its frames later
    (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `reread_proofs.py`, `reader_census.py`)
-   ask local readers only too and none about an identity row's frames, and a prover's way back to the shooting screen
+   ask local readers only too and none about an identity row's frames, and write into it owner-only, and a prover's way back to the shooting screen
    sends no OK to a notice that refuses MENU (nor, on any run, to one naming identity); a screen inside the row
    that names identity or credentials gets MENU alone and no reader, and from the run's start to its end no screen's
    text is printed or kept: row labels the kit knows, field names, a list's option names as the definition gives them
@@ -1001,7 +1001,16 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   with its bar naming that very group (a bar that reads a row, "File Format RAW", names none); with no such group in
   the tab nothing is pressed and the run stops. A jump by the columns that would end on such a group is refused before
   any press (the rows are walked to instead), or, when only the bar read there shows it, stops before its last Right,
-  leaving the cursor in the column for the next run to step out of so.
+  leaving the cursor in the column for the next run to step out of so (`crawl_run.py` steps out of it too, as `drive.py`
+  does). The jump and the way back read the lit group alike, its name whole by its letters and digits: the bar draws a
+  group's icon glyph otherwise than the page scan stored it ("(Cnct./Remote Sht." for "[Cnct./Remote Sht."), and
+  matching the scan's text as read left every jump into the Network tab unreachable (2026-11-14).
+- **A row's icon reads otherwise on its lit bar than on its page** → OCR reads a row's icon as letters, and reads it
+  differently with the row lit (the a1 II's IP Address Setting: the page scan's readings show the Wired LAN icon glued on
+  in one reading and set apart in another; the lit bar shows it with a letter misread). The kit takes the icon the page
+  scan read glued on, as a word of the page's own group, and on the live bar that icon with at most one letter misread,
+  dropped or put in, glued on or set apart, where the bar forms no other label the kit knows; anything else fails
+  closed ("its bar does not read it"). A look at such a row's frames with the kit's own OCR shows the bar's shape.
 - **No HDMI frames, and no OSD image either, at the start of a session** → the camera's monitor is asleep (or the
   HDMI cable is out): the capture gives no frames while the monitor sleeps or the cable is out, and the SDK's OSD
   image is unavailable while the monitor sleeps. A session the owner runs by hand starts with the camera awake: ask

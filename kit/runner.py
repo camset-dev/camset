@@ -1330,8 +1330,9 @@ def known_groups(model=None) -> set:
 # what OCR reads a row's icon as, glued to its label or set before it: a letter or two ("G" in "GAirplane Mode On")
 _ICON_BEFORE = re.compile(r"[0-9a-z]{1,2} ?")
 # a page model's label this short (once plain) is an icon read as letters, never kept as a label alone unless the
-# definition has it (2026-11-14: a "B" kept as a field name on a menu page)
-SHORT_LABEL = 2
+# definition has it (2026-11-14: a "B" kept as a field name on a menu page); and a withheld screen keeps a line this
+# short only where it is a row label of the page shown (safety.screen_fields' page, safety.SHORT_LINE)
+SHORT_LABEL = safety.SHORT_LINE
 
 
 def label_alone(label: str, defined=frozenset(), values=None, bases=()) -> bool:

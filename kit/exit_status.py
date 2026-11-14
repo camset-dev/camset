@@ -18,6 +18,7 @@ EXIT_NOT_CONFIRMED = 6
 # exits 4 instead
 EXIT_REFUSED = 7
 # a run's exit when anything but a refusal stopped its work short (kit/crawl_run.py: an error, a screen the scan does not
-# know, the start label not reached, the crawl lost or off the scan), its start file then put back and checked; a STOP,
-# a complete lap or --limit reached exit 0; a chain stops there, as after status 4 (its end file is uploaded)
+# know, the start label not reached, the crawl lost or off the scan; kit/drive.py: its --path's first row not reached by
+# the scan, none of its presses sent), its start file then put back and checked; a STOP, a complete lap or --limit
+# reached exit 0; a chain stops there, as after status 4 (its end file is uploaded)
 EXIT_INCOMPLETE = 8

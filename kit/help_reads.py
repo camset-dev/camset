@@ -20,7 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths, vlm  # noqa: E402
+from camkit import jsonl, paths, runs, vlm  # noqa: E402
 from camkit.vlm import make_reader, readers  # noqa: E402
 
 RUN = paths.module_root() / "kit2_help"
@@ -83,6 +83,7 @@ def built_readers() -> list:
 
 
 def main():
+    runs.private_if_marked(RUN)              # a --network or --owner run's folder: help_reads.jsonl 0600 in it too
     vlm.local_only_runs(RUN)                 # a --network run's frames: local readers only (make_reader)
     asked = built_readers()
     done = {}

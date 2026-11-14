@@ -1058,6 +1058,12 @@ def held_runs(*places) -> list:
     return _marked(places, NO_READER_MARKER)
 
 
+def marked_runs(*places) -> list:
+    """The run folders among `places` that hold LOCAL_MARKER or NO_READER_MARKER (_marked): a --network or --owner
+    run's, into which every tool writes owner-only (camkit.runs.private_if_marked)."""
+    return list(dict.fromkeys(_marked(places, LOCAL_MARKER) + _marked(places, NO_READER_MARKER)))
+
+
 def local_only_runs(*places) -> list:
     """The run folders among `places` (each a run folder, or a file or folder inside one) that hold LOCAL_MARKER, looked
     for in each place and the folders above it up to the runs folder (camkit.paths.runs_top); when any does, LOCAL_ONLY
