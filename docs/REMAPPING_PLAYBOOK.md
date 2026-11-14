@@ -916,16 +916,16 @@ section 8).
    reads `RECORD_FIXES` (a name or note the camera proved wrong), `NEW_RECORDS` with the `FILTER_FLAGS` entries it
    takes in (a record the menus never write, found by hand, laid out like a record the definition holds), `NEW_LIKE`
    with `NEW_WHOLE_LABELS`, `FRAME_PROOFS` (what a record holds, and a hand proof), `CAROUSEL`, `VALUE_FIXES`,
-   `PP7_VALUES`, `KEEP_LABELS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES` (with `COPY_MODES` and
+   `PP7_VALUES`, `KEEP_LABELS`, `PICKER_LISTS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES` (with `COPY_MODES` and
    `COPY_MODES_UNKNOWN`), `UNPROVED` (why no proof reaches a record) and `CONTEXT_WORDS`, and stops, naming it, on a
    table only the a1 II's own pass reads so far (the list in [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)).
    There a value a table names is named, not proved: an editor offers it outside Expert mode only once a proof covers
    it, and taking an entry out takes its record or hand proof out on the next `--write`.
    The tables are public, edited by hand there, and hold names, value tables and facts; how each was proved (a hand
-   proof's values, run, day and menu row, a sample's count, the owner's word, what shows a not-offered mark, a
-   reason's day) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`
+   proof's values, run, day and menu row, a sample's count, the owner's word, what shows a not-offered mark, how a
+   picker's list was walked whole, a reason's day) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`
    ([the hand evidence file](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)); while the tables
-   hold `FRAME_PROOFS`, `UNPROVED` or `NOT_OFFERED` entries `--write` refuses without it, and if you proved none of them
+   hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED` or `PICKER_LISTS` entries `--write` refuses without it, and if you proved none of them
    by hand you write that file with no evidence in it (`"tables": {}`)
    ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) holds evidence
    fields only and carries a note's evidence only as a suffix, `"note+"`; the public words and values live in the table
@@ -948,6 +948,14 @@ section 8).
      the other holds that agree with it, whatever the item; until then a hold's Exposure Comp. code no proof chose is
      named by `EV_DOWN_FROM_20`'s quarter-stop count, `counted`, which an editor does not offer outside Expert
      mode);
+   - `PICKER_LISTS` (a picker's list walked full circle: the settings it is for, an array record's slots or keys
+     whose pickers the table walk shows offering one list, then list exactly the codes the walks wrote, and the codes
+     a first kit listed from its union of the camera's function codes go; only while every walk it names chose every
+     place, the table walk went round every list, the hand evidence says how, and no proof and not the sample holds a
+     code outside it, [the rule](DATA_CONTRACTS.md#a-pickers-list-walked-whole-picker_lists). Use it for codes no list
+     of that screen offers, and only for a picker whose list does not change with the camera's state: where it may, walk
+     it whole in each state (each walk named, all writing the same codes) or use `NOT_OFFERED` marks; a code another key
+     of the screen offers, or a factory value, is a `NOT_OFFERED` mark);
    - `NOT_OFFERED` (values the camera's menus never offer, each with why in plain words: a mark is written only while
      its evidence (in the hand evidence file) holds, every row it names (each a walk of the whole list, as its
      evidence says) never writing the

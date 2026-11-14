@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -274,6 +274,17 @@
    },
    "description": "By shooting family, the records whose values that family's Shoot Mode carousel describes. Read only by the ILCE-1M2's own pass so far: the plain pass, every other camera's, refuses a file that fills it."
   },
+  "PICKER_LISTS": {
+   "type": "object",
+   "propertyNames": {
+    "minLength": 1,
+    "pattern": "\\S"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/picker_list"
+   },
+   "description": "Pickers whose lists were walked whole on the camera, by a name for each (the picker, or the key whose walk proves the list): each setting an entry covers lists exactly the codes its picker's walks wrote, and a value a first kit listed beyond them (from a union of the camera's function codes) is taken out (kit/writer/offered.py walked_lists), before the not-offered marks. Only while the walks and the table walk show the list whole and one for every setting covered (each through a row of its own), every row of a covered setting was made in a state a walk names, the hand evidence says how it was walked, and no proof, not the definition's sample and none of the camera's own downloads holds a code outside it; otherwise the lists stay as they are, said, or the write stops. For a picker whose list does not change with the camera's state: where it may, walk it in each state, every walk named, or mark its values NOT_OFFERED. Where a value is on another key's list of the same picker screen, or the camera writes it itself, a NOT_OFFERED mark says so instead."
+  },
   "NOT_OFFERED": {
    "type": "array",
    "items": {
@@ -523,6 +534,47 @@
     }
    }
   },
+  "picker_list": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "keys",
+    "walk",
+    "table",
+    "why"
+   ],
+   "properties": {
+    "keys": {
+     "type": "string",
+     "description": "A pattern (Python's) for the keys of the settings the list is for: an array record's slots, or keys whose pickers offer one list (\"^global:0x0445\\\\[(?:[0-9]|1[01])\\\\]$\")."
+    },
+    "walk": {
+     "type": "string",
+     "description": "A pattern (Python's) for the report's rows that walked the list whole, one in each state the list was proved in: each proves one setting it covers, chose every place by its proof lines (no sample from the option the camera held) and names as many options and wrote as many distinct codes as the list has places, all of them the same codes. A row may walk another slot or key than the setting's own: the table walk shows every setting's picker lists the same functions in the same order."
+    },
+    "table": {
+     "type": "array",
+     "minItems": 2,
+     "maxItems": 2,
+     "prefixItems": [
+      {
+       "type": "string"
+      },
+      {
+       "type": [
+        "string",
+        "null"
+       ]
+      }
+     ],
+     "description": "The table walk's screen the pickers are on, [screen, page or section or null]: a keyset's page by its title, a table's section by the start of its rows' labels (\"Still\" for the Fn menu's Still Upper and Still Lower), null for the whole screen. Each setting's picker is found there through a report row that proves the setting, and every one went round to its start."
+    },
+    "why": {
+     "type": "string",
+     "description": "Why the list is the picker's whole list, in plain words (that it was walked full circle, and whose codes the others are), naming no run and no day."
+    }
+   }
+  },
   "not_offered": {
    "type": "object",
    "additionalProperties": false,
@@ -566,7 +618,7 @@
     },
     "walk": {
      "type": "string",
-     "description": "A pattern (Python's) for the report's rows that walked the row's whole list: each must prove the record and none may write the value."
+     "description": "A pattern (Python's) for the report's rows that walked the row's whole list: each must prove the record and none may write the value; a row that chose only a sample of a picker from the option the camera held counts for none. Where no row it names proves the record, a row it names that walked another key's or slot's picker whole stands for it when the table walk shows both pickers listing the same functions in the same order."
     },
     "table": {
      "type": "array",

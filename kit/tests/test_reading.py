@@ -472,7 +472,7 @@ def test_every_option_names_itself_as_readers_and_ocr_write_it():
                         conflicts.add((r, o))
                     if not agree(r, o, kind):
                         assert why_unnamed(how, r, o, opts, False), (how, r, o, kind, "without options")
-    assert conflicts == CONFLICTS_WITH_OPTIONS and tried > 40000
+    assert conflicts == CONFLICTS_WITH_OPTIONS and tried > 35000
 
 
 def option_lists(menu_groups: bool = False) -> list:

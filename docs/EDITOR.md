@@ -212,10 +212,10 @@ so every setting can be reached from the side bar, and next edit (F3) lands on t
 
 A value is shown by its name. A setting with a range shows a number and its unit, and one the definition has no names
 for at all shows the plain number. Where a setting has named values but the file holds a number none of them names,
-it shows as "7 (no name yet)": that value was not chosen on the camera when the setting was mapped (frame rates of
-the other TV system, say), so the definition has no name for it. Its hover says so wherever it is shown (the menu,
+it shows as "7 (no name yet)": no choice on the camera wrote that value when the setting was mapped (the camera's list
+may not offer it, or offers it under the other TV system, as frame rates), so the definition has no name for it. Its hover says so wherever it is shown (the menu,
 the Main page, Compare, Memories, the search and the web page), and so does a line in the detail panel, which adds
-in Expert mode why (it was not chosen on the camera when mapped) and the record number. Outside Expert mode it says only "The camera holds 7 here, a value Camset has no name for
+in Expert mode why (no choice on the camera wrote it when mapped) and the record number. Outside Expert mode it says only "The camera holds 7 here, a value Camset has no name for
 yet."
 
 The side bar has a Memories page: memories 1, 2, 3 beside the live settings, "Recall Memory 1 ➡ Live" and "Register

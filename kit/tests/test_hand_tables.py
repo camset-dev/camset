@@ -81,6 +81,7 @@ def test_the_a1_iis_tables_are_in_the_shapes_the_writer_reads():
     assert T.NEW_LIKE["global:0x0b63"] == ("global:0x0b65", "ISO Range Limit (upper)")
     assert T.LATE_COPY[0x16bd].startswith(" The second copy of this box") and isinstance(T.COPY_MODES, tuple)
     assert T.NOT_OFFERED[0]["table"] == ("Custom Key/Dial Set.", "Dial/Wheel")
+    assert T.PICKER_LISTS["Fn Menu (Playback)"]["table"] == ("Fn Menu Settings (playback)", None)
     assert T.ORIENTED.search("Focus Area [Switch V/H AF Area = AF Point + AF Area, camera grip up]")[1] == "grip up"
     assert all(T.NEW_RECORDS[k] is e for k, e in T.FILTER_FLAGS.items())
     assert list(T.NEW_RECORDS)[:len(T.FILTER_FLAGS)] == list(T.FILTER_FLAGS)
@@ -112,6 +113,7 @@ def j(**tables) -> str:
 
 ENTRY = {"like": "global:0x0003", "name": "A", "values": [], "note": ""}
 NOT_OFFERED = {"key": "global:0x0001", "values": [1], "why": "Not on its list.", "menu": "Row"}
+PICKER = {"keys": "^global:0x0001\\[", "walk": "^Fn / Upper / 1$", "table": ["Fn", None], "why": "Walked full circle."}
 DEEP = 100000                      # deeper than Python's parser follows
 
 
@@ -177,6 +179,17 @@ DEEP = 100000                      # deeper than Python's parser follows
     (j(CONTEXT_WORDS={"Slot": "\\g<x>"}), "the words for 'Slot', '\\\\g<x>', are no replacement Python reads"),
     (j(CONTEXT_WORDS={"Slot": 1}), "the words for 'Slot' is a whole number, not a string"),
     (j(NOT_OFFERED=[{**NOT_OFFERED, "walk": "^Row ["}]), "mark 0's walk, '^Row [', is no pattern Python reads"),
+    # a picker's list walked whole: a name once, the fields the writer reads, its two patterns compiled
+    ('{"camera": "ILCE-0X0_fw1.00", "PICKER_LISTS": {"Fn": ' + json.dumps(PICKER) + ', "Fn": ' + json.dumps(PICKER) + '}}',
+     "'Fn' is there twice"),
+    (j(PICKER_LISTS=[PICKER]), "PICKER_LISTS is not in its shape: the table is an array, not an object"),
+    (j(PICKER_LISTS={"Fn": "x"}), "PICKER_LISTS is not in its shape: 'Fn' is a string, not an object"),
+    (j(PICKER_LISTS={" ": PICKER}), "PICKER_LISTS is not in its shape: an entry has no name"),
+    (j(PICKER_LISTS={"Fn": {k: v for k, v in PICKER.items() if k != "walk"}}), "PICKER_LISTS is not in its shape: 'Fn' has no 'walk'"),
+    (j(PICKER_LISTS={"Fn": {**PICKER, "keys": "^global:0x0001["}}), "'Fn''s keys, '^global:0x0001[', is no pattern Python reads"),
+    (j(PICKER_LISTS={"Fn": {**PICKER, "walk": "^Fn ("}}), "'Fn''s walk, '^Fn (', is no pattern Python reads"),
+    (j(PICKER_LISTS={"Fn": {**PICKER, "table": ["Fn"]}}), "'Fn''s table is ['Fn'], not [screen, page or section or null]"),
+    (j(PICKER_LISTS={"Fn": {**PICKER, "why": 1}}), "'Fn''s 'why' is a whole number, not a string"),
     (j(ORIENTED="camera (level"), "ORIENTED is not in its shape: the table, 'camera (level', is no pattern Python reads"),
     (j(ORIENTED="camera level"), "ORIENTED is not in its shape: 'camera level' has no group, and the writer reads its first"),
     # My Menu's empty line: {code} is the one field, put in as text

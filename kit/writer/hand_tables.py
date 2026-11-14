@@ -5,31 +5,31 @@ definition (docs/decisions/0016, 0020), read from the camera's own public data f
 
 each table under its name: records whose name or note the camera proved wrong (RECORD_FIXES), records the menus never
 write, found by hand (NEW_RECORDS, FILTER_FLAGS, NEW_LIKE, FRAME_PROOFS), value names no proof can give (CAROUSEL,
-VALUE_FIXES, KEEP_LABELS, ...), the values the menus never offer (NOT_OFFERED), the copies the camera keeps (COPIES),
-why a record cannot be proved (UNPROVED), and the label fixes and proof-row rules the writer applies. The file holds
-what the camera is, the same for every owner of that model and firmware, and is written and edited by hand. How, when
-and in which run each hand fact was proved is the mapping's evidence, kept in the private overlay
-(private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by load() (writer/hand_evidence.py). A camera
-with no file has every table empty.
+VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKER_LISTS), the values the menus never
+offer (NOT_OFFERED), the copies the camera keeps (COPIES), why a record cannot be proved (UNPROVED), and the label
+fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
+and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
+evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
+load() (writer/hand_evidence.py). A camera with no file has every table empty.
 
 load() gives each table in the shape the writer reads: a set for a list of keys (KEEP_LABELS, NEW_WHOLE_LABELS,
 EV_DOWN_FROM_20; COPY_MODES_UNKNOWN a frozenset), a dict by (key, value) for a table of [key, value, label] rows
 (CAROUSEL, VALUE_FIXES, PP7_VALUES) and by (option, area) for FRAME_STEPS' [option, area, x, y], record ids for
 LATE_COPY's "0x16bd", tuples where the writer unpacks (NEW_LIKE's (like, name), UNPROVED's (kind, day, why),
-NOT_OFFERED's table, COPY_MODES), a compiled pattern for ORIENTED, and every other table as the file has it, in the
-file's order. A NEW_RECORDS entry {"$ref": "#/FILTER_FLAGS/<key>"} is FILTER_FLAGS' entry of the same key, one object
-in both tables, so the evidence put on it lands once (hand_evidence._suffixed). The tables are made in those shapes
-before the evidence is put back, as the Python module that held them before they were data made them.
+NOT_OFFERED's and PICKER_LISTS' table, COPY_MODES), a compiled pattern for ORIENTED, and every other table as the file
+has it, in the file's order. A NEW_RECORDS entry {"$ref": "#/FILTER_FLAGS/<key>"} is FILTER_FLAGS' entry of the same
+key, one object in both tables, so the evidence put on it lands once (hand_evidence._suffixed). The tables are made in
+those shapes before the evidence is put back, as the Python module that held them before they were data made them.
 
 The file is contributed data, so the reader takes nothing on trust that the writer would trip on later: each table's
 JSON type, each entry's type and the fields the writer reads, the value lists' [code, name] pairs, every pattern the
-writer runs (CONTEXT_WORDS' patterns, each tried once with its words; NOT_OFFERED's walks; ORIENTED, with the group
-the writer reads), and My Menu's empty line, whose one field is {code}. A file that is not JSON (NaN and Infinity
-included), nested past what the parser follows, for another camera, with a table the kit does not know, a key or a row
-twice, a table or an entry out of its shape, a pattern that does not compile, or a $ref anywhere but a NEW_RECORDS entry
-naming FILTER_FLAGS' entry of the same key, is refused in plain words (Refused), naming the file and the table. What
-else an entry may hold is the JSON Schema's, which the commit hooks and CI check. A file saved with a byte order mark
-(Windows Notepad's) reads as one without.
+writer runs (CONTEXT_WORDS' patterns, each tried once with its words; NOT_OFFERED's walks; PICKER_LISTS' keys and
+walks; ORIENTED, with the group the writer reads), and My Menu's empty line, whose one field is {code}. A file that is
+not JSON (NaN and Infinity included), nested past what the parser follows, for another camera, with a table the kit
+does not know, a key or a row twice, a table or an entry out of its shape, a pattern that does not compile, or a $ref
+anywhere but a NEW_RECORDS entry naming FILTER_FLAGS' entry of the same key, is refused in plain words (Refused), naming
+the file and the table. What else an entry may hold is the JSON Schema's, which the commit hooks and CI check. A file
+saved with a byte order mark (Windows Notepad's) reads as one without.
 """
 import json
 import re
@@ -48,15 +48,15 @@ TABLES = {
     "FRAME_STEPS": "steps", "FRAME_PROOFS": "entries", "CAROUSEL": "rows", "VALUE_FIXES": "rows", "PP7_VALUES": "rows",
     "KEEP_LABELS": "set", "EV_DOWN_FROM_20": "set", "HOLD_TABLES": "entries", "HOLD_BRACKET_COPIES": "words",
     "ISO_TABLE": "text", "LABEL_FIXES": "words", "GROUP_NAMES": "words", "MY_MENU_ROW": "text",
-    "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "NOT_OFFERED": "not_offered",
-    "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
+    "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "PICKER_LISTS": "picker_lists",
+    "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
     "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
-         "pattern": lambda: None}
+         "pattern": lambda: None, "picker_lists": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
@@ -354,6 +354,19 @@ def _shaped(name: str, kind: str, raw):
             if "table" in e:
                 _row(e["table"], (str, (str, type(None))), f"mark {i}'s table", "[table, page or null]")
         return [{f: tuple(v) if f == "table" else v for f, v in e.items()} for e in raw]
+    if kind == "picker_lists":
+        for k, e in _need(raw, dict, "the table").items():
+            if not k.strip():
+                raise _Shape("an entry has no name")
+            _need(e, dict, repr(k))
+            for f, t in (("keys", str), ("walk", str), ("table", list), ("why", str)):
+                if f not in e:
+                    raise _Shape(f"{k!r} has no {f!r}")
+                _need(e[f], t, f"{k!r}'s {f!r}")
+            _pattern(e["keys"], f"{k!r}'s keys")
+            _pattern(e["walk"], f"{k!r}'s walk")
+            _row(e["table"], (str, (str, type(None))), f"{k!r}'s table", "[screen, page or section or null]")
+        return {k: {f: tuple(v) if f == "table" else v for f, v in e.items()} for k, e in raw.items()}
     if kind == "unproved":
         out = {}
         for k, e in _need(raw, dict, "the table").items():

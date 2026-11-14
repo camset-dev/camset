@@ -36,6 +36,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   Ticked or Not ticked, each proved on the camera by ticking and unticking its box. A ticked box keeps that setting
   apart for stills and for movies; what a change then writes to each mode's copy is not proved yet, so the editor's
   handling of the copies is as before.
+- A value shown as "7 (no name yet)" says in Expert mode that no choice on the camera wrote it when the setting was
+  mapped, and that the camera's list may not offer it, where it said the value was not chosen on the camera, which
+  was wrong for one the list never offers.
 - On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
   page and in Copy details: "Windows 11 build 26100 (x86_64)" (or Windows 10, or Windows Server), where it said
   "Windows (x86_64)". Windows itself gives the numbers, with no console window and nothing more to install.
@@ -125,6 +128,48 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   folder which frames and downloads back a valid proof (it deletes nothing). The a1 II's public form is committed as
   its public sources give it, with an empty seen file. Sony's Save/Load list is data now, `save_load_excluded` in the
   camera file (never copied into the definition), and the model page's row is rendered from it.
+- **A picker's list walked whole on the camera is what its settings list.** The first kit gave every function picker
+  one list, the union of every function code it met (the Custom Keys', the dials', the Fn menus'), and the writer
+  never dropped a listed value, so each of the a1 II's 36 Fn Menu places listed 222, 221 or 229 functions where its
+  picker offers 72 (Stills), 72 (Movie) or 33 (Playback), and Expert mode's "Offer values not checked on the camera
+  yet" offered the rest, to be written to the camera with "Write anyway". A new hand table, `PICKER_LISTS`, names the
+  pickers whose lists were walked full circle (the settings each list is for, the walks that chose every place, the
+  table walk's screen); `kit/schema_update.py` cuts those settings' lists to the codes the walks wrote, judged by code,
+  in either pass and before the not-offered marks, only while the walks, the table walk and the hand evidence agree
+  (how the list was walked is the hand evidence's, by the entry's name): each setting's picker found through a row of
+  its own, every list gone round to its start and alike place by place with the same numbers, every walk choosing
+  each place of its list (by its proof lines), and every row of a covered setting made in a state a walk names (the
+  rule is for lists that do not change with the camera's state). Where the camera draws an icon by a function's name,
+  the reader gives it digits or letters that differ from cell to cell ("8Var. Shutter", "S Var. Shutter"; the rating
+  stars), so numbers are compared only at places whose code is read with the same numbers every time, by every row of
+  the screen that wrote it, and even there a label's numbers must be some the camera read for that code ("Recall
+  Custom hold 2" is "hold 3" only where the reader misread it so), unless they cannot name another function: every
+  function some screen showed under that name is in the walked list, and the reader cannot read the place's own
+  function's numbers apart (it is the only one of that name, the reader gave it a sibling's digits, or its own
+  readings disagree three ways, as five stars' do); the run says each place so excused, with both labels, and a
+  function no screen showed is left to the code checks. A cell whose label reads nearer a function the
+  camera has outside the walked list (as every picker screen of the table walk showed each code) than the walked one
+  at its place (as its own screen showed it: "Clip Flag KEEP" where the walked list has "Clip Flag OK") is refused,
+  for it may offer another set of functions; two look-alikes of the list the other way round, the same set of codes,
+  pass, and so does one name under two codes with the same numbers (Pre-Capture, Clip Flag OK), which no label tells
+  apart. Neither that nor a function the camera never showed on a screen is caught by the labels: for those the code
+  checks stand, and a code outside the walked list that a proof, the definition's sample or one of the camera's own
+  downloads holds stops the write. An entry is refused when the picker screens gave no readings to check, and when a
+  walk's proof lines plan other labels than the table walk reads at their places (the table walk read again since);
+  each entry cut says how many outside functions it was checked against and which codes it took as one name. The
+  camera's downloads are read once for both checks against them. The a1 II's
+  table cuts the 36 Fn Menu places (the playback list's walk is Upper 4's, which chose every place) and the 14 stills
+  Custom Keys the first kit gave the Fn menu's codes for Pre-Capture and Subject Recog in AF (the keys write their
+  own, 2110 and 1049); the movie Center and Multi-Slc Center buttons (In-Camera Guide, Switch Right/Left Eye) and the
+  playback Fn Button (Follow Custom) are marked `not_offered` for functions the other keys offer. A not-offered mark's
+  walk no longer counts a row that chose only a sample of a picker, and a key whose own row is a sample has its mark
+  stand on its twin's whole walk where the table walk shows the two pickers' lists alike. The 37 Custom Key notes say
+  the length of each key's walked list (they said the first kit's partial counts), the playback Fn places' note no
+  longer says "inferred from the codes", and the playback Fn code 2509 is "Aspect Marker Disp." (an OCR slip read
+  "ErAspect"). A setting the hand table says the camera keeps or computes for itself (`UNPROVED` kind `state`) keeps
+  no proof in either pass, a proof an earlier write left taken out and said (decision 16); one that also has a hand
+  proof (`FRAME_PROOFS`) stops the write, for the two tables then say opposite things of it. The definition changes
+  when the maintainer writes it with the private evidence (docs/DATA_CONTRACTS.md, "A picker's list walked whole").
 - **A network decision opens an identity or connection row only once the row has been seen to open and close over the
   link without harm.** On the a1 II a look-only `--network` run opened IP Address Setting over the wired LAN link
   (Right, then MENU, nothing chosen): its screen read as no known kind, and a second or two after the MENU the camera

@@ -26,6 +26,7 @@ EVIDENCE_KEYS = {"run", "date", "proved", "sampled", "linear", "allowance", "evi
 EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run", "date", "menu", "allowance"},
                    "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
                    "NOT_OFFERED": {"$key", "$values", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
+                   "PICKER_LISTS": {"evidence"},
                    "UNPROVED": {"1"}, "MY_MENU_EMPTY": {"line+"}}
 # the mapper's hand evidence for the a1 II, where this computer holds the private overlay
 HAND_EVIDENCE = hand_evidence.path(paths.A1II)
@@ -77,7 +78,8 @@ def test_the_schema_refuses_a_hand_proofs_evidence_in_an_entry():
                                     ("NEW_RECORDS", "set:0x023c", "date", "x"), ("NOT_OFFERED", 0, "evidence", "x"),
                                     ("NOT_OFFERED", 0, "files", ["a.DAT"]), ("UNPROVED", "global:0x1672", 1, "x"),
                                     ("MY_MENU_EMPTY", None, "line+", "x"), ("VIDEO_SYSTEM_VALUES", "global:0x0202",
-                                                                             "evidence", "x")):
+                                                                             "evidence", "x"),
+                                    ("PICKER_LISTS", "Fn Menu (Still)", "evidence", "x")):
         bad = json.loads(json.dumps(doc))
         (bad[name] if key is None else bad[name][key])[field] = value      # a field, or a reason's day (index 1)
         assert not check.is_valid(bad), (name, key, field)
@@ -124,7 +126,9 @@ def test_without_its_evidence_a_table_says_what_the_camera_is_and_nothing_of_how
     notes += [e.get("note") or "" for table in (T.NEW_RECORDS, T.RECORD_FIXES) for e in table.values()]
     assert not [n for n in notes if DAY_OR_RUN.search(n)]
     # the same keys, in the same order, as with the evidence put back: the evidence adds to entries, never makes one
-    for name in ("FRAME_PROOFS", "NEW_RECORDS", "RECORD_FIXES", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "UNPROVED"):
+    assert not [name for name, e in T.PICKER_LISTS.items() if "evidence" in e]
+    for name in ("FRAME_PROOFS", "NEW_RECORDS", "RECORD_FIXES", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "UNPROVED",
+                 "PICKER_LISTS"):
         mine, theirs = getattr(T, name), getattr(whole, name)
         assert (list(mine) if isinstance(mine, dict) else len(mine)) == \
             (list(theirs) if isinstance(theirs, dict) else len(theirs)), name

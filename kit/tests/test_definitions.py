@@ -2489,11 +2489,11 @@ def test_a_value_is_marked_not_offered_only_where_its_evidence_holds(tmp_path):
 
 
 def test_the_shipped_marks_of_values_the_menus_never_offer_in_the_public_file():
-    """The public file alone: the a1 II's not_offered marks, 54 in all, ISO AUTO Minimum's factory ISO 64 held, twice;
+    """The public file alone: the a1 II's not_offered marks, 59 in all, ISO AUTO Minimum's factory ISO 64 held, twice;
     each says why in plain words and on which menu, each value is one of its setting's, and an editor offers none of
     the values a mark says the menus never offer (each a value no proof checked)."""
     marks = [(s, m) for s in PUB["settings"] for m in s.get("not_offered") or []]
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (54, 2)
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 2)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         assert "evidence" not in m, s["key"]
@@ -2507,10 +2507,10 @@ def test_the_shipped_marks_of_values_the_menus_never_offer_in_the_public_file():
 def test_the_shipped_marks_of_values_the_menus_never_offer():
     """The a1 II's not_offered (the unseen-values plan, route 3): the stills dials' Audio Rec Level and Follow Custom,
     the movie dials' Flash Comp., My Dial's Follow Custom, ISO AUTO's ISO 50/64/80, four Rec Frame Rates and Movie
-    White Balance's Flash, 52 in all, and ISO AUTO Minimum's factory ISO 64, held, twice. No mark is a value a proof
+    White Balance's Flash, with the values a picker's walked list never offers 57 in all, and ISO AUTO Minimum's factory ISO 64, held, twice. No mark is a value a proof
     wrote, each says why in plain words, and each value is one of its setting's."""
     marks = [(s, m) for s in DOC["settings"] for m in s.get("not_offered") or []]
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (54, 2)
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 2)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         if not m.get("held"):

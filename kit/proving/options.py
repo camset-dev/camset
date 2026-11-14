@@ -9,6 +9,9 @@ import numpy as np
 
 from camkit import ocr, screen
 from camkit.frames import load
+# a picker label without its icon, and two pickers listing the same functions in the same order: the rules are
+# camkit/match.py's, which the writer reads too (writer/offered.py's walked lists)
+from camkit.match import function_name, same_functions  # noqa: F401
 
 from . import base
 from .base import frame_file
@@ -123,12 +126,6 @@ def which_option(cam, job) -> int | None:
     return option_index(cam, job["labels"], job["kind"])
 
 
-def function_name(label: str) -> str:
-    """A picker label without the function's icon, which OCR reads as a stray mark or letter or two
-    ("• S Creative Look", "R Focus Area", "% Focus Area"), compared like option_key."""
-    return option_key(re.sub(r"^(?:\S{1,2}\s+)+", "", label))
-
-
 _WALKED: dict = {}                 # walk frame -> (cursor row, rows on the page)
 
 
@@ -181,13 +178,3 @@ def closest_function(t: str, labels: list, least: float = 0.8, margin: float = 0
     if r and r[0][0] >= least and (len(r) == 1 or r[0][0] - r[1][0] >= margin):
         return [r[0][1]]
     return []
-
-
-def same_functions(a: list, b: list) -> bool:
-    """Two pickers list the same functions in the same order, allowing OCR's slips in each label
-    (My Dial's twelve cells, 2026-10-29: "Move AF Frame +> : L" / "Move AF Frame+ : L"). A walk
-    starts each list at the slot's saved function, so b may be a's list turned round (Fn Menu)."""
-    if len(a) != len(b):
-        return False
-    alike = lambda x, y: difflib.SequenceMatcher(None, function_name(x), function_name(y)).ratio() >= 0.8
-    return any(alike(a[0], b[r]) and all(alike(x, y) for x, y in zip(a, b[r:] + b[:r], strict=True)) for r in range(len(b)))

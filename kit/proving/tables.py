@@ -147,15 +147,9 @@ def key_jobs(row: str, t: dict, scope_names=None) -> list:
         for it in page["items"]:
             if it.get("opens") != "picker" or not it.get("wrapped"):
                 continue
-            if "row" in it:
-                cell, name = [page["tab"], "key", it["row"]], it["key"] or f"page {page['tab'] + 1} key {it['row'] + 1}"
-            else:
-                cell = [page["tab"], *it["pos"]]
-                name = " / ".join(x for x in (it["key"], it.get("col_label", "")) if x) or \
-                    f"page {page['tab'] + 1} cell {it['pos']}"
-            name = f"{name} @{'.'.join(str(x) for x in cell)}"        # key names repeat across pages' OCR
-            if t.get("nth"):
-                name = f"{row[len(t['path'][0]):].strip(' ()')}: {name}"   # "movie: AEL Button @0.key.0"
+            # its name: the key's reading, then its cell (key names repeat across pages' OCR), "movie: " in front on
+            # the second screen of the row ("movie: AEL Button @0.key.0"); the report names its rows by it
+            cell, name = match.walked_key(row, t, page, it)
             labels = [o["label"] for o in it["options"]]
             if scope_names and not in_scope(scope_names, row, t, name):
                 continue

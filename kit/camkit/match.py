@@ -136,6 +136,82 @@ def walked_cell_names(t: dict) -> list:
     return [n if n and count[n] == 1 else f"{n} @{c['pos'][0]},{c['pos'][1]}".strip() for n, c in zip(names, cells, strict=True)]
 
 
+def walked_key(row: str, t: dict, page: dict, it: dict) -> tuple:
+    """(its cell, its name) of one key or Dial/Wheel cell `it` on a page of a Custom Key screen of tables.json (t: that
+    screen's entry, row: its key there), as kit/proving/tables.py's key_jobs names its jobs: cell [page, "key", row] or
+    [page, x, y] (the grid cell's centre); the name the key's reading (a grid cell's with its column), or its page and
+    place when unread, then "@<cell>" (key names repeat across pages' OCR), and for the second screen of a row the words
+    that tell it apart in front ("movie: AEL Button @0.key.0")."""
+    if "row" in it:
+        cell, name = [page["tab"], "key", it["row"]], it.get("key") or f"page {page['tab'] + 1} key {it['row'] + 1}"
+    else:
+        cell = [page["tab"], *it["pos"]]
+        name = " / ".join(x for x in (it.get("key"), it.get("col_label", "")) if x) or \
+            f"page {page['tab'] + 1} cell {it['pos']}"
+    name = f"{name} @{'.'.join(str(x) for x in cell)}"
+    if t.get("nth"):
+        name = f"{row[len(t['path'][0]):].strip(' ()')}: {name}"
+    return cell, name
+
+
+def walked_rows(tables: dict, name: str) -> dict:
+    """{the report's row name: the walked cell, key or tile} of one screen of kit/table_walk.py's tables.json (`name`, its
+    key there), every cell the walk saw, as kit/proving/tables.py names its jobs and kit/pass2_report.py its rows
+    ("<menu path> / <cell's name>": walked_cell_names, walked_key): the way from a row of the report, whose proofs
+    say which record the cell writes, to the list the walk read there. {} for a screen the file does not hold."""
+    t = tables.get(name) or {}
+    path = " > ".join(t.get("path") or [name])
+    if t.get("screen") == "keyset":
+        return {f"{path} / {walked_key(name, t, page, it)[1]}": it for page in t.get("pages") or []
+                for it in page.get("items") or []}
+    return {f"{path} / {n}": c for n, c in zip(walked_cell_names(t), t.get("cells") or [], strict=True)}
+
+
+# a picker label's leading icon, as OCR reads it: a stray mark or letter or two before a space ("• S Creative Look")
+ICON = re.compile(r"^(?:\S{1,2}\s+)+")
+
+
+def function_name(label: str) -> str:
+    """A picker label without the function's icon, which OCR reads as a stray mark or letter or two
+    ("• S Creative Look", "R Focus Area", "% Focus Area"), compared like an option's label (key)."""
+    return key(ICON.sub("", label))
+
+
+def label_numbers(label: str) -> tuple:
+    """The numbers a picker label holds, its icon aside (function_name's): ("3",) for "Recall Custom hold 3"."""
+    return tuple(re.findall(r"\d+", ICON.sub("", str(label or ""))))
+
+
+def nearness(x, y) -> float:
+    """How near two picker labels read, their icons aside (function_name): same_functions takes them for one function
+    at 0.8 or more."""
+    return difflib.SequenceMatcher(None, function_name(x), function_name(y)).ratio()
+
+
+def turns(a: list, b: list, numbers: bool = False, free=frozenset()):
+    """Each turn r of b at which a lists the same functions in the same order (same_functions): a's place i beside b's
+    place (i + r) % len(b), every pair near (nearness 0.8 or more) and, with `numbers`, holding the same numbers
+    (label_numbers) unless b's place is in `free` (an icon place, writer/offered.py's icon_places: there the reader
+    gives an icon drawn by the function's name as differing digits). A generator; nothing when the lengths differ."""
+    if len(a) != len(b):
+        return
+    n = len(b)
+    alike = lambda x, j: nearness(x, b[j]) >= 0.8 and (not numbers or j in free or label_numbers(x) == label_numbers(b[j]))
+    for r in range(n):
+        if alike(a[0], r) and all(alike(a[i], (i + r) % n) for i in range(1, n)):
+            yield r
+
+
+def same_functions(a: list, b: list, numbers: bool = False, free=frozenset()) -> bool:
+    """Two pickers list the same functions in the same order, allowing OCR's slips in each label
+    (My Dial's twelve cells, 2026-10-29: "Move AF Frame +> : L" / "Move AF Frame+ : L"). A walk
+    starts each list at the slot's saved function, so b may be a's list turned round (Fn Menu). With `numbers`, each
+    pair also holds the same numbers (label_numbers): a slip's tolerance takes "Hold 3" for "Hold 4", and a writer that
+    lends one list's codes to another must not; but not at b's places in `free`, where the reader reads an icon beside
+    the function's name as digits that differ from screen to screen ("8Var. Shutter", "S Var. Shutter")."""
+    return next(turns(a, b, numbers, free), None) is not None
+
+
 def cell_options(proofs: list, tables: dict | None) -> tuple:
     """(proof lines with each setting table cell named as the walked table names it now, {each name a cell kept by its
     own reading: why}). A line written before 2026-11-11 names its cell by the reading of that cell alone ("<row

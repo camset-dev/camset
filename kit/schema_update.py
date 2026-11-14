@@ -38,6 +38,10 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
                 (pass2_report.registration_mirrors: kit/provers/memreg_run.py's "registration mirror" lines), right
                 after in_sets (with_in_sets_proved); a memory record no live record holds (a frame's place) takes the
                 values its registrations wrote as proved (pass2_report.mirrored_values: framepos_run.py --zone-grid)
+  values        a picker's list walked whole (the hand table's PICKER_LISTS, its walks' evidence the hand
+                evidence's): each setting it covers lists exactly the codes the walks wrote, the first kit's union of
+                the camera's function codes taken out, each said (writer/offered.py walked_lists); before the
+                not-offered marks
   video_system_values  {"NTSC": [...], "PAL": [...]}: the values a setting's menus offer under one video system only,
                 from the rows walked under each, their downloads' headers saying which (writer/offered.py), or the hand
                 table's VIDEO_SYSTEM_VALUES where no proof walked both
@@ -138,7 +142,7 @@ from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis
                            with_in_sets_proved,
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
                            without_observed, without_written_with)
-from writer.offered import check_video_systems, not_offered_marks, with_video_systems  # noqa: E402
+from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
 from writer.copies import with_copies  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
@@ -174,6 +178,7 @@ NEW_RECORDS = HAND.NEW_RECORDS
 NEW_WHOLE_LABELS = HAND.NEW_WHOLE_LABELS
 NOT_OFFERED = HAND.NOT_OFFERED
 ORIENTED = HAND.ORIENTED
+PICKER_LISTS = HAND.PICKER_LISTS
 PP7_VALUES = HAND.PP7_VALUES
 RECORD_FIXES = HAND.RECORD_FIXES
 SHOOT_MODE_RECORDS = HAND.SHOOT_MODE_RECORDS
@@ -828,8 +833,7 @@ def main():
         return
     # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the tables
     # give no hand proofs, and a definition written so would lose every one of them (the plain pass refuses alike)
-    missing = hand_evidence.missing(paths.A1II, HAND_EVIDENCE, {"FRAME_PROOFS": FRAME_PROOFS, "UNPROVED": UNPROVED,
-                                                                "NOT_OFFERED": NOT_OFFERED})
+    missing = hand_evidence.missing(paths.A1II, HAND_EVIDENCE, {n: getattr(HAND, n) for n in hand_evidence.COMPLETES})
     if a.write and not a.dry_run and missing:
         sys.exit(missing)
     # a hand proof the hand evidence gives names its run, day and menu row there, as the plain pass asks, by the same
@@ -1468,8 +1472,12 @@ def main():
     # candidate row tried, or the raw stop values memory sets 4-12 never write), each until a proof reaches it
     # (2026-11-09). A reason whose day the hand evidence does not give is written without one, as the plain pass writes
     # it (hand_facts.unproved): one an earlier write gave a day loses it on purpose, said, and the write is told so
-    # (taken_out), never a day of null
+    # (taken_out), never a day of null. A value the camera keeps or computes for itself (kind "state": how the camera is
+    # held) keeps no proof: the one a view-only readout kept from an older run goes first, and one FRAME_PROOFS proves
+    # by hand too stops the write (hand_facts.state_proofs_out, as the plain pass does)
     taken_out = set()
+    by_hand = {k for k, fp in FRAME_PROOFS.items() if {"proved", "sampled"} & set(fp)}
+    hand_facts.state_proofs_out(by_key, UNPROVED, by_hand, changed)
     for k, r in by_key.items():
         why = None
         if not r.get("proved") and k in UNPROVED and not {"proved", "sampled"} & set(FRAME_PROOFS.get(k) or ()):
@@ -1663,9 +1671,14 @@ def main():
         proved.pop(k, None)
     with_scales(doc, RUN)
     by_key = {s["key"]: s for s in doc["settings"]}
-    # values the menus never offer, each where its evidence holds (writer/offered.py); a held one the ISO table names
+    # a picker's list walked whole: the codes its walks wrote and no other (the first kit's union of the camera's
+    # function codes out), where the walks, the table walk and the sample agree; then the values the menus never offer,
+    # each where its evidence holds (writer/offered.py); a held one the ISO table names
     tables_file = RUN_ROOT / "kit2_tables" / "tables.json"
-    not_offered_marks(doc, NOT_OFFERED, report, read_json(tables_file) if tables_file.exists() else {}, RUN_ROOT)
+    walk = read_json(tables_file) if tables_file.exists() else {}
+    counted = [r for i, r in enumerate(all_proofs) if i not in cut_short] if all_proofs else None
+    cut_to_walks(doc, PICKER_LISTS, NOT_OFFERED, report, walk, definitions.sample(doc, target), counted, RUN_ROOT)
+    not_offered_marks(doc, NOT_OFFERED, report, walk, RUN_ROOT, counted)
     for entry in NOT_OFFERED:
         src, k = by_key.get(entry.get("named_by", "")), entry["key"]
         for m in (by_key.get(k) or {}).get("not_offered") or [] if src else []:

@@ -236,7 +236,203 @@
     "global:0x0ef5": {"name": "WB fine-tune G-M (Underwater Auto, stills)"},
     "global:0x0ef7": {"name": "WB fine-tune G-M (Underwater Auto, movie)"},
     "global:0x0ef9": {"name": "WB fine-tune G-M (C.Temp./Filter, stills)"},
-    "global:0x0efb": {"name": "WB fine-tune G-M (C.Temp./Filter, movie)"}
+    "global:0x0efb": {"name": "WB fine-tune G-M (C.Temp./Filter, movie)"},
+    "global:0x0436": {
+      "name": "Custom Key (Movie): AEL Button",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x0432": {
+      "name": "Custom Key (Movie): Center Button",
+      "note": "Offers the 125 functions this key's picker lists."
+    },
+    "global:0x0429": {
+      "name": "Custom Key (Movie): Custom Button 1",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x042a": {
+      "name": "Custom Key (Movie): Custom Button 2",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x042b": {
+      "name": "Custom Key (Movie): Custom Button 3",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x042c": {
+      "name": "Custom Key (Movie): Custom Button 4",
+      "note": "Offers the 127 functions this key's picker lists."
+    },
+    "global:0x042d": {
+      "name": "Custom Key (Movie): Custom Button 5",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x0435": {
+      "name": "Custom Key (Movie): Down Button",
+      "note": "Offers the 106 functions this key's picker lists."
+    },
+    "global:0x0433": {
+      "name": "Custom Key (Movie): Left Button",
+      "note": "Offers the 106 functions this key's picker lists."
+    },
+    "global:0x0438": {
+      "name": "Custom Key (Movie): MOVIE Button",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x0431": {
+      "name": "Custom Key (Movie): Multi-Slc Center Btn",
+      "note": "Offers the 125 functions this key's picker lists."
+    },
+    "global:0x0434": {
+      "name": "Custom Key (Movie): Right Button",
+      "note": "Offers the 106 functions this key's picker lists."
+    },
+    "global:0x0442": {
+      "name": "Custom Key (Playback): MOVIE Button",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x0437": {
+      "name": "Custom Key (Movie): AF-ON Button",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x0439": {
+      "name": "Custom Key (Movie): Focus Hold Button",
+      "note": "Offers the 128 functions this key's picker lists."
+    },
+    "global:0x1244": {
+      "name": "Custom Key (Playback): AF-ON Button",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x0441": {
+      "name": "Custom Key (Playback): AEL Button",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x043a": {
+      "name": "Custom Key (Playback): Custom Button 1",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x043b": {
+      "name": "Custom Key (Playback): Custom Button 2",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x043c": {
+      "name": "Custom Key (Playback): Custom Button 3",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x043d": {
+      "name": "Custom Key (Playback): Custom Button 4",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x043e": {
+      "name": "Custom Key (Playback): Custom Button 5",
+      "note": "Offers the 38 functions this key's picker lists."
+    },
+    "global:0x0444": {
+      "name": "Custom Key (Playback): Fn Button",
+      "note": "Offers the 37 functions this key's picker lists."
+    },
+    "global:0x041c": {
+      "name": "Custom Key (Still): AEL Button",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x041d": {
+      "name": "Custom Key (Still): AF-ON Button",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0418": {
+      "name": "Custom Key (Still): Center Button",
+      "note": "Offers the 150 functions this key's picker lists."
+    },
+    "global:0x040f": {
+      "name": "Custom Key (Still): Custom Button 1",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0410": {
+      "name": "Custom Key (Still): Custom Button 2",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0411": {
+      "name": "Custom Key (Still): Custom Button 3",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0412": {
+      "name": "Custom Key (Still): Custom Button 4",
+      "note": "Offers the 152 functions this key's picker lists."
+    },
+    "global:0x0413": {
+      "name": "Custom Key (Still): Custom Button 5",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x041b": {
+      "name": "Custom Key (Still): Down Button",
+      "note": "Offers the 117 functions this key's picker lists."
+    },
+    "global:0x041f": {
+      "name": "Custom Key (Still): Focus Hold Button",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0419": {
+      "name": "Custom Key (Still): Left Button",
+      "note": "Offers the 117 functions this key's picker lists."
+    },
+    "global:0x041e": {
+      "name": "Custom Key (Still): MOVIE Button",
+      "note": "Offers the 153 functions this key's picker lists."
+    },
+    "global:0x0417": {
+      "name": "Custom Key (Still): Multi-Slc Center Btn",
+      "note": "Offers the 150 functions this key's picker lists."
+    },
+    "global:0x041a": {
+      "name": "Custom Key (Still): Right Button",
+      "note": "Offers the 117 functions this key's picker lists."
+    },
+    "global:0x12e7[0]": {
+      "name": "Fn Menu (Playback): Upper 1",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[1]": {
+      "name": "Fn Menu (Playback): Upper 2",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[2]": {
+      "name": "Fn Menu (Playback): Upper 3",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[3]": {
+      "name": "Fn Menu (Playback): Upper 4",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[4]": {
+      "name": "Fn Menu (Playback): Upper 5",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[5]": {
+      "name": "Fn Menu (Playback): Upper 6",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[6]": {
+      "name": "Fn Menu (Playback): Lower 1",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[7]": {
+      "name": "Fn Menu (Playback): Lower 2",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[8]": {
+      "name": "Fn Menu (Playback): Lower 3",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[9]": {
+      "name": "Fn Menu (Playback): Lower 4",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[10]": {
+      "name": "Fn Menu (Playback): Lower 5",
+      "note": "Playback Fn Menu slot (function code)"
+    },
+    "global:0x12e7[11]": {
+      "name": "Fn Menu (Playback): Lower 6",
+      "note": "Playback Fn Menu slot (function code)"
+    }
   },
   "FILTER_FLAGS": {
     "global:0x1290": {
@@ -2061,7 +2257,8 @@
     "Sad Frame Rate Settings": "S&Q Frame Rate Settings",
     "Reg. AF AreatAF On": "Reg. AF Area+AF On",
     "Subject Reccgnition AF": "Subject Recognition AF",
-    "Tracking On E + A5": "Tracking On (frame icon) + AF On"
+    "Tracking On E + A5": "Tracking On (frame icon) + AF On",
+    "ErAspect Marker Disp.": "Aspect Marker Disp."
   },
   "GROUP_NAMES": {
     "DCnct./Remote Sht.": "Cnct./Remote Sht.",
@@ -2075,6 +2272,50 @@
     "S&Q": ["global:0x13e2"],
     "Time-lapse": ["global:0x13e3"],
     "Stills": ["global:0x0bd5[0]", "global:0x0bd5[1]", "global:0x0bd5[2]"]
+  },
+  "PICKER_LISTS": {
+    "Fn Menu (Still)": {
+      "keys": "^global:0x0445\\[(?:[0-9]|1[01])\\]$",
+      "walk": "^Fn Menu Settings / Still (?:Upper / 1|Lower / 6)$",
+      "table": ["Fn Menu Settings", "Still"],
+      "why": "Every place of the stills Fn menu offers one list of functions, the same in the same order, walked full circle on the camera; the other codes the first kit listed are the Custom Keys', the dials' and the other Fn menus'."
+    },
+    "Fn Menu (Movie)": {
+      "keys": "^global:0x0451\\[(?:[0-9]|1[01])\\]$",
+      "walk": "^Fn Menu Settings / Movie (?:Upper / 1|Lower / 6)$",
+      "table": ["Fn Menu Settings", "Movie"],
+      "why": "Every place of the movie Fn menu offers one list of functions, the same in the same order, walked full circle on the camera; the other codes the first kit listed are the Custom Keys', the dials' and the other Fn menus'."
+    },
+    "Fn Menu (Playback)": {
+      "keys": "^global:0x12e7\\[(?:[0-9]|1[01])\\]$",
+      "walk": "^Fn Menu Settings / Playback Upper / 4$",
+      "table": ["Fn Menu Settings (playback)", null],
+      "why": "Every place of the playback Fn menu offers one list of functions, the same in the same order, walked full circle on the camera and walked whole on Upper 4, every one of its places chosen; the other codes the first kit listed are the shooting Fn menus', the Custom Keys' and the dials'."
+    },
+    "Custom Key (Still): AEL Button's list": {
+      "keys": "^global:0x0(?:40f|410|411|413|41c|41d|41e|41f)$",
+      "walk": "^Custom Key/Dial Set\\. / AEL\\b[^@/]* @",
+      "table": ["Custom Key/Dial Set.", null],
+      "why": "The pickers of these stills keys offer one list, AEL Button's, walked full circle on the camera: it holds Pre-Capture under the keys' own code, not under the Fn menu's, which the first kit listed too."
+    },
+    "Custom Key (Still): Custom Button 4's list": {
+      "keys": "^global:0x0412$",
+      "walk": "^Custom Key/Dial Set\\. / Custom Button ?4\\b[^@/]* @",
+      "table": ["Custom Key/Dial Set.", null],
+      "why": "Custom Button 4's picker, walked full circle on the camera, holds Pre-Capture under the keys' own code, not under the Fn menu's, which the first kit listed too."
+    },
+    "Custom Key (Still): Multi-Slc Center Btn's list": {
+      "keys": "^global:0x041[78]$",
+      "walk": "^Custom Key/Dial Set\\. / Multi[^@/]* @",
+      "table": ["Custom Key/Dial Set.", null],
+      "why": "The pickers of the two centre buttons offer one list, walked full circle on the camera: it holds Pre-Capture and Subject Recog in AF under the keys' own codes, not under the Fn menus', which the first kit listed too."
+    },
+    "Custom Key (Still): Left Button's list": {
+      "keys": "^global:0x041[9ab]$",
+      "walk": "^Custom Key/Dial Set\\. / Left\\b[^@/]* @",
+      "table": ["Custom Key/Dial Set.", null],
+      "why": "The pickers of the Left, Right and Down buttons offer one list, walked full circle on the camera: it holds Pre-Capture and Subject Recog in AF under the keys' own codes, not under the Fn menus', which the first kit listed too."
+    }
   },
   "NOT_OFFERED": [
     {
@@ -2353,6 +2594,27 @@
       "walk": "^White Balance \\[(?:Movie mode|S&Q mode(?: \\([^)]*\\))?)\\]$",
       "why": "Movie mode's White Balance list has no Flash: its 14 options, in Movie mode and in S&Q, leave it out.",
       "menu": "White Balance [Movie mode]"
+    },
+    {
+      "key": "global:0x0431",
+      "values": [796, 849],
+      "walk": "^Custom Key/Dial Set\\. / movie: Multi[^@/]* @",
+      "why": "This key's list leaves them out, though other keys offer them.",
+      "menu": "Custom Key/Dial Set. (movie)"
+    },
+    {
+      "key": "global:0x0432",
+      "values": [796, 849],
+      "walk": "^Custom Key/Dial Set\\. / movie: Multi[^@/]* @",
+      "why": "This key's list, the same as the Multi-Slc Center Btn's, leaves them out, though other keys offer them.",
+      "menu": "Custom Key/Dial Set. (movie)"
+    },
+    {
+      "key": "global:0x0444",
+      "values": [875],
+      "walk": "^Custom Key Setting / Fn\\b[^@/]* @",
+      "why": "The Fn Button's list leaves it out, though the other playback keys offer it.",
+      "menu": "Custom Key Setting"
     }
   ],
   "VIDEO_SYSTEM_VALUES": {

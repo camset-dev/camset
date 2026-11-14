@@ -6,12 +6,13 @@ hand tables file, or with every table empty, gets the plain pass as it was befor
 What the plain pass reads (PLAIN): a record's name or note the camera proved wrong (RECORD_FIXES), records the menus
 never write, found by hand (NEW_RECORDS, with FILTER_FLAGS' entries it takes in, laid out from the run's newest
 download), a record a proof found laid out like a sibling (NEW_LIKE, NEW_WHOLE_LABELS), what a record holds and its
-hand proof (FRAME_PROOFS), value names no proof gives (CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS), the values the
-menus never offer (NOT_OFFERED), the values offered under one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES,
-COPY_MODES, COPY_MODES_UNKNOWN), why a record cannot be proved (UNPROVED) and proof contexts in other words
-(CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the ILCE-1M2's own pass alone reads so far (A1_PASS_ONLY), or
-no part of the kit's passes (NO_READER): the plain pass refuses a camera whose file fills one (refusals), in plain
-words, for a mapper who fills in a table must not believe it took effect. Where an entry cannot take effect (a setting
+hand proof (FRAME_PROOFS), value names no proof gives (CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS), the pickers
+whose lists were walked whole (PICKER_LISTS), the values the menus never offer (NOT_OFFERED), the values offered under
+one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES, COPY_MODES, COPY_MODES_UNKNOWN), why a record cannot be
+proved (UNPROVED) and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the
+ILCE-1M2's own pass alone reads so far (A1_PASS_ONLY), or no part of the kit's passes (NO_READER): the plain pass
+refuses a camera whose file fills one (refusals), in plain words, for a mapper who fills in a table must not believe
+it took effect. Where an entry cannot take effect (a setting
 the definition lacks, a value no setting lists) the pass says so, "not applied", as it goes.
 
 A value a hand table names is named, not proved: its name's source is "hand table" (a name the editor offers) only
@@ -27,7 +28,8 @@ the hand evidence (private/evidence/<model>_fw<fw>.hand.json) is never put into 
 written only into a field the definition keeps as evidence (camkit.definitions.split): a hand proof's values, run, day
 and menu rows into the setting's proof, a note's evidence ("note+") and the owner's word ("allowance") into
 note_evidence, a reason's day into unproved_reason's date, what shows a not-offered mark into the mark's evidence. A
-public note is the public table's note, word for word, whatever the evidence holds."""
+public note is the public table's note, word for word, whatever the evidence holds. How a picker's list was walked
+whole reaches no field at all: without it the list is not cut (walked_lists)."""
 import json
 import re
 import sys
@@ -42,8 +44,8 @@ from .proofs import sampled_scale
 
 # the tables the plain pass reads, in the order DATA_CONTRACTS lists them
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
-         "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES", "COPY_MODES",
-         "COPY_MODES_UNKNOWN", "UNPROVED", "CONTEXT_WORDS")
+         "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "PICKER_LISTS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES",
+         "COPY_MODES", "COPY_MODES_UNKNOWN", "UNPROVED", "CONTEXT_WORDS")
 # a table a prover reads for the camera it works on, which no pass of the writer reads
 PROVERS = {"ZONE": "kit/provers/framepos_run.py --zone-grid"}
 # the tables only the ILCE-1M2's own pass (kit/schema_update.py main) reads so far, each with what it is for: rules tied
@@ -366,6 +368,30 @@ def record_fixes(by_key: dict, tables, ev: dict, changed: list) -> None:
             hand_note(by_key[k], fix["note"], evidence_words(ev, ("RECORD_FIXES",), k), changed)
 
 
+def state_proofs_out(by_key: dict, reasons: dict, by_hand: set, changed: list) -> list:
+    """A setting the hand table says the camera keeps or computes for itself (UNPROVED, kind "state": how the camera is
+    held, a flag every load flips) keeps no proof, whatever a run read there: a proof an earlier write gave it
+    (a view-only readout's, which the proof runs read but never chose) is taken out, said, for its values are what the
+    camera held when the run looked, which another owner's mapping would not find (docs/decisions/0016), and the reason
+    is written in its place. A key the table says so of that also has a hand proof (`by_hand`, the FRAME_PROOFS entries
+    the hand evidence proves) stops the write, in either pass, nothing written: the two tables say opposite things of
+    it, and only the mapper knows which holds. Returns the keys whose proof went."""
+    clash = sorted(k for k, (kind, _day, _why) in reasons.items() if kind == "state" and k in by_hand)
+    if clash:
+        sys.exit(f"unproved: {', '.join(clash)}: UNPROVED says the camera keeps it for itself, FRAME_PROOFS' hand "
+                 "evidence proves it: take one out (docs/DATA_CONTRACTS.md, the hand tables); nothing written")
+    out = []
+    for k, (kind, _day, _why) in reasons.items():
+        s = by_key.get(k)
+        if kind == "state" and s is not None and s.get("proved") and k not in by_hand:
+            print(f"  unproved  {k}: a value the camera keeps for itself (state): its proof taken out, its values are "
+                  "what the camera held when a run looked")
+            s.pop("proved")
+            changed.append((k, s["name"], "proved", None, "(a value the camera keeps for itself: no proof)"))
+            out.append(k)
+    return out
+
+
 def unproved(doc: dict, by_key: dict, tables, ev: dict, changed: list, taken_out: set = None) -> None:
     """UNPROVED: why no proof can reach a setting, {kind, date (the hand evidence's, kept private), why}, on each
     setting it names that has no proof (its hand proof counting as one); a setting a proof reached, or the table no
@@ -381,6 +407,7 @@ def unproved(doc: dict, by_key: dict, tables, ev: dict, changed: list, taken_out
         if k not in by_key:
             print(f"  unproved  {k}: the definition has no such setting yet, not applied")
     proofs = hand_proofs(ev)
+    state_proofs_out(by_key, tables.UNPROVED, set(proofs), changed)
     for k, r in by_key.items():
         why = None
         if not r.get("proved") and k in tables.UNPROVED and k not in proofs:
@@ -510,10 +537,40 @@ def frame_proofs(by_key: dict, tables, ev: dict, over: dict, changed: list, regi
               "hand table's proof of it takes them in; not credited")
 
 
+def walked_lists(doc: dict, tables, ev: dict, report: list, run: Path, sample: Path | None) -> None:
+    """PICKER_LISTS: each picker's list cut to the codes its walks wrote (writer/offered.py's cut_to_walks, as the
+    ILCE-1M2's pass calls it: the camera's table walk and the proof lines the report counts read where the runs hold
+    them, `run` the pass-2 run; its sample's values read from `sample`, the definition's sample file; the camera's
+    downloads checked after), each entry with what shows its walks went round from the hand evidence by its name (none:
+    the list stays as it is, said), and a value a NOT_OFFERED mark says the camera holds kept. Nothing when the table
+    is empty."""
+    from runner import read_json
+
+    from .offered import cut_to_walks
+    if not tables.PICKER_LISTS:
+        return
+    entries = {name: dict(entry, **{f: x for f, x in part(ev, "PICKER_LISTS", name).items() if f == "evidence"})
+               for name, entry in tables.PICKER_LISTS.items()}
+    walk = run.parent / "kit2_tables" / "tables.json"
+    cut_to_walks(doc, entries, tables.NOT_OFFERED, report, read_json(walk) if walk.exists() else {}, sample,
+                 counted_proofs(run), run.parent)
+
+
+def counted_proofs(run: Path) -> list | None:
+    """The proof lines the report counts (pass2_report.report_proofs, those a run cut short left out) of the pass-2
+    run `run`; None when it has no proofs.jsonl."""
+    from pass2_report import report_proofs
+    if not (run / "proofs.jsonl").exists():
+        return None
+    lines, skip = report_proofs(run)[:2]
+    return [r for i, r in enumerate(lines) if i not in skip]
+
+
 def not_offered(doc: dict, tables, ev: dict, report: list, run_root: Path, derived: dict,
-                taken_out: set = None) -> None:
+                taken_out: set = None, proofs: list | None = None) -> None:
     """NOT_OFFERED: each mark written while its evidence holds (writer/offered.py's not_offered_marks, the camera's
-    table walk read where the runs hold it; what shows a mark, and a held value's downloads, from the hand evidence by
+    table walk read where the runs hold it, `proofs` the proof lines the report counts (counted_proofs), for a twin
+    walk's icon places; what shows a mark, and a held value's downloads, from the hand evidence by
     the mark's place, into the mark's evidence, which the definition keeps private), and a held value named "derived"
     where the record its entry names (named_by) proved it under the mark's own label. A mark whose evidence the hand
     evidence no longer gives loses it on purpose: said, and added to `taken_out` (lost_evidence's words), so the write
@@ -529,7 +586,7 @@ def not_offered(doc: dict, tables, ev: dict, report: list, run_root: Path, deriv
     entries = [dict(entry, **{f: x for f, x in part(ev, "NOT_OFFERED", i).items() if f in ("evidence", "files")})
                for i, entry in enumerate(tables.NOT_OFFERED)]
     walk = run_root / "kit2_tables" / "tables.json"
-    not_offered_marks(doc, entries, report, read_json(walk) if walk.exists() else {}, run_root)
+    not_offered_marks(doc, entries, report, read_json(walk) if walk.exists() else {}, run_root, proofs)
     by_key = {s["key"]: s for s in doc["settings"]}
     for k, s in by_key.items():
         # each mark's part is its own (hand_evidence.plain_problems holds each part to its mark's "$key" and, where a

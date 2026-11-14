@@ -176,7 +176,7 @@ impl App {
         if !self.prefs.expert {
             return Some(format!("The camera holds {v} here, a value Camset has no name for yet."));
         }
-        let mut why = format!("The camera stores {v} here. This camera's definition has no name for that value yet: it was not chosen on the camera when the setting was mapped, so the editor shows the number.");
+        let mut why = format!("The camera stores {v} here. This camera's definition has no name for that value: no choice on the camera wrote it when the setting was mapped (the camera's list may not offer it), so the editor shows the number.");
         why += &format!(" Record 0x{:04x}.", s.id);
         Some(why)
     }

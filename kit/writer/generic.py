@@ -79,7 +79,7 @@ def no_tables() -> hand_tables.Tables:
 
 
 def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolved: list = None,
-            allowed: dict = None, evidence: dict = None, taken_out: set = None) -> list:
+            allowed: dict = None, evidence: dict = None, taken_out: set = None, sample: Path = None) -> list:
     """Pass 2's report into a definition: each proved value the label the camera showed (a number field keeps its
     numbers), a live record the definition lacks a setting named by its menu row, and each proved setting its evidence
     ("proved": the run, the date, the rows, the values; of what it held before only a value a counted line still wrote,
@@ -96,7 +96,8 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     lays out one an earlier run could not); a FRAME_PROOFS entry listing values with no hand proof is proved by the
     report's lines alone (hand_facts.by_lines); then the hand facts (writer/hand_facts.py: NEW_RECORDS, VALUE_FIXES,
     RECORD_FIXES, UNPROVED, PP7_VALUES, FRAME_PROOFS, a registration's allowance into `allowed`, what the tables no
-    longer name taken out, the entries that cannot take effect said) before a disputed record loses its proof, and the
+    longer name taken out, the entries that cannot take effect said) before a disputed record loses its proof, the
+    pickers' lists cut to their walks (PICKER_LISTS, the definition's sample file `sample` checked) and the
     not-offered marks (NOT_OFFERED) before the names' sources are set, a value a hand table names that no proof covers
     named "counted" (hand_facts.named_not_proved), and a NEW_LIKE record's filled values named as its sibling's stand
     (hand_facts.like_fill_names). The evidence reaches only the fields the definition keeps private; a reason's day or
@@ -242,7 +243,9 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     hand_facts.frame_proofs(by_key, T, E, over, changed, mirrored_values(run) if T.FRAME_PROOFS else {}, allowed)
     hand_facts.not_found(by_key, T)
     disputed_out(doc, disputed & set(by_key))
-    hand_facts.not_offered(doc, T, E, report, run.parent, derived, taken_out)
+    hand_facts.walked_lists(doc, T, E, report, run, sample)
+    hand_facts.not_offered(doc, T, E, report, run.parent, derived, taken_out,
+                           hand_facts.counted_proofs(run) if T.NOT_OFFERED else None)
     hand_facts.named_not_proved(doc, over)     # a value a hand table names that no proof covers: named, not proved
     for s in doc["settings"]:
         with_names(s, readers[s["key"]], over[s["key"]], derived[s["key"]])
@@ -409,7 +412,8 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
             allowed[k].add(m["allowance"])
     unresolved = []                 # the conflicts a hand table keeps against the camera's reading (KEEP_LABELS)
     taken_out = set()               # evidence the pass took out on purpose, said (a reason's day, a mark's evidence)
-    changed = generic(doc, report, run, date, tables, unresolved, allowed, evidence, taken_out)
+    changed = generic(doc, report, run, date, tables, unresolved, allowed, evidence, taken_out,
+                      definitions.sample(doc, target))
     print(f"in sets: {with_in_sets_proved(doc, mirrors)} settings whose memory copy a registration took; allowances: "
           f"{with_allowances(doc, allowed)} settings took the owner's word into their evidence")
     # the rows a definition kept, named so too; the patterns said applied are those that match a row

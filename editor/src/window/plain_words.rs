@@ -218,7 +218,8 @@ pub(crate) mod plain_words_tests {
         assert_eq!(why, format!("The camera holds {unnamed} here, a value Camset has no name for yet."));
         app.prefs.expert = true;
         let why = app.unnamed_why(&s, Some(unnamed)).expect("said why");
-        assert!(why.starts_with(&format!("The camera stores {unnamed} here. This camera's definition has no name for that value yet")), "{why}");
+        assert!(why.starts_with(&format!("The camera stores {unnamed} here. This camera's definition has no name for that value: no choice on the camera wrote it")), "{why}");
+        assert!(!why.contains("was not chosen"), "a value the camera's list does not offer was never there to choose: {why}");
         assert!(!why.contains("have held it before"), "no list of the values camera files held is kept (decision 16)");
         assert!(app.unnamed_why(&s, Some(unnamed)).unwrap().ends_with(&format!("Record 0x{:04x}.", s.id)));
         app.prefs.expert = false;

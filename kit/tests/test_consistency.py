@@ -185,26 +185,16 @@ TWINS = {
     "AEL toggle": "spot and normal metering, as AEL hold",
     "Fixed Speed STBY": "Custom Key zoom and Remote zoom: two codes, a remote icon apart (stills names them apart)",
     "Fixed Speed REC": "Custom Key zoom and Remote zoom, as Fixed Speed STBY",
-    "SteadyShot": "the stills and the movie SteadyShot: 209 proved on the stills Fn menu, 210 on the movie screens",
-    "Sbj Recog Frm Disp.": "the stills and the movie item: 1144 on the stills screens, 1145 on the movie screens",
     "Record Setting": "Movie and Time-lapse/S&Q Record Setting: an S&Q icon apart (the Fn Menu names them apart)",
     "FTP Trans. (This Img.)": "two FTP transfer items an icon apart, both proved on the playback Fn menu and keys",
 }
-# one label, one code proved on the Fn Menu screens and another on the Custom Key screens, both kept in both
-# families' tables: the same words for what may be two functions (one opens the setting, one is the key's own)
-SCREEN_SPLIT = {
-    "Pre-Capture": "2081 proved on the stills Fn menu, 2110 on the stills custom keys",
-    "Subject Recog in AF": "314 proved on the Fn menus, 1049 on the custom keys",
-    "Regist. Face Priority": "970 proved on the Fn menus, 1008 on the custom keys (both hand table)",
-    "Protect": "2551 proved on the playback Fn menu, 336 on the playback custom keys",
-}
+# A label one code of which was proved on the Fn Menu screens and another on the Custom Key screens (Pre-Capture,
+# Subject Recog in AF, Regist. Face Priority, Protect, SteadyShot, Sbj Recog Frm Disp.) is no repeat any more: each
+# setting holds only the codes its own picker's walked list offers (PICKER_LISTS), so only one of the two.
 REPEATS = {
     "Custom Key (Movie)": {"AEL hold", "AEL toggle", "Record Setting", "Fixed Speed STBY"},
-    "Custom Key (Still)": {"Pre-Capture", "Fixed Speed REC", "Fixed Speed STBY", "Subject Recog in AF"},
-    "Fn Menu (Still)": {"Pre-Capture", "Protect", "Regist. Face Priority", "SteadyShot", "Subject Recog in AF"},
-    "Fn Menu (Movie)": {"Pre-Capture", "Protect", "Regist. Face Priority", "Sbj Recog Frm Disp.", "SteadyShot",
-                        "Subject Recog in AF"},
-    "Fn Menu (Playback)": {"FTP Trans. (This Img.)", "Pre-Capture", "Protect", "SteadyShot", "Subject Recog in AF"},
+    "Custom Key (Still)": {"Fixed Speed REC", "Fixed Speed STBY"},
+    "Fn Menu (Playback)": {"FTP Trans. (This Img.)"},
 }
 
 
@@ -216,7 +206,7 @@ def test_no_label_is_repeated_inside_a_setting_but_the_listed_ones():
             if n > 1:
                 got[family(s) or s["key"]].add(lab)
     assert dict(got) == REPEATS
-    assert set().union(*REPEATS.values()) == set(TWINS) | set(SCREEN_SPLIT), "each repeat has its reason"
+    assert set().union(*REPEATS.values()) == set(TWINS), "each repeat has its reason"
 
 
 # ---------------------------------------------------------------- e. the movie copies

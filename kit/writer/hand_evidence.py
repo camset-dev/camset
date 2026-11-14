@@ -3,8 +3,8 @@
 the camera is, the same for every owner of that model and firmware who maps it (record names, value tables, the copies
 and families, the notes that say what a record holds, the rules the writer applies). How, when, in which run and from
 which state each of its facts was proved (a hand proof's values, run, day and menu row, a sample's count, the owner's
-allowance, a note's evidence, what shows a not-offered mark) is the mapping's evidence, and is kept in the private
-overlay beside the definition's own evidence:
+allowance, a note's evidence, what shows a not-offered mark, how a picker's list was walked whole) is the mapping's
+evidence, and is kept in the private overlay beside the definition's own evidence:
 
     private/evidence/<model>_fw<fw>.hand.json   by table name, the fields each entry's evidence adds or replaces
 
@@ -13,7 +13,7 @@ the tables are in the shapes the writer reads), so the writer reads them whole a
 evidence file as before the split. Without it (a fresh clone, CI) the tables stay the public ones: --from-data and the
 checks need nothing more, and kit/schema_update.py --write, in either pass, refuses to write the definition of a camera
 whose tables hold entries the evidence completes (COMPLETES: a hand proof, a reason's day, what shows a not-offered
-mark), which would lose them (missing). Its shape is schemas/hand-evidence.schema.json's; a mapper who proved none of
+mark, how a picker's list was walked whole), which would lose them (missing). Its shape is schemas/hand-evidence.schema.json's; a mapper who proved none of
 those entries by hand keeps the file with no evidence in it ("tables": {}).
 
 The file's "tables" map a table's name to a patch: for a dict, {key: value or patch}; for a list or a tuple, {index:
@@ -58,9 +58,10 @@ def path(camera: str) -> Path:
 
 SCHEMA_REF = "../../schemas/hand-evidence.schema.json"      # the "$schema" the file names, from private/evidence/
 # the tables whose entries the hand evidence completes in the definition: a FRAME_PROOFS entry's hand proof (its values
-# or sample, run, day and menu rows), an UNPROVED reason's day, what shows a NOT_OFFERED mark. A definition written from
-# tables that hold any of them, without the file, would lose those proofs.
-COMPLETES = ("FRAME_PROOFS", "UNPROVED", "NOT_OFFERED")
+# or sample, run, day and menu rows), an UNPROVED reason's day, what shows a NOT_OFFERED mark, how a PICKER_LISTS
+# picker's list was walked whole (without it the list is not cut). A definition written from tables that hold any of
+# them, without the file, would lose those proofs.
+COMPLETES = ("FRAME_PROOFS", "UNPROVED", "NOT_OFFERED", "PICKER_LISTS")
 
 
 def missing(camera: str, found, tables: dict) -> str | None:
@@ -76,7 +77,8 @@ def missing(camera: str, found, tables: dict) -> str | None:
     empty = json.dumps({"$schema": SCHEMA_REF, "hand_format": FORMAT, "camera": camera, "tables": {}})
     return (f"schema_update: nothing written. Part of the {camera} definition is proved by its hand tables "
             f"({paths.shown(datafiles.hand_tables_file(camera))}: {', '.join(held)}), and what those proofs were (a "
-            "hand proof's values, run and day, a reason's day, what shows a not-offered mark) is kept in the mapper's "
+            "hand proof's values, run and day, a reason's day, what shows a not-offered mark, how a picker's list was "
+            "walked whole) is kept in the mapper's "
             f"private file {paths.shown(path(camera))}, which is not on this computer. Writing without it would drop "
             "those proofs from the definition. Run --write where that file is (the private overlay, private/evidence/), "
             "or point CAMSET_EVIDENCE_DIR at its folder; --from-data needs no evidence. If you map this camera and "
