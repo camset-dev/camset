@@ -1091,7 +1091,8 @@ def drive_run(tmp_path, monkeypatch, scope_file, presses, path, decision, states
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("black", lambda f: at["s"] in blacks),
                         ("close_for_restore", close_for_restore),
-                        ("session", SimpleNamespace(ended=lambda link, before, show=30: restore.append("ended") or ending,
+                        ("session", SimpleNamespace(ended=lambda link, before, show=30, **kw: restore.append("ended") or extra.update(ended_kw={"show": show, **kw})
+                                                    or ending,
                                                     put_back=put_back)),
                         ("restore_checked", restore_checked)):
         monkeypatch.setattr(D, name, value)
@@ -1341,7 +1342,8 @@ def test_a_refused_armed_press_closes_and_restores_and_any_other_failure_does_no
             RESET_MOVES, more=["--confirm"], fails=fails, extra=extra)
         assert extra["marked"] == [False, True], fails.__name__                    # (a) there as the press went
         assert code == 0 and restore == ["closed", "ended"] and restore_pending(tmp_path) is None, fails.__name__
-        assert line["completed"] is False and "restore_kw" in extra and extra["restore_kw"] == {}   # (b)
+        # (b), and the records that differ said by key alone, never a value (an owner run: runner.values_withheld)
+        assert line["completed"] is False and extra.get("restore_kw") == {"show": 0, "keys": True}
 
     def not_handed(state, key, cam):
         if state == "page" and key == "right":
@@ -1560,6 +1562,39 @@ def test_drive_logs_values_in_its_files_and_never_in_its_console(tmp_path, monke
     assert vlm.LOCAL_ONLY is True
     run_dir = tmp_path / "kit2_drive"
     assert (run_dir / vlm.LOCAL_MARKER).is_file() and (run_dir / vlm.NO_READER_MARKER).is_file()   # finding 10
+
+
+# Access Authen. Info as OCR reads it in lines (drive_run's screen_lines splits on two spaces): a name and its value on
+# one line, a name alone, a value alone; the values are placeholders
+CREDS_LINES = {**CREDS_STATES, "info": ("notice", f"Access Authen. Info  User Name: {USER}  Password: {SECRET}  "
+                                                  "Fingerprint  SHA256:made-up-print  OK", "OK")}
+
+
+@pytest.mark.parametrize("logged", [True, False])
+def test_an_owner_rows_screen_names_its_fields_and_counts_the_rest_never_a_value(tmp_path, monkeypatch, scope_file,
+                                                                                 logged):
+    """The first --owner look on the camera (Access Authen. Info, values logged) showed "fields []" and no count: the
+    console names the fields the kit can name without a value (whole row labels; the name before a value where it is a
+    field name camkit.safety.ADDRESS_FIELDS lists: Password, Fingerprint, User Name...) and always counts the lines not
+    shown; never a value, logged or not."""
+    decision = {"rows": ["Access Authen. Info"], **({"values": "logged"} if logged else {})}
+    pressed, line, logged_events, code, _, out, _ = drive_run(tmp_path, monkeypatch, scope_file, ["right", "menu"],
+                                                              ["Access Authen. Info"], decision, CREDS_LINES, DRIVE_CREDS)
+    assert code == 0
+    said = "fields ['Access Authen. Info', 'User Name', 'Password', 'Fingerprint'], 4 lines withheld"
+    assert said in out and ("(values in drive.jsonl)" in out) is logged, out
+    for where in (out, logged_events):
+        assert SECRET not in where and USER not in where and "made-up-print" not in where
+    info = next(s for s in line["screens"] if s.get("fields"))
+    assert info["fields"] == ["Access Authen. Info", "User Name", "Password", "Fingerprint"] and info["withheld"] == 4
+    assert (SECRET in json.dumps(line["screens"])) is logged                      # drive.jsonl holds them only if logged
+
+
+def test_a_blanked_owner_screen_is_said_as_withheld_with_its_kind(tmp_path):
+    import drive
+    cam = SimpleNamespace(blank=True, frame=SimpleNamespace(path=tmp_path / "00001_x.png", image=None))
+    console, kept = drive.shown_screen(cam, None, "anything", True, kind="notice")
+    assert kept == {"blanked": True} and "screen withheld" in console and "anything" not in console
 
 
 def test_drive_sends_menu_alone_in_a_logged_credentials_screen(tmp_path, monkeypatch, scope_file):

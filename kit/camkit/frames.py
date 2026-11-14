@@ -132,6 +132,18 @@ class OsdSource:
 
     def close(self):
         self.close_private()
+        self.forget_live()
+
+    def forget_live(self) -> None:
+        """The polling target at the top of the run's folder (live, and camlink's .part beside it) taken away: it is a
+        real frame of whatever was polled last, never evidence (2026-11-14: an owner run's, values logged, sat beside
+        shots/), so no run leaves it behind."""
+        live = getattr(self, "live", None)
+        if live is None:
+            return
+        for left in (Path(live), Path(live).with_name(Path(live).name + ".part")):
+            with contextlib.suppress(OSError):
+                left.unlink()
 
     def peek(self) -> Frame:
         if not getattr(self, "withheld", False):
@@ -214,6 +226,7 @@ class OsdFeed(OsdSource):
 
     def close(self):
         self.close_private()                    # the withheld polls' folder, if a withheld row made one
+        self.forget_live()                      # and the polling target at the top of the run's folder
 
 
 def eyes_default() -> str:

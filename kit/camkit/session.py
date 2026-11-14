@@ -95,13 +95,15 @@ class Ending:
 
 
 def ended(link, start: Path, tag: str = "after", tries: int = 4, pause: float = 10.0, show: int = 20,
-          say=_say, expected=frozenset()) -> Ending:
+          say=_say, expected=frozenset(), keys: bool = False) -> Ending:
     """The session's last download, on the shooting screen (a card going in or out made the camera refuse one once,
     2026-10-29: `tries` times, `pause` s apart), and the records that differ from `start`. put_back next.
     expected: keys ("set1:0x023c") of records no settings file sets which the run is known to write (registering a
     memory slot marks the slot filled, its family and its exposure mode, and an upload leaves them: runs/<model>_fw<fw>/
     kit2_small_1109, 00159_restored.DAT and 00289_restored.DAT, 2026-11-09). They are said by key and left out of the
-    changes, so they alone never make an upload, which could not put them back."""
+    changes, so they alone never make an upload, which could not put them back. keys (with show=0): the records that
+    differ said by their keys alone, never a value (said_keys: a --network or --owner run, whose records can hold an
+    address, an identity or a credential)."""
     after = None
     for attempt in range(tries):
         try:
@@ -120,7 +122,20 @@ def ended(link, start: Path, tag: str = "after", tries: int = 4, pause: float = 
     say(f"{len(changes)} records differ from the start file {start.name}{_besides(known)}")
     for c in changes[:show]:
         say(f"   {c.key}: {c.before!r} -> {c.after!r}")
+    if keys and not show:
+        said_keys(changes, say)
     return Ending(after, changes)
+
+
+KEYS_SAID = 40          # the most record keys said_keys lists on its line
+
+
+def said_keys(changes: list, say=_say) -> None:
+    """The records that differ said by their keys alone, on one line ("   records: global:0x0123, set1:0x0456"), never a
+    value; nothing when none differ."""
+    if changes:
+        more = f" (and {len(changes) - KEYS_SAID} more)" if len(changes) > KEYS_SAID else ""
+        say(f"   records: {', '.join(c.key for c in changes[:KEYS_SAID])}{more}")
 
 
 def _apart(changes: list, expected) -> tuple:
@@ -161,11 +176,11 @@ def finish(link, start: Path, tag: str = "after", say=_say, **kw) -> Ending:
 
 
 def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause: float = 15.0, link_class=Link,
-                   ready: float = 3.0, say=_say, show: int = 20, expected=frozenset()) -> int | None:
+                   ready: float = 3.0, say=_say, show: int = 20, expected=frozenset(), keys: bool = False) -> int | None:
     """After an upload the camera restarts: wait `settle` s, reconnect (`tries` times, `pause` s apart), give it
     `ready` s more, download and count the records that differ from `start`, saying the first `show` of them (0: the
-    count only, for a run whose start file holds a value it never prints); None when no connection came. The records
-    `expected` names (ended) are said by key and not counted."""
+    count only, for a run whose start file holds a value it never prints; with keys, their keys too: said_keys); None
+    when no connection came. The records `expected` names (ended) are said by key and not counted."""
     time.sleep(settle)
     for attempt in range(tries):
         try:
@@ -175,6 +190,8 @@ def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause
                 say(f"after the restore: {len(ch)} records differ from the start file{_besides(known)}")
                 for c in ch[:show]:
                     say(f"   {c.key}: {c.before!r} -> {c.after!r}")
+                if keys and not show:
+                    said_keys(ch, say)
                 return len(ch)
         except Exception as e:
             say(f"reconnect {attempt + 1} failed: {str(e)[:80]}")

@@ -178,19 +178,19 @@ def reader_label(path, timeout: float = READER_TIMEOUT) -> tuple[str, str]:
 
 
 def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: bool = False, values=None,
-                 readings=None) -> str:
+                 readings=None, labels=None) -> str:
     """Why a press may not open the lit row, or "": the row's text is never-open, and no name the run was given
     lifts it (drive.py --allow lifts what it may; never what safety.never_lifted names: the cards, Initialize, Reset
     Network Set., credentials, and the camera's identity, a connection or its region, decision 8). A Wi-Fi or Bluetooth
     setting or an address screen (safety.NETWORK, or its words in a row of another reason) is lifted only by a dated
     owner decision naming the row (`network`, safety.network_decided's rows, for a run given --network:
     safety.network_lifted, its label, or a reading of it another reader read as the label (`readings`), followed by
-    nothing or one of its `values`, an address screen only with `screens`), never by the substring match of
-    `may_open`."""
+    nothing or one of its `values`, an address screen only with `screens`; with no value known, a short tail that makes
+    of the bar no other label of `labels`, runner.label_readings), never by the substring match of `may_open`."""
     why = safety.never_open(lit)
     if not why:
         return ""
-    if network and safety.network_lifted(lit, network, screens, values, readings):
+    if network and safety.network_lifted(lit, network, screens, values, readings, labels):
         return ""                       # a network decision names it: a Wi-Fi or Bluetooth setting, an identity row
     if why.startswith(safety.NETWORK + ":"):
         return (f"the lit row {lit.strip()!r} is never opened ({why}; only a dated owner decision naming the row opens "
@@ -234,7 +234,7 @@ def osd_kind(link, folder=None) -> str:
 
 class LiveCamera:
     def __init__(self, link, hdmi, run, may_open=(), network=(), screens: bool = False, options=None, values=None,
-                 readings=None, owner=None):
+                 readings=None, owner=None, labels=None):
         self.link, self.hdmi, self.run = link, hdmi, run
         log_to(run)                     # a reader that fails during the run is logged in its events.jsonl (camkit.vlm)
         self.may_open = frozenset(may_open)            # never-open rows this run was told it may open
@@ -260,6 +260,9 @@ class LiveCamera:
         # out; on an address screen (address_open) or a screen naming identity or credentials (identity_open), MENU
         # alone, and no reader is asked (camkit.vlm.HELD)
         self.network = dict(network) if isinstance(network, dict) else frozenset(network)
+        # the labels the kit knows (runner.label_readings), against which a tail a lit bar carries after a decided row's
+        # label, where no value of the row is known, must make no other label (safety.other_label); None: no such tail
+        self.labels = labels
         self.screens = bool(screens)
         self.options = dict(options or {})
         self.values = dict(values or {})
@@ -313,7 +316,7 @@ class LiveCamera:
             lit = lit_text(self.frame.image, self.frame.path)
             if not lit.strip() and lit_box(self.frame.image) is not None:
                 lit = self.unread_row(key)          # a bar OCR read nothing in: the reader names it, or no press
-            why = open_refused(lit, self.may_open, network, screens, values, readings)
+            why = open_refused(lit, self.may_open, network, screens, values, readings, getattr(self, "labels", None))
             if why and owner and getattr(self, "network_open", None) is None:
                 # the row an owner decision opens for this run, of the very class it was lifted from: Right alone, once
                 owner_row = safety.owner_lifted_row(lit, owner, values)
@@ -324,12 +327,13 @@ class LiveCamera:
                 self.run.log("press_lifted_exact", key=key, frame=self.frame.path.name, lit=lit)
                 why = ""
             if why:
-                self.refuse(key, why)
+                self.refuse(key, why, row=True)     # about the lit row itself: a crawl skips it (safety.RowRefused)
             if owner_row is not None:
                 opened, cls = owner_row, owner[owner_row].get("class")
                 address = cls == safety.LIFT_ADDRESS
             elif network and getattr(self, "network_open", None) is None:
-                opened = safety.network_lifted_row(lit, network, screens, values, readings)
+                opened = safety.network_lifted_row(lit, network, screens, values, readings,
+                                                   getattr(self, "labels", None))
                 cls = safety.lift_class(lit) if opened else None
                 address = cls == safety.LIFT_ADDRESS
         canon = safety.canonical_input(key)
@@ -553,13 +557,14 @@ class LiveCamera:
         if why:
             self.refuse(key, why)
 
-    def refuse(self, key: str, why: str) -> None:
-        """A press refused: logged in the run's events.jsonl and raised (safety.Refused). On a --network run (network
-        given) the reason's quoted texts are withheld in both, since a row's bar can carry an identity value (a device's
-        name, an SSID, an address): safety.quoted_withheld."""
+    def refuse(self, key: str, why: str, row: bool = False) -> None:
+        """A press refused: logged in the run's events.jsonl and raised (safety.Refused; safety.RowRefused where `row`:
+        the lit row itself may not be opened, which a crawl skips). On a --network run (network given) the reason's quoted
+        texts are withheld in both, since a row's bar can carry an identity value (a device's name, an SSID, an
+        address): safety.quoted_withheld."""
         said = safety.quoted_withheld(why) if getattr(self, "network", None) or getattr(self, "owner", None) else why
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=said)
-        raise safety.Refused(f"{key}: {said}")
+        raise (safety.RowRefused if row else safety.Refused)(f"{key}: {said}")
 
     def menu_went_out(self) -> None:
         """A MENU (or an Enter inside_refused let through) has gone out while a row a network decision opened is open:
@@ -709,7 +714,7 @@ class LiveCamera:
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=UNREAD, reader=why_not, by_hand=True)
         print(f"{key} refused on {self.frame.path.name}: {UNREAD} ({why_not}); if the row is one to open, open it on "
               f"the camera by hand", flush=True)
-        raise safety.Refused(f"{key}: {UNREAD}")
+        raise safety.RowRefused(f"{key}: {UNREAD}")
 
     def read(self) -> screen.Screen:
         return self.screen

@@ -49,7 +49,9 @@ def find_row(cam, label) -> bool:
     for _ in range(best):                           # back at the first row: Down to the closest
         cam.press("down")
     SEEN[label] = bar_text(cam)
-    print(f"   row {label!r} reads {SEEN[label]!r} here", flush=True)
+    # a --network or --owner run (local readers only) says no text read off the screen: a bar can carry a value
+    seen = "(its text withheld)" if vlm.LOCAL_ONLY else repr(SEEN[label])
+    print(f"   row {label!r} reads {seen} here", flush=True)
     return True
 
 

@@ -70,8 +70,12 @@ named option, is the shooting screen or the page it was opened from with its lit
 never on a screen's kind alone, never on a later press): up, down and MENU go out, Enter only on an option the
 decision names ("options": {"<row>": ["<option>"]}), never Right, Left, a dial or C4;
 a screen there that names identity or credentials (safety.identity_screen: a pairing screen, a connecting notice) gets
-MENU alone, and any screen there whose kind the kit does not show or that names them is printed and kept as its field
-names alone (safety.network_withheld), as are the quoted texts of a refusal or an error. An address screen (Display
+MENU alone. From the run's start to its end (--owner's too, but the owner row's own screens where its decision logs
+values) no screen's text is printed or kept: every screen is shown and kept as safety.kept_screen keeps it, its row
+labels and field names, a list's option names where the definition gives them for its row (never which one is lit), a
+notice as safety.notice_kept keeps it, and the count of lines withheld; the shooting screen as its kind alone; and the
+quoted texts of a refusal or an error are withheld. The run's folder is owner-only (camkit.runs: folders 0700, files
+0600, on POSIX), checked at its end. An address screen (Display
 Wi-Fi Info., Display Wired LAN Info., Disp Device Address: safety.address_screen) opens only here, only as the last
 label of --path and only where a decision names it: the run prints and keeps every screen as its field names alone
 (safety.address_fields: never an OCR text, in the console, drive.jsonl or the run's events), asks no reader once it is
@@ -128,7 +132,9 @@ local readers only, and its folder is marked so no batch tool asks any reader ab
 (camkit.vlm.NO_READER_MARKER). Nothing is typed: a keyboard or an entry screen takes MENU alone.
 Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same run folder. The settings are downloaded before
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
-checked (docs/decisions/0015: every run ends restoring its start file).
+checked (docs/decisions/0015: every run ends restoring its start file). On an address, --network or --owner run the
+records that differ are said and kept by key and count alone, never a value (runner.values_withheld, changes_kept),
+unless the owner row's decision logs values.
 """
 import argparse
 import contextlib
@@ -151,9 +157,10 @@ from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, add_network_argument,  # noqa: E402
-                    add_owner_argument, add_scan_argument, changes_of, close_for_restore, known_labels, known_values,
-                    load_scan, log_network_decided, log_owner_decided, network_decided_or_exit, network_readings,
-                    network_values, owner_decided_or_exit, restore_checked, restoring)
+                    add_owner_argument, add_scan_argument, changes_kept, close_for_restore, defined_values,
+                    known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
+                    network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restore_checked,
+                    restoring, row_values, values_withheld)
 
 
 def bar_at(cam, y: int) -> bool:
@@ -300,7 +307,7 @@ armed_wiping = safety.armed_wiping
 
 def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                   vouched: bool = False, on_shooting=(), network=frozenset(), screens: bool = False,
-                  values=None, readings=None, owner=None, armed_row: str = "") -> str:
+                  values=None, readings=None, owner=None, armed_row: str = "", labels=None) -> str:
     """Why drive.py may not send this press, or "" when it may. Fails closed: a lit text that cannot be read is
     no permission (decisions 5 and 9). lit: the text in the orange cursor (highlighted); text: the whole screen's.
     --confirm (confirm) allows Enter on a confirmation, never on Initialize or Reset Network Set. The key is judged as
@@ -313,9 +320,9 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     there is judged by that naming (decision 21): it has no row to open, so the refusals of a lit text that cannot be
     read, and the lit row's never-open check, are not made; Enter still meets the Initialize and confirmation checks.
     On every other screen, "unknown" among them, nothing changes.
-    network, screens, values, readings (--network): the Wi-Fi and Bluetooth rows a dated owner decision opens, whether
-    an address screen among them may, the values known for each and the page model's readings of each
-    (live.open_refused); --allow never lifts those rows.
+    network, screens, values, readings, labels (--network): the Wi-Fi and Bluetooth rows a dated owner decision opens,
+    whether an address screen among them may, the values known for each, the page model's readings of each and every
+    label the kit knows (live.open_refused); --allow never lifts those rows.
     owner (--owner): the one row an owner decision opens for this run ({label: info}): a lit text that is that row, of
     its class (safety.owner_lifted_row), passes the never-open check, the press that opens it and an action's own
     button among them ("Delete" on Delete's question); whether the press may go is owner_press_decision's and
@@ -348,7 +355,7 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
-        why = open_refused(lit, allow, network, screens, values, readings)
+        why = open_refused(lit, allow, network, screens, values, readings, labels)
         if why and owner and safety.owner_lifted_row(lit, owner, values) is not None:
             return ""
         return why
@@ -357,7 +364,7 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
 
 def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                    on_shooting=(), network=frozenset(), screens: bool = False, values=None, readings=None, owner=None,
-                   armed_row: str = "") -> tuple:
+                   armed_row: str = "", labels=None) -> tuple:
     """(why the press is refused or "", whether it goes as vouched) for the --press `p` whose key is `key`, on a screen
     whose lit text is `lit`, whole text `text` and kind `kind`, as main() sends it: a press written enter!:regex is
     vouched for (press_refused's vouched) only when it is Enter, and goes as vouched only when nothing lit could be
@@ -365,7 +372,7 @@ def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bo
     --network's; owner, armed_row: --owner's (press_refused)."""
     vouched = vouched_press(p) and key in ENTERS and not (kind == "shooting" and key in on_shooting)    # named instead
     why = press_refused(key, lit, text, kind, confirm, allow, vouched, on_shooting, network=network, screens=screens,
-                        values=values, readings=readings, owner=owner, armed_row=armed_row)
+                        values=values, readings=readings, owner=owner, armed_row=armed_row, labels=labels)
     return why, bool(vouched and not why and not (lit or "").strip())
 
 
@@ -739,47 +746,47 @@ def screen_lines(cam, grip: str | None) -> list:
     return out
 
 
-def shown_screen(cam, grip: str | None, text: str, hide: bool, labels=(), values=(), logged: bool = False) -> tuple:
-    """(what the console shows of a screen, what drive.jsonl keeps of it): its text, or, hidden, its field names and
-    whole row labels alone and the count of lines withheld (safety.screen_fields; labels: the menu's row labels as the
-    page model and the definition know them, runner.known_labels; values: the values they know for the rows,
-    runner.known_values, never kept), never a value. logged (an owner decision's "values": "logged"): the console as
-    hidden, saying "(values in drive.jsonl)", and drive.jsonl keeps the text besides: the run's files hold the values,
-    never the console (which a hosted agent may read). A blanked row's screen (cam.blank) is kept as "blanked" alone:
-    its frame is black and was never read."""
+def shown_screen(cam, grip: str | None, text: str, hide: bool, labels=(), values=(), logged: bool = False,
+                 kind: str | None = None, options=(), by_row=None) -> tuple:
+    """(what the console shows of a screen, what drive.jsonl keeps of it): its text, or, hidden, what
+    safety.kept_screen keeps of it (by its kind: the shooting screen as its kind alone; else its whole row labels and
+    field names, a list's known option names, a notice as safety.notice_kept keeps it) and the count of lines withheld,
+    never a value (labels: the menu's row labels as the page model and the definition know them, runner.known_labels;
+    values: the values they know for the rows, runner.known_values, never kept; options: the definition's value names
+    for the row whose list this is, runner.defined_values; by_row: runner.row_values, for a notice). logged (an owner
+    decision's "values": "logged", inside its row): the console as hidden, saying "(values in drive.jsonl)", and
+    drive.jsonl keeps the text besides: the run's files hold the values, never the console (which a hosted agent may
+    read). A blanked row's screen (cam.blank) is kept as "blanked" alone: its frame is black and was never read."""
     if getattr(cam, "blank", False):
-        return "blanked: its values are withheld, its frame saved black", {"blanked": True}
+        return safety.kept_said({"blanked": True}), {"blanked": True}
     if not hide:
         return repr((text or "")[:150]), {"text": text}
-    names, withheld = safety.screen_fields(screen_lines(cam, grip), labels, values)
+    if kind is None:
+        with contextlib.suppress(Exception):
+            kind = cam.read().kind
+    kept = safety.kept_screen(kind, screen_lines(cam, grip), labels, values, options, by_row)
     if logged:
-        return f"fields {names} (values in drive.jsonl)", {"fields": names, "text": text}
-    return f"fields {names}, {withheld} lines withheld", {"fields": names, "withheld": withheld}
+        return f"{safety.kept_said(kept)} (values in drive.jsonl)", {**kept, "text": text}
+    return safety.kept_said(kept), kept
 
 
 def network_shown(kind: str, text: str, inside, address: bool, network: bool) -> bool:
-    """Whether a screen is shown and kept as its field names and row labels alone (shown_screen's hide): every screen
-    of an address run; every screen inside a row an owner decision opened; on a --network or --owner run, every screen
-    inside an identity or connection row or an address screen a decision opened, and any other screen whose kind the
-    kit does not show or whose text names identity or credentials (safety.network_withheld: a page whose rows carry a
-    device's name, an SSID or an address beside their labels among them). A run without --network or --owner shows every
-    screen as ever."""
-    if address:
-        return True
-    if not network:
-        return False
-    if inside and (inside.get("owner") or inside.get("class") != safety.LIFT_NETWORK):
-        return True
-    return bool(safety.network_withheld(kind, text))
+    """Whether a screen is shown and kept as safety.kept_screen keeps it (shown_screen's hide), never its text: every
+    screen of an address run, a --network run or an --owner run, from the run's start to its end, whatever its kind, its
+    text or the row open (2026-11-14: a look at the Wi-Fi and Bluetooth rows printed a greyed row's notice with its
+    blocker's state, a list's current value and, after MENU, the shooting screen's status line). A run without
+    --network or --owner shows every screen as ever."""
+    return bool(address or network)
 
 
 withheld = safety.quoted_withheld        # a refusal's or an error's quoted texts withheld (address runs, network rows)
 
 
-def owner_kept(cam, grip, text: str, labels, values, info: dict) -> tuple:
+def owner_kept(cam, grip, text: str, labels, values, info: dict, kind: str | None = None, options=(),
+               by_row=None) -> tuple:
     """(console, record) of a screen met in the owner row of `info`, its opening's after-armed screen among them: as
     every screen inside it is kept (shown_screen hidden), its text in drive.jsonl only where the decision logs values."""
-    return shown_screen(cam, grip, text, True, labels, values, bool(info.get("logged")))
+    return shown_screen(cam, grip, text, True, labels, values, bool(info.get("logged")), kind, options, by_row)
 
 
 def menu_only(inside: dict, kind: str, text: str) -> str | None:
@@ -949,20 +956,38 @@ def main():
         return "unknown" if kind == "shooting" and inside and inside.get("suspect") is not None else kind
 
     def shown(t: str) -> tuple:
-        """(console, record) of a screen whose text is t (network_shown): on a --network or --owner run its field names
-        and whole row labels alone wherever it may hold an identity value, never a line that is a value the kit knows;
-        inside the owner row always, its text kept in drive.jsonl alone where the decision logs values."""
-        hide = network_shown(kind_now(), t, inside, bool(address), a.network or a.owner)
+        """(console, record) of a screen whose text is t (network_shown): on a --network or --owner run, every screen
+        from the run's start to its end as safety.kept_screen keeps it, never a line that is a value the kit knows nor
+        which option is current; inside the owner row, its text kept in drive.jsonl alone where the decision logs
+        values."""
+        kind = kind_now()
+        hide = network_shown(kind, t, inside, bool(address), a.network or a.owner)
         logged = bool(inside and inside.get("owner") and inside.get("logged"))
-        return shown_screen(cam, a.grip, t, hide, labels, told, logged)
+        names = defined.get(inside["row"], ()) if inside else ()       # the definition's option names for the row
+        return shown_screen(cam, a.grip, t, hide, labels, told, logged, kind, names, by_row)
     cycle, model = scan if scan is not None else load_scan(a.scan)
     values = network_values(cam_network, model) if a.network else {}
     if owner_info:
         values = {**values, **network_values(owner_cam, model)}
     readings = network_readings(cam_network, model) if a.network else {}
-    labels = known_labels(model) if a.network or a.owner else set()
+    # every label the kit knows a row by: a tail after a decided row's label whose values none knows makes none of them
+    known = label_readings(model) if a.network else None
+    # what a withholding run keeps of a screen: the row labels the kit knows (the decisions' own rows among them), never
+    # a value it knows; a list's option names as the definition gives them for its row; a notice judged by row_values
+    labels = (known_labels(model) | set(network) | ({owner_label} if owner_label else set())
+              if a.network or a.owner else set())
     told = known_values(model) if a.network or a.owner else set()
+    defined = defined_values() if a.network or a.owner else {}
+    by_row = row_values(model) if a.network or a.owner else {}
     run = Run(a.run)
+    # the session's end says the records that differ by their keys alone and drive.jsonl keeps no value of them, unless
+    # the owner row's decision logs values (runner.values_withheld, changes_kept)
+    private = bool(address or a.network or a.owner)
+    keep_values = not private or bool(owner_info and owner_info.get("logged"))
+    if private:
+        # its frames, drive.jsonl, events and downloads may hold addresses, credentials or logged values: the folder
+        # owner-only from here, every file the run writes 0600 (camkit.runs; checked again at the end: seal)
+        run.make_private()
     if a.network:
         log_network_decided(run, network, options)
     if owner_info:
@@ -1015,7 +1040,7 @@ def main():
             before = link.download("before")
             time.sleep(5)
             cam = LiveCamera(link, hdmi, run, may_open=a.allow, network=cam_network, screens=bool(address),
-                             options=options, values=values, readings=readings,
+                             options=options, values=values, readings=readings, labels=known,
                              **({"owner": owner_cam} if owner_cam else {}))
             screens, ok = [], True
             opened = None           # on an address run, the frame a press opened a row on: from then MENU only
@@ -1173,7 +1198,7 @@ def main():
                     why, vouched = press_decision(p, key, lit, t, cam.read().kind, confirm_now, a.allow, on_shooting,
                                                   network=cam_network, screens=bool(address), values=values,
                                                   readings=readings, owner=owner_cam,
-                                                  armed_row=owner_label if armed else "")
+                                                  armed_row=owner_label if armed else "", labels=known)
                     if vouched:
                         print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
@@ -1182,7 +1207,7 @@ def main():
                         break
                     # the row this press opens, when a network decision opens it: from then on it is looked at only,
                     # until a MENU or an Enter on a named option (closes) brings back the page it is opened from now
-                    opens = (safety.network_lifted_row(lit, cam_network, bool(address), values, readings)
+                    opens = (safety.network_lifted_row(lit, cam_network, bool(address), values, readings, known)
                              if key in ENTERS + RIGHTS and lit and not inside and not owner_opens else None)
                     opened_from = cam.read() if opens or owner_opens else None
                     closes = bool(inside) and key in CLOSES          # inside_refused let it through above
@@ -1231,7 +1256,8 @@ def main():
                                 # (e) the row's own question: nothing was done yet. MENU alone cancels it (never
                                 # Enter); then the run restores as ever, and says nothing was confirmed
                                 question = frame_now
-                                entry.update(owner_kept(cam, a.grip, t, labels, told, owner_info)[1])
+                                entry.update(owner_kept(cam, a.grip, t, labels, told, owner_info, kind_after,
+                                                        defined.get(owner_label, ()), by_row)[1])
                                 print(f"{p:32s} -> {kind_after:9s} {frame_now}  the row's own question: nothing was "
                                       "confirmed; cancelling it with MENU, never Enter", flush=True)
                                 run.log("armed_question", key=key, frame=frame_now, row=owner_label)
@@ -1244,7 +1270,8 @@ def main():
                                 # (f) the link answered with another screen: MENU alone back to the shooting screen
                                 # and the remote restore, the marker taken away only when the restore checks out
                                 byhand = "answered"
-                                console, kept = owner_kept(cam, a.grip, t, labels, told, owner_info)
+                                console, kept = owner_kept(cam, a.grip, t, labels, told, owner_info, kind_after,
+                                                           defined.get(owner_label, ()), by_row)
                                 entry.update(kept)
                                 print(f"{p:32s} -> {kind_after:9s} {frame_now}  {console}", flush=True)
                             screens.append(entry)
@@ -1367,9 +1394,9 @@ def main():
                         except RuntimeError as e:
                             # the wait gave up: the restore is still tried, never skipped (decision 15); the download
                             # closes a menu itself, and ended() says so when the camera refuses it
-                            print(f"   {e}; restoring all the same", flush=True)
+                            print(f"   {say(str(e))}; restoring all the same", flush=True)
                         time.sleep(1)
-                        ending = session.ended(link, before, show=30)
+                        ending = session.ended(link, before, **(values_withheld(private) or {"show": 30}))
                         session.put_back(link, ending, before)      # first: a log that cannot be written skips nothing
                         log.write(json.dumps({"path": a.path, "presses": a.press, "note": a.note, "completed": ok,
                                               **({"on_shooting": sorted(on_shooting)} if on_shooting else {}),
@@ -1384,7 +1411,7 @@ def main():
                                                  if byhand == "answered" else {}),
                                               "screens": screens, "before": before.name,
                                               "after": ending.after.name if ending.after else None,
-                                              "changes": changes_of(ending.changes)}) + "\n")
+                                              "changes": changes_kept(ending.changes, keep_values)}) + "\n")
                         log.flush()
                 except SystemExit:
                     if not byhand:
@@ -1394,10 +1421,11 @@ def main():
         # kit/tools/upload_check.py's does: to check that very start file (camkit.link pending_restore)
         checking = {"link_class": functools.partial(Link, pending_restore=True)} if byhand else {}
         restored = (False if byhand and (byhand not in ("question", "answered") or unfinished)
-                    else restore_checked(run, ending, before, **checking))
+                    else restore_checked(run, ending, before, **checking, **values_withheld(private)))
     finally:
         hdmi.close()
         log.close()
+        run.seal()          # a private run's folder checked owner-only, the eyes' polling target taken away
     if byhand in ("question", "answered") and restored:
         clear_restore_by_hand(run.root)
         run.log("restore_by_hand_cleared", outcome=byhand, frame=question)

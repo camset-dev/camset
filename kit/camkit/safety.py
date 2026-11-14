@@ -27,6 +27,9 @@ The guards:
   address_fields(lines)      the field names an address screen shows (MAC Address, IP Address...), never a value;
                              screen_fields, those and whole row labels, never a line that is a known value.
   notice_kept(text)          a greyed network setting's notice as the crawl keeps it: a known shape naming no identity.
+  kept_screen(kind, lines)   what a --network or --owner run keeps of every screen, from its start to its end: row
+                             labels, field names, a list's known option names, a notice as notice_kept keeps it, the
+                             count withheld; the shooting screen as its kind alone (kept_said, as the console says it).
   confirmation(text)         dialog text asking to execute something; never press Enter on it.
   fold(text)                 a reading as the checks compare it: Unicode look-alikes, dashes and spacing mended.
   readings(text)             every reading a guard judges (as read, folded, slips undone): any one matching refuses.
@@ -164,6 +167,13 @@ _PROPERTY_RES = [(why, re.compile("|".join(pats))) for why, pats in NEVER_PROPER
 
 class Refused(Exception):
     pass
+
+
+class RowRefused(Refused):
+    """A refusal about the lit row itself, raised before anything goes out (camkit.live.LiveCamera: the row the bar
+    lights is one the run may not open, or one no reader could read): the crawl skips that row and goes on
+    (camkit.crawl.visit_row). Any other refusal (a lock still on, the link's own guard, a STOP) is no such refusal, and
+    stops the lap."""
 
 
 def check_input(name: str, allow: frozenset | set = frozenset()):
@@ -357,6 +367,9 @@ _NEVER_CHOOSE = [
     # access authentication On/Off and Wi-Fi Direct: the choice changes how the link itself logs in, or opens a network
     # of the camera's own (2026-11-13, a review: an owner decision's option there needs "link_loss")
     r"access authen", _WIFI + r"d[il1|]rect",
+    # Wi-Fi Frequency Band: a change of band can drop a link that runs over Wi-Fi (2026-11-14, a review), as the
+    # network settings name it (_NETWORK_SETTINGS)
+    _WIFI + r"freq", r"frequency\s?band",
 ]
 # The Wi-Fi and Bluetooth settings and the screens that show the camera's network addresses (decision 8, as it stands
 # since 2026-11-13): by hand only, like _IDENTITY, and no --allow opens them; but unlike _IDENTITY, a dated owner
@@ -1019,7 +1032,8 @@ def bar_on_row(lit, row: str, readings=None) -> bool:
     return any(w and seen.startswith(w) and not seen[len(w):len(w) + 1].isalnum() for w in lifted_readings(row, readings))
 
 
-def network_lifted_row(lit: str, decided, screens: bool = False, values=None, readings=None) -> str | None:
+def network_lifted_row(lit: str, decided, screens: bool = False, values=None, readings=None,
+                       labels=None) -> str | None:
     """The row of `decided` (a network decision's rows) that opens the row whose text, as read, is `lit`, or None.
     The text must be of a class a network decision lifts and of nothing else (lift_class: a Wi-Fi or Bluetooth setting
     or an address screen, never_lifted naming nothing; or an identity, connection or region row of _IDENTITY_LIFTABLE,
@@ -1028,11 +1042,14 @@ def network_lifted_row(lit: str, decided, screens: bool = False, values=None, re
     read as that row exactly, an icon of its page glued on (`readings`, {row: [entries]}: lifted_readings, row_read_as,
     glued_icon; its class the row's, every reading of it judged), and what follows the label must be nothing or one of
     that row's own values (`values`, {row: [values]} as the page model and the definition know them: a menu row's bar
-    carries its value after its label); with no values known for the row, nothing may follow. So "Wi-Fi Connect On"
-    opens Wi-Fi Connect where On is one of its values, and "Wi-Fi Connect Settings" or "No Wi-Fi Connect" never do;
-    "LANIP Address Setting" opens IP Address Setting only where the page model's row on the Wired LAN page holds both
-    readings. An address screen only where the caller looks at one (`screens`: kit/drive.py alone), never for the
-    walker or the provers."""
+    carries its value after its label); with no value known for the row at all, only a short tail that names nothing
+    (unknown_tail: at most two words, nothing the never-open list or identity holds, no address) and makes of the lit
+    bar no other label the kit knows, nor the start of one (`labels`, runner.label_readings: other_label; without them,
+    no such tail). So "Wi-Fi Connect On"
+    opens Wi-Fi Connect where On is one of its values, and "No Wi-Fi Connect" never does, nor "Wi-Fi Connect Settings"
+    where the row's values are known; "LANIP Address Setting" opens IP Address Setting only where the page model's row
+    on the Wired LAN page holds both readings. An address screen only where the caller looks at one (`screens`:
+    kit/drive.py alone), never for the walker or the provers."""
     cls = lift_class(lit) if decided else None
     if cls is None or (cls == LIFT_ADDRESS and not screens):
         return None
@@ -1047,12 +1064,64 @@ def network_lifted_row(lit: str, decided, screens: bool = False, values=None, re
             rest = plain(seen[len(want):])
             if not rest or rest in known:
                 return row
+            if not known and labels is not None and unknown_tail(rest) \
+                    and not other_label(seen, labels, own_readings(row, readings), row):
+                return row
     return None
 
 
-def network_lifted(lit: str, decided, screens: bool = False, values=None, readings=None) -> bool:
+def own_readings(row: str, readings=None) -> set:
+    """The decided row `row`'s own names (plain): its label, and every reading the page model keeps of the menu rows that
+    hold it (`readings`, runner.network_readings' entries), which are no other label than the row's."""
+    out = {plain(row)}
+    for entry in (readings or {}).get(row, ()) or ():
+        texts = entry.get("readings") if isinstance(entry, dict) else None
+        out |= {plain(t) for t in texts or () if isinstance(t, str)}
+    return out - {""}
+
+
+def other_label(seen, labels, own=(), row: str = "") -> str | None:
+    """The known label (`labels`: runner.label_readings, the definition's row labels and every label and reading of the
+    page model) other than the decided row's own (`own`, own_readings) that a lit bar read as `seen` is, is the start of
+    ("Wi-Fi Connect Sett" starts "Wi-Fi Connect Settings"), or begins with where that label is longer than the decided
+    row's (`row`) and what follows it is no letter or digit of a longer word ("Wi-Fi Connect Settings On" begins with
+    Wi-Fi Connect Settings, a value after it), compared plain; None when it is none: a tail the kit knows no value for is
+    then no other row's label, nor another row's label and its value (unknown_tail, 2026-11-14, a review)."""
+    seen, want = plain(seen), plain(row)
+    own = {plain(x) for x in own or ()}
+    for x in labels or ():
+        other = plain(x) if isinstance(x, str) else ""
+        if not other or other in own:
+            continue
+        if other.startswith(seen):
+            return x
+        if want and len(other) > len(want) and seen.startswith(other) and not seen[len(other):len(other) + 1].isalnum():
+            return x
+    return None
+
+
+# a number joined to another by a stop or a colon: an address, a time, a version (unknown_tail)
+_ADDRESS_SHAPE = re.compile(r"\d\s?[.:]\s?\d|[0-9a-f]{2}[:-][0-9a-f]{2}", re.I)
+TAIL_WORDS = 2              # the most words a lit bar may carry after a decided row's label whose values none knows
+
+
+def unknown_tail(rest) -> bool:
+    """Whether `rest`, what a lit bar carries after a decided row's label when the kit knows no value for that row at all
+    (neither the definition nor the page model gives one: IP Address Setting on the a1 II, its shown value filed under
+    the page model's other reading, 2026-11-14), may be taken for the row's value: at most TAIL_WORDS words, naming
+    nothing the never-open list holds (never_open: an action, credentials, identity, another network row) and nothing
+    of identity or credentials (identity_screen), with no address shape (two numbers joined by a stop or a colon, two
+    hex pairs by a colon or a hyphen). Anything else refuses, as a row whose values are known refuses what is none of
+    them."""
+    seen = plain(rest)
+    if not seen or len(seen.split()) > TAIL_WORDS:
+        return False
+    return not (never_open(seen) or identity_screen(seen) or _ADDRESS_SHAPE.search(seen))
+
+
+def network_lifted(lit: str, decided, screens: bool = False, values=None, readings=None, labels=None) -> bool:
     """Whether a network decision opens the row whose text is `lit` (network_lifted_row)."""
-    return network_lifted_row(lit, decided, screens, values, readings) is not None
+    return network_lifted_row(lit, decided, screens, values, readings, labels) is not None
 
 
 def network_allowance(decided, options=None) -> str:
@@ -1128,8 +1197,9 @@ def identity_screen(text) -> str | None:
 # network decision opened: notice_kept), each its whole text once folded, spacing as one space and the OK button left
 # out: the camera's "This function is currently disabled." (kit/schema_update.py DISABLED_RE) and "This operation or
 # setting not available."; and the blocker form (_NOTICE_FOLLOWS), "... not available as follows" and, after it, the
-# setting that blocks it with its value (kit/proving/screens.py refuse_or_fail), whose part after "as follows" is kept
-# only where it is a row label the kit knows, or one and a value it knows for that row (blocker_known)
+# setting that blocks it with its value (kit/proving/screens.py refuse_or_fail), of whose part after "as follows" only
+# the row label is kept, where it is a row label the kit knows, alone or with a value it knows for that row
+# (blocker_known): never the value, which is the blocking row's current state
 _NOTICE_SHAPES = [re.compile(p) for p in (
     r"this function is currently disabled\.?",
     r"this operation or setting (?:is )?not available\.?",
@@ -1138,28 +1208,31 @@ _NOTICE_FOLLOWS = re.compile(r"(this operation or setting (?:is )?not available 
 _NOTICE_OK = re.compile(r"[\s•●]*\bok\b[\s•●.]*$", re.I)
 
 
-def blocker_known(tail, labels=(), values=None) -> bool:
-    """Whether what a blocker notice names after "as follows" (`tail`) is a row label the kit knows (`labels`:
-    runner.known_labels), alone or followed by one of the values it knows for that row (`values`, {label: [values]}:
-    runner.row_values), all compared as plain: "Airplane Mode On". An address, a device's name, an SSID or anything else
-    the kit does not know as a label is not."""
+def blocker_known(tail, labels=(), values=None) -> str | None:
+    """The row label, as `labels` writes it, that what a blocker notice names after "as follows" (`tail`) is: a row label
+    the kit knows (`labels`: runner.known_labels), alone or followed by one of the values it knows for that row
+    (`values`, {label: [values]}: runner.row_values), all compared as plain ("Airplane Mode On" is Airplane Mode); None
+    for an address, a device's name, an SSID or anything else the kit does not know as a label. The value is never
+    returned: it is the blocking row's current state (2026-11-14, a review)."""
     seen = plain(tail)
-    known = {plain(x) for x in labels or () if isinstance(x, str) and plain(x)}
+    known = {plain(x): x for x in labels or () if isinstance(x, str) and plain(x)}
     told = {plain(k): {plain(v) for v in vs if isinstance(v, str) and plain(v)}
             for k, vs in (values or {}).items() if isinstance(k, str)}
     if not seen:
-        return False
+        return None
     if seen in known:
-        return True
-    return any(seen.startswith(k + " ") and plain(seen[len(k):]) in told.get(k, ()) for k in known)
+        return known[seen]
+    return next((x for k, x in known.items() if seen.startswith(k + " ") and plain(seen[len(k):]) in told.get(k, ())),
+                None)
 
 
 def notice_kept(text, labels=(), values=None) -> str:
     """The text of a notice as the kit keeps it for a Wi-Fi or Bluetooth setting a network decision opened, or "": its
     whole text (folded, spacing as one space, the OK button left out) when it is one of the notices the kit knows
-    (_NOTICE_SHAPES); for the blocker form (_NOTICE_FOLLOWS), its fixed sentence, and what it names after "as follows"
-    only where that is a row label the kit knows, or one and one of that row's known values (blocker_known, `labels` and
-    `values` as runner.known_labels and runner.row_values give them), else the fixed sentence alone. Nothing at all where
+    (_NOTICE_SHAPES); for the blocker form (_NOTICE_FOLLOWS), its fixed sentence, and the row label it names after "as
+    follows" where that is a row label the kit knows, alone or with one of that row's known values (blocker_known,
+    `labels` and `values` as runner.known_labels and runner.row_values give them), never the value (the blocking row's
+    current state: "... as follows Airplane Mode"), else the fixed sentence alone. Nothing at all where
     the text holds a question, reads as a confirmation anywhere (confirmation, on the whole text and on what follows "as
     follows"), names identity or credentials (identity_screen: an SSID, a device's name, a pairing, an address, a
     connection) or anything no allowance opens (never_lifted), or is of no shape the kit knows: then the frame is the
@@ -1174,7 +1247,8 @@ def notice_kept(text, labels=(), values=None) -> str:
     if not m:
         return ""
     head = t[:len(m.group(1))]
-    return f"{head} {tail}" if tail and blocker_known(tail, labels, values) else head
+    label = blocker_known(tail, labels, values) if tail else None
+    return f"{head} {label}" if label else head
 
 
 _QUOTED_TEXT = re.compile(r"'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\"")
@@ -1237,6 +1311,11 @@ ADDRESS_FIELDS = {
     "Device Name": r"dev[il1|!]ce\s?name",
     "User Name": r"user\s?name",
     "Server": r"server",
+    # the field names a credentials screen shows (Access Authen. Info, 2026-11-14: its screen kept "fields []"): the
+    # name, never what follows it on its line (decision 9)
+    "Password": r"pass\s?word",
+    "Fingerprint": r"finger\s?print",
+    "Access Authen.": r"access\s?authen(?:tication|\.)?",
 }
 _FIELD_RES = [(name, re.compile(rx + r"(?![a-z0-9])")) for name, rx in ADDRESS_FIELDS.items()]
 
@@ -1301,6 +1380,63 @@ def screen_fields(lines, labels=(), values=()) -> tuple[list, int]:
         names += [n for n in got if n not in names]
         withheld += hidden
     return names, withheld
+
+
+# The option lists whose option names a withholding run may show (kept_screen): a list, a checklist. Never a carousel
+# ("dialog"), which draws the lit option's name alone, the very value withheld, nor a side list, a window centred on it
+OPTION_KINDS = frozenset({"list", "checklist"})
+
+
+def kept_screen(kind, lines, labels=(), values=(), options=(), by_row=None) -> dict:
+    """What a run that withholds every screen's text keeps of one screen ({"fields", "withheld", and "options" or
+    "notice" where there are any}): every --network run and every --owner run (kit/drive.py, kit/crawl_run.py,
+    kit/prove_run.py; docs/decisions/0008 and 0009), from its start to its end, never a line as read. `lines`: the
+    screen's OCR lines (camkit.ocr Lines or texts). Kept: the screen's kind (the caller's); the whole row labels and the
+    field names (screen_fields, `labels` and `values` as runner.known_labels and runner.known_values give them: never a
+    line that is a known value); on an option list (OPTION_KINDS) the row's option names (`options`: the definition's
+    for that row, runner.defined_values) only where the names on the screen are that whole set, never which one is lit,
+    current or saved (a set short of one, OCR missing the lit line, or a window of a longer list would tell it), else
+    their count alone ("option_count"); on a notice, what notice_kept keeps of it (`by_row`:
+    runner.row_values); and the count of lines withheld. The shooting screen is kept as its kind alone: its status line
+    is the owner's shooting values."""
+    texts = [t for t in (str(getattr(ln, "text", ln) or "") for ln in lines or ()) if t.strip()]
+    if kind == "shooting":
+        return {"fields": [], "withheld": len(texts)}
+    names, withheld, out = [], 0, {}
+    known = {plain(o): o for o in options or () if isinstance(o, str) and plain(o)}
+    shown = list(dict.fromkeys(known[plain(t)] for t in texts if plain(t) in known)) if kind in OPTION_KINDS else []
+    if shown and len(shown) == len(known):
+        out["options"] = shown                  # the row's whole set: which one is lit is never kept
+    elif shown:
+        out["option_count"] = len(shown)        # part of it: the names would tell what is missing
+    notice = notice_kept(" ".join(texts), labels, by_row) if kind == "notice" else ""
+    if notice:
+        out["notice"] = notice
+    said = plain(notice)
+    for t in texts:
+        if "options" in out and plain(t) in known:
+            continue
+        if notice and plain(t) and re.search(r"(?<![0-9a-z])" + re.escape(plain(t)) + r"(?![0-9a-z])", said):
+            continue                # a line the kept notice holds whole, word for word
+        got, hidden = screen_fields([t], labels, values)
+        names += [n for n in got if n not in names]
+        withheld += hidden
+    return {"fields": names, **out, "withheld": withheld}
+
+
+def kept_said(kept: dict) -> str:
+    """What the console shows of a screen kept_screen kept (or one blanked, {"blanked": True}): its field names and row
+    labels, its options and its notice where kept, and the count of lines withheld; never a line as read."""
+    if kept.get("blanked"):
+        return "screen withheld: its frame saved black, never read"
+    said = f"fields {kept.get('fields', [])}"
+    if kept.get("options"):
+        said += f", options {kept['options']}"
+    elif kept.get("option_count"):
+        said += f", {kept['option_count']} options"
+    if kept.get("notice"):
+        said += f", notice {kept['notice']!r}"
+    return f"{said}, {kept.get('withheld', 0)} lines withheld"
 
 
 # The one reset an owner's word lets a run open (decision 5; the a1 II's owner, 2026-11-11, for the public sample): a

@@ -18,7 +18,9 @@ calls to shell word splitting. Here:
   (kit/tools/upload_check.py, the file the camera's RESTORE_BY_HAND.json names), and no link opens before that; a
   step that exits with status 6 (EXIT_NOT_CONFIRMED: that press only brought up its row's own question, which the step
   cancelled with MENU, its start file restored and checked) stops the chain as status 4 does, since nothing was
-  confirmed; any other failure is listed and the chain goes on;
+  confirmed; a step that exits with status 7 (EXIT_REFUSED: a refusal stopped its work part way, kit/crawl_run.py, its
+  start file restored and checked) or 8 (EXIT_INCOMPLETE: anything else stopped it short, restored and checked) stops
+  the chain as status 4 does; any other failure is listed and the chain goes on;
 - a step over its `limit` (seconds) is asked to stop through its `stop` file (a run's STOP: the
   walkers cancel to the menu and close it). The runner never kills a step: a camera left in a
   dialog is worse than a late chain. A step with no `stop` file is only reported;
@@ -67,7 +69,8 @@ from camkit import ROOT, paths  # noqa: E402
 import tomllib  # noqa: E402
 # a step's exit status when the camera may not be back on its start file, the runners' own: from kit/exit_status.py,
 # which imports nothing (kit/runner.py would bring the camera's screen and frames along)
-from exit_status import EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED  # noqa: E402
+from exit_status import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_REFUSED, EXIT_RESTORE_BY_HAND,  # noqa: E402
+                         EXIT_UNRESTORED)
 
 PY = sys.executable
 RUN_ROOT = None          # the camera's runs, set in main()
@@ -227,6 +230,14 @@ def main():
                         "kit/tools/upload_check.py and the file RESTORE_BY_HAND.json names, then upload the end file "
                         "the same way")
                     end = None
+                    break
+                if rc == EXIT_REFUSED:
+                    # a refusal stopped the step's work part way (kit/crawl_run.py), its start file back and checked: what
+                    # the next steps expect was not done
+                    say("   a refusal stopped the step part way (its start file is back and checked): stopping the chain")
+                    break
+                if rc == EXIT_INCOMPLETE:
+                    say("   the step stopped short (its start file is back and checked): stopping the chain")
                     break
                 if rc == EXIT_NOT_CONFIRMED:
                     # the step's last press brought up its row's own question, which it cancelled with MENU before it

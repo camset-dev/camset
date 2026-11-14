@@ -118,6 +118,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import ROOT, camset, datafiles, definitions, help_files, jsonl, menu_rows, paths, placement  # noqa: E402
 from camkit.placement import norm  # noqa: E402
+from camkit.runs import POLL_LEFT  # noqa: E402
 from camkit.vlm import LOCAL_MARKER, NO_READER_MARKER  # noqa: E402
 
 RUN_ROOT = None          # the camera's runs the page reads (runs/<model>_fw<fw>/), or None: set by main(), place()
@@ -169,8 +170,9 @@ def frame(run: Path, name, here: Path):
     """A frame's link: relative to the page in the camera's _viewer/, else its absolute path; with forward slashes on
     every OS, as a page's links are. None when the file is not there, and for every frame of a run that opened a row an
     owner decision names (its folder marked NO_READER_MARKER: credentials, the serial number or values the owner chose
-    to log may be on them; 2026-11-14, a review): the page never links one."""
-    if not name or held(run):
+    to log may be on them; 2026-11-14, a review): the page never links one; nor the eyes' polling target, _live.png at
+    the top of a run's folder (camkit.runs.POLL_LEFT), a frame of whatever was polled last, never evidence."""
+    if not name or held(run) or Path(str(name)).name in POLL_LEFT:
         return None
     for sub in ("shots", "upright", "."):
         p = run / sub / name

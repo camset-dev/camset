@@ -7,8 +7,11 @@ runs/<model>_fw<fw>/STOP for every run of that camera, runs/STOP for every run) 
 cancels any open dialog before it exits, because a dropped session applies the dialog on screen. Ctrl-C (or a
 tool's SIGTERM) while a camera link is open does the same: request_stop (camkit.link catches the signal).
 """
+import contextlib
 import json
+import os
 import re
+import stat
 import sys
 import threading
 import time
@@ -119,15 +122,36 @@ def mark_proof_run(run_dir: Path, by: str) -> bool:
     return True
 
 
+# A private run's folder (a --network or --owner run: its frames, its drive.jsonl and its downloads can hold addresses,
+# credentials or values the owner chose to log, 2026-11-14): its folders 0700 and every file in it 0600, on POSIX. On
+# Windows the modes are left as they are: the folder is the user's own profile's (docs/decisions/0009)
+PRIVATE_DIR, PRIVATE_FILE = 0o700, 0o600
+# the umask a private run sets for its process, whatever the person's own umask (os.umask): every file the run, its
+# eyes, its OCR and the camera's helper (which inherits it) create is 0600 and every folder 0700; kit/runner.write_text
+# reads it, so a file it writes new is no looser. 0 until a private run starts
+UMASK_FLOOR = 0
+POLL_LEFT = ("_live.png", "_live.png.part")     # the eyes' polling target at the top of a run folder (camkit.frames)
+
+
+def private_modes() -> bool:
+    """Whether this system takes POSIX modes (a private run's are set there alone)."""
+    return os.name == "posix"
+
+
 class Run:
-    def __init__(self, name: str, root: Path = None):
-        """root: the camera's run root (camkit.paths.run_root()) unless given."""
+    def __init__(self, name: str, root: Path = None, private: bool = False):
+        """root: the camera's run root (camkit.paths.run_root()) unless given. private: a --network or --owner run's
+        folder (PRIVATE_DIR, PRIVATE_FILE): the process's umask set to 0077 before anything is written, the folder and its
+        subfolders made 0700 and what an earlier run left in it 0600; seal() checks it at the run's end."""
         self.root = Path(root) if root is not None else paths.run_root()
         self.dir = self.root / name
         self.shots = self.dir / "shots"
         self.dat = self.dir / "dat"
+        self.private = False
+        if private:
+            self.make_private()
         for d in (self.shots, self.dat):
-            d.mkdir(parents=True, exist_ok=True)
+            d.mkdir(parents=True, exist_ok=True)        # 0700 on a private run: its umask is set
         self._lock = threading.Lock()
         self._n = self._highest()
         self._stop_why = None                  # a stop asked for in this process (a signal), not by a file
@@ -138,6 +162,54 @@ class Run:
             print(f"{p} is there from an earlier stop: a run presses nothing while it is there. Remove it to run.",
                   file=sys.stderr, flush=True)
             self.log("stop_left_over", path=str(p))
+
+    def make_private(self) -> list:
+        """The run made private (a --network or --owner run, decided once its flags are read, before its link opens or
+        anything is written in its folder but the folders themselves): on POSIX the process's umask set to 0077 or
+        tighter (UMASK_FLOOR), whatever the person's own, and the folder made owner-only now (tighten). The paths
+        tightened."""
+        global UMASK_FLOOR
+        self.private = True
+        if not private_modes():
+            return []
+        UMASK_FLOOR = 0o077
+        os.umask(os.umask(0o077) | 0o077)           # read and set at once: tighter than before, never looser
+        return self.tighten()
+
+    def tighten(self) -> list:
+        """A private run's folder made owner-only, on POSIX: every folder in it 0700 and every file 0600 (symbolic links
+        left as they are, never followed). The paths whose modes were looser, relative to the folder; [] elsewhere."""
+        if not private_modes() or not self.dir.is_dir():
+            return []
+        fixed = []
+        for p in [self.dir, *sorted(self.dir.rglob("*"))]:
+            try:
+                if p.is_symlink():
+                    continue
+                st = p.stat()
+                want = PRIVATE_DIR if p.is_dir() else PRIVATE_FILE
+                if stat.S_IMODE(st.st_mode) & 0o077:
+                    os.chmod(p, want)
+                    fixed.append(p.relative_to(self.dir).as_posix() or ".")
+            except OSError:
+                continue
+        return fixed
+
+    def seal(self) -> list:
+        """A private run's end: the eyes' polling target left at the top of the folder taken away (POLL_LEFT: a real
+        frame of whatever was polled last), then the folder checked (tighten), and anything that was group- or
+        world-readable fixed and said. The paths fixed; [] for a run that is not private."""
+        if not self.private:
+            return []
+        for name in POLL_LEFT:
+            with contextlib.suppress(OSError):
+                (self.dir / name).unlink()
+        fixed = self.tighten()
+        if fixed:
+            print(f"{len(fixed)} path(s) in {self.dir.name} were readable by other users and are owner-only now: "
+                  f"{', '.join(fixed[:6])}{' ...' if len(fixed) > 6 else ''}", flush=True)
+            self.log("private_modes_fixed", paths=fixed[:50], count=len(fixed))
+        return fixed
 
     def _highest(self) -> int:
         top = 0

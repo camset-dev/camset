@@ -1,6 +1,6 @@
 # 8. By hand only: USB, language, region and network identity
 
-- **Date:** 2026-10 (first kit); changed 2026-11-02, 2026-11-11 and 2026-11-13
+- **Date:** 2026-10 (first kit); changed 2026-11-02, 2026-11-11, 2026-11-13 and 2026-11-14
 - **Status:** accepted
 - **Rule:** USB, language, region and network rows by hand; Auto Power OFF Temp. when a run names it; a dated owner
   decision opens a row it names, look-only by default.
@@ -55,8 +55,9 @@ the never-open list or identity holds stops the run. No option is ever chosen, w
 choice drops a link, starts a connection or a pairing or changes what no file puts back: Wi-Fi Connect (On joins the
 access point), Bluetooth Rmt Ctrl (On opens Pairing), Airplane Mode (it drops the Wi-Fi and Bluetooth links), Wired LAN
 Connect, Remote Shoot Function, IP Address Setting, Cnct. while Power OFF, Manage Paired Device, Display FTP Result,
-the USB rows, Language, NTSC/PAL and Area/Date/Time; on the a1 II that leaves Bluetooth Function, Wi-Fi Frequency Band
-and Wake On LAN as the rows whose options a decision may name. The kit names these classes only when no other reason
+the USB rows, Language, NTSC/PAL and Area/Date/Time, and Wi-Fi Frequency Band (a change of band can drop a link that
+runs over Wi-Fi); on the a1 II that leaves Bluetooth Function and Wake On LAN as the rows whose options a decision may
+name. The kit names these classes only when no other reason
 matches the row, so a misread that also looks like credentials or an action keeps that reason.
 
 A run given `--network` asks only local readers, those whose address is this computer's or a private network's,
@@ -65,9 +66,22 @@ never a paid service, and marks its run folder so; every tool that reads that fo
 `tools/reader_census.py`) asks local readers only too, builds no other, and asks none about the frames of an identity
 or connection row; and a prover's way back to the shooting screen sends no OK to a notice that refuses MENU during
 such a run, nor anywhere to one that names identity or credentials ("Connect to ...?"). A screen met inside such a row that names identity or credentials (a pairing screen, a connecting
-notice, an SSID, a keyboard) gets MENU alone, and no reader is asked; so does an address screen. Inside an identity
-row or on an address screen, and on any screen whose text names identity, what the run prints and keeps is the
-screen's field names and whole row labels alone, never a value. Whatever a network decision says, these stay by hand:
+notice, an SSID, a keyboard) gets MENU alone, and no reader is asked; so does an address screen. From such a run's
+start to its end no screen's text is printed or kept, whatever its kind (`camkit.safety.kept_screen`): what the console,
+`drive.jsonl`, `rows.jsonl`, the proofs and `events.jsonl` keep of a screen is its kind, the whole row labels the kit
+knows (the definition's, the page model's that are a label alone, the decision's own rows) and the field names, on an
+option list the option names the definition gives that row only where the screen shows that whole set, else their
+count (never which one is lit, current or saved; never a carousel's, which shows the lit one alone, nor a side
+list's, a window centred on it), on a notice what `notice_kept` keeps (a notice the kit knows, and a blocker's row
+label where it is one the kit knows, never that row's value, its current state), and the count of lines withheld; the
+shooting screen as its kind alone, since its status line is the owner's shooting values; a row label the kit does not
+know as "(withheld)"; a refusal's or an error's quoted texts withheld; the records that differ at the session's end by
+key and count alone, never a value, in the console and in `drive.jsonl` (unless the owner row's decision logs values).
+A proof of a network row says nothing of the option it was saved on: the named options are proved in their own order,
+each said as "proof i of N", the records they changed said by key, and every such row ends with the session's upload of
+the start file; the proofs' diffs against the start file tell it by nature, as do the run's `events.jsonl` (its presses
+tell the way the cursor went from the saved option) and its frames, and all stay in the run's owner-only folder. An `--owner` run keeps alike, but for the owner row's own screens where its decision says
+`"values": "logged"` (decision 9). Such a run's folder is the owner's alone on macOS and Linux (decision 9). Whatever a network decision says, these stay by hand:
 credentials and the screens that show them (decision 9), the SSID, WPS, access point and pairing rows, Import Root
 Certificate, the copyright and IPTC rows, Display Serial Number, and every action and reset (SSID/PW Reset, Reset
 Network Set., Reset Transfer Status); the rows whose opening may itself start or end a connection or act, since
@@ -131,7 +145,9 @@ frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the con
 The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
 decides for theirs, and the default stays by hand (the playbook's rule 3).
 
-Before 2026-11-13 no decision opened a row of the never-open list, Wi-Fi Connect, Bluetooth Function and Airplane Mode
+Before 2026-11-14 a decision could name Wi-Fi Frequency Band's options, and a `--network` run printed and kept the
+text of the screens it did not withhold (a list's lines, a notice's, the page after MENU, the shooting screen's status
+line). Before 2026-11-13 no decision opened a row of the never-open list, Wi-Fi Connect, Bluetooth Function and Airplane Mode
 were network identity, which no allowance opened, and Bluetooth Rmt Ctrl, Wi-Fi Frequency Band and the address screens
 were on no list until a first change that day made them identity rows too; before 2026-11-02 Auto Power OFF Temp. was changed by hand only, as the rest; before 0.2.0
 (2026-11-11) a run's `--allow` could name one of the others.

@@ -1,6 +1,6 @@
 # 9. Credentials are never read or stored
 
-- **Date:** 2026-10 (first kit); changed 2026-11-05 and 2026-11-13
+- **Date:** 2026-10 (first kit); changed 2026-11-05, 2026-11-13 and 2026-11-14
 - **Status:** accepted
 - **Rule:** The login lives only in a file the owner writes; the kit never types a password, and opens a credentials
   screen only where a dated owner decision names it.
@@ -36,11 +36,27 @@ its frames with any reader afterwards (`camkit.vlm.NO_READER_MARKER`). What it k
   with a name no other user can guess and mode 0700, where camlink writes it and the kit removes it, and camlink's
   `.part` beside it, as soon as it is read, and the folder when the row is left and at the run's end, an error's
   included), no OCR text of it is kept, no reader is asked, and the console, `drive.jsonl` and
-  `events.jsonl` say only that a screen was there, its kind and its frame's name;
+  `events.jsonl` say only that a screen was there ("screen withheld"), its kind and its frame's name;
 - with `"values": "logged"`, every frame is saved as it was in `runs/<model>_fw<fw>/<run>/shots/`, and each screen's
-  OCR text, the password among it, in that run's `drive.jsonl`; the console shows each screen's field names and whole
-  row labels and "(values in drive.jsonl)", never a value; `events.jsonl` keeps frame names and keys, never text; and
-  a refusal's or an error's quoted texts are withheld in both.
+  OCR text, the password among it, in that run's `drive.jsonl`; the console shows each screen's field names, never a
+  value: the lines that are whole row labels the kit knows, the name before a value on a line ("Password: ...",
+  "User Name  ...") where it is a field name the kit lists (`camkit.safety.ADDRESS_FIELDS`: User Name, Password,
+  Fingerprint, Access Authen., SSID, Device Name and the address fields), and always the count of lines not shown,
+  then "(values in drive.jsonl)"; `events.jsonl` keeps frame names and keys, never text; and a refusal's or an error's
+  quoted texts are withheld in both.
+
+On macOS and Linux the run folder of every `--owner` run, and of every `--network` run (whose frames can hold the
+camera's addresses), is the owner's alone: the folder and its subfolders mode 0700, and every file the run writes in it
+mode 0600, the frames, `drive.jsonl`, `events.jsonl`, the downloads and the markers among them (`camkit.runs`: the run
+sets its process's umask to 0077 before anything is written, so the camera's helper writes so too, whatever the
+person's own umask), and the run checks at its end that nothing in its folder can be read by another user, fixes what
+can and says so. The eyes' polling target at the top of the folder (`_live.png`, a frame of whatever was polled last)
+is taken away when the eyes close and again at that check, and the proof viewer never links it. On Windows the modes
+are left as they are: the run folder sits under the user's own profile as a rule, which other standard users cannot
+read by default, though administrators can. Every run's `events.jsonl`, an ordinary one's too, holds the camera's
+network address and MAC address in its `link_open` entry (the camera link's reply as it opens): mode 0600 in a private
+run's folder, and as the person's umask makes it (0644 as a rule) in any other run's, which is never committed or
+shared either.
 
 Nothing of it goes into a tracked file: `runs/` is never committed, and `kit/tools/check_public.py` refuses it. The
 proof viewer (`kit/tools/proof_viewer.py`) shows no frame and no step of such a run, and its `--pack` copies no frame
@@ -57,6 +73,9 @@ trusts: the fingerprint (SSH host key) each camera showed at its first successfu
 and its address. A login goes only to a camera whose fingerprint matches; the editor's Forget removes the trust with
 the login. The maintainer, the a1 II's owner, decided the owner decision's part for their own camera on 2026-11-13.
 
+Before 2026-11-14 such a run folder took the person's umask (folders 0755 and files 0644 as a rule, readable by other
+users of the computer), left `_live.png` at its top, and the console showed a logged screen's field names without the
+count of lines not shown, and none of a credentials screen's own field names (Password, Fingerprint, Access Authen.).
 Before 2026-11-13 no decision opened a credentials screen, and the kit never read one; before 2026-11-05 the record
 named one pair for every camera, with no check that the file is private and no list of the cameras this computer
 trusts; it says from 2026-11-13 that no such check is made on Windows, and where the file is there.

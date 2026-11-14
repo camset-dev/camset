@@ -36,8 +36,15 @@ hand. The run stops before anything connects when a decision names what none ope
 the serial number), when none of --rows holds a decided row, when a decided row names no option (it is opened to look
 only), or when its job is not a list of options. The camera may open those rows and no other never-open row, never an
 address screen, and chooses there only a named option (camkit.live); a row whose saved option is not named is left for
-the session's upload to put back (RestoreAfter); a notice there naming identity or credentials is kept and said as its
-field names alone, and no OK goes out on a screen nobody reads; the run asks local readers only. The reviewed scope's
+the session's upload to put back (RestoreAfter); no OK goes out on a screen nobody reads; the run asks local readers
+only. Such a run prints and keeps no screen's text (KEPT): of an option under the cursor, only the map's own option
+names ("shown", "vlm"); of a notice after OK, what safety.kept_screen keeps (its row labels and field names, the notice
+as safety.notice_kept keeps it, the count withheld), in proofs.jsonl alone; a failure's quoted texts withheld; the
+records that differ at the session's end by key alone; its folder owner-only (camkit.runs), checked at the end. Nothing
+it says tells which option a network row was saved on: the named options are proved in their own order, each said as
+"proof i of N", the records they changed said by key after them, and every such row ends with the session's upload of
+the start file (NETWORK_RESTORE); the proofs' diffs against the start file tell it by nature, and stay in proofs.jsonl
+in the run's owner-only folder. The reviewed scope's
 "exclude" still keeps a row out; each proof line carries "allowance": "the owner decided on <date> that the kit may
 open <row> remotely and choose <options>".
 
@@ -69,8 +76,9 @@ from camkit.session import check_restore, verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from page_model import same_text  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
-                    changes_of, end_session, known_groups, load_scan, log_network_decided, network_decided_or_exit,
-                    network_readings, network_values, read_json, restoring)
+                    changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
+                    log_network_decided, network_decided_or_exit, network_readings, network_values, read_json,
+                    restoring, row_values, values_withheld)
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
@@ -111,6 +119,21 @@ from proving.helptext import help_row  # noqa: E402,F401
 # --context: the switched state this run proves in (pass 3), which a single-option list's display proof needs to tell
 # which of its row's records holds the value now (display_records)
 CONTEXT: str | None = None
+# what a --network run keeps of a screen it withholds (safety.kept_screen): the row labels the kit knows (the decisions'
+# rows among them), the values it knows, and the values by row label for a notice; set by main() on such a run
+KEPT: dict = {"labels": set(), "values": set(), "by_row": {}}
+
+
+# what every network row's proof ends with, whatever option the row was saved on: the session's upload of the start
+# file puts it back (RestoreAfter), one text for every such row
+NETWORK_RESTORE = "a network row's proofs end with the session's upload of the start file"
+
+
+def kept_option(text, labels) -> str:
+    """What a network row's proof keeps of an option read under the cursor (OCR's or the vision reader's): the text where
+    it is one of the map's own option names for the row (`labels`, compared plain), else "(withheld)"."""
+    names = {safety.plain(x) for x in labels or () if isinstance(x, str)}
+    return text if isinstance(text, str) and safety.plain(text) and safety.plain(text) in names else "(withheld)"
 
 
 def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
@@ -139,7 +162,22 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     identity_row = job.get("network_class") == safety.LIFT_IDENTITY
     if choose is not None:
         order = [k for k in order if k in choose]
-    print(f"{name}: saved value {labels[c]!r}; proving {[labels[k] for k in order]}", flush=True)
+    if network_row:
+        # nothing said tells which option the row was saved on: the named options are proved in their own order (never
+        # the saved one last), the loop says "proof i of N" alone, and the session's upload of the start file always
+        # ends the row (RestoreAfter, NETWORK_RESTORE). The proofs' diffs against the start file tell it by nature: they
+        # stay in proofs.jsonl, in the run's owner-only folder (camkit.runs)
+        order = sorted(set(order))
+        print(f"{name}: proving {len(order)} named option(s) {[labels[k] for k in order]}; the saved value withheld, "
+              "the start file put back by the session's upload", flush=True)
+    else:
+        print(f"{name}: saved value {labels[c]!r}; proving {[labels[k] for k in order]}", flush=True)
+
+    def tell(message: str) -> None:
+        """A line of the loop, said where the row is no network row's (its lines would tell the saved option)."""
+        if not network_row:
+            print(message, flush=True)
+    keys = set()                        # a network row's: the records its proofs changed, said by key after the loop
     last, prev = base_path, c
     for step, k in enumerate(order):
         if step > 0:
@@ -150,6 +188,9 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if cam.read().kind != kind:
                 raise Failed(f"{name}: Right opened {cam.read().kind}, not the {kind}")
             cur = which_option(cam, job)
+            if cur != prev and network_row:
+                # no index: after a refused proof the last OK "chose" the saved option, which nothing may tell
+                raise Failed(f"{name}: the list did not open on the option the last OK chose")
             if cur != prev:
                 raise Failed(f"{name}: the list opened on option {cur}, the last OK chose {prev} ({labels[prev]!r})")
         else:
@@ -159,12 +200,11 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             raise Failed(f"{name}: the cursor is not on {labels[k]!r} ({text(cam)!r})")
         chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)                   # evidence: the option under the cursor
         shown = text(cam)                              # as the camera shows it now (a carousel: with its axis value)
-        if network_row and any(safety.network_withheld(kind, x or "") for x in (shown, seen_vlm)):
-            shown, seen_vlm = "(withheld)", "(withheld)"
-        if identity_row:            # inside an identity row only the map's own option names are kept
-            names = {safety.plain(x) for x in labels}
-            shown, seen_vlm = (x if safety.plain(x or "") in names else "(withheld)" for x in (shown, seen_vlm))
+        if network_row:             # inside a network row only the map's own option names are kept (KEPT)
+            shown, seen_vlm = kept_option(shown, labels), kept_option(seen_vlm, labels)
         cam.press("enter")
+        if network_row:
+            print(f"   proof {step + 1} of {len(order)}", flush=True)
         s = cam.read()
         notice, refused = None, False
         if s.kind == "notice":
@@ -179,13 +219,13 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if why:
                 raise Failed(f"{name}: after OK on {labels[k]!r} a confirmation came up ({why}; {cam.frame.path.name})")
             refused = bool(re.search(r"not available|invalid", text_n, re.I))
-            if network_row and (identity_row or safety.network_withheld("notice", text_n)):
-                # inside a network row, a notice naming identity or credentials (a pairing screen, a connecting
-                # notice), and any notice inside an identity row: its field names alone are kept and said, never its
-                # text; MENU alone closes it
-                names, hidden = safety.address_fields(lines)
-                notice = {"withheld": hidden, "fields": names, "frame": cam.frame.path.name}
-                print(f"   notice after OK, its text withheld ({hidden} lines; fields {names})", flush=True)
+            if network_row:
+                # inside a network row no notice's text is kept or said: what safety.kept_screen keeps (its row labels
+                # and field names; inside a Wi-Fi or Bluetooth setting the notice as safety.notice_kept keeps it, never
+                # inside an identity row; the count withheld); MENU alone closes it
+                kept = safety.kept_screen("notice" if not identity_row else "unknown", lines, KEPT["labels"],
+                                          KEPT["values"], (), KEPT["by_row"])
+                notice = {**kept, "frame": cam.frame.path.name}       # in proofs.jsonl alone (tell)
             else:
                 notice = {"text": text_n, "frame": cam.frame.path.name}
                 print(f"   {'refused' if refused else 'notice after OK'}: {text_n[:90]!r}", flush=True)
@@ -194,13 +234,13 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             # some choices close the menu (Focus Area = Wide went straight to the shooting screen with
             # the new area icon, 2026-10-29): the download shows what applied
             notice = {"text": "the menu closed after OK", "frame": cam.frame.path.name}
-            print("   the menu closed after OK", flush=True)
+            tell("   the menu closed after OK")
         elif s.kind == "menu" and (same_place(place(cam), top) if top is not None else at_label(cam, "menu", path[0])):
             # back on the top-level row: XAVC HS 8K's Rec Frame Rate rebuilds Movie Settings on OK
             # (24p applied, 2026-10-31); the download shows what applied. Over the OSD there is no
             # recorded place for that row, so its label decides
             notice = {"text": "the camera went back to the menu page after OK", "frame": cam.frame.path.name}
-            print("   back on the menu page after OK", flush=True)
+            tell("   back on the menu page after OK")
         elif s.kind == "unknown" and not network_row and not same_place(place(cam), row_place):
             # an information screen without a notice's frame lines, "Don't show this again." over its
             # OK (Framing Stabilizer = On: Center, Movie mode, 2026-10-30): taken as the table prover
@@ -232,15 +272,21 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         out.write(json.dumps(rec) + "\n")
         out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
-        print(f"   {labels[k]!r:24s} {brief}{' ...' if len(changes) > 6 else ''}", flush=True)
+        tell(f"   {labels[k]!r:24s} {brief}{' ...' if len(changes) > 6 else ''}")
+        keys |= {ch.key for ch in changes}
         last, prev = dat, (cur if refused else k)
         after_download(cam, done)
-        if k == c and changes:
+        if k == c and changes and not network_row:
             put_back = put_back_leftovers(changes, history)
             if put_back is None:
                 raise Failed(f"{name}: back on the saved value, {len(changes)} records still differ from the start")
             say_put_back(name, put_back)
     finish_attempt(run, attempt, name, put_back)
+    if network_row:
+        # the options in their own order and the records by key alone, never which changed what; then the session's
+        # upload of the start file, whatever the row was saved on
+        print(f"   proved {[labels[k] for k in order]}: records {sorted(keys)}", flush=True)
+        raise RestoreAfter(f"{name}: {NETWORK_RESTORE}")
     if choose is not None and c not in choose:
         # the saved option is not one the decision lets the kit choose: the session's upload puts it back
         raise RestoreAfter(f"{name}: its saved option is not one the decision names; the session's upload puts it back")
@@ -323,9 +369,11 @@ def prove_by_display(cam, link, run, job, base_path: Path, out, top, row_place, 
     cs = camset.read(base_path)
     held = {k: v for k in display_records(settings, path, CONTEXT) if (v := held_value(cs, k)) is not None}
     rec = display_proof(job, shown, seen_vlm, base_path, held, (chosen, back), attempt)
+    if job.get("network_row"):          # a network row's: only the map's own option names (KEPT)
+        rec["shown"], rec["vlm"] = kept_option(rec["shown"], job["labels"]), kept_option(rec["vlm"], job["labels"])
     out.write(json.dumps(rec) + "\n")
     out.flush()
-    print(f"{name}: one option, {rec['label']!r} (OCR {shown!r}, vision model {seen_vlm!r}), held in "
+    print(f"{name}: one option, {rec['label']!r} (OCR {rec['shown']!r}, vision model {rec['vlm']!r}), held in "
           f"{', '.join(held)}", flush=True)
     finish_attempt(run, attempt, name)
     to_row(cam, path, top, row_place)
@@ -502,10 +550,20 @@ class OsdEyes(OsdSource):
         pass
 
 
-def put_start_back(run, hdmi, ref: Path) -> bool:
+def end_rows(link, eyes, start: Path, reach, withheld: bool | None = None):
+    """A proof session's end (runner.end_session: the shooting screen, the download, the start file put back when anything
+    differs); withheld (a --network run, whose decided rows main() gives proving.jobs.NETWORK, unless said): the records
+    that differ said by their keys alone (runner.values_withheld)."""
+    withheld = bool(proving.jobs.NETWORK) if withheld is None else withheld
+    return end_session(link, eyes, start, "the settings download after the rows", reach=reach,
+                       **values_withheld(withheld))
+
+
+def put_start_back(run, hdmi, ref: Path, withheld: bool = False) -> bool:
     """A run before this one can stop short of its restore (a crash, 2026-10-29), and a context run
     starts from a file of its own: if the camera differs from `ref`, upload it, wait for the camera
-    to restart, reconnect and check (an upload ends the session, 2026-10-30). True when it matches."""
+    to restart, reconnect and check (an upload ends the session, 2026-10-30). True when it matches. withheld: a
+    --network run, whose check says the records that differ by their keys alone (runner.values_withheld)."""
     with Link(run) as link:
         hdmi.attach(link)
         if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
@@ -518,7 +576,7 @@ def put_start_back(run, hdmi, ref: Path) -> bool:
         print(f"the camera differs from {ref.name} in {len(ch)} records {[c.key for c in ch][:6]}: uploading it",
               flush=True)
         print(link.upload(ref), flush=True)
-    return verify_restore(run, ref) == 0
+    return verify_restore(run, ref, **values_withheld(withheld)) == 0
 
 
 def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str:
@@ -528,7 +586,8 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
                                                 if safety.owner_may_approve(safety.never_open(r.split(" > ")[-1]))}
                      | proving.jobs.ALLOWED, network=proving.jobs.NETWORK, options=proving.jobs.NETWORK_OPTIONS,
                      values=network_values(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None,
-                     readings=network_readings(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None)
+                     readings=network_readings(proving.jobs.NETWORK, MODEL) if proving.jobs.NETWORK else None,
+                     labels=label_readings(MODEL) if proving.jobs.NETWORK else None)
     status = "done"
     try:
         cam.press("menu")
@@ -846,7 +905,9 @@ def main():
     todo.sort(key=lambda j: next((v for k, v in order.items() if same_text(k, j["path"][0])), 10 ** 6))
     run = Run(a.run)
     if network:
+        run.make_private()          # owner-only from here (camkit.runs), checked at the end (seal)
         log_network_decided(run, network, proving.jobs.NETWORK_OPTIONS)
+        KEPT.update(labels=known_labels(model) | set(network), values=known_values(model), by_row=row_values(model))
     done, failed, done_labels = {}, set(), {}
     help_text = proving.jobs.HELP_TEXT
     proofs, fails = ("option_help.jsonl", "help_failures.jsonl") if help_text else ("proofs.jsonl", "failures.jsonl")
@@ -899,7 +960,8 @@ def main():
     pending, start, in_a_row, unrestored = list(todo), None, 0, False
     try:
         with restoring("putting the start file back"):    # an upload that raises: exit EXIT_UNRESTORED
-            put_back_ok = not a.start or put_start_back(run, hdmi, Path(a.start))
+            put_back_ok = not a.start or put_start_back(run, hdmi, Path(a.start),
+                                                        **({"withheld": True} if network else {}))
         if not put_back_ok:
             print("the start file did not take: stopping", flush=True)
             pending, unrestored = [], True
@@ -949,13 +1011,13 @@ def main():
 
                 # the restore is tried even when the shooting screen does not come back (decision 15): a Failed
                 # here once skipped finish and left the camera changed
-                ending = end_session(link, eyes, start, "the settings download after the rows", reach=reach)
+                ending = end_rows(link, eyes, start, reach)     # keys alone on a --network run
                 if unreached:
                     status = "error"                         # restored; no further session from an unknown screen
                 if ending.after is None:
                     unrestored = True
                     break                                    # the camera kept refusing the download: finish said so
-            if ending.uploaded and check_restore(run, ending, start) != 0:
+            if ending.uploaded and check_restore(run, ending, start, **values_withheld(bool(network))) != 0:
                 print("the restore did not check out: stopping", flush=True)
                 unrestored = True
                 break
@@ -973,6 +1035,7 @@ def main():
             hdmi.close()
         out.close()
         failures.close()
+        run.seal()                  # a --network run's folder checked owner-only
     if unrestored:
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
 

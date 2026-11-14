@@ -142,6 +142,85 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   blocker notice it keeps what follows "as follows" only where that is a row label it knows with one of that row's
   values, else the sentence alone. On a `--network` run the menu navigation prints no text it read off the screen, only
   its length.
+- A second look at the a1 II's Network menus (`--network`, rows opened, read and left with MENU) showed more to mend:
+  - **What a `--network` or `--owner` run prints and keeps is withheld from its start to its end.** `drive.py` printed
+    and kept (console, `drive.jsonl`, the run's events) the text of a Wi-Fi or Bluetooth setting's own screens: a greyed
+    row's notice with its blocker and that blocker's state, an option list's lines, and, after MENU from a greyed row's
+    notice, the shooting screen's status line (the owner's shooting values). Now no screen's text is printed or kept by
+    `drive.py`, the walk (`crawl_run.py`) or the proofs (`prove_run.py`) on such a run, whatever the screen's kind: what
+    is kept is its kind, the whole row labels the kit knows (the definition's, the page model's that are a label alone,
+    the decision's own rows) and the field names, on an option list (never a carousel, which shows the lit option alone,
+    nor a side list, a window centred on it) the option names the definition gives that row only where the screen shows
+    that whole set (one missing, OCR's miss of the lit line or a window of a longer list, would tell which is current),
+    else their count alone, on a notice what the walk keeps (a notice the kit knows, and from a blocker notice the
+    blocking row's label where it is one the kit knows, never its value: "... as follows Airplane Mode", where the walk
+    kept "... Airplane Mode On" before), and the count of lines withheld; the shooting screen as its kind alone. The walk
+    keeps a row's label in `rows.jsonl` and on the console only where it is a label the kit knows, or the decided row a
+    lifted row was opened as, else "(withheld)"; the proofs keep of an option under the cursor only the map's own option
+    names. A refusal's or an error's quoted texts are withheld as before. The records that differ at the session's end
+    (and at the restore's check) are said by key and count alone on such a run, where the values were printed before
+    (an owner run of a network reset would have printed its address and identity records), and `drive.jsonl` keeps them
+    by key alone unless the owner row's decision logs values. An `--owner` run keeps alike, but for the owner row's own
+    screens where its decision says `"values": "logged"`. This is about the run's own logs, which an agent reads, beside
+    decision 16, which keeps the owner's values out of the public files (decisions 8 and 9).
+  - **Nothing a `--network` proof says tells which option the row was saved on.** It printed the saved value, proved
+    the options from the one after it round to it, last, its line saying "no change", and the records' values; and only
+    a row saved on an option the decision did not name ended with the session's upload. Now the named options are proved
+    in their own order, each said as "proof i of N" alone, the records they changed are said by key after them, never
+    which changed what or a value, and every network row ends with the session's upload of the start file, one text for
+    all. The proofs' diffs against the start file tell the saved option by their nature (its own proof changes nothing):
+    they stay in `proofs.jsonl`, in the run's owner-only folder, never said, as do the run's `events.jsonl`, whose
+    presses tell the way the cursor went from the saved option, and its frames (decision 8). A failure there names no
+    option by its index any more.
+  - **A `--network` or `--owner` run's folder is yours alone** on macOS and Linux: the folder and its subfolders 0700,
+    every file the run writes 0600 (frames, `drive.jsonl`, events, downloads, markers; the run sets its process's umask
+    to 0077 first, so the camera's helper writes so too), checked at the run's end, where anything another user could
+    read is fixed and said. They were 0755 and 0644 as a rule, so a logged credentials screen's run could be read by
+    other users of the computer. On Windows the modes are left as they are (decision 9). The eyes' polling target,
+    `_live.png` at the top of a run's folder (a frame of whatever was polled last), is taken away when the eyes close, on
+    every run, and the proof viewer never links it.
+  - On an owner row's screen the console names the fields it can without a value: whole row labels, and the name before
+    a value on a line where it is a field name the kit lists (now with Password, Fingerprint and Access Authen. beside
+    User Name, SSID, Device Name and the address fields), always with the count of lines not shown (Access Authen. Info
+    showed `fields []` and no count); a blanked screen says "screen withheld".
+  - "IP Address Setting" can be gone to and opened: `--path "IP Address Setting"` found no row when the page model's
+    label was OCR's "LANIP Address Setting" (the Wired LAN page's icon glued on). The way to a row now finds it by any
+    reading the page model keeps of it, and by that reading with an icon of its own page glued on, where the old rule
+    (a prefix of one or two letters) finds none. `--path "LANIP Address Setting"` stays refused before anything
+    connects. The values the kit knows for a row now gather every reading of the page model's row, so the value shown
+    beside "LANIP Address Setting" counts for IP Address Setting; and where no value of a decided row is known at all,
+    its lit bar may carry a tail of at most two words that names nothing on the never-open list, no identity or
+    credentials and no address, and makes of the bar no other label the kit knows (the definition's, every label and
+    reading of the page model, but the decided row's own) nor the start of one ("Wi-Fi Connect Settings" for Wi-Fi
+    Connect), where before nothing could follow its label. A row found by another reading than its label is gone to only
+    where exactly one row reads so, and only where its lit bar, read there, is the row.
+  - Wi-Fi Frequency Band is a row whose options no decision lets the kit choose (a change of band can drop a link that
+    runs over Wi-Fi): a decision naming its options is refused, as Wi-Fi Connect's are. That leaves Bluetooth Function
+    and Wake On LAN on the a1 II.
+  - A page model's label of one or two characters (an icon read as a letter, "B") is no row label the kit keeps on a
+    withheld screen unless the definition has it.
+- **These change ordinary runs too** (without `--network` or `--owner`):
+  - `crawl_run.py` exited 0 when a refusal stopped it mid-lap ("error: Refused ...; cancelling"), and after every other
+    failure too (an error, the menu on a screen the scan does not know, a lap that went off the scan or lost its row),
+    which a chain took for success. A row whose opening the camera refuses because of the lit row itself (it reads as one
+    the run may not open, or no reader can read it: `safety.RowRefused`) before any press went out on it is now skipped
+    ("skipped: refused (...)" in `rows.jsonl`, the reason's quoted texts withheld) and the lap goes on; any other
+    refusal (a look-only lock still on, the link's own guard), and a refusal after a press on a row (inside its walk,
+    which took it for an incomplete walk before), cancels the lap. Once its start file is back and checked the run exits
+    7 (`EXIT_REFUSED`) after a refusal and 8 (`EXIT_INCOMPLETE`) after any other failure or short lap (the start label
+    not reached now says so in its own words); a STOP, a complete lap and `--limit` reached exit 0; an unchecked restore
+    still exits 4 (`kit/exit_status.py`). `kit/tools/chain.py` stops on 7 and 8 as after 4.
+  - The menu navigation guesses nothing: where the lit group in the group column could not be read the jump took it for
+    the first group and pressed on ("taking it as the first"), and after its moves it sent its Right on a group it could
+    not read. Now the lit group is read again once after a short settle, then on the camera's own picture of its screen,
+    before its moves and after them, and where none names the group meant nothing more is pressed and the row is not
+    reached ("could not reach ... by the scan"); a menu that opens in the group column gets the same second look.
+  - The way to a row (`crawl_run.go_to`, which `drive.py`, the walk and every prover go by) finds a row whose page model
+    label is no reading of the label asked for by any other reading the page model keeps of it, or by that reading with
+    an icon of its own page glued on, where the old rule (a prefix of one or two letters) finds none; only where exactly
+    one row reads so, and only where its lit bar, read once there, is the row (above, "IP Address Setting").
+  - The OSD eyes take their polling target, `_live.png` at the top of the run's folder, away when they close, on every
+    run (above).
 - The menu navigation every run shares (`kit/crawl_run.py`, which `drive.py`, the walk and every prover go by) changes
   with or without `--network`: a group whose name the page model read one letter off a never-open group's or action's
   name ("FTP Transter" for FTP Transfer) is never jumped into by the group column, refused before any press, and the

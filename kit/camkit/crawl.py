@@ -16,6 +16,12 @@ crawl is given those rows (network: kit/crawl_run.py --network, docs/decisions/0
 address screen, never a row whose stored reason or any reading says another class. Such a row is looked at only: Down round its list or
 carousel (LOOK_WALKED), never a second axis, a panel or a submenu, with --panels too; the camera's own check
 (camkit.live.LiveCamera) refuses anything else there besides.
+
+A row whose Right the camera refuses because of the lit row itself (safety.RowRefused, raised before the press goes
+out: the lit row read as one the run may not open, or read by no reader) is skipped, "skipped: refused (...)", and the
+crawl goes on: nothing was pressed on it. Any other refusal at that Right (a look-only lock still on, the link's own
+guard), any refusal while a row a network decision opened is still open, and a refusal after a press on a row (inside
+its walk) is raised, and the lap is cancelled (kit/crawl_run.py).
 """
 from dataclasses import dataclass, field
 
@@ -53,6 +59,10 @@ class RowResult:
     # a Wi-Fi or Bluetooth setting's notice, the row greyed ("This function is currently disabled."), as the kit keeps it
     # (safety.notice_kept: a notice it knows, naming no identity or credentials); "" for every other row
     notice: str = ""
+    # the decided row a network decision opened it as (network_row: "IP Address Setting" for a row the page model
+    # labels "LANIP Address Setting"); "" for every other row. kit/crawl_run.py keeps it as the row's label on a run
+    # that withholds the labels it does not know (kept_row)
+    decided: str = ""
 
 
 @dataclass
@@ -152,16 +162,21 @@ def network_open(row: dict, network, group: str = "") -> bool:
     of the same class; and the decision names the row (safety.network_lifted), its label or, read with an icon of its
     page glued on, where another reading of the row is the decided row exactly and the glued letters are a word of the
     page's group (`group`, the page's breadcrumb's second part: safety.lifted_readings)."""
+    return network_row(row, network, group) is not None
+
+
+def network_row(row: dict, network, group: str = "") -> str | None:
+    """The decided row (of `network`) the crawl opens the never-open row `row` as, on network_open's terms, or None."""
     label = row.get("label") or ""
     cls, fresh, stored = safety.lift_class(label), safety.never_open(label), row.get("never_open")
     if not network or cls in (None, safety.LIFT_ADDRESS):
-        return False
+        return None
     if stored and stored.split(":", 1)[0] != fresh.split(":", 1)[0]:
-        return False
+        return None
     if any(safety.never_open(t) and safety.lift_class(t) != cls for t in row_readings(row)):
-        return False
+        return None
     entry = {"group": group or "", "readings": [label, *row_readings(row)]}
-    return safety.network_lifted(label, network, readings={r: [entry] for r in network})
+    return safety.network_lifted_row(label, network, readings={r: [entry] for r in network})
 
 
 def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=None, panels=False,
@@ -180,14 +195,26 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     r = RowResult(page.get("page", ""), slot, label, "")
     why = row.get("never_open") or safety.never_open(label)
     crumb = str(page.get("breadcrumb") or "").split(" > ")
-    if why and not network_open(row, network, crumb[1] if len(crumb) > 1 else ""):
+    decided = network_row(row, network, crumb[1] if len(crumb) > 1 else "") if why else None
+    if why and decided is None:
         r.outcome = f"skipped: {why}"
         return r
     looked_at = bool(why)           # a row a network decision opens: its options are read, nothing is committed
     if looked_at:
-        r.network = safety.lift_class(label) or ""
+        r.network, r.decided = safety.lift_class(label) or "", decided
     p0 = cam.presses
-    cam.press("right")
+    try:
+        cam.press("right")
+    except safety.RowRefused as e:
+        # refused before it went out because of the lit row itself (the camera's own check): nothing was pressed on this
+        # row, so it is skipped and the lap goes on, the reason's quoted texts withheld (a bar can carry a value); never
+        # while a row a network decision opened is still open (its lock refuses what is no row's own refusal)
+        if any(getattr(cam, attr, None) is not None for attr in ("network_open", "identity_open", "address_open")):
+            raise
+        if hasattr(cam, "presses"):
+            cam.presses = p0
+        r.outcome = f"skipped: refused ({safety.quoted_withheld(e)})"
+        return r
     s = cam.read()
     r.kind = s.kind
     if same_state(s, row_screen):
@@ -198,6 +225,8 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             try:
                 r.walk = walk_cycle(cam, budget=120)
                 r.outcome = "walked (network row, looked at only)" if r.walk.complete else f"incomplete: {r.walk.note}"
+            except safety.Refused:
+                raise                            # after a press on the row: the lap is cancelled
             except Exception as e:
                 r.outcome = f"incomplete: {type(e).__name__}"
         else:
@@ -217,6 +246,8 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             else:
                 r.walk = WALKERS[s.kind](cam)
             r.outcome = "walked" if getattr(r.walk, "complete", False) else f"incomplete: {r.walk.note}"
+        except safety.Refused:
+            raise                                # after a press on the row: the lap is cancelled
         except Exception as e:                   # the twin raises for moves nobody recorded
             r.outcome = f"incomplete: {type(e).__name__}"
     elif s.kind == "submenu" and labels is not None and len(path) < MAX_DEPTH:

@@ -21,10 +21,12 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   the words for a proof's allowance (camkit.vlm.LOCAL_ONLY set)
     network_values(rows, model)                   the values the page model and the definition know for those rows
     network_readings(rows, model)                 every reading the page model keeps of each such row, and its page's group
-                                                  (an icon of the page glued on)
+                                                  (an icon of the page glued on); label_readings(model), every label and
+                                                  reading of a row the kit knows (safety.other_label)
     known_labels(model); known_values(model)      the menu's row labels, never an option or a value, and the values, for
                                                   what a --network run keeps of a screen it withholds; row_values(model),
-                                                  the values by row label
+                                                  the values by row label (every reading of it); defined_values(), the
+                                                  definition's alone, for a withheld list's option names
     known_groups(model)                           the menu's group names, for safety.group_refused
     add_owner_argument(ap)                        --owner, drive.py's alone: a row a dated owner decision names
     rows = owner_decided_or_exit(model)           those rows ({entry: info}: camkit.safety.owner_decided), or a stop
@@ -34,6 +36,9 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   it: the start file goes back by hand (camkit.runs)
     sys.exit(EXIT_NOT_CONFIRMED)                  a run's exit when that press brought up the row's own question,
                                                   cancelled with MENU and restored: nothing confirmed
+    sys.exit(EXIT_REFUSED)                        a run's exit when a refusal stopped its work part way, its start
+                                                  file restored and checked (kit/crawl_run.py); EXIT_INCOMPLETE, when
+                                                  anything else did
 
 Only camkit is imported at the top: crawl_run imports this, and prove_run's parts import crawl_run, so the prover's
 own pieces (to_shooting) are imported where they are used.
@@ -59,7 +64,8 @@ from camkit.screen import same_position
 # out, the last download was refused so nothing was restored, or the restore itself failed (restoring). kit/tools/
 # chain.py stops the chain after a step that exits with it, as after a failed upload; both take it from
 # kit/exit_status.py, which imports nothing
-from exit_status import EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED  # noqa: F401 (the runners import them here)
+from exit_status import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_REFUSED, EXIT_RESTORE_BY_HAND,  # noqa: F401
+                         EXIT_UNRESTORED)    # the runners import them here
 
 SETTLE_S = 5.0          # after the start download: MENU within ~4 s of a download leaves the menu locked
 
@@ -646,8 +652,8 @@ def write_text(path, text: str) -> None:
     """The file replaced whole, by a temporary file beside it renamed over it: a run stopped mid-write (a crash, a
     killed process, a power cut: the data reaches the disk before the rename) leaves the file as it was, never cut
     short (a walk's tables.json holds hours of walking). The file keeps its permissions, and a new one gets what
-    open() would give it (the umask's), not mkstemp's owner-only 0600. A symbolic link is written through, to the file
-    it names, as open(path, "w") wrote through it."""
+    open() would give it (the umask's, a private run's 0077 among it), not mkstemp's owner-only 0600. A symbolic link
+    is written through, to the file it names, as open(path, "w") wrote through it."""
     path = Path(path)
     if path.is_symlink():
         path = path.resolve()
@@ -657,7 +663,9 @@ def write_text(path, text: str) -> None:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())
-        os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode) if path.exists() else 0o666 & ~_UMASK)
+        # a private run's folder (camkit.runs.UMASK_FLOOR: a --network or --owner run) gets no looser file than 0600
+        from camkit import runs
+        os.chmod(tmp, stat.S_IMODE(os.stat(path).st_mode) if path.exists() else 0o666 & ~(_UMASK | runs.UMASK_FLOOR))
         os.replace(tmp, path)
     except BaseException:
         with contextlib.suppress(OSError):
@@ -742,7 +750,7 @@ def restoring(what: str = "the restore"):
 
 
 def end_session(link, eyes, start: Path, why: str = "the settings download after the rows", tag: str = "after",
-                reach=None, show: int | None = None, expected=frozenset()):
+                reach=None, show: int | None = None, expected=frozenset(), keys: bool = False):
     """The session's end (decision 15): back to the shooting screen, then camkit.session.finish (download, compare with
     `start`, upload it when anything differs). `reach(link, eyes, why)` gets there: prove_run's to_shooting by default
     (MENU until the shooting screen), wait_shooting for a walker that has closed the menu itself. When the shooting
@@ -753,7 +761,8 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
     EXIT_UNRESTORED): the STOP still refuses every further press (camkit.link: no press, dial or set after a STOP but
     a cleanup press), never the download and the upload a restore is made of. A restore that raises (the upload
     refused or unanswered) exits EXIT_UNRESTORED (restoring). show=0 counts the records that differ from the start file
-    and lists none (camkit.session.ended), for a prover that never prints a value the start file holds (afreg_run).
+    and lists none (camkit.session.ended), for a prover that never prints a value the start file holds (afreg_run);
+    keys=True with it lists their keys, never a value (a --network or --owner run: values_withheld).
     expected: records no settings file sets which the run is known to write (camkit.session.ended), said by key and
     left out (memreg_run: a memory slot's registration marks)."""
     if reach is None:
@@ -767,13 +776,31 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
             print(f"   {why}: {type(e).__name__}: {e}; restoring all the same", flush=True)
         time.sleep(1)
         return session.finish(link, start, tag=tag, **({} if show is None else {"show": show}),
-                              **({"expected": frozenset(expected)} if expected else {}))
+                              **({"expected": frozenset(expected)} if expected else {}), **({"keys": True} if keys else {}))
 
 
 def wait_shooting(link, eyes, why: str):
     """end_session's reach for a walker that closed the menu itself: wait for the shooting screen (camkit.session's
     wait_for, a black HDMI frame read on the SDK's OSD)."""
     session.wait_for(eyes, ("shooting",), why, link=link)
+
+
+# what the session's end says and keeps of the records that differ on a run whose records can hold an address, an
+# identity, a credential or a value the owner did not choose to log (a --network or --owner run): their keys and their
+# count, never a value (end_session, restore_checked, camkit.session.ended and verify_restore)
+VALUES_WITHHELD = {"show": 0, "keys": True}
+
+
+def values_withheld(on: bool) -> dict:
+    """end_session's, restore_checked's and camkit.session.ended's keywords for a run that says no record's value (`on`:
+    a --network or --owner run): VALUES_WITHHELD, else {}."""
+    return dict(VALUES_WITHHELD) if on else {}
+
+
+def changes_kept(changes, values: bool = True) -> list:
+    """A run's changes as its results file keeps them: changes_of, or, where values are withheld (`values` False: a
+    --network or --owner run whose decision does not log values), [{"key"}] alone, never a before or an after."""
+    return changes_of(changes) if values else [{"key": c.key} for c in changes or ()]
 
 
 def restore_checked(run, ending, start: Path, note: str = "THE START FILE DID NOT TAKE: check the camera",
@@ -1232,16 +1259,28 @@ def _shown_values(row: dict) -> set:
 def row_values(model=None) -> dict:
     """{a row's label: the values the kit knows for it}: each value and option name (value_names) of every setting of the
     camera's definition whose row path ends in that label, and every value each page of the page model (model: {page
-    key: page}) shows beside a row of that label, every reader's reading of it included. safety.blocker_known and
-    label_alone judge a row's label and a value together by it."""
+    key: page}) shows beside a row, filed under every reading the page model keeps of that row's label (row_readings:
+    the value shown beside OCR's "LANIP Address Setting" counts for the vision reader's "IP Address Setting" too,
+    2026-11-14), every reader's reading of the value included. safety.blocker_known and label_alone judge a row's label
+    and a value together by it."""
     out = {}
     for s in _settings(definition()):
         if _path(s):
             out.setdefault(_path(s)[-1], set()).update(value_names(s))
     for row in _model_rows(model):
-        label = row.get("label")
-        if isinstance(label, str) and label.strip():
+        for label in dict.fromkeys(row_readings(row)):
             out.setdefault(label, set()).update(_shown_values(row))
+    return out
+
+
+def defined_values() -> dict:
+    """{a row's label: the value and option names the camera's definition gives the settings whose row path ends in that
+    label} (value_names), the definition's alone: never a value a page model shows, which is the value the owner's camera
+    held. What a withholding run shows of an option list (camkit.safety.kept_screen's options)."""
+    out = {}
+    for s in _settings(definition()):
+        if _path(s):
+            out.setdefault(_path(s)[-1], set()).update(value_names(s))
     return out
 
 
@@ -1290,6 +1329,9 @@ def known_groups(model=None) -> set:
 
 # what OCR reads a row's icon as, glued to its label or set before it: a letter or two ("G" in "GAirplane Mode On")
 _ICON_BEFORE = re.compile(r"[0-9a-z]{1,2} ?")
+# a page model's label this short (once plain) is an icon read as letters, never kept as a label alone unless the
+# definition has it (2026-11-14: a "B" kept as a field name on a menu page)
+SHORT_LABEL = 2
 
 
 def label_alone(label: str, defined=frozenset(), values=None, bases=()) -> bool:
@@ -1303,6 +1345,8 @@ def label_alone(label: str, defined=frozenset(), values=None, bases=()) -> bool:
     if label in defined:
         return True
     seen = safety.plain(label)
+    if len(seen) <= SHORT_LABEL:
+        return False            # one or two characters: an icon read as letters ("B"), no label the definition has
     if ":" in label or re.search(r"\d[.:]\d|\d{3}", label) or safety.identity_screen(label):
         return False
     if any(seen.startswith(safety.plain(d) + " ") for d in defined if safety.plain(d)):
@@ -1318,6 +1362,17 @@ def label_alone(label: str, defined=frozenset(), values=None, bases=()) -> bool:
                 if seen == whole or (seen.endswith(whole) and _ICON_BEFORE.fullmatch(seen[:-len(whole)])):
                     return False
     return True
+
+
+def label_readings(model=None) -> set:
+    """Every label the kit knows a menu row by: the camera's definition's row labels (row_labels, its menu's among them)
+    and every label and reading the page model (model: {page key: page}) keeps of each row (row_readings). What a tail a
+    lit bar carries after a decided row's label, where no value of the row is known, must make no other of
+    (camkit.safety.other_label: never "Wi-Fi Connect Settings" for Wi-Fi Connect)."""
+    out = set(row_labels(definition()))
+    for row in _model_rows(model):
+        out |= set(row_readings(row))
+    return {x for x in out if isinstance(x, str) and x.strip()}
 
 
 def row_readings(row: dict) -> list:
@@ -1345,16 +1400,17 @@ def network_readings(decided, model=None) -> dict:
 
 def network_values(decided, model=None) -> dict:
     """{row: the values the kit knows for it} for the rows a network decision opens: the value each page of the page
-    model (model: {page key: page}) shows beside a row of that label, or beside a row another reader read as that label
-    (safety.row_read_as: every reading of it of the row's class), every reader's reading of the value included, and the
+    model (model: {page key: page}) shows beside a row one of whose readings (row_readings: its label, each reader's
+    reading of it) is that label, every reader's reading of the value included, as row_values files them, and the
     values the camera's definition gives the settings whose menu row ends in that label. A menu row's bar carries its
-    value after its label: safety.network_lifted_row lets that through only where the value is one of these."""
+    value after its label: safety.network_lifted_row lets that through only where the value is one of these, or, where
+    none is known, a short tail naming nothing (safety.unknown_tail)."""
     out = {r: set() for r in decided}
 
     def of(label):
         return [r for r in decided if safety.plain(r) == safety.plain(label or "")]
     for row in _model_rows(model):
-        for r in dict.fromkeys([*of(row.get("label")), *(r for r in decided if safety.row_read_as(r, row_readings(row)))]):
+        for r in dict.fromkeys(r for t in row_readings(row) for r in of(t)):
             out[r] |= _shown_values(row)
     for s in _settings(definition()):
         path = s.get("row")

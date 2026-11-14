@@ -20,12 +20,29 @@ asks local readers only (camkit.vlm.LOCAL_ONLY), marks its folder so (camkit.vlm
 frames later ask local readers only too), and writes each such row's class in rows.jsonl ("network"); for a Wi-Fi or
 Bluetooth setting (never an identity row) that answers Right with a notice the kit knows ("This function is currently
 disabled.", "... not available as follows ...") naming no identity or credentials, the notice's text too ("notice":
-safety.notice_kept), so why the row is greyed is recorded.
+safety.notice_kept), so why the row is greyed is recorded. From its start to its end such a run prints and keeps no text
+read off the screen: a row's label only where it is a row label the kit knows (runner.known_labels, the decisions' own
+rows, the decided row a lifted row was opened as), else "(withheld)", and the quoted texts of an outcome, a note or an
+error withheld (kept_row); its folder is owner-only (camkit.runs: folders 0700, files 0600, on POSIX), checked at the
+end.
+
+A row whose opening the camera refuses because of the lit row itself (safety.RowRefused: the lit row read as one the
+run may not open, or read by no reader) before any press went out on it is skipped, "skipped: refused (...)" with the
+reason's quoted texts withheld, and the lap goes on (camkit.crawl.visit_row); any other refusal, and a refusal after a
+press on the row, cancels the lap. Once its start file is back and checked, a run a refusal stopped exits EXIT_REFUSED
+(7), and one stopped short by anything else (an error, a screen the scan does not know, the start label not reached,
+the crawl lost or off the scan) EXIT_INCOMPLETE (8); a STOP, the lap complete or --limit reached exit 0; a restore that
+did not check out exits EXIT_UNRESTORED (4) (kit/exit_status.py; kit/tools/chain.py stops on each).
+
+Navigation guesses nothing: where the lit group in the group column cannot be read, it is read again once after a short
+settle, then on the camera's own picture of its screen (the SDK's OSD image); if none names it, nothing more is pressed
+and the row is not reached (jump, from_groups: lit_group).
 
 Results: kit2_crawl/rows.jsonl (one line per row), frames and presses in shots/ and events.jsonl. Every run folder
 named here is in the camera's runs/<model>_fw<fw>/ (camkit.paths).
 """
 import argparse
+import contextlib
 import json
 import re
 import sys
@@ -42,9 +59,10 @@ from camkit.live import lit_text, LiveCamera, submenu_labels, text_of  # noqa: E
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_network_argument, add_scan_argument, close_for_restore, end_session,  # noqa: E402
-                    known_groups, known_labels, load_scan, network_decided_or_exit, network_readings, network_values,
-                    restore_checked, row_values, wait_shooting)
+from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_network_argument, add_scan_argument,  # noqa: E402
+                    close_for_restore, end_session, known_groups, known_labels, label_readings, load_scan,
+                    network_decided_or_exit, network_readings, network_values, restore_checked, row_readings,
+                    row_values, values_withheld, wait_shooting)
 
 
 def summary(r) -> dict:
@@ -62,6 +80,8 @@ def summary(r) -> dict:
            "options": opts, "presses": r.presses, "note": getattr(w, "note", "") if w else ""}
     if getattr(r, "network", ""):
         out["network"] = r.network                          # opened under a network decision: safety.lift_class
+    if getattr(r, "decided", ""):
+        out["decided"] = r.decided                          # the decided row it was opened as (camkit.crawl.network_row)
     if getattr(r, "notice", ""):
         out["notice"] = r.notice                            # why a greyed network setting is unavailable (notice_kept)
     frames = option_frames(w)
@@ -121,9 +141,18 @@ def go_to(cam, cycle, model, j, label, place=None):
     none there, None."""
     from page_model import same_text
     tabs = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")
-    matches = [i for i, p in enumerate(cycle) if p["kind"] == "menu" and p["page"] in model
-               and p["row"] is not None and p["row"] < len(model[p["page"]]["rows"])
-               and same_text(model[p["page"]]["rows"][p["row"]]["label"], label)]
+
+    def found(named) -> list:
+        return [i for i, p in enumerate(cycle) if p["kind"] == "menu" and p["page"] in model
+                and p["row"] is not None and p["row"] < len(model[p["page"]]["rows"])
+                and named(model[p["page"]], model[p["page"]]["rows"][p["row"]])]
+    matches = found(lambda page, row: same_text(row["label"], label))
+    fallback = not matches
+    if fallback:
+        # the page model's label is one reading (OCR's "LANIP Address Setting", the Wired LAN page's icon glued on); the
+        # row is found by any reading it keeps, or by that reading with an icon of its own page glued on (row_named): only
+        # where exactly one row reads so, and only where its lit bar reads the row once there (bar_on_row, below)
+        matches = found(lambda page, row: row_named(row, label, page_group(page)))
     if place is not None:
         def crumb(i):
             parts = [unglued(x.strip()) for x in (model[cycle[i]["page"]]["breadcrumb"] or "").split(" > ")]
@@ -131,6 +160,10 @@ def go_to(cam, cycle, model, j, label, place=None):
         matches = [i for i in matches if crumb(i) == [safety.plain(x) for x in place]]
     # My Menu repeats rows from other tabs (Pre-Capture Settings is on My Menu 1): prefer the real one
     real = [i for i in matches if model[cycle[i]["page"]]["breadcrumb"].startswith(tabs)]
+    if fallback and len({(cycle[i]["page"], cycle[i]["row"]) for i in (real or matches)}) > 1:
+        print(f"no row labelled {label!r} in the page model, and {len(real or matches)} rows read as it: none is gone "
+              "to", flush=True)
+        return None
     target = (real or matches or [None])[0]
     if target is None:
         print(f"no row labelled {label!r} in the page model", flush=True)
@@ -164,7 +197,43 @@ def go_to(cam, cycle, model, j, label, place=None):
         j = (j + step) % n
         if not same_position(cam.read(), cycle[j]["screen"]):
             return None
+    if fallback:
+        # a row found by another reading: its lit bar, read now, must be the row (safety.bar_on_row: its label, or the
+        # reading with its page's icon glued on where another reader read the row exactly), else nothing more
+        row = model[cycle[j]["page"]]["rows"][cycle[j]["row"]]
+        entry = {"group": page_group(model[cycle[j]["page"]]), "readings": [row.get("label") or "", *row_readings(row)]}
+        lit = lit_text(cam.frame.image, cam.frame.path)
+        if not safety.bar_on_row(lit, label, {label: [entry]}):
+            print(f"the row the page model reads as {label!r} is lit, but its bar does not read it: "
+                  f"{said(cam, lit)}", flush=True)
+            return None
     return j
+
+
+def page_group(page) -> str:
+    """A page model page's group: its breadcrumb's second part ("Network > Wired LAN": Wired LAN), "" without one."""
+    crumb = str((page or {}).get("breadcrumb") or "").split(" > ")
+    return crumb[1].strip() if len(crumb) > 1 else ""
+
+
+def row_named(row: dict, label: str, group: str) -> bool:
+    """Whether the page model's row `row`, on a page of the group `group`, is the row `label` names, for go_to where its
+    label as the page model voted it is no reading of `label`: one of the readings it keeps (runner.row_readings: its
+    label, each reader's) is `label` exactly once plain (safety.plain), or is `label` with an icon of its page read as
+    letters glued to its front (safety.glued_icon: a word of the page's own group name, of at most safety.ICON_MAX
+    letters, naming nothing never-open or of identity, the label's class kept). "LANIP Address Setting" on the Wired LAN
+    page is IP Address Setting; a word set before a label ("LAN IP Address Setting", "No Wi-Fi Connect") is another
+    label. Only where to go: whether a row may be opened is judged at the press, as ever."""
+    want = safety.plain(label)
+    if not want:
+        return False
+    for t in row_readings(row):
+        seen = safety.plain(t)
+        if seen == want:
+            return True
+        if len(seen) > len(want) and seen.endswith(want) and safety.glued_icon(seen[:-len(want)], label, group) is None:
+            return True
+    return False
 
 
 # The menu's tab column, top to bottom, below Main (never passed through: it is a tile page). From a
@@ -272,9 +341,10 @@ def from_groups(cam, cycle, model):
         return None
     names = group_names(cycle, groups, model, tab)
     lit = lambda: lit_text(cam.frame.image, cam.frame.path)        # noqa: E731
-    at = group_near(lit(), names)
+    at = lit_group(cam, names, lit, group_near)
     if at is None:
-        print(f"the menu opened in the group column and the lit group could not be read: {said(cam, lit())}", flush=True)
+        print(f"the menu opened in the group column and the lit group could not be read, nor on a second look or the "
+              f"camera's own picture: {said(cam, lit())}; nothing is pressed", flush=True)
         return None
     order = sorted((i for i, n in enumerate(names) if n), key=lambda i: (abs(i - at), i))
     target = next((i for i in order if not safety.group_refused(names[i], known)
@@ -334,6 +404,53 @@ def group_shown(text: str, names: list) -> int | None:
     return next((i for i, n in enumerate(names) if n and len(words) > 1 and same_text(words[1].split("\n")[0], n)), None)
 
 
+GROUP_SETTLE = 0.6          # s before the lit group, unread, is read again once (lit_group)
+
+
+def osd_lit(cam) -> str:
+    """The text the orange cursor lights on the camera's own picture of its screen (the SDK's OSD image, fetched into a
+    file of this process's own and removed after, as camkit.live.osd_kind fetches it; into the camera's own folder while
+    a row whose values are withheld is open), or "" when there is no link or it cannot be fetched or read."""
+    import os
+    import tempfile
+    from camkit.frames import load
+    link = getattr(cam, "link", None)
+    if link is None or not hasattr(link, "osd"):
+        return ""
+    folder = getattr(cam, "osd_folder", lambda: None)()
+    path = (Path(folder) / "group.png" if folder is not None
+            else Path(tempfile.gettempdir()) / f"camkit_osd_{os.getpid()}_group.png")
+    try:
+        return lit_text(load(link.osd(path)).image, path)
+    except Exception:
+        return ""
+    finally:
+        for left in (path, path.with_name(path.name + ".part")):
+            with contextlib.suppress(OSError):
+                left.unlink()
+
+
+def lit_group(cam, names: list, lit, named=None):
+    """Which of a tab's groups (`names`) the group column's lit bar names (`named`: group_shown, or group_near, judged
+    whole), or None: read as it is, then once more after GROUP_SETTLE s (the camera's own frame read afresh where the
+    camera can: cam.refresh), then on the camera's own picture of its screen (osd_lit). Nothing is pressed here, and
+    nothing guessed: None leaves the caller to press nothing more."""
+    named = named or group_shown
+    at = named(lit(), names)
+    if at is not None:
+        return at
+    time.sleep(GROUP_SETTLE)
+    refresh = getattr(cam, "refresh", None)
+    if callable(refresh):
+        with contextlib.suppress(Exception):    # a read that fails is no reading
+            refresh("group-again")
+    at = named(lit(), names)
+    if at is not None:
+        return at
+    seen = osd_lit(cam)
+    return named(seen, names) if seen.strip() else None
+
+
 def jump(cam, cycle, groups, target, model):
     """From a page's rows to the target row's group by the columns: Left twice to the tabs, Up/Down to
     its tab (read off the screen), Right, Down to its group, Right into its rows. Returns the position
@@ -359,15 +476,19 @@ def jump(cam, cycle, groups, target, model):
     # Customize reached Accessibility, 2026-11-07): the breadcrumb names the lit group, so the move is relative
     names = group_names(cycle, groups, model, tab)
     lit = lambda: lit_text(cam.frame.image, cam.frame.path)       # the breadcrumb says only the tab here
-    at = group_shown(lit(), names)
+    at = lit_group(cam, names, lit, group_shown)
     if at is None:
-        print(f"the lit group could not be read in {said(cam, lit())}: taking it as the first", flush=True)
-        at = 0
+        # never a guess before a Down or a Right (2026-11-14: "taking it as the first" moved from a group nobody read)
+        print(f"the lit group could not be read in {said(cam, lit())}, nor on a second look or the camera's own picture: "
+              "nothing more is pressed, and the row is not reached", flush=True)
+        return None
     d = group - at
     for _ in range(abs(d)):
         cam.press("down" if d > 0 else "up")
-    if d and group_shown(lit(), names) not in (group, None):
-        print(f"the group column did not reach group {group + 1} of {tab!r}: {said(cam, lit())}", flush=True)
+    if d and lit_group(cam, names, lit, group_shown) != group:
+        # the group reached must be read as the one meant: one that cannot be read gets no Right either
+        print(f"the group column did not reach group {group + 1} of {tab!r}, or its lit group could not be read: "
+              f"{said(cam, lit())}", flush=True)
         return None
     refused = group_closed(cam, lit(), known_groups(model))
     if refused:
@@ -381,6 +502,33 @@ def jump(cam, cycle, groups, target, model):
     elif groups.get(cycle[j]["page"]) != (tab, group):
         print(f"landed in {groups.get(cycle[j]['page'])}, not {(tab, group)}: walking from there", flush=True)
     return j
+
+
+WITHHELD_LABEL = "(withheld)"
+
+
+def kept_row(row: dict, labels) -> dict:
+    """What a --network walk prints and keeps in rows.jsonl of one row's summary (summary): its label only where it is a
+    row label the kit knows (`labels`: runner.known_labels and the decisions' own rows, compared plain), or, for a row a
+    network decision opened, the decided row it was opened as ("decided": "LANIP Address Setting" is kept as IP Address
+    Setting); else WITHHELD_LABEL, since a page model's or a live page's reading can carry a value glued on ("Wi-Fi
+    ConnectOn", a device's name). Its outcome and note keep no quoted text (safety.quoted_withheld); the rows of a
+    submenu or a panel inside it alike. The counts, kinds, frames' names and the notice (safety.notice_kept) are kept."""
+    known = {safety.plain(x) for x in labels or () if isinstance(x, str) and safety.plain(x)}
+    out = dict(row)
+    label = str(row.get("label") or "")
+    out["label"] = (label if not label or safety.plain(label) in known
+                    else row["decided"] if row.get("decided") else WITHHELD_LABEL)
+    for k in ("outcome", "note"):
+        if isinstance(out.get(k), str):
+            out[k] = safety.quoted_withheld(out[k])
+    if isinstance(out.get("submenu"), list):
+        out["submenu"] = [kept_row(x, labels) for x in out["submenu"]]
+    if isinstance(out.get("details"), dict):
+        out["details"] = {k: ({**v, "rows": [kept_row(x, labels) for x in v["rows"]]}
+                              if isinstance(v, dict) and isinstance(v.get("rows"), list) else v)
+                          for k, v in out["details"].items()}
+    return out
 
 
 def show(row: dict, depth: int = 0):
@@ -410,11 +558,13 @@ def main():
     a = ap.parse_args()
     cycle, model = load_scan(a.scan)      # signatures from the current reader, not the one at scan time
     run = Run(a.run)
+    if a.network:
+        run.make_private()                # owner-only from here (camkit.runs), checked at the end (seal)
     network = network_settings_or_exit(run) if a.network else {}
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
-    ending = None
+    ending, refused, complete = None, False, False
     try:
         with Link(run) as link:
             hdmi.attach(link)
@@ -427,22 +577,42 @@ def main():
             time.sleep(5)                                  # MENU within ~3 s of a download locks the menu
             # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused)
             cam = LiveCamera(link, hdmi, run, network=network, values=network_values(network, model),
-                             readings=network_readings(network, model))
+                             readings=network_readings(network, model),
+                             labels=label_readings(model) if network else None)
             try:
-                crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
-                                tuple(a.tabs.split(",")) if a.tabs else None, network=network)
+                complete = crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
+                                           tuple(a.tabs.split(",")) if a.tabs else None, network=network)
+            except StopRequested:                           # a STOP: cancelled as ever, and no failure
+                print("STOP file: cancelling", flush=True)
+                complete = True
+                close_for_restore(cam, link)
             except Exception as e:                          # never leave a dialog or the menu open
-                print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
+                # a refusal that stops the lap (after a press on its row, or on the way to a row): the run's work is
+                # not done, whatever the restore says (EXIT_REFUSED below)
+                refused = isinstance(e, safety.Refused)
+                said_e = f"{type(e).__name__}: {e}"
+                print(f"error: {safety.quoted_withheld(said_e) if network else said_e}; cancelling", flush=True)
                 close_for_restore(cam, link)            # cleanup presses; when they fail too, the restore all the same
             # every run ends restoring its start file (decision 15), not only a --panels run, and even when the
             # shooting screen does not come back
-            ending = end_session(link, hdmi, before, "the final settings download", reach=wait_shooting)
-        restored = restore_checked(run, ending, before)
+            # a --network run says the records that differ by their keys alone (runner.values_withheld)
+            ending = end_session(link, hdmi, before, "the final settings download", reach=wait_shooting,
+                                 **values_withheld(bool(network)))
+        restored = restore_checked(run, ending, before, **values_withheld(bool(network)))
     finally:
         hdmi.close()
         results.close()
+        run.seal()                            # a --network run's folder checked owner-only
     if not restored:
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
+    if refused:
+        print("the lap was stopped by a refusal: its start file is back and checked, but the rows after it were not "
+              f"crawled (exit status {EXIT_REFUSED})", flush=True)
+        sys.exit(EXIT_REFUSED)               # a chain stops there (kit/exit_status.py)
+    if not complete:
+        print("the lap stopped short: its start file is back and checked, but the rows after where it stopped were not "
+              f"crawled (exit status {EXIT_INCOMPLETE})", flush=True)
+        sys.exit(EXIT_INCOMPLETE)            # a chain stops there too
 
 
 def network_settings_or_exit(run) -> dict:
@@ -458,23 +628,33 @@ def network_settings_or_exit(run) -> dict:
 
 
 def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
-                    network=frozenset()):
+                    network=frozenset()) -> bool:
     """MENU, find where it opened in the scan's cycle, crawl from there, close the menu. network: the Wi-Fi and
-    Bluetooth settings a dated owner decision opens (camkit.crawl.network_open)."""
+    Bluetooth settings a dated owner decision opens (camkit.crawl.network_open). True when the lap ended as it should
+    (complete, --limit reached, or a STOP); False when the menu opened on a screen the scan does not know, the start
+    label was not reached, or the crawl stopped short (off the scan, lost, an error)."""
     cam.press("menu")
     s = cam.read()
     j = next((i for i, p in enumerate(cycle) if same_position(s, p["screen"])), None)
+    complete, reached = False, True
     if j is not None and start_label:
         j = go_to(cam, cycle, model, j, start_label)
-    if j is None:
+        reached = j is not None
+    if not reached:
+        print(f"the start label {start_label!r} could not be reached by the scan; stopping", flush=True)
+    elif j is None:
         print(f"the menu is on a screen the scan does not know ({cam.read().kind}); stopping", flush=True)
     else:
         print(f"at scan position {j}; crawling", flush=True)
 
+        # a --network walk keeps no text read off the screen: its labels as the kit knows them (kept_row)
+        keep = (known_labels(model) | set(network)) if network else None
+
         def on_row(r):
-            results.write(json.dumps(summary(r)) + "\n")
+            row = summary(r) if keep is None else kept_row(summary(r), keep)
+            results.write(json.dumps(row) + "\n")
             results.flush()
-            show(summary(r))
+            show(row)
         try:
             # a Wi-Fi or Bluetooth setting that answers Right with a notice keeps the notice's text where it is one the
             # kit knows and names no identity (camkit.crawl, safety.notice_kept)
@@ -482,14 +662,23 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
                         **({"tabs": tabs} if tabs else {}),
                         panels=panels, network=network,
                         notices=(text_of, known_labels(model), row_values(model)) if network else None)
-            print(f"crawl ended: {out.stopped or 'lap complete'}; {out.presses} presses, "
+            print(f"crawl ended: {(safety.quoted_withheld(out.stopped) if network else out.stopped) or 'lap complete'}; "
+                  f"{out.presses} presses, "
                   f"{len(out.rows)} rows; the menu closed by itself {len(out.recoveries)} times "
                   f"(reopened with MENU)", flush=True)
+            complete = not out.stopped or out.stopped.startswith(LAP_ENDS)
         except StopRequested:
             print("STOP file: cancelling to the menu", flush=True)
             cam.cancel_to_menu()
+            complete = True
     if cam.read().kind in ("menu", "tiles"):
         link.press("menu", cleanup=True)
+    return complete
+
+
+# camkit.crawl's stops that end a lap as asked: --limit reached, a STOP; any other stop (off the scan, lost, an error)
+# leaves the lap short (EXIT_INCOMPLETE)
+LAP_ENDS = ("row limit", "stop requested")
 
 
 if __name__ == "__main__":

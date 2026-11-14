@@ -23,6 +23,22 @@ def own_runs(tmp_path_factory, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def own_umask():
+    """The process's umask and camkit.runs.UMASK_FLOOR as they were before the test, put back after it: a private run
+    (camkit.runs.Run.make_private, a --network or --owner run's) sets both for its process, and no test's run reaches
+    another's file modes."""
+    import os
+    import sys
+    mask = os.umask(0o022)
+    os.umask(mask)
+    yield
+    os.umask(mask)
+    runs = sys.modules.get("camkit.runs")
+    if runs is not None:
+        runs.UMASK_FLOOR = 0
+
+
+@pytest.fixture(autouse=True)
 def fresh_readers():
     """camkit.vlm's state for one run cleared before and after every test (vlm.forget: the start check's verdict, the
     readers it skipped, the stand-ins, the failures said and the run they are logged in), so that no test's run

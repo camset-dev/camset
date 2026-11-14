@@ -108,13 +108,15 @@ and the default is no.
    Choosing an option needs the decision to name it, `"options": {"<row>": ["<option>"]}` (never one character, a
    button's word or a name of the never-open list), and no option is ever chosen in a row whose choice drops a link,
    starts a connection or a pairing, or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl, Airplane
-   Mode, Wired LAN Connect, Remote Shoot Function, Cnct. while Power OFF, the IP and USB rows, Language, NTSC/PAL,
-   Area/Date/Time). Such a run asks local readers only and marks its folder, so the tools that read its frames later
+   Mode, Wi-Fi Frequency Band, Wired LAN Connect, Remote Shoot Function, Cnct. while Power OFF, the IP and USB rows,
+   Language, NTSC/PAL, Area/Date/Time). Such a run asks local readers only and marks its folder, so the tools that read its frames later
    (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `reread_proofs.py`, `reader_census.py`)
    ask local readers only too and none about an identity row's frames, and a prover's way back to the shooting screen
    sends no OK to a notice that refuses MENU (nor, on any run, to one naming identity); a screen inside the row
-   that names identity or credentials gets MENU alone and no reader, and inside an identity row or on an address
-   screen the run shows and keeps field names and whole row labels alone, never a value. Credentials, the SSID, WPS,
+   that names identity or credentials gets MENU alone and no reader, and from the run's start to its end no screen's
+   text is printed or kept: row labels the kit knows, field names, a list's option names as the definition gives them
+   (never which one is lit), a notice as the kit keeps it, the count withheld, and the shooting screen as its kind
+   alone; its run folder is yours alone on macOS and Linux. Credentials, the SSID, WPS,
    access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
    connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
    Right does there), Server Setting and Edit Device Name stay by hand whatever a network decision says, and one naming
