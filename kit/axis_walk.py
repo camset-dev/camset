@@ -7,6 +7,8 @@ carousel, go to the option, press Right until the title comes back round or stop
 12), reading the title after each press; Left as many times back; MENU cancels the carousel, so
 nothing is committed. Settings are downloaded before and after and must not differ.
 Results: runs/<model>_fw<fw>/kit2_axes/axes.json {row: {option: [axis values in Right order, from the one held]}}.
+kit/prove_run.py on pass 1's map adds an axis job for every value the file lists; without it no second axis is proved,
+so walk the axes before proving.
 """
 import argparse
 import sys

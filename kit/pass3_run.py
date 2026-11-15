@@ -21,6 +21,9 @@ refused: that is a file edited by a script, which docs/decisions/0006 forbids si
 boot-looped the a1 II on 2026-11-01, and Link.upload refuses it (its bytes are no download's). For such a
 state, change the setting on the camera (the menu, or the owner by hand), watch it take, download it, and
 prove from that download with prove_run.py --start.
+
+Entries marked "on_request" run only when --only names them; a pass-3 entry's "first" is also the way to prove a row's
+starting option, which its own last proof only chooses again (it changes nothing).
 """
 import argparse
 import os

@@ -14,7 +14,9 @@ First a look per box: Up until the value stops changing or comes round, then Dow
 values in Down order), MENU. Then, as kit/prove_run.py does, per box: each value against the start,
 the one held last; every choice is the row, Right, Left/Right to the box, Up/Down until the value is
 read, OK, a settings download. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl (kind "list", the box name
-last in the path); the start file goes back on at the end and is checked.
+last in the path); the start file goes back on at the end and is checked. Each proof line keeps the vision model's
+reading of the chosen value ("vlm") beside OCR's ("shown"), as the second reading. The value a box opened on is proved
+only from another start: --first BOX=VALUE.
 """
 import argparse
 import json

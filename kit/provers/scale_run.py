@@ -55,6 +55,8 @@ Right until it stops (the scale's ends, in order), MENU. Then, as kit/prove_run.
 the one held last; every choice is the row, Right, Left/Right until the number is read, OK, a settings download.
 Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl (kind "list", labelled with the numbers); the start file goes
 back on at the end and is checked.
+The finder's rows (Viewfinder Bright.) are greyed while the HDMI cable is in: run them with it out (the owner's hand)
+and CAMSET_EYES=osd, from a page scan made through the OSD (the third example's kit2_page_scan_osd3).
 """
 import argparse
 import itertools

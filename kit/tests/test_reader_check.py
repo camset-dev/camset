@@ -174,7 +174,7 @@ def test_a_reader_that_does_not_answer_is_skipped_and_one_that_answers_stands_in
 
 
 def test_a_paid_second_reader_is_always_asked_and_a_local_one_stands_in_when_it_fails(world, monkeypatch, capsys):
-    """The playbook's own example gives Claude the second role and a local reader the third: the paid second reader is
+    """A paid reader in the second role (Claude, say) and a local reader in the third: the paid second reader is
     asked at the start even when the local one answers (a run asks it on every proof), and one whose key is not set
     is found there: the local reader stands in for it, said, rather than the run going on with OCR alone."""
     write, sent = world

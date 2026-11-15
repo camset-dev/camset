@@ -14,8 +14,8 @@ row opened on last), then each option with a second axis (runs/<model>_fw<fw>/ki
 value against that option's own base (the value it held last). Every choice is the row, Right,
 Up until the option is read, Right until the axis value is read, OK, then a settings download.
 The keys are not assumed to move one way: grip down, Down steps back through the carousel.
-Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl tagged with the context; the start file goes back on
-at the end and is checked.
+Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl tagged with the context, each keeping the vision model's
+reading of the chosen option ("vlm") beside OCR's ("shown"); the start file goes back on at the end and is checked.
 
 --af-point: Spot chosen the same way, then the AF point moved with the multi-selector on the
 shooting screen; what changed goes to runs/<model>_fw<fw>/kit2_pass2/afpoint.jsonl.

@@ -79,6 +79,14 @@ they part is counted (pairs). --dry-run asks nothing and says what a run would a
 it; --parallel asks a local server several questions at once (at most its config's "parallel" and 8); --fail-run sets
 the failures in a row after which a reader is asked nothing more.
 
+What --questions decides: a kind's caller moves onto its new question only once, with each reader the owner uses, the
+new question names the proved option on nearly every sampled frame, never less often than the old one, and its wrong
+options are rare; options are handed to the reader only where the decoy list shows no wrong picks from the list. A
+kind that falls short keeps its old question. A third question (.v3, beside the pinned second) is kept only where it
+names the proved option more often on the sample and no less often on --held-out, with no more wrong options (so far
+only the title's). When the list's caller moves, a list proof on a carousel whose second axis lights a strip cell asks
+the carousel's question instead.
+
 Decision 8 (docs/decisions/0008): a run a --network run marked (camkit.vlm.LOCAL_MARKER) is asked about by local
 readers only (camkit.vlm.local_only_runs: --questions leaves out a reader named that is not local, and stops when none
 is left), and no reader is asked about a proof of an identity or connection row a network decision opened.

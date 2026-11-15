@@ -1,51 +1,35 @@
 # Remapping a Sony camera's settings file: playbook for an agent
 
-This is for an AI agent asked to map the CAMSET `.DAT` settings file of a Sony body other than the
-one this project was built on: an a1 II (ILCE-1M2, firmware 4.00), mapped October 2026. Read all of
-it before touching the camera. Read the safety rules twice. A mapping begun with an older clone is
-updated first ([CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md)).
+This is for an AI agent asked to map the CAMSET `.DAT` settings file of a Sony body other than the a1 II (ILCE-1M2,
+firmware 4.00) this project was built on. Read all of it before touching the camera, and the safety rules twice. A
+mapping begun with an older clone is updated first
+([CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md)).
 
-**Goal:** for every record in the file, prove on the camera which menu setting it holds and what
-each stored value means. Then record those facts in the model's `data/<model>_fw<fw>/` folder, from which the kit
-writes its definition for the editor, `editor/definitions/<model>_fw<fw>.json`.
+**Goal:** for every record in the file, prove on the camera which menu setting it holds and what each stored value
+means, and record those facts in `data/<model>_fw<fw>/`, from which the kit writes the camera's definition,
+`editor/definitions/<model>_fw<fw>.json`. A record counts as "proved" only when the camera itself showed the option and
+wrote the value. Nothing is copied from another model or from documentation without proof.
 
-A record counts as "proved" only when the camera itself showed the option and wrote the value.
-Nothing is copied from another model or from documentation without proof.
+**Each tool documents itself.** Before you first run a kit command, read its docstring (the top of the file) and
+`--help`: they hold its options, limits and refusals, which this playbook does not repeat.
 
 **What you deliver:**
-- The `data/<model>_fw<fw>/` folder ([which files, and how each is made](DATA_CONTRACTS.md#what-a-mapping-delivers))
-  and the model's page (below).
-- The model's definition, `editor/definitions/<model>_fw<fw>.json`
-  ([decision 19](decisions/0019-definitions-are-files-one-per-model-and-firmware.md)): `kit/schema_update.py --write`
-  writes it last, with that camera the one the kit works on (Phase 6), never another camera's; the owner opens their
-  files with it in the editor the same day (Settings > Camera support & web page > Add definition…). It is lean: how,
-  when and in which run each thing was proved goes into `private/evidence/<model>_fw<fw>.json`, and the menu tree, the
-  accepted rulings and the record shapes into `private/evidence/<model>_fw<fw>/`; both stay with the owner and are
-  never part of the submission ([the evidence](DATA_CONTRACTS.md#the-mappings-evidence)).
-- What the mapping found by hand (a record's name or note the camera proved wrong, a record the menus never write,
-  a value no menu offers, a copy, why a record cannot be proved), in the camera's hand tables file,
-  `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json`, written by hand and part of the `data/` folder, which the
-  writer applies to the definition (Phase 6); how each was proved goes into your
-  `private/evidence/<model>_fw<fw>.hand.json`, which stays with you
-  ([the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand) lists the tables a
-  new model's pass reads).
-- `runs/<model>_fw<fw>/<run>/proofs.jsonl`: one line per proof, with evidence frames and downloads, in the camera's
-  own folder of runs (section 7, "Where runs go"). It stays local and is never published; so does the proof viewer
-  (`kit/tools/proof_viewer.py`), your own check of each value against the camera's screens, which exists only where
-  the kit has run on the camera and is never part of the submission.
-- Notes in `docs/`: each camera behaviour once, on the model's page (`docs/models/<MODEL>_fw<FW>.md`, which a
-  definition's `layouts[].doc` names; the a1 II's is `models/ILCE-1M2_fw4.00.md`), whose entry in `mkdocs.yml`'s
-  nav `kit/tools/build_docs.py` writes; your own record of each session in your `private/`; the method in `KIT_PLAN.md`. The docs site renders the Status page, the
-  memory map and the model page's measured block from the definition when it is built; `kit/tools/build_docs.py` rebuilds the
-  committed generated files (the record names, the readers), and the pre-commit hook stops a commit that left one
-  stale.
-- A setting no proof can reach gets `unproved_reason` with its kind and why instead of staying "not proved":
-  `not_on_camera` (not in this body's menu, or never written by it), `state` (a working value the camera keeps),
-  `camera_only` (only the camera's own saves write it), `equipment` (greyed without equipment you do not have),
-  `network` (a network block, by hand only), `unknown` (every candidate row tried, none moved it); `skipped` is for the
-  owner's own exclusions. The editor and the proof viewer show the reason; each camera's are its hand table
-  `UNPROVED` (in its hand tables file; the a1 II's, `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, is the
-  pattern).
+- The `data/<model>_fw<fw>/` folder ([which files, and how each is made](DATA_CONTRACTS.md#what-a-mapping-delivers)),
+  with the camera's hand tables file for what the mapping found by hand
+  ([the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)). A setting no proof
+  can reach gets an `UNPROVED` entry there, its kind and why, instead of staying "not proved".
+- The definition, `editor/definitions/<model>_fw<fw>.json`
+  ([decision 19](decisions/0019-definitions-are-files-one-per-model-and-firmware.md)), which
+  `kit/schema_update.py --write` writes last, with that camera the one the kit works on (Phase 6), never another
+  camera's; its record names,
+  `docs/formats/sony_camset_ids_<model>_fw<fw>.ksy`, go with it. The owner opens their files with it the same day
+  (Settings > Camera support & web page > Add definition…). How each thing was proved stays with the owner, in
+  `private/evidence/` ([the evidence](DATA_CONTRACTS.md#the-mappings-evidence)), never in the submission.
+- Notes: each camera behaviour once, on the model's page (`docs/models/<MODEL>_fw<FW>.md`; the a1 II's,
+  `models/ILCE-1M2_fw4.00.md`, is the pattern), whose nav entry `kit/tools/build_docs.py` writes; your own record of
+  each session in your `private/`; the method in `KIT_PLAN.md`.
+- The evidence (`runs/<model>_fw<fw>/<run>/proofs.jsonl`, its frames and downloads) and the proof viewer
+  (`kit/tools/proof_viewer.py`) stay local, never part of the submission.
 
 ## 1. Rules that are never broken
 
@@ -225,387 +209,104 @@ and the default is no.
 
 ## 2. What carries over to a new model, and what does not
 
-**First, can the kit drive the body at all?** `kit/tools/body_check.py` says (section 4); what its answers mean, and how to
-build the table it reads from your own SDK, is in `QUICKSTART.md`, step 1.
-
-**Carries over (the kit):**
-- the file reader and writer (`kit/camkit/camset.py`) and the camera link (camlink, `kit/link/`, on Sony's
-  SDK);
-- the screen reader's screen types (`kit/camkit/screen.py`);
-- the scan, crawl and prove pipeline and every special prover;
-- the report and definition tools;
-- all the pitfalls below.
-
-Bodies with the 2021-and-later menu system (`QUICKSTART.md`, "What you need") share the same screens, so most
-readers should work unchanged.
-
-**Does not carry over (prove again):**
-- **Record ids, counts and value codes.** Treat every a1 II mapping as a hypothesis for the new
-  body, at most a hint of where to look.
-- **The menu's pages, rows and labels.** Scan and crawl again; each mode (Stills, Movie, S&Q) has
-  its own menu.
-- **Screen geometry and templates, if the UI resolution or layout differs.** That means the HDMI
-  crop, row pitch and battery glyph templates. Check them with `kit/tools/selftest.py` and
-  `kit/tests/score_screen.py`, and recut templates from the new camera's own frames.
-- **Which settings Camera Settings Reset leaves alone, which records a file cannot set, and which
-  records the camera writes only once.** Measure them again.
+Whether the kit can drive the body at all, `kit/tools/body_check.py` says (`QUICKSTART.md`, step 1). The kit carries
+over, and bodies with the 2021-and-later menu share the same screens. **Prove again:** record ids, counts and value
+codes (the a1 II's `data/ILCE-1M2_fw4.00/`, definition and page, `docs/models/ILCE-1M2_fw4.00.md`, are at most a hint
+of where to look: Recall Custom holds, for one, keep values the hold's screen never shows); each mode's menu pages, rows
+and labels; screen geometry and templates where the UI differs (section 16, step 4); which settings Camera Settings
+Reset leaves alone, which records a file cannot set, and which the camera writes only once.
 
 ## 3. The file
 
-The layout is the camera file's container block ([the container block](DATA_CONTRACTS.md#the-container-block-file));
-the ILCE-1M2's is on [the file format](formats/index.md) page too, as a Kaitai spec. Check every number on the new
-body: `kit/tools/identify.py` says whether a known block reads its files, and prints a draft when none does. `camset.read` and `camset.diff` are all a run needs. Keep the a1
-II's lessons about records in mind (its own record ids are on [its page](models/ILCE-1M2_fw4.00.md), "The file"):
+The layout is the camera file's container block ([the container block](DATA_CONTRACTS.md#the-container-block-file)),
+which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 
-- **Volatile records** change on every save, or follow the camera rather than the file
-  (`camset.VOLATILE`).
-  Find the new body's by downloading twice with no change, and by turning the camera.
-- **Records a file cannot set.** Upload a download and download again: anything that does not match
-  was never loaded.
-- **First-use records** hold 0 until their feature is used, then keep a value.
-- **Copies and linked records.** One menu choice often writes two to seven records: copies, an
-  "in use" record plus a per-mode record, or alternate numberings. The prover records all of them;
-  the report names each record by its own row.
-- **Arrays** carry per-slot values: Picture Profile (11 profiles), Creative Look (18 looks), the
-  Fn and Custom Key slots, and the memory tables. A definition keys them `global:0x....[i]`.
-- **The memory sets** hold copies of the live settings taken at registration.
+- **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 5).
+- **Records a file cannot set:** upload a download and download again; what does not match was never loaded.
+- **First-use records,** 0 until their feature is used.
+- **Copies and linked records:** one choice often writes two to seven records; the report names each by its own row.
+- **Arrays** of per-slot values (Picture Profiles, Creative Looks, Fn and Custom Key slots, the memory tables), keyed
+  `global:0x....[i]`, and **the memory sets,** copies of the live settings taken at registration.
 
 ## 4. Setup
 
-**First:** `.venv/bin/python kit/tools/body_check.py --model ... --link ... --eyes ...` with the owner's answers
-(which camera, how it connects, whether there is a capture dongle), after `kit/tools/sdk_support.py --json`
-(`QUICKSTART.md`, step 1). It says from the SDK's tables whether the kit can drive the body.
-
-**Hardware:**
-- the camera, with the lens cap on (so the live view behind dialogs is plain black) and test cards in both slots;
-- **eyes**, one of:
-  - an HDMI capture dongle (Elgato Cam Link 4K) at 1080p59.94, with HDMI Info. Display On, calibrated in `private/config.json`
-    `"hdmi"` (crop to the 640x480 canonical layout). Use a micro-to-full cable for micro-HDMI
-    bodies;
-  - no dongle: `"eyes": "osd"` (or `CAMSET_EYES=osd`), and every script watches the SDK's OSD
-    image. It was tested on the a1 II (its page, "Connection and capture"). Scan the menu with the same eyes the
-    runs will use;
-- the network (Wired LAN with access authentication) or a USB-C data cable to the computer.
-
-**Software,** as `QUICKSTART.md` step 1 installs it: the Sony Camera Remote SDK (`kit/sdk/`, v2.02) and the link;
-Apple Vision OCR on the Mac and RapidOCR everywhere, which miss different rows, so the page model counts them as two
-votes (`PORTING.md` has the comparison; on Windows and Linux RapidOCR is the only OCR); and the VLMs in
-`private/config.json` `"readers"` (section 5).
-
-**Connecting:**
-- **Over the network:** the camera's IP is `camera_ip` in `private/config.json`, the credentials
-  file is the owner's, and the camera's Remote Shoot Function must be On.
-- **Over USB:** `export CAMSET_USB=1` in the shell, for every script; the config has no USB setting.
-  The camera's USB Connection Mode must be PC Remote, and the computer must see the camera: `ioreg -p IOUSB` lists
-  it on a Mac, `lsusb | grep 054c` (Sony's USB vendor id) on Linux, and Device Manager shows "Sony Remote Control
-  Camera" on Windows (`PORTING.md`).
-
-**Mac quirks already solved:** `QUICKSTART.md` step 1, "On macOS".
-
-**Before anything else:** the offline tests and the self-test (`QUICKSTART.md` steps 1 and 6).
+`QUICKSTART.md`, steps 0 to 6, sets everything up, from the owner's three answers to the eyes checked. Lens cap on (the
+live view behind dialogs is then plain black), test cards in both slots, and the same eyes for the scans as for the
+runs.
 
 ## 5. Readers: accuracy before speed
 
-Every name and value label in a definition comes from at least two independent readings that agree.
-The kit is built around that rule, so it needs reading tools. **More readers, and stronger ones,
-give better labels. This project chose accuracy over time:** a slower run with more readers is the
-right trade.
-
-**The readers and what each is good and bad at:**
-- **OCR** (Apple Vision, `kit/ocr`, local, about 0.1-0.3 s a frame): exact characters, numbers and
-  punctuation. It reads icons as letters ("S&d", "MR", "(V)", "#") and confuses Latin with Cyrillic
-  look-alikes ("30р", "ОК"), returns accented letters for an icon read as a letter and a Cyrillic ZE
-  for the 3 of PP3. It clips short words ("Aut") and merges neighbours ("15" for the ◂ and the 5), and
-  it drops short numbers, one and two digits, more often than it misreads them. Apple's recognition
-  changes with the system: since macOS 27.2 it misses a scale's end number on many Creative Look
-  frames. **RapidOCR** (PaddleOCR's models on ONNX Runtime, every OS, about 0.2 s a frame) is
-  the second engine. It reads icons as letters less often but drops a letter now and then
-  ("Create Still mage"). The page model counts the two as separate votes (`ocr`, `ocr2`), and on
-  Windows and Linux RapidOCR is the first engine (`PORTING.md`).
-- **Vision-language models (VLMs)** (any OpenAI-compatible `/v1` server, `private/config.json`
-  `"readers"`: name, url, model, parallel): they read meaning and ignore icons, and they read turned
-  screens. But they **invent answers on black or blank frames**: Framing Stabilizer's black preview
-  frame became "Auto", titled White Balance. They also drop marks ("Spot S" for "Spot: S") and
-  sometimes answer with the icon's text, and a question can make them read another thing on the
-  screen: a button, the screen's title, a neighbouring row. This project used Qwen3.8 27B
-  (`RedHatAI/Qwen3.8-27B-INT4`), INT4 on a GPU server through vLLM (8 parallel, about 1 s a frame),
-  plus the same model 4-bit through omlx on the Mac as the third reader.
-- **Claude** (`kit/camkit/claude_reader.py`, through the Anthropic Messages API): a reader entry
-  with `"kind": "anthropic"`, for example
-  `{"name": "claude", "kind": "anthropic", "model": "claude-opus-5-5", "parallel": 4, "effort": "medium"}`.
-  - It needs no GPU of your own: a strong second or third reader where no local server exists.
-  - Credentials come from the environment (`ANTHROPIC_API_KEY`, or `ant auth login`). The kit never
-    stores a key.
-  - Each frame is paid for once and cached; refusals are not cached.
-  - Requests opt into server-side fallbacks, so a declined request is re-run on another model.
-- **The agent's own eyes** on the saved frame, where the readers disagree. It goes in
-  `checked_labels.json`, naming the frame, and never counts as the owner's word.
-- **The owner** (`user_labels.json`): only what they confirmed themselves.
-
-**Which reader plays which role** is set in `private/config.json` `"roles"`, for example
-`{"second": "claude", "third": "omlx"}`. The second reading is asked on every proof; the third
-breaks ties. Without `"roles"`, the first two readers listed play them. A paid reader (Claude, or a service with
-`api_key_env`) plays only the roles given it there and never stands in for another. Before a camera run opens the
-link, each reader it can use is asked to read a small picture (the local ones and a paid second reader at once, a paid
-third only when no local one answered). One that does not answer is skipped for the run, with what it said or the
-error: a local reader that answered stands in for it, and a role left with none goes unanswered for the run, its
-questions taken as no answer at once. With no reader answering, or the second reader not answering and no local
-reader to stand in, the run stops there (`kit/tools/reader_check.py` asks the same with no camera; the quickstart's
-[Choosing a reader](QUICKSTART.md#choosing-a-reader)). The same check stops the run when an OCR engine's name is one
-the kit does not know: it knows `"apple"` and `"rapidocr"`, and refuses any other name, under which Apple Vision would
-run and vote twice. On 2026-11-13 a session ran with no reader answering (the remote one timed out, the local one answered every question with HTTP 507), each question going on with OCR alone,
-and nothing said so. When the second reader will not connect (at the start, or a server on another machine switched
-off during the run, 2026-11-06), the next local reader that answers stands in for the rest of the run, never a paid
-one; `kit/page_model.py --vlm --reader NAME` names one outright. A reader that fails during the run is said
-once, on the terminal and in the run's `events.jsonl` (`reader_failing`); its questions are still taken as no answer. The reader also
-decides where OCR leaves a number box unread (Apple Vision skipped "11 sec" on a frame it had read "10" on): it has
-been right every time it was checked against the screen, so it comes before the second OCR engine.
-
-**The minimum** is OCR plus one VLM, a local one first where the hardware allows (the
-order: the quickstart's [Choosing a reader](QUICKSTART.md#choosing-a-reader)). **Better** is OCR
-plus two VLMs from different families or servers, so that a third reader breaks ties
-without the agent's eye. A **VLM-only setup** (two different models agreeing) gives
-high-quality labels too. It is slower, and loses OCR's exactness on numbers and punctuation, so
-keep OCR if you can.
-
-**Where the kit reads, and with whom:**
-
-| Step | Readers |
-|---|---|
-| Page labels (`page_model.py`) | two of OCR, each VLM, eye and owner must agree |
-| Option labels (`pass1_labels.py`, `tiebreak.py`) | OCR under the cursor plus vLLM, the third reader on disagreement; carousels and grids trust OCR of their orange line |
-| During proofs (`prove_run.py`) | OCR finds the option; the VLM keeps a second reading in every proof record (`vlm`) and decides when OCR is unsure. `boxes_run` and `orient_run` keep one too, and `scale_run` keeps one where OCR read the number (two readers only when the VLM read the same number); where OCR reads none, the VLM's number is the only reading (`read_by`: `reader`), one reader, and never decides alone: a choice stands by the count of presses too (section 7, **Scales**) |
-| Picker function names (report) | sure only when OCR and the VLM agree |
-| Value names (report) | the map's label, unless the VLM backs the OCR's reading instead; OCR never wins alone |
-
-`kit/pass2_report.py` names each proved value from three readings: the pass-1 map's label, the bar's OCR at OK time
-(`shown`, the weakest) and the VLM's (`vlm`). The VLM breaks ties and never overrides alone (it can read another row
-or a button), so a value it reads far from both, or one the OCR reads unlike the map with no VLM reading, keeps the
-map's label and goes into the report's `name_disputes` (listed in full in `report.md`, with the frame to check); each
-value's source is in `report.json` (`names`). Proofs written while the VLM was off carry no reading:
-`kit/tools/reread_proofs.py --reader omlx` reads their saved frames again (no camera, restartable, `--limit N` for a
-trial) into `readings.jsonl`, which the report takes as their `vlm`.
+Every name and value label in a definition comes from at least two independent readings that agree; a slower run with
+more readers is the right trade. The readers are OCR (Apple Vision on the Mac and RapidOCR, two votes), the
+vision-language models (VLMs) in `private/config.json` `"readers"`, the agent's own eye on the saved frame
+(`checked_labels.json`, naming the frame, never the owner's word) and the owner (`user_labels.json`, only what they
+confirmed). The quickstart's [Choosing a reader](QUICKSTART.md#choosing-a-reader) says which to use, their roles and the
+check each run makes first. OCR reads icons as letters and drops short numbers; a VLM **invents answers on black or
+blank frames** and may read a button or a neighbouring row instead. The minimum is OCR plus one VLM; better, two VLMs of
+different families, so a third reader breaks ties without the agent's eye.
 
 **Rules:**
-- Never settle a disagreement by picking the likelier reading silently. Use a majority of three,
-  else the eye with a note naming the frame, else ask the owner.
-- Never ask a VLM about a black or near-black frame. Check the frame's brightness first.
-- **A second reading kept in a proof is a check only if it reads the option chosen.** Count how
-  often it names the proof's label. On the a1 II, the Recall Custom hold prover read the screen
-  with the cursor already on Register, and the reading named the label in 1 of 235 proofs. Read
-  the option before OK, or the screen that shows the value just chosen (a hold's own row shows its
-  new value).
-- **Matching an option to a label is strict** (`camkit.match.same`, `prove_run.option_key`):
-  - digits must match exactly ("1/4000" is not "1/400", "F1.1" is not "F11": keep the decimal point);
-  - a close reading must end on the same word, and a short last word must match exactly. "Cont.
-    Shooting: Hi+" is 0.9 like "Cont. Shooting: Lo" by ratio, and taking one for the other registers
-    the wrong option. A put-back is held to the same rule: it must register the hold's own value;
-  - Cyrillic look-alikes are folded to Latin before comparing ("С.Temp");
-  - a radio ring is read before or after a short label ("o 4", "4 O").
-- Answers are cached by image, prompt and model (`runs/<model>_fw<fw>/_cache/vlm`), so re-reads are free. A new
-  model reads everything again.
-- Run page and option reading off the camera loop, while the camera does something else.
+- Never settle a disagreement by picking the likelier reading silently. Use a majority of three, else the eye with a
+  note naming the frame, else ask the owner.
+- Never ask a VLM about a black or near-black frame: read that row through the OSD.
+- **A second reading kept in a proof is a check only if it reads the option chosen.** Count how often it names the
+  proof's label, and read the option before OK, or the screen that shows the value just chosen.
+- **Matching an option to a label is strict** (`camkit.match`): a close reading taken for another option registers
+  the wrong one.
+- Answers are cached (`runs/<model>_fw<fw>/_cache/vlm`). Run page and option reading off the camera loop.
 
-**The one reading rule comes in by stages.** [Decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)
-says the rule and why; `kit/camkit/reading.py`'s docstrings say how a reading is cleaned and how two readings are
-compared. The table above is how the kit reads today: about a hundred and fifty places call OCR directly, some twenty
-helpers ask the reader, each with its own fallback, and eight tables mend look-alike letters, each a little
-differently. Each stage is tested on its own, and changes what a run decides only once the one before it has been
-measured.
-
-- **In place since 2026-11-13, with no run deciding or pressing differently:** the rule's building blocks in
-  `camkit.reading` (the one cleaning, the doubts, the comparison by kind, what the first two votes make of a reading,
-  the count of independent votes, and `read()`, one reading by the rule: the fresh frame, the third vote, the guards'
-  refusals, every vote recorded), with OCR, the readers and the third reader's model each asked in one place. Nothing
-  calls `read()` yet. The eight tables still mend as they did; the tests say, table by table, where the one cleaning
-  agrees with each and where it differs, so that the next stage's changes are known before they are made.
-  `kit/tools/reader_census.py` replays the rule over runs already made (proof lines, the readers' answers already
-  given, page models) and counts, per kind of screen, the readings it would doubt, the reader calls it would add, what
-  it would keep or refuse, and what a third vote by the second OCR engine would settle where a run kept that engine's
-  reading (the page models do, the proof lines do not). It writes nothing in the runs, and its counts are for the
-  owner's terminal (`--json` gives them as one object, to send to the maintainer when asked). A test lists the modules
-  that still read the screen by themselves; the list only gets shorter. The start check above asks every reader a
-  real question and checks the OCR engines' names.
-- **The current stage for a plain OCR reading the reader contradicts:** it is recorded in the proof and stands. It
-  becomes a vote like any other once each kind of screen's question to the reader is fixed and the disagreement rate
-  is measured low. This stage was put to the owner for confirmation; it is not a final rule. Until then a plain
-  reading that is another option's own text (a point lost whole, "F11" for F1.1) stands even where the reader reads
-  the right option, which is one reason a contradicted plain reading is to become a vote.
-- **In place since 2026-11-13, with no caller switched:** one question to the reader per kind of screen
-  (`camkit.reading.QUESTIONS`: the `.v2` prompts beside the old ones, whose text, and so the answers already cached,
-  stays), each asking for exactly the thing the kit reads there in one pinned JSON line (those that read a lit item
-  that may be missing say to answer "none" then); and finding a row judges OCR's reading without the icon it reads as
-  letters in front of a row's label, as `page_model.same_text` leaves it out (`reading.icon_left_out`, the stakes
-  `find`), which no caller uses yet either. `kit/tools/reader_census.py --questions` asks the old questions and each
-  kind's new one about the same sample of that kind's proof frames every time, also with the options expected there
-  handed to the reader and with every option but the one proved (a decoy list), and judges each answer against the
-  option the proof's file proved; a reader's failures are counted apart from the question's answers. A kind's caller
-  moves onto its new question only once that shows, with each reader the owner uses, the new question naming the
-  proved option on nearly every sampled frame and never less often than the old one, and its wrong options rare;
-  options are handed to the reader only where the decoy list shows no wrong picks from the list against the screen.
-  A kind that falls short keeps its old question until a better one measures so. A third question (`.v3`, beside the
-  second, which stays pinned) is kept only where it names the proved option more often on the census's sample and no
-  less often on a second, held-out sample (`--held-out`), with no more wrong options; so far only the title's. The
-  census also judges against a truth checked by eye (`--truth`, a file kept outside the repository and the runs) where
-  a run recorded a label as OCR read an icon or a garbled mark, and counts where OCR and the reader are wrong alike,
-  the case OCR-main and reader-backup cannot catch: so far only on options the screen draws with the same text. When
-  the list's caller moves onto its question, a list proof on a carousel whose second axis lights a strip cell asks the
-  carousel's question instead.
-- **Next, after the census:** `camkit.match.key` and `page_model.key_text` take the one cleaning, and the other tables
-  go. Finding a row leaves out the icon OCR reads as letters in front of a row's label first (in the building blocks
-  since 2026-11-13), or the reader would be asked about most rows for nothing.
-- **Then, site by site, one change each:** finding a row asks the reader before taking the closest reading; a Picture
-  Profile is entered by its name with the digits' look-alikes read (PP3); one OCR match with a doubt needs the reader's
-  agreement; a look's number needs the reader to agree with OCR or with the marker, never to override both; side
-  lists, checklists, the White Balance grid and table cells read through the rule; every proof line carries its
-  `eyes`. Then the provers, `kit/provers/pp_reset_run.py` last. Then the guards, which may only add refusals: the
-  never-open check asks the reader on any doubt, not only on an empty bar, and Enter on a notice judges the reader's
-  reading too. Then the start of a run (`--ocr-only` to run without a reader on purpose; `kit/tiebreak.py` with one
-  reader), the batch tools (pass 1's carousels and grids ask on a doubt), and this section, the quickstart and the
-  porting notes, rewritten for the rule.
-- **Not before they are measured:** agreement as a gate on every proof frame (on some screens the reader's question
-  answers something else than the option: checklists, number fields, Creative Look panels, axes, star ratings; each
-  needs a better question first), a confidence floor for OCR, Apple's recognition languages set to English, and new
-  names for labels already recorded, which only the owner's word changes (proofs are keyed by their labels).
+**The one reading rule comes in by stages**
+([decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md);
+`kit/camkit/reading.py`), each measured before the next changes what a run decides. In place since 2026-11-13, deciding
+nothing yet: the rule's building blocks, one question per kind of screen, and `kit/tools/reader_census.py`, which
+measures each kind's question over runs already made. Meanwhile a plain OCR reading the reader contradicts is recorded
+in the proof and stands (put to the owner; not a final rule). Next, one change at a time: one cleaning for every
+comparison, each place that reads a row, an option or a cell, the provers (`kit/provers/pp_reset_run.py` last), the
+guards (which may only add refusals), the start of a run, and this section.
 
 ## 6. The proof, and how runs are shaped
 
-One proof works like this:
-1. Download a base file.
-2. Open the row, choose one option and press OK.
-3. Download again.
-4. The records that differ are what that option wrote.
+One proof: download a base file; open the row, choose one option, press OK; download again; the records that differ are
+what that option wrote. The option the row held at the start is proved last, and its download must equal the base,
+which proves the row went back. Each run checks the camera against its start file (`--start`), proves rows, and ends by
+putting the start file back and checking it took; a row whose state cannot be put back fails, and the session restores
+at once. A proof made in a switched state (Movie mode, a blocker off, the camera grip down) carries `--context`, with a
+start file downloaded in that state.
 
-The option the row held at the start is proved last. Its download must equal the base, which
-proves the row went back.
+**Seen, or inferred.** A value is *seen* when choosing its option changed the record to it. A row's own start is
+inferred (its visit changes nothing), and that is sound: one option per row. Where two or more options leave a record
+alone, the report lists them (`inferred`) and the definition does not, since one is the owner's own value (decision
+16); `kit/pass2_report.py` holds the rules for "nothing changed". A two-value axis's held value is seen only when the
+axis is proved again from a start file the camera wrote holding the other value.
 
-**A list with a single option** (XAVC HS 8K's Rec Frame Rate under PAL) has nothing to choose, so no download can
-differ. `kit/prove_run.py` proves it by its display instead: it reads the option off the screen with both readers
-(OCR and the vision model must both name the map's label), leaves the list with MENU, nothing chosen, and writes
-one proof line with `"proof": "display"`, the label, both readings and `"held"`: the values the row's records hold
-in the download the proof starts from (its `dat` and `base`). The records are the definition's settings proved
-through that row in the state closest to the run's `--context` (`display_records`: a proof context wholly part of
-the run's, naming the most of it), so the row must have been proved by choosing in another state first; otherwise
-the row fails. `kit/pass2_report.py` takes each held value as the one the label writes, a seen value, and
-`kit/schema_update.py` writes it from the report like any other.
-
-**Each run:**
-1. Checks the camera against its start file (`--start`), uploading the start file if they differ.
-2. Proves rows.
-3. Uploads the start file when anything differs from it and checks it took: `kit/camkit/session.py`, which every
-   runner ends through (`finish`, then `check_restore`).
-
-A row whose state cannot be put back fails, and the session restores at once.
-
-- **Context.** A proof made in a switched state (Movie mode, a blocker turned off, the camera held
-  grip down) carries `--context`, and the report treats it as another row. Each mode or state gets
-  its own start file, downloaded in that state.
-- **Evidence.** Every frame and download is numbered within the run folder, and nothing is ever
-  overwritten.
-
-**Seen, or inferred.** A value is *seen* when choosing its option changed the record to it. A
-row's own start is inferred (its visit changes nothing), and that is sound: one option per row.
-When two or more options of a row leave a record alone, all but one of them were taken from
-"nothing changed": the report lists them (`inferred`, in the run's `report.json`), and the definition
-does not: one of them is the record's start, the owner's own value (decision 16), so a value taken from
-"nothing changed" is proved and named by its readers like any other. The report's rules for "nothing changed":
-- **A record only some options write** keeps its value under the others: a hold's continuous speed
-  (0x0bf1) when a bracket is registered. Name it from the options that write it
-  (`pass2_report.WRITTEN_BY`), or every other option is credited with the speed held.
-- **A row proved in two runs has two starting values**: an option that changed nothing holds its
-  own run's.
-- **A label seen to change the record outranks the same label from a visit where nothing
-  changed**: a visit can miss its option (the self-timer read "Single Shooting" after OK).
-- **A two-value axis has one test visit**, where nothing can differ: the option's own records are
-  the ones the carousel's own proof of that option wrote (`own_records`). Its held value is credited under its
-  reader, as the next rule says; to see that value written too, prove the axis again in a state where it holds the
-  other value (a start file the camera wrote, never one made by hand: decision 6).
-- **An axis's held value** is its last visit's, as a list's own start is: the visit put the axis back and changed
-  nothing, so on a record only the axis writes (none the carousel's own options write, in any state, and no live
-  readout) its label takes the value from before in the visits of its own attempt, else from that attempt's base file,
-  unless another label was seen writing it (`held_axis_value`). Focus Area's full-memory records hold the option the
-  carousel opened on, so they take none, and a carousel whose own rows have no proofs credits none.
-
-**Checking the evidence offline.** The saved frames and downloads are enough to re-check labels
-with no camera: what each proof's frames show against its label, and the report's rules against
-the proofs. Do it before calling a model done; on the a1 II it found the useless second reading and
-two report rules, and no wrong label in the definition.
-
-**Running unattended: `kit/tools/chain.py`.** Steps go in a TOML file (`kit/chains/`; `stills_brackets.toml` there
-is a worked example), each an argument list with its own log, the lines to echo, a time limit and the run's STOP
-file. A step over its limit is asked to stop through that file; the runner never kills a step, since a camera left
-in a dialog is worse than a late chain. `STOP_CHAIN` in the camera's `runs/<model>_fw<fw>/` ends the chain
-between steps (a chain runs on one camera, and its file's paths are in that camera's runs), and the owner's file
-(`--end`) is uploaded last whatever happened, after the last step has exited. Shell scripts did this before; one
-waited 2.5 hours on a black HDMI feed and one lost its prover calls to shell word splitting.
+Before calling a model done, check the evidence offline: each proof's frames against its label, and the report's rules
+against the proofs. Unattended runs go through `kit/tools/chain.py`, never a shell script.
 
 ## 7. Order of work
 
 Every kit command here runs with the venv's Python, as `.venv/bin/python -u kit/page_scan.py …`
-(`.venv\Scripts\python` on Windows): the scripts are not executable on their own.
+(`.venv\Scripts\python` on Windows).
 
-**Where runs go.** Each camera's runs are in a folder of their own, `runs/<model>_fw<fw>/`, named as its
-`data/<model>_fw<fw>/` folder is: the run folders (`kit2_*`), the proof viewer (`_viewer/`), the readers' answers
-(`_cache/`) and the downloads manifest (`downloads.jsonl`). The kit works on one camera at a time: `"camera"` in
-`private/config.json`, else the one camera in `runs/`; `--camera <model>_fw<fw>` on any command, or `CAMSET_CAMERA`,
-works on another (QUICKSTART, "Where the runs go"). A run named on a command line (`<scan>`, `<crawl>` below) is a
-folder in that camera's runs: `kit2_page_scan`, `kit2_crawl/map.json`. Runs left at the top of `runs/` from before
-2026-11-05 stop every kit command that reads or writes runs (the commit hook goes on) until
-`kit/tools/migrate_runs.py` has moved them under their camera's folder.
+**Where runs go.** In `runs/<model>_fw<fw>/`, one folder per camera; a run named on a command line (`<scan>`,
+`<crawl>` below) is a folder there ([QUICKSTART, "Where the runs go"](QUICKSTART.md#where-the-runs-go)).
 
 **What is settled, and what is left.** Start every session from the coverage ledger
 ([decision 23](decisions/0023-a-ledger-says-what-is-settled-and-a-proof-is-made-once.md),
 [DATA_CONTRACTS](DATA_CONTRACTS.md#the-coverage-ledger-what-is-settled-and-what-a-proof-needs)), never from memory or
-the log:
-
-1. `kit/tools/coverage.py` prints, per tab, how many rows are proved, tested with no record changes, greyed, closed by
-   rule, not yet tried, and the records and bytes no setting explains.
-2. `kit/tools/coverage.py --todo` lists what is left by expected yield, each with what its next step needs, and every
-   row with values still to try (with how many); narrow it with `--tab`, `--mode Movie` and `--needs remote-look` (a
-   look with `kit/drive.py`), `remote-proof` (`kit/prove_run.py`), `hand` (the owner's hand, a download before and
-   after), `equipment`, `decision` (a dated owner decision, the opener the row names) or `kit` (a kit fix first). Plan
-   the session from it: remote work first, then one message to the owner per physical action (section 9).
-3. `kit/tools/coverage.py --row "<label>"` shows one row with what it rests on (the looks, crawl rows and proofs, by
-   run and day).
-
-The runners ask the ledger before they press on a row and, by default, only print its word on each ("coverage: <row>:
-<status> ..."), then do what they always did. To leave settled rows out, give `kit/crawl_run.py` or `kit/prove_run.py`
-`--skip-settled`; `kit/drive.py` never skips. A prover given it leaves out only a list or dialog row whose every
-planned option is settled, and nothing in a switched state (`--context`), with `--first`, `--tables`, `--wb`,
-`--wb-corners`, `--looks`, `--look-base`, `--redo` or `--help-text`. **A crawl meant to build pass 1's map must not
-skip:** a skipping crawl's `map.json` has a hole at each row it left out, and `kit/pass1_map.py` refuses it for
-`kit2_pass1`. A row with values still to try is never settled; a row greyed before is settled only while the start
-file still greys it, a row the kit could not read only for an unknown screen or no response to Right, on the same kit
-commit (a lost row, an error or a walk cut short is always tried again); an action or an information screen known by
-its class alone is never settled, since only a run allowed to open it reaches it. On a camera's first run there is no
-looks file yet, so nothing is settled and the run says so. Every look the runners make goes into the looks file (field
-names and record keys, never a value), the latest look of a row winning; an owner's hand check goes in with
-`kit/tools/coverage.py --record --path "Tab > Group > Row" --did choose --option "<label>" --start <before.DAT> --end
-<after.DAT>`, both files camera downloads, and a look found wrong is withdrawn with `--record --path "..." --did open
---result retract` (`--did` names what the look did: open, choose or act). After `kit/schema_update.py --write`, run `kit/tools/coverage.py --write`: the public form in
-`data/` is built from the public sources and the few facts a look establishes for every camera of the model, which it
-keeps in the seen file beside it (`seen_<model>_fw<fw>.json`), never from what your camera's state showed; commit both,
-and never edit either by hand (`kit/tools/check_public.py` refuses a form that is not the build of its sources and its
-seen file). One valid proof of an option is enough (`--proofs` counts the repeats); `--bundles` shows which frames and
-downloads back a valid proof, and deletes nothing.
+the log: `kit/tools/coverage.py` (the counts per tab and status), `kit/tools/coverage.py --todo` (what is left, by
+expected yield, with what each next step needs) and `kit/tools/coverage.py --row "<label>"` (one row and what it rests
+on). Plan the session from `--todo`: remote work first, then one message to the owner per physical action (section 9).
+`--skip-settled` leaves settled rows out of a crawl or a prove run, but **a crawl meant to build pass 1's map must not
+skip.**
 
 ### Phase 1: map the menu
 
-1. **Page scan.** Only Down is pressed, one full lap:
-   `kit/page_scan.py --mode Stills|Movie|S&Q --run kit2_page_scan[_movie|_sq]`. It stops without pressing on any
-   screen it does not know, and closes plain menu pages itself. `--mode` is the mode the camera is in, which the scan
-   records: the provers take by default only the latest whole scan of the mode they work in (its lap written, and its
-   page model built after it), and a scan that records none (made before 2026-11-11) only by `--scan <scan>` or once
-   `kit/page_model.py --mode <mode> <scan>` has recorded it. A folder that holds a lap or page model of a scan
-   recording no mode or another mode is refused before anything is sent: each mode's scan has a run of its own. A
-   folder whose scan records the same mode is scanned again, and is no default until the new lap is whole.
-2. **The cycle file.** `page_scan.py` writes `scan_rekeyed.json` after a full lap; check that it
-   printed `cycle written`. Without a full lap it writes none, and no prover takes the scan by default: scan again.
-3. **Page labels.**
-   - Run `kit/page_model.py --vlm <scan>`.
-   - Labels the readers disagree on are read by eye off the frame into `checked_labels.json`, as
-     `{page: {slot: {label, frame, note}}}`.
-   - The owner's own confirmations go in `user_labels.json`. Keep the two apart.
+1. **Page scan,** Down only, one full lap: `kit/page_scan.py --mode Stills|Movie|S&Q --run kit2_page_scan[_movie|_sq]`,
+   `--mode` naming the mode the camera is in, each mode's scan in a run of its own.
+2. **The cycle file.** Check that it printed `cycle written`; without a full lap no prover takes the scan: scan again.
+3. **Page labels.** `kit/page_model.py --vlm <scan>`. Labels the readers disagree on are read by eye off the frame into
+   `checked_labels.json` (`{page: {slot: {label, frame, note}}}`), the owner's own confirmations into
+   `user_labels.json`. Keep the two apart.
 4. **Crawl.** This opens every safe row and walks its options, read-only, with MENU to cancel and
    a download diff before and after that must be empty:
    `kit/crawl_run.py --scan <scan> --run kit2_crawl[_mode]`. Use `--tabs Playback` for the
@@ -613,32 +314,48 @@ downloads back a valid proof, and deletes nothing.
    is recorded as `notice` and left with MENU: the crawl never presses Enter, so the screen behind the notice is not
    mapped. Where that notice is a plain explanation with a single OK, name the row and the notice's whole text for one
    run, `--info-ok "ROW=PHRASE"` (section 8, "A row whose screen sits behind an information notice").
-5. **Option labels and the map:**
-   1. `kit/pass1_labels.py <crawl>`
-   2. `kit/tiebreak.py <crawl>`, the third reader on disagreements
-   3. `kit/pass1_map.py <crawl> [<crawl> ...]` (`--dry-run` first), which writes each crawl's `map.json` and every
-      crawl's rows into `kit2_pass1/map_all.json`, the map Phase 2 reads
-
-   Fix any label that came off a black or wrong frame by hand in `map.json`, and say how in the
-   entry's `by` field; making the map again keeps it.
-6. **Scope.** In `kit2_pass1/pass2_scope_draft.json` (shared by every map of the camera), exclude rows the
-   rules forbid. Rows that change or blank HDMI go in the OSD group; anything that governs the
-   remote session is excluded. Write each decision with its date and reason in `decisions`.
+5. **Option labels and the map:** `kit/pass1_labels.py <crawl>`, `kit/tiebreak.py <crawl>`, then
+   `kit/pass1_map.py <crawl> [<crawl> ...]` (`--dry-run` first), which writes `kit2_pass1/map_all.json`, the map Phase 2
+   reads. Fix a label that came off a black or wrong frame by hand in `map.json`, saying how in the entry's `by` field;
+   making the map again keeps it.
+6. **Scope.** In `kit2_pass1/pass2_scope_draft.json`, exclude rows the rules forbid, put rows that change or blank HDMI
+   in the OSD group, and exclude anything that governs the remote session; write each decision with its date and reason
+   in `decisions`.
 
 ### Phase 2: prove
 
-- **The map** every prover reads is `kit2_pass1/map_all.json`: `kit/pass1_map.py <crawl> [<crawl> ...]` writes it.
-- **Second axes, first** (‹ › beside a carousel option, as Spot: Standard / Large): walk them read-only with
-  `kit/axis_walk.py [--rows ROW ...]`, into `kit2_axes/axes.json`. `prove_run.py` on pass 1's map adds an axis
-  job for every value it lists; without the file no second axis is proved.
+Pick the command by the kind of row or screen. A never-open action needs your owner's word, given as the `--allow`
+shown (section 1, rule 2).
+
+| Row or screen | Command |
+|---|---|
+| Carousel options' second axes (‹ ›), first | `kit/axis_walk.py [--rows ROW ...]` |
+| Lists, carousels, number fields, checklists, side lists | `kit/prove_run.py` (below) |
+| Fn Menu, Custom Key/Dial, My Dial, Image Quality tables | `kit/table_walk.py --rows ...`, then `kit/prove_run.py --tables --picker-sample` |
+| Creative Look panels; White Balance grids; Picture Profile side lists | `kit/prove_run.py --looks`; `--wb`, then `--wb-corners`; `--pp PP1,PP2,...` |
+| Rows that change or blank HDMI | `kit/prove_run.py --eyes osd` |
+| Scales (a number between − and +), panel sliders | `kit/provers/scale_run.py --row ...` (`--panel-row`) |
+| Exposure Comp., Flash Comp. | `kit/provers/sdk_run.py --property ExposureBiasCompensation --row "Exposure Comp." --values missing` |
+| Two-box screens (S&Q, Time-lapse frame rates) | `kit/provers/boxes_run.py --row ... --boxes "Left name,Right name"` |
+| Turned dialogs (camera held vertically) | `kit/provers/orient_run.py --grip down` (or `up`) |
+| Checkbox grids (Focus Area Limit) | `kit/provers/grid_run.py [--row ROW]` |
+| Shoot Mode set with the menu | `kit/provers/shootmode_run.py --start FILE` |
+| Rows only another mode's menu offers | `kit/provers/mode_switch.py --to Movie [--mode M] --keep`, prove runs with `--eyes osd-all` and that mode's own OSD scan, map and `--context`, then `kit/provers/mode_switch.py --restore` |
+| Recall Custom holds | `kit/provers/customshoot_run.py --allow "Reg. Custom Shoot Set" --hold N`, then `kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold N --items "ITEM,..."` |
+| Playback Filter Condition | `kit/provers/filter_run.py [--items ...]` |
+| AF Area Registration | `kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing` |
+| A memory's copies | `kit/tools/set_twins.py --evidenced ''`, then `kit/provers/memreg_run.py --allow "Camera Set. Memory"` |
+| Where a focus frame's place is kept | `kit/provers/framepos_run.py --allow "Camera Set. Memory"` |
+| Picture Profiles' own Reset, for the sample | `kit/provers/pp_reset_run.py --allow "Picture Profile Reset"`: `--peek`, then `--profiles PP1`, then a full run in Stills and one `--in Movie` (its docstring), then `kit/tools/make_sample.py <the download right after Initialize> --take "Picture Profile PP" --from <Stills pp_reset.json> --from <Movie pp_reset.json>` |
+| My Menu's slots | `kit/provers/mymenu_run.py --allow "Add Item"` |
+| Bracket fields | `kit/provers/bracket_run.py --option "Cont. Bracket" --look`, then without `--look` |
+| Anything else | `kit/drive.py`, below |
+
 - **Ordinary rows** (lists, carousels, number fields, checklists, side lists):
   `kit/prove_run.py [--scan S --map M --context C] --start FILE [--rows ROW ...]`.
   Without `--rows` it resumes: rows already proved, or failed, are skipped (use `--retry-failed`). A checklist behind
   an information notice is proved with the same `--info-ok "ROW=PHRASE"` its crawl took, the row named in `--rows`.
 - **Assignment screens** (Fn Menu, Custom Key/Dial, My Dial, Image Quality tables):
-  - Walk them read-only first with `kit/table_walk.py --rows ...`.
-  - Then prove with `kit/prove_run.py --tables --picker-sample`: one full list per identical
-    picker, and three functions on each other slot.
   - Where a row opens behind a first-time screen ("Don't show this again." and OK) that the camera closes on MENU, name
     it by its whole text, as the run's message prints it: `kit/prove_run.py --tables --rows "Custom Key/Dial Set."
     --info-ok "Custom Key/Dial Set.=In the next setting screen, you can check the function assigned to a specific
@@ -655,159 +372,8 @@ downloads back a valid proof, and deletes nothing.
     that copy outlives an upload; its proof is the key's record as the start file holds it, and the session's upload
     puts the key back. A function whose screen is not left with the key on its cell is learned into `own_screen.json`
     and passed over from then on.
-- **Creative Look panels:** `--looks`. **White Balance fine-tune grids:** `--wb`, then
-  `--wb-corners`. **Picture Profile side lists:** `--pp PP1,PP2,...`.
-- **Rows that change or blank HDMI** (HDMI Resolution, HDMI Output Settings, HDMI Info. Display, CTRL FOR HDMI,
-  frame rate, file format, Framing Stabilizer, Auto Framing, Select Finder/Monitor, Auto Monitor OFF): `--eyes osd`. The way to the row goes over HDMI, and the
-  proof watches the SDK's OSD. `--eyes osd-all` does not work, because OSD frames do not match a
-  scan made over HDMI. A run in OSD mode (`"eyes": "osd"`, scanned through the OSD) has no such
-  rows.
-- **Rows that drop one link** are proved over the other: rows that drop the LAN link over USB, rows that drop USB
-  over LAN. The owner swaps the cables; batch the rows by the link they need, so there is one swap per batch
-  (decided 2026-10-29).
-- **Scales** (a number between − and + boxes): `kit/provers/scale_run.py --row ...`. A scale counts as open only
-  with an OK in its footer, read by OCR or, where OCR drops it on a fresh frame too, by the reader. Every end of the
-  scale is confirmed by one more press (at the high end one Left press must then read the number before it), whole
-  numbers must step evenly, a scale has two values at least, and each choice must open on the value chosen last and
-  land where the count of presses puts it; anything else stops the row, and a stopped row's lines count for nothing
-  in the report. A slider inside a panel (Monitor Brightness, Viewfinder Bright.: a Brightness Setup row first, the
-  slider below it only on Manual) is given with `--panel-row` instead, with its setup row among the `--set` rows
-  (`--set "Monitor Brightness > Brightness Setup=Manual" --panel-row "Monitor Brightness"`): the run puts the setup row
-  on Manual through the menu, so every proof's context names it and none tells what the camera stood on (rule 10), and
-  a `--panel-row` without it is refused before anything connects, with the `--set` to add; Down goes to the slider; a
-  plain scale given so, or a panel given as `--row`, stops before any choice. A scale with negative numbers is
-  labelled as the camera writes it around zero (-2, -1, ±0, +1, +2).
-  `--set "ROW=OPTION"` (repeatable; `"A > B=OPTION"` for a submenu's or a panel's row) puts a row on an option
-  through the menu before the first row, the proofs' context naming it; a never-open row needs its own `--allow`, and
-  the rows of decision 8 are never set so. The finder's rows are greyed with the HDMI cable in: they are run with
-  it out and `CAMSET_EYES=osd`, from `kit2_page_scan_osd3`.
-- **A live exposure value no menu list proves on a line** (Exposure Comp. and Flash Comp., whose codes mix 1/3 and 1/2
-  steps): `kit/provers/sdk_run.py --property ExposureBiasCompensation --row "Exposure Comp." --values missing
-  --context "..."` sets each value the camera offers through the SDK's own setter (camkit.safety.SET_PROPERTIES only),
-  reads it back, downloads and diffs it as a menu proof would, sets the start's value back last and restores;
-  `--list` prints the plan with no camera. Not writable now (the mode, a flash switched off): it says what to change
-  and sets nothing.
-- **Two-box screens** (S&Q or Time-lapse frame rates):
-  `kit/provers/boxes_run.py --row ... --boxes "Left name,Right name"`; the value a box opened on is proved with
-  `--first BOX=VALUE` (section 8).
-- **Turned dialogs** (camera held vertically): `kit/provers/orient_run.py --grip down|up [--only ...]`.
-- **Checkbox grids** (Focus Area Limit): `kit/provers/grid_run.py [--row ROW]`, one cell flipped per visit.
-- **Shoot Mode set with the menu** (Mode Dial Control Set's Set with Menu): `kit/provers/shootmode_run.py --start FILE`,
-  from a start file holding that setting; every proof ends by uploading it again.
-- **Rows another mode's menu offers** (Movie, S&Q, or a stills exposure mode: Flash Mode's Autoflash in Intelligent
-  Auto alone, ISO AUTO Min. SS not in M): `kit/provers/mode_switch.py --to Movie [--mode M] --keep [--info-ok "Mode
-  Dial Control Set=<the note's whole text>"]` puts the camera there through the menu (Mode Dial Control Set = Set with
-  Menu, then Shoot Mode's carousel; never a memory recall), keeping the stills start file's name; without `--info-ok`
-  it stops at the note Mode Dial Control Set shows where the camera takes MENU there, and says so. The prove runs that
-  follow (`--eyes osd-all`, that mode's own OSD scan and map,
-  `--context` naming the mode) take the camera as they find it and put that back; `mode_switch.py --restore` uploads
-  the stills file and checks it took. That file is the camera's settings from before the switch: whatever was changed
-  on the camera since is undone too, so a switch record left over after the camera was put back another way (by hand,
-  or by a later session's restore) is removed with `mode_switch.py --forget --shows <mode> --run <run>`, which renames
-  it and sends nothing: first look at the camera's screen, or ask the owner, which mode it shows, and say that, the
-  family first (Stills, Movie or S&Q) and the exposure mode after it when you say one (P, A, S, M or Auto):
-  `--shows Movie`, `--shows "Stills M"` (a letter alone is refused: Movie's and S&Q's screens show one too); it refuses
-  while the screen shows the mode the switch went to, and says how to undo it (rename the record back). Every run stops on a waiting switch of another mode, saying both. A state a row needs on top of the mode
-  (Exposure Ctrl Type = Flexible Exp. Mode for the Auto/Manual switches, proxy recording on for its settings) is set
-  the same way,
-  `mode_switch.py --set "ROW=OPTION" [--set "Submenu > Row=OPTION"] --scan <that mode's scan>`, while the switch
-  waits; the one `--restore` covers it all. A mode's page scan must be of the menu as it is now: the page counter is
-  part of every page's key, so a scan from another day's state (two pages fewer, 2026-11-07) knows none of them, and
-  `kit/page_scan.py --mode <mode> --run <scan>` then `kit/page_model.py --vlm <scan>` take ten minutes. Intelligent
-  Auto's menu is not known to be P/A/S/M's: a scan made while a kept switch to Auto (`--to Auto`, or a family's Auto)
-  waits records it, and is the default only while such a switch waits, when the plain Stills scans are not.
-- **A put-back that leaves records differing** is no failure when the prover can say why (`put_back_leftovers`,
-  2026-11-07): a record the camera has held since an earlier option of the row ("kept": S&Q Shoot Mode's exposure
-  mode, the keys Flexible Exp. Mode reassigns), a saved value no option of the list gives back ("not offered": Flash
-  Mode's Autoflash outside Intelligent Auto, Proxy Rec. Settings holding the reset value no menu choice writes), or a
-  checklist's copy of a box's tick written from the first save on (`mirrored_boxes`: Rating Set(Custom Key)). The
-  attempt is recorded finished with the reason, the session's upload puts the records back, and the report credits a
-  kept value to the option that first set it. Anything else still fails the row.
-- **Recall Custom holds** (Reg. Custom Shoot Set, a never-open action: only with your owner's word, given as `--allow
-  "Reg. Custom Shoot Set"`): `kit/provers/customshoot_run.py --allow "Reg. Custom Shoot Set" --hold N` for the items'
-  ticks, then `kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold N --items "ITEM,..."` for their
-  values.
-- **Playback Filter Condition** (a checklist whose boxes open a chooser each, and which answers "There are no target
-  images." to every box while the playback target holds no image): `kit/provers/filter_run.py [--items ...]` proves
-  each condition's chooser as a list row of its own (Protect, Still Images/Movies, Shot Mark, the transfer states,
-  Voice Memo), the start file back between items; Date's calendar and Folder's list are data on the card, Rating's
-  star boxes are noted, and Execute Filter, Cancel Filter and Fn (Reset Condition) are never pressed. `--untick` also
-  proves each box's value 0: Enter on the ticked box in the box column, a download before and after; the report takes
-  that proof as the item's row in the state "box ticked", apart from the chooser's options.
-- **AF Area Registration** (a Focus Area registered by holding Fn on the shooting screen, a registration: only with your
-  owner's word, rules 2 and 14): `kit/provers/afreg_run.py --allow "Fn hold on the shooting
-  screen" --areas missing [--info-ok "Mode Dial Control Set=<the note's whole text>"]` (`--list` alone touches no camera
-  and needs none; `--info-ok` as for `mode_switch.py` above) chooses each area in Focus Area's menu,
-  holds Fn and diffs the downloads around the hold;
-  `--proved` prints what its lines proved. A Tracking area needs Focus Mode on Continuous AF, which the run sets
-  through the menu (the Focus Mode dial set with the menu), and the camera refuses Continuous AF under some drive
-  modes (it says so in a notice when Focus Mode is set), so the run first puts Drive Mode on Single Shooting the same
-  way (the Drive Mode dial set with the menu; `--drive-mode auto|menu|leave`) and the restore puts the file's own
-  back; a setup step the camera refuses ("not available as follows") stops the run, the notice's words kept in the
-  run's `events.jsonl` and never printed (a notice can name another setting's value). Its proofs stay in a run of their
-  own (`kit2_afreg2`), marked as a proof run, which the report reads beside `kit2_pass2` (Phase 6). A non-Tracking
-  area's hold copies the Tracking start area in use, the camera's own setting: its lines name those records as side
-  effects, changed or not, and the report credits a side effect to no option.
-- **A memory's copies** (Camera Set. Memory, a never-open action: only with your owner's word, given as `--allow
-  "Camera Set. Memory"`): `kit/tools/set_twins.py` groups the memory set's records with the live records of the same
-  id and picks plain list rows to change, no camera; `kit/provers/memreg_run.py [--list]` registers memory slot 1,
-  changes those rows in their menus, registers it again and checks that each copy took the new value. A filled slot
-  only: registering an empty one would mark it filled for good, and the three registration records no settings file
-  sets back are said by key and left out of the restore's check. Its lines (`"kind": "registration mirror"`) are no
-  row's proof: the report keeps them out of its rows and the writer marks each live setting whose copy took
-  (`in_sets_proved`, in the evidence file). The run is marked as a proof run.
-- **Where a focus frame's place is kept** (also Camera Set. Memory, `--allow` as above): `kit/provers/framepos_run.py
-  [--areas ...] [--list] [--info-ok "Mode Dial Control Set=<the note's whole text>"]` (`--info-ok` as for
-  `mode_switch.py` above) chooses each area whose frame moves, registers slot 1, moves the frame with the
-  multi-selector, registers it again and diffs the two (the console and `framepos_summary.txt` give each record's
-  delta, never what it held; `framepos.jsonl` keeps both values, as the run's evidence in runs/, which is never
-  published), then puts the frame back and checks a third registration matches the first; `--summary` prints the
-  lines with no camera. `--frame-move-amt Standard|Large` sets AF Frame Move Amt by the menu with the other setup rows,
-  checks in the download after the setup that the camera took it, and names it in the context every line carries, so
-  a step's size is measured under a setting the run set, never the camera's own; give a step run its own `--run`, and
-  read a step only from an area whose put-back matched. For a frame that stands near the limit of its travel, which
-  three Left presses run into the limit (the delta cut short; a press at the limit still counts as taken, so the
-  put-back goes past where the frame was, and the check-back, the registration after it not matching the first, is
-  what shows it), `--moves "Right 1"` (a direction and one to nine presses each, comma-separated, never a direction
-  with its opposite) moves the point and box areas by those presses instead of Left 3 and Up 2, and the check-back
-  tells whether they stayed clear; the zones keep their own one-step moves and a default run's context, and the
-  context names the moves, so each set of moves keeps its own summary lines. `--zone-grid` leads the Zone over its
-  nine places with Switch V/H AF Area Off, registering at each, so one sweep proves every grid copy, the vertical ones
-  too, without turning the camera; its lines (`zone_grid.jsonl`, and registration mirror lines in `proofs.jsonl`, the
-  run marked as a proof run) give the writer each place as proved. A record family the deltas show that the definition
-  has no setting for gets no name from a run: map it with proofs first.
-- **Picture Profiles' own Reset** (Picture Profile Reset, a never-open action: only with your owner's word, given as
-  `--allow "Picture Profile Reset"`): a definition's sample is a download taken right after Initialize, scrubbed by
-  `kit/tools/make_sample.py`. Initialize leaves some records as they were. Of those, only the Picture Profile
-  parameters are checked so far (the reset file lists what Initialize puts back for the settings tested); for them
-  the sample takes the values the camera holds after each offered profile's own Reset, in Stills and in Movie.
-  `kit/provers/pp_reset_run.py --peek` first (it opens the first profile's question and cancels), then a one-profile
-  trial (`--profiles PP1`), then the run in Stills, `kit/provers/mode_switch.py --to Movie --keep [--info-ok ...]`,
-  the run `--in Movie`, and `mode_switch.py --restore`. A run first shows on one profile that its Reset writes the records a
-  settings file saves: it changes one parameter, downloads, resets, and requires the changed records to be written
-  (the run's control: one parameter of one profile, which must move only that profile's element, in the record in use
-  and in the copy of the run's mode, and which that profile's Reset must write back). Then each profile the camera's
-  list offers is reset by its own Reset row. The panel's title before Reset, the question, the completion notice and,
-  in the verify pass, each panel's title are read by both readers, and a run meant for the sample refuses to open
-  Reset or confirm on one reader alone; the carousel's labels are read by both too, and one read by one reader alone
-  may be taken, since no press acts on a label; the lit row (Reset, the control's Black Level) is read by OCR and must
-  read as that row's name. Only that profile's own question is accepted. After OK the camera's completion notice is
-  expected; the profile's panel coming straight back with no notice is recorded as such and refused for a sample
-  unless allowed (`--allow-no-notice`); anything else stops the run. A verify pass enters each panel again, confirms
-  each by its title and checks that no profile's parameter moves by that alone, and every exit restores the start
-  file (`--dry-run` prints the plan). Then `kit/tools/make_sample.py <base> --take "Picture Profile PP" --from <the
-  Stills result> --from <the Movie result>`, which recomputes each result's lists and its control from its own
-  downloads and takes those downloads only as one session's, in the camera's downloads manifest. When no reset
-  download holds any of the family's records unlike its run's start file, make_sample stops; --allow-unchanged takes
-  the records then, the run's control being what shows a Reset writes them (one parameter of one profile). That is
-  the limit of the evidence: the control shows it for one parameter of one profile; for the rest the evidence is the
-  camera's own completion notice. A
-  profile the body keeps records for but no menu offers (the a1 II's PP7-PP9) cannot be reset by a menu and keeps
-  what the base file held: a limit of the sample. The tool's guards are written for the screens and wording of the
-  ILCE-1M2 at firmware 4.00 ("Reset PPn to the default setting?", "Complete.") and fail closed on any other; on any
-  camera, a peek and a one-profile trial come before a full run.
-- **Bracket fields** (Drive Mode's Cont. / Single Bracket step and images): `kit/provers/bracket_run.py --option
-  "Cont. Bracket" --look` first, then without `--look` (`--sample N` for a long list).
+- **Rows that drop one link** are proved over the other (LAN over USB, USB over LAN); batch them by link, so the owner
+  swaps the cables once a batch.
 - **Anything else, by hand-written presses:**
   `kit/drive.py --path ROW --press right --press "enter:REGEX"`. Enter needs a lit text the kit can read; on a screen
   that lights nothing it can read (the a1 II's MR Memory slots) `--press "enter!:REGEX"` is Enter you vouch for, once
@@ -827,234 +393,77 @@ downloads back a valid proof, and deletes nothing.
 
 ### Phase 3: settings greyed by another setting
 
-`kit/pass3_run.py` turns each blocker off in the menu (using greyed-row reasons from pass 1), walks and proves
-what that opened, then restores. Each walk builds a map of its own (`kit/pass1_map.py --own`, with `kit/tiebreak.py`
-as the third reader where the first two differ) and leaves pass 1's `map_all.json` as it is. An entry's `"first"`
-lists states chosen in the menu before its own switch (a File Format before that format's Rec Frame Rate); the
-restore puts them all back. Entries marked `on_request` run only when `--only` names them. Its blockers that were
-switched by writing values into a file and uploading it are retired, and the script refuses them (rule 12). Some of the context runs need a start file in another state, such as
-File Format slots swapped, or a Picture Profile gamma that allows Black Gamma: set that state on the camera, download
-it, and prove from it with `kit/prove_run.py --start` (rule 12).
+`kit/pass3_run.py` turns each blocker off in the menu, walks and proves what that opened, then restores. Its blockers
+that were switched by writing values into a file and uploading it are retired, and the script refuses them (rule 12).
+For a state that needs another start file (File Format slots swapped, a gamma that allows Black Gamma), set it on the
+camera, download it, and prove from it with `kit/prove_run.py --start`. On any body but the ILCE-1M2 the script stops
+before anything connects: its blocker table (`BLOCKERS`) is the a1 II's, and another body's is a kit change still to
+make. Until then prove each blocked row from a start file the camera wrote in the unblocked state, as above.
 
 ### Phase 4: other modes
 
-The Still/Movie/S&Q switch is physical, so the owner moves it.
+The owner moves the Still/Movie/S&Q switch (or `kit/provers/mode_switch.py` does through the menu).
 
-1. Download in the new mode. That file is the mode's start file, and its diff from stills shows
-   the mode's own records.
-2. Page-scan and model the mode's menu.
-3. Crawl it if the rows differ. S&Q's menu equalled Movie's except for greyed rows, so Movie's map
-   served there.
+1. Download in the new mode: the mode's start file, whose diff from stills shows the mode's own records.
+2. Page-scan and model the mode's menu as it is now: the page counter is part of every page's key, so a scan from
+   another state of the camera knows none of its pages.
+3. Crawl it if the rows differ.
 4. Prove the rows no stills proof covers.
-5. Prove again the rows "Different Set for Still/Mv" splits: each keeps a stills record and a movie record beside
-   the record in use (the a1 II's: its page, the Movie / stills row). Prove too what each box does to them, with the
-   box ticked and unticked and from each mode, and what ticking and unticking it writes: on the a1 II unticking a box
-   set the record in use and both copies to 0 (its page, the Different Set for Still/Mv row). A box whose effect is
-   proved goes into the hand tables' `KEEPS_APART` (the family it keeps apart, its Ticked value, what unticking it
-   set), and the runs and day that showed it into the hand evidence (`"evidence"`, `"untick"`), without which it is
-   not written; that tells the editor to say so. A box not proved gets no entry.
+5. Prove again the rows "Different Set for Still/Mv" splits (a stills and a movie record beside the record in use), and
+   what each box does to them, ticked and unticked, from each mode. A box whose effect is proved goes into the hand
+   tables' `KEEPS_APART`, with the runs and day that showed it in the hand evidence (`"evidence"`, `"untick"`), without
+   which it is not written.
 
 ### Phase 5: sessions with the owner
 
-Each step is one physical action, then `kit/tools/upload_check.py --diff REF TAG` (when a download is refused:
-section 8).
+Each step is one physical action, then `kit/tools/upload_check.py --diff REF TAG` (a refused download: section 8),
+and `kit/tools/coverage.py --record` for the row it settles.
 
-- **The mode dial:** P, A, S, M in each mode give the exposure-mode records.
-- **Holding the camera grip down and grip up** gives the per-orientation Focus Area sets (the
-  dialog turns with the camera).
-- **Registering memories in two modes and two dial positions** gives the memories' own records.
-- **DISP on the monitor and in the finder** gives the display layouts.
-- **A state only the owner sets** (NTSC/PAL Selector, rule 3): the owner switches it by hand, and a download in
-  that state shows what it moved. The kit then walks and proves the rows whose lists change in it through
-  `kit/pass3_run.py --only` entries, one per File Format chosen in the menu, over the OSD (`CAMSET_EYES=osd`, with an
-  OSD scan of the mode; a change of rate changes the HDMI signal), each entry restoring its start file. The two-box
-  screens (S&Q and Time-lapse Frame Rate Settings) are proved in that state with `kit/provers/boxes_run.py`. The
-  option every list opened on after the switch is proved only from another start (section 8). Then the owner
-  switches back, and a download checks the camera is as before.
-- **Camera Settings Reset, then Initialize,** run by the owner, show what each one really resets: download before
-  and after each. Set the test values on the camera through the menus, never by a file (rule 12): menu-proved
-  records at another proved value, never sound, light, motion, network, keys or dials. (The a1 II's owner allowed
-  Camera Settings Reset only, decision 5; ask yours.) Then write `data/<model>_fw<fw>/settings_reset_<model>_fw<fw>.json`
-  by hand, lean, from the downloads: `about` (a sentence on what the file is), and under `records`, by the
-  definition's setting key, the setting's `name` and `tab` and `result` (Camera Settings Reset) and `initialize`
-  (Initialize), each `resets` or `keeps`. Leave out a setting whose test value might equal the factory value, the
-  value the reset gives: a reading of it would only tell what the camera held before. Notes about the tests (their
-  dates, how many settings, what was tried) go in your own notes in `private/`, never in this file. It is the one
-  file the kit reads; correct it there, and a setting's name or tab in the definition, which `kit/schema_update.py
-  --write` copies into it ([DATA_CONTRACTS](DATA_CONTRACTS.md#the-reset-file-what-each-reset-puts-back)).
+- **The mode dial,** P, A, S, M in each mode: the exposure-mode records.
+- **Grip down and grip up:** the per-orientation Focus Area sets.
+- **Memories registered in two modes and two dial positions:** the memories' own records.
+- **DISP on the monitor and in the finder:** the display layouts.
+- **A state only the owner sets** (NTSC/PAL Selector, rule 3): switched by hand; the rows whose lists change in it are
+  walked and proved through `kit/pass3_run.py --only` entries (the ILCE-1M2 only, Phase 3) over the OSD (`CAMSET_EYES=osd`), the two-box screens
+  with `kit/provers/boxes_run.py`; then the owner switches back, and a download checks the camera is as before.
+- **Camera Settings Reset, then Initialize,** run by the owner: a download before and after each, the test values set
+  through the menus, never by a file (rule 12), and never sound, light, motion, network, keys or dials. (The a1 II's
+  owner allowed Camera Settings Reset only, decision 5; ask yours.) Then write
+  `data/<model>_fw<fw>/settings_reset_<model>_fw<fw>.json` by hand
+  ([its shape](DATA_CONTRACTS.md#the-reset-file-what-each-reset-puts-back)).
 
 ### Phase 6: report and definition
 
-1. `kit/pass2_report.py`: per row, records and value labels against the definition (agrees, wording,
-   missing, conflict, new). It reads `kit2_pass2`'s proofs and the camera's other proof runs, the run folders marked
-   as one (`proof_run.json`: `afreg_run.py` marks its run, `filter_run.py` the one `--run` names, `memreg_run.py` and
-   `framepos_run.py --zone-grid` theirs once they wrote a registration mirror line), each run's
-   unfinished attempts left out by its own attempts and failures, a row's lines made where the camera stood left out
-   where they say nothing of another row whose state lines of the same row name (`Row = option` in their context or
-   their run's `setup`, or in words, `Row option`, for a row the proofs walk), when for each record and value each of
-   them changed a line of those chosen with the same option changed it alike or left it as its own base download held
-   it, none writes it otherwise under that option, and those lines are credited every value and value name they are
-   (a panel's slider proved again with `--panel-row` and its `--set`; an AF Area Registration hold proved again with
-   `afreg_run.py`'s setup; a row walked again in pass 3's named states: the older lines, by being there or by the
-   records they wrote, told that row's state as the camera was found; nothing proved is lost, only their menu row), a
-   setting table's cell named by its row as all the row's cells read it (a cell's own reading carries the values of
-   the cells before it), each proof's files named
-   with its run so two runs' files of one name are never one, and a proof found in two folders counted once; `--alone`
-   reads `kit2_pass2` only,
-   into `report_alone.json`, leaving the `report.json` the writer reads as it is. A run made to check the kit is never
-   marked (`kit2_review_list`; remove the mark from one a prover made for a check): it proved rows again in whatever
-   state the camera was in then, a state its proofs do not name, and taken in beside the mapping's they would tell
-   that state (decision 16).
-   `kit/tools/replay_proofs.py` diffs every proof's two downloads again with today's parser (`kit2_pass2`'s and the
-   other proof runs' the report reads, a proof's named side effects aside) and exits 1 when one
-   no longer says what its stored `changes` say, or a file is gone: run it after any change to the parser, the
-   container block or the volatile list, before the report.
-2. `kit/schema_update.py`, a dry run, then `--write` when its changes read right (or
-   `kit/tools/build_docs.py --write-schema`, which runs it and then rebuilds the generated files). It writes the
-   definition of the camera the kit works on, `editor/definitions/<model>_fw<fw>.json` (decision 19), lean, with its
-   evidence in `private/evidence/<model>_fw<fw>.json`, which the kit reads back with it, and refuses proofs from
-   another body or firmware. A new model's first run starts its definition from its `data/` folder and the
-   run's newest download, with every setting the report proves named by its menu row; later runs write over it, and
-   of the proofs it held keep only a value a proof line the report counts still wrote (`kept_proof`, listed as "kept
-   from the definition"), never an older menu row, count of samples or value no counted line wrote. A definition an
-   older kit wrote is written afresh instead. Its
-   parts from `data/` (the camera section, the project's own help) and its own rules over them (the Expert marks, each
-   note's evidence apart in `note_evidence`, for the evidence file) are written on every run, and `kit/tools/build_docs.py --definitions`
-   writes only them, with no runs, after a camera file was edited. A setting on no camera row whose name still holds
-   a mapping word ("record", "numerator", "slot memory", "mirror", "(inferred", the SDK's) is marked Expert-only, as
-   are the fields of the memories' live copy; a setting on a row gets a photographer's name in `RECORD_FIXES`
-   instead, and the kit tidies groups and refused options' reasons (`SETTING_GROUPS`, `with_plain_words`, in
-   `kit/writer/fromdata.py`, the writer's data-only part).
-   `kit/tests/test_definitions.py`'s "mapping words" test fails while any text a photographer reads outside Expert
-   mode (a name, group, help, display rule or refused option's reason) holds a record number, a pass, the owner or
-   another word of the mapping; fix the kit's rules or tables, never the definition by hand. The writer's body is in
-   `kit/writer/` (`kit/schema_update.py` stays the command), and what a mapping finds by hand goes into the camera's
-   own hand tables file, `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` (the a1 II's,
-   `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, is the pattern; the tables and their shapes:
-   [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)), which applies to
-   that camera's definition alone. A new model has no file until its first hand fact: write it by hand then, with
-   `"camera": "<model>_fw<fw>"` and only the tables you need. A new model's definition takes the plain pass, which
-   reads `RECORD_FIXES` (a name or note the camera proved wrong), `NEW_RECORDS` with the `FILTER_FLAGS` entries it
-   takes in (a record the menus never write, found by hand, laid out like a record the definition holds), `NEW_LIKE`
-   with `NEW_WHOLE_LABELS`, `FRAME_PROOFS` (what a record holds, and a hand proof), `CAROUSEL`, `VALUE_FIXES`,
-   `PP7_VALUES`, `KEEP_LABELS`, `PICKER_LISTS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES` (with `COPY_MODES` and
-   `COPY_MODES_UNKNOWN`), `KEEPS_APART` (a switch that keeps a family's copies apart), `UNPROVED` (why no proof
-   reaches a record) and `CONTEXT_WORDS`, and stops, naming it, on a
-   table only the a1 II's own pass reads so far (the list in [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)).
-   There a value a table names is named, not proved: an editor offers it outside Expert mode only once a proof covers
-   it, and taking an entry out takes its record or hand proof out on the next `--write`.
-   The tables are public, edited by hand there, and hold names, value tables and facts; how each was proved (a hand
-   proof's values, run, day and menu row, a sample's count, the owner's word, what shows a not-offered mark, how a
-   picker's list was walked whole, a reason's day) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`
-   ([the hand evidence file](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)); while the tables
-   hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED`, `PICKER_LISTS` or `KEEPS_APART` entries `--write` refuses without it, and if you proved none of them
-   by hand you write that file with no evidence in it (`"tables": {}`)
-   ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) holds evidence
-   fields only and carries a note's evidence only as a suffix, `"note+"`; the public words and values live in the table
-   alone, so reword a note or mend a value there and nowhere else. The a1 II's pass puts the file back into its tables
-   (evidence that would replace a public value is refused, naming the table, key and field); the plain pass reads it
-   apart, refuses any field that is not evidence, and writes every piece where the definition keeps it private, never
-   into a public note (`kit/writer/hand_evidence.py --check` lists, read only, what it would refuse; a format-1 file is
-   converted once with `kit/writer/hand_evidence.py --convert`). A write stops, writing nothing, when evidence went stale in that run (a
-   proof's, or more than five settings': after a setting's key was renamed, say); `--accept-stale` writes it anyway,
-   and `--drop-stale` shows the evidence file's "stale" section by key and field and removes it:
-   - `LABEL_FIXES` (the a1 II's pass only: OCR slips: a spelling, no evidence of the code; a mended name on a value no
-     proof or rule names stays the old schema's, `schema kept`, which an editor does not offer outside Expert mode);
-   - `RECORD_FIXES` (names and notes);
-   - `VALUE_FIXES`;
-   - `NEW_LIKE` (a new record shaped like a sibling);
-   - `NEW_RECORDS` (records found by hand);
-   - `KEEP_LABELS` (a flag several options share);
-   - `HOLD_TABLES` (the a1 II's pass only: a Recall Custom hold's copy of a live setting, named by the live table once
-     that is proved in full and every proof of the hold fits it, the code itself or mirrored; a hold item proved in full on one hold names
-     the other holds that agree with it, whatever the item; until then a hold's Exposure Comp. code no proof chose is
-     named by `EV_DOWN_FROM_20`'s quarter-stop count, `counted`, which an editor does not offer outside Expert
-     mode);
-   - `PICKER_LISTS` (a picker's list walked full circle: the settings it is for, an array record's slots or keys
-     whose pickers the table walk shows offering one list, then list exactly the codes the walks wrote, and the codes
-     a first kit listed from its union of the camera's function codes go; only while every walk it names chose every
-     place, the table walk went round every list, the hand evidence says how, and no proof and not the sample holds a
-     code outside it, [the rule](DATA_CONTRACTS.md#a-pickers-list-walked-whole-picker_lists). Use it for codes no list
-     of that screen offers, and only for a picker whose list does not change with the camera's state: where it may, walk
-     it whole in each state (each walk named, all writing the same codes) or use `NOT_OFFERED` marks; a code another key
-     of the screen offers, or a factory value, is a `NOT_OFFERED` mark);
-   - `NOT_OFFERED` (values the camera's menus never offer, each with why in plain words: a mark is written only while
-     its evidence (in the hand evidence file) holds, every row it names (each a walk of the whole list, as its
-     evidence says) never writing the
-     value, or every picker list of a table-walk screen walked round to its start without it; a factory value the
-     camera writes itself is `held` and stays offered). An
-     option refused under another setting is never this: the proof runs' refusals (`menu_blocked`) stay in the
-     evidence ([the field](DATA_CONTRACTS.md));
-   - `MY_MENU_EMPTY` (the a1 II's pass only: My Menu's empty place, "(empty)" in every slot, below);
-   - `CONTEXT_WORDS` (a proof context in other words: one reworded in `runs/` after it was written, or a state as
-     found that the proof does not need, which the runs still hold ("S&Q mode (…)" is "S&Q mode"); a pattern and its
-     new words, renamed where a row enters the definition and in the rows the definition kept, or the old row would
-     stay beside the new).
-
-   In the a1 II's own pass only, so far (the plain pass names My Menu's slots as any record, by their proofs): My
-   Menu's slots (`camera.my_menu.records`, seven per page) share one code table. `kit/provers/mymenu_run.py --allow
-   "Add Item"` (a never-open action: only with your owner's word) adds every item the Add Item picker offers, one
-   download each, and its proofs say which page and slot took which code (`my_menu`); the writer reads those proofs,
-   not the report's row, and names each code in every slot: the slot that took it is proved, the others hold the
-   same name as derived. The item's name is settled against the camera's
-   own row names (the menu tree's rows, the Help Guide's menu list) from the lit row's OCR and the vision reader's
-   words, twins numbered by their place in the picker ("Fn Menu Settings (2)"); a name the table already holds stays
-   when it is the fuller of two alike readings. `mymenu_run.py --relabel` names a run's proofs again by that rule
-   from the readings they kept, touching no camera. The empty place's code, the camera file's `my_menu.empty`, is
-   "(empty)" in all 42 slots by a hand table (`MY_MENU_EMPTY`): every place the Add Item proofs filled held it before,
-   and the location screen showed the places after a page's items blank.
-
-   `--write` refuses (exit 1, the list printed) while the report holds a question it does not settle that
-   `private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json` does not accept: a conflict whose label it keeps
-   against the camera's reading, a new record it does not add, a record not one to one (which loses its proof and is
-   marked `disputed`), a name dispute or a carried-over value. Settle each with a proof, or look at it (report.md, the
-   proof viewer) and add an entry with why ([the file's shape](DATA_CONTRACTS.md)); the file stays with you, and the
-   pull request carries the gate's count line. `--force` writes anyway, loudly, for a look only. The evidence keeps what backs each proved value's name
-   (`proved.names`: two readers, one, the vision model alone, a hand table, the schema's kept label, a rule's copy,
-   sampled), and a proof's `values` in the definition are those the camera's own word backs; a number the camera
-   shows scaled ("75%" stored 7500) gets `shown_as` from its proofs.
-
-   After `--write`, stage the definition (`git add editor/definitions/<model>_fw<fw>.json`), run the report and
-   `--write` again: `git diff --exit-code editor/definitions/<model>_fw<fw>.json` must print nothing (the writer is
-   repeatable; its dry run still lists the labels it sets on every run).
-3. Run `cd editor && cargo test`, then `.venv/bin/python kit/tools/build_docs.py` (the committed generated files;
-   without `--write-schema` or `--definitions` it never writes a definition, and the pre-commit hook passes neither) and
-   `.venv/bin/zensical build --strict`: the Status page, the memory map and the model page's measured block are
-   rendered from the definition when the site is built.
+1. `kit/tools/replay_proofs.py` after any change to the parser, the container block or the volatile list.
+2. `kit/pass2_report.py`: per row, records and value labels against the definition (agrees, wording, missing, conflict,
+   new). A run made only to check the kit carries no proof-run mark (remove the `proof_run.json` a prover wrote): its
+   proofs, made in whatever state the camera was then, would be read beside the mapping's (decision 16).
+3. `kit/tools/menu_tree.py --crawl <crawl> [--crawl ...]` (`--dry-run` first), and each other mode's
+   (`--mode Movie --scan <the Movie page scan> [--crawl <its crawl>]`, S&Q likewise): the writer places each setting on
+   its row from it. Then `kit/schema_update.py`, a dry run, then `--write` when its changes read right. What the mapping finds by hand goes
+   into the hand tables file, written by hand ([which tables a new model's pass reads](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)),
+   how each was proved into the hand evidence file
+   ([the hand evidence file](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)). Fix the kit's
+   rules or the hand tables, never the definition by hand.
+4. `--write` refuses (exit 1) while the report holds a question
+   `private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json` does not accept: settle each with a proof, or look at
+   it and accept it with why ([the accepted file](DATA_CONTRACTS.md#the-accepted-file-what-the-report-leaves-open)).
+   The pull request carries the gate's count line.
+5. Stage the definition (`git add editor/definitions/<model>_fw<fw>.json`), run the report and `--write` again:
+   `git diff --exit-code editor/definitions/<model>_fw<fw>.json` must print nothing.
+6. `kit/tools/coverage.py --write` (commit what it writes; never edit it by hand), then `cd editor && cargo test`, `.venv/bin/python kit/tools/build_docs.py` and
+   `.venv/bin/zensical build --strict`.
 
 ## 8. Pitfalls already paid for
 
-- **A press sent to a menu still sliding in.** The menu reopens where a hand left it, and its rows slide in over
-  about half a second; the OSD image renews only every 0.25-0.37 s and shows a press 0.33-0.65 s after it was sent,
-  so "unchanged for 0.2 s" was one picture seen five times, not a screen at rest. A page scan read a mid-slide frame
-  (no row bar yet) as the group column, sent the Right that steps into the rows, and the camera, by then at rest
-  with the cursor on the Drive Mode row, opened the row; the next Down moved the drive mode (2026-11-06; the start
-  file went back on). Now: the OSD eyes wait two renewals with the same picture (`OsdSource.QUIET`), the reader
-  gives a menu no focus while its rows panel is between its two places (`screen._panel_x`), and the scan and the
-  prover look again until the menu is at rest before any press, cancelling with MENU if a Right opened a row all the
-  same. The scan also downloads the settings first and puts the start file back on when anything moved, and waits
-  out "Saving to the connected device..." before its first MENU.
-
-Each line is a symptom, then its cause, then the fix now in the kit.
+Each line is a symptom, then its cause, then what to do.
 
 **Screens and reading:**
-- **An unknown screen after Right** → a screen type the reader lacks. The row fails closed. Look
-  at the frame, then add a reader or a special prover.
-- **A big orange cell or Main tiles read as a menu page** → Movie mode's Main pages have different
-  grids. Count grid lines in the top rows and the bottom rows too.
-- **The shooting screen read as unknown or as a keyset** → the camera is held vertically and the
-  shooting screen turned with it. Use the rotated battery templates, checked first.
-- **The shooting screen read as a notice** → Focus Map tints live view red. Check the battery
-  before the notice frame.
-- **The Focus Area dialog is unreadable when the camera is held vertically** → menus stay level,
-  but dialogs turn. Read OCR on the frame turned upright (`orient_run`); keys follow the turned
-  picture.
+- **An unknown screen after Right** → a screen type the reader lacks: the row fails closed. Look at the frame, then add
+  a reader or a special prover.
 - **OCR noise:**
-  - Cyrillic look-alikes ("30р", "ОК") → translate them before comparing.
   - Icons read as letters ("S&d", "sad", "#", "4e", "MR ", "(V)") → read the frame by eye into
     checked labels.
-  - Tick marks or arrows beside a number ("3•", "15") → read only digit-tall text centred on the
-    value.
   - Words run together or split ("WakeOn LAN", "ResetNetwork Set.", "Forma t", "Pre-AFOn") → a never-open pattern with
     a space in it, or a word boundary at its end, never matched them: with one space dropped, 54 of the a1 II
     definition's 95 never-open labels read as ordinary rows in the press checks. The guards judge every such pattern
@@ -1064,18 +473,15 @@ Each line is a symptom, then its cause, then the fix now in the kit.
     lifts, a row it opens, an armed confirmation) needs the readings spaced as read to agree (`plain_view`), and a
     decision names its rows as the camera writes them. `kit/tests/test_guards.py` drops and puts in a space in every
     never-open label of the definition.
-- **The VLM invents an answer on a black frame** (section 5) → read that row through the OSD.
 - **A label carries state, not a name** ("User1: (No Import)", "Spot: Standard") → strip the
   state, or use `VALUE_FIXES`.
 
 **HDMI and the link:**
-- **HDMI black** → Auto Framing On, a Framing Stabilizer preview, or the rear screen folded in.
-  The prover now looks at the OSD. With the screen folded in, the camera also refused the remote
-  session until it was opened.
-- **The capture dies after a frame-rate change** → the HDMI format followed the movie settings.
-  The feed restarts once, otherwise it raises. Restores need no HDMI.
-- **MENU unanswered just after a download** → the menu is locked for about 4.5 s. Wait `LOCK_S`,
-  look again, and press once more. Never press MENU twice on a slow menu.
+- **HDMI black** → Auto Framing On, a Framing Stabilizer preview, or the rear screen folded in (which also refuses the
+  remote session until opened). The prover then looks at the OSD.
+- **The capture dies after a frame-rate change** → the HDMI format follows the movie settings. Restores need no HDMI.
+- **MENU unanswered just after a download** → the menu is locked for about 4.5 s (`LOCK_S`). Never press MENU twice on
+  a slow menu.
 - **The menu reopens after a download with the focus in the group column** → the position matches no page of the
   scan. A session that opens the menu that way presses Right once, onto the page's rows, before it matches the scan;
   a menu that still matches no page fails closed ("the menu opened on a screen the scan does not know") and the
@@ -1098,33 +504,21 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   scan read glued on, as a word of the page's own group, and on the live bar that icon with at most one letter misread,
   dropped or put in, glued on or set apart, where the bar forms no other label the kit knows; anything else fails
   closed ("its bar does not read it"). A look at such a row's frames with the kit's own OCR shows the bar's shape.
-- **No HDMI frames, and no OSD image either, at the start of a session** → the camera's monitor is asleep (or the
-  HDMI cable is out): the capture gives no frames while the monitor sleeps or the cable is out, and the SDK's OSD
-  image is unavailable while the monitor sleeps. A session the owner runs by hand starts with the camera awake: ask
-  them to wake it by hand first, and to check the cable.
-- **The a1 II's viewfinder rows (Viewfinder Bright., Finder Color Temp.) answer "This function is currently
-  disabled."** → the HDMI cable is in. With it out they open only with the finder in use, which needs the eye sensor
-  covered (or an eye at the finder) and the monitor folded in: a monitor flipped out keeps the monitor on and the
-  finder off, even on VF(Manual). With the finder not in use, Finder Color Temp. showed "Look at the viewfinder while
-  setting the color temperature of the viewfinder." and went back to the menu. These are physical actions, the owner's, one per message
-  (section 9).
+- **No HDMI frames and no OSD image at the start of a session** → the monitor is asleep, or the HDMI cable is out: ask
+  the owner to wake the camera by hand and check the cable.
+- **The viewfinder rows answer "This function is currently disabled."** → the HDMI cable is in. With it out they open
+  only with the finder in use (eye sensor covered, monitor folded in): the owner's actions, one per message.
 - **"Connect_SSH_GetFingerprintFailed"** → SSH port 22 is closed. Remote Shooting is off, or bound
   to USB, or the camera is asleep, or the screen is folded in.
 - **"camera does not allow a settings download now"** → the dial is on 1-3, or the camera just
   woke.
-- **Evidence numbers collided past 99,999** → numbering read only 5 digits. Read 5 or more.
 
 **Proving and restoring:**
-- **A row's starting option has no proof** → a row's last proof is the option it opened on, chosen again, which
-  changes nothing by design. Prove that option from another start: a pass-3 entry with `"first"` (another option
-  chosen in the menu before the row is walked), `kit/provers/boxes_run.py --first BOX=VALUE` on a two-box screen, or
-  `kit/prove_run.py --first "ROW / OPTION=VALUE"` for a carousel option's second axis (`--rows` naming that axis
-  job). Both `--first` options compare every later proof with the download made after that choice and still put the
-  start file back.
-- **Every row fails on the way to it ("a screen was not the one the scan recorded") after a camera reset** → a reset,
-  or any change that adds or removes menu pages, changes the page count, and every stored page scan is stale: the
-  a1 II's 65 pages became 63 after the owner's reset. Make the scans again (Phase 1, steps 1 to 3, for each mode's
-  scan) before any run.
+- **A row's starting option has no proof** → prove it from another start: a pass-3 entry with `"first"` (the ILCE-1M2
+  only, Phase 3), `kit/provers/boxes_run.py --first BOX=VALUE`, or
+  `kit/prove_run.py --first "ROW / OPTION=VALUE" --rows "ROW / OPTION"` for a carousel option's second axis.
+- **Every row fails on the way to it ("a screen was not the one the scan recorded") after a camera reset** → the page
+  count changed, so every stored scan is stale: make the scans again (Phase 1, steps 1 to 3, for each mode's scan).
 - **"Back on the saved value, records still differ"** → a first-use record, a record written on
   every OK, or a one-way flag. Note it as found; the upload restores the camera.
 - **An information screen after OK** (it may have a "Don't show this again" box) → leave it with MENU; its OK goes
@@ -1158,26 +552,10 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   that reads as a confirmation only so ("new folders").
 - **A choice that also rewrites key assignments or other rows** (Flexible Exp. Mode) → keep those
   records as side effects, not as the row's changes.
-- **The table walk got lost** → buttons can keep hidden columns. Re-plan after every press and
-  route around unsure cells.
-- **Picker lists differ between keys** → the lists are turned round from each key's saved
-  function. Compare them allowing for rotation and OCR slips; identify options by page and row.
-- **Recall Custom registration left a working slot changed that the upload did not restore** →
-  never choose own-screen functions. If it happens, opening another hold's registration puts it
-  back.
 - **The definition got wrong labels for linked records** → a shared flag (`KEEP_LABELS`), or side
-  effects recorded as changes.
-- **A list look ended early and a later visit registered the wrong option** → two options matched
-  by ratio. Strict matching (section 5); the home visit's diff must be empty, so a change there is a
-  red flag to stop on.
-- **Guessed labels were backwards** → 84 Movie white-balance fine-tune labels, copied by analogy,
-  were wrong until proved. Labels by analogy stay unproved in the definition until a proof names them.
+  effects recorded as changes. Labels copied by analogy stay unproved until a proof names them.
 
 **Running unattended:**
-- **A crawl waited 2.5 hours for the shooting screen** → Auto Framing blanks HDMI. Waits now read
-  the OSD on a black frame and give up after `WAIT_LIMIT`.
-- **Every prover step of a shell chain failed at once** → zsh does not split `$V` into words. Use
-  `kit/tools/chain.py` (argument lists, no shell).
 - **A wait loop never ended** → `pgrep -f name` matched the waiting shell's own command line. Wait
   on the process number.
 
@@ -1191,8 +569,6 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   while the viewfinder is in use.
 - **The owner sometimes does something other than what was asked** (the dial on S, not A). The
   download says what happened; read it, never assume.
-- **A refused download, or HDMI black with the rear screen folded in** (section 8), is not a fault; tell the owner
-  what to change.
 - **The owner decides the scope.** Ask before long runs or anything that changes their setup;
   never decide that something is "good enough" for them.
 
@@ -1219,16 +595,11 @@ exit status 5 too: look at the camera first, then the same.
 
 ## 11. Time, power and heat
 
-- **Time:**
-  - A full menu scan takes about 2 min; a crawl about 25 min per mode.
-  - Proofs take 14-30 s per option, most of it the download and the menu lock after it (`LOCK_S`), so a stills
-    pass is roughly 2,500 proofs over 10-20 h.
-  - Picker-heavy screens are sampled (one list in full, three functions on the other slots).
-  - The whole first stills mapping (scan, crawl, labels, proofs, report) takes about two days of camera time,
-    mostly unattended; each extra mode takes a few hours more. This section is the one place these figures are kept.
-  - Plan overnight runs only with the owner's agreement.
-- **Power:** use mains power for the camera if the owner has it. Mention the battery level when it
-  is low; the a1 II's battery showed 36% after a day of runs.
+- **Time:** a full menu scan takes about 2 min, a crawl about 25 min per mode, a proof 14-30 s per option (a stills pass
+  is roughly 2,500 proofs over 10-20 h). The whole first stills mapping takes about two days of camera time, mostly
+  unattended; each extra mode a few hours more. This section is the one place these figures are kept. Plan overnight
+  runs only with the owner's agreement.
+- **Power:** mains power if the owner has it; mention the battery level when it is low.
 - **Heat:** stop and let the camera cool if it warns of temperature. Auto Power OFF Temp. is by hand (rule 3).
 
 ## 12. Records and definitions, for reference
@@ -1242,20 +613,9 @@ exit status 5 too: look at the camera first, then the same.
  "notice": null, "applied": true, "context": "Movie mode"}
 ```
 
-**A setting in a definition** (`editor/definitions/<model>_fw<fw>.json` `settings`). Fields are additive: the
-editor ignores fields it does not know.
-
-```json
-{"key": "global:0x0324", "area": "global", "id": 804, "name": "Center Marker",
- "tab": "Shooting", "group": "Marker Display", "values": [[0, "Off"], [1, "On"]], "note": "",
- "in_sets": true, "scalar": true, "size": 1, "count": 1, "modes": "movie, S&Q",
- "proved": {"values": [0, 1]}}
-```
-
-The proof's run, day, menu rows and name sources are in the evidence file, under the same key.
-
-Notes say what a person needs, in the definition's own words: which records move together, what a file
-cannot set, which mode or orientation writes the record, and what is unknown.
+A definition's settings: [DATA_CONTRACTS](DATA_CONTRACTS.md#a-setting). Notes say what a person needs, in the
+definition's own words: which records move together, what a file cannot set, which mode or orientation writes the
+record, and what is unknown.
 
 ## 13. A round trip at the end
 
@@ -1268,103 +628,48 @@ A map is only useful if a file the editor writes loads on the camera as intended
 3. Check that every edit took and nothing else moved. Anything rejected or rewritten goes into the
    definition's notes.
 
-The first such test on the a1 II passed on 2026-10-23 (a file-name prefix edit).
-
-## 14. Hints from the a1 II (to prove, never to copy)
-
-`data/ILCE-1M2_fw4.00/` holds what this body taught. Use it to know where to look and what to expect on a body of
-the same generation, never as proof:
-- `camera_<model>_fw<fw>.json`;
-- `settings_reset_<model>_fw<fw>.json`, which settings Camera Settings Reset leaves alone;
-- `help_guide_menu_<model>_fw<fw>.jsonl`, the Help Guide's menu list;
-- the definition's menu list and each setting's place (`row`, `row_at`, `row_tab`, `row_group`, `under_option`): the
-  menus' rows in the camera's order;
-- value ladders: ISO, aperture, shutter and bracket codes;
-- the a1 II's page, `docs/models/ILCE-1M2_fw4.00.md`: behaviour worth testing again, such as Different Set for
-  Still/Mv, orientation sets, first-use records and the memories' records.
-- Recall Custom holds keep values the hold's screen never shows (the a1 II's page: the Reg. Custom Shoot Set and
-  Recall Custom rows). Look for such copies with a start file, downloaded, in which the live setting differs.
-
 ## 15. What "done" looks like
 
-- Every row of every mode's map is proved, or excluded with a written reason: rule, by hand, an
-  action, an info screen, or not in the file. `kit/tools/coverage.py --todo` lists nothing you could still do without
-  equipment, a decision or a kit fix, and the public form it writes (`--write`) is in the data folder.
-- `kit/pass2_report.py` shows no unexplained conflict or missing value, and `kit/schema_update.py` (without
-  `--write`) prints its gate line with every open question accepted. Every proved record has
-  value labels the camera showed, and the inferred ones (section 6) are only on readouts and flags.
-- The evidence was re-checked offline (section 6): the proofs' frames against their labels.
-- Records only the owner can change (dial, orientation, registration, resets) are proved in
-  sessions, and the definition's notes say how.
-- Records a file cannot set are recorded with a note saying so, so the editor can show them
-  read-only.
+- Every row of every mode's map is proved, or excluded with a written reason, and `kit/tools/coverage.py --todo` lists
+  nothing you could still do without equipment, a decision or a kit fix.
+- `kit/pass2_report.py` shows no unexplained conflict or missing value, and `kit/schema_update.py` (without `--write`)
+  prints its gate line with every open question accepted. Every proved record has value labels the camera showed, and
+  the inferred ones (section 6) are only on readouts and flags.
+- The evidence was re-checked offline (section 6).
+- Records only the owner can change (dial, orientation, registration, resets) are proved in sessions, and records a
+  file cannot set carry a note saying so.
 - The `data/<model>_fw<fw>/` folder holds the files [Data files](DATA_CONTRACTS.md#what-a-mapping-delivers) lists as
-  required, and the model's page is in `docs/models/` with its entry in `mkdocs.yml`'s nav (`kit/tools/build_docs.py` writes it). The model's definition,
-  `editor/definitions/<model>_fw<fw>.json`, is as `kit/schema_update.py --write` wrote it, it opens the owner's files
-  in the editor (Add definition…), and no other camera's definition changed. It is lean
-  (`kit/tools/check_public.py --all` exits 0), and its evidence file stays in `private/`. Its record names,
-  `docs/formats/sony_camset_ids_<model>_fw<fw>.ksy`, go with it ([Data files](DATA_CONTRACTS.md#what-a-mapping-delivers)
-  says what writes them).
-- The menu tree is written by `kit/tools/menu_tree.py --crawl <crawl> [--crawl ...]` (`--dry-run` first), into
-  `private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json`, and each other shooting mode's menu beside it from
-  that mode's page scan and crawls: `kit/tools/menu_tree.py --mode Movie --scan <the Movie page scan> [--crawl <its
-  crawl>]` (S&Q likewise), so the settings proved in Movie mode find their rows.
-- The camera holds the owner's own file again: an upload, then a download that differs only in
-  the records a file cannot set.
-- The tests pass (`kit/tests`, `cargo test` in `editor/`), and the notes and the memory map are
-  current.
+  required, with the coverage ledger's public form, and the model's page is in `docs/models/`. The definition is as
+  `kit/schema_update.py --write` wrote it, opens the owner's files in the editor, and no other camera's definition
+  changed; `kit/tools/check_public.py --all` exits 0, and its evidence stays in `private/`.
+- The camera holds the owner's own file again: an upload, then a download that differs only in the records a file
+  cannot set.
+- The tests pass (`kit/tests`, `cargo test` in `editor/`), and the notes and the memory map are current.
 
 ## 16. New model: first day
 
-1. **Read the model and firmware** with the SDK (`SoftwareVersion`), and take the layout
-   fingerprint of a downloaded file: every record's id, size and count, in order (`kit/tools/identify.py`,
-   the same signature as the editor's).
-2. **Read the model's whole Help Guide,** every page, not only its menu list (decided 2026-11-01). It
-   names each item's options, the modes it appears in, what greys it out, the default-value and reset
-   lists, and what Save/Load Settings leaves out. Keep your notes from it in your `private/`
-   (decisions 13 and 18: Sony's text is never published), to plan runs, set press budgets and order the
-   work, never as proof. Only its menu list goes in `data/`: `help_guide_menu_<model>_fw<fw>.jsonl`, one
-   line per item with its tab, group, name and modes. On the a1 II only the menu list and a few pages
-   were read, and rows the list leaves out (Forced File Number Reset) were found on the camera.
-3. **Keep the model's results apart.** Its results go into its own `data/<model>_fw<fw>/` folder, proofs and
-   definition (`editor/definitions/<model>_fw<fw>.json`, which `kit/schema_update.py --write` writes for the camera
-   the kit works on); files from different bodies or firmware are never mapped with another's definition. When no
-   known container block reads its files, `kit/tools/identify.py` prints a draft: correct it into the camera file's
-   `file` by hand ([the container block](DATA_CONTRACTS.md#the-container-block-file)) before anything else. The second body's runs get a folder of their own,
-   `runs/<model>_fw<fw>/`, which `kit/tools/identify.py --camera` starts (section 7, "Where runs go"): name it in
-   `private/config.json` (`"camera"`, with `"cameras"` listing both bodies and their own addresses) or pass
-   `--camera` to each command, so the first body's runs, viewer and downloads are never mixed with the second's.
-   `build_docs.py --write-schema` writes the active camera's definition only, never the a1 II's while another camera
-   is the active one.
+1. **Read the model and firmware** with the SDK (`SoftwareVersion`), and take the layout fingerprint of a downloaded
+   file (`kit/tools/identify.py`).
+2. **Read the model's whole Help Guide,** every page: each item's options, the modes it appears in, what greys it out,
+   the default and reset lists, and what Save/Load Settings leaves out. Keep your notes from it in your `private/`
+   (decisions 13 and 18: Sony's text is never published), to plan, never as proof. Only its menu list goes in `data/`:
+   `help_guide_menu_<model>_fw<fw>.jsonl`, one line per item with its tab, group, name and modes.
+3. **Keep the model's results apart,** in its own `data/<model>_fw<fw>/` folder and definition. When no known container
+   block reads its files, correct `kit/tools/identify.py`'s draft into the camera file's `file` (`data/<model>_fw<fw>/camera_<model>_fw<fw>.json`) by hand before anything
+   else. A second body's runs get their own folder, which `kit/tools/identify.py --camera` starts: name the camera in
+   `private/config.json` (`"camera"`, with `"cameras"` listing both bodies) or pass `--camera` to each command.
 4. **Check the screens.** Run `kit/tools/selftest.py`, open one screen of each type by hand while
-   `kit/tools/hdmi_watch.py` records, and score the readers on those frames. Recalibrate the HDMI crop
-   and recut templates where they miss.
-5. **Download twice with nothing changed, and once after turning the camera,** to find the
-   volatile records, and write them into the new body's `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`
-   (`volatile_records`) before Phase 1: a diff ignores only its own body's volatile records, so without them every
-   row fails its last diff. Upload the download back and download again to find the records a file
-   cannot set.
-6. **Find the records that hold an owner's own data and the live mode record,** and write them into the camera file
-   too, each body's own ids, never the a1 II's. `personal_records`: every record that changes when the owner's own
-   things change, text or not, as the text check misses a name packed against other bytes (on the a1 II: Preset
-   Focus/Zoom's registered lens list, each lens's name, serial number and data, and the file-name prefix). What the
-   Help Guide says Save/Load Settings keeps tells which things to try. Each change is the owner's, by their own hand
-   and asked first: registering a lens to a preset needs a held custom key or the lens's ring and overwrites a slot,
-   so it goes in a slot they do not use. Download before and after (`kit/tools/upload_check.py --diff REF TAG`), and
-   list each record that changed by its key's id ("0x167c",
-   [DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records)); the bytes the diff
-   prints are the owner's (a lens's name, its serial number): copy them nowhere, not into notes, the camera file or a
-   message. A record with a camera default (a file-name prefix) goes under `defaults`, its bytes read from the file
-   the camera wrote right after Initialize, the one `make_sample.py` is given, never from the owner's working file
-   (DATA_CONTRACTS has the one-line command): they go into the published sample.
-   `kit/tools/make_sample.py` refuses to make the sample without the list, with a record listed twice, a
-   record the file does not hold or a default of another length than its record, and `kit/tools/check_public.py`
-   refuses such a sample; an empty list is allowed only once those things were tried and changed no other record,
-   and both say so when they meet one. `live_mode`: download once in each mode of the Still/Movie/S&Q switch (the
-   owner's hand); the live record whose value follows the mode is it, with what each value means.
-   `kit/tools/help_extras.py` reads a drive's mode by it and stops without it; `kit/provers/customshoot_values.py
-   --counted` reads the Focus Area order from this camera's own definition (`--order-from` its Focus Area record) and
-   stops before the camera is touched while there is none.
+   `kit/tools/hdmi_watch.py` records, and score the readers on those frames; recalibrate the HDMI crop and recut
+   templates where they miss.
+5. **Download twice with nothing changed, and once after turning the camera,** to find the volatile records, and write
+   them into the camera file (`volatile_records`) before Phase 1, or every row fails its last diff. Upload the download
+   back and download again to find the records a file cannot set.
+6. **Find the records that hold an owner's own data and the live mode record,** each body's own ids, and write them into
+   the camera file. `personal_records`: as
+   [DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records) says, each change made by
+   the owner's own hand and asked first; the bytes the diff prints are the owner's: copy them nowhere, not into notes,
+   the camera file or a message. `live_mode`: download once in each position of the Still/Movie/S&Q switch (the owner's
+   hand); the live record whose value follows the mode is it.
 7. **Blank cards, then one picture.** Ask the owner to put in cards that hold nothing they want kept and to leave them
    in for the whole mapping, then to run `kit/tools/owner_statement.py cards` in their own terminal: only they answer
    it. A row the kit has not yet seen opened on this body opens only with that statement, under `RESTORE_BY_HAND`
@@ -1380,3 +685,4 @@ the same generation, never as proof:
    `schema_update.py --write` puts the text they settled on into your `private/help/` (decision 13); for a new model
    it stays in its `runs/<model>_fw<fw>/` until that model's help reading is wired into its definition (the
    ILCE-1M2's tables do it for that body only).
+

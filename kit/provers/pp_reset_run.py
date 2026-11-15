@@ -133,6 +133,9 @@ since the start say whether opening alone reset anything (pp_reset_peek.json); i
 with no link. A camera run, a peek and a dry run
 all need the owner's word, --allow "Picture Profile Reset", and no other --allow (safety.PROFILE_RESET).
 No key on the shooting screen but MENU (decision 21); nothing that makes sound, light or motion is touched.
+The guards are written for the ILCE-1M2's screens and wording at firmware 4.00 ("Reset PP1 to the default setting?",
+"Complete.") and stop on any other, so on any camera a --peek and a one-profile trial (--profiles PP1) come before a
+full run.
 """
 import argparse
 import contextlib

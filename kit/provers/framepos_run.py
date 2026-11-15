@@ -59,7 +59,9 @@ presses went: Left lowers X and Up lowers Y, Right and Down raise them; a grid r
 "frames", "files", "back"}, tagged with the context and the allowance; a failed area's line says why.
 framepos_summary.txt holds the summary, the last line of each area in each context (a run folder holding a Standard
 and a Large session, or sessions under other --moves, keeps each), its head naming the context. Nothing a record held
-is printed (decision 16): each changed key with its delta, and the count of records that differ at the end.
+is printed (decision 16): each changed key with its delta, and the count of records that differ at the end. Give a
+--frame-move-amt run its own --run, and read a step's size only from an area whose put-back matched. A record family
+the deltas show that the definition has no setting for gets no name from a run: map it with proofs first.
 
 --zone-grid (2026-11-09): with Switch V/H AF Area = Off one Zone move writes the zone's grid index into every copy at
 once (set1:0x019a, the level memories, the six vertical copies), so a sweep of the nine places proves the vertical

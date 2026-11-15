@@ -63,6 +63,15 @@ this again." and OK, read as no known kind: proving.screens.notice_before), not 
 
 Results: runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, one line per option; frames and downloads numbered on.
 
+--eyes osd and osd-all both add the reviewed scope's OSD group ("could take the menus off HDMI or blank a screen":
+HDMI Resolution, File Format, Rec Frame Rate, Framing Stabilizer, Auto Framing, Select Finder/Monitor ...; jobs.OSD_ROWS)
+to the rows proved. With osd the way to each such row goes over HDMI and only its proofs watch the SDK's OSD image
+(OsdEyes); after the row the run reads HDMI again, where a stopped capture is restarted once and is otherwise an error
+(camkit.frames). With osd-all the whole run, the way to every row included, watches the OSD, and takes the camera's
+settings at the start as its start file (no --start): for rows after which HDMI may not come back (a change of frame
+rate or resolution), and for another mode's rows after kit/provers/mode_switch.py. It needs a page scan and map made
+through the OSD: OSD frames do not match a scan made over HDMI.
+
 The parts are in kit/proving/ (its __init__ lists them): the screen readers, the way to a row and back, the job
 builders and the provers of the other row kinds (number fields, side lists, checklists, Creative Look's panels, White
 Balance's grids, tables and keys). This file holds the list prover itself (prove_row, and prove_by_display for a list
@@ -890,10 +899,11 @@ def main():
                     help="read the camera's help (In-Camera Guide) for each list / dialog row and option instead of "
                          "proving: <run>/option_help.jsonl in the camera's runs; nothing is chosen")
     ap.add_argument("--eyes", choices=["hdmi", "osd", "osd-all"], default="hdmi",
-                    help="osd: also prove the rows that can take the menus off HDMI, watching their proofs "
-                         "through the SDK's OSD image (the way there is still over HDMI); osd-all: the whole "
-                         "run through the OSD, for rows that change the HDMI signal itself (frame rate, "
-                         "resolution: the capture may not come back until the restore)")
+                    help="osd: also prove the scope's OSD group (the rows that can take the menus off HDMI or "
+                         "change its signal: HDMI Resolution, frame rate ...), the way to each over HDMI and its "
+                         "proofs through the SDK's OSD image, HDMI read again after the row; osd-all: the same rows "
+                         "with the whole run through the OSD (an OSD page scan and map, no --start), for when the "
+                         "capture may not come back between rows, and for another mode's rows")
     a = ap.parse_args()
     if a.allow and not a.rows:
         sys.exit("--allow opens a never-open row for the rows named with --rows only")
