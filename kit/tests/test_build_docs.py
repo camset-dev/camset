@@ -358,6 +358,46 @@ def test_the_submission_lists_name_the_record_names():
     assert "`kit/tools/build_docs.py --no-viewer` writes from it (the pre-commit hook runs it" in " ".join(contracts.split())
 
 
+def schema_fields():
+    """docs/DATA_CONTRACTS.md's schema_fields macro, as the docs site gets it (kit/tools/docs_macros.py define_env)."""
+    import docs_macros
+    macros = {}
+
+    class Env:
+        def macro(self, f):
+            macros[f.__name__] = f
+            return f
+    docs_macros.define_env(Env())
+    return macros["schema_fields"]
+
+
+def test_a_schema_table_shows_the_schema_s_words_as_typed():
+    """The data files' page prints a schema's own description above its fields, and a field's own description only in
+    its parent's table: <model>, _ and \\ read as typed outside `code`, and nothing is escaped inside it."""
+    import re
+    fields = schema_fields()
+    camera = fields("camera")
+    assert camera.startswith("Camera-specific facts the editor reads")
+    assert r"data/&lt;model>\_fw&lt;fw>/camera\_&lt;model>\_fw&lt;fw>.json" in camera
+    assert not fields("camera", "properties/personal_records").startswith("The records that hold")
+    assert fields("camera", "$defs/file_block").startswith("The container the camera writes")
+    picker = fields("hand-tables", "$defs/picker_list")
+    assert r"0x0445\\\\[(?:[0-9]\|1[01])\\\\]" in picker          # the JSON's "\\[" shown as typed
+    for page in (camera, picker, fields("hand-tables"), fields("definition", "$defs/setting")):
+        for code in re.findall(r"`([^`]*)`", page):
+            assert "\\_" not in code and "&lt;" not in code, code
+
+
+def test_the_hand_schemas_name_the_tables_the_code_reads():
+    """The hand tables' and the hand evidence's descriptions, printed on the data files' page, list what the code
+    reads: the plain pass's tables in PLAIN's order, and every table whose entries need the hand evidence file."""
+    from writer import hand_evidence, hand_facts
+    tables = json.loads((ROOT / "schemas" / "hand-tables.schema.json").read_text(encoding="utf-8"))["description"]
+    assert ", ".join(hand_facts.PLAIN) in tables
+    evidence = json.loads((ROOT / "schemas" / "hand-evidence.schema.json").read_text(encoding="utf-8"))["description"]
+    assert all(t in evidence for t in hand_evidence.COMPLETES), hand_evidence.COMPLETES
+
+
 # ---------------------------------------------------------------- the reader's .ksy hashes (no compiler needed)
 
 # record names as camset_ksy writes them: each value's doc ends with its proof count, which the reader leaves out

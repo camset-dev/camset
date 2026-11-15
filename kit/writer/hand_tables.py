@@ -23,13 +23,14 @@ those shapes before the evidence is put back, as the Python module that held the
 
 The file is contributed data, so the reader takes nothing on trust that the writer would trip on later: each table's
 JSON type, each entry's type and the fields the writer reads, the value lists' [code, name] pairs, every pattern the
-writer runs (CONTEXT_WORDS' patterns, each tried once with its words; NOT_OFFERED's walks; PICKER_LISTS' keys and
-walks; ORIENTED, with the group the writer reads), and My Menu's empty line, whose one field is {code}. A file that is
-not JSON (NaN and Infinity included), nested past what the parser follows, for another camera, with a table the kit
-does not know, a key or a row twice, a table or an entry out of its shape, a pattern that does not compile, or a $ref
-anywhere but a NEW_RECORDS entry naming FILTER_FLAGS' entry of the same key, is refused in plain words (Refused), naming
-the file and the table. What else an entry may hold is the JSON Schema's, which the commit hooks and CI check. A file
-saved with a byte order mark (Windows Notepad's) reads as one without.
+writer runs, Python's regular expressions the maintainer reviews in a pull request as code (CONTEXT_WORDS' patterns,
+each tried once with its words; NOT_OFFERED's walks; PICKER_LISTS' keys and walks; ORIENTED, with the group the writer
+reads), and My Menu's empty line, whose one field is {code}. A file that is not JSON (NaN and Infinity included), nested
+past what the parser follows, for another camera, with a table the kit does not know, a key or a row twice, a table or
+an entry out of its shape, a pattern that does not compile, or a $ref anywhere but a NEW_RECORDS entry naming
+FILTER_FLAGS' entry of the same key, is refused in plain words (Refused), naming the file and the table. What else an
+entry may hold is the JSON Schema's, which the commit hooks and CI check. A file saved with a byte order mark (Windows
+Notepad's) reads as one without.
 """
 import json
 import re

@@ -85,17 +85,27 @@ def define_env(env):
         f = definitions.camera_file(definitions.key(doc))
         return build_docs.save_load_md(json.loads(f.read_text(encoding="utf-8")) if f.exists() else {})
 
+    def md(t) -> str:
+        """A schema's words as Markdown shows them as typed: \\, <, _ and * escaped outside `code`, | for a table."""
+        parts = str(t).split("`")
+        return build_docs.esc("`".join(p if i % 2 else p.replace("\\", "\\\\").replace("<", "&lt;").replace("_", "\\_")
+                                       .replace("*", "\\*") for i, p in enumerate(parts)))
+
     @env.macro
     def schema_fields(name: str, part: str = "") -> str:
-        """The fields a JSON Schema in schemas/ describes, as a table: its own words, so no list of them is kept by hand."""
+        """The fields a JSON Schema in schemas/ describes, as a table under the node's own description (left out for
+        a field's own node, whose description its parent's table already gives): its own words, so no list of them is
+        kept by hand."""
         s = json.loads((ROOT / "schemas" / f"{name}.schema.json").read_text(encoding="utf-8"))
         node = s
-        for step in [p for p in part.split("/") if p]:
+        steps = [p for p in part.split("/") if p]
+        for step in steps:
             node = node[step]
         req = set(node.get("required") or [])
-        rows = ["| Field | Type | Required | Holds |", "|---|---|---|---|"]
+        rows = [md(node["description"]), ""] if node.get("description") and steps[-2:-1] != ["properties"] else []
+        rows += ["| Field | Type | Required | Holds |", "|---|---|---|---|"]
         for k, v in (node.get("properties") or {}).items():
             t = v.get("type") or ("one of " + ", ".join(map(str, v["enum"])) if "enum" in v else v.get("$ref", "").split("/")[-1])
             t = " or ".join(t) if isinstance(t, list) else t
-            rows.append(f"| `{k}` | {t} | {'yes' if k in req else ''} | {build_docs.esc(v.get('description', ''))} |")
+            rows.append(f"| `{k}` | {t} | {'yes' if k in req else ''} | {md(v.get('description', ''))} |")
         return "\n".join(rows)

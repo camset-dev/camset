@@ -14,7 +14,7 @@ from pathlib import Path
 
 KEY = re.compile(r"global:0x([0-9a-f]{4})(?:\[(\d+)\])?")
 # how many of the camera's downloads (runs/<model>_fw<fw>/downloads.jsonl) a write reads, spread evenly over the list:
-# the full check over every download was made once by hand (DATA_CONTRACTS), and a write reads a sample of it again
+# the full check over every download was made once by hand, and a write reads a sample of it again
 SAMPLE = 200
 
 

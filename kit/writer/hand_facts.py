@@ -42,7 +42,7 @@ from .mirror import mirror_key, mirror_of
 from .notes import ALLOWANCE, apply_fix, fix_differs
 from .proofs import sampled_scale
 
-# the tables the plain pass reads, in the order DATA_CONTRACTS lists them
+# the tables the plain pass reads, in the order schemas/hand-tables.schema.json's description lists them
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
          "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "PICKER_LISTS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES",
          "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "UNPROVED", "CONTEXT_WORDS")

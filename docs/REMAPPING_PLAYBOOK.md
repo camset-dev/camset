@@ -931,7 +931,7 @@ section 8).
    proof's values, run, day and menu row, a sample's count, the owner's word, what shows a not-offered mark, how a
    picker's list was walked whole, a reason's day) is the mapper's, in `private/evidence/<model>_fw<fw>.hand.json`
    ([the hand evidence file](DATA_CONTRACTS.md#the-hand-evidence-file-how-each-hand-fact-was-proved)); while the tables
-   hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED` or `PICKER_LISTS` entries `--write` refuses without it, and if you proved none of them
+   hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED`, `PICKER_LISTS` or `KEEPS_APART` entries `--write` refuses without it, and if you proved none of them
    by hand you write that file with no evidence in it (`"tables": {}`)
    ([the mapping's evidence](DATA_CONTRACTS.md#the-mappings-evidence)). The evidence file (format 2) holds evidence
    fields only and carries a note's evidence only as a suffix, `"note+"`; the public words and values live in the table

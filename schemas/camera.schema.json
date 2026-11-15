@@ -1008,7 +1008,7 @@
   },
   "file_block": {
    "type": "object",
-   "description": "The container the camera writes its settings in (docs/decisions/0020): where its parts sit and which of the editor's known kinds apply. A range runs from its first offset up to, not including, its second. A kind or key the editor does not know refuses the definition; a new algorithm or framing is a change to the program.",
+   "description": "The container the camera writes its settings in (docs/decisions/0020): where its parts sit and which of the editor's known kinds apply. An offset is \"0x\" and lower-case hex counted from the start of the file (\"0x3c\"), or \"end-N\", N bytes back from its end; a range runs from its first offset up to, not including, its second. A kind or key the editor does not know refuses the definition; a new algorithm or framing is a change to the program.",
    "additionalProperties": false,
    "required": [
     "magic",
@@ -1071,7 +1071,7 @@
        "description": "major_minor: two bytes, the major version then the minor, shown with two digits (04 00 = 4.00, 02 01 = 2.01). major_minor3: three bytes, the major version then the minor's two digits (04 00 00 = 4.00), the reading the ILCE-1M2's block held until 2026-11-06, kept for a block that names it."
       }
      },
-     "description": "The firmware that saved the file. A file is read with the definition of its model and this firmware, and the layout signature feeds its first two bytes."
+     "description": "The firmware that saved the file. A file is read with the definition of its model and this firmware, and the layout signature feeds its first two bytes. Only the bytes that are the firmware: a byte that changes with a setting, such as the video system the camera was set to (the ILCE-1M2's 0x38), goes in video_system, never in this span."
     },
     "video_system": {
      "type": "object",

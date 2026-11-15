@@ -1,8 +1,8 @@
 """The camera's options as it lays them out: a carousel's main options, each with the choice it opens on its own
 axis (Focus Area: Wide, Zone, Center Fix, Spot with its sizes, Expand Spot, Custom with its three slots, Tracking with
-its start areas). kit/schema_update.py writes it into a definition as a setting's "option_tree" (docs/DATA_CONTRACTS.md,
-"The camera's options, nested"), so the editor shows a setting's options as the camera does while "values" stays the
-flat list every other consumer uses.
+its start areas). kit/schema_update.py writes it into a definition as a setting's "option_tree"
+(schemas/definition.schema.json says the field), so the editor shows a setting's options as the camera does while
+"values" stays the flat list every other consumer uses.
 
 The camera decides, never the labels: a label of the shape "Main: Sub" is a nest only when the camera showed one. Pass
 2 proves a carousel row's options as "dialog" proofs (the main options in the camera's order, each with the value its
