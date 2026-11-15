@@ -9,7 +9,8 @@ import pytest
 
 from camkit import crawl, live, safety
 from camkit.runs import Run
-from test_step3_acceptance import BLANK, DRIVE_MODE, ISO, NETWORK, UNRELATED, crawl_lap, lap_with, srow
+from test_step3_acceptance import (BLANK, DAY, DRIVE_MODE, ISO, NETWORK, UNRELATED, assert_lap_went_on, crawl_lap,
+                                   lap_with, srow)
 from test_step3_acceptance import scope  # noqa: F401  (the fixture)
 
 
@@ -409,3 +410,463 @@ def test_an_ordinary_runs_failed_first_open_of_a_parenthesised_label_is_kept():
     _record(look(["(Card 1) Format"], result="changed"))
     s = first_open.seen_record("cam")
     assert first_open.key(["(Card 1) Format"]) in s.acting and not s.seen(["(Card 1) Format"])
+
+
+# ---- a row's own name kept where the definition names the row, though it is a value too (2026-11-15, the a1 II: 74
+# of its 268 top-level rows are also a Custom Key's function, and one's failed first open under the placeholder made a
+# later lap skip every withheld row)
+
+# a definition naming Focus Magnifier as a row of the menu and as a function Custom Key Setting can take (a value the
+# kit knows, as on the a1 II), and two rows the page model can read with a value glued on
+DEFINED = {"menu": [{"tab": "Setup", "group": "Test Group", "label": "Focus Magnifier"},
+                    {"tab": "Network", "group": "Wi-Fi", "label": "Wi-Fi Connect"},
+                    {"tab": "Network", "group": "Network Option", "label": "Edit Device Name"}],
+           "settings": [{"row": ["Custom Key Setting"], "values": [[0, "Focus Magnifier"], [1, "Not Set"]]}]}
+FOCUS_MAG = srow("Focus Magnifier", "", options=("Made-up Opt A", "Made-up Opt B"), current=1)
+GLUED = srow("Edit Device Name AAA-1", "", options=("A", "B"))         # a label read with a value glued on
+
+
+def defined(monkeypatch, doc=DEFINED):
+    """The camera's definition the run reads (runner.definition, as kit/crawl_run.py imported it): `doc`."""
+    import crawl_run
+    import runner
+    monkeypatch.setattr(runner, "definition", lambda: doc)
+    monkeypatch.setattr(crawl_run, "definition", lambda: doc)
+
+
+def markers_at_right(monkeypatch) -> list:
+    """RESTORE_BY_HAND's text at every Right on a menu row of the simulated camera ("" where there is none)."""
+    import test_step3_acceptance as A
+    from camkit.runs import RESTORE_BY_HAND
+    seen, real = [], A.Sim.key
+
+    def key(self, k):
+        if k in A.OPENERS and self.mode == "menu":
+            marker = self.root / RESTORE_BY_HAND
+            seen.append(marker.read_text(encoding="utf-8") if marker.exists() else "")
+        real(self, k)
+    monkeypatch.setattr(A.Sim, "key", key)
+    return seen
+
+
+def test_k1_the_runs_names_for_a_rows_own_name_take_the_definitions_rows_and_nothing_else_widens(monkeypatch):
+    """K1: a row's own name is kept where the definition names the row, a value the kit knows or not (a row's place in
+    the menu is no value); the set a screen's text is judged by (runner.known_labels) still holds no such label. K3: a
+    label read with a value glued on is no definition's row label, so it is withheld. K4: a submenu's rows alike."""
+    import crawl_run
+    import runner
+    defined(monkeypatch)
+    names = {safety.plain(x) for x in crawl_run.row_names({})}
+    assert crawl_run.kept_label("Focus Magnifier", names) == "Focus Magnifier"
+    assert crawl_run.kept_label("Edit Device Name", names) == "Edit Device Name"
+    assert "Focus Magnifier" not in runner.known_labels({})              # a screen's text: withheld as ever
+    for glued in ("Edit Device Name ILCE-made-up-owner-name", "Wi-Fi ConnectOn", "Wi-Fi Connect On", "Focus MagnifierOn"):
+        assert crawl_run.kept_label(glued, names) == crawl_run.WITHHELD_LABEL, glued
+    assert {safety.plain(x) for x in crawl_run.row_names({}, {"Bluetooth Function": DAY})} >= names | {"bluetooth function"}
+    row = {"page": "P", "slot": 0, "label": "Custom Key Setting", "outcome": "submenu crawled", "kind": "submenu",
+           "presses": 4, "note": "", "submenu": [
+               {"page": "P", "slot": 0, "label": "Focus Magnifier", "outcome": "walked", "kind": "list", "options": 2,
+                "presses": 2, "note": ""},
+               {"page": "P", "slot": 1, "label": "Edit Device Name AAA-1", "outcome": "walked", "kind": "list",
+                "options": 2, "presses": 2, "note": ""}]}
+    kept = crawl_run.kept_row(row, crawl_run.row_names({}))
+    assert [x["label"] for x in kept["submenu"]] == ["Focus Magnifier", crawl_run.WITHHELD_LABEL]
+
+
+def test_k1_a_defined_rows_own_name_is_written_whole_and_its_clean_first_open_makes_it_seen(tmp_path, monkeypatch,
+                                                                                           scope):  # noqa: F811 (the fixture)
+    """A look lap writes the name of a row the definition names, though it is a value too, whole: rows.jsonl,
+    events.jsonl (first_open, first_open_checked), the looks file and RESTORE_BY_HAND's text; after its clean first
+    open it is seen, and the next lap opens it plainly. Its rows.jsonl line names no option, lit or not (K4)."""
+    import json
+    from camkit import coverage, first_open
+    scope(BLANK, UNRELATED)
+    defined(monkeypatch)
+    at_right = markers_at_right(monkeypatch)
+    lap = lap_with(tmp_path / "one", monkeypatch, FOCUS_MAG, seen_target=False)
+    assert_lap_went_on(lap)
+    assert lap.sim.opened(1) and lap.sim.marked_at_open(1) is True, lap.out[-1500:]
+    assert lap.row(1)["label"] == "Focus Magnifier", lap.row(1)
+    events = [json.loads(x) for x in lap.events.splitlines()]
+    assert [e["path"] for e in events if e["kind"] == "first_open"] == [["Focus Magnifier"]]
+    assert [e["paths"] for e in events if e["kind"] == "first_open_checked"] == [[["Focus Magnifier"]]]
+    looks = [json.loads(x) for x in coverage.looks_file(lap.root.name).read_text(encoding="utf-8").splitlines()]
+    mine = [(lk["path"], lk["result"]) for lk in looks if lk.get("run") == lap.run.dir.name]
+    assert (["Focus Magnifier"], "not_reached") in mine and (["Focus Magnifier"], "looked") in mine, mine
+    assert not [p for p, _ in mine if crawl_run_withheld(p)], mine
+    marked = [t for t in at_right if t]
+    assert len(marked) == 1 and "Focus Magnifier" in marked[0] and "(withheld)" not in marked[0], marked
+    assert first_open.seen_record(lap.root.name).seen(["Focus Magnifier"])
+    assert "current" not in lap.row(1) and "Made-up Opt" not in json.dumps(lap.row(1)), lap.row(1)
+    lap2 = lap_with(tmp_path / "two", monkeypatch, FOCUS_MAG, seen_target=False)
+    assert_lap_went_on(lap2)
+    assert lap2.sim.opened(1) and lap2.sim.marked_at_open(1) is False, lap2.keys
+    assert "first_open" not in lap2.events
+
+
+def crawl_run_withheld(path) -> bool:
+    import crawl_run
+    return crawl_run.WITHHELD_LABEL in path
+
+
+def test_k1_a_defined_rows_failed_first_open_skips_that_row_alone(tmp_path, monkeypatch, scope):  # noqa: F811 (the fixture)
+    """A failed first open of a row the definition names is recorded under its own name, RESTORE_BY_HAND naming it; the
+    next lap skips that row only, while a row still withheld (a label read with a value glued on) opens under its own
+    first open, its name withheld as ever."""
+    from camkit import first_open, session
+    from camkit.runs import RESTORE_BY_HAND
+    from exit_status import EXIT_RESTORE_BY_HAND
+    scope(BLANK, UNRELATED)
+    defined(monkeypatch)
+    monkeypatch.setattr(session, "compared", lambda a, b, say=None: [SimpleNamespace(key="global:0x0357")])
+    lap = lap_with(tmp_path / "one", monkeypatch, FOCUS_MAG, seen_target=False)
+    assert lap.sim.opened(1) and lap.code == EXIT_RESTORE_BY_HAND, (lap.code, lap.out[-800:])
+    marker = lap.root / RESTORE_BY_HAND
+    assert "Focus Magnifier" in marker.read_text(encoding="utf-8")
+    assert lap.row(1)["label"] == "Focus Magnifier", lap.row(1)
+    s = first_open.seen_record(lap.root.name)
+    assert first_open.key(["Focus Magnifier"]) in s.acting and first_open.key(["(withheld)"]) not in s.acting
+    marker.unlink()                                      # upload_check put the start file back
+    monkeypatch.setattr(session, "compared", lambda a, b, say=None: [])
+    lap2 = crawl_lap(tmp_path / "two", monkeypatch, [DRIVE_MODE, FOCUS_MAG, GLUED, ISO], argv=NETWORK,
+                     seen=["Drive Mode", "ISO"])
+    assert lap2.code in (0, None), lap2.out[-1500:]
+    assert lap2.sim.opened(0) and lap2.sim.opened(3) and not set(lap2.keys) & {"enter", "ms_enter"}
+    assert not lap2.sim.opened(1) and not lap2.sim.inside(1), lap2.keys
+    assert lap2.outcome(1).startswith("skipped") and lap2.row(1)["label"] == "Focus Magnifier", lap2.row(1)
+    assert lap2.sim.opened(2) and lap2.sim.marked_at_open(2) is True, (lap2.outcome(2), lap2.keys)
+    assert lap2.row(2)["label"] == "(withheld)", lap2.row(2)
+    rows_text = (lap2.run.dir / "rows.jsonl").read_text(encoding="utf-8")
+    assert "AAA-1" not in lap2.events + lap2.out + rows_text
+
+
+@pytest.mark.parametrize("tail,kept", [("Drive Mode", True), ("Focus Magnifier", False)])
+def test_k2_a_notices_blocker_that_is_a_known_value_is_withheld_though_the_definition_names_it(tmp_path, monkeypatch,
+                                                                                               scope, tail, kept):  # noqa: F811 (the fixture)
+    """K2: what of a screen's text a look lap keeps stays judged by runner.known_labels: a Wi-Fi setting's blocker notice
+    keeps the row it names after "as follows" where that is a row label the kit knows (Drive Mode), never one that is a
+    value the kit knows too (Focus Magnifier, a Custom Key's function), though the definition names that row and the
+    lap keeps it as a row's own name."""
+    import crawl_run
+    scope(UNRELATED)
+    defined(monkeypatch)
+    head = "This operation or setting not available as follows"
+    monkeypatch.setattr(crawl_run, "text_of", lambda cam: f"{head} {tail} OK")
+    target = srow("Wi-Fi Frequency Band", "", kind="notice", lines=(head, tail), options=("OK",))
+    lap = lap_with(tmp_path, monkeypatch, target, seen_target=True)
+    assert_lap_went_on(lap)
+    assert lap.sim.opened(1), lap.keys
+    assert lap.row(1).get("notice") == (f"{head} {tail}" if kept else head), lap.row(1)
+
+
+def test_k1_on_the_a1_iis_scan_fewer_top_level_rows_are_withheld(monkeypatch):
+    """The a1 II's definition and a page model of its whole menu (read only; skipped without them): fewer top-level rows
+    have their own name withheld by a look lap, and each still withheld is a label the definition does not name and the
+    kit does not know (a reading with something glued on). The test prints both counts."""
+    import json
+    from pathlib import Path
+
+    import runner
+    from camkit import paths
+    root = Path(__file__).resolve().parents[2]
+    scan = paths.a1ii_root() / "kit2_page_scan_1113b" / "model.json"
+    definition = root / "editor" / "definitions" / "ILCE-1M2_fw4.00.json"
+    if not scan.exists() or not definition.exists():
+        pytest.skip("the a1 II's page scan is not in this clone")
+    doc = json.loads(definition.read_text(encoding="utf-8"))
+    model = {p["key"]: p for p in json.loads(scan.read_text(encoding="utf-8"))}
+    defined(monkeypatch, doc)
+    before, after = withheld_rows(model)
+    print(f"top-level rows withheld: {len(before)} before, {len(after)} after")
+    assert len(after) < len(before), (len(before), len(after))
+    known = {safety.plain(x) for x in runner.row_labels(doc) | runner.known_labels(model)}
+    assert not [x for x in after if safety.plain(x) in known]
+
+
+def withheld_rows(model) -> tuple:
+    """(before, after): the page model's rows whose own name a look lap withholds by runner.known_labels alone, as before
+    2026-11-15, and by kit/crawl_run.py's row_names."""
+    import crawl_run
+    import runner
+    rows = [r.get("label") or "" for p in model.values() for r in p.get("rows") or []]
+    old = {safety.plain(x) for x in runner.known_labels(model)}
+    new = {safety.plain(x) for x in crawl_run.row_names(model)}
+    return ([x for x in rows if crawl_run.kept_label(x, old) == crawl_run.WITHHELD_LABEL],
+            [x for x in rows if crawl_run.kept_label(x, new) == crawl_run.WITHHELD_LABEL])
+
+
+# ---- after a first open's check that left the menu elsewhere, the lap finds its row again (2026-11-15, the a1 II: a
+# Playback row's view left with its button, the check clean, MENU reopened the menu on the Focus tab)
+
+def reopen_on(monkeypatch, at=None, swallow=(), stays_closed=False) -> dict:
+    """The simulated camera's opening of the menu after a first open's check (the MENU from the shooting screen once
+    the check took RESTORE_BY_HAND away: the key before it went with the marker there, this one without) lands on row
+    `at` (None: where the cursor was), or, `stays_closed`, the MENU is taken and nothing opens; after it the first of
+    each key in `swallow` is taken and moves nothing. Returns {"at": the trace's length just after that opening}."""
+    import test_step3_acceptance as A
+    from camkit.runs import RESTORE_BY_HAND
+    real, state = A.Sim.key, {"at": None, "swallow": list(swallow)}
+
+    def taken(self, k):
+        self.trace.append((k, self.mode, self.pos, self.opt, (self.root / RESTORE_BY_HAND).exists()))
+
+    def key(self, k):
+        if state["at"] is not None and k in state["swallow"]:
+            state["swallow"].remove(k)
+            return taken(self, k)
+        checked = (state["at"] is None and k == "menu" and self.mode == "shooting" and self.trace
+                   and self.trace[-1][4] and not (self.root / RESTORE_BY_HAND).exists())
+        if checked:
+            state["at"] = len(self.trace) + 1
+            if stays_closed:
+                return taken(self, k)
+            real(self, k)
+            if at is not None:
+                self.pos = at
+            return
+        real(self, k)
+    monkeypatch.setattr(A.Sim, "key", key)
+    return state
+
+
+AFTER_CHECK = "after a first open's check the menu is not back on its row"
+
+
+def refind_keys(lap, state) -> list:
+    """The keys sent from the menu's opening after the check to the lap's next Right (or its end)."""
+    out = []
+    for k, m, *_ in lap.sim.trace[state["at"]:]:
+        if k in ("right", "ms_right") and m == "menu":
+            break
+        out.append((k, m))
+    return out
+
+
+@pytest.mark.parametrize("target", [srow("Grid Line", "", options=("A", "B")), GLUED], ids=["kept", "withheld"])
+def test_after_the_check_reopened_the_menu_on_another_row_the_lap_finds_its_row_and_finishes(tmp_path, monkeypatch,
+                                                                                           scope, target):  # noqa: F811 (the fixture)
+    """The first open's check comes out clean and MENU reopens the menu on another row of a page the scan knows: the lap
+    goes to its row once by its own way there (Down, checked against the scan), finds it the row it expected, and goes
+    on to the end; no Right or Enter goes out on the way, and nothing of a label the lap withholds is printed."""
+    scope(BLANK, UNRELATED)
+    state = reopen_on(monkeypatch, at=0)
+    lap = lap_with(tmp_path, monkeypatch, target, seen_target=False)
+    assert_lap_went_on(lap)
+    assert lap.sim.opened(1) and lap.sim.marked_at_open(1) is True and state["at"] is not None
+    keys = refind_keys(lap, state)
+    assert ("down", "menu") in keys and not [k for k, _ in keys if k in ("right", "ms_right", "enter", "ms_enter")], keys
+    assert AFTER_CHECK not in lap.out and "back to the lap's row" in lap.out, lap.out[-1500:]
+    assert "AAA-1" not in lap.out + lap.events
+
+
+@pytest.mark.parametrize("how", ["a step that lands elsewhere", "the menu not reopened"])
+def test_after_the_check_a_way_back_that_fails_or_no_menu_stops_the_lap_as_before(tmp_path, monkeypatch, scope, how):  # noqa: F811 (the fixture)
+    """Where the way back to the row lands elsewhere (a Down the camera did not take: the screen is not the scan's next),
+    or the menu did not reopen at all (nothing pressed then), the lap stops as before: its message, exit 8, its start
+    file back."""
+    from exit_status import EXIT_INCOMPLETE
+    scope(BLANK, UNRELATED)
+    state = (reopen_on(monkeypatch, at=0, swallow=("down",)) if how.startswith("a step") else
+             reopen_on(monkeypatch, stays_closed=True))
+    lap = lap_with(tmp_path, monkeypatch, srow("Grid Line", "", options=("A", "B")), seen_target=False)
+    assert lap.code == EXIT_INCOMPLETE, (lap.code, lap.out[-1500:])
+    assert f"position 1: {AFTER_CHECK}" in lap.out, lap.out[-1500:]
+    assert not lap.sim.opened(2), lap.keys
+    keys = refind_keys(lap, state)
+    assert not [k for k, _ in keys if k in ("right", "ms_right", "enter", "ms_enter")], keys
+    if how.startswith("a step"):
+        assert keys[:1] == [("down", "menu")], keys
+    else:
+        assert keys == [], keys                              # after the MENU the camera did not answer, nothing
+
+
+# A menu of three tabs of three groups of three rows each, as the tab column, the group column and the rows show it
+TAB_GROUPS = {"Focus": ["Focus Assistant", "Face/Eye AF", "Peaking Display"],
+              "Playback": ["Magnification", "Playback Option", "Selection/Search"],
+              "Network": ["Wi-Fi", "Bluetooth", "Network Option"]}
+
+
+class TabsCamera:
+    """TAB_GROUPS as the camera shows it, each group one page of `rows` rows in the scan's Down cycle (tab by tab, in the
+    menu's order): Left from the rows to the group column and on to the tab column; Up and Down there a tab or a group;
+    Right from the tab column into the group column, on the group last used in that tab, and from there into the
+    group's first row (or `astray`: a page the scan does not know); Up and Down in the rows a step of the Down cycle;
+    MENU closes the menu and opens it where it was. The first of each key in `stuck` is taken and does nothing. Every
+    key is kept with the focus it went out in ("shooting" with the menu closed)."""
+
+    def __init__(self, rows=3, groups=None):
+        self.names = list((groups or TAB_GROUPS).items())
+        self.order = [(t, g, r) for t, (_, gs) in enumerate(self.names) for g in range(len(gs)) for r in range(rows)]
+        self.rows, self.shown, self.focus, self.at, self.tab, self.group, self.last = rows, False, "rows", 0, 0, 0, {}
+        self.sent, self.stuck, self.astray = [], [], False
+        self.may_open = frozenset()
+        self.frame = SimpleNamespace(image=None, path=None)
+
+    def press(self, key, **kw):
+        self.sent.append((key, self.focus if self.shown else "shooting"))
+        if key in self.stuck:
+            self.stuck.remove(key)
+            return
+        if key == "menu":
+            self.shown = not self.shown
+        elif not self.shown:
+            return
+        elif self.focus == "rows" and key in ("up", "down") and self.at is not None:
+            self.at = (self.at + (1 if key == "down" else -1)) % len(self.order)
+        elif self.focus == "rows" and key == "left":
+            self.focus = "groups"
+            if self.at is not None:
+                self.tab, self.group, _ = self.order[self.at]
+        elif self.focus == "groups" and key in ("up", "down"):
+            self.group = max(0, min(len(self.names[self.tab][1]) - 1, self.group + (1 if key == "down" else -1)))
+        elif self.focus == "groups" and key == "left":
+            self.focus = "tabs"
+        elif self.focus == "groups" and key == "right":
+            self.last[self.tab] = self.group
+            self.focus, self.at = "rows", None if self.astray else self.order.index((self.tab, self.group, 0))
+        elif self.focus == "tabs" and key in ("up", "down"):
+            self.tab = max(0, min(len(self.names) - 1, self.tab + (1 if key == "down" else -1)))
+        elif self.focus == "tabs" and key == "right":
+            self.focus, self.group = "groups", self.last.get(self.tab, 0)
+
+    def read(self):
+        if not self.shown:
+            return SimpleNamespace(kind="shooting", focus=None, where=("shooting",))
+        if self.focus == "rows":
+            return SimpleNamespace(kind="menu", focus="rows",
+                                   where=("rows", *self.order[self.at]) if self.at is not None else ("rows", "unknown"))
+        return SimpleNamespace(kind="menu", focus=self.focus, where=(self.focus, self.tab, self.group))
+
+    def place(self) -> tuple:
+        return self.order[self.at][:2] if self.focus == "rows" and self.at is not None else (self.tab, self.group)
+
+    def lit(self) -> str:
+        t, g = self.place()
+        if self.focus == "tabs":
+            return self.names[t][0]
+        if self.focus == "groups":
+            return self.names[t][1][g]
+        return f"{self.names[t][1][g]} row {self.order[self.at][2]}" if self.at is not None else "Made-up Row"
+
+    def text(self) -> str:
+        t, g = self.place()
+        return f"{self.names[t][0]} > {self.names[t][1][g]}"
+
+    def scan(self) -> tuple:
+        cycle = [{"kind": "menu", "page": f"p{t}{g}", "row": r,
+                  "screen": SimpleNamespace(kind="menu", focus="rows", where=("rows", t, g, r))} for t, g, r in self.order]
+        model = {f"p{t}{g}": {"breadcrumb": f"{tab} > {gs[g]}", "page": f"{3 * t + g + 1}/9",
+                              "rows": [{"label": f"{gs[g]} row {r}", "never_open": None} for r in range(self.rows)]}
+                 for t, (tab, gs) in enumerate(self.names) for g in range(len(gs))}
+        return cycle, model
+
+
+class Check:
+    """camkit.crawl's `first` with one top-level row's first open pending (the cycle's position `due_at`): its check
+    closes the menu with MENU, `reopen(cam)` says where the camera then holds its menu, and MENU opens it there; `after`,
+    how many keys the camera had had once the check was done."""
+
+    def __init__(self, cam, due_at, reopen):
+        self.cam, self.due_at, self.reopen = cam, due_at, reopen
+        self.pending, self.seen, self.skip_why, self.after = [("the row",)], None, "", None
+
+    def skips(self, path) -> bool:
+        return False
+
+    def takes(self, look) -> bool:
+        return False
+
+    def due(self, pos, nxt) -> bool:
+        return pos is self.due_at
+
+    def settle(self, cam) -> None:
+        cam.press("menu")
+        self.reopen(self.cam)
+        cam.press("menu")
+        self.pending, self.after = [], len(self.cam.sent)
+
+
+def tabs_lap(monkeypatch, reopen, stuck=(), astray=False, groups=None, target=(1, 2, 1)):
+    """kit/crawl_run.py's crawl_from_menu over a TabsCamera (of `groups`), every row settled by the ledger (none opened),
+    the first open of the row at `target` (tab, group, row: Playback > Selection/Search row 1) pending there. Returns
+    (camera, complete, console, its first, position)."""
+    import crawl_run
+    from camkit import crawl as crawling
+    cam = TabsCamera(groups=groups)
+    cycle, model = cam.scan()
+    same = lambda a, b: getattr(a, "where", None) == getattr(b, "where", None)       # noqa: E731
+    monkeypatch.setattr(crawl_run, "same_position", same)
+    monkeypatch.setattr(crawling, "same_position", same)
+    monkeypatch.setattr(crawl_run, "lit_text", lambda image, path: cam.lit())
+    monkeypatch.setattr(crawl_run, "menu_text", lambda c: cam.text())
+    at = cam.order.index(target)
+    first = Check(cam, cycle[at], lambda c: (reopen(c), c.stuck.extend(stuck), setattr(c, "astray", astray)))
+    ledger = SimpleNamespace(after=lambda row, model, **kw: None, skip=lambda page, row, opened=True: "settled: here")
+    link = SimpleNamespace(press=lambda key, **kw: cam.press(key))
+    import contextlib
+    import io
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        complete = crawl_run.crawl_from_menu(cam, link, cycle, model, None, io.StringIO(), ledger=ledger, first=first,
+                                             tabs=tuple(TAB_GROUPS))
+    return cam, complete, out.getvalue(), first, at
+
+
+def on_focus_page(cam):
+    """The camera holds its menu on the Focus tab's second page (the page last used before a Playback row's view)."""
+    cam.focus, cam.at = "rows", cam.order.index((0, 1, 1))
+
+
+def test_after_the_check_reopened_the_menu_on_another_tabs_page_the_lap_jumps_back_and_finishes(monkeypatch):
+    """The menu reopens on the Focus tab after the check of a Playback row: the lap goes back once by its own way (the
+    tab and group columns, jump, then Down), finds the very row, and crawls on to the end; no Right on a row and no
+    Enter go out on the way, only the columns' Rights the jump sends."""
+    cam, complete, out, first, at = tabs_lap(monkeypatch, on_focus_page)
+    assert complete and "lap complete" in out and first.after is not None, out
+    back = cam.sent[first.after:]
+    assert back[:8] == [("left", "rows"), ("left", "groups"), ("down", "tabs"), ("right", "tabs"),
+                        ("down", "groups"), ("down", "groups"), ("right", "groups"), ("down", "rows")], back
+    assert not [k for k in cam.sent if k == ("right", "rows") or k[0] in ("enter", "ms_enter")], cam.sent
+    assert AFTER_CHECK not in out
+
+
+@pytest.mark.parametrize("how", ["astray", "stuck"])
+def test_after_the_check_a_jump_that_lands_elsewhere_stops_the_lap_as_before(monkeypatch, how):
+    """The jump lands on a page the scan does not know, or a column's step is not taken: the lap goes back once, is not
+    on its row, and stops with the message it stopped with before (crawl_from_menu says the lap incomplete: exit 8)."""
+    cam, complete, out, first, at = tabs_lap(monkeypatch, on_focus_page, **(
+        {"astray": True} if how == "astray" else {"stuck": ("down",)}))
+    assert not complete and f"position {at}: {AFTER_CHECK}" in out, out
+    back = cam.sent[first.after:]
+    assert back.count(("left", "rows")) == 1, back                       # once, never a second try
+    assert not [k for k in cam.sent if k == ("right", "rows") or k[0] in ("enter", "ms_enter")], cam.sent
+
+
+def in_group_column(cam):
+    cam.focus, cam.tab, cam.group = "groups", 0, 1
+
+
+def on_unknown_page(cam):
+    cam.focus, cam.at = "rows", None
+
+
+def menu_stays_closed(cam):
+    cam.stuck.append("menu")
+
+
+@pytest.mark.parametrize("reopen", [in_group_column, on_unknown_page, menu_stays_closed])
+def test_after_the_check_a_screen_that_is_no_plain_menu_page_the_scan_knows_stops_as_before(monkeypatch, reopen):
+    """The cursor in the group column, a page the scan does not know, the menu not reopened: nothing is pressed to go
+    back (but the closing MENU on a menu), and the lap stops with its message as before."""
+    cam, complete, out, first, at = tabs_lap(monkeypatch, reopen)
+    assert not complete and f"position {at}: {AFTER_CHECK}" in out, out
+    assert set(cam.sent[first.after:]) <= {("menu", "groups"), ("menu", "rows")}, cam.sent[first.after:]
+
+
+def test_after_the_check_no_jump_into_a_group_the_column_never_enters_and_no_long_walk(monkeypatch):
+    """The lap's row is in a group the group column never enters (FTP Transfer): the way back makes no jump and, unlike
+    --start-label's, walks no rows the long way either; nothing is pressed and the lap stops as before."""
+    groups = {**TAB_GROUPS, "Network": ["Wi-Fi", "FTP Transfer", "Network Option"]}
+    cam, complete, out, first, at = tabs_lap(monkeypatch, on_focus_page, groups=groups, target=(2, 1, 1))
+    assert not complete and f"position {at}: {AFTER_CHECK}" in out and "no jump to" in out, out
+    assert set(cam.sent[first.after:]) <= {("menu", "rows")}, cam.sent[first.after:]

@@ -197,7 +197,7 @@ def seen_of(first):
 
 def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_rows: int | None = None, on_row=None,
           labels=None, panels=False, network=frozenset(), notices=None, info_ok=None, skip=None, first=None,
-          look: bool = False) -> Crawl:
+          look: bool = False, refind=None) -> Crawl:
     """cycle: the page scan's positions in Down order, each {"page": key, "row": slot, "signature",
     "kind"}; model: page key -> {"breadcrumb", "page", "rows": [{"label", "never_open", ...}]}.
     max_rows: stop after opening that many rows (skipped rows do not count). on_row(result) is
@@ -212,8 +212,10 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
     never-open row no decision names opens to look at where safety.look_lap_refused lets it (closed_row). first: a row's
     first open on the body (camkit.first_open.FirstOpens):
     opening(path) before each Right (visit_row), and after a top-level row whose visit left a first open pending, where
-    due(), settle(cam), which
-    checks it and reopens the menu; the lap stops where the menu is then not back on the row."""
+    due(), settle(cam), which checks it and reopens the menu; the lap stops where the menu is then not back on the row.
+    refind(cam, pos): where it is not, the run's own way back to the position `pos`, called once (kit/crawl_run.py
+    back_to_row: from a plain menu page the scan knows alone, else nothing pressed), the row then checked as before;
+    None: none, the lap stops at once."""
     cam = Counted(cam)
     out = Crawl()
     opened = 0
@@ -256,6 +258,10 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
                     break
         if first is not None and first.pending and first.due(pos, cycle[i + 1] if i + 1 < len(cycle) else None):
             first.settle(cam)                       # raises when the check fails: the marker stays
+            if not _at(cam.read(), pos) and refind is not None:
+                # the check left the menu open elsewhere (a Playback row's view left with its button, and MENU reopened
+                # the menu on the page last used before it, 2026-11-15): once, the run's own way back to the position
+                refind(cam, pos)
             if not _at(cam.read(), pos):
                 out.stopped = f"position {i}: after a first open's check the menu is not back on its row"
                 break

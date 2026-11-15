@@ -176,6 +176,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   open's check and a run's end ask no download while the camera says Playback: where the view is not left, the run
   writes `RESTORE_BY_HAND`, says how to leave it by hand and exits 5, where the first look lap over the Playback tab
   asked for a download the camera refused.
+- A look lap now keeps a row's own name wherever the camera's definition names that row, a Custom Key's function too
+  (on the a1 II 4 top-level rows stay "(withheld)", not 78, so one failed first open no longer skips them all), and
+  keeps what it kept of a screen's text. After a first open's check that leaves the menu on another page the scan
+  knows, `crawl_run.py` goes back to its row once as `--start-label` would, and stops with exit 8 as before where it
+  cannot.
 
 ### The docs
 
