@@ -129,7 +129,9 @@ not yet run on GitHub.
 
 `.github/dependabot.yml` has Dependabot propose, every Monday, newer versions of the workflows' actions (moving each
 commit pin with the version in its comment, all but `dtolnay/rust-toolchain`, pinned to its stable branch and moved
-by hand), the editor's crates and the kit's packages (all but numpy, pinned twice by Python version, where a newer
+by hand), the editor's crates (all but eframe past the minor `editor/Cargo.toml` asks for: egui 0.32 rewrote the
+menus and popups the editor uses, so the editor does not build on it unchanged and that move is a change of its own,
+made by hand) and the kit's packages (all but numpy, pinned twice by Python version, where a newer
 numpy for Python 3.12 and later could be written over the older pin Python 3.11 needs: moved by hand): one pull
 request for each of the three, all its updates together. A pin is raised only when its pull request is merged, after
 CI has tested it. Dependabot's commits carry no

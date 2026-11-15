@@ -675,9 +675,13 @@ def test_the_dependency_audit_runs_weekly_and_when_a_pin_changes():
     assert [(u["package-ecosystem"], u["directory"]) for u in bot["updates"]] == [("github-actions", "/"), ("cargo", "/editor"), ("pip", "/kit")]
     for u in bot["updates"]:
         assert u["schedule"]["interval"] == "weekly" and [g["patterns"] for g in u["groups"].values()] == [["*"]], u["package-ecosystem"]
-    # moved by hand: rust-toolchain (a commit of its stable branch, no release tag to follow) and numpy (pinned twice,
-    # by Python version, where a grouped update could raise the older pin past what Python 3.11 runs)
-    assert bot["updates"][0]["ignore"] == [{"dependency-name": "dtolnay/rust-toolchain"}] and "ignore" not in bot["updates"][1]
+    # moved by hand: rust-toolchain (a commit of its stable branch, no release tag to follow), eframe past the minor
+    # editor/Cargo.toml asks for (egui 0.32 rewrote the menus and popups the editor uses: a migration of its own, and
+    # raising eframe by hand fails this until the ignore is moved or taken out) and numpy (pinned twice, by Python
+    # version, where a grouped update could raise the older pin past what Python 3.11 runs)
+    assert bot["updates"][0]["ignore"] == [{"dependency-name": "dtolnay/rust-toolchain"}]
+    eframe = re.search(r'^eframe = "0\.(\d+)"', (ROOT / "editor" / "Cargo.toml").read_text(encoding="utf-8"), re.M).group(1)
+    assert bot["updates"][1]["ignore"] == [{"dependency-name": "eframe", "versions": [f">= 0.{int(eframe) + 1}"]}]
     assert bot["updates"][2]["ignore"] == [{"dependency-name": "numpy"}]
     numpy = [ln for ln in (ROOT / "kit" / "requirements.txt").read_text(encoding="utf-8").splitlines() if ln.startswith("numpy==")]
     assert len(numpy) == 2 and any('python_version < "3.12"' in ln for ln in numpy)

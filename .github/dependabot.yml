@@ -29,6 +29,13 @@ updates:
     groups:
       crates:
         patterns: ["*"]
+    # eframe 0.32 (the newest the editor's rust-version allows) rewrote egui's menus and popups: the editor does not
+    # build on it unchanged (Memory::close_popup takes the popup's id), clippy refuses the 37 uses of what it deprecates
+    # and its menus close on any click inside, so that move is a change of its own, made by hand; take this out with it
+    # (kit/tests/test_workflows.py holds the floor one above editor/Cargo.toml's eframe)
+    ignore:
+      - dependency-name: eframe
+        versions: [">= 0.32"]
     commit-message:
       prefix: Editor
 
