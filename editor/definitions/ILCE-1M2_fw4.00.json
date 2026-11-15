@@ -31042,7 +31042,7 @@
      "+5.0 EV"
     ]
    ],
-   "note": "A copy the camera keeps of Exposure Comp.; which shooting mode's it is, is not known yet.",
+   "note": "A copy the camera keeps of Exposure Comp.: equal to it in every file seen.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -31278,7 +31278,7 @@
      "+5.0 EV"
     ]
    ],
-   "note": "A copy the camera keeps of Exposure Comp.; which shooting mode's it is, is not known yet.",
+   "note": "Follows Exposure Comp. when a value is set. It also kept a slider position that MENU then cancelled (seen in Movie mode), so it can differ from Exposure Comp.",
    "in_sets": false,
    "scalar": true,
    "size": 1,
@@ -217044,6 +217044,414 @@
      "untick_sets": 0
     }
    ]
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0e6e",
+   "id": 3694,
+   "name": "Spot size at AF Area Registration (copy 1)",
+   "values": [
+    [
+     0,
+     "S"
+    ],
+    [
+     1,
+     "M"
+    ],
+    [
+     2,
+     "L"
+    ],
+    [
+     3,
+     "XL"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0e70",
+   "id": 3696,
+   "name": "Spot size at AF Area Registration (copy 2)",
+   "values": [
+    [
+     0,
+     "S"
+    ],
+    [
+     1,
+     "M"
+    ],
+    [
+     2,
+     "L"
+    ],
+    [
+     3,
+     "XL"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0e72",
+   "id": 3698,
+   "name": "Spot size at AF Area Registration (copy 3)",
+   "values": [
+    [
+     0,
+     "S"
+    ],
+    [
+     1,
+     "M"
+    ],
+    [
+     2,
+     "L"
+    ],
+    [
+     3,
+     "XL"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0f86",
+   "id": 3974,
+   "name": "Spot size at AF Area Registration (alt numbering, copy 1)",
+   "values": [
+    [
+     0,
+     "XL"
+    ],
+    [
+     1,
+     "L"
+    ],
+    [
+     2,
+     "M"
+    ],
+    [
+     3,
+     "S"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0f88",
+   "id": 3976,
+   "name": "Spot size at AF Area Registration (alt numbering, copy 2)",
+   "values": [
+    [
+     0,
+     "XL"
+    ],
+    [
+     1,
+     "L"
+    ],
+    [
+     2,
+     "M"
+    ],
+    [
+     3,
+     "S"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0f8a",
+   "id": 3978,
+   "name": "Spot size at AF Area Registration (alt numbering, copy 3)",
+   "values": [
+    [
+     0,
+     "XL"
+    ],
+    [
+     1,
+     "L"
+    ],
+    [
+     2,
+     "M"
+    ],
+    [
+     3,
+     "S"
+    ],
+    [
+     4,
+     "XS"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x132d",
+   "id": 4909,
+   "name": "Custom area at AF Area Registration (copy 1)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x132f",
+   "id": 4911,
+   "name": "Custom area at AF Area Registration (copy 2)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1331",
+   "id": 4913,
+   "name": "Custom area at AF Area Registration (copy 3)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1399",
+   "id": 5017,
+   "name": "Custom area at AF Area Registration (copy 4)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x139b",
+   "id": 5019,
+   "name": "Custom area at AF Area Registration (copy 5)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 119,
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x139d",
+   "id": 5021,
+   "name": "Custom area at AF Area Registration (copy 6)",
+   "values": [
+    [
+     0,
+     "Custom 1"
+    ],
+    [
+     1,
+     "Custom 2"
+    ],
+    [
+     2,
+     "Custom 3"
+    ]
+   ],
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "in_sets": true,
+   "expert": true,
+   "size": 1,
+   "count": 1
   }
  ],
  "menu": [

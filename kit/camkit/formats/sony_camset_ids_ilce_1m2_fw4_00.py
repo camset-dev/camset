@@ -590,6 +590,9 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         focus_area_remembered = 3688
         focus_area_remembered_0e6a = 3690
         focus_area_remembered_0e6c = 3692
+        spot_size_at_af_area_registration = 3694
+        spot_size_at_af_area_registration_0e70 = 3696
+        spot_size_at_af_area_registration_0e72 = 3698
         registered_af_area_tracking_start_area = 3700
         registered_af_area_tracking_start_area_0e76 = 3702
         registered_af_area_tracking_start_area_0e78 = 3704
@@ -687,6 +690,9 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         registered_af_area_area = 3968
         registered_af_area_area_0f82 = 3970
         registered_af_area_area_0f84 = 3972
+        spot_size_at_af_area_registration_0f86 = 3974
+        spot_size_at_af_area_registration_0f88 = 3976
+        spot_size_at_af_area_registration_0f8a = 3978
         registered_af_area_tracking_start_area_alt_numbering = 3980
         registered_af_area_tracking_start_area_alt_numbering_0f8e = 3982
         registered_af_area_tracking_start_area_alt_numbering_0f90 = 3984
@@ -856,6 +862,9 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         custom_area_remembered_1325 = 4901
         custom_box_position_in_use_x = 4903
         custom_box_position_in_use_y = 4905
+        custom_area_at_af_area_registration = 4909
+        custom_area_at_af_area_registration_132f = 4911
+        custom_area_at_af_area_registration_1331 = 4913
         custom_1_box_position_x = 4915
         custom_1_box_position_x_1335 = 4917
         custom_1_box_position_x_1337 = 4919
@@ -877,6 +886,9 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         custom_area_remembered_1393 = 5011
         custom_area_remembered_1395 = 5013
         custom_area_remembered_1397 = 5015
+        custom_area_at_af_area_registration_1399 = 5017
+        custom_area_at_af_area_registration_139b = 5019
+        custom_area_at_af_area_registration_139d = 5021
         custom_1_box_position_x_139f = 5023
         custom_1_box_position_y_13a1 = 5025
         custom_2_box_position_x_13a3 = 5027

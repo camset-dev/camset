@@ -2250,6 +2250,18 @@ enums:
       id: focus_area_remembered_0e6c
       doc: 'Focus Area remembered (vertical, grip up) [Focus > Focus Area]: 0 Wide, 1 Zone, 2 Center Fix, 3 Spot,
         4 Expand Spot, 5 Custom, 6 Tracking. live settings; 1 of 1 settings on it proved on the camera.'
+    0x0e6e:
+      id: spot_size_at_af_area_registration
+      doc: 'Spot size at AF Area Registration (copy 1) [Focus > Focus Area]: 0 S, 1 M, 2 L, 3 XL, 4 XS. live settings;
+        0 of 1 settings on it proved on the camera.'
+    0x0e70:
+      id: spot_size_at_af_area_registration_0e70
+      doc: 'Spot size at AF Area Registration (copy 2) [Focus > Focus Area]: 0 S, 1 M, 2 L, 3 XL, 4 XS. live settings;
+        0 of 1 settings on it proved on the camera.'
+    0x0e72:
+      id: spot_size_at_af_area_registration_0e72
+      doc: 'Spot size at AF Area Registration (copy 3) [Focus > Focus Area]: 0 S, 1 M, 2 L, 3 XL, 4 XS. live settings;
+        0 of 1 settings on it proved on the camera.'
     0x0e74:
       id: registered_af_area_tracking_start_area
       doc: 'Registered AF area: Tracking start area (horizontal) [Focus > Focus Area]. live settings; 1 of 1 settings
@@ -2634,6 +2646,18 @@ enums:
       id: registered_af_area_area_0f84
       doc: 'Registered AF area: area (vertical, grip up) [Focus > Focus Area]. live settings; 1 of 1 settings on
         it proved on the camera.'
+    0x0f86:
+      id: spot_size_at_af_area_registration_0f86
+      doc: 'Spot size at AF Area Registration (alt numbering, copy 1) [Focus > Focus Area]: 0 XL, 1 L, 2 M, 3 S,
+        4 XS. live settings; 0 of 1 settings on it proved on the camera.'
+    0x0f88:
+      id: spot_size_at_af_area_registration_0f88
+      doc: 'Spot size at AF Area Registration (alt numbering, copy 2) [Focus > Focus Area]: 0 XL, 1 L, 2 M, 3 S,
+        4 XS. live settings; 0 of 1 settings on it proved on the camera.'
+    0x0f8a:
+      id: spot_size_at_af_area_registration_0f8a
+      doc: 'Spot size at AF Area Registration (alt numbering, copy 3) [Focus > Focus Area]: 0 XL, 1 L, 2 M, 3 S,
+        4 XS. live settings; 0 of 1 settings on it proved on the camera.'
     0x0f8c:
       id: registered_af_area_tracking_start_area_alt_numbering
       doc: 'Registered AF area: Tracking start area, alt numbering (horizontal) [Focus > Focus Area]. live settings;
@@ -3304,6 +3328,18 @@ enums:
       id: custom_box_position_in_use_y
       doc: 'Custom box position in use: Y [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on the
         camera.'
+    0x132d:
+      id: custom_area_at_af_area_registration
+      doc: 'Custom area at AF Area Registration (copy 1) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
+    0x132f:
+      id: custom_area_at_af_area_registration_132f
+      doc: 'Custom area at AF Area Registration (copy 2) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
+    0x1331:
+      id: custom_area_at_af_area_registration_1331
+      doc: 'Custom area at AF Area Registration (copy 3) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
     0x1333:
       id: custom_1_box_position_x
       doc: 'Custom 1 box position: X (copy 1) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on
@@ -3388,6 +3424,18 @@ enums:
       id: custom_area_remembered_1397
       doc: 'Custom area remembered (vertical, grip up, copy 3) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
         3. live settings; 1 of 1 settings on it proved on the camera.'
+    0x1399:
+      id: custom_area_at_af_area_registration_1399
+      doc: 'Custom area at AF Area Registration (copy 4) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
+    0x139b:
+      id: custom_area_at_af_area_registration_139b
+      doc: 'Custom area at AF Area Registration (copy 5) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
+    0x139d:
+      id: custom_area_at_af_area_registration_139d
+      doc: 'Custom area at AF Area Registration (copy 6) [Focus > Focus Area]: 0 Custom 1, 1 Custom 2, 2 Custom
+        3. live settings; 0 of 1 settings on it proved on the camera.'
     0x139f:
       id: custom_1_box_position_x_139f
       doc: 'Custom 1 box position: X (copy 4) [Focus > Focus Area]. memory sets; 1 of 1 settings on it proved on

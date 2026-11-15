@@ -1159,9 +1159,11 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     #   camera row; the ★-★★★★★ copies sit on Rating Set(Custom Key)'s row as its boxes), 2026-11-07
     # + 26 the Custom boxes' place records in the memory sets (kit2_framepos, 2026-11-09): derived copies, and the box in
     #   use, on no camera row, as the Zone's copies are
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 26
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 26   # + the live copy
-    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 26
+    # + 12 the spot size and the Custom area as written at AF Area Registration (the camera's own downloads compared,
+    #   2026-11-15): copies on no camera row
+    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 26 + 12
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 26 + 12   # + the live copy
+    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 26 + 12
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
     one = next(s for s in DOC["settings"] if s.get("expert"))
