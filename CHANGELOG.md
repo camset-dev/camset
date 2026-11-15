@@ -7,725 +7,161 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### Read first
 
-- **If you map a camera other than the a1 II and made a sample** (`editor/definitions/<model>_fw<fw>.DAT`): on any
-  body but the a1 II the kit zeroed in it only the records whose value reads as text (its list of the a1 II's own
-  personal records applied to the ILCE-1M2 alone), and the text check misses a name packed against other bytes, so a
-  registered lens list, with each lens's serial number, and other records of the owner's own could be left in. Add
-  your camera's `personal_records` to its camera file and make the sample again (docs/UPDATING.md, "Your camera
-  file: what the kit reads in it now").
+- **If you map a camera other than the a1 II and made a sample** (`editor/definitions/<model>_fw<fw>.DAT`), make it
+  again: the older kit could leave the owner's own records in it, such as a registered lens list with each lens's
+  serial number. List your camera's `personal_records` in its camera file first; `kit/tools/make_sample.py` and
+  `kit/tools/check_public.py` now refuse a sample without them (docs/UPDATING.md, "Your camera file: what the kit
+  reads in it now").
+- **A kit run that asks a reader now needs one in `private/config.json` that answers a test question before the link
+  opens**; otherwise it stops, nothing pressed, and says what to do, where it went on with OCR alone or stopped
+  midway. The example config names no reader and no camera address until you fill them in, a paid reader plays only
+  the roles you give it, and `kit/tools/reader_check.py` tests your readers with no camera (docs/QUICKSTART.md,
+  "Choosing a reader").
+- **`crawl_run.py` and `drive.py` no longer exit 0 when they did not finish:** once the start file is back,
+  `crawl_run.py` exits 7 after a refusal and 8 after any other failure or a short lap, `drive.py` exits 8 when it did
+  not reach its first `--path` row, and `kit/tools/chain.py` stops on both. A crawl now skips a row whose label it may
+  not open or cannot read ("skipped: refused" in `rows.jsonl`) and goes on, where it stopped.
+- **The kit opens fewer rows, on every camera:** no `--allow` opens the Wi-Fi and Bluetooth settings, the screens that
+  show the camera's network addresses or Display Serial Number, and the kit refuses Enter on SSID/PW Reset as on
+  Initialize and Reset Network Set. Only a camera owner's dated decision opens more, as The mapping kit below says:
+  network rows to look at with `--network`, or one never-open row per `drive.py --owner` run (decisions 4, 5, 8 and
+  9).
 
 ### The project
 
-- The docs site has a code signing policy (Reference > Code signing policy), linked from the README's and the docs
-  home page's download parts: what would be signed once SignPath Foundation accepts the project for free code signing
-  (the editor's Windows program and its installer, built from a release tag by the release workflow on GitHub's
-  runners), who approves it, and that the editor sends nothing over a network unless asked. Nothing is signed yet.
-- SignPath Foundation declined the project's application for free code signing for now (2026-11: the project is too
-  new): no Camset program is signed, the project will apply again later, and the code signing policy says so.
-- The release workflow builds only a tag on a commit of `main`: a tag on any other commit, or one pushed before `main`
-  was, stops it before anything is built, with a message that says what to do (push `main`, then re-run the job). Its
-  builds and tests, and the packaging scripts', take the crates `editor/Cargo.lock` names (`--locked`), or stop.
-- The security policy, the code of conduct and the new-issue page are written for the public repository: a security
-  problem goes through the repository's Security tab (Report a vulnerability), or, where that is not offered, a Bug
-  report titled "Security contact" with no details, and the new-issue page points there and to the documentation.
-- A download can be checked: each release from this one holds `SHA256SUMS`, the SHA-256 checksum of every package
-  and of the definition viewer, and GitHub keeps each one's build provenance, signed when the release workflow built
-  it. `shasum -a 256 -c --ignore-missing SHA256SUMS` on macOS (`sha256sum` on Linux, `Get-FileHash` on Windows)
-  shows that a file arrived whole, and
+- A download can be checked: each release from this one carries `SHA256SUMS`, the checksum of every package and of the
+  definition viewer, and GitHub keeps each file's signed build provenance.
+  `shasum -a 256 -c --ignore-missing SHA256SUMS` (`sha256sum` on Linux, `Get-FileHash` on Windows) shows that a file
+  arrived whole, and
   `gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml`
-  that the project's release workflow built it from this repository (the README, "Check a download"). Neither is a
-  code signature: the Windows downloads are still not signed.
-- The editor's crates and the kit's Python packages are checked against the known vulnerabilities (`cargo audit` on
-  `editor/Cargo.lock`, `pip-audit` on `kit/requirements.txt`) every week, so a new advisory shows with no change
-  pushed, and whenever a pull request changes their pins; Dependabot proposes newer actions, crates and packages once
-  a week, one pull request for each of the three. The first audit, on 2026-11-14, found two high-severity advisories
-  in `quick-xml` 0.30.0, fixed in 0.41.0, which only the Linux editor takes in, through eframe's accessibility
-  crates: it is compiled into the Linux editor as a regular dependency of `atspi-common`, but called only by that
-  crate's compile-time check and its own tests, never at run time (read from the crates' source; no built program
-  was inspected). Both are set aside, each with its reason, until a newer eframe takes them out. The kit's packages
-  had none.
+  that the project's release workflow built it; neither is a code signature (the README, "Check a download").
+- No Camset program is signed: SignPath Foundation declined the project's application for free code signing for now
+  (2026-11: the project is too new), and the project will apply again later. A code signing policy on the docs site
+  (Reference > Code signing policy) says what would be signed, who approves it, and that the editor sends nothing over
+  a network unless asked.
+- A security problem is reported through the repository's Security tab (Report a vulnerability) or, where that is not
+  offered, a Bug report titled "Security contact" with no details; the security policy, the code of conduct and the
+  new-issue page are written for the public repository and say so.
+- The editor's crates and the kit's Python packages are checked every week against known vulnerabilities, and
+  Dependabot proposes newer versions weekly. The first check found two high-severity advisories in `quick-xml`, which
+  only the Linux editor takes in, through eframe: they are set aside until a newer eframe drops it, as the crate's
+  source shows it is never called at run time (no built program was inspected).
+- The release workflow builds only a tag on a commit of `main` (push `main` first, then re-run the job), and every
+  build takes exactly the crates `editor/Cargo.lock` names.
+- The kit's pinned packages move to anthropic 2.8.0 and zensical 0.1.1, which the next `python3 kit/setup.py`
+  installs, and the editor takes pollster 1.0.1.
 
 ### The editor
 
-- **The a1 II's Different Set for Still/Mv is read and edited.** Its seven boxes (Aperture, Shutter Speed, ISO,
-  Exposure Comp., Metering Mode, White Balance, Picture Profile) are seven settings on the Setup tab, one record each,
-  Ticked or Not ticked, each proved on the camera by ticking and unticking its box. A ticked box keeps that setting
-  apart for stills and for movies; what a change then writes to each mode's copy is not proved yet, so the editor's
-  handling of the copies is as before.
-- **What the a1 II's White Balance and Picture Profile boxes of Different Set for Still/Mv do to the copies is
-  proved,** in Stills and Movie mode, for White Balance and the Picture Profile in use, each kept in the one in use and
-  a stills and a movie copy. With the box not ticked, a choice in either mode writes the one in use and both copies;
-  ticked, the one in use and only that mode's copy. Ticking a box writes nothing but the box, and unticking it sets
-  the one in use and both copies to White Balance Auto or Picture Profile Off, in the states tried. The notes on the
-  two boxes and the four copies say so (in Expert mode), and the camera's page has a Different Set for Still/Mv row.
-  Still not proved: whether that Auto or Off is a default or a value the camera keeps elsewhere; what the boxes do to
-  White Balance's colour temperature and fine-tune and to the profiles' parameters; the other five boxes; an untick in
-  S&Q or Time-lapse, or in Stills mode with the copies apart and neither Auto nor Off; White Balance options past
-  Shade (Cloudy in Stills mode only) and PP3 and later; and what the camera does on loading a file whose box was
-  changed. What the editor does with these two boxes is the next point.
-- **Unticking the a1 II's White Balance or Picture Profile box of Different Set for Still/Mv asks first,** in the
-  window and on the web page, before anything is changed, from wherever the change comes (the setting's own control, a
-  copy from file B or from a memory, a copy of several rows or a merge that leaves the family behind, a put-back, the
-  History window's Revert):
-  when it was tried on the camera, unticking it also set White Balance or the Picture Profile to Auto or Off, in both
-  copies too; changing the box alone would leave the file with values that unticking on the camera does not leave, and
-  what the camera does when it loads such a file is not known. "Do as the camera does" unticks the box and sets the
-  setting and both copies to Auto or Off in one step (one Undo takes it all back), "Change this setting only" unticks
-  the box alone, and Cancel leaves it as it was. Where the camera's way cannot be made here (a setting it would set is
-  view only, or does not take the value), that choice is greyed out with why, and nothing is ever made in part; on
-  the page an answer to a question about a file that changed meanwhile is refused. While
-  one of the two boxes is ticked, the rows of its setting and copies say that when this was tried a change on the
-  camera changed only the copy for the shooting mode it was made in, and that the editor does not follow the box: an
-  edit here still takes along the copies that held the same value when the file was opened. The other five boxes are
-  not proved, and change alone as before. The editor knows the two boxes from the definition (`keeps_apart`), names
-  every value by the definition's own words, and refuses a definition whose `keeps_apart` names values or settings it
-  does not hold, so any camera's mapping can say the same of its own switches.
-- A value shown as "7 (no name yet)" says in Expert mode that no choice on the camera wrote it when the setting was
-  mapped, and that the camera's list may not offer it, where it said the value was not chosen on the camera, which
-  was wrong for one the list never offers.
-- On Windows, Settings > About names the version of Windows as it does macOS's and Linux's, in the window, on the web
-  page and in Copy details: "Windows 11 build 26100 (x86_64)" (or Windows 10, or Windows Server), where it said
-  "Windows (x86_64)". Windows itself gives the numbers, with no console window and nothing more to install.
-- An installer for Windows, beside the zip: `camset-editor-<version>-windows-x64-setup.exe` installs the editor for
-  you alone, with no administrator rights, puts it in the Start menu (and on the desktop, if you tick that) and in
-  Windows' installed apps, where you uninstall it; a newer installer updates it in place. Updating or uninstalling
-  never touches your own files: your preferences, the definitions you added and the copies the editor keeps stay in
-  the editor's own folder (`%APPDATA%\camset_editor` as a rule). Take the installer unless you would rather install
-  nothing; the zip holds the same program and runs from wherever you unpack it. Neither is signed yet, so Windows
-  SmartScreen warns the first time ("Windows protected your PC": More info, then Run anyway), and Smart App Control,
-  where it is on, blocks them with no Run anyway, until code signing is arranged. The installer's Properties > Details
-  name Camset Editor and the program's version, as the program's do.
+- **The a1 II's Different Set for Still/Mv is read and edited:** its seven boxes (Aperture, Shutter Speed, ISO,
+  Exposure Comp., Metering Mode, White Balance, Picture Profile) are settings on the Setup tab, each proved on the
+  camera. What the White Balance and Picture Profile boxes do to the stills and movie copies is proved too, in the
+  states tried, and their notes say so in Expert mode; for the other five boxes it is not, and they change alone as
+  before.
+- **Unticking the a1 II's White Balance or Picture Profile box asks first,** in the window and on the web page, from
+  wherever the change comes: on the camera, unticking also set that setting and both its copies to Auto or Off, and
+  what the camera makes of a file where they differ is not known. Choose "Do as the camera does" (one step, one Undo),
+  "Change this setting only" or Cancel; while a box is ticked, its setting's rows say that the camera then changes
+  only the copy for the mode in use, which the editor does not follow.
+- **The a1 II's Fn Menu places list only the functions their own picker offers on the camera,** where each listed
+  every function seen on any picker, and its custom keys drop the few their picker never shows, so even Expert mode no
+  longer offers them there. In Expert mode a value shown as "7 (no name yet)" now says that no choice on the camera
+  wrote it and that the camera's list may not offer it.
+- An installer for Windows beside the zip, `camset-editor-<version>-windows-x64-setup.exe`, installs the editor for
+  you alone with no administrator rights, puts it in the Start menu and Windows' installed apps, updates it in place
+  and never touches your own files. Neither is signed yet, so Windows SmartScreen warns the first time (More info,
+  then Run anyway), and Smart App Control, where it is on, blocks them.
+- The a1 II's notes claim only what holds for every a1 II, with nothing particular to its owner's camera, and Proxy
+  Rec. Settings is corrected: its row follows the Proxy File Format, and its code 3, which no menu choice writes, is
+  what Initialize and Camera Settings Reset write.
+- On Windows, Settings > About names the Windows version and build ("Windows 11 build 26100"), as it does for macOS
+  and Linux.
 - On the web page, Open in Backups opens the copy you chose even when the editor kept more copies after the list was
-  shown (a read from the camera, a write, a file opened), which go at the top and move the rest down. It said "That is
-  not one of the copies the editor keeps." until you pressed Refresh, and now it says so only for a copy no longer kept,
-  then shows the list as it is. A page left open from before this version asks to be reloaded first.
+  shown; a page left open from before this version asks to be reloaded first.
 
 ### The definition viewer
 
-- A file the definition viewer refuses shows, under the message that refuses it, what the file starts with: its size
-  and its first 256 bytes as a classic hex dump (offset, hex, text), to paste into a report of the problem. It says
-  that the file was read in the browser and never left it, and to check before pasting it anywhere public that it
-  holds nothing of yours; a file that is read shows none.
+- A file the viewer refuses shows its size and first bytes as a hex dump, to paste into a problem report: the file was
+  read in your browser and never left it, but check that the dump holds nothing of yours before pasting it anywhere
+  public.
 
 ### The mapping kit
 
-- **A switch that keeps a family's copies apart is written into the definition, where a proof showed what it does.**
-  The hand tables take `KEEPS_APART`: by the switch's key (a Different Set for Still/Mv box), the family it keeps
-  apart (a `COPIES` family whose copies' modes are known), its values that keep it apart, and what unticking it on the
-  camera sets the family to, where that was proved. `kit/schema_update.py` writes it as `keeps_apart` on the switch,
-  in both passes, after the copies; an entry that cannot take effect (a switch or a family the definition lacks, a
-  family without copies or their modes, a value the switch or the family does not list, a family a switch named
-  before) is said, "not applied", and left out, and the plain pass refuses one naming no `COPIES` family or one in
-  `COPY_MODES_UNKNOWN`. Each entry takes effect only where the mapper's private hand evidence shows it (`KEEPS_APART`
-  there, by the switch and the entry's place, checked by `"$setting"`: `"evidence"` for the entry, `"untick"` for its
-  untick value), so a fact nothing proved is not written, and like the other tables the evidence completes, `--write`
-  stops without the hand evidence file. Where the camera's downloads are there, each section holding the switch
-  outside its apart values must hold the family at one value: a download that contradicts an entry stops the write
-  (exit 1), naming the file and the section, as a contradicted copy does. The a1 II's table names its White Balance
-  and Picture Profile boxes only, each unticking to 0; its definition gets them at the next `--write`.
-- **A row whose screen sits behind an information notice can be walked and proved, where a run names it.** The a1 II's
-  Different Set for Still/Mv answers Right with a notice ("You can set different settings for still image mode and
-  movie mode in the next screen. ...", a single OK) before its checklist of seven boxes; the crawl, which never presses
-  Enter, recorded it as a notice, so pass 1's map had no row for it and the checklist prover stopped at the notice.
-  `kit/crawl_run.py` and `kit/prove_run.py` take `--info-ok "ROW=PHRASE"` (repeatable, one row each; the prover's rows
-  named in `--rows` too), PHRASE the notice's whole text as written, compared by its letters, digits and single spaces
-  (punctuation and glyphs ignored): after Right on that row, the notice's OK is taken once, and only for a notice that
-  explains and asks nothing: the lit bar read as the row before Right; the phrase's words found in the notice in order
-  and accounting for all of it but 10 letters or digits (an icon read as a letter or two beside a line's first or last
-  word, a slip; never a word of three letters or more, nor a line outside its text; a negation such as "isn't" one
-  word), so no sentence, button or negation the phrase leaves out rides along; no question mark, no confirmation (its
-  words run together inside one word too), nothing never-open, of identity or credentials; exactly one line a button's
-  word alone, OK; no other line naming a second button, a choice or an action, nor on or below the OK's line; and the
-  lit button reading OK. Anything else presses nothing, and the crawl records "notice (named, not passed: ...)"; a
-  phrase that leaves part of the notice out prints the notice's text, to give it whole. A row that is no label the
-  definition or the page model knows, or is never-open (with its words run together or split too, as the walker reads
-  the lit row), a phrase of fewer than 3 words or 12 letters, with a question mark or a pattern's sign such as `*` or
-  `|`, and `--network` are refused before anything connects. The notice and the phrase are judged as read, words run
-  together counted only inside one word: the guards' reading with every space taken out (below) reads ordinary prose
-  across its spaces ("a different screen" holds NTSC, "camera settings" holds "erase"). The camera's own Enter check
-  (below) still judges the notice at the press, so a notice that reads as a confirmation only with its spaces taken
-  out ("new folders") stops the run there, nothing pressed.
-  The crawl's `rows.jsonl` and each proof line keep `info_ok` (the row and the notice's frame), never the notice's
-  words, and the menu tree keeps such a row's mark that an information notice comes first. Without the flag nothing
-  changes. A new checklist setting's tab is now its row's tab in the definition's menu, where the writer had a table of
-  five rows (the playbook, section 8, "A row whose screen sits behind an information notice").
-- **A coverage ledger says what is settled about each row, value and record; the runners print it, and skip only
-  when told to.** A new ledger (`kit/tools/coverage.py`, decision 23) gives every menu row, every value of every
-  setting and every record of the file one status (proved, tested with no record changes, not in the settings file by
-  Sony's own list, greyed in a state, closed by rule, not yet tried and the others the data files' page lists),
-  generated each time from the definition, the data folder, `camkit.safety` and your own looks and runs, so it cannot
-  drift. `kit/drive.py`, `kit/crawl_run.py` and `kit/prove_run.py` behave as before: they only print, before they
-  press on a row, what the ledger says of it ("coverage: <row>: <status> ..."). Give `kit/crawl_run.py` or
-  `kit/prove_run.py` the new `--skip-settled` to leave settled rows out (a prover only a list or dialog row whose every
-  planned option is settled, and never with `--context`, `--first`, `--tables`, `--wb`, `--wb-corners`, `--looks`,
-  `--look-base`, `--redo` or `--help-text`); `kit/drive.py` never skips. A crawl meant to build pass 1's map must not
-  skip: its `map.json` would have holes, and `kit/pass1_map.py` refuses such a crawl. A row with values still to try
-  (Fn Menu Settings' 5,940 on the a1 II) is never settled; a row found greyed is settled only while the start file
-  still greys it, a row the kit could not read only for an unknown screen or no response to Right and only on the same
-  kit commit; on a camera with no looks file yet nothing is settled, and a ledger error never breaks a run. A run that
-  only prints builds the ledger once before it connects (about half a second at the a1 II's scale) and reads no
-  download and asks git nothing for a row. Each look the three runners make (and each hand check
-  `kit/tools/coverage.py --record` notes, from two camera downloads) goes into a private, append-only looks file,
-  `private/evidence/<model>_fw<fw>/looks_<model>_fw<fw>.jsonl`: labels, field names and record keys, never a value; the
-  latest look of a row wins (one that did not reach the row never replaces one that did), and `--record --result
-  retract --did <what>` withdraws one. `--todo` lists what is left by expected yield and what each step needs (a remote
-  look or proof, the owner's hand, equipment, a decision, a kit fix), `--row` shows one row with what it rests on, and
-  `--write` writes a public form, `data/<model>_fw<fw>/coverage_<model>_fw<fw>.json`, beside a private form with the
-  citations. The public form is built from the public sources alone and the few facts a look establishes that hold
-  for every camera of the model (an information screen and the kit's address field names it showed, a row that acts
-  when opened, a hand check that changed a record, a row of Sony's list seen to change nothing), which live in a small
-  public file of their own, `data/<model>_fw<fw>/seen_<model>_fw<fw>.json`, written by `--write` where your looks file
-  is: nothing your camera's state showed reaches either, so two owners' forms differ only in which of those facts each
-  has looked for. `kit/tools/check_public.py` refuses a public form that is not, byte for byte, the build of the public
-  sources and the seen file (so an edit by hand is refused, and an edit of a fact shows as a change to the seen file),
-  and either file where it breaks its schema or holds a run, a date, a hash, a commit or a word its sources do not
-  know; a test checks the committed form is that build. A definition never carries the camera file's Save/Load list
-  (its schema refuses it). A proof counts as valid when its diff is the row's own records, two independent readings
-  recorded in it agree on its label and each option of the row writes its own value; the proof that chooses the saved
-  option again is inferred, never valid. `--proofs` counts the repeats of a valid proof, and `--bundles` shows per run
-  folder which frames and downloads back a valid proof (it deletes nothing). The a1 II's public form is committed as
-  its public sources give it, with an empty seen file. Sony's Save/Load list is data now, `save_load_excluded` in the
-  camera file (never copied into the definition), and the model page's row is rendered from it.
-- **A picker's list walked whole on the camera is what its settings list.** The first kit gave every function picker
-  one list, the union of every function code it met (the Custom Keys', the dials', the Fn menus'), and the writer
-  never dropped a listed value, so each of the a1 II's 36 Fn Menu places listed 222, 221 or 229 functions where its
-  picker offers 72 (Stills), 72 (Movie) or 33 (Playback), and Expert mode's "Offer values not checked on the camera
-  yet" offered the rest, to be written to the camera with "Write anyway". A new hand table, `PICKER_LISTS`, names the
-  pickers whose lists were walked full circle (the settings each list is for, the walks that chose every place, the
-  table walk's screen); `kit/schema_update.py` cuts those settings' lists to the codes the walks wrote, judged by code,
-  in either pass and before the not-offered marks, only while the walks, the table walk and the hand evidence agree
-  (how the list was walked is the hand evidence's, by the entry's name): each setting's picker found through a row of
-  its own, every list gone round to its start and alike place by place with the same numbers, every walk choosing
-  each place of its list (by its proof lines), and every row of a covered setting made in a state a walk names (the
-  rule is for lists that do not change with the camera's state). Where the camera draws an icon by a function's name,
-  the reader gives it digits or letters that differ from cell to cell ("8Var. Shutter", "S Var. Shutter"; the rating
-  stars), so numbers are compared only at places whose code is read with the same numbers every time, by every row of
-  the screen that wrote it, and even there a label's numbers must be some the camera read for that code ("Recall
-  Custom hold 2" is "hold 3" only where the reader misread it so), unless they cannot name another function: every
-  function some screen showed under that name is in the walked list, and the reader cannot read the place's own
-  function's numbers apart (it is the only one of that name, the reader gave it a sibling's digits, or its own
-  readings disagree three ways, as five stars' do); the run says each place so excused, with both labels, and a
-  function no screen showed is left to the code checks. A cell whose label reads nearer a function the
-  camera has outside the walked list (as every picker screen of the table walk showed each code) than the walked one
-  at its place (as its own screen showed it: "Clip Flag KEEP" where the walked list has "Clip Flag OK") is refused,
-  for it may offer another set of functions; two look-alikes of the list the other way round, the same set of codes,
-  pass, and so does one name under two codes with the same numbers (Pre-Capture, Clip Flag OK), which no label tells
-  apart. Neither that nor a function the camera never showed on a screen is caught by the labels: for those the code
-  checks stand, and a code outside the walked list that a proof, the definition's sample or one of the camera's own
-  downloads holds stops the write. An entry is refused when the picker screens gave no readings to check, and when a
-  walk's proof lines plan other labels than the table walk reads at their places (the table walk read again since);
-  each entry cut says how many outside functions it was checked against and which codes it took as one name. The
-  camera's downloads are read once for both checks against them. The a1 II's
-  table cuts the 36 Fn Menu places (the playback list's walk is Upper 4's, which chose every place) and the 14 stills
-  Custom Keys the first kit gave the Fn menu's codes for Pre-Capture and Subject Recog in AF (the keys write their
-  own, 2110 and 1049); the movie Center and Multi-Slc Center buttons (In-Camera Guide, Switch Right/Left Eye) and the
-  playback Fn Button (Follow Custom) are marked `not_offered` for functions the other keys offer. A not-offered mark's
-  walk no longer counts a row that chose only a sample of a picker, and a key whose own row is a sample has its mark
-  stand on its twin's whole walk where the table walk shows the two pickers' lists alike. The 37 Custom Key notes say
-  the length of each key's walked list (they said the first kit's partial counts), the playback Fn places' note no
-  longer says "inferred from the codes", and the playback Fn code 2509 is "Aspect Marker Disp." (an OCR slip read
-  "ErAspect"). A setting the hand table says the camera keeps or computes for itself (`UNPROVED` kind `state`) keeps
-  no proof in either pass, a proof an earlier write left taken out and said (decision 16); one that also has a hand
-  proof (`FRAME_PROOFS`) stops the write, for the two tables then say opposite things of it. The definition changes
-  when the maintainer writes it with the private evidence (docs/DATA_CONTRACTS.md, "A picker's list walked whole").
-- **A network decision opens an identity or connection row only once the row has been seen to open and close over the
-  link without harm.** On the a1 II a look-only `--network` run opened IP Address Setting over the wired LAN link
-  (Right, then MENU, nothing chosen): its screen read as no known kind, and a second or two after the MENU the camera
-  raised a network error and dropped the link, which did not come back. It had been listed among the rows whose
-  opening starts or ends nothing without anyone having seen it opened over the link, as had USB Connection Mode, USB
-  LUN Setting, USB Power Supply, Language, NTSC/PAL and Area/Date/Time. None of them opens by any network decision now
-  (IP Address Setting never; the others until someone has seen them opened over the link); a decision naming one,
-  such as the one that named IP Address Setting, stops the run before anything connects and says why. The rows that
-  still open, look-only, are those seen so on 2026-11-13 and 2026-11-14 (Wired LAN Connect, Wake On LAN, Remote Shoot
-  Function, Cnct. while Power OFF, Manage Paired Device, Display FTP Result), each with the day it was seen beside it
-  in `kit/camkit/safety.py`, and a test fails if a row is added there without being recorded as seen (decision 8).
-  Under an owner decision (`drive.py --owner`) IP Address Setting is a row whose opening may drop the link: it opens
-  only as the armed last press of a run given `--confirm`, the row under `"confirm"` with `"link_loss": true` and
-  `"values": "logged"`, the person at the terminal typing its name and `RESTORE_BY_HAND.json` written first; a run
-  that would look at it without that stops before anything connects, as one does for every row whose opening may
-  change the network. The USB and region rows stay closed identity rows an owner decision opens to look at, their
-  frames blacked out, at the owner's risk of a dropped link: none has been seen opened over the link. The entries
-  below that name IP Address Setting describe how the kit reads a row's page icon and goes to the row, which holds for
-  any row; IP Address Setting itself no network decision opens.
-- On a `--network` or `--owner` run the closing lines withhold an error's quoted texts as its first error line does:
-  when the link dropped, the first line withheld the OSD frame's path, and the closing lines (the tries to close the
-  camera, the restore that did not finish) printed it whole, the home folder in it. And when `drive.py`'s restore does
-  not finish (exit status 4, or 5 after an armed press), `drive.jsonl` keeps a result line saying the run did not finish
-  and was not restored, with what the run was asked and no screen, where it was left empty.
-- Words OCR runs together or splits no longer make a never-open row an ordinary one, on every run. A pattern of the
-  never-open list with a space in it never matched the words run together: of the 95 never-open labels in the a1 II's
-  definition (its menu's and its settings' rows), 54 read as an ordinary row in `drive.py`'s press check and the
-  camera's own with one of their spaces dropped (actions such as Reset Network Set., Setting Reset, Camera Set. Memory,
-  Create New Folder and Pixel Mapping; Access Authen. Info and Settings; Shutter When Pwr OFF, Screen Reader, Audio
-  Signal, Video Light; IP Address Setting, Wired LAN Connect, Wake On LAN, the USB rows, Edit Device Name, Remote Shoot
-  Function, Access Point Set., WPS Push; Airplane Mode, Bluetooth Function). Every guard pattern now has a copy without
-  its spaces, and the reading with every space taken out and the reading with its CamelCase set apart are judged beside
-  the others: a word split by a space ("Forma t", "De lete AII") is the word, and a word bounded at its end is seen
-  inside run-together words ("Pre-AFOn", Pre-AF's lit bar with its value; "PWReset", "TestShot", "RecLamp" on other
-  bodies). "WPS Push" and "WPS PIN" run together are WPS; USB and DNS (whose options are never chosen), Format and
-  Delete (never opened, whatever a run is allowed: "DeleteAll") and Load, Recall and Import (what no decision names) are
-  read at a word's start. The actions are still matched whole: "File Format", "Time Code Preset" and "Zoom Ring Rotate"
-  run together are no actions.
-- What permits is judged on the readings spaced as read too, so the readings above only refuse: a decision that names
-  a row with its words run together or split, so that it reads otherwise than as written ("USBConnection Mode",
-  "Access Authen. AccessPoint"), is refused ("name the row as the camera writes it"); a lit bar, an owner row, a page
-  model's reading, an armed confirmation ("Forma t?" arms nothing), a kept field name ("Ser ver"), an armed reset's
-  family, an owner's approval of a motion row ("ShutterWhenPwr OFF" with an action read through a Cyrillic letter is
-  no motion row to approve), a profile's own reset question ("theDefault" set apart is no "default"), an armed opening
-  and an "unattended" decision's waiver (only of a never-choose row it names as written, whose option it may take) hold
-  only where both readings agree. A name given with `--allow` lifts a word on a screen only where the word lies wholly
-  within the name ("Set" lifts no "Reset", "Light" no "Video Light"); and the row's own label is taken off its owner
-  screen whole, never word by word ("Access Point" beside Access Authen. stays an access point).
-- `drive.py`'s Enter guard reads a confirmation run together too ("Formatthe memory card? Enter Cancel"), and the camera
-  now makes that check itself (`LiveCamera`): Enter is refused on a notice that reads as a confirmation or reads
-  nothing, on a dialog or a screen of no known kind whose text and lit text both read nothing (one with text and
-  nothing lit, such as Camera Set. Memory's slot screen, is judged by its text), and on a dialog or a screen of no known
-  kind that asks (a question mark, Cancel outside quoted option names,
-  a lit Enter, OK, Execute or Yes, a lit action word whose screen still reads as a confirmation without it, or a lit
-  text that cannot be read) and reads as a confirmation, unless the press was judged with `--confirm` (`drive.py`,
-  `card_actions.py`), is `pp_reset_run.py`'s own checked question, or is an owner decision's armed press. A carousel
-  asks nothing (its title and its lit option): the 32 of the a1 II definition's carousels that read as a confirmation
-  (Delete confirm., File Name Format, Custom Key Setting's Delete, File Number's Reset...) still take Enter. What changes
-  for ordinary runs: the tools that press OK on a notice after their own `safety.confirmation` check now stop with a
-  refusal where the notice reads as a confirmation only to the new check (its words run together) or reads nothing:
-  `table_walk.py`'s "not available" or "invalid" notices, `afreg_run.py`'s Mode Dial Control Set note and its "not
-  available" notices after a choice, `memreg_run.py`'s "not available" notice, `mode_switch.py`'s Mode Dial Control Set
-  note (checked for "mode dial" alone) and `proving/screens.py`'s blocker notice and first-time note. None of them
-  checks a question of its own, so none is given `--confirm`'s word: a notice that reads so is not the information the
-  tool expects, and the run stops there, nothing pressed on it. A session whose closing gave up restores over its last
-  screen only where that screen reads as no confirmation with its words run together either.
-- Measured against the kit before (4f18908) over 27,865 strings (the a1 II's data and definition, every test literal,
-  every label with a space dropped, all dropped, one put in or CamelCase-joined, every question with a space dropped or
-  run together in CamelCase, every never-open label with a letter read as its Cyrillic twin) and 266 verdicts of the
-  guards, the decisions and `drive.py`'s and the camera's press checks: 264,771 verdicts refuse more, and the seven that
-  refuse less are two changes. With "Voice Memo" and "Voice Memo Play Vol." both allowed, the screen "Voice Memo Play Vol." is
-  no longer refused for "Play Vol." (the shorter name, lifted first, left it). And an owner's approval may name
-  "Pre-AFOn", which is Pre-AF to the kit now, where before it was no never-open row at all and opened with no approval.
-  The classes beneath them (`lift_class`, `identity_liftable`, `owner_class`, and `owner_may_approve` of `never_open`'s
-  reason) class more run-together readings, which no permission takes unless the readings spaced as read class them
-  alike. On the a1 II's own texts no definition label became never-open;
-  `drive.py`'s Enter guard refuses two help texts more ("newfolder" run together); a vouched Enter (`enter!:`, nothing
-  lit) is refused on the list of the setting the definition writes "AutoCreateStillImage", run together, which reads
-  "Create Still Image" with its CamelCase set apart, as it would spaced (kept so: a vouched Enter judges least).
-- White Balance's Cloudy is no cloud row. On the owner's a1 II, once White Balance > Cloudy was chosen, the lit row read
-  "White Balance Cloudy", its value beside its name, and the next press was refused, "by hand only: cloud": the word
-  meant for the cloud service's rows (Cloud Connection, Cloud Information, the Creators' Cloud group) was found inside
-  "Cloudy". Every guard that names "cloud" (the never-open list and its identity rows, the rows whose options are never
-  chosen, the rows that act on opening or may drop the link, and why no network decision opens one) now passes over
-  "Cloudy" where it ends its word in a reading, run together too ("WhiteBalanceCloudy"), or comes before "Weather".
-  A cloud row is refused as before, as written, run together and split ("CloudConnection", "Clo ud Connection",
-  "Creators'Cloud", "Cloud Upload", "C3 Portal/cloud"), and so is a cloud word split or slipped with a "y" after it
-  ("C loud Y", "Clo ud Y1"), which run together reads "cloudy": White Balance's Cloudy read split ("C loudy") is
-  refused with it. With every space taken out, a "y" and a letter after "cloud" may be a cloud row split by OCR and the
-  next word ("Creators' Clo ud Yes"), so "Cloudy" with a word that starts with a letter after it ("White Balance Cloudy
-  A1", "Cloudyconnect") is still refused, and the guards that judge a whole screen still refuse White Balance's list
-  read run together ("Shade Cloudy Incandescent"). What no pattern can tell from Cloudy now passes the row check: a "y"
-  OCR puts in after a cloud row's "Cloud" before a sign or the end ("Creators' Cloudy", "Cloudy-Connection"), as a
-  letter read for another always has ("Creators' Clond"); the group column still refuses the a1 II's Creators' Cloudy,
-  one letter from its group's name. Over the a1 II definition's menu, rows and values, each row read with one of its
-  own values beside it, and its Help Guide's menu, only "Cloudy", "White Balance Cloudy" and the six WB fine-tune names
-  for Cloudy changed verdict; no other word of the never-open list is found inside a longer word of the a1 II's labels
-  that means something else.
-- A third look-only `--network` session on the a1 II showed two rules of 2026-11-14 keeping the kit from rows it reached
-  before (failing closed: nothing wrong was pressed). The jump by the tab and group columns reads the group column's lit
-  bar as the way back out of the column does, the group's name judged whole by its letters and digits, equal or one
-  letter apart, one group of the tab only: a bar drawn with another icon glyph than the page scan stored ("(Cnct./Remote
-  Sht." for the scan's "[Cnct./Remote Sht."), or one the scan read a letter off ("FTP Transter"), no longer ends the jump
-  with nothing pressed, and its last Right goes out only on a screen still read as the group column. `crawl_run.py`
-  finds where the menu opened as `drive.py` does: a menu reopened with the cursor in the group column is stepped into a
-  group it may enter, and one on a page the scan does not match goes to the Shooting tab by the columns, where the crawl
-  stopped at once (exit 8). Both on every run, not only `--network` ones.
-- IP Address Setting opens on its live bar. Read with the row lit, the bar shows the Wired LAN page's icon with a letter
-  misread and set apart by a space (or, by the second OCR engine, a letter dropped and glued on), which no reading of the
-  page scan holds, so `drive.py --network` stopped at the row ("its bar does not read it"). The page's icon as the page
-  scan read it glued on is now taken on the live bar with at most one letter misread, dropped or put in, glued on or set
-  apart, where every other condition holds: a word of the page's own group, every reading of the row of its class, a
-  reader reading the label exactly, nothing never-open or of identity named, no other label the kit knows formed. The
-  arrival on the row, `drive.py`'s press check, the camera's own check and the end of the look after MENU alike.
-- `drive.py` exits 8 (EXIT_INCOMPLETE), once its start file is back and checked, when the scan did not reach its first
-  `--path` label, where it exited 0, so a chain or an agent can tell the row was not reached; it names that label as it
-  was given on every run, where a `--network` run said "could not reach '(withheld)'".
-- A tool that writes into a run folder a `--network` or `--owner` run marked (`pass1_labels.py`, `pass1_map.py`,
-  `tiebreak.py`, `help_reads.py`, `page_model.py`, `pass2_report.py`, `tools/reread_proofs.py`) writes owner-only (files
-  0600, folders 0700) on macOS and Linux, as the run left it; `pass1_labels.py` wrote `options.jsonl` readable by other
-  users.
-- A `--network` or `--owner` run says nothing of a text it withholds, not even its length, which could tell a row's
-  options apart; and on a withheld screen a line of one or two characters is kept only where it is a row label of the
-  page shown (the page scan's rows of that page), never because the definition has such a row somewhere (a "B" was kept
-  as a field name).
-- A dated owner decision that says `"lifts": "owner"` may name rows of the never-open list a network decision cannot:
-  credentials, the serial number screen, the closed identity rows, actions and resets, a card's Format and Delete;
-  never a firmware update or the Version screen, anything that loads a file or settings (Save/Load Settings' Load,
-  Recall Camera Setting, Import Root Certificate, Register IPTC Info), nor sound, light, motion or the Screen Reader, which keep their own
-  routes, and Initialize, whose Enter nobody has seen. Only `drive.py --owner` uses it, for the last label of its
-  `--path`, one row per run: the crawl and the proofs never open such a row. An action's or a card's row, and any row
-  whose name the kit knows in more than one place, is named by its path (`"Tab > Group > Row"`), and the run opens it
-  only where the screen reads that place: the top-level page's tab and group, and for a deeper row each parent's lit bar
-  before its Right and the title of the page it opens; between the walk and the opening only Up and Down go out, and
-  then no Right or Enter goes out, in `drive.py` or in the camera's own check, but that row's opening and the presses
-  inside it, whatever a lit row reads as, and a Right that leaves the page where it was refuses; `--confirm` covers only
-  the presses those checks judged. Before any `--owner` run given `--confirm` connects, the person at the terminal types
-  the row's name, the prompt showing its whole place and never the word to type; no flag answers it, it stops a careless
-  agent but not a determined one (a pseudo-terminal can answer it), so the owner types it, and only `"unattended": true`
-  beside `"confirm"`, or beside a never-choose row's `"options"` with `"link_loss"`, waives it. The row opens with Right alone, to look, only at a place where the
-  kit has seen it open a list or a question (Setup > Reset/Save Settings > Setting Reset, Camera Set. Memory, Reg.
-  Custom Shoot Set, My Menu's Add Item, Select REC Folder: the whole place, never the label alone); every other action,
-  Format and Delete among them, whose opening no frame records, and every row that acts as soon as it opens (WPS Push,
-  Pairing, Create New Folder...), opens only as a `--confirm` run's armed last press, the row under `"confirm"`.
-  `"options"` names what may be chosen (an action's steps, a never-choose option with `"link_loss": true`); inside an
-  action any Enter may be the final one, so a step goes before the last press only where `"steps_seen"` marks it seen
-  to lead only to a question and its screen shows no dialog's two buttons, and any other Enter there is the run's armed
-  last press; the camera's own check presses an armed press only when `drive.py` allowed it. Before a press that may
-  drop the link (Reset Network Set., SSID/PW Reset with `"link_loss": true`) `RESTORE_BY_HAND.json` in the camera's
-  runs folder (and in the clone's `runs/` for the camera, where `CAMSET_RUNS` points elsewhere) names the start file. A
-  press refused before it went takes it away and restores as ever; when the screen after it is the row's own question
-  (one that asks, with a "?" or a dialog's two buttons, never a notice saying it was done), MENU alone cancels it, the run restores and exits 6 (`EXIT_NOT_CONFIRMED`, the question's frame kept); when the link
-  answers with another screen, the run restores and takes the file away once the restore checks out; anything else
-  keeps it, presses nothing more and exits 5, telling the owner to cancel by hand what the camera still shows. A
-  blanked row whose opening may change the network (WPS Push, Pairing...) is confirmed only with `"values": "logged"`,
-  so that the screen after its opening can be judged. No link opens while it is there until `kit/tools/upload_check.py` has put
-  the start file back (the records no file sets back left out of the count; the owner may accept records that still
-  differ only by naming them back, `--accept 0x1126,0x18cb`), and `kit/tools/chain.py` stops after status 5, uploading
-  no end file, and after status 6. Without `"values": "logged"` a credentials, serial number or closed identity row's
-  frames are written black by the eyes, the camera's own picture of them polled into a folder of the eyes' own (mode
-  0700) removed at the end; with it the screens' text goes to the run's `drive.jsonl` alone, never to the console. Such
-  a run asks local readers only, no batch tool asks any reader about its frames, and the proof viewer neither shows
-  them nor packs a local-only run's frames. A scope that git tracks, that git cannot say it does not track, or that
-  writes a key twice in one object, is refused, and a network decision that says `"confirm"`, `"link_loss"`, `"values"`,
-  `"steps_seen"` or `"unattended"` is refused. Without `--owner` and such a decision every verdict is as before or stricter (decisions 4, 5,
-  8 and 9, changed 2026-11-13 for the a1 II's owner's camera; every other camera's default is unchanged or stricter:
-  SSID/PW Reset joined the Enter check of Initialize and Reset Network Set. for every camera).
-- The Wi-Fi and Bluetooth settings (Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt Ctrl,
-  Airplane Mode), the screens that show the camera's network addresses, and the identity and connection rows seen to
-  open and close over the link without harm (Wired LAN Connect, Remote Shoot Function and the others decision 8 lists:
-  above) stay by hand by default, and no `--allow` opens them; but a
-  dated owner decision in the reviewed scope that names the row (`"lifts": "network"`) opens it for a run given
-  `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with `--rows`). A row so named is looked at only: up,
-  down and MENU, never Enter, Right, Left or a dial inside it, until the screen read right after a MENU (or an Enter
-  on an option the decision names) is the shooting screen, or the page it was opened from with its lit bar on the row
-  itself: a camera slow to draw the row's list, a MENU the camera ignored, or a list or popup misread as a menu page,
-  never ends it. An option is chosen only where the decision names it (`"options"`; never one character, a button's
-  word or a name of the never-open list), never in a row whose choice drops a link, starts a connection or a pairing
-  or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl and Airplane Mode among them). A `--network` run
-  asks local readers only and marks its folder (`LOCAL_ONLY`), so every tool that reads its frames later
-  (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `kit/tools/reread_proofs.py`,
-  `kit/tools/reader_census.py`) builds local readers only and asks none about an identity row's frames; a prover's way
-  back to the shooting screen sends no OK to a notice that refuses MENU during such a run, nor ever to one that names
-  identity or credentials; a screen inside such a row that names identity or
-  credentials gets MENU alone and no reader; inside an identity row or on an address screen (`drive.py` only) the run
-  shows and keeps field names and row labels alone, never a value. Credentials, the SSID, WPS, access point and
-  pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a connection
-  (Smartphone Connection, Cloud Connection, Cloud Information, Network Streaming, USB Streaming, Tethering Connection
-  and Disconnection, FTP Function), Server Setting and Edit Device Name stay closed whatever a decision names, and a
-  decision naming one stops the run before anything connects. Without `--network` every row is refused as before
-  (decision 8, changed 2026-11-13: the a1 II's owner decided so for their camera; another camera's owner decides for
-  theirs, the playbook's rule 3).
-- A `--network` run's look at the a1 II's Network menus showed what to mend, and it is mended. What the run prints and
-  keeps of a screen it withholds (an address screen, a page after MENU) holds no value any more: the row labels it
-  keeps are the definition's and the page model's, never an option a setting's menu path names (such as Recognition
-  Target's Auto) nor a label read with its value glued on ("Wi-Fi ConnectOn"), and no line that is a value the
-  definition or the page model knows is kept, though it matches a label or a field's name. A row OCR reads with its
-  page's icon glued on ("LANIP Address Setting" on the Wired LAN page) opens as the decided row only where another
-  reader read the same row of the page model as that row exactly, every reading of it is of the row's class, and what
-  is glued on is a word of the page's own group name of at most four letters that names nothing on the never-open list
-  or of identity ("WPSIP...", "NoWi-Fi..." stay closed); MENU back to the page with that bar on it ends the row. A row's
-  own screen read as the shooting screen before any MENU (Manage Paired Device's list) is taken as a screen of no known
-  kind: MENU alone, its field names only, and a later frame read as the shooting screen ends the row only when the
-  camera's own picture says so too. A screen of no known kind inside any row a decision opened gets MENU alone (no new
-  kind of screen is added for the information screens, which cannot be told from a keyboard without the camera's
-  frames). The walk keeps the notice a greyed Wi-Fi or Bluetooth setting answers with (`"notice"` in `rows.jsonl`) when
-  it is one the kit knows ("This function is currently disabled.") and names no identity or credentials; from a
-  blocker notice it keeps what follows "as follows" only where that is a row label it knows with one of that row's
-  values, else the sentence alone. On a `--network` run the menu navigation prints no text it read off the screen, only
-  its length.
-- A second look at the a1 II's Network menus (`--network`, rows opened, read and left with MENU) showed more to mend:
-  - **What a `--network` or `--owner` run prints and keeps is withheld from its start to its end.** `drive.py` printed
-    and kept (console, `drive.jsonl`, the run's events) the text of a Wi-Fi or Bluetooth setting's own screens: a greyed
-    row's notice with its blocker and that blocker's state, an option list's lines, and, after MENU from a greyed row's
-    notice, the shooting screen's status line (the owner's shooting values). Now no screen's text is printed or kept by
-    `drive.py`, the walk (`crawl_run.py`) or the proofs (`prove_run.py`) on such a run, whatever the screen's kind: what
-    is kept is its kind, the whole row labels the kit knows (the definition's, the page model's that are a label alone,
-    the decision's own rows) and the field names, on an option list (never a carousel, which shows the lit option alone,
-    nor a side list, a window centred on it) the option names the definition gives that row only where the screen shows
-    that whole set (one missing, OCR's miss of the lit line or a window of a longer list, would tell which is current),
-    else their count alone, on a notice what the walk keeps (a notice the kit knows, and from a blocker notice the
-    blocking row's label where it is one the kit knows, never its value: "... as follows Airplane Mode", where the walk
-    kept "... Airplane Mode On" before), and the count of lines withheld; the shooting screen as its kind alone. The walk
-    keeps a row's label in `rows.jsonl` and on the console only where it is a label the kit knows, or the decided row a
-    lifted row was opened as, else "(withheld)"; the proofs keep of an option under the cursor only the map's own option
-    names. A refusal's or an error's quoted texts are withheld as before. The records that differ at the session's end
-    (and at the restore's check) are said by key and count alone on such a run, where the values were printed before
-    (an owner run of a network reset would have printed its address and identity records), and `drive.jsonl` keeps them
-    by key alone unless the owner row's decision logs values. An `--owner` run keeps alike, but for the owner row's own
-    screens where its decision says `"values": "logged"`. This is about the run's own logs, which an agent reads, beside
-    decision 16, which keeps the owner's values out of the public files (decisions 8 and 9).
-  - **Nothing a `--network` proof says tells which option the row was saved on.** It printed the saved value, proved
-    the options from the one after it round to it, last, its line saying "no change", and the records' values; and only
-    a row saved on an option the decision did not name ended with the session's upload. Now the named options are proved
-    in their own order, each said as "proof i of N" alone, the records they changed are said by key after them, never
-    which changed what or a value, and every network row ends with the session's upload of the start file, one text for
-    all. The proofs' diffs against the start file tell the saved option by their nature (its own proof changes nothing):
-    they stay in `proofs.jsonl`, in the run's owner-only folder, never said, as do the run's `events.jsonl`, whose
-    presses tell the way the cursor went from the saved option, and its frames (decision 8). A failure there names no
-    option by its index any more.
-  - **A `--network` or `--owner` run's folder is yours alone** on macOS and Linux: the folder and its subfolders 0700,
-    every file the run writes 0600 (frames, `drive.jsonl`, events, downloads, markers; the run sets its process's umask
-    to 0077 first, so the camera's helper writes so too), checked at the run's end, where anything another user could
-    read is fixed and said. They were 0755 and 0644 as a rule, so a logged credentials screen's run could be read by
-    other users of the computer. On Windows the modes are left as they are (decision 9). The eyes' polling target,
-    `_live.png` at the top of a run's folder (a frame of whatever was polled last), is taken away when the eyes close, on
-    every run, and the proof viewer never links it.
-  - On an owner row's screen the console names the fields it can without a value: whole row labels, and the name before
-    a value on a line where it is a field name the kit lists (now with Password, Fingerprint and Access Authen. beside
-    User Name, SSID, Device Name and the address fields), always with the count of lines not shown (Access Authen. Info
-    showed `fields []` and no count); a blanked screen says "screen withheld".
-  - "IP Address Setting" can be gone to and opened: `--path "IP Address Setting"` found no row when the page model's
-    label was OCR's "LANIP Address Setting" (the Wired LAN page's icon glued on). The way to a row now finds it by any
-    reading the page model keeps of it, and by that reading with an icon of its own page glued on, where the old rule
-    (a prefix of one or two letters) finds none. `--path "LANIP Address Setting"` stays refused before anything
-    connects. The values the kit knows for a row now gather every reading of the page model's row, so the value shown
-    beside "LANIP Address Setting" counts for IP Address Setting; and where no value of a decided row is known at all,
-    its lit bar may carry a tail of at most two words that names nothing on the never-open list, no identity or
-    credentials and no address, and makes of the bar no other label the kit knows (the definition's, every label and
-    reading of the page model, but the decided row's own) nor the start of one ("Wi-Fi Connect Settings" for Wi-Fi
-    Connect), where before nothing could follow its label. A row found by another reading than its label is gone to only
-    where exactly one row reads so, and only where its lit bar, read there, is the row.
-  - Wi-Fi Frequency Band is a row whose options no decision lets the kit choose (a change of band can drop a link that
-    runs over Wi-Fi): a decision naming its options is refused, as Wi-Fi Connect's are. That leaves Bluetooth Function
-    and Wake On LAN on the a1 II.
-  - A page model's label of one or two characters (an icon read as a letter, "B") is no row label the kit keeps on a
-    withheld screen unless the definition has it.
-- **These change ordinary runs too** (without `--network` or `--owner`):
-  - `crawl_run.py` exited 0 when a refusal stopped it mid-lap ("error: Refused ...; cancelling"), and after every other
-    failure too (an error, the menu on a screen the scan does not know, a lap that went off the scan or lost its row),
-    which a chain took for success. A row whose opening the camera refuses because of the lit row itself (it reads as one
-    the run may not open, or no reader can read it: `safety.RowRefused`) before any press went out on it is now skipped
-    ("skipped: refused (...)" in `rows.jsonl`, the reason's quoted texts withheld) and the lap goes on; any other
-    refusal (a look-only lock still on, the link's own guard), and a refusal after a press on a row (inside its walk,
-    which took it for an incomplete walk before), cancels the lap. Once its start file is back and checked the run exits
-    7 (`EXIT_REFUSED`) after a refusal and 8 (`EXIT_INCOMPLETE`) after any other failure or short lap (the start label
-    not reached now says so in its own words); a STOP, a complete lap and `--limit` reached exit 0; an unchecked restore
-    still exits 4 (`kit/exit_status.py`). `kit/tools/chain.py` stops on 7 and 8 as after 4.
-  - The menu navigation guesses nothing: where the lit group in the group column could not be read the jump took it for
-    the first group and pressed on ("taking it as the first"), and after its moves it sent its Right on a group it could
-    not read. Now the lit group is read again once after a short settle, then on the camera's own picture of its screen,
-    before its moves and after them, and where none names the group meant nothing more is pressed and the row is not
-    reached ("could not reach ... by the scan"); a menu that opens in the group column gets the same second look.
-  - The way to a row (`crawl_run.go_to`, which `drive.py`, the walk and every prover go by) finds a row whose page model
-    label is no reading of the label asked for by any other reading the page model keeps of it, or by that reading with
-    an icon of its own page glued on, where the old rule (a prefix of one or two letters) finds none; only where exactly
-    one row reads so, and only where its lit bar, read once there, is the row (above, "IP Address Setting").
-  - The OSD eyes take their polling target, `_live.png` at the top of the run's folder, away when they close, on every
-    run (above).
-- The menu navigation every run shares (`kit/crawl_run.py`, which `drive.py`, the walk and every prover go by) changes
-  with or without `--network`: a group whose name the page model read one letter off a never-open group's or action's
-  name ("FTP Transter" for FTP Transfer) is never jumped into by the group column, refused before any press, and the
-  row is walked to instead; the jump sends its last Right into a group only where the group's bar, read there, names no
-  such group, else it stops there and the run ends restoring its start file, where before only the camera's own check
-  judged that Right, by the never-open list alone; a menu that opens with the cursor in the group column (where such a
-  stop leaves it) is stepped into the rows of the nearest group of that tab that may be entered, by Up or Down and one
-  Right, only while the screen still reads as the group column and the bar names that very group, pressing nothing
-  when no group of the tab may be entered (`drive.py` and the My Menu prover stopped there before, "could not reach
-  ... by the scan"); and the prover's own way out of the group column now also steps off a group read one letter off a
-  never-open one, and sends no Right while every group it lit reads so or the screen no longer reads as the column.
-- The kit no longer opens Bluetooth Rmt Ctrl or Wi-Fi Frequency Band unasked, Wi-Fi and Bluetooth settings that the
-  playbook's rule 3 keeps for the owner's hand and that no pattern of the never-open list caught, so the walker opened
-  them and a prover could change them; nor the screens that show the camera's network addresses, Display Wi-Fi Info.
-  and Display Wired LAN Info. (its MAC and IP addresses) and Disp Device Address (its Bluetooth address), which saved
-  frames, the OCR output and a reader's request would have held. No `--allow` opens them (`kit/camkit/safety.py`):
-  only a dated owner decision naming the row, with `--network` (above). Display Serial Number, refused before as an
-  action that an owner's `--allow` could still open,
-  is now never opened whatever is allowed: the body's serial number would be in every frame. These rows, Wi-Fi Connect
-  and Wi-Fi Direct are refused too as a reader misreads them ("Wi-Fl", "Wi-FiInfo.", "Wired IAN Info.", "Dev1ce
-  Addr.", "Bluetoth Rnt Ctrl"). No other row of the a1 II's menus is refused that was not before.
-- Every camera's definition takes its own hand tables. `kit/schema_update.py` gave the a1 II's hand tables to the a1
-  II's definition alone: any other camera took the plain pass, which read none, so a fact found by hand on another
-  body (a name or note the camera proved wrong, a record the menus never write, a value no menu offers, the copies it
-  keeps, why a record cannot be proved) could not reach its definition. The plain pass now reads the camera's own
-  `data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json` where it has one: `RECORD_FIXES`, `NEW_RECORDS` (with
-  `FILTER_FLAGS`), `NEW_LIKE`, `NEW_WHOLE_LABELS`, `FRAME_PROOFS`, `CAROUSEL`, `VALUE_FIXES`, `PP7_VALUES`,
-  `KEEP_LABELS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES`, `COPY_MODES`, `COPY_MODES_UNKNOWN`, `UNPROVED` and
-  `CONTEXT_WORDS`, and stops in plain words, before anything is written, on a file that fills a table only the a1 II's
-  pass reads so far (its checklist records, Recall Custom holds, My Menu and the first kit's spellings), holds an entry
-  no table it reads would use, or does not fit its JSON Schema, so no table is filled in and believed to take effect;
-  an entry that cannot take effect yet (a setting the definition lacks) is said, "not applied" (docs/DATA_CONTRACTS.md,
-  "The hand tables file"). A value a hand table names is named, not proved: the editor offers it outside Expert mode
-  only where a proof covers it or a `NOT_OFFERED` mark says the camera holds it, and never becomes checked through a
-  `NEW_LIKE` record's fill from its sibling. What the tables or the hand evidence no longer give (a record found by
-  hand, a hand proof, a reason's day, a mark's evidence) leaves the definition, said. A record `NEW_LIKE` names is laid
-  out the same whatever the report's or the file's order (a chain of them sibling first; a cycle refused), and a second
-  run on the same tables changes nothing and says so. A camera with no file, or with every table empty, gets the plain pass as before, byte
-  for byte; the a1 II's own pass is unchanged. How each hand fact was proved stays in the mapper's
-  `private/evidence/<model>_fw<fw>.hand.json`, which now has a JSON Schema (`schemas/hand-evidence.schema.json`, "The
-  hand evidence file"): the plain pass takes from it only evidence fields, each on an entry the tables hold (a
-  not-offered mark's part naming its mark's values where a setting has several marks), and writes
-  each piece only into a field the definition keeps private, however it is worded, so a note's evidence or the owner's
-  word never reaches a public note. `--write` refuses, for any camera, while the camera's tables hold `FRAME_PROOFS`,
-  `UNPROVED` or `NOT_OFFERED` entries and that file is not there (a look says so and goes on; a mapper who proved none
-  of them by hand writes it with no evidence in it); the plain pass stops on a hand proof that names no run, day or menu
-  row; and evidence that no longer fits the tables stops either pass in plain words, no traceback.
-  `kit/writer/hand_evidence.py --check` says, read only, which parts of a camera's hand evidence the plain pass would
-  refuse, by table, key and field, never a value. `kit/pass2_report.py` leaves a value carried over in a record the
-  run's own camera's `KEEP_LABELS` names to that rule (it read no hand rules on another body before), and
-  `kit/provers/framepos_run.py --zone-grid` plans by the `ZONE` of the camera the kit works on (it read the a1 II's on
-  every body before), stopping before the camera where it names none.
-- The guard that stops a write from dropping evidence it read away (a proof read without its run, day and menu rows:
-  `kit/camkit/definitions.py`, `lost_evidence`) missed such a proof once the pass had put the sources of its value
-  names on it, as every write does, so the write would have kept only the values and the names in the evidence file.
-  The kit's own reading puts every fitting proof back (`definitions.load`), so no write in normal use met it; a
-  definition read with part of a proof's evidence missing, in either pass and with or without hand tables, now stops
-  as it was meant to, nothing written, naming the setting. A write that has all its evidence writes as before.
-- The foundations of one rule for when OCR alone is trusted and when the reader is asked
-  ([decision 22](docs/decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md)), with no
-  change in what any run reads, decides or presses: `kit/camkit/reading.py` holds the one cleaning every reading is to
-  get (look-alike letters, accents, dashes, spacing), the doubts that will send a reading to the reader, how two
-  readings are compared by what is read, and the owner's tie-break (two independent votes agree, or a fresh frame and
-  a third vote: the second OCR engine, then the site's own check, then a reader of another model), and nothing
-  calls it yet.
-  `kit/tools/reader_census.py` counts, over runs already made, how often the rule would doubt OCR, ask the reader,
-  keep or refuse a reading, and what a third vote by the second OCR engine would settle; it only reads the runs, asks
-  no reader unless `--ask` or `--questions`, and prints counts alone.
-- One question to the reader per kind of screen beside the old ones (`camkit.reading.QUESTIONS`), measured against
-  them on recorded frames by `kit/tools/reader_census.py --questions`, and finding a row judged without the icon OCR
-  reads in front of its label; no run asks, decides or presses differently.
-- The reader's questions measured further, again with no run asking, deciding or pressing differently: the title's
-  question kept as a third (`title.v3`) beside its pinned second, and `kit/tools/reader_census.py --questions` able to
-  check a change on a held-out sample, judge against a truth checked by eye, count where OCR and the reader are wrong
-  alike, time each question, ask a local server several questions at once (`--parallel`), and ask Claude through the
-  Claude Code command line on one's own plan, passing it no API key from the environment (`--claude-cli`, the census's
-  alone), never sending a hosted reader (that, a paid one, or one at an address off one's own network) a frame that may
-  name the network, an address or a credential.
-- A copy of `kit/config.example.json` names nothing to contact until it is filled in: its camera address is empty and
-  it lists no reader. Its first reader was a server at an example address on the local network, to which a copy left
-  as it was sent pictures of the camera's screen; the readers it shows are all under `readers_examples` now.
-- A run that asks a reader (the crawl, the proofs, the walks, the provers, `drive.py`, `mode_switch.py --to` and
-  `--set`, `card_actions.py`) with no reader listed in `private/config.json`, or with no `private/config.json`, stops
-  before it opens the link, saying what to put there: nothing is pressed. With an empty list such a run used to go on
-  with OCR alone, and with no config at all (over USB) it stopped at its first question to a reader, the menus left
-  open. A run that asks no reader (the page scan, the self-test) and a restore run as before; `prove_run.py --start`
-  with nothing left to prove puts its start file back with no reader. Inside a run, a reader that cannot be asked is
-  taken by each question to it as no answer, and the run goes on with OCR alone as before; only one that reaches a
-  session's own body ends the run, with the menus closed and the start file put back. `pass1_labels.py` and
-  `tiebreak.py` say in a sentence when no reader fits.
-- The same runs also check, before the link, that their readers answer: each reader the run can use is asked to read
-  "MENU 42" off a small picture, through the request a run's question makes, the local ones and a paid second reader
-  at once (a few seconds when they are healthy), a paid third reader only when no local one answered, saying so. A
-  reader that does not answer is named with what it read or the error (the HTTP status and the server's own message,
-  "HTTP 507 Insufficient Storage: ...", with any address or key taken out) and skipped for the run: a local reader that
-  answered stands in for it, and a role left with none goes unanswered for the run, its questions taken as no answer at
-  once instead of each waiting out its timeout. With no reader answering, or the second reader not answering and no
-  local reader to stand in, the run stops there, nothing pressed, and says what to do. On 2026-11-13 a session ran with
-  no reader answering (the remote one timed out, the local one listed its models but answered every question with HTTP
-  507), each question going on with OCR alone, and nothing said so. An OCR engine name the kit does not know, a
-  reader entry with no name of its own, or a `private/config.json` that is not valid JSON or not in the shape the kit
-  reads (said in one sentence, the line to fix, no path), stops the run at the same point. A paid reader (Claude, or a service with
-  `api_key_env`) now plays only the roles the config gives it and never stands in for another, at the start or during
-  the run, where a hosted OpenAI-style reader could stand in by itself before. A reader that fails later in a run is
-  said once, on the terminal and in the run's `events.jsonl` (`reader_failing`); its questions are taken as no answer
-  as before. `kit/tools/reader_check.py` asks the same with no camera, printing each reader's kind, model, time to
-  answer or error (`--all`: the paid ones too), and `kit/setup.py` runs it for the local readers once
-  `private/config.json` lists them, failing nothing (docs/QUICKSTART.md, "Choosing a reader"). The restores still
-  need no reader.
-- When the proof viewer is not built (the kit has never run on the camera here, or it works on another camera), its
-  message, and `kit/setup.py`'s line for it, also say that the definition viewer needs no runs:
-  `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at
+- **A coverage ledger** (`kit/tools/coverage.py`, decision 23) says for every menu row, value and record what is
+  settled and what is left (`--todo`); `--write` writes a public form and a seen file into the data folder, holding
+  nothing of your camera's state, and once they are committed, run it again after each `kit/schema_update.py --write`,
+  or `check_public.py` refuses the form. `drive.py`, `crawl_run.py` and `prove_run.py` print what it says of a row
+  before pressing on it, and `crawl_run.py` or `prove_run.py` given `--skip-settled` leave settled rows out (never on
+  the crawl that builds pass 1's map).
+- The writer reads every camera's own hand tables file (`data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json`), where
+  it read only the a1 II's (now a data file, the pattern), and stops in plain words on a table it does not read yet or
+  a file that breaks its schema. While your tables hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED`, `PICKER_LISTS` or
+  `KEEPS_APART` entries, `--write` needs your private hand evidence file, which `kit/writer/hand_evidence.py --check`
+  checks (docs/UPDATING.md, "Your hand tables: what the writer reads of them now").
+- Two new hand tables: `PICKER_LISTS` cuts a picker's settings to the list walked whole on the camera, and
+  `KEEPS_APART` records a switch that keeps a setting's stills and movie copies apart and what unticking it sets
+  (written into the definition as `keeps_apart`, which the editor asks about). Each takes effect only with its private
+  hand evidence, and a camera download that contradicts either, or a proof or sample holding a code outside a cut
+  list, stops the write (docs/DATA_CONTRACTS.md).
+- `kit/crawl_run.py` and `kit/prove_run.py` take `--info-ok "ROW=PHRASE"` (repeatable; never with `--network`) for a
+  row whose screen sits behind an information notice, such as the a1 II's Different Set for Still/Mv: given the
+  notice's whole text, the run takes its OK once, and only for a notice that explains and asks nothing. Anything else
+  presses nothing, and a phrase that leaves part of the notice out prints the notice's text (the playbook, section 8).
+- The safety guards now catch a never-open row or a confirmation whose words OCR ran together or split ("Forma t",
+  "DeleteAll", "Formatthe memory card?"), on every run, and a decision or `--allow` permits only what reads so as
+  written too. The camera's own check now refuses Enter on a notice or dialog that reads as a confirmation or reads
+  nothing, unless `--confirm` judged that press, so a tool that OKs a notice it expects stops there instead, nothing
+  pressed.
+- White Balance > Cloudy no longer stops a run as a cloud-service row; cloud rows are still refused as written, run
+  together or split.
+- The menu navigation every run shares guesses less: it reads the lit group again instead of taking the first, finds a
+  group bar or row read with a stray icon or a letter off, never jumps into a group read one letter off a never-open
+  one, and presses nothing where it cannot tell.
+- `kit/tools/help_extras.py` and `kit/provers/customshoot_values.py --counted` read your own camera's shooting-mode
+  record (the camera file's `live_mode`) and Focus Area order (from its definition; `--order-from` names the record),
+  where they read the a1 II's on every body, and stop, saying what is missing, where yours has none.
+- On macOS 27.2 and later, where Apple's text recognition often misses an end of a Creative Look parameter's scale,
+  the proof reads a -9..+9 or 0..9 scale from its tick marks once it has read both ends beside the same ticks, and
+  ends that do not match the ticks now stop it; a 1..5 scale, and RapidOCR on Windows and Linux, still stop the proof
+  as before.
+- Sony's list of what a settings file never holds is now data, the camera file's `save_load_excluded`, which the model
+  page and the coverage ledger read; a definition never carries it.
+- `--network` (`drive.py`, `crawl_run.py`, `prove_run.py --rows`) opens, to look at, a network row a dated owner
+  decision names (`"lifts": "network"`), choosing only an option it names and none that may drop a link or start a
+  connection. Credentials, resets, pairing and connection rows, Display Serial Number and IP Address Setting (it
+  dropped the link) stay closed whatever it names, as do the USB rows, Language, NTSC/PAL and Area/Date/Time until
+  seen to open safely over the link.
+- `drive.py --owner` opens, one per run, a never-open row a dated owner decision names (`"lifts": "owner"`), the last
+  label of `--path`: a card's Format or Delete, another action, a credentials screen, or the USB rows, Language,
+  NTSC/PAL and Area/Date/Time at the owner's risk (none has been seen opened over the link), but never Initialize, a
+  firmware update, anything that loads a file or settings, sound, light, motion or the Screen Reader. An action's last
+  press needs `--confirm` and the row's name typed by the owner; one that may drop the link writes
+  `RESTORE_BY_HAND.json` first and exits 6 if it only raised a question, which it cancels, else 5 unless the restore
+  checks out, and after a 5 no link opens until `kit/tools/upload_check.py` puts the start file back (`--accept` names
+  records left differing).
+- A `--network` or `--owner` run asks local readers only and prints and keeps no screen text or value: only each
+  screen's kind, the row labels the kit knows and field names, nothing that tells which option a row was saved on. The
+  frames of a credentials or identity screen an owner decision opens are saved black unless it says
+  `"values": "logged"`, which keeps them and puts their text in `drive.jsonl` alone; the run's folder and every file
+  in it, what later tools write there included, are readable by you alone on macOS and Linux.
+- Where the proof viewer is not built, its message and `kit/setup.py` now say that the definition viewer needs no
+  runs: `kit/tools/proof_viewer.py --public --out site/viewer` builds it, and it is online at
   <https://camset-dev.github.io/camset/viewer/>.
-- Creative Look proofs on a Mac: since macOS 27.2, Apple's text recognition often misses one of the numbers at the
-  ends of a look parameter's scale (the "+9" at the top of -9..+9, the "0" at the bottom of 0..9), and the proof
-  stopped with the scale "not readable". The kit now counts the scale's tick marks. Once the run has read both ends
-  of a parameter's scale beside the same number of ticks, that parameter's -9..+9 or 0..9 scale with an end missing
-  is read from its ticks, and its proofs say so (`"range_from": "ticks"`, else `"ends"`). The proof still stops, as
-  before, on a 1..5 scale (Sharpness Range) with an end missing, since five ticks fit several scales, on a parameter
-  whose ends the run has not yet read both of, and with RapidOCR (Windows and Linux), which reads neither end of
-  0..9 or 1..5. Ends that do not match the ticks beside them (a tick read as a plus would make 1..5 read as -5..+5)
-  now stop the proof instead of being taken as read.
-- A camera's records that hold an owner's own data, every record that changes when the owner's own things change,
-  text or not, are named in its own camera file, `personal_records` (records zeroed whole, records set back to the
-  camera's default, records of numbers never read as text, and the camera's own words kept; each record as the
-  record keys write it, "0x167c"), no longer only in the kit and only for the a1 II. `kit/tools/make_sample.py`
-  scrubs a sample by them and refuses, before writing anything, a camera file without them, a record listed twice, a
-  record the file does not hold and a default of another length than its record, saying what to add or correct;
-  `kit/tools/check_public.py` checks every published sample (a file of its definition's own model and firmware) by
-  its camera file's list in the same way, names what it finds by the record or a text by its length, never by a
-  value, and refuses for the maintainer's eye a pull request that weakens a camera's list against the range's base:
-  a record taken out, a default's bytes changed, a record moved to or newly set to a default, or a new camera file of
-  a model already mapped that lists less. Both say when a list names no record to zero or set back. The a1 II's
-  camera file carries what the kit held before, and its published sample comes out byte for byte the same
-  (docs/DATA_CONTRACTS.md, "Records that hold an owner's own data").
-- `kit/provers/customshoot_values.py --counted` names a hold's Focus Area rows in the Focus Area order of the camera
-  the kit works on, read from its own definition when the run starts (`--order-from` names the record, and is refused
-  without `--counted`), no longer the a1 II's order read when the prover was imported; a camera without one stops
-  before the camera is touched, saying what to prove first.
-- `kit/tools/help_extras.py` reads a drive's shooting mode by the camera file's `live_mode`, no longer by the a1 II's
-  record, and stops plainly where the camera file names none or its start file holds no such record.
-- Two notes of the a1 II's definition no longer publish what was particular to its owner's camera on the day:
-  the lens-name record (0x167c) says a teleconverter's name is added after the lens's without naming the one used,
-  and the registration stamp (0x0c09) no longer gives the number seen as a fact. They reach the definition the next
-  time the maintainer writes it with `kit/schema_update.py --write`.
-- The a1 II's hand tables reworded to claim only what holds for every a1 II: the Recall Custom holds' bracket copies
-  say their rule (the live setting's place in its list) without a proof's trial values, the memories' aperture and
-  shutter records say their encoding without the values a registration held, the Preset Focus/Zoom records that
-  vary with the lens say what the lenses tried showed, Enlarge Screen says which custom key it took on the body
-  mapped without saying that every body takes that one, the movie title and file-name prefix give the camera's own
-  defaults, not what was typed, every note that gives a Custom box's step says it may depend on the box's size, and
-  the RAW output rows and the Dial/Wheel checkbox no longer speak of one camera or one menu page. Proxy Rec.
-  Settings (0x0284) is corrected: its row follows the Proxy File Format, not the main movie File Format (greyed,
-  showing 6M 4:2:0 8bit, under XAVC S HD), changing that format does not rewrite the record, and code 3 is what
-  Initialize and Camera Settings Reset write, which no menu choice writes, no longer labelled XAVC S HD. The
-  definition carries them. The model page's Proxy recording and Focus frame position rows say the same, and Enlarge
-  Screen's help says it assigns a custom key, Custom Button 2 on the camera tried.
-- The a1 II's hand tables (the names, notes and value tables its mapping found by hand, the values its menus never
-  offer, its copies, why a record cannot be proved) were Python code in the kit; they are its data file now,
-  `data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json`, edited by hand, with a JSON Schema
-  (`schemas/hand-tables.schema.json`) that the commit hooks and CI check and that refuses a hand proof's evidence in an
-  entry, and `kit/tools/check_public.py` refuses a run or a day in it as in any file of a camera's data folder.
-  `kit/writer/hand_tables.py` reads a camera's file, refusing in plain words one for another camera, a table it does
-  not know or a key given twice, and puts the mapper's private hand evidence back as before: the definition the kit
-  writes is the same. A camera without the file has every table empty: nothing to do for whoever maps another body
-  (what the plain pass, any camera's but the a1 II's, reads of a camera's own file is the first entry of this list;
-  docs/DATA_CONTRACTS.md, "The hand tables file").
-- Three more of the a1 II's facts moved from its own pass in `kit/schema_update.py` into its hand tables: the two
-  copies of each Creative Look's base look (0x0f9b, 0x0fbb) are `FRAME_PROOFS` entries (their note; the a1 II's pass
-  still names their values by the list of the look in use, 0x0cbe), the raw stop values memory sets 4-12 never write
-  are `UNPROVED` entries, and the camera position record's range (0x04e2) is a `RECORD_FIXES` field. How they were
-  proved (the base looks' hand proof, the reasons' day), and the run, day and menu row that pass gave a hand proof
-  whose evidence named none, are the maintainer's private hand evidence now, so the code no longer holds those runs
-  and days. The definition the kit writes is the same but for one thing: the Base Look copies' note no longer names
-  the exposure mode the S&Q base-look change was tried in (it said "in S&Q (Program Auto)"; that is the test's state,
-  kept in the evidence); the definition carries it. Either pass now stops, before it reads the definition, on a hand
-  proof whose evidence names no run, day or menu row, or names one empty, by one rule, saying which and what it lacks
-  (the a1 II's took a default for them). The a1 II's pass writes a reason no proof can reach a setting whose day the
-  hand evidence does not give without a day, as the plain pass does (it wrote a day of null into the evidence file),
-  saying so where an earlier write gave one; and it says a `RECORD_FIXES` change by the field that changes (a range
-  alone was said as the name changing to itself). Nothing to do for whoever maps another body.
+- `kit/tools/reader_census.py` measures, over runs already made, how the coming rule for when OCR alone is trusted
+  (decision 22) would treat each reading, and compares the reader's questions (`--questions`; `--claude-cli` asks
+  Claude through Claude Code on your own plan, and no hosted reader is sent a frame that may name the network, an
+  address or a credential). No run reads, decides or presses differently yet.
 
 ### The docs
 
-- The docs site draws its text in the system's own fonts. It loaded Inter and JetBrains Mono from Google Fonts on
-  every page, so Google saw each visitor; a test keeps it so. The repository box in its header still asks GitHub's
-  API for the star count, from the visitor's browser: GitHub hosts the site anyway.
+- The docs site uses the system's own fonts and no longer loads any from Google, so Google does not see its visitors;
+  the header's star count still comes from GitHub, which hosts the site.
 - The editor's guide says plainly that the camera login file holds the passwords in plain text, protected only by the
-  file's permissions, and names the two things there for developers: the camera address taken from a clone's
-  `private/config.json` at start, and `CAMSET_NETTEST=1`.
-- Decision 22, on when OCR alone is trusted and when the reader is asked, is shortened to the rule and why; its detail
-  moved to the playbook's section 5 (the stages the rule comes in by) and to `kit/camkit/reading.py` (how two
-  readings are compared). The decisions index gives each decision's rule in one sentence, from a Rule line in each
-  record.
-- The decision records say what holds now (decision 1, changed, departing on purpose from Nygard's practice of
-  superseding records): a changed decision's record is rewritten in place, with one line saying what it said before
-  and when, a safety rule's only with the maintainer's decision (another camera's owner allows more through the
-  playbook's rules, never by rewriting a record); git keeps earlier wordings from 0.2.0 on, and a withdrawn decision
-  keeps its file as a stub. Decisions 11, 14, 19 and 20 each read whole on their own, with no record amending another;
-  6, 7, 8, 9 and 13 have their dated changes folded in, with the date of each and why; every status is plain. No rule
-  is weaker: the Rule lines of 6, 7, 8 and 20 now say as much as their records (6 binds the kit and whoever maps a
-  camera, and the editor's user alone writes an edited file, by their own hand and at their own risk, never a mapping
-  or an agent through the editor; 7 lets C4 go only as guarded Help or a go-ahead named per run; 8 opens Auto Power
-  OFF Temp. only when a run names it). Decision 7 no longer counts the multi-selector's centre among the keys never
-  sent, which was never so: it is a menu key, as Enter. Decision 20 also says that the kit keeps a camera's facts as
-  that camera's data (its camera file and hand tables), the a1 II's few tables still in the kit's code marked to move;
-  6 names the downloads manifest per camera, 9 says where the credentials file is on Windows and that its privacy is
-  not checked there, and 18 names `private/evidence/` among the places the code looks. No record's number or file name
-  changed.
+  file's permissions.
+- The decision records say what holds now: a changed decision is rewritten in place, with a line saying what it said
+  before and when, the decisions index gives each rule in one sentence, and no rule is weaker. Decision 7's keys never
+  sent no longer include the multi-selector's centre, a menu key like Enter, and decision 22 is cut to its rule and
+  why.
 
 ## 0.2.1 (2026-11-13)
 
@@ -749,13 +185,10 @@ the kit's plain words for a Python that cannot run it, and fixes.
 
 ### The editor
 
-- The editor's version is easy to find: in the window's title and at the right end of the status bar. Settings has an
-  About tab, the last, which the status bar's version opens on every system, so it is found on Windows and Linux too,
-  which have no menu bar. It gives the version and build, the system the editor runs on, the cameras it works with by
-  model and firmware (one you added says so), whether the camera link program is there, the licence and copyright
-  line, links to the project page, the documentation and Report a problem, Changes, the third-party licences and Copy
-  details, which copies those lines for a message about a problem, with no file, folder, name or address of yours. The
-  macOS app's own About panel, in its application menu, shows its version and copyright line.
+- The editor's version is in the window's title and at the right end of the status bar, which opens Settings' new
+  About tab on every system: the version and build, the system, the cameras it works with, whether the camera link
+  program is there, links, Changes, the third-party licences, and Copy details for a problem report, with nothing of
+  yours in it.
 - The macOS disk image installs the macOS way: open it and drag Camset Editor onto Applications.
 - A Windows package joins the macOS and Linux ones: a zip for 64-bit Windows 10 and 11 on Intel or AMD. Unpack it
   anywhere and run `camset_editor.exe` in the folder it makes, with the camera definitions and the licences beside
@@ -783,51 +216,33 @@ the kit's plain words for a Python that cannot run it, and fixes.
 
 ### The definition viewer
 
-- A page anyone can open to look inside a settings file, with nothing to install: the definition viewer, on the docs
-  site at <https://camset-dev.github.io/camset/viewer/>. Open your settings file… reads a `CAMSET*.DAT` in the
-  browser, where it stays, finds its camera among every definition Camset has, as the editor does, and shows each
-  setting by name in the camera's menu, the same tabs, groups and rows as the editor's (a setting's choices for an
-  option, which the editor shows beside the option, under its row; an Expert switch shows every setting the
-  definition holds), with whether a proof checked each value, and the file's layout byte by byte. Until a file is
-  open it shows the camera's sample, not your camera. A file of another firmware is read with the nearest one's
-  definition, and says so; one of a camera with no definition yet, laid out like the files of a camera the viewer
-  knows, shows its structure only, with no names, and how a camera gets mapped; any other file is refused, naming the
-  cameras it reads. `kit/tools/proof_viewer.py --public` builds it from the public definitions alone (the docs site's
-  build does), and `--public --single --out site/camset-viewer.html` makes it one file that opens from disk with no
-  network. The proof viewer, with the camera's own screens, stays with whoever mapped the camera.
+- A page anyone can open to look inside a settings file, with nothing to install: the definition viewer, at
+  <https://camset-dev.github.io/camset/viewer/>, reads a `CAMSET*.DAT` in the browser, where it stays, and shows each
+  setting by name in the camera's menu, as the editor does, with whether a proof checked each value and the file's
+  layout byte by byte. `kit/tools/proof_viewer.py --public` builds it, `--single` as one file that needs no network.
 - Each release carries the definition viewer as one file, `camset-viewer.html`, to download and open with no
   internet; the latest is always at <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html>.
-- The proof viewer's Open settings file… also says when a file is of another firmware than its definition, not only
-  of another model; its file buttons answer Enter and Space, and are 44 pixels tall on a touch screen; a tab's count
-  says on hover what it counts; links read on the light theme; a file's header text is read as UTF-8, as the editor
-  reads it; a file framed with no section of settings is refused as damaged.
+- The proof viewer says when a file is of another firmware than its definition, not only of another model; its file
+  buttons answer Enter and Space and suit a touch screen, links read on the light theme, a file's header text is read
+  as UTF-8 as the editor reads it, and a file framed with no section of settings is refused as damaged.
 
 ### The mapping kit
 
-- `kit/setup.py` on Windows, after its first run on a Windows 11 PC: it finds Sony's USB driver once it is installed
-  (`pnputil /enum-drivers`, no administrator rights needed) and says OK, where the reminder used to come back
-  forever; until then it gives the install as numbered steps, with the driver's whole path, as the administrator
-  window opens elsewhere. Without Python's UTF-8 mode it stops at once with the three steps that turn it on (`setx
-  PYTHONUTF8 1`, a new terminal, the same command again there) instead of going on to steps that would fail. Every
-  step that needs another window or administrator rights comes as numbered steps, and Windows commands are in
-  Windows' words (`move`, backslashes, a new terminal after a winget install).
-- `kit/setup.py` on every system: it says that it does not wait for a DO and carries on; each long step says roughly
-  how long it takes (the tests: about 3 minutes on a fast Mac, not "under a minute") and shows a progress line while
-  it runs (the tests' percentage, the build's count, the package pip is fetching), says so when a step takes
-  unusually long, and stops cleanly on Ctrl+C. Its last lines, after the table, say that everything is in place or
-  list what is left for you, numbered in order, ending "Then run ... again".
-- The kit's tests, first run on a Windows 11 PC (10 of 2129 failed there), are fixed for Windows, and the kit's CI
-  now runs them on Windows too, for every pull request and push to main. In the kit: `kit/tools/make_sample.py` refuses a result that names a
-  download by a path absolute on any system (a POSIX one, a drive, a network share, a leading slash or backslash),
-  on every system; a chain file with a Windows path in double quotes stops with the way to write it; a read-only
-  results file that Windows will not replace leaves no temporary file. The other failures were the tests' own Unix
-  habits, and two things Windows cannot hold (a file name with a newline in git, Unix permission bits) are skipped
-  there with the reason (docs/PORTING.md, "Seen on Windows / Linux").
-- A kit program started with a Python that cannot run it (macOS's own `python3`, or any Python without the kit's
-  packages) no longer ends in a traceback such as "No module named 'numpy'": it says what is wrong and gives the
-  command to run instead, with the kit's own Python (`.venv/bin/python`, on Windows `.venv\Scripts\python`), from the
-  camset folder, with the same arguments. A program that needs none of the packages runs on the system's Python as
-  before.
+- `kit/setup.py` on Windows finds Sony's USB driver once it is installed, where the reminder came back forever, and
+  gives every step that needs another window or administrator rights as numbered steps in Windows' own words. Without
+  Python's UTF-8 mode it stops at once with the three steps that turn it on (`setx PYTHONUTF8 1`, a new terminal, the
+  same command again there).
+- `kit/setup.py` on every system carries on past a step marked DO (yours to do), says roughly how long each long step
+  takes and shows its progress, says so when one takes unusually long, and stops cleanly on Ctrl+C; its last lines say
+  that everything is in place or list what is left for you, in order.
+- The kit's tests are fixed for Windows, and the kit's CI runs them there for every pull request and push to main; in
+  the kit, `kit/tools/make_sample.py` refuses a result naming a download by an absolute path of any system, a chain
+  file with a Windows path in double quotes says how to write it, and a read-only results file leaves no temporary
+  file.
+- A kit program started with a Python that cannot run it (macOS's own `python3`, or one without the kit's packages) no
+  longer ends in a traceback: it says what is wrong and gives the command to run instead, with the kit's own Python
+  (`.venv/bin/python`, on Windows `.venv\Scripts\python`). A program that needs none of the packages runs on the
+  system's Python as before.
 
 ## 0.2.0 (2026-11-11)
 
@@ -838,10 +253,10 @@ new lean form. It replaces 0.1.0, which is withdrawn.
 
 - **0.1.0 is withdrawn: use 0.2.0.** Its packages are no longer offered. If you have the 0.1.0 editor, replace it
   with this one.
-- **Camera definitions are in a new, lean form (definition format 2).** This editor does not open a definition made
-  for 0.1.0, and the 0.1.0 editor does not open the new ones; this editor comes with the new ILCE-1M2 definition. If
-  you are mapping a camera with a clone of this repository, follow [Updating your clone](docs/UPDATING.md) before
-  going further, and write your definition afresh with the updated kit.
+- **Camera definitions are in a new, lean form (definition format 2).** This editor, which comes with the new ILCE-1M2
+  definition, does not open a definition made for 0.1.0, nor the 0.1.0 editor the new ones. If you are mapping a
+  camera with a clone of this repository, follow [Updating your clone](docs/UPDATING.md) first and write your
+  definition afresh with the updated kit.
 - **Writing an edited settings file to a camera is at your own risk.** A file edited by hand once put a camera into
   a restart loop in Movie mode, which ended when Initialize was run on the camera; Initialize also clears the network
   setup and the memories. The editor and the camera may refuse or change values. Always keep the camera's own backup,
@@ -869,12 +284,10 @@ new lean form. It replaces 0.1.0, which is withdrawn.
 
 ### The editor
 
-- A value the camera keeps in more than one record stays in step: a setting in use and its Stills and Movie copies
-  (Picture Profile and its parameters, ISO, White Balance with its fine-tune values and colour temperature, Metering
-  Mode, ISO AUTO's limits, Exposure Comp.). Changing a setting changes the copies that held its value when the file
-  was opened, and says so first; a copy that held another value is changed alone. A file in which a setting does not
-  match the copy for the mode it was saved in is listed before a save or a write, with a fix, whether or not it was
-  edited here.
+- A value the camera keeps in more than one record stays in step: changing a setting (Picture Profile, ISO, White
+  Balance, Metering Mode, ISO AUTO's limits, Exposure Comp.) changes the Stills and Movie copies that held its value,
+  saying so first, and a file whose setting does not match the copy for the mode it was saved in is listed, with a
+  fix, before a save or a write.
 - Outside Expert mode only a setting proved on a camera can be changed. Any other is view only and says why: the
   ILCE-1M2's PP7 to PP9, which no menu of the body writes, among them.
 - A frame rate of the other video system is no longer offered for a file saved on NTSC or PAL, nor copied by Compare.
@@ -898,21 +311,18 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   value of the three scales: the pass-2 report proves 7631 options (7604 before), and 1194 value names come from a
   hand table (1221 before).
 - So are its Finder Color Temp. and Viewfinder Bright.'s manual level (both -2 to +2), every value of the two scales,
-  chosen with the finder in use: the pass-2 report proves 7641 options (7631 before; Monitor Brightness's proofs made
-  again with `--set` on 2026-11-10 stand in for its older ones, which named no state of its setup row), and 1185 value
-  names come from a hand table (1195 before, the review round of 2026-11-10 having moved it from 1194).
-- A menu row whose proofs name less of the camera's state than other proofs of the same row that prove every value
-  it proves, option by option, is no longer listed beside them: the pass-2 report proves 7616 options of 1315 rows
-  (7643 of 1324 before, AF Area Registration's two areas proved again by the kit on 2026-11-11 among them), and no
-  proved value or value name changes. A setting table's cells (Image Quality Settings, My Dial Settings) are named by
-  their row alone, and the definition keeps no menu row of an older write that today's report does not list.
+  chosen with the finder in use.
+- A menu row whose proofs name less of the camera's state than other proofs of the same row covering the same values
+  is no longer listed beside them; no proved value or value name changes. A setting table's cells (Image Quality
+  Settings, My Dial Settings) are named by their row alone, and the definition keeps no menu row of an older write
+  that today's report does not list.
 - The memory sets' records that keep the Custom 1-3 boxes' places (26, the box in use's and each box's copies) are in
   the definition, Expert mode only, and the notes of the focus frame records say where each area keeps its place: a
   Tracking area in its plain area's records.
-- The notes of the ILCE-1M2's focus point and Custom box records and of AF Frame Move Amt give the step a press of the
-  multi-selector moves a frame, measured under AF Frame Move Amt Standard and Large: Large's step is up to twice
-  Standard's, Spot XS's step is smaller than Spot M's across (and, under Large, up and down too), and the Custom 1 box
-  has its own, measured by one press each way, Large's twice Standard's both ways.
+- The notes of the ILCE-1M2's focus point and Custom box records and of AF Frame Move Amt give the step one press of
+  the multi-selector moves a frame under AF Frame Move Amt Standard and Large: Large's step is up to twice Standard's,
+  Spot XS's step is smaller than Spot M's across (and, under Large, up and down too), and the Custom 1 box has its
+  own.
 - Expert mode no longer shows how a value was proved (the marks beside option names, the evidence line, the refused
   options' line); what it lets you edit is unchanged.
 
@@ -933,31 +343,20 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   navigates by the page scan the provers take (`--scan`, as `memreg_run.py`'s).
 - C4 is refused when the camera lists its operating mode and the mode cannot be read.
 - `kit/provers/pp_reset_run.py`, with the owner's word (`--allow "Picture Profile Reset"`), resets each Picture
-  Profile by its own Reset row, in Stills or Movie (`--in`), after a control on one profile that shows its Reset
-  writes the records a settings file saves. Both readers read the panel's title before Reset, the question, the
-  completion notice and each panel's title in the verify pass, and a run meant for the sample opens Reset or confirms
-  on no reading of one reader alone; only that profile's own question is accepted; after OK the camera's "Complete."
-  is expected, or the profile's panel straight back, recorded as such and refused for a sample unless allowed;
-  anything else stops the run. A verify pass confirms each panel it enters by its title and checks that entering the
-  panels alone moves nothing, and every exit restores the start file (`--peek`, `--profiles`, `--dry-run`). Its
-  guards are written for the ILCE-1M2 at firmware 4.00 and fail closed on other screens.
-- `kit/tools/make_sample.py --take FAMILY --from RESULT` takes a definition family's reset values into a sample, only
-  from finished, verified `pp_reset_run.py` results that reset every offered profile, one in Stills and one in Movie
-  (one alone only when it shows its resets write the other mode's copies too); never record ids. A result needs its
-  positive control: one parameter of one profile moved, only that profile's element, in the record in use and the
-  copy of the run's mode, and written back by that profile's Reset. Each result is checked against its own downloads:
-  every list of changed records and the control are recomputed from them, and the downloads must be one session's,
-  consecutive in the camera's downloads manifest. `--allow-no-notice` takes a result whose profiles showed no
-  completion notice (a body that shows none); `--allow-unchanged` takes the family when no reset download holds any
-  of its records unlike its run's start file, the control being then what shows a Reset writes them.
+  Profile by its own Reset row in Stills or Movie (`--in`), once a control shows that a Reset writes the records a
+  settings file saves; a run meant for the sample presses only on what both readers read, and every run stops on
+  anything unexpected and restores the start file on every exit. Its guards are written for the ILCE-1M2 at firmware
+  4.00 and fail closed on other screens.
+- `kit/tools/make_sample.py --take FAMILY --from RESULT` takes a definition family's reset values into a sample, never
+  record ids, only from finished, verified `pp_reset_run.py` results that reset every offered profile, each with its
+  positive control and checked against its own downloads. `--allow-no-notice` takes a result from a body that shows no
+  completion notice, and `--allow-unchanged` a family whose records no reset download changed.
 - `kit/provers/scale_run.py --panel-row` needs its panel's setup row among the `--set` rows, so no proof rests on a
   state the camera was found in.
 - A definition now says which records are copies of a setting and which mode each copy is for (`copies`, `copy_of`,
-  `copy_for`, `camera.live_mode`), and which values belong to one video system (`video_system_values`); every write
-  checks them against the camera's downloads. It no longer carries what told how a camera stood when it was proved
-  (decision 16): which values no option wrote, the records each proof wrote together, a state "as found", the value
-  a blocking setting stood on, nor how many samples were taken from where a list stood (that count is kept in the
-  evidence file).
+  `copy_for`, `camera.live_mode`), and which values belong to one video system (`video_system_values`), checked
+  against the camera's downloads on every write. It no longer carries anything that told how a camera stood when it
+  was proved (decision 16); a count of samples stays in the evidence file.
 - The record shapes, kept in `private/evidence/`, hold only records no setting covers, and no value.
 - `kit/provers/afreg_run.py` puts Drive Mode on Single Shooting before a Tracking area (`--drive-mode`), as the camera
   refuses Continuous AF under some drive modes (it says so in a notice when Focus Mode is set), and stops when a setup
@@ -965,26 +364,14 @@ new lean form. It replaces 0.1.0, which is withdrawn.
 - `--allow "ROW"` on `kit/prove_run.py` and the scale prover opens one never-open row the owner allowed, never the
   cards, Initialize, Reset Network Set. or credentials; the proof lines carry the words (`allowance`), and the writer
   puts them in each setting's note evidence.
-- Where OCR reads no number on a scale, or text that is no number (a letter for a digit), the scale prover asks the
-  vision reader, one question a frame; a number only the reader read never decides alone, and a frame neither reads
-  stops the row, naming the frame. Whoever reads, the scale counts as open only with an OK in its footer (OCR's, or
-  the reader's where OCR drops it on a fresh frame too), every end of the scale is confirmed by one more press, a
-  press that seems to change nothing is read again on a fresh frame, whole numbers must step evenly, a scale has two
-  values at least, and each choice must open on the value chosen last and land where the count of presses puts it, or
-  the row stops. A row's lines count in the report only once the value put back last leaves nothing changed, so a row
-  that stops leaves none. The proof lines say which read the value chosen (`read_by`); `kit/pass2_report.py` counts a
-  line the reader alone read as one reader, the vision model, and an OCR-read line as two readers only when the vision
-  model read the same number. `--panel-row` proves a slider inside a panel (Monitor Brightness, Viewfinder Bright.:
-  its setup row must read Manual, then Down), a scale around zero is labelled -2, -1, ±0, +1, +2 whoever read it, and
-  `--set "ROW=OPTION"` puts a row on an option before the first row, the proofs naming that state, never one of
-  decision 8's rows.
-- `kit/pass2_report.py` leaves out a row's proofs made where the camera stood (`stood_out`): a row that says nothing
-  of another row whose state lines of the same row name ("Row = option" in their context or their run's `setup`, or
-  in words, "Row option", for a row the proofs walk), when for each record and value each of its lines changed a line
-  of those, chosen with the same option, changed it alike or left it as its own base download held it, none of them
-  writes it otherwise under that option, and the report credits every value and value name it credits to them too (a
-  panel's slider proved again with `--panel-row` and its `--set`; a hold proved again with its run's setup; a row
-  walked again in pass 3's named states).
+- Where OCR reads no number on a scale, the scale prover asks the vision reader, but a number only the reader read
+  never decides alone, and a scale counts only when its footer shows OK, its ends are confirmed and every step checks
+  out, or the row stops and leaves no lines. `--panel-row` proves a slider inside a panel, and `--set "ROW=OPTION"`
+  puts a row on an option first, never one of decision 8's rows.
+- `kit/pass2_report.py` leaves out a row's proofs made where the camera merely stood (`stood_out`) when proofs of the
+  same row in a named state write each record alike and the report credits them with every value those credit (a
+  slider proved again with `--panel-row` and its `--set`, a hold with its run's setup, a row walked again in pass 3's
+  named states).
 - A setting table's cell (`kit/proving/tables.py`, the report) is named by its row as all the row's cells read it:
   `kit/table_walk.py` reads a cell's row label up to the cell, so a cell further right read the values of the cells
   before it glued on, values the camera held.
@@ -1000,10 +387,9 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   finds which records keep each focus area's frame, `--zone-grid` sweeping the Zone over its nine places. Their
   "registration mirror" lines are no report row; the writer reads them (`in_sets_proved`, and the Zone's places).
 - `kit/provers/framepos_run.py --frame-move-amt Standard|Large` sets AF Frame Move Amt by the menu before any area,
-  stops when the settings file downloaded after the setup does not hold that option, and names it in every line's
-  context; its summary keeps the last line of each area in each context, so a run with both settings keeps both.
-  `--moves "Right 1"` (or `"Left 1,Up 1"`) moves the point and box areas by the presses given, so a step can be
-  measured by one press each way; the zones keep their own, and the context names the moves.
+  stops when the download after the setup does not hold it, and names it in each line's context; `--moves "Right 1"`
+  (or `"Left 1,Up 1"`) moves the point and box areas by the presses given, so a step can be measured by one press each
+  way.
 - A run's end leaves out, by key, the records a settings file does not set that the run is known to write (a memory
   slot's registration marks), so they never fail the restore's check.
 - `kit/page_scan.py` needs `--mode Stills`, `Movie` or `S&Q`, the mode the camera is in, and records it in the scan.
@@ -1016,21 +402,16 @@ new lean form. It replaces 0.1.0, which is withdrawn.
 - `kit/provers/filter_run.py`, `kit/provers/mymenu_run.py` and `kit/provers/mode_switch.py` take `--in MODE`, the mode
   the camera is in.
 - `kit/provers/mode_switch.py --forget --shows MODE` removes a switch record left over after the camera was put back
-  another way, sending nothing. `--shows` is the mode the camera's screen shows now (look, or ask its owner), the
-  family first and the exposure mode after it when you say one (`--shows Movie`, `--shows "Stills M"`; a letter alone
-  is refused, as Movie's and S&Q's screens show one too): it refuses while that is the mode the switch went to, which
-  only `--restore` puts back. The renamed record keeps what
-  was said and when, and the command says how to undo it. A run that stops on a waiting switch says first to look at
-  the screen, and what `--restore` would undo.
+  another way, sending nothing: `--shows` is the mode the screen shows now, family first (`--shows "Stills M"`; a
+  letter alone is refused), and it refuses the mode the switch went to, which only `--restore` puts back. A run that
+  stops on a waiting switch says to look at the screen first.
 - `--scan latest` on a command that works in no mode of its own (`prove_run.py`, `crawl_run.py`, `drive.py`) stops in
   plain words.
 - `kit/tools/set_twins.py` needs `--evidenced <run>` (`--evidenced ''` for none).
-- `kit/tools/menu_tree.py` writes the menu tree to `private/evidence/<model>_fw<fw>/`. A menu tree, accepted rulings
-  or record shapes still in `data/<model>_fw<fw>/` are moved there once with `kit/tools/move_evidence.py`, and only
-  by it: the commands that read or write those files (the report, the writers, `menu_tree.py`, `set_twins.py`,
-  `mymenu_run.py`) stop and name it while one is there, and `check_public.py` prints it.
-  Without the menu tree the proof viewer lists every record under its tab and group instead of on the camera's menu
-  rows, and says so.
+- `kit/tools/menu_tree.py` writes the menu tree to `private/evidence/<model>_fw<fw>/`, and a menu tree, accepted
+  rulings or record shapes still in `data/<model>_fw<fw>/` are moved there once with `kit/tools/move_evidence.py`: the
+  commands that use them stop and name it until then. Without the menu tree the proof viewer lists every record under
+  its tab and group, and says so.
 - `kit/tools/check_public.py` refuses a tracked path holding a control character (a newline, a tab, NUL and the
   like), with `--all` and `--commits`.
 - On a pull request, `kit/tools/check_public.py --commits BASE..HEAD` holds every file each commit adds or changes to
@@ -1040,13 +421,10 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   kit keeps no private copy in step with it, and refreshes only each setting's name and tab from the definition. One
   in the older whole shape is refused, and `kit/tools/move_evidence.py` keeps the whole once in `private/evidence/` and
   writes the lean one in its place.
-- `kit/schema_update.py --write` stops before writing anything when evidence went stale in that run (a proof's, or
-  more than five settings', say after a setting's key was renamed); `--accept-stale` writes it anyway, kept aside.
-  After a write one line says when the evidence file has a "stale" section; `--drop-stale` lists it by setting and
-  field, and `--drop-stale --write` removes it. A write leaves a marker beside the evidence file until the definition
-  is in place; while one is left, the last write was cut short, the next write stops and names `--finish-write`,
-  which writes the definition that write was writing only when it is the one the marker names. An evidence file
-  newer than the definition (after a pull, say) is no longer taken for a write cut short.
+- `kit/schema_update.py --write` stops before writing when evidence went stale in that run (`--accept-stale` writes
+  anyway, kept aside; `--drop-stale` lists it, `--drop-stale --write` removes it). A write cut short leaves a marker,
+  the next write stops and names `--finish-write`, which finishes only that write, and an evidence file newer than the
+  definition (after a pull) is no longer taken for one.
 - Hand evidence (`private/evidence/<model>_fw<fw>.hand.json`, format 2) only adds to the public hand tables: it never
   replaces a value there. A format-1 file is refused, naming `kit/writer/hand_evidence.py --convert`, which converts
   it once.
@@ -1093,39 +471,27 @@ firmware 4.00 definition.
 
 ### The editor
 
-- Outside Expert mode a setting offers the values its proofs on the camera show, no longer the old lists of the values
-  camera files had held (which held the camera owner's own settings, so a definition no longer carries them, and one
-  that still does is refused by the definition's schema and read without them). A value not checked on the camera yet
-  is listed only with "Offer values not checked on the camera yet" (in italics in the window, "(not checked)" on the
-  web page; the value the file holds now is shown as it is), its hover saying the camera may refuse a file holding
-  it. A value the camera's menus never offer is left out even then, and the detail panel says why on one line per
-  reason ("Not on the camera's list: …"); a factory value the camera writes itself stays offered. Every My Menu place
-  can be emptied, and each Fn Menu place, Custom Key and dial offers the functions its own list on the camera has.
-- A setting no proof on the camera can reach says why in a few words instead of "Not proved on the camera yet": "Not
-  a menu setting: the camera keeps it", "Written only by the camera's own saves", "Not proved (needs equipment)", "Not
-  proved (network, by hand only)" or "Not proved (nothing tried moved it)", with the reason in full on hover, in the
-  window and on the web page alike. A kind of reason the editor does not know shows "No proof possible".
+- Outside Expert mode a setting offers the values its proofs on the camera show, no longer the lists of values camera
+  files had held, which held owners' own settings. A value not yet checked is listed only with "Offer values not
+  checked on the camera yet", its hover warning that the camera may refuse a file holding it; one the camera's menus
+  never offer is not listed even then (the detail panel says why), and each Fn Menu place, Custom Key and dial offers
+  the functions of its own list.
+- A setting no proof on the camera can reach says why in a few words ("Not a menu setting: the camera keeps it", "Not
+  proved (needs equipment)" and the like) instead of "Not proved on the camera yet", with the reason in full on hover,
+  in the window and on the web page.
 - A setting's proof names the run and the day of its latest proof ("Proved 2026-11-09 (kit2_afreg2)" on hover), where
   it was made outside the main mapping run, instead of that run's first day.
-- The a1 II's definition offers more values checked on the camera: Exposure Comp. and Flash Comp. every step, in
-  thirds and in halves; a Recall Custom hold's Exposure Comp. every step, its Shutter Speed every speed from BULB to
-  1/32000 (hold 3's list checked whole, holds 1 and 2 named from it), and hold 1's ISO at every value; Movie's own
-  colour temperature (C.Temp./Filter) every temperature from 2500 K to 9900 K; HEIF in File Format (Slot 1); the
-  exposure mode a memory registration stores, in S and M too; the Registered AF area records for every area
-  registered so far (its kind, its area and a Tracking area's start area); the Spot size Focus Area remembers on
-  leaving Spot, at every size; and each Playback Filter Condition box unticked. A memory-set record named AF
-  Illuminator, which a registration showed it is not, is unnamed now, its values numbers. The Registered AF area's
-  Tracking start area does not count as proved a value a hold copied from the camera's own setting.
-- A Picture Profile's page as on the camera: PP1 to PP11 are marked "›" on the Picture Profile row, with a link
-  "Open the PP1 page" under the chosen one (and the one under the pointer) in the window and the web page; the page is
-  a group of its own after Color/Tone, laid out with the camera's headings (Black Gamma > Range, Level; Knee > Auto
-  Set; Color Depth; Detail > Adjust), the stills and movie copies side by side. The search and every jump to a
-  profile's setting open its page; the Picture Profiles table stays, and the flat list is unchanged.
-- The detail panel and the web page no longer show the mapping team's words outside Expert mode: a setting's note,
-  the records it lives in, what the camera writes together with it, the hidden-values count and the layout's note
-  are Expert-only, and the record number, proof and stored-number switches moved from Appearance to under Expert
-  mode. Refused options go on one line per reason ("Not offered while …: A, B, C"), a setting the camera's menu does
-  not show says so, and a value with no name, a damaged file and the write check are said in plain words.
+- The a1 II's definition offers more values checked on the camera, among them Exposure Comp. and Flash Comp. at every
+  step, a Recall Custom hold's Exposure Comp., Shutter Speed and ISO, Movie's own colour temperature, HEIF in File
+  Format (Slot 1), the Registered AF area records and each Playback Filter Condition box unticked; a memory-set record
+  wrongly named AF Illuminator is unnamed now.
+- A Picture Profile's page as on the camera, in the window and on the web page: PP1 to PP11 are marked "›" on the
+  Picture Profile row, with a link to the chosen profile's page, laid out with the camera's headings and the stills
+  and movie copies side by side, which the search and every jump to a profile's setting open.
+- The detail panel and the web page show the mapping team's words (a setting's note, its records, what the camera
+  writes with it) and the record number, proof and stored-number switches in Expert mode only; refused options go on
+  one line per reason ("Not offered while …: A, B, C"), and a value with no name, a damaged file and the write check
+  are said in plain words.
 - The web page's Compare offers Show raw values in Expert mode only, as the window does, and the page's record
   number, proof and stored-number switches draw nothing while Expert mode is off.
 - Compare: a value of file A can be changed in place, from the same choice Edit offers (the values checked on the
@@ -1150,14 +516,12 @@ firmware 4.00 definition.
   when one was refused and why. Another camera's definition never shows the a1 II's help. Option help comes value by
   value, and each option's hover says whose words it shows.
 - Header byte 0x38 of a settings file is the camera's video system (NTSC or PAL), not the firmware's last digit: a
-  file saved on PAL opens as firmware 4.00 with its definition, the badge says "PAL" or "NTSC", Compare notes when
-  two files differ in it, and a write is refused when the file and the camera differ (an untried case; a switch in
-  the code turns it on).
-- The menu is laid out as on the camera: each group's rows in the camera's order, a row's sub-rows under it, and
-  each setting under the row it belongs to (Cont. Shooting Speed's rates under Cont. Shooting Speed, not at the end of
-  the group). An option's own choice shows under it in the detail: Drive Mode on Continuous Shooting shows the speed.
-  "As on the camera / Flat list" above the rows switches back to the plain list. Settings the definition does not
-  place yet come last, under "More settings in this group". The web page does the same.
+  file saved on PAL opens with its firmware's definition, the badge says PAL or NTSC, and Compare notes when two files
+  differ in it; a write is refused when the file and the camera differ (an untried case; a switch in the code allows
+  it).
+- The menu is laid out as on the camera, in the window and on the web page: each group's rows in the camera's order, a
+  row's sub-rows and settings under it, and an option's own choice under it in the detail; "As on the camera / Flat
+  list" switches back to the plain list, and settings not yet placed come last.
 - My Menu has its own entry under Main, as on the camera: each page with its items in order, the value of the
   setting each one opens, a click to open it, Remove, and Move up or down. Every setting can now be reached from the
   side bar: the settings of a tab the definition does not list are under Other.
@@ -1173,15 +537,13 @@ firmware 4.00 definition.
 - Found cameras: "Use this one" is the first column, so it is in view at any window width.
 - Help text for 1,548 of the a1 II's settings, in Camset's own words, comes with its definition; the hover says
   whether a help text is Camset's or the camera's own (a help file on your computer).
-- Camera definitions are files, one per model and firmware, never built into the program: the ones that come with
-  the editor sit beside it, and yours in `definitions/` in the editor's own folder. Settings > Camera support & web
-  page lists every one, with Add definition…, Open folder and Reload; yours replaces a built-in one of the same model
-  and firmware, and the sample keeps the built-in one. A camera mapped with the kit works the same day, with no new
-  editor. A definition made for a newer editor is refused with a message saying so.
-- A file is read with the definition of the model and firmware its header names, through that definition's
-  container block; another firmware of the model opens with the nearest one, said beside the file's name; a file
-  whose checksums do not hold under its block is never edited. In Expert mode, Open with… reads a file with any
-  definition, and a save or a write says so.
+- Camera definitions are files, one per model and firmware, never built into the program: the built-in ones sit beside
+  it, yours in `definitions/` in the editor's own folder (Settings > Camera support & web page > Add definition…),
+  replacing a built-in one of the same model and firmware. A camera mapped with the kit works the same day with no new
+  editor; a definition made for a newer editor is refused, saying so.
+- A file is read with the definition of the model and firmware its header names, another firmware of the model with
+  the nearest one, said beside the file's name; a file whose checksums do not hold is never edited, and in Expert mode
+  Open with… reads a file with any definition, a save or a write saying so.
 - The program holds no camera facts: the memory copies, the memories' names and columns, the link's words and
   timing, the Main and exposure pages' wording and the sample come from the definition.
 - Opening a file on Linux no longer freezes the window: the file dialogs run beside it, and the window carries an
@@ -1203,10 +565,10 @@ firmware 4.00 definition.
 - Unsaved edits are never thrown away without a question: opening a file, a kept copy or the sample, reading the
   camera, closing the file and closing the window ask first (Save As…, Discard edits or Cancel). After Save As the
   window works on the saved file, its edits counted as saved.
-- Writing to the camera: only a file the editor may edit, of the camera definition's model, never the sample, and
-  only the file the Write window checked; the camera's copy read just before is checked first (model, layout, a
-  copy cut short), and a write the camera did not confirm says it may have been written and offers Put the camera
-  back. The Write window says in plain sight what a write replaces and to save the camera's own copy first.
+- Writing to the camera: only a file the editor may edit, of the definition's model, never the sample, and only the
+  file the Write window checked, once the camera's own copy read just before checks out; a write the camera did not
+  confirm says it may have been written and offers Put the camera back. The Write window says in plain sight what a
+  write replaces and to save the camera's own copy first.
 - Copies between columns, Merge, Whole sets, Recall and Register leave alone a setting a file holds in another shape
   than it was mapped in, and say how many; Recall, Register and Whole sets copy the whole memory whatever the search.
 - The light theme is readable everywhere; your edits are orange with a pencil, a difference a pale amber fill.
@@ -1224,10 +586,9 @@ firmware 4.00 definition.
 - Edits not saved survive a crash: a couple of seconds after each edit the editor keeps a copy in its `recovery/`
   folder, and the next start after a crash, a power cut or a forced quit offers to open them or discard them. An
   error that stops the editor leaves a short `crash.log` without your folders or name.
-- A damaged or hand-made settings file never stops the editor: random bytes, files cut short and files with a byte
-  of their header, record counts or record sizes damaged are refused or opened view-only, and a file of no sections,
-  more sections or records of other shapes opens with every page of the window and the web page drawn. The web
-  page's Unmapped records and Record map no longer stop the editor on a file that holds no sections.
+- A damaged or hand-made settings file never stops the editor: random bytes, a file cut short or with a damaged
+  header, record count or record size is refused or opened view-only, and a file of unusual sections or record shapes
+  opens with every page of the window and the web page drawn.
 - The foot of Settings names the version (and, for a build from the repository, its commit), with Changes, this list
   built into the program, and Third-party licences, which opens the licences page the packages carry; the Linux
   install copies that page beside the program.
@@ -1250,37 +611,31 @@ firmware 4.00 definition.
 - Settings > Third-party licences says "not in a development build" when the build carries no licences page,
   instead of being greyed out without a word.
 - As on the camera, a choice that opens beside an option with Right (Drive Mode's continuous speed, White Balance's
-  fine-tune, a Creative Look's parameters) is no longer a row of its own: the row's detail panel shows every choice
-  of the option chosen now, each with its control and Revert, and the search, F3, All edits and Compare open the
-  row with that choice marked; the web page does the same. A number the definition shows other than as stored is
-  shown and typed so ("75 %" for 7500), and Expert mode marks an option name that two readers did not agree on and a
-  setting whose proofs disagree. The record-number, proof and stored-number switches draw nothing with Expert mode off.
+  fine-tune, a Creative Look's parameters) is no longer a row of its own: the row's detail shows the chosen option's
+  choices, each with its control, and the search, F3, All edits and Compare open the row with that choice marked, on
+  the web page too. A number shown other than as stored is typed so too ("75 %" for 7500).
 
 ### The web page
 
-- The page speaks to photographers: a setting's mapping notes, records, what the camera writes with it, the record
-  number, the proof badge, the stored number and the count of known settings show in Expert mode only, and the
-  three "Names and values" switches sit under Expert mode. A row's details start with its help, say "Kept in the
-  memories too" and "Not on this camera's menu" in plain words, and group the options the camera refuses into one
-  line per reason ("Not offered while …").
+- The page speaks to photographers: mapping notes, records, the record number, proof badge, stored number and count of
+  known settings show in Expert mode only, and a row's details start with its help, say "Kept in the memories too" and
+  "Not on this camera's menu" in plain words, and group refused options by reason ("Not offered while …").
 - The page's Settings name the editor's version, as the window's do.
 - The page's Write reads the camera first, as the window's does: "Reading the camera, to list what this write
   changes…", then what the write changes against the camera now, and only then Write to camera, which keeps that
   read as the copy from just before; a read that fails ends the write with the Camera link report.
 - The page names the definition the open file is read with, and how it was picked.
-- The editor's small web page, off until turned on, now does what the window does from a browser on a tablet, a
-  phone or another computer: the same pages (Main, the tabs, Memories, Exposure, All edits, and in Expert mode
-  Unmapped records and the Record map), a setting's details, Connect to the camera, Settings, Backups, the edit
-  history, the camera report, and Compare with file B, a base file, copies and merges.
+- The editor's small web page, off until turned on, now does what the window does from a browser on a tablet, a phone
+  or another computer: the same pages, a setting's details, Connect to the camera, Settings, Backups, the edit
+  history, the camera report, and Compare with file B, copies and merges.
 - Files go up and come down through the browser: Open… and Compare's files are uploaded, and Download file,
   Export CSV… and Describe for support… download.
 - The camera's user name and password are entered in the desktop app only, and never cross the network from the
   page.
-- The access code is new each time the page is turned on; a browser then keeps a session for 12 hours unused, and
-  Sign out ends it. The page answers only its own requests (Host and Origin checked) and counts wrong codes per
-  device. It cannot turn on Expert mode, raw edits, unobserved values or Edit anyway, point the camera link at a new
-  address, or write a file the Write window did not check. The state it asks for every few seconds names no folder,
-  address or serial number; the camera's details come only when Connect to the camera asks for them.
+- The access code is new each time the page is turned on, a session lasts 12 hours unused, and Sign out ends it; the
+  page answers only its own requests and counts wrong codes per device. It cannot turn on Expert mode, raw edits or
+  Edit anyway, change the camera link's address, or write a file the Write window did not check, and its polled state
+  names no folder, address or serial number.
 - The page's light theme is readable in daylight, its toolbar fits one row on a phone, its windows are real dialogs
   with fingertip-sized targets, an edit is drawn in place, and a refused change puts the real value back.
 - The page's Memories shades a value that differs from the live settings and keeps orange with a pencil for your
@@ -1299,10 +654,10 @@ firmware 4.00 definition.
   the round dot (the value held) are explained.
 - The menus of the camera's other shooting modes: a group's Movie-only rows follow its Stills rows under "In Movie
   mode", with the records proved there.
-- Help where you look: a setting's help on hover in the rows and in the file layout's inspector, and each option's
-  help under it and on hover. With the camera's runs on the computer, every help text read off the camera links the
-  guide screen it was read from, and a text the two readers read differently is marked, with both readings. Rows with
-  no setting of their own (actions, submenus) show the camera's guide for the row. Each text says whose words it is.
+- Help where you look: a setting's help on hover in the rows and the file layout's inspector, each option's help under
+  it, and the camera's guide for rows with no setting of their own. With the camera's runs on the computer each help
+  text links the guide screen it was read from, with both readings where the two readers differ, and each text says
+  whose words it is.
 - A My Menu tab: the shown file's pages, each item linked to the setting it opens, and every item name by its code
   with the camera screen that proved it where one was kept. A Main entry: each mode's tiles with the value each
   shows, the records it reads, and the camera's own Main page beside them.
@@ -1315,10 +670,9 @@ firmware 4.00 definition.
 - A value's pictures say which two prove it: the option lit before OK, and the row after OK.
 - The chosen range on the file map is outlined in bright cyan, and choosing a record's own fields moves the map to
   their memory set.
-- Every row of the file layout's structure chooses its bytes, outlined on the map: the file, a section, a block of
-  records, a record, its fields and its elements; the inspector names a block and lists its records. In the hex the
-  chosen bytes stand out in their own colours (bright cyan on the dark theme, blue on the light), with the record
-  around them shaded faintly.
+- Every row of the file layout's structure (the file, a section, a block, a record, its fields and elements) outlines
+  its bytes on the map and picks them out in the hex, the record around them shaded faintly; the inspector names a
+  block and lists its records.
 
 ### The mapping kit
 
@@ -1329,108 +683,57 @@ firmware 4.00 definition.
 - `kit/drive.py` takes `enter!:REGEX`, an Enter the operator vouches for on a screen that lights nothing the kit can
   read, with the camera owner's word only; it is refused on a menu, the Main tiles and the shooting screen, on a
   screen whose text reads nothing or names a never-open row, and wherever a plain Enter is.
-- The pass-2 report reads the camera's other proof runs beside the main one (the runs a prover marks as one), each
-  proof's files named with its run, and never credits a record a proof names as a side effect; `--alone` reports the
-  main run by itself into a file of its own. `kit/schema_update.py` gives each record proved there the run and day of
-  its latest proof, and a reason why no proof can reach it where a hand table says so.
+- The pass-2 report reads the camera's other proof runs beside the main one, never crediting a record a proof names as
+  a side effect (`--alone` reports the main run by itself), and `kit/schema_update.py` gives each record proved there
+  the run and day of its latest proof, or why no proof can reach it where a hand table says so.
 - `kit/tools/menu_tree.py` names a carousel's options by their own names, never by the sub-choice the walk read them
   on; `--carousel-names` does so for an existing tree and changes nothing else.
-- The rows the pass-2 report listed as failed are finished (2026-11-07). `kit/provers/mode_switch.py` puts the camera
-  in another shooting mode through the menu (Mode Dial Control Set = Set with Menu, then Shoot Mode's carousel, never
-  a memory recall) and leaves it there for the prove runs that need that mode's menu, the stills file put back with
-  `--restore`: Flash Mode's Autoflash and Flash Off (Intelligent Auto alone offers them), ISO AUTO Min. SS (not in
-  M), and the Movie menu's rows. A put-back that leaves records differing is no failure when the prover can say why:
-  kept by the camera since an earlier option, a saved value the list does not offer here, or a checklist's copy of a
-  box's tick written from the first save on (Rating Set(Custom Key)); the attempt is recorded finished with the
-  reason and the session's upload puts the records back. An information screen with buttons after a list choice
-  (Exposure Ctrl Type = Flexible Exp. Mode) is taken with its OK. A carousel that opens on a word of its automatic
-  position's scale (ISO AUTO Min. SS on "Standard") is matched to that position; a vision reading that ends with a
-  label names it ("ISO ASS 2"" for 2"); seconds marks compare alike however drawn (2", 2″, 2”).
+- The rows the pass-2 report listed as failed are finished (2026-11-07): `kit/provers/mode_switch.py` puts the camera
+  in another shooting mode through the menu, never a memory recall, for the runs that need that mode's menu
+  (`--restore` puts the stills file back), and a put-back that leaves records differing is no failure where the prover
+  can say why.
 - Picker functions that open a setup screen of their own (a Recall Custom hold's registration, Rating Set, Recog.
-  Target Select, and the Send, Sync. Release, Cnt Sht Spd Bst and My Dial functions the kit kept out by name) are
-  proved like any other since 2026-11-07: the key takes the function, the prover leaves the screen with MENU and goes
-  on, and the report credits the function with the key's record alone, the screen's own records (the hold copied into
-  its registration working copy) credited to nothing. A saved Recall Custom hold is still left for the session's
-  upload to put back. `prove_run.py --list` says how many of a cell's options are still to prove. S&Q Shoot Mode is
-  proved with the owner's switch on S&Q (Time-lapse, S&Q Motion). `kit/provers/filter_run.py` proves Playback Filter
-  Condition, a checklist whose boxes open a chooser each and whose conditions the camera writes to the file: each
-  chooser's options as a list row of its own, the start file back between items.
-- `kit/provers/mymenu_run.py` proves My Menu's item codes on the camera: My Menu Setting > Add Item for every
-  item the picker offers (268 on the a1 II), one download per add, six pages filled in turn and the start file put
-  back between fills; the report counts the slot an add filled and gives an add no held value. The item's name is
-  settled against the camera's own row names (the menu tree's rows and the Help Guide's menu list) from the lit row's
-  OCR and the vision reader's words, for the OCR carries icon noise and a page's group name and the reader now and
-  then answers with the group's name ("AF/MF" for Preset Focus/Zoom); twins the screen tells apart by an icon alone
-  (the Still and Movie "Fn Menu Settings") are numbered by their place in the picker, and `--relabel` names a run's
-  proofs again by that rule without the camera. On an Add Item proof the report leaves out a vision reading that is
-  another row's or a group's name, as it does a row's name over an option, and the writer keeps the fuller of the
-  table's name and the proof's when they are alike ("Shot Mark with Shutter Button" over the OCR's "with Shutter
-  Button"; "Fn Menu Settings" over "Menu Settings"), dropping a glued icon glyph ("SISO Range Limit"). The 42 slots'
-  table names 268 proved codes and the empty slot. The prover's ways round what a settings reset changes: the
-  Custom Key screen's one-time notice is OKed, the Dial/Wheel page's "Separate M mode and other modes" box is ticked
-  before its dials are proved (with a fresh base after it, so the proofs show the dial alone), a never-open group left
-  lit in the group column is stepped off before Right, the jump by the tab and group columns reads the lit group
-  instead of assuming the first, a frozen OSD picture is waited out on the Fn Menu tiles, `--redo` proves a named
-  row's options again, and `customshoot_values.py --prepare` puts a hold into a mode whose items the camera offers.
+  Target Select and others) are proved like any other since 2026-11-07, credited with the key's record alone. S&Q
+  Shoot Mode is proved with the owner's switch on S&Q, `kit/provers/filter_run.py` proves Playback Filter Condition's
+  choosers, and `prove_run.py --list` says how many of a cell's options are still to prove.
+- `kit/provers/mymenu_run.py` proves My Menu's item codes on the camera by Add Item for every item the picker offers,
+  the start file put back between fills, each name settled against the camera's own row names and twins numbered by
+  their place in the picker (`--relabel` renames a run's proofs by that rule without the camera); `--redo` proves a
+  named row's options again.
 - My Menu's items are proved on the camera one by one (`kit/provers/mymenu_run.py`: Add Item for every item the
   picker offers); `kit/schema_update.py` names each proved code alike in all 42 My Menu slots, proving only the slot
   that took it.
-- A setting proved on the page an option of a row opens ("Picture Profile > PP2 > Black Gamma > Level") gets its
-  place on that page: `row` is the row, the option, then the page's rows, `row_at` adds the option's index (a
-  family's column) before the page's places, and `under_option` names the option, while the setting keeps its own
-  group. Every option's page takes the shape of the one the walk opened, so the a1 II's Picture Profile parameters on the
-  profiles its menu offers (PP1-PP6, PP10, PP11: 600 settings, stills and movie copies alike) now have a place; PP7-PP9,
-  which the menu never offers, stay unplaced (2026-11-07).
-- The pass-2 report credits an option that changed nothing with the start value of its own base file, read from
-  the file when no proof of that session moved the record: a put-back made in a session of its own (the saved
-  function alone, after a picker tile was proved in two sessions) was credited with the first session's start value
-  and showed as a conflict. The prover OKs the camera's one-time notice before the Custom Key screen (after a
-  settings reset), waits out a frozen OSD picture while walking the Fn Menu tiles instead of failing the cell, names
-  a second-screen table cell by its job key with `--rows`, and `kit/provers/customshoot_values.py --prepare
-  "Shoot Mode=Manual Exposure"` first puts a Recall Custom hold into a mode whose items the camera offers (the
-  shutter speed and aperture items are refused while a hold is in P). A second Fn Menu tile per screen, a second
-  My Dial slot and the holds' shutter speeds are proved in full or at three points (2026-11-07).
-- `kit/tools/replay_proofs.py` diffs every proof of a run again with today's parser and lists each proof whose
-  changes now differ from the stored ones, and any missing file. `kit/tests/test_consistency.py` checks the shipped
-  definition against itself and the proofs: the Recall Custom holds' shared labels and bracket places, picker slots
-  against the slot proved in full, repeated labels against a reasoned list, the movie copies against their stills
-  twins, scaled numbers against what the camera showed, what backs each name, and the accepted file. CI validates the
-  accepted file against its schema.
-- `kit/schema_update.py --write` refuses, listing each, while pass 2's report holds a conflict it leaves standing, a
-  new record it does not add, a record not one to one, a name dispute or a carried-over value that the camera's new
-  `data/<model>_fw<fw>/accepted_<model>_fw<fw>.json` does not accept with why (`--force` writes anyway, loudly). A
-  record not one to one loses its old proof and is marked `disputed`; each proved value's name says what backs it
-  (`proved.names`: two readers, one reader, the vision model, a hand table, the kept schema label, a rule's copy,
-  held, sampled); a number the camera shows scaled gets `shown_as` from its proofs (the 66 Knee Point settings, "75%"
-  stored 7500); a picker's reading is never snapped to a name with other numbers ("Custom Look 1" for "2"). The
-  JPEG/HEIF copies written with their main record are Expert-only, and the Focus Area and Free Size memories are
-  named "remembered". A picker family names each code once in every slot (no head the camera never shows, no name
-  cut short or misread: "Fixed Speed STBY", "Face Priority in Multi Metering"); a value two options write alike gets
-  one name ("HEIF"); an icon's capitals give way to the words beside them ("Extra fine"); an unproved value follows
-  its siblings' form ("Manual Exposure", "120fps"); a Picture Profile's movie and stills copies share their values;
-  the WB fine-tunes and the Creative Look parameters sit under their preset and look on the camera's rows; the
-  settings reset file's names follow the definition. The pass-2 report no longer counts a vision reading of one part
-  of a name, or one beside two agreeing readers, as a dispute (44 disputes down to 7).
-- The pass-2 report names a value by the map's label unless the vision model backs the bar's OCR instead; the OCR no
-  longer wins alone (it had named a slot-icon option "1/7 This Image"). Each value's readers are in `report.json`,
-  and the names they argue over (`name_disputes`), the values a record kept from the option before while others
-  moved (`carried_over`, no longer credited to the option) and a picker's twins ("AEL hold (2)") are listed in the
-  new `report.md`. Tables and carousels' axes are checked one to one too, and a short definition label only agrees
-  inside the camera's when no other proved label holds it. `kit/tools/reread_proofs.py` asks the vision model about
-  the saved frames of proofs that have no reading of their own, with no camera, for the report to weigh.
+- A setting proved on the page an option of a row opens ("Picture Profile > PP2 > Black Gamma > Level") gets its place
+  on that page (`row`, `row_at`, `under_option`), each option's page taking the shape of the one the walk opened: the
+  a1 II's Picture Profile parameters on the profiles its menu offers now have a place, and PP7-PP9, which the menu
+  never offers, stay unplaced.
+- The pass-2 report credits an option that changed nothing with the start value of its own base file, so a put-back
+  made in a session of its own no longer shows as a conflict, and the prover takes the Custom Key screen's one-time
+  notice and a frozen OSD picture in its stride;
+  `kit/provers/customshoot_values.py --prepare "Shoot Mode=Manual Exposure"` first puts a Recall Custom hold into a
+  mode whose items the camera offers.
+- `kit/tools/replay_proofs.py` diffs every proof of a run again with today's parser and lists each one whose changes
+  now differ, and any missing file; the kit's tests check the shipped definition against itself and the proofs, and CI
+  validates the accepted file against its schema.
+- `kit/schema_update.py --write` refuses, listing each, while pass 2's report holds a conflict, a new record it does
+  not add, a record not one to one (marked `disputed`), a name dispute or a carried-over value that the camera's
+  `data/<model>_fw<fw>/accepted_<model>_fw<fw>.json` does not accept with why (`--force` writes anyway, loudly). Each
+  proved value's name says what backs it (`proved.names`), and a number the camera shows scaled gets `shown_as` ("75%"
+  stored 7500).
+- The pass-2 report names a value by the map's label unless the vision model backs the bar's OCR instead, so OCR no
+  longer wins alone; the new `report.md` lists name disputes, values a record carried over from the option before (no
+  longer credited) and a picker's twins, and `kit/tools/reread_proofs.py` asks the vision model about saved frames
+  with no reading of their own, with no camera.
 - `kit/prove_run.py --first "ROW / OPTION=VALUE"` proves a carousel axis from another value, so the one it held is
-  proved too; a list that opens with a single option is proved by its display (both readers on the label, the
-  value from the file), for rows such as XAVC HS 8K's frame rate under PAL. The prover presses MENU again after the
-  lock that follows a download and Right when the menu reopens with the focus in the group column.
-- `kit/prove_run.py --every` proves a number scale at every value instead of its lowest, middle and highest (scales
-  of up to 64 values), to check that a family's straight line holds at every step; `--list` prints what a run would
-  prove and stops, with no camera. A number field the first OCR engine leaves unread is read by the second engine,
-  else from the field alone enlarged, before the row can fail on it.
-- Nothing is pressed while the menu is still sliding: the screen reader gives a menu page no focus while its rows
-  panel is between its two places, the OSD eyes wait two of the SDK image's renewals (0.75 s) before a screen counts
-  as at rest and give a press 1.5 s to show, and the scan and the prover look again until the menu stops before
-  stepping into the rows (a Right sent to a moving menu had opened the Drive Mode row and the next Down moved the
-  drive mode, 2026-11-06). The prover cancels with MENU if that Right opens a row all the same.
+  proved too, and a list that opens with a single option is proved by its display (XAVC HS 8K's frame rate under PAL).
+  The prover presses MENU again after the lock that follows a download, and Right when the menu reopens in the group
+  column.
+- `kit/prove_run.py --every` proves a number scale at every value instead of its lowest, middle and highest, and
+  `--list` prints what a run would prove, with no camera. A number field the first OCR engine leaves unread is read by
+  the second engine, else enlarged, before the row can fail on it.
+- Nothing is pressed while the menu is still sliding: the kit waits for it to come to rest before a screen counts or
+  the scan and the prover step into the rows (a Right sent to a moving menu had changed Drive Mode, 2026-11-06), and
+  the prover cancels with MENU if that Right opens a row all the same.
 - The page scan downloads the settings first and puts the start file back on when a press changed anything, waits
   out "Saving to the connected device..." before its first MENU, and cancels with MENU whatever it stopped on before
   disconnecting. `kit/page_model.py --vlm --reader NAME` asks a configured reader by name when the usual one is away.
@@ -1442,9 +745,9 @@ firmware 4.00 definition.
   holds the other modes' menus (`modes`), which `kit/tools/menu_tree.py --mode` writes from that mode's scan and
   crawl. The camera's option trees (`option_tree`) are read from the proofs by `kit/schema_update.py --option-trees`.
 - The a1 II's frame rates under PAL are named (50p, 25p, 100p; S&Q's 100fps to 3fps; Time-lapse's two rates), proved
-  on the camera with `kit/pass3_run.py --only "PAL …"` entries over the OSD and `kit/provers/boxes_run.py`. A row's
-  starting option is proved from another start: `"first"` in pass 3's table, `--first BOX=VALUE` in the two-box
-  prover. `kit/pass1_map.py --own` writes one walk's map without touching pass 1's; pass 3 uses the third reader.
+  on the camera with `kit/pass3_run.py --only "PAL …"` and `kit/provers/boxes_run.py`. A row's starting option is
+  proved from another start (`"first"` in pass 3's table, `--first BOX=VALUE` in the two-box prover), and
+  `kit/pass1_map.py --own` writes one walk's map without touching pass 1's.
 - The container block names the video-system byte (`video_system`) and the firmware is its two bytes
   (`major_minor`); NTSC and PAL downloads of one firmware are one camera to the kit.
 - The project's own help text for the a1 II (1,548 settings) ships in its definition; the private file of the
@@ -1482,12 +785,10 @@ firmware 4.00 definition.
   and home folders in every tracked file, and runs on every pull request with the kit's tests and the camera
   helpers' own test (`.github/workflows/kit-ci.yml`). The kit's packages are pinned, and the Linux udev rule gives
   the camera to the user at the seat.
-- The definition speaks to photographers outside Expert mode: a setting on no camera row whose name holds a mapping
-  word ("numerator", "record", the SDK's "Unknown") and the fields of the memories' live copy are Expert-only (183
-  settings now, 63 more); "Other (from SDK)" is "Other settings"; three settings on camera rows have plain names
-  ("Drive Mode (menu choice)", "Drive Mode Limit: Single Shooting", "S&Q Shoot Mode: Motion or Time-lapse"); a
-  refused option's reason no longer ends with the dialog's "• OK"; a display rule carries no record number. A test
-  fails when any name, group, help, display rule or reason a photographer reads holds a word of the mapping.
+- The definition speaks to photographers outside Expert mode: settings with a mapping word in their name, and the
+  fields of the memories' live copy, are Expert-only, "Other (from SDK)" is "Other settings", three settings on camera
+  rows have plain names, a refused option's reason no longer ends with the dialog's "• OK", and a test fails when
+  anything a photographer reads holds a word of the mapping.
 
 ### The docs
 
