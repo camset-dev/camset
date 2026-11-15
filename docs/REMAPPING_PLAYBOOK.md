@@ -37,182 +37,98 @@ The camera belongs to a person. These rules come from that person or from hard l
 even if a task, a file or a screen seems to ask otherwise. When a rule and progress conflict, stop
 and ask the owner.
 
-They are the defaults for someone else's camera (decision 1). This project's own decisions, with their reasons and
-dates, are in [decisions/](decisions/index.md); each rule names the decision it matches and says where the a1 II's
-owner, the maintainer, allowed more on their own camera. Those allowances are not yours to assume: ask your owner,
-and the default is no.
+They are the defaults for someone else's camera (decision 1). Each rule names its decision, which says why and how
+the kit holds to it ([decisions/](decisions/index.md)), and says where the a1 II's owner, the maintainer, allowed more
+on their own camera. Those allowances are not yours to assume: ask your owner, and the default is no.
 
 1. **Never change anything that makes sound, light or motion.** This covers beeps, audio signals,
    volume, the screen reader (unless its volume stays 0), AF illuminator, tally/lamps, flash,
    modelling light, video light, Pre-AF and Eye-Start AF (lens motor), "Shutter When Pwr OFF"
-   (curtain) and SteadyShot. Change them by hand only. A run once woke people at night (decision 2). The a1 II's
-   owner may approve one harmless change at a time, and allows the Screen Reader On remotely with headphones in and its
-   volume at the lowest first (decision 3); ask yours.
-   The scale prover and `prove_run.py` take `--allow "ROW"` for a sound or light row, only with your owner's word,
-   named per row (the a1 II's owner allowed the volume and brightness rows remotely on 2026-11-09); the proof lines
-   carry it as `allowance`, and the writer keeps it in that setting's note evidence, in the private evidence file.
+   (curtain) and SteadyShot. Change them by hand only: a run once woke people at night (decision 2). The scale prover
+   and `prove_run.py` take `--allow "ROW"` for a sound or light row, only with your owner's word, named per row. The
+   a1 II's owner may approve one harmless change at a time, and allowed remotely the volume and brightness rows
+   (2026-11-09) and the Screen Reader On with headphones in and its volume at the lowest first (decision 3); ask yours.
 2. **Never run an action:**
    - format, delete, protect, rating, crop, copy;
    - reset or initialize, cleaning, pixel mapping, firmware update;
    - memory registration, Recall Custom registration;
    - FTP transfer, send.
-   `kit/camkit/safety.py` holds the never-open list, a second check on a body nobody has seen beside the first-open
-   procedure, the Enter check and the blank cards; add the new body's names to it. Card
-   actions are allowed only on the test cards the owner names. The owner runs resets and
-   Initialize by hand. A prover or tool that runs one of these opens its row only when the run names it with
-   `--allow "ROW"`, your owner's word, and refuses to start without it or with any other `--allow`; the proof lines
-   carry it as `allowance`: Camera Set. Memory (`memreg_run.py`, `framepos_run.py`), Reg. Custom Shoot Set
-   (`customshoot_run.py`, `customshoot_values.py`), My Menu's Add Item (`mymenu_run.py`), a card row
-   (`kit/tools/card_actions.py`, which judges each press as `drive.py` does and ends restoring as every runner
-   does) and Picture Profile Reset (`pp_reset_run.py`, each profile's own Reset row; it writes no proof line, and its
-   result carries the words). (Decisions 4 and 5. The a1 II's owner allowed Camera Settings Reset, the narrowest reset,
-   for proofs with their file put back after, and each Picture Profile's own Reset for the sample; and decided on
-   2026-11-13 that a dated owner decision may name a card's Format or Delete, Reset Network Set., SSID/PW Reset and
-   the other actions for `drive.py --owner`, confirmed only as a `--confirm` run's last press, after the person at the
-   terminal has typed the row's name (rule 3); Initialize never. Ask yours: the default is no Format, no Delete and no reset.)
+   Card actions only on the test cards the owner names; resets and Initialize by the owner's hand (decisions 4 and 5).
+   A prover or tool that runs one opens its row only when the run names it with `--allow "ROW"`, your owner's word,
+   and refuses to start without it or with any other (section 7's Phase 2 table; for a card row,
+   `kit/tools/card_actions.py`). Add the new body's names to `kit/camkit/safety.py`'s never-open list, a second check
+   on a body nobody has seen beside the first-open procedure, the Enter check and the blank cards. (The a1 II's owner
+   allowed Camera Settings Reset, the narrowest reset, for proofs with their file put back after, and each Picture
+   Profile's own Reset for the sample; and, on 2026-11-13, Format, Delete, Reset Network Set., SSID/PW Reset and the
+   other actions by a dated owner decision, only as a `drive.py --owner --confirm` run's last press (rule 3);
+   Initialize never. Ask yours: the default is no Format, no Delete and no reset.)
 3. **By hand only:** network identity and connection settings (Wired LAN, Wi-Fi, Bluetooth, access
    authentication, FTP server), USB connection mode, language, NTSC/PAL, area and date, and Auto
    Power OFF Temp. (Decision 8. The a1 II's owner allowed Auto Power OFF Temp. remotely from 2026-11-02; ask yours.)
-   The screen that shows the body's serial number (Display Serial Number on the a1 II) opens only on a look lap or the
-   owner route, which save its frames black, since every frame is kept as evidence.
-   No `--allow` opens the camera's identity, its connections or its region, whatever the owner said: `drive.py`,
-   `card_actions.py` and every prover refuse such a label before anything connects (`safety.allow_refused`), and the
-   checks on the camera refuse the row however a run named it (`safety.never_lifted`).
-   Changing one is by hand, and stays so unless your owner decides otherwise for a named row; ask yours. A run given
+   No `--allow` opens the camera's identity, its connections or its region, whatever the owner said. A run given
    `--network` (`drive.py`, `crawl_run.py`) is a look lap (decision 24): it may open any row to look at, no decision
-   naming it, but what never opens (a firmware update, what loads, the sensor's, shutter's or lens's motion,
-   Initialize, the Screen Reader), a row whose opening acts (IP Address Setting, WPS, Pairing, Access Point Set., the
-   smartphone, cloud, streaming, tethering and FTP rows, Send, Create New Folder: the owner's own run, each time) and a
-   format, delete or reset this body has not been seen to open (the owner's own run first), a row not yet seen opened
-   under the first-open procedure. A dated owner decision in the reviewed scope, `{"date": "YYYY-MM-DD", "lifts":
-   "network", "rows": ["<the row as the camera writes it>"], "why": "<their words>"}`, names the options such a run, or
-   `prove_run.py` with `--rows`, may choose in a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency
-   Band, Bluetooth Function, Bluetooth Rmt Ctrl, Airplane Mode), a screen that shows the camera's network addresses
-   (Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address), or an identity or connection row that has been
-   seen to open and close over the link without harm (decision 8 lists them, and `safety.py` says beside each when it
-   was seen). A decision names a row only once so seen: IP Address Setting dropped the wired LAN link when opened and
-   left with MENU (2026-11-14), and USB Connection Mode, USB LUN Setting, USB Power Supply, Language, NTSC/PAL and
-   Area/Date/Time have not been seen opened over the link, so no decision names them. No `--allow` opens any of them.
-   A row a look lap opens is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
-   read right after a MENU (or an Enter on a named option) is the shooting screen, or the page it was opened from with
-   its lit bar on the row itself; never on what kind of screen the camera seems to show alone, nor on a later read.
-   Where the row's own screen read as the shooting screen before any MENU, it is taken as a screen of no known kind
-   (MENU alone), and a later frame read as the shooting screen ends the row only when the camera's own picture agrees.
-   Choosing an option needs the decision to name it, `"options": {"<row>": ["<option>"]}` (never one character, a
-   button's word or a name of the never-open list), and no option is ever chosen in a row whose choice drops a link,
-   starts a connection or a pairing, or changes what no file puts back (Wi-Fi Connect, Bluetooth Rmt Ctrl, Airplane
-   Mode, Wi-Fi Frequency Band, Wired LAN Connect, Remote Shoot Function, Cnct. while Power OFF, the IP and USB rows,
-   Language, NTSC/PAL, Area/Date/Time). Such a run asks local readers only and marks its folder, so the tools that read its frames later
-   (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `reread_proofs.py`, `reader_census.py`)
-   ask local readers only too and none about an identity row's frames, and write into it owner-only, and a prover's way back to the shooting screen
-   sends no OK to a notice that refuses MENU (nor, on any run, to one naming identity); a screen inside the row
-   that names identity or credentials gets MENU alone and no reader, and from the run's start to its end no screen's
-   text is printed or kept: row labels the kit knows, field names, a list's option names as the definition gives them
-   (never which one is lit), a notice as the kit keeps it, the count withheld, and the shooting screen as its kind
-   alone, and a refusal's or an error's quoted texts are withheld in its closing lines as in its first; its run folder
-   is yours alone on macOS and Linux. IP Address Setting and the USB and region rows above, credentials, the SSID, WPS,
-   access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
-   connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
-   Right does there), Server Setting and Edit Device Name are named by no network decision, and one naming
-   one, or saying `"confirm"`, `"link_loss"` or `"values"`, stops the run before anything connects. A dated owner
-   decision, `{"date", "lifts": "owner", "rows", "why"}`, may name them and the rest of the never-open list for
-   `drive.py --owner` alone, the last label of `--path`, one row per run (decisions 4, 5, 8 and 9 say how), never a
-   firmware update, anything that loads a file or settings, Initialize, nor sound, light, motion or the Screen Reader;
-   inside an action any Enter may be the final one, so it goes before the last press only where the decision marks the
-   step seen (`"steps_seen"`), an action the kit has not seen open to look opens only as the last press, IP Address
-   Setting only as the armed last press with `"link_loss"` (a run without `--confirm` stops before anything connects),
-   the USB and region rows only to look and at your owner's risk of a dropped link, and before a
-   run given `--confirm` connects the person at the terminal types the row's name (no flag or environment variable
-   answers it; only the decision's `"unattended": true` waives it; it stops a careless agent, not a determined one, so
-   the owner types it, never the agent). (The a1 II's
-   owner decided on 2026-11-13 that the kit may open their camera's network and identity rows this way: "Yes map as much
-   as we can"; "you have my full permission to open any menu and map items"; and the rest with owner decisions: "you can
-   also do password/logins, actions, and display serial number... I have generic sd cards in so you can format, delete,
-   etc".)
+   naming it, with up, down and MENU alone, asking local readers only and keeping no screen's text; never what never
+   opens (a firmware update, what loads, the sensor's, shutter's or lens's motion, Initialize, the Screen Reader); a
+   row whose opening acts, or a format, delete or reset this body has not been seen to open, only by the owner's own
+   run; a row not yet seen opened only under the first-open procedure. The body's serial number screen opens only on a
+   look lap or the owner route, which save its frames black. A `--network` run chooses an option only where a dated
+   owner decision names it, and never in a row whose choice drops a link, starts a connection or a pairing, or changes
+   what no file puts back (decision 8 says which rows, and how). A dated owner decision may also open those rows and
+   the rest of the never-open list for `drive.py --owner` alone, one row per run, never a firmware update, what loads,
+   Initialize, nor sound, light, motion or the Screen Reader (decisions 4, 5, 8 and 9). Before such a run given
+   `--confirm` connects, the person at the terminal types the row's name, the owner and never the agent; no flag
+   answers it, and only the decision's `"unattended": true` waives it. (The a1 II's owner decided all this on
+   2026-11-13; ask yours.)
 4. **Credentials:**
-   - Never type, read, OCR, screenshot or store a password. That includes the camera's own Access
-     Authen. Info screen: only a look lap opens it, saving its frames black and pressing MENU alone there, because every
-     frame is kept as evidence (decision 24). (The a1 II's owner
-     decided on 2026-11-13 that a dated owner decision may open their camera's credentials screens for `drive.py
-     --owner`, nothing ever typed, their frames saved black unless it says `"values": "logged"`, which keeps the text
+   - Never type, read, OCR, screenshot or store a password. Only a look lap opens the camera's own Access Authen. Info
+     screen, saving its frames black and pressing MENU alone there, because every frame is kept as evidence (decision
+     24). (The a1 II's owner decided on 2026-11-13 that a dated owner decision may open their credentials screens for
+     `drive.py --owner`, nothing typed, their frames black unless it says `"values": "logged"`, which keeps the text
      in the run's `drive.jsonl` alone, never in the console (decision 9). Ask yours: the default is never.)
-   - The owner puts the user name and password in `~/.config/camset/network.json` (mode 600).
-     It is never committed (decision 9).
-5. **Every run starts from a known file and ends by restoring it.**
-   - Restoring means uploading the start file, waiting for the camera's restart, downloading
-     again and checking the records match.
-   - At the end of the session the owner's own file goes back.
-   - Never leave a run's changes on the camera (decision 15).
-6. **Never kill a camera run while a dialog is open.** Stop it with a STOP file
-   (`runs/<model>_fw<fw>/<run>/STOP`; `runs/<model>_fw<fw>/STOP` stops every run of that camera, `runs/STOP` every
-   run). Never disconnect with a dialog open: a dropped session can apply it (decision 15).
-   Once a run's link is open, one Ctrl-C (or a tool's SIGTERM) stops it the same way: camlink runs in a process
-   group of its own and finishes the command in progress, and the run cancels and restores. A second Ctrl-C stops
-   at once, which is not safe.
+   - The owner puts the user name and password in `~/.config/camset/network.json` (mode 600), never committed
+     (decision 9).
+5. **Every run starts from a known file and ends by restoring it:** uploading the start file, waiting for the camera's
+   restart, downloading again and checking the records match. The session ends with the owner's own file back; never
+   leave a run's changes on the camera (decision 15).
+6. **Never kill a camera run while a dialog is open.** Stop it with its STOP file, `runs/<model>_fw<fw>/<run>/STOP`
+   (`kit/camkit/runs.py` names wider ones), or, once its link is open, one Ctrl-C, after which it cancels and
+   restores; a second Ctrl-C stops at once, which is not safe. Never disconnect with a dialog open: a dropped session
+   can apply it (decision 15).
 7. **Long runs go through the tool's background mode, never `&`.** Never pipe a camera run through
    `head`: SIGPIPE kills it mid-run.
 8. **A press happens only on a screen the reader recognises.**
    - Fail closed: an unknown screen gets MENU (cancel), never Enter.
-   - Enter only on a screen that asks nothing, whatever its words or language (`safety.enter_refused`): never on a
-     notice, a screen of no known kind or no readable text, one with a question mark, or a carousel that asks. The
-     camera checks every Enter and trash press on a frame grabbed just before it, and the link sends none it did not
-     judge. The ways past are named and narrow: the owner route (`drive.py --owner --confirm`); `--confirm "SCREEN
-     TEXT"` (the screen's whole text, one press, never a format, delete or reset); a prover's `--allow` for its own
-     row's screen; `--info-ok` for a named notice; a notice's lone OK after the camera refused MENU on it.
-   - **What this check cannot see:** a question drawn as an option screen with no question mark, or one whose mark OCR
-     misses; a list where choosing is the act (a slot in Format, an item in Delete); button words in another language
-     on a carousel or beside a lone OK; Right and the dials; a question the camera raises by itself just before the
-     press (on OSD eyes, within 3.5 s of the kit's last move); a held Enter.
+   - Enter only on a screen that asks nothing, whatever its words or language: never on a notice, a screen of no known
+     kind or no readable text, one with a question mark, or a carousel that asks. The camera checks every Enter and
+     trash press on a frame grabbed just before it.
+   - **What this check cannot see:** a question drawn with no question mark, a list where choosing is the act (a slot
+     in Format, an item in Delete), button words in another language, Right and the dials. `kit/camkit/live.py`'s
+     docstring has the whole list, and the few named ways past the check.
    - Never press Enter on table buttons ("Set All", "Rec. Media Settings") or on a "Don't show
      this again" box.
-   - A dial turns only on a screen a regex names: on the shooting screen a dial changes the live
-     exposure.
-9. **Never act on a stale picture.** An HDMI frame older than 2 s raises an error
-   (`HdmiSource.STALE`). When HDMI goes black, the kit checks the SDK's OSD image instead.
-10. **Values from the owner's camera never go into a definition, the data files or the docs.**
-    - A definition holds names and value meanings.
-    - The value a row held at the start of a run is filled from a sibling record's labels, so a
-      gap cannot reveal it.
-    - A picker proof whose label would reveal the owner's saved function is not planned (decision 16).
-11. **Ask the owner only for physical things or visual checks.** That means switches, dials,
-    turning the camera, cables, opening the screen, by-hand menu actions and resets. Otherwise
-    the camera is free for tests (decision 10).
-12. **Upload only files the camera wrote.** Settings are changed on the camera and watched; a run uploads only
-    the link's own downloads: each one's SHA-256 goes into the camera's `runs/<model>_fw<fw>/downloads.jsonl`, and
-    `Link.upload` and `kit/tools/upload_check.py` refuse any file whose bytes are not a download of that camera's,
-    whatever folder it is in
-    (`upload_check.py --adopt` takes in downloads that the runs' logs show were made before the manifest existed). A
-    file edited by hand put the a1 II into a restart loop in Movie mode on 2026-11-01 (decision 6;
-    [what ended it](EDITOR.md#if-the-camera-restarts-over-and-over)).
-13. **C4 only where it is safe.** C4 is the trash button: in Playback, or wherever a picture is displayed, it deletes
-    the picture; on the shooting screen it does whatever the body assigns to it, a change the kit must not make. Send
-    it only as guarded Help, on a menu or option screen whose footer draws the help button. The screen is the guard:
-    `Link.press` sends C4 only when the screen read last is a menu, option, panel or editor screen, and refuses it on
-    the shooting screen, in Playback and with a picture displayed (decision 7, since 2026-11-06). Whether the body
-    lists its operating mode (CameraOperatingMode) is learnt from `props`, once per open link, the first time C4 is
-    judged; a `props` that fails or cannot be read refuses C4. When the mode is listed, C4 goes only when `get` gives
-    an integer mode that is not Playback: any other answer refuses it, whatever its words, since camlink answers
-    "unknown property" for a failed read as for a property not listed. When it is not listed, the screen alone
-    decides. The a1 II's owner also allowed it as Focus Area's SET and a Creative Look panel's Reset (decision 7):
-    `drive.py`'s `c4set` and `c4reset` presses, each sent only when the run names it with `--c4-press c4set` or
-    `--c4-press c4reset`, your owner's word for that run, which the log and `drive.jsonl` keep; ask yours. C1-C3 and
-    C5-C7 are never sent.
-14. **On the shooting screen, no key but MENU.** There a key does what the body makes of it: on the a1 II the control
-    wheel's Center, Left, Right and Down buttons and the multi-selector's centre are Custom Keys, the multi-selector's
-    four directions move the focus frame, and a dial changes the live exposure, which no file puts back; which keys a
-    body lets its owner assign differs by body, and the rule does not rest on it. `Link.press` and `Link.dial` send no
-    key but MENU on a screen read as the shooting screen unless the caller names that key for the press, and none but
-    MENU with no screen given, named or not (decision 21). Named so far: the multi-selector's directions that move a
-    focus frame (`framepos_run.py`, under its own `--allow "Camera Set. Memory"`; `orient_run.py --af-point`) and the
-    Fn hold that registers an area (`afreg_run.py`, with your owner's word: `--allow "Fn hold on the shooting
-    screen"`). `drive.py` refuses a press that meets the shooting screen unless `--on-shooting KEY` names it, your
-    owner's word, which the log and `drive.jsonl` keep; a key so named is judged there by the naming, since the
-    shooting screen has no row to open. A key named for the shooting screen changes what no settings file holds (a
-    focus frame's place, the live exposure): the run's restore does not put it back, so name and press the keys that
-    do (`ms_right` after `ms_left`). The screen judged is read afresh when the camera may have
-    moved behind the kit's back (a download, an upload, a press sent straight through the link). Not covered: a
-    shooting screen the reader takes for another kind (a DISP mode that draws no battery reads as unknown); a black
-    frame is judged on the camera's own picture of the screen.
+   - A dial turns only on a screen a regex names (rule 14).
+9. **Never act on a stale picture.** An HDMI frame older than 2 s raises an error. When HDMI goes black, the kit
+   checks the SDK's OSD image instead.
+10. **Values from the owner's camera never go into a definition, the data files or the docs.** A definition holds
+    names and value meanings. The value a row held at the start of a run is filled from a sibling record's labels, so
+    a gap cannot reveal it. A picker proof whose label would reveal the owner's saved function is not planned
+    (decision 16).
+11. **Ask the owner only for physical things or visual checks:** switches, dials, turning the camera, cables, opening
+    the screen, by-hand menu actions and resets. Otherwise the camera is free for tests (decision 10).
+12. **Upload only files the camera wrote.** Settings are changed on the camera and watched; the kit uploads no file
+    whose bytes are not one of that camera's own downloads, wherever it sits (decision 6). A file edited by hand once
+    put the a1 II into a restart loop ([what ended it](EDITOR.md#if-the-camera-restarts-over-and-over)).
+13. **C4 only where it is safe.** C4 is the trash button: in Playback, or with a picture displayed, it deletes; on the
+    shooting screen it does whatever the body assigns to it. Send it only as guarded Help, on a menu or option screen
+    whose footer draws the help button. Where the body lists its operating mode, C4 also needs the camera to give one
+    that is not Playback (decision 7; `Link.c4_refused` says how). The a1 II's owner also allowed Focus Area's SET and
+    a Creative Look panel's Reset, each only when the run names it (`drive.py --c4-press`); ask yours. C1-C3 and C5-C7
+    are never sent.
+14. **On the shooting screen, no key but MENU.** There a key does what the body makes of it (a Custom Key, the focus
+    frame, a dial's change to the live exposure, which no file puts back). No key but MENU goes there unless the run
+    names that key for the press (`drive.py --on-shooting KEY`, your owner's word; decision 21), and none but MENU
+    with no screen given, named or not. The run's restore does not put back what a named key changed: name and press
+    the keys that do (`ms_right` after `ms_left`).
 
 ## 2. What carries over to a new model, and what does not
 

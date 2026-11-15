@@ -61,6 +61,10 @@ button reads OK and is plainly its only one (safety.lone_ok). An Enter or a tras
 the link's count of moving commands at that look (Link.press's judged), which the link refuses once anything has moved
 since, so no press sent past this camera (proving.nav.to_shooting's, which judges with menu_refused_enter on a frame
 grabbed after the refusal) escapes the check, nor a judgement grown stale.
+What this check cannot see: a question drawn as an option screen with no question mark, or one whose mark OCR misses; a
+list where choosing is the act (a slot in Format, an item in Delete); button words in another language on a carousel or
+beside a lone OK; Right and the dials; a question the camera raises by itself just before the press (on OSD eyes,
+within OSD_LAG of the kit's last move); a held Enter.
 
 The orange cursor is found as a bar first (lit_box). A dialog or table that lights its item without one (the White
 Balance chooser's orange text, a two-slot table's narrow cell) is read from the largest orange region instead, on those

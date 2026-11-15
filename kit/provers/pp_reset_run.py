@@ -120,6 +120,7 @@ back with none (each profile's "complete" and "complete_frame" say which); "back
 back on their settings after the completion notice (the run still finishes); the console's last line says the counts
 and names those. kit/tools/make_sample.py --from takes it, and checks every list in it against the run's own
 downloads. Nothing is a proof line: the run proves no setting's values, it makes the files the sample is taken from.
+The owner's word is the result's "allowance" ("the owner allowed <row> remotely, <date>", runner.allowed_or_exit).
 
 Whether a profile's Reset in Stills mode also resets the Movie copy of its parameters (each parameter is kept three
 times: in use, stills, movie) is not known: run it in Stills, then in Movie (kit/provers/mode_switch.py --to Movie

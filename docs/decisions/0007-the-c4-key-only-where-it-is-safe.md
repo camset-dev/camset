@@ -37,7 +37,7 @@ lit), or that box's size editor (Custom 1-3 with Reset and Cancel); c4reset, a s
 with Reset, Cancel and OK (a panel's footer), and neither Playback nor Delete; c4set and c4reset never on the shooting
 screen or the Main tiles. `Link.press` checks the screen's kind under them, so a caller that skips drive.py's
 checks is still refused off those screens. Where the body lists its operating mode, C4 goes only when the camera gives
-one that is not Playback (the playbook's rule 13 says how).
+one that is not Playback (`Link.c4_refused` says how).
 
 See also: [decision 21](0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md) (on the shooting screen
 no key but MENU unless the run names it; the multi-selector's centre there is whatever the body assigns to it, and
