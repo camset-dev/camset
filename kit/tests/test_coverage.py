@@ -756,6 +756,30 @@ def test_the_crawl_skips_a_settled_row_only_with_skip_settled(camera, capsys):
     quiet = coverage.CrawlGate(run, SimpleNamespace(skip_settled=False, scan=None, network=False), None)
     assert quiet.skip(model["p"], {"label": "Alpha"}) is None
     assert "settled: Alpha: proved; opened all the same" in capsys.readouterr().out
+    # a row the lap leaves unopened all the same (a first open's rule, never-open): the skip wins, and the ledger's line
+    # never says the row is opened (2026-11-15, a camera session: "opened all the same" printed before such a skip)
+    from camkit import first_open
+
+    class First:
+        pending = []
+
+        def skips(self, path):
+            return path == ("Alpha",)
+
+        def opening(self, path):
+            return f"{first_open.UNSEEN} (no statement)" if self.skips(path) else None
+    out = crawl.crawl(Cam(), cycle, model, tabs=("Shooting",), skip=quiet.skip, first=First())
+    said = capsys.readouterr().out
+    assert "settled: Alpha: proved" in said and "opened all the same" not in said
+    assert presses == [] and out.rows[0].outcome == f"{first_open.SKIPPED} (no statement)"
+    assert quiet.skip(model["p"], {"label": "Alpha"}, opened=False) is None
+    said = capsys.readouterr().out
+    assert "settled: Alpha: proved" in said and "opened all the same" not in said
+    told = []
+    never = {"p": {"breadcrumb": "Shooting > G1", "page": "1/1", "rows": [{"label": "Format"}]}}
+    for m in (never, model):
+        crawl.crawl(Cam(), cycle, m, tabs=("Shooting",), skip=lambda page, row, opened=True: told.append(opened))
+    assert told == [False, True] and presses == ["right"]
 
 
 def test_pass1_map_refuses_a_crawl_that_skipped(camera, capsys):

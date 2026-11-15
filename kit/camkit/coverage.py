@@ -2656,7 +2656,10 @@ class CrawlGate:
             self.led = None
             _failed("crawl_run.py's gate", e)
 
-    def skip(self, page: dict, row: dict) -> str | None:
+    def skip(self, page: dict, row: dict, opened: bool = True) -> str | None:
+        """Why a --skip-settled run leaves the row out (settled), else None, the ledger's word printed; `opened` False
+        where the lap leaves the row unopened all the same (camkit.crawl.left_unopened: never-open, or not seen opened
+        on this body without a first open), whose line then never says it is opened."""
         try:
             if self.led is None:
                 return None
@@ -2666,7 +2669,7 @@ class CrawlGate:
                         ledger=self.led, judge=self.skipping)
             if self.skipping and v.skip:
                 return v.reason                 # the row's outcome: "skipped: settled: ..." (CRAWL_SKIPPED)
-            _say(v.reason + ("; opened all the same (--skip-settled leaves it out)" if v.skip else ""))
+            _say(v.reason + ("; opened all the same (--skip-settled leaves it out)" if v.skip and opened else ""))
             return None
         except (Exception, SystemExit) as e:    # noqa: BLE001
             _failed("crawl_run.py's gate", e)

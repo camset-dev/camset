@@ -168,11 +168,10 @@ def group_closed(cam, name: str, known=()) -> str | None:
     return refused
 
 
-def go_to(cam, cycle, model, j, label, place=None):
-    """Step from cycle position j to the row labelled `label`, the short way round, checking every
-    screen against the scan. Returns the new position, or None if a screen was not the expected one. place: (tab,
-    group) the row must be in (kit/drive.py --owner: the owner decision's), its page's breadcrumb read so in the scan;
-    none there, None."""
+def target_of(cycle, model, label, place=None) -> tuple:
+    """(position, by another reading, why): the cycle position of the row labelled `label` that go_to steps to, whether
+    it was found by another reading of the row (row_named), and, where there is none, why (position None). place:
+    go_to's."""
     from page_model import same_text
     tabs = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")
 
@@ -195,12 +194,20 @@ def go_to(cam, cycle, model, j, label, place=None):
     # My Menu repeats rows from other tabs (Pre-Capture Settings is on My Menu 1): prefer the real one
     real = [i for i in matches if model[cycle[i]["page"]]["breadcrumb"].startswith(tabs)]
     if fallback and len({(cycle[i]["page"], cycle[i]["row"]) for i in (real or matches)}) > 1:
-        print(f"no row labelled {label!r} in the page model, and {len(real or matches)} rows read as it: none is gone "
-              "to", flush=True)
-        return None
+        return None, fallback, (f"no row labelled {label!r} in the page model, and {len(real or matches)} rows read as "
+                                "it: none is gone to")
     target = (real or matches or [None])[0]
+    return target, fallback, "" if target is not None else f"no row labelled {label!r} in the page model"
+
+
+def go_to(cam, cycle, model, j, label, place=None):
+    """Step from cycle position j to the row labelled `label` (target_of), the short way round, checking every
+    screen against the scan. Returns the new position, or None if a screen was not the expected one. place: (tab,
+    group) the row must be in (kit/drive.py --owner: the owner decision's), its page's breadcrumb read so in the scan;
+    none there, None."""
+    target, fallback, why = target_of(cycle, model, label, place)
     if target is None:
-        print(f"no row labelled {label!r} in the page model", flush=True)
+        print(why, flush=True)
         return None
     n = len(cycle)
     ahead = (target - j) % n
@@ -646,18 +653,15 @@ def main():
     # (camkit.first_open), only with the owner's blank-cards statement (camkit.statements) and never with --panels;
     # else each is skipped and recorded, and the lap goes on
     seen = first_open.seen_record(run.root.name)
-    fresh = [x for x in lap_rows(cycle, model, tuple(a.tabs.split(",")) if a.tabs else LAP_TABS, network)
-             if not seen.seen([x])]
     try:
         skip_why = cards_statement_refused("crawl_run.py")
     except SystemExit as e:
         skip_why = str(e.code)      # a scope that cannot be read makes no first open, and stops no lap
     if a.panels and not skip_why:
         skip_why = "--panels commits options, while a first open is a look: crawl without --panels first"
-    if fresh:
-        print(f"{len(fresh)} rows of this lap have not been seen opened on this body: "
-              + (f"each is skipped and recorded, since {skip_why}" if skip_why else
-                 f"each opens under the link-loss procedure, checked once per {a.first_open_check}"), flush=True)
+    said = unseen_line(cycle, model, seen, skip_why, a, network)
+    if said:
+        print(said, flush=True)
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
@@ -728,6 +732,30 @@ def main():
         print("the lap stopped short: its start file is back and checked, but the rows after where it stopped were not "
               f"crawled (exit status {EXIT_INCOMPLETE})", flush=True)
         sys.exit(EXIT_INCOMPLETE)            # a chain stops there too
+
+
+def unseen_line(cycle, model, seen, skip_why: str, a, network=frozenset()) -> str:
+    """The line said before the link opens of the top-level rows this body has not been seen to open (camkit.first_open)
+    that the lap reaches, "" when none: from --start-label's row (target_of) as far as --limit (camkit.crawl.lap_rows,
+    a row a first open's rule skips counting toward no limit); where that is known only once the menu opens (a --limit
+    with no --start-label found, or with --skip-settled, whose rows left out count toward none), the whole menu's."""
+    tabs = tuple(a.tabs.split(",")) if a.tabs else LAP_TABS
+    start = target_of(cycle, model, a.start_label)[0] if a.start_label else None
+    # a start label not found: go_to says so, and the lap does not start
+    known = not (a.start_label and start is None) and (
+        a.limit is None or (start is not None and not getattr(a, "skip_settled", False)))
+    rows = lap_rows(cycle, model, tabs, network, start, a.limit, lambda x: not seen.skips([x], skip_why)) if known \
+        else None
+    fresh = [x for x in (rows if rows is not None else lap_rows(cycle, model, tabs, network)) if not seen.seen([x])]
+    if not fresh:
+        return ""
+    where = ("of this lap" if rows is not None else
+             "of the whole menu (which of them this lap reaches is known only once the menu opens)")
+    return (f"{len(fresh)} rows {where} have not been seen opened on this body: "
+            + (f"each {'is' if rows is not None else 'it reaches is'} skipped and recorded, since {skip_why}"
+               if skip_why else
+               f"each {'opens' if rows is not None else 'it reaches opens'} under the link-loss procedure, checked "
+               f"once per {a.first_open_check}"))
 
 
 def network_settings_or_exit(run) -> dict:

@@ -48,7 +48,8 @@ def _with_parents(k: tuple) -> set:
 class Seen:
     """The rows seen opened on one camera (seen_record): seen(path) and unseen(path) (the path's prefixes that are not,
     a row above first); acting, the rows whose first open failed; alone, the rows a page's check could not clear;
-    greyed, the rows the records hold greyed."""
+    greyed, the rows the records hold greyed. A path with a label read as nothing (a page model row no vote named) is
+    never seen: one such row's clean first open would else stand for every other."""
 
     def __init__(self, opened=(), acting=(), unchecked=(), alone=(), greyed=()):
         self.opened, self.acting, self.unchecked = set(opened), set(acting), set(unchecked)
@@ -56,10 +57,15 @@ class Seen:
 
     def seen(self, path) -> bool:
         k = key(path)
-        return bool(k) and k in self.opened and k not in self.acting and k not in self.unchecked
+        return bool(k) and all(k) and k in self.opened and k not in self.acting and k not in self.unchecked
 
     def unseen(self, path) -> list:
         return [tuple(path[:i]) for i in range(1, len(path or ()) + 1) if not self.seen(path[:i])]
+
+    def skips(self, path, skip_why: str) -> bool:
+        """Whether a lap leaves the row at `path` unopened by the first open's rule, as FirstOpens.opening refuses it
+        before writing anything: not seen, and its first open failed or the run makes none (`skip_why`)."""
+        return not self.seen(path) and (key(path) in self.acting or bool(skip_why))
 
     def lit_row(self, parent, lit: str, known=()) -> tuple | None:
         """The path of the row a lit bar's text `lit` names under `parent` (labels from the top-level row): the longest
@@ -188,6 +194,11 @@ class FirstOpens:
 
     def _look(self, path, result, **kw) -> bool:
         return failed_look(self.run.root.name, self.run.dir.name, path, result, private=self.private, **kw)
+
+    def skips(self, path) -> bool:
+        """Whether opening(path) refuses the row with nothing written (Seen.skips), asked before it (camkit.crawl's
+        left_unopened: the coverage gate's line then never says the row is opened)."""
+        return self.seen.skips(path, self.skip_why)
 
     def opening(self, path) -> str | None:
         """Before Right on the row at `path` (labels from the top-level row): None to open it, the row then pending

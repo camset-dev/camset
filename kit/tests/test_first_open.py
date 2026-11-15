@@ -134,6 +134,17 @@ def test_seen_comes_from_the_looks_the_crawls_and_the_proofs(own_runs):
     assert seen.unseen(["Sub", "Other"]) == [("Sub", "Other")] and seen.unseen(["X", "Y"]) == [("X",), ("X", "Y")]
 
 
+def test_a_row_whose_label_was_not_read_is_never_seen(tmp_path):
+    """A page model row no vote named (label None: "BISO"/"RISO"/"ISO" in the a1 II's older scans) is crawled with an
+    empty label: its clean first open never makes it, nor any other such row, seen (2026-11-15, a review)."""
+    seen = first_open.Seen({("",), ("a",), ("a", "")})
+    assert seen.seen(["A"]) and not seen.seen([""]) and not seen.seen(["A", ""])
+    fo, sent, _ = first_opens(tmp_path)
+    assert fo.opening(("",)) is None and fo.pending == [("",)]
+    fo.settle(SimpleNamespace(press=lambda key: None))
+    assert sent == ["first-open"] and fo.opening(("",)) is None and fo.pending == [("",)]     # the procedure again
+
+
 def test_a_new_body_has_seen_nothing():
     assert not first_open.seen_record(TEST_CAMERA).seen(["Drive Mode"])
     assert not first_open.seen_record("NO-CAM_fw1.00").seen(["Drive Mode"])
@@ -538,6 +549,66 @@ def test_crawl_run_goes_on_without_the_statement_and_says_how_many_it_skips(tmp_
     scope.file.write_text("{", encoding="utf-8")                        # a scope that cannot be read: no first open
     code, out = crawl_main(tmp_path, monkeypatch)
     assert code in (0, None) and "each is skipped and recorded, since crawl_run.py: the reviewed scope" in out
+
+
+def test_the_start_line_counts_the_rows_the_lap_reaches_or_says_the_whole_menu(tmp_path, monkeypatch, scope):
+    """Before the link opens, the unseen rows of the lap --start-label and --limit make (a row a first open's rule skips
+    counting toward no limit, a never-open row reached and counted for nothing), else the whole menu's, said so
+    (2026-11-15, a camera session: '6 rows of this lap' on a three-row lap that held none)."""
+    import crawl_run
+    labels = ["A", "B", "Format", "C", "D", "E", "F"]          # B, D, E unseen; Format never opened
+    cycle = [{"page": "P", "row": i, "signature": f"r{i}", "kind": "menu"} for i in range(len(labels))]
+    cycle.append({"page": "Q", "row": 0, "signature": "q0", "kind": "menu"})     # Playback: off the lap's tabs
+    model = {"P": {"breadcrumb": "Shooting > Test", "page": "1/1", "rows": [{"label": x} for x in labels]},
+             "Q": {"breadcrumb": "Playback > Test", "page": "1/1", "rows": [{"label": "G"}]}}
+    seen = first_open.Seen({("a",), ("c",), ("f",), ("g",)})
+
+    def line(skip_why="no statement", seen=seen, **kw):
+        a = SimpleNamespace(**{"tabs": None, "start_label": None, "limit": None, "skip_settled": False,
+                               "first_open_check": "row", **kw})
+        return crawl_run.unseen_line(cycle, model, seen, skip_why, a)
+    assert line().startswith("3 rows of this lap have not been seen opened on this body: each is skipped")
+    assert line(start_label="E").startswith("3 rows of this lap")                # the whole cycle from E round
+    assert line(start_label="C", limit=1) == ""                                   # C alone: seen
+    # without the statement D and E are skipped and count toward no limit: C, D, E, F; with it D opens: C, D
+    assert line(start_label="C", limit=2).startswith("2 rows of this lap")
+    assert line("", start_label="C", limit=2) == ("1 rows of this lap have not been seen opened on this body: each "
+                                                  "opens under the link-loss procedure, checked once per row")
+    # a row whose first open failed is skipped all the same: C, D, E
+    acting = first_open.Seen(seen.opened, acting={("d",)})
+    assert line("", acting, start_label="C", limit=2).startswith("2 rows of this lap")
+    assert line(start_label="A", limit=1) == "" and line(start_label="B", limit=1).startswith("1 rows of this lap")
+    for kw in ({"limit": 1}, {"start_label": "C", "limit": 1, "skip_settled": True},
+               {"start_label": "Nowhere", "limit": 1}, {"start_label": "Nowhere"}):
+        assert line(**kw) == ("3 rows of the whole menu (which of them this lap reaches is known only once the menu "
+                              "opens) have not been seen opened on this body: each it reaches is skipped and recorded, "
+                              "since no statement"), kw
+    assert line(tabs="Playback") == "" and line(tabs="Shooting,Playback").startswith("3 rows")
+    from camkit.crawl import lap_rows
+    assert lap_rows(cycle, model, limit=1) is None and lap_rows(cycle, model, start=3, limit=1) == ["C"]
+    # the start is go_to's: the real row before My Menu's copy of it (target_of)
+    mine = [{"page": "M", "row": 0, "signature": "m0", "kind": "menu"}, *cycle]
+    model["M"] = {"breadcrumb": "My Menu > Page 1", "page": "1/1", "rows": [{"label": "C"}]}
+    assert crawl_run.target_of(mine, model, "C") == (4, False, "")
+    assert crawl_run.target_of(mine, model, "Nowhere") == (None, True, "no row labelled 'Nowhere' in the page model")
+    # crawl_run.main says it before anything connects
+    code, out = crawl_main(tmp_path, monkeypatch, argv=["--limit", "1"])
+    assert "1 rows of the whole menu" in out
+    code, out = crawl_main(tmp_path, monkeypatch, argv=["--start-label", "Drive Mode", "--limit", "1"])
+    assert "1 rows of this lap have not been seen opened" in out
+
+
+def test_a_first_opens_skip_is_known_before_it_writes_anything(tmp_path):
+    """FirstOpens.skips (camkit.crawl.left_unopened asks it before the coverage gate's line) says True exactly where
+    opening() refuses with nothing written: an unseen row on a run that makes no first open, or one whose first open
+    failed; a seen row, or an unseen one the run opens, is not skipped."""
+    seen = first_open.Seen({("a",)}, acting={("b",)})
+    fo, _sent, _run = first_opens(tmp_path, seen, skip_why="no statement")
+    assert [fo.skips((x,)) for x in ("A", "B", "C")] == [False, True, True]
+    assert all(fo.opening((x,)) for x in ("B", "C")) and not restore_pending(tmp_path)
+    fo, _sent, _run = first_opens(tmp_path, seen)
+    assert [fo.skips((x,)) for x in ("A", "B", "C")] == [False, True, False]
+    assert fo.opening(("B",)) and fo.opening(("C",)) is None
 
 
 def test_crawl_run_stops_on_another_body_before_anything_is_pressed(tmp_path, monkeypatch):

@@ -107,22 +107,51 @@ class Counted:
 LAP_TABS = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")      # the tabs a lap crawls unless told
 
 
-def lap_rows(cycle: list, model: dict, tabs=LAP_TABS, network=frozenset()) -> list:
-    """The labels of the top-level rows a lap of crawl() opens, in the cycle's order: a menu page of `tabs`' rows that
-    visit_row does not skip as never-open (a row a network decision opens included: network_row)."""
-    out = []
-    for pos in cycle:
+def lap_rows(cycle: list, model: dict, tabs=LAP_TABS, network=frozenset(), start=None, limit=None,
+             opens=None) -> list | None:
+    """The names of the top-level rows a lap of crawl() reaches, in its order, each once: a menu page of `tabs`' rows
+    that visit_row does not skip as never-open, a row a network decision opens by its decided name (closed_row). From
+    the cycle's position `start` round to the one before it (None: the whole cycle, wherever it starts) as far as the
+    row that brings the rows opened to `limit` (crawl()'s max_rows; None: no limit), a row counting toward it where
+    `opens(name)` (None: every row; a row a first open's rule skips counts toward none). None where the rows reached
+    depend on where the menu opens: a limit with no start."""
+    if limit is not None and start is None:
+        return None
+    out, opened = [], 0
+    for pos in (cycle[start:] + cycle[:start]) if start is not None else cycle:
+        if limit is not None and opened >= limit:
+            break
         page = model.get(pos.get("page"))
         if pos.get("kind") == "tiles" or page is None or not str(page.get("breadcrumb") or "").startswith(tabs):
             continue
         rows = page.get("rows") or []
         row = rows[pos["row"]] if pos.get("row") is not None and pos["row"] < len(rows) else None
         label = (row or {}).get("label") or ""
-        crumb = str(page.get("breadcrumb") or "").split(" > ")
-        if label and not ((row.get("never_open") or safety.never_open(label))
-                          and network_row(row, network, crumb[1] if len(crumb) > 1 else "") is None):
-            out.append(label)
+        why, decided = closed_row(page, row or {}, network)
+        if label and not (why and decided is None):
+            out.append(decided or label)
+            opened += opens is None or bool(opens(decided or label))
     return list(dict.fromkeys(out))
+
+
+def closed_row(page: dict, row: dict, network=frozenset()) -> tuple:
+    """(why, decided) of a page model row: why it is never-open (its stored reason, else safety.never_open of its
+    label; empty when it is not) and, for such a row, the decided row a network decision opens it as (network_row),
+    else None. visit_row leaves the row unopened where there is a why and no decided row."""
+    why = row.get("never_open") or safety.never_open(row.get("label") or "")
+    crumb = str(page.get("breadcrumb") or "").split(" > ")
+    return why, (network_row(row, network, crumb[1] if len(crumb) > 1 else "") if why else None)
+
+
+def left_unopened(page: dict, row: dict, network=frozenset(), first=None) -> bool:
+    """Whether visit_row leaves the top-level row unopened, nothing pressed, by a rule known before its Right: never-open
+    with no network decision opening it (closed_row), or not seen opened on this body where a first open's rule skips
+    it (camkit.first_open.FirstOpens.skips). A refusal at the press itself (safety.RowRefused) is known only then."""
+    why, decided = closed_row(page, row, network)
+    if why and decided is None:
+        return True
+    skips = getattr(first, "skips", None)
+    return bool(skips and skips(((decided or row.get("label") or ""),)))
 
 
 def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_rows: int | None = None, on_row=None,
@@ -134,10 +163,12 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
     dated owner decision opens ({row: date}, crawl_run.py --network; network_open). notices: (read(cam), the screen's
     text now: camkit.live.text_of; the row labels the kit knows; the values it knows by row label: runner.known_labels,
     runner.row_values), for the notice such a setting answers with (visit_row); None reads none. info_ok: the notice a
-    run names to pass (visit_row); None passes none. skip(page, row): why the coverage ledger says the row is settled
-    (camkit.coverage.CrawlGate.skip, only on a kit/crawl_run.py --skip-settled run), or None: such a row is not opened,
-    "skipped: <why>". first: a row's first open on the body (camkit.first_open.FirstOpens): opening(path) before each
-    Right (visit_row), and after a top-level row whose visit left a first open pending, where due(), settle(cam), which
+    run names to pass (visit_row); None passes none. skip(page, row, opened=): why the coverage ledger says the row is
+    settled (camkit.coverage.CrawlGate.skip, only on a kit/crawl_run.py --skip-settled run), or None: such a row is not
+    opened, "skipped: <why>"; `opened` False where the lap leaves the row unopened all the same (left_unopened), so the
+    ledger's line never says it is opened. first: a row's first open on the body (camkit.first_open.FirstOpens):
+    opening(path) before each Right (visit_row), and after a top-level row whose visit left a first open pending, where
+    due(), settle(cam), which
     checks it and reopens the menu; the lap stops where the menu is then not back on the row."""
     cam = Counted(cam)
     out = Crawl()
@@ -162,7 +193,8 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
         page = model.get(pos["page"])
         if pos["kind"] != "tiles" and page is not None and page["breadcrumb"].startswith(tabs):
             row = page["rows"][pos["row"]] if pos["row"] is not None and pos["row"] < len(page["rows"]) else None
-            settled = skip(page, row) if skip is not None and row is not None else None
+            settled = (skip(page, row, opened=not left_unopened(page, row, network, first))
+                       if skip is not None and row is not None else None)
             if settled:
                 out.rows.append(RowResult(page.get("page", ""), pos["row"], row.get("label") or "",
                                           f"skipped: {settled}"))
@@ -242,9 +274,7 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     time on this body is skipped, "skipped: <why>", nothing pressed."""
     label = row.get("label") or ""
     r = RowResult(page.get("page", ""), slot, label, "")
-    why = row.get("never_open") or safety.never_open(label)
-    crumb = str(page.get("breadcrumb") or "").split(" > ")
-    decided = network_row(row, network, crumb[1] if len(crumb) > 1 else "") if why else None
+    why, decided = closed_row(page, row, network)
     if why and decided is None:
         r.outcome = f"skipped: {why}"
         return r
