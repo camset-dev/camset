@@ -47,6 +47,9 @@ def measure(run: Path, engine: str) -> tuple[dict, list]:
 
 
 def main():
+    if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
+        print(__doc__.strip())
+        sys.exit(0)
     runs = [paths.run_path(a) for a in sys.argv[1:] or ["kit2_page_scan"]]
     total = {e: {} for e in ENGINES}
     missed = {e: set() for e in ENGINES}

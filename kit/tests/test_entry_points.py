@@ -19,17 +19,6 @@ FOLDERS = (KIT, KIT / "tools", KIT / "provers")
 SCRIPTS = sorted(p for d in FOLDERS for p in d.glob("*.py") if any(
     isinstance(n, ast.FunctionDef) and n.name == "main" for n in ast.parse(p.read_text(encoding="utf-8")).body))
 
-# Scripts that do not answer --help with usage and exit 0, each with its reason. They are not left unchecked: --help
-# must still start nothing, connect to nothing and write nothing, and each fails closed, refusing it as a bad argument
-# before it reads, connects or asks (the test below). Teaching them --help is a change of their argument handling.
-EXEMPT: dict[str, str] = {
-    "hook.py": "a shim whose first argument is the program of the kit's venv to run (the pre-commit hook's); --help is "
-               "refused as a program that is not there",
-    "ocr_compare.py": "takes only run names; --help is refused as a run that is not there (it reads saved frames and "
-                      "asks no reader, but it starts nothing and connects to nothing either way)",
-    "sdk_set.py": "takes only NAME=VALUE pairs; --help is refused as one that is not, before any link is opened",
-}
-
 # Runs a script as `python script ARGS` would, with the kit's config pointed at a file that is not there, and every
 # child process and every socket connection refused after writing the marker file: a link (camlink) is a child process,
 # a reader (a vision model) a connection.
@@ -88,9 +77,6 @@ def test_every_script_answers_help_before_it_reads_connects_or_asks(script, tmp_
     r, marker = run_script(script, ["--help"], tmp_path)
     assert marker == "", f"--help started a process or a connection: {marker}"
     assert not (tmp_path / "runs").exists() or not any((tmp_path / "runs").iterdir()), "--help wrote into the runs"
-    if script.name in EXEMPT:                     # fails closed, and says why
-        assert r.returncode != 0 and "Traceback" not in r.stderr and (r.stdout + r.stderr).strip(), EXEMPT[script.name]
-        return
     assert r.returncode == 0, (r.stdout + r.stderr)[-600:]
     assert r.stdout.strip(), "--help printed nothing"
 

@@ -47,6 +47,9 @@ def expanded(arg: str, root: Path = ROOT) -> list:
 
 
 def main():
+    if sys.argv[1:2] and sys.argv[1] in ("-h", "--help"):     # its own first word alone: a later one is the program's
+        print(__doc__.strip())
+        sys.exit(0)
     env = {**os.environ, "PYTHONUTF8": "1"}
     sys.exit(subprocess.run(command(sys.argv[1:]), cwd=ROOT, env=env).returncode)
 

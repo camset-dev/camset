@@ -34,6 +34,9 @@ def not_writable_hint(name: str) -> str:
 
 
 def main():
+    if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
+        print(__doc__.strip())
+        sys.exit(0)
     pairs = []
     for arg in sys.argv[1:]:
         name, _, value = arg.partition("=")
