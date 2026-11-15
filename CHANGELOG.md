@@ -15,8 +15,7 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **A kit run that asks a reader now needs one in `private/config.json` that answers a test question before the link
   opens**; otherwise it stops, nothing pressed, and says what to do, where it went on with OCR alone or stopped
   midway. The example config names no reader and no camera address until you fill them in, a paid reader plays only
-  the roles you give it, and `kit/tools/reader_check.py` tests your readers with no camera (docs/QUICKSTART.md,
-  "Choosing a reader").
+  the roles you give it, and `kit/tools/reader_check.py` tests your readers with no camera (the quick start, step 3).
 - **`crawl_run.py` and `drive.py` no longer exit 0 when they did not finish:** once the start file is back,
   `crawl_run.py` exits 7 after a refusal and 8 after any other failure or a short lap, `drive.py` exits 8 when it did
   not reach its first `--path` row, and `kit/tools/chain.py` stops on both. A crawl now skips a row whose label it may

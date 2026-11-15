@@ -1,20 +1,24 @@
 # Releasing
 
-This page is how a release is made: what can be released and how, Sony's SDK terms and the rules the project
-follows under them, what is fine to publish, and how the installers are built and released. What is kept out of
-the repository, and why, is in [decision 18](decisions/0018-one-public-codebase-with-a-private-overlay.md).
+How a release is made and checked, how the dependencies are kept, and what Sony's SDK terms allow. What stays out of
+the repository is in [decision 18](decisions/0018-one-public-codebase-with-a-private-overlay.md).
 
-## What can be released, and how
+## What is released
 
-The project splits into three parts (agreed 2026-10-22):
+1. **The editor** (`editor/`), for anyone with a camera. It needs no Sony software. The camera definitions
+   (`editor/definitions/`, each with its sample) ship beside the program, never compiled into it, so a camera mapped
+   later needs no new release: its definition is added in the editor (Settings > Camera support & web page > Add
+   definition…).
+2. **The mapping kit** (`kit/`), for contributors. It drives the camera through Sony's Camera Remote SDK, which each
+   contributor downloads from Sony.
+3. **A definition per model and firmware** (`editor/definitions/<model>_fw<fw>.json`,
+   [decision 19](decisions/0019-definitions-are-files-one-per-model-and-firmware.md)), the contract between the two,
+   written by `kit/schema_update.py --write`. Its sample is a download the camera wrote right after Initialize,
+   scrubbed by `kit/tools/make_sample.py`, whose notes say what the sample holds.
 
-1. **The editor** (`editor/`), for anyone with a camera. It needs no Sony software: it reads and writes the settings files the camera saves to a card (MENU > Setup > Reset/Save Settings > Save/Load Settings). The camera definitions (`editor/definitions/`, one per model and firmware, each with its sample) ship beside the program, never compiled into it: inside the macOS app, next to the program in the Windows zip and, from the release after 0.2.1, where the Windows installer puts it, in the Linux tarball. A camera mapped later needs no new release: its definition is added in the editor (Settings > Camera support & web page > Add definition…).
-2. **The mapping kit** (`kit/`), for contributors who want to map another body or firmware. It drives the camera through the Sony Camera Remote SDK, which each contributor downloads from Sony themselves.
-3. **The definition per model and firmware** (`editor/definitions/<model>_fw<fw>.json`, [decision 19](decisions/0019-definitions-are-files-one-per-model-and-firmware.md); today the ILCE-1M2's at firmware 4.00), which `kit/schema_update.py --write` writes from `data/<model>_fw<fw>/`, that camera's proof runs in `runs/<model>_fw<fw>/` and, for the ILCE-1M2, its own tables. This is the contract between the two. Its sample (`editor/definitions/<model>_fw<fw>.DAT`) is a download the camera wrote right after Initialize, scrubbed by `kit/tools/make_sample.py`; of the records Initialize leaves as they were, only the Picture Profile parameters are checked so far, and the sample takes their values after each offered profile's own Reset in Stills and in Movie (`kit/provers/pp_reset_run.py`, then `make_sample.py --take "Picture Profile PP" --from` both results); a profile no menu offers (the ILCE-1M2's PP7-PP9) cannot be reset by a menu and keeps what the base file held, which is said plainly.
+## Sony Camera Remote SDK terms
 
-## Sony Camera Remote SDK terms (read 2026-10-29, again 2026-11-04 and 2026-11-05)
-
-Source: the licence agreement at <https://support.d-imaging.sony.co.jp/app/sdk/licenseagreement/en.html>, linked from the SDK page <https://support.d-imaging.sony.co.jp/app/sdk/l/index.php>. The SDK is free; access is by application to Sony. This summary is for planning and is not legal advice.
+Read 2026-10-29, again 2026-11-04 and 2026-11-05. Source: the licence agreement at <https://support.d-imaging.sony.co.jp/app/sdk/licenseagreement/en.html>, linked from the SDK page <https://support.d-imaging.sony.co.jp/app/sdk/l/index.php>. The SDK is free; access is by application to Sony. This summary is for planning and is not legal advice.
 
 - **Apps built with the SDK may be distributed.** The SDK page says developers may sell them; the grant does not separate free from paid.
 - **The SDK's library may ship only inside an app,** "in a binary form ... in an inseparable way". The SDK itself (headers, samples, documents) may not be shared or published.
@@ -37,6 +41,7 @@ What the project does under these terms:
   ([decision 13](decisions/0013-sony-s-help-text-stays-private.md)), and `kit/tools/check_public.py` refuses a
   commit whose help text stays too close to Sony's.
 - **The docs hold nothing taken from Sony's documents** (decided 2026-11-04): only what the project observed itself or what Sony publishes openly. The docs carry no model-by-function table from Sony's reference; `kit/tools/sdk_support.py --json` builds the model × function table from one's own SDK into one's own `private/data/`.
+- **If an SDK build is ever shipped,** it must carry the warranty notice above.
 
 ## Fine to publish
 
@@ -49,124 +54,81 @@ None of them holds help text or a value from anyone's camera.
 
 ## Installers
 
-| Platform | Build | State |
+Each package carries the project's `LICENSE` and the third-party licences page (`cargo about`, from
+`editor/about.hbs`), and the definitions beside the program.
+
+| Platform | Build (from `editor/`) | State |
 |---|---|---|
-| macOS | `sh packaging/build_macos_app.sh` (from `editor/`): `Camset Editor.app` and a `.dmg` (the app beside a shortcut to Applications, to drag it onto) in `editor/target/dist`, with only the tools macOS ships; the bundle identifier is `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Built and launched by Finder's route (`open`) on the Mac that built it, 2026-10-29: Apple silicon, ad-hoc signed. A downloaded copy, which macOS marks as from the internet, not yet tried. |
-| Linux | `sh packaging/build_linux.sh` (from `editor/`): a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | `build_linux.sh` written, not yet run. The editor itself was built and run on Ubuntu 26.04 (`PORTING.md`, "Seen on Windows / Linux"). |
-| Windows | The workflow (`Windows zip`) puts `camset_editor.exe`, `definitions/` (each definition with its sample), the project's licence as `LICENSE.txt` and the third-party licences page into one folder, `camset-editor-<version>-windows-x64`, and zips that folder; the release build has no console window (its tests' build keeps one, so `cargo test --release` prints its results). Then, from the release after 0.2.1 (`Windows installer`), Inno Setup builds `camset-editor-<version>-windows-x64-setup.exe` from the same folder with `packaging/windows/installer.iss`: `ISCC.exe /DAppVersion=<version> "/DAppCopyright=<copyright sentence>" packaging\windows\installer.iss` from `editor/`, the version read from `Cargo.toml` and the copyright sentence, the first sentence of the program's own copyright detail ("Copyright (c) <year> <holders>."), both passed in: Inno Setup keeps at most 100 characters of a copyright, and the program's whole line, with its sentence that the project is not Sony's, is longer. It installs for one user with no administrator rights, into `%LOCALAPPDATA%\Programs\Camset Editor`, the zip's four in the zip's layout, with a Start-menu shortcut, a desktop one if ticked, and an uninstaller in Windows' installed apps (Camset Editor, its version, Camset contributors, the program's icon, the project's page); a newer version upgrades an older in place, found by the script's `AppId`, which must never change. It never names the editor's own folder (`camset_editor` in `%APPDATA%`, or in `XDG_CONFIG_HOME` when that is set), so an upgrade or the uninstaller leaves the user's files as they are; all it deletes are the built-in definitions in the program's `definitions` folder, the files named as the shipped ones (`*_fw*.json` and `*_fw*.DAT`), replaced as a set by each install, and never a folder, whatever folder the user chose. No file types, nothing started with Windows, no code, no network. Inno Setup comes with GitHub's Windows runners (`ISCC.exe` in `C:\Program Files (x86)\Inno Setup 6`, taken first, or on the PATH, where the runner has Chocolatey's stand-in for it); the step stops, saying so, on a runner without it, and nothing is downloaded for it. The installer carries version details of its own (Properties > Details: product Camset Editor, the program's version, description Camset Editor Setup, Camset contributors, the copyright sentence), which the step checks on the built file as the zip step checks the program's, each trimmed of the spaces Inno Setup pads its fixed-width slot with (the script refuses a version or copyright longer than its slot), since a signing service asks for a product name and version on every file it signs | The editor was built (Visual Studio 2022 Build Tools), its tests run (56 and 229 passed) and the program used on a Windows 11 PC, 2026-11-12, reading a camera over the network with the camera helper (`PORTING.md`, "Seen on Windows / Linux"). The workflow's zip step itself first ran for 0.2.1; a downloaded zip not yet tried. Since 2026-11-12 `build.rs` links the program's icon (drawn from `assets/icon.png` at 16 to 256 px) and its version details (Properties > Details) into the exe, for the MSVC toolchain, with no resource compiler (`packaging/windows/resources.rs`); not yet seen on a Windows PC. On Windows, `editor-ci.yml` (after its build) and the `Windows zip` step (before it zips) check the built program's details (product name, description, version) and fail without them, which a build that cannot link them only warns about. The installer, written 2026-11-13 after 0.2.1 was out, was built by a run of the release workflow started by hand and tried on a Windows 11 PC the same day: installing without administrator rights, the Start-menu shortcut, the licences page, its entry in Windows' installed apps, an upgrade over itself and an uninstall that kept the person's own files all worked. It ships with the release after 0.2.1. `editor-ci.yml` also compiles it on Windows for every pull request, from a folder staged as the zip's (with a stand-in licences page), with the release's own lines and the same check of its details. Neither the exe nor the installer is signed. |
+| macOS | `sh packaging/build_macos_app.sh`: `Camset Editor.app` and a `.dmg` in `target/dist`, with only the tools macOS ships; bundle identifier `app.camset.editor` (`CAMSET_BUNDLE_ID` overrides it) | Apple silicon, ad-hoc signed; launched on the Mac that built it. A downloaded copy not yet tried. |
+| Linux | `sh packaging/build_linux.sh`: a tarball with the program, a menu entry, the icon and `install.sh` (per user, no root) | Built by the release workflow. The editor itself built and ran on Ubuntu 26.04 ([PORTING](PORTING.md)). A downloaded tarball and its `install.sh` not yet tried. |
+| Windows | The workflow's `Windows zip` step: `camset_editor.exe`, `definitions/`, `LICENSE.txt` and the licences page in one folder, zipped. Its `Windows installer` step: Inno Setup builds `camset-editor-<version>-windows-x64-setup.exe` from that folder with `packaging/windows/installer.iss` (`ISCC.exe /DAppVersion=<version> "/DAppCopyright=<copyright sentence>" packaging\windows\installer.iss`), whose notes say what it installs and what it never touches. Its `AppId` must never change: an upgrade finds the earlier install by it. | The editor built, tested and used on a Windows 11 PC (2026-11-12). The zip first shipped with 0.2.1; a downloaded zip not yet tried. The installer, tried on a Windows 11 PC on 2026-11-13, ships from the release after 0.2.1; `editor-ci.yml` compiles it on every pull request. Neither is signed. |
 
-**Cutting a release.** Set `version` in `editor/Cargo.toml` (0.2.1 now; three numbers and nothing more, as the
-Windows installer's own details take it), add the release's section to `CHANGELOG.md` and commit it to `main`. Push
-`main` to GitHub first, then tag that commit `v<version>` (for example `v0.2.1`) and push the tag to GitHub only; or
-push both at once (`git push <remote> main v<version>`, GitHub's remote). The workflow checks first that GitHub's
-`main` holds the commit the tag names, and stops when it does not: a tag pushed before `main` is put right by pushing
-`main`, then Re-run jobs on the run's page. The release is 0.2.1, tagged on 2026-11-13. Before
-it, 0.2.0 was tagged on 2026-11-11 on the single commit that replaced the public history; 0.1.0 was withdrawn then,
-its tag and its GitHub Release deleted, because its packages carried a definition in the older form. Pushing the tag
-starts `.github/workflows/editor-release.yml` (which runs the same, without the release, when run by hand with
-workflow_dispatch):
+Both Windows steps check the built file's version details (product name, version, description) and fail without them.
 
-1. **test:** first, on a pushed tag, that the commit the tag names is on `main` (its checkout fetches the whole
-   history and every branch for it): a tag on any other commit stops the workflow there and says so, and nothing is
-   built ([the code signing policy](CODE_SIGNING_POLICY.md) promises it); then the kit's tests,
-   `kit/tools/check_public.py --all` and the editor's tests, on Linux: the gate before any package is built (pull
-   requests and main are checked by `kit-ci.yml` and `editor-ci.yml`); and, from 0.2.1, the definition viewer as one
-   file, `camset-viewer.html`, built by `kit/tools/proof_viewer.py --public --single` from the public definitions in
-   `editor/definitions/` alone (each with its sample), kept as a build artifact; it is never committed;
-2. **build:** on macOS, Linux and Windows, the editor's tests, its third-party licences page (`cargo about`: the
-   crates, and the fonts egui builds in, from `editor/about.hbs`), and the package for that system (on Windows the zip
-   and the installer built from the same folder), which carries the project's `LICENSE` and that page, kept as a
-   build artifact;
-3. **attest:** from the release after 0.2.1, on a version tag pushed to GitHub only, `SHA256SUMS`, the SHA-256
-   checksum of every package and of the viewer, each file the release attaches but `SHA256SUMS` itself (written with
-   `sha256sum`, by the release's own file patterns, so a kind of package missing stops the job), and GitHub's build
-   provenance for each file it lists
-   (`actions/attest-build-provenance`: an artifact attestation, signed through Sigstore's public instance and kept
-   by GitHub, that names this workflow, the repository, the tag's commit and the run that built the file). Only
-   this job may ask for the signing identity and store attestations (`id-token: write`, `attestations: write`); the
-   release job, which runs a third-party action with write access to the repository, has neither. Run by hand, or
-   on Gitea, which has no attestations, this job skips itself, and `editor-ci.yml`, which publishes nothing, attests
-   nothing. Written 2026-11-14, not yet run;
-4. **release:** on a version tag pushed to GitHub only, a GitHub Release for the tag with the packages attached
-   (`softprops/action-gh-release`) and, from 0.2.1, `camset-viewer.html`, always under that one name, so
-   <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest one's address;
-   from the release after 0.2.1 also `SHA256SUMS`, once the files to attach, taken by the same patterns, have
-   checksummed to exactly its bytes (`sha256sum ... | cmp - SHA256SUMS`: none changed, none missing, none added).
-   Run by hand, or on Gitea, which has no GitHub Releases API, this job skips itself.
+## Cutting a release
 
-Each action the workflow uses is pinned to a full commit, with its version in a comment, and `cargo-about` to a
-version, so a tag moved upstream cannot change what builds or publishes a release; and every `cargo build`, `cargo
-test` and `cargo about` of the workflow and of the packaging scripts it runs takes `--locked`, so the crates are the
-ones `editor/Cargo.lock` names, or the build stops.
+1. Set `version` in `editor/Cargo.toml` (three numbers, nothing more: the Windows installer's details take it), add
+   the release's section to `CHANGELOG.md` and commit it to `main`.
+2. Push `main` to GitHub, then tag that commit `v<version>` and push the tag to GitHub only (or both at once:
+   `git push <GitHub's remote> main v<version>`). A tag on a commit GitHub's `main` does not hold stops the workflow before
+   anything is built: push `main`, then Re-run jobs on the run's page.
+3. The tag starts `.github/workflows/editor-release.yml` (run by hand, it builds but publishes nothing):
+   1. **test:** the tag's commit is on `main`; the kit's tests, `kit/tools/check_public.py --all` and the editor's
+      tests; and the definition viewer as one file, `camset-viewer.html`, from the public definitions only
+      (`kit/tools/proof_viewer.py --public --single`).
+   2. **build:** on macOS, Linux and Windows, the editor's tests, its licences page and the package (on Windows the zip
+      and the installer).
+   3. **attest:** `SHA256SUMS`, the checksum of every file the release attaches, and GitHub's build provenance for
+      each (`actions/attest-build-provenance`, signed through Sigstore). Only this job may ask for the signing
+      identity and store attestations. It first runs for the release after 0.2.1.
+   4. **release:** a GitHub Release for the tag with the packages, `camset-viewer.html` (always under that name, so
+      <https://github.com/camset-dev/camset/releases/latest/download/camset-viewer.html> is the latest) and
+      `SHA256SUMS`, once the files checksum to exactly its bytes.
 
-Once a release is published, check one of its downloads as a user would, with the commands in the README's
-[Check a download](https://github.com/camset-dev/camset#check-a-download): `SHA256SUMS` matches it and
-`gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml`
-passes (with `--source-ref refs/tags/v<version>` it also requires that release's tag). `SHA256SUMS` shows that a file
-arrived whole; the attestation, that this workflow, and no other in the repository, built it from this repository:
-`--repo` alone would accept an attestation made by any of the repository's workflows.
+   Every action is pinned to a full commit, and every `cargo build`, `cargo test` and `cargo about` takes `--locked`.
+   A build job the runner cancelled is rebuilt with Re-run failed jobs. On Gitea the attest and release jobs skip
+   themselves.
+4. Paste the release's `CHANGELOG.md` section onto the GitHub Release as its notes (the workflow writes none), with a
+   link named "Code signing policy" to the [policy page](CODE_SIGNING_POLICY.md), which SignPath's terms ask for on
+   the download pages.
+5. Check one download as a user would, with the README's
+   [Check a download](https://github.com/camset-dev/camset#check-a-download): `SHA256SUMS` matches it and
+   `gh attestation verify <file> --repo camset-dev/camset --signer-workflow camset-dev/camset/.github/workflows/editor-release.yml`
+   passes (`--source-ref refs/tags/v<version>` also requires that release's tag). `--signer-workflow` matters:
+   `--repo` alone accepts an attestation made by any of the repository's workflows.
 
-**Dependencies.** `.github/workflows/audit.yml` checks the editor's crates and the kit's Python packages against the
-public lists of known vulnerabilities, every Monday (so a new advisory against a crate or package already pinned
-shows with no push), by hand, and on a pull request or a push to `main` that changes `editor/Cargo.lock`,
-`editor/Cargo.toml`, `editor/.cargo/audit.toml` or `kit/requirements.txt`. `cargo audit` (cargo-audit 0.22.2, the
-newest the pinned install-action carries with its checksum) reads `editor/Cargo.lock` against the RustSec database
-and fails on a known vulnerability, warning only of a crate that is unmaintained, unsound or yanked; it was chosen
-over `cargo deny check advisories` because it does this one check from the lock file alone, with nothing to
-configure but the advisories set aside, and `cargo about` already handles the licences. An advisory is set aside in
-`editor/.cargo/audit.toml` only with what it is, where it comes from and what clears it, and its line goes with that
-change; a run by hand, `cargo audit` from `editor/` after `cargo install --locked cargo-audit --version 0.22.2`,
-reads the same file.
-`pip-audit` (2.10.1) resolves `kit/requirements.txt` and every package it pulls in, on Python 3.11 and 3.14 (the two
-numpy pins), and checks them against PyPI's advisories. On 2026-11-14 the audit found, in the editor, two
-high-severity advisories in `quick-xml` 0.30.0 (RUSTSEC-2026-0194 and RUSTSEC-2026-0195, fixed in 0.41.0), which
-only the Linux build takes in, through eframe's accessibility crates: it is compiled into the Linux editor as a
-regular dependency of `atspi-common` (through `zbus-lockstep` and `zbus_xml`), but called only by that crate's
-compile-time check and its own tests, never at run time (read from the crates' source; no built program was
-inspected). Both are set aside until a newer eframe takes them out. It warned of five unmaintained crates and one yanked, all
-under eframe too, and found nothing in the kit's packages. Those were runs by hand; the workflow, written that day, has
-not yet run on GitHub.
+## Dependencies
 
-`.github/dependabot.yml` has Dependabot propose, every Monday, newer versions of the workflows' actions (moving each
-commit pin with the version in its comment, all but `dtolnay/rust-toolchain`, pinned to its stable branch and moved
-by hand), the editor's crates (all but eframe past the minor `editor/Cargo.toml` asks for: egui 0.32 rewrote the
-menus and popups the editor uses, so the editor does not build on it unchanged and that move is a change of its own,
-made by hand) and the kit's packages (all but numpy, pinned twice by Python version, where a newer
-numpy for Python 3.12 and later could be written over the older pin Python 3.11 needs: moved by hand): one pull
-request for each of the three, all its updates together. A pin is raised only when its pull request is merged, after
-CI has tested it. Dependabot's commits carry no
-sign-off, so the sign-off check fails on its pull requests: the maintainer takes the bump over in a signed-off commit
-of their own.
+`.github/workflows/audit.yml` checks the editor's crates and the kit's Python packages against the public lists of
+known vulnerabilities: every Monday, by hand, and on a pull request or push to `main` that changes `editor/Cargo.lock`,
+`editor/Cargo.toml`, `editor/.cargo/audit.toml` or `kit/requirements.txt`. `cargo audit` (0.22.2) fails on a known
+vulnerability and only warns of a crate that is unmaintained, unsound or yanked; `pip-audit` (2.10.1) checks
+`kit/requirements.txt` on Python 3.11 and 3.14 (the two numpy pins). An advisory is set aside in
+`editor/.cargo/audit.toml` only with what it is, where it comes from and what clears it. By hand, from `editor/`:
+`cargo install --locked cargo-audit --version 0.22.2`, then `cargo audit`.
 
-The workflow ran on GitHub for 0.1.0: a build job that GitHub's macOS runner cancelled before any step was rebuilt
-with Re-run failed jobs on the run's page, and the release job, which waits for every build, ran after it. It has not
-been run on Gitea, whose Actions needs runners for each system and a recent version for the pinned `upload-artifact`.
+`.github/dependabot.yml` proposes newer versions every Monday, one pull request each for the workflows' actions, the
+editor's crates and the kit's packages, with three exceptions moved by hand: `dtolnay/rust-toolchain` (pinned to its
+stable branch, which has no release tags), eframe from 0.32 (egui 0.32 rewrote the menus and popups the editor uses,
+so it does not build unchanged) and numpy (pinned twice by Python version; an update could break the pin Python 3.11
+needs). A pin is raised only when its pull request is merged, after CI. Dependabot's commits carry no sign-off, so the
+maintainer takes a bump over in a signed-off commit of their own.
 
-**Replacing a withdrawn release** (0.1.0 by 0.2.0): the maintainer commits the tree as one fresh commit on `main`
-and force-pushes it to both remotes, tags that commit `v0.2.0` and pushes the tag to GitHub only, which starts the
-workflow above, then deletes the `v0.1.0` tag on both remotes and its GitHub Release, and pastes 0.2.0's section of
-`CHANGELOG.md` onto the new Release. A clone made earlier keeps its own `v0.1.0` tag until its owner removes it
-(`git tag -d v0.1.0`).
+## Other workflows
 
-**The docs site** is built and published to GitHub Pages by `.github/workflows/docs.yml`, on each push to main that
-touches what the site is built from (or run by hand), once Pages is enabled for the repository (Settings → Pages →
-Source: GitHub Actions); on Gitea its deploy job skips itself. It is live at https://camset-dev.github.io/camset/.
+- **The docs site:** `.github/workflows/docs.yml` builds and publishes it to GitHub Pages on a push to `main` that
+  touches its sources, once Pages is enabled (Settings > Pages > Source: GitHub Actions). It is live at
+  <https://camset-dev.github.io/camset/>.
+- **Statistics:** `.github/workflows/stats.yml` appends the repository's numbers to CSV files on the `stats` branch
+  daily. The traffic series need the `STATS_TOKEN` secret: a fine-grained token for this repository only, with
+  Administration: read, set under Settings > Secrets and variables > Actions.
 
-**Statistics:** `.github/workflows/stats.yml` runs daily (03:17 UTC, or by hand) and appends to CSV files on the `stats` branch, an orphan branch it creates on the first run: `stats/summary.csv` (stars, forks, watchers, open issues, total downloads), `stats/downloads.csv` (each release asset's download count) and, for what GitHub's Insights page keeps only 14 days, `stats/traffic.csv` (views and clones, by day), `stats/referrers.csv` and `stats/paths.csv`. The traffic series need the `STATS_TOKEN` secret, a fine-grained token for this repository only with Administration: read, set under Settings > Secrets and variables > Actions; without it the workflow skips them and says so in its log.
+## Not yet done
 
-**Sign-offs:** `.github/workflows/dco.yml` runs `dco-check --verbose` on each pull request and fails it when a commit
-is not signed off (`git commit -s`; the repository's CONTRIBUTING.md). Written 2026-11-04, not yet run.
-
-Not yet done for a public release:
-- **macOS:** the app is ad-hoc signed only: no Developer ID signature, no notarization (both need an Apple Developer account), and no universal (Intel + Apple silicon) build.
-- **Windows:** no code signing, of the program or the installer, so Windows SmartScreen warns ("Windows protected your PC") the first time the downloaded installer, or the program from the zip, is opened, and Smart App Control, where it is on, may refuse them. What users meet until then is in the README, "Use the editor". SignPath Foundation declined the project's application for free code signing for now (2026-11: the project is too new), and the project will apply again later; what would be signed, how and by whom is the [code signing policy](CODE_SIGNING_POLICY.md), and the release workflow gets its signing step once an application is accepted.
-- **Proper installers for Linux** (`.deb`, AppImage), for example with cargo-packager, once the plain packages work. Windows has its installer (Inno Setup, above); it carries Inno Setup's own icon, as the script names no `.ico` (the repository keeps none; the program's icon is in `camset_editor.exe`, which the uninstaller's entry and the shortcuts show).
-- **File types:** none are claimed. `.DAT` is used by many apps (decided 2026-10-22).
-- **The docs site's links to the README, CONTRIBUTING and the Releases page.** `repo_url` and `site_url` in
-  `mkdocs.yml` point at github.com/camset-dev/camset since 2026-11-09, so the site's header links back to the repository.
-- **Release notes on GitHub:** the workflow attaches the packages and the viewer and writes no notes. A release's
-  notes are its section of `CHANGELOG.md` (its "Read first" repeats the README's warning, says that the camera helper
-  is not included, for 0.2.0 that 0.1.0 is withdrawn and its definitions do not open in 0.2.0, and from 0.2.1 that the
-  Windows program is not signed, so SmartScreen warns), copied onto the Release by hand, with a link named "Code
-  signing policy" to the [policy page](CODE_SIGNING_POLICY.md), which SignPath's terms ask for on the download pages.
-- **The camera helper is not in these packages** (the README, "The camera helper"). If an SDK build is ever shipped, it must carry the warranty notice above.
+- **macOS:** no Developer ID signature or notarization (both need an Apple Developer account), and no universal
+  (Intel and Apple silicon) build.
+- **Windows:** no code signing, so SmartScreen warns and Smart App Control may refuse the program. SignPath Foundation
+  declined the project for now; what would be signed, and by whom, is the [code signing policy](CODE_SIGNING_POLICY.md),
+  and the workflow gets its signing step once an application is accepted.
+- **Linux:** no `.deb` or AppImage yet.
+- **File types:** none are claimed; `.DAT` is used by many apps.

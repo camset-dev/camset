@@ -38,7 +38,7 @@ reads neither.
 
 ## How a signed release is built
 
-A release is cut as [Releasing](RELEASING.md#installers) says: the version set and the changelog written, the commit
+A release is cut as [Releasing](RELEASING.md#cutting-a-release) says: the version set and the changelog written, the commit
 pushed to `main`, then tagged, and the tag pushed to GitHub. The tag starts the release workflow, which first refuses
 a tag whose commit is not on `main`, then runs the kit's and the editor's tests, builds the packages from the source at
 that tag, with the Rust crates `editor/Cargo.lock` fixes (every build and test takes `--locked`) and every action
