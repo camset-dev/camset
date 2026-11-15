@@ -18,7 +18,7 @@ The proof viewer is rebuilt for the camera the kit works on, when that camera ha
 (runs/<model>_fw<fw>/kit2_pass2/report.json); with none it is not built, and says so, as kit/tools/proof_viewer.py
 refuses a page without the camera's own runs. --no-viewer (the pre-commit hook) never looks at runs/.
 
-Each fact is edited in one place only (docs/decisions/0014); docs/WHERE_FACTS_LIVE.md, "Where each fact lives", maps them.
+Each fact is edited in one place only (docs/decisions/0014, whose table maps them).
 Committed because other tools read them as files:
   editor/definitions/<model>_fw<fw>.json kit/schema_update.py, with --write-schema or --definitions only
   docs/formats/sony_camset_ids_<model>_fw<fw>.ksy

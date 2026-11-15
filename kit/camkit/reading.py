@@ -15,7 +15,7 @@ In plain words (the decision record says why, and docs/REMAPPING_PLAYBOOK.md's s
 how two readings are compared, by the kind of thing read, is agree()'s docstring and those of the functions it names):
   1. One cleaning for every reading (canonical): compatibility forms, Cyrillic, Greek and accented look-alikes become
      the Latin letters they are drawn as, every dash a hyphen, every run of spacing one space; case kept. The camera's
-     menus are in English (docs/CAMERA_SUPPORT.md), so a non-Latin or accented letter is always a misread. The raw
+     menus are in English (docs/QUICKSTART.md, "What you need"), so a non-Latin or accented letter is always a misread. The raw
      reading is kept beside the cleaned one.
   2. OCR alone is enough only for a plain reading: Latin letters, digits and the camera's own signs as read, four
      characters or more, naming exactly one of the options expected there.

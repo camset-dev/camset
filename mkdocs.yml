@@ -30,6 +30,12 @@ plugins:
       module_name: kit/tools/docs_macros
       render_by_default: false
       on_error_fail: true        # a macro that fails stops the build, rather than printing its error in the page
+  # pages folded into others (the 0.2.1 definition viewer links CAMERA_SUPPORT/; kit/tests/test_build_docs.py checks)
+  - redirects:
+      redirect_maps:
+        CAMERA_SUPPORT.md: QUICKSTART.md#what-you-need
+        UPDATING.md: https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md
+        WHERE_FACTS_LIVE.md: decisions/0014-one-source-per-fact.md
 markdown_extensions:
   - tables
   - admonition
@@ -47,7 +53,6 @@ nav:
   - How-to guides:
       - Use the editor: EDITOR.md
       - Map another camera: REMAPPING_PLAYBOOK.md
-      - Update your clone: UPDATING.md
       - Run on Windows and Linux: PORTING.md
       - Releasing: RELEASING.md
   - Reference:
@@ -61,6 +66,4 @@ nav:
       # end of the model pages
   - Explanation:
       - The kit's design: KIT_PLAN.md
-      - Which cameras the kit works with: CAMERA_SUPPORT.md
-      - Where each fact lives: WHERE_FACTS_LIVE.md
   - Decisions: decisions/index.md

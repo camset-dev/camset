@@ -32,6 +32,10 @@ proof was made with.
   - a crawl walks a row with 0 records changed;
   - proofs match the HDMI proofs and restore to 0 differences;
   - a proved option takes about 14 s against about 8 s over HDMI: roughly 1.8 times slower.
+- **SDK 2.02 limits:** `ExposureProgramMode` and `FocusMode` cannot be set (the menu's Shoot Mode can); string
+  properties read only through `GetCurrentStr()`; settings downloads are refused with the mode dial on memory
+  positions 1-3; an upload restarts the camera; during a Remote Shooting session, Power Save Start Time, Wi-Fi
+  Frequency Band and Wi-Fi Direct Settings refuse to change.
 
 ## Screens and readers
 

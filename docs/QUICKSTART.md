@@ -4,14 +4,13 @@ This page gets an agent, or a person, from a fresh machine to one setting proved
 about an hour. It is the short path only. Every step links into `REMAPPING_PLAYBOOK.md`, which
 explains why. **Read the playbook's section 1 (the rules) before step 5.**
 
-Already mapping with a clone? Update it first, as [UPDATING.md](UPDATING.md) says: every clone moves to the lean files
-once, and one made before the repository's history was replaced by a single commit is moved onto the new commit
-before that.
+Already mapping with an older clone?
+[CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md) says how to take in a newer kit.
 
 ## What you need
 
-**The body check** at the end of step 1 says whether the kit can drive your camera (what its answers mean:
-`CAMERA_SUPPORT.md`).
+**The body check** at the end of step 1 says, from Sony's SDK tables, what the kit can do with your camera and what
+is missing ([Sony's SDK page](https://support.d-imaging.sony.co.jp/app/sdk/l/index.php) lists the bodies).
 
 - **A computer** that Sony's SDK page lists: a Mac with macOS 14.1 or later; a Linux PC (on Ubuntu 26.04 the setup,
   the tests and the editor's camera helper ran, the kit's camera runs not yet); or a Windows 11 PC on Intel or AMD
@@ -21,6 +20,8 @@ before that.
   2026 with the C++ workload on Windows, g++ on Linux) and git. Step 1's `kit/setup.py` checks each and prints the
   command for what is missing.
 - **The camera,** with:
+  - the 2021-and-later menu (a1 II, a7S III, a7 IV, a7R V, a7C II, a7CR, a9 III, FX3, FX30), in English, set by the
+    owner's hand (decision 8): the readers know no older menu and no other language;
   - the lens cap on;
   - two test cards inserted;
   - mains power, where there is a socket.
@@ -29,8 +30,8 @@ before that.
   Access Authen. on; the owner sets them up) is an alternative to USB, not a requirement; the kit's camera link
   has no Wi-Fi mode yet.
 - **Eyes,** the way the kit sees the screen. The baseline is the camera's own OSD image through the SDK, on
-  bodies that have it (the body check says): set `"eyes": "osd"` in `private/config.json`
-  ([`CAMERA_SUPPORT.md`](CAMERA_SUPPORT.md#without-an-hdmi-capture-dongle) says how it works and what it costs).
+  bodies that have it (the body check says): set `"eyes": "osd"` in `private/config.json`, and scan the menu with the
+  same eyes as the runs.
   **An HDMI capture dongle is optional** (Elgato Cam Link 4K, with the camera's HDMI set to 1080p, and a
   micro-to-full HDMI cable for bodies with micro-HDMI): it is faster, and needed only on bodies without the OSD image.
 - **Readers:** OCR is built in, but it misreads icons as letters, clips short words and confuses look-alike
@@ -99,9 +100,9 @@ mkdir -p private/data                                     # your own folder, git
 
 `sdk_support.py --json` writes the table into `private/data/` (`.cache/` when there is no `private/data/` folder),
 kept out of the public repository: Sony's reference may not be redistributed. Run it again when a new SDK version
-arrives. `body_check.py` answers everything, settings files only, or nothing (what each means: `CAMERA_SUPPORT.md`,
-"The short answers"). It also names anything that won't work, such as Ethernet on a body that has no port, or the
-OSD on a body without one, and prints the settings for steps 3 and 4. Stop here if it says "Nothing"; otherwise go
+arrives. `body_check.py` answers everything, settings files only, or nothing, and says what each allows. It also
+names anything that won't work, such as Ethernet on a body that has no port, or the OSD on a body without one, and
+prints the settings for steps 3 and 4. Stop here if it says "Nothing"; otherwise go
 on with step 2.
 
 ## 2. Credentials (the owner's job)

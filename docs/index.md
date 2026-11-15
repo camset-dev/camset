@@ -20,8 +20,8 @@ The file is read in your browser and never leaves your computer.
 | ILCE-1M2 (a1 II) | 4.00 | About 2,000 settings by name. [Status](STATUS.md) counts how many the camera has proved. |
 
 Other bodies need a mapping pass first, which works out on the camera what each setting in its file means:
-[map your camera](REMAPPING_PLAYBOOK.md) says how, and [which cameras the kit works with](CAMERA_SUPPORT.md) how to
-check yours.
+[map your camera](REMAPPING_PLAYBOOK.md) says how, and [the quick start](QUICKSTART.md#check-the-body) how to check
+yours.
 
 ## Get it
 
@@ -71,13 +71,11 @@ as it does.
 
 - **Tutorials:** [from nothing to a first proved setting](QUICKSTART.md).
 - **How-to guides:** [use the editor](EDITOR.md), [map another camera](REMAPPING_PLAYBOOK.md),
-  [update your clone](UPDATING.md),
   [Windows and Linux](PORTING.md), [make a release](RELEASING.md).
 - **Reference:** [status](STATUS.md), [the file format](formats/index.md) (a Kaitai Struct spec, for Kaitai's tools
   and ImHex), [memory map](MEMORY_MAP.md), [data files and their schemas](DATA_CONTRACTS.md),
   [the ILCE-1M2's page](models/ILCE-1M2_fw4.00.md) (what was measured on it and how it behaves).
-- **Explanation:** [the kit's design](KIT_PLAN.md) (how a setting is proved),
-  [which cameras the kit works with](CAMERA_SUPPORT.md), [where each fact lives](WHERE_FACTS_LIVE.md).
+- **Explanation:** [the kit's design](KIT_PLAN.md) (how a setting is proved).
 - **[Decisions](decisions/index.md)** (why things are done as they are).
 
 The code is in the [repository](https://github.com/camset-dev/camset), and

@@ -13,5 +13,5 @@
 - [ ] No personal values: no settings file but a definition's scrubbed sample beside it (`editor/definitions/<model>_fw<fw>.DAT`, made by `kit/tools/make_sample.py`), and no value from the owner's files (decision 16); `.venv/bin/python kit/tools/check_public.py` exits 0, and the diff was searched for the camera's serial number, the owner's name and their network addresses, which it may not know (CONTRIBUTING.md).
 - [ ] The definition and the data files match their schemas: `.venv/bin/pre-commit run --all-files` passes.
 - [ ] Nothing from `private/` (the evidence file `private/evidence/<model>_fw<fw>.json` among it), `runs/` or Sony's SDK (`kit/sdk/`) is in the pull request.
-- [ ] The pull request is one commit of the final files on a fresh branch cut from the updated `main`, so no older commit of your branch publishes a now-private file (docs/UPDATING.md, "Your pull request").
+- [ ] The pull request is one commit of the final files on a fresh branch cut from the updated `main`, so no older commit of your branch publishes a now-private file (CONTRIBUTING.md, "What a contribution must keep").
 - [ ] Every commit is signed off (`git commit -s`; CONTRIBUTING.md, "Sign off every commit").

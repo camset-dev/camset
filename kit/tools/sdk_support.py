@@ -11,7 +11,7 @@ Prints a Markdown table, one row per model in the SDK's compatibility list:
   - **dials** (CameraDialFunction);
   - **OSD** (GetOSDImage): the second pair of eyes.
 
-Rerun it when a new SDK version arrives; docs/CAMERA_SUPPORT.md says what the kit needs and how to read kit/tools/body_check.py's answers.
+Rerun it when a new SDK version arrives; kit/tools/body_check.py reads the table (docs/QUICKSTART.md, step 1).
 """
 import argparse
 import html

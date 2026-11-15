@@ -4,9 +4,13 @@ A pull request here is one of two kinds:
 
 - **A camera's data,** made with the mapping kit on that camera: a `data/<model>_fw<fw>/` folder for one body and
   firmware. Start with [AGENTS.md](AGENTS.md); an AI agent walks you through the mapping.
-  If you are mapping with an older clone, [update it first](docs/UPDATING.md): every clone moves to the lean files
-  once; in one made before the history was replaced by a single commit `git pull` no longer works, and a definition
-  the older kit wrote is not to be sent.
+  To take in a newer kit, merge `origin/main` into your mapping branch (in a conflict, keep your own `data/` files and
+  the project's version of everything else), then run `kit/pass2_report.py` and `kit/schema_update.py --write` again
+  (and `kit/tools/coverage.py --write` where `data/` holds a coverage file; the changelog's Read first says what
+  else). A clone made before 2026-11-11 shares no history with this one: clone afresh, copy `private/`, `runs/`,
+  `data/<model>_fw<fw>/` and your model page across, not your definition, and make again by hand any change you made
+  to a kit file (the never-open list in `kit/camkit/safety.py`). Then write the definition afresh:
+  `kit/pass2_report.py --no-schema`, `kit/schema_update.py --write`, then both again without `--no-schema`.
 - **Code and docs:** the editor (`editor/`), the kit (`kit/`) and the docs site (`docs/`). The commands are in the
   README, [Develop](README.md#develop).
 
@@ -78,13 +82,23 @@ editor can edit; any other camera is **not mapped yet**, and the README's
   file in `data/` reaches its definition with `kit/tools/build_docs.py --definitions`, which needs no runs.
 - The camera set to English while you map it: the kit's readers and menu trees were built on English menus, and
   [decision 8](docs/decisions/0008-by-hand-only-usb-language-region-and-network-identity.md) leaves the language to your
-  hand ([Camera support](docs/CAMERA_SUPPORT.md#the-cameras-menus-must-be-in-english)).
+  hand.
 - No files from `private/`, `runs/` or Sony's SDK (`kit/sdk/`)
   ([decision 18](docs/decisions/0018-one-public-codebase-with-a-private-overlay.md); the SDK's terms:
   [RELEASING](docs/RELEASING.md)).
-- None of them in any commit either: a pull request publishes its branch's whole history, so open it from a fresh
-  branch cut from the updated `main` with one commit of your final files, as
-  [UPDATING](docs/UPDATING.md#your-pull-request-one-commit-on-a-fresh-branch) shows.
+- None of them in any commit either: a pull request publishes every commit of its branch, so open it from a fresh
+  branch with one commit of your final files:
+
+  ```sh
+  git fetch origin && git switch --no-track -c my-camera-pr origin/main
+  git checkout <your mapping branch> -- data/<model>_fw<fw> 'editor/definitions/<model>_fw<fw>.*' docs/models/<model>_fw<fw>.md
+  .venv/bin/python kit/tools/build_docs.py --no-viewer     # the record names and the nav entry
+  git add mkdocs.yml docs/formats/sony_camset_ids_<model>_fw<fw>.ksy
+  git commit -s -m "<model>_fw<fw>: data and definition"
+  git log --oneline origin/main..HEAD                      # exactly one commit
+  ```
+
+  Push it to your fork and open the pull request from it.
 
 You do not need a background in verification: the kit does the proving. You need patience (how long it takes: the
 playbook's [section 11](docs/REMAPPING_PLAYBOOK.md#11-time-power-and-heat)), the camera, and the hardware

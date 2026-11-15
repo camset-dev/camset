@@ -10,8 +10,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **If you map a camera other than the a1 II and made a sample** (`editor/definitions/<model>_fw<fw>.DAT`), make it
   again: the older kit could leave the owner's own records in it, such as a registered lens list with each lens's
   serial number. List your camera's `personal_records` in its camera file first; `kit/tools/make_sample.py` and
-  `kit/tools/check_public.py` now refuse a sample without them (docs/UPDATING.md, "Your camera file: what the kit
-  reads in it now").
+  `kit/tools/check_public.py` now refuse a sample without them (docs/DATA_CONTRACTS.md, "Records that hold an
+  owner's own data").
 - **A kit run that asks a reader now needs one in `private/config.json` that answers a test question before the link
   opens**; otherwise it stops, nothing pressed, and says what to do, where it went on with OCR alone or stopped
   midway. The example config names no reader and no camera address until you fill them in, a paid reader plays only
@@ -97,7 +97,7 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   it read only the a1 II's (now a data file, the pattern), and stops in plain words on a table it does not read yet or
   a file that breaks its schema. While your tables hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED`, `PICKER_LISTS` or
   `KEEPS_APART` entries, `--write` needs your private hand evidence file, which `kit/writer/hand_evidence.py --check`
-  checks (docs/UPDATING.md, "Your hand tables: what the writer reads of them now").
+  checks (docs/DATA_CONTRACTS.md, "The hand evidence file").
 - Two new hand tables: `PICKER_LISTS` cuts a picker's settings to the list walked whole on the camera, and
   `KEEPS_APART` records a switch that keeps a setting's stills and movie copies apart and what unticking it sets
   (written into the definition as `keeps_apart`, which the editor asks about). Each takes effect only with its private
@@ -154,6 +154,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The docs
 
+- Three pages are folded into others: updating a clone into CONTRIBUTING, camera support into the quick start,
+  where each fact lives into decision 14.
 - The docs site uses the system's own fonts and no longer loads any from Google, so Google does not see its visitors;
   the header's star count still comes from GitHub, which hosts the site.
 - The editor's guide says plainly that the camera login file holds the passwords in plain text, protected only by the
@@ -255,7 +257,7 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   with this one.
 - **Camera definitions are in a new, lean form (definition format 2).** This editor, which comes with the new ILCE-1M2
   definition, does not open a definition made for 0.1.0, nor the 0.1.0 editor the new ones. If you are mapping a
-  camera with a clone of this repository, follow [Updating your clone](docs/UPDATING.md) first and write your
+  camera with a clone of this repository, update it as [CONTRIBUTING](CONTRIBUTING.md) says first and write your
   definition afresh with the updated kit.
 - **Writing an edited settings file to a camera is at your own risk.** A file edited by hand once put a camera into
   a restart loop in Movie mode, which ended when Initialize was run on the camera; Initialize also clears the network
@@ -377,8 +379,7 @@ new lean form. It replaces 0.1.0, which is withdrawn.
   before it glued on, values the camera held.
 - `kit/schema_update.py --write` over an older definition keeps of its proofs only a value that a proof line the
   report counts still wrote (a hold's option numbered apart in two sessions); never an older menu row, count of
-  samples, or value no counted line wrote. A mapper with a definition written by an older kit writes it afresh
-  ([UPDATING](docs/UPDATING.md)).
+  samples, or value no counted line wrote. A mapper with a definition written by an older kit writes it afresh.
 - The kit reads the viewfinder's shooting screen (the eye sensor covered and the monitor folded in) as the shooting
   screen: the finder draws its battery smaller, further right and higher, and that icon is one of the
   battery templates, cut from the camera's own frame.

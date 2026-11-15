@@ -47,7 +47,7 @@ jobs:
         run: python kit/tools/check_public.py --all
       # a pull request publishes its branch's whole history: every file each of its commits adds or changes is held to
       # the rules --all holds the tree to (paths, binaries, contents, lean data and definitions), so what a later
-      # commit took out again is refused all the same (docs/UPDATING.md, "Your pull request")
+      # commit took out again is refused all the same (CONTRIBUTING.md, "What a contribution must keep")
       - name: No commit of the pull request publishes what is private
         if: github.event_name == 'pull_request'
         env:

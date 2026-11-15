@@ -1091,7 +1091,7 @@ def commit_problems(spec: str, repo: Path = ROOT) -> list:
         objects.close()
     if out:
         out.append("a pull request publishes every commit of its branch, so open it from a fresh branch cut from the "
-                   "updated main with one commit of the final files (docs/UPDATING.md, \"Your pull request\")")
+                   "updated main with one commit of the final files (CONTRIBUTING.md, \"What a contribution must keep\")")
     return out
 
 

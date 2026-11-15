@@ -181,9 +181,8 @@ python3.11 -m venv .venv && .venv/bin/pip install -r kit/requirements.txt   # or
 .venv/bin/zensical serve                         # the docs site at http://127.0.0.1:8000
 ```
 
-About four in ten of the kit's tests skip without camera runs in `runs/` (the local folder of camera runs); that is expected. The web page's script, `editor/web/app.js`, is tested among them: `kit/tests/test_page_script.py` loads it whole under `node` in the small made-up DOM of `kit/tests/page_harness.js` (no npm package) and checks its own functions on made-up rows; those tests skip where `node` is missing. Each fact is edited in one place
-([decision 14](docs/decisions/0014-one-source-per-fact.md)); the docs site's page [Where each fact lives](docs/WHERE_FACTS_LIVE.md)
-says where each one lives. Camera runs and the command cheat sheet are in [docs/QUICKSTART.md](docs/QUICKSTART.md),
+About four in ten of the kit's tests skip without camera runs in `runs/` (the local folder of camera runs); that is expected. The web page's script, `editor/web/app.js`, is tested among them: `kit/tests/test_page_script.py` loads it whole under `node` in the small made-up DOM of `kit/tests/page_harness.js` (no npm package) and checks its own functions on made-up rows; those tests skip where `node` is missing. Each fact is edited in one place, which
+[decision 14](docs/decisions/0014-one-source-per-fact.md) names. Camera runs and the command cheat sheet are in [docs/QUICKSTART.md](docs/QUICKSTART.md),
 Windows and Linux in [docs/PORTING.md](docs/PORTING.md). Rebuilding the reader a test generates from the format's
 Kaitai description needs `kaitai-struct-compiler` 0.11 (`brew install kaitai-struct-compiler`; it runs on Java). [docs/RELEASING.md](docs/RELEASING.md) holds the SDK's
 terms and how a release is made.
@@ -243,7 +242,7 @@ The packages themselves: `sh packaging/build_macos_app.sh` builds `Camset Editor
   firmware's definition and can be edited after a warning; settings it does not hold in the mapped shape stay
   view-only. A model no definition covers opens view-only.
 - **Mapping another camera:** [docs/REMAPPING_PLAYBOOK.md](docs/REMAPPING_PLAYBOOK.md). How to check whether
-  the mapping kit can drive a body through the SDK: [docs/CAMERA_SUPPORT.md](docs/CAMERA_SUPPORT.md).
+  the mapping kit can drive a body through the SDK: [docs/QUICKSTART.md](docs/QUICKSTART.md#check-the-body).
 
 ## Repository layout
 

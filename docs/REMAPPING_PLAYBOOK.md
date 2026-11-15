@@ -3,7 +3,7 @@
 This is for an AI agent asked to map the CAMSET `.DAT` settings file of a Sony body other than the
 one this project was built on: an a1 II (ILCE-1M2, firmware 4.00), mapped October 2026. Read all of
 it before touching the camera. Read the safety rules twice. A mapping begun with an older clone is
-updated first ([UPDATING.md](UPDATING.md)).
+updated first ([CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md)).
 
 **Goal:** for every record in the file, prove on the camera which menu setting it holds and what
 each stored value means. Then record those facts in the model's `data/<model>_fw<fw>/` folder, from which the kit
@@ -219,7 +219,7 @@ and the default is no.
 ## 2. What carries over to a new model, and what does not
 
 **First, can the kit drive the body at all?** `kit/tools/body_check.py` says (section 4); what its answers mean, and how to
-build the table it reads from your own SDK, is in `CAMERA_SUPPORT.md`.
+build the table it reads from your own SDK, is in `QUICKSTART.md`, step 1.
 
 **Carries over (the kit):**
 - the file reader and writer (`kit/camkit/camset.py`) and the camera link (camlink, `kit/link/`, on Sony's
@@ -229,7 +229,7 @@ build the table it reads from your own SDK, is in `CAMERA_SUPPORT.md`.
 - the report and definition tools;
 - all the pitfalls below.
 
-Bodies with the 2021-and-later menu system (`CAMERA_SUPPORT.md`, "Menu system") share the same screens, so most
+Bodies with the 2021-and-later menu system (`QUICKSTART.md`, "What you need") share the same screens, so most
 readers should work unchanged.
 
 **Does not carry over (prove again):**
@@ -267,7 +267,7 @@ II's lessons about records in mind (its own record ids are on [its page](models/
 
 **First:** `.venv/bin/python kit/tools/body_check.py --model ... --link ... --eyes ...` with the owner's answers
 (which camera, how it connects, whether there is a capture dongle), after `kit/tools/sdk_support.py --json`
-(`QUICKSTART.md`, step 1). It says from the SDK's tables whether the kit can drive the body (`CAMERA_SUPPORT.md`).
+(`QUICKSTART.md`, step 1). It says from the SDK's tables whether the kit can drive the body.
 
 **Hardware:**
 - the camera, with the lens cap on (so the live view behind dialogs is plain black) and test cards in both slots;
@@ -901,7 +901,7 @@ section 8).
    run's newest download, with every setting the report proves named by its menu row; later runs write over it, and
    of the proofs it held keep only a value a proof line the report counts still wrote (`kept_proof`, listed as "kept
    from the definition"), never an older menu row, count of samples or value no counted line wrote. A definition an
-   older kit wrote is written afresh instead ([UPDATING.md](UPDATING.md)). Its
+   older kit wrote is written afresh instead. Its
    parts from `data/` (the camera section, the project's own help) and its own rules over them (the Expert marks, each
    note's evidence apart in `note_evidence`, for the evidence file) are written on every run, and `kit/tools/build_docs.py --definitions`
    writes only them, with no runs, after a camera file was edited. A setting on no camera row whose name still holds

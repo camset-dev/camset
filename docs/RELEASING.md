@@ -36,7 +36,7 @@ What the project does under these terms:
   `private/help/`; the published definitions carry only the project's own help
   ([decision 13](decisions/0013-sony-s-help-text-stays-private.md)), and `kit/tools/check_public.py` refuses a
   commit whose help text stays too close to Sony's.
-- **The docs hold nothing taken from Sony's documents** (decided 2026-11-04): only what the project observed itself or what Sony publishes openly. `docs/CAMERA_SUPPORT.md` names no model's SDK functions and says how to check one's own body; `kit/tools/sdk_support.py --json` builds the model × function table from one's own SDK into one's own `private/data/`.
+- **The docs hold nothing taken from Sony's documents** (decided 2026-11-04): only what the project observed itself or what Sony publishes openly. The docs carry no model-by-function table from Sony's reference; `kit/tools/sdk_support.py --json` builds the model × function table from one's own SDK into one's own `private/data/`.
 
 ## Fine to publish
 
@@ -146,7 +146,7 @@ been run on Gitea, whose Actions needs runners for each system and a recent vers
 and force-pushes it to both remotes, tags that commit `v0.2.0` and pushes the tag to GitHub only, which starts the
 workflow above, then deletes the `v0.1.0` tag on both remotes and its GitHub Release, and pastes 0.2.0's section of
 `CHANGELOG.md` onto the new Release. A clone made earlier keeps its own `v0.1.0` tag until its owner removes it
-([UPDATING](UPDATING.md#packages-and-tags)).
+(`git tag -d v0.1.0`).
 
 **The docs site** is built and published to GitHub Pages by `.github/workflows/docs.yml`, on each push to main that
 touches what the site is built from (or run by hand), once Pages is enabled for the repository (Settings → Pages →

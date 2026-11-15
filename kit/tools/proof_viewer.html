@@ -2730,7 +2730,7 @@ function nodefDetail() {
     el("p", {}, "No camera definition describes this model, so its settings cannot be named here, and no other camera's names are put on them. "
       + `The File layout view shows the file's structure all the same: its header, its sections, every record by id and size, the bytes, the map and the inspector, read with the ${viaWords(via)} file layout, which fits this file.`),
     el("p", {}, `This viewer knows ${VIEWER.cameras.length === 1 ? "one camera" : `${VIEWER.cameras.length} cameras`}: ${VIEWER.cameras.map((c) => `${c.name}, firmware ${c.firmware}`).join("; ")}.`),
-    el("p", {}, "A camera gets its definition by being mapped with Camset's kit: ", link("QUICKSTART/", "how a camera gets mapped"), " · ", link("CAMERA_SUPPORT/", "which cameras the kit works with"), "."),
+    el("p", {}, "A camera gets its definition by being mapped with Camset's kit: ", link("QUICKSTART/", "how a camera gets mapped"), " · ", link("QUICKSTART/#what-you-need", "which cameras the kit works with"), "."),
     el("button", { class: "button", onclick: () => setMode("layout") }, "Show the file's structure"))];
 }
 // a file opened in the definition viewer: read by trial with every camera's block; this camera's (or the nearest

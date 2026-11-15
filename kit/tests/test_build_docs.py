@@ -283,6 +283,34 @@ def test_the_docs_site_loads_no_fonts_from_google():
         assert not any("://" in str(x) for x in site.get(key) or []), key
 
 
+def test_the_definition_viewer_s_docs_links_reach_a_page():
+    """Each docs page the definition viewer links (kit/tools/proof_viewer.html's link() and docs()) is a page of the
+    site with its #anchor a heading there, and each redirect in mkdocs.yml leads to one or to a file of the repository:
+    a released viewer still links a removed page (0.2.1's CAMERA_SUPPORT/), and the strict build checks neither."""
+    import re
+    site = yaml.safe_load((ROOT / "mkdocs.yml").read_text(encoding="utf-8"))
+    redirects = next((p["redirects"]["redirect_maps"] for p in site["plugins"] if isinstance(p, dict) and "redirects" in p), {})
+    repo = site["repo_url"] + "/blob/main/"
+
+    def reaches(where, anchor):
+        assert where.is_file(), where
+        heads = {re.sub(r"[-\s]+", "-", re.sub(r"[^\w\s-]", "", h).strip().lower())
+                 for h in re.findall(r"^#+ (.+)$", where.read_text(encoding="utf-8"), re.M)}
+        assert not anchor or anchor in heads, f"{where}#{anchor}"
+
+    targets = re.findall(r'\b(?:link|docs)\("([^"]*)"', (ROOT / "kit/tools/proof_viewer.html").read_text(encoding="utf-8"))
+    assert targets
+    for t in targets:
+        m = re.fullmatch(r"([\w./-]+)/(?:#([\w-]+))?", t)
+        assert m, t
+        reaches(ROOT / "docs" / f"{m.group(1)}.md", m.group(2))
+    assert {"CAMERA_SUPPORT.md", "UPDATING.md", "WHERE_FACTS_LIVE.md"} <= set(redirects)
+    for old, new in redirects.items():
+        assert not (ROOT / "docs" / old).exists(), old
+        page, _, anchor = new.partition("#")
+        reaches(ROOT / page.removeprefix(repo) if page.startswith(repo) else ROOT / "docs" / page, anchor)
+
+
 # ---------------------------------------------------------------- the record names, one file per definition
 
 def test_the_record_names_are_one_file_per_definition():

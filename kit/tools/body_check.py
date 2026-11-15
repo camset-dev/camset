@@ -60,7 +60,7 @@ def main():
         table = ROOT / ".cache" / "sdk_support.json"
     if not table.exists():
         sys.exit("No SDK support table yet: put Sony's Camera Remote SDK zip into kit/sdk/, run python3 kit/setup.py, then\n"
-                 "  python3 kit/tools/sdk_support.py --json\nWhat its answers mean: docs/CAMERA_SUPPORT.md, \"The short answers\".")
+                 "  python3 kit/tools/sdk_support.py --json\n(docs/QUICKSTART.md, step 1)")
     data = json.loads(table.read_text(encoding="utf-8"))
     models = data["models"]
     if not (a.model and a.link and a.eyes):
@@ -82,9 +82,11 @@ def main():
         verdict = "EVERYTHING: walk the menus, prove every setting, restore files"
     elif r["settings_file"]:
         verdict = ("SETTINGS FILES ONLY: the editor works (download, edit, upload); the kit cannot press buttons, "
-                   "so mapping needs a person pressing while the kit watches and downloads after each step")
+                   "so mapping needs a person pressing while the kit watches and downloads after each step "
+                   "(kit/tools/hdmi_watch.py records the screens, kit/tools/upload_check.py --diff shows what changed)")
     else:
-        verdict = "NOTHING: no settings-file transfer and no button presses in the SDK"
+        verdict = ("NOTHING: no settings-file transfer and no button presses in the SDK; files move only on a card, "
+                   "through the camera's Save/Load Settings")
     if not r["dials"] and r["buttons"]:
         notes.append("no remote dial turns: rows driven by a dial (Var. Shutter speed and the like) stay by hand")
     print(f"{a.model} = {model} (SDK {data['sdk']})")
