@@ -124,7 +124,7 @@ Add a dated line for each difference: the step, the message, the fix.
 - 2026-11-12, Windows 11 (Visual Studio 2022 Build Tools): the editor built, its tests passed, and its helper found
   and read a camera over the network.
 
-Fixed since, not yet re-checked on that PC:
+Fixed since, not yet re-checked:
 
 - 2026-11-04, Ubuntu 26.04 (GNOME, Wayland): a file dialog left the window "not responding"; fixed (dialogs on a
   helper thread, the window's id `app.camset.editor` matching the menu entry's `StartupWMClass`).
@@ -132,5 +132,3 @@ Fixed since, not yet re-checked on that PC:
   searches first, the MAC from the neighbour table, a login looked up under each MAC known: `kit/common/camera_net.h`).
 - 2026-11-05, Ubuntu 26.04, USB: the camera's serial number stopped showing; fixed (any text id kept, its bytes as
   `id_hex` in Expert mode, a `note:` line when the serial came from the id).
-- 2026-11-12, Windows 11: the kit's tests' first run there had 10 failures; fixed, and run by the CI on Windows
-  (`kit-windows`), not yet re-run on the PC.
