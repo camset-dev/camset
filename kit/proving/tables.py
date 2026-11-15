@@ -475,7 +475,8 @@ def prove_table_row(cam, link, run, job, base_path: Path, out, top=None) -> Path
             # a first-time screen before the row's own (Custom Key/Dial Set.'s "Don't show this again." / OK), or the
             # notice --info-ok names for the row: passed as pass_note passes it; one not passed fails the cell, the
             # message giving the --info-ok that would name it
-            got = notice_before(cam, " > ".join(path), lit)
+            from .jobs import NETWORK       # (a module that imports this one) a --network run prints no screen's text
+            got = notice_before(cam, " > ".join(path), lit, words=not NETWORK)
             if got is not None and "refused" in got:
                 raise Failed(f"{name}: Right opened a notice before the {where}, not passed: {got['refused']}")
         if cam.read().kind != where:

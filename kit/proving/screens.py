@@ -63,16 +63,15 @@ def info_screen(cam) -> bool:
     return kind == "unknown" and any(dont_show(ln) for ln in ocr.read([cam.frame.path])[cam.frame.path])
 
 
-def info_ok_hint(cam, row: str) -> str:
-    """The --info-ok that would name the notice on show for `row`: its text as OCR reads it, its OK and its "Don't show
-    this again." line left out, to be checked against its frame before it is given; a placeholder where it cannot be
-    read."""
+def info_ok_text(cam) -> str:
+    """The notice on show's text as --info-ok would name it: OCR's reading, its OK and its "Don't show this again." line
+    left out; "" where it cannot be read."""
     try:
         lines = ocr.read([cam.frame.path])[cam.frame.path]
     except Exception:
-        lines = []
-    said = " ".join(ln.text for ln in lines if not dont_show(ln) and not BUTTON_LINE.fullmatch(ln.text or ""))
-    return f'--info-ok "{row or "ROW"}={" ".join(said.split()) or "<its whole text>"}"'
+        return ""
+    return " ".join(" ".join(ln.text for ln in lines
+                             if not dont_show(ln) and not BUTTON_LINE.fullmatch(ln.text or "")).split())
 
 
 def notice_before(cam, row: str, lit_before: str = "", words: bool = True) -> dict | None:
@@ -104,8 +103,12 @@ def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
     names it with --info-ok (INFO_OK; pass_named_notice judges it, the lit bar read before Right as the row), or where
     the camera refuses MENU on it and OK is its only button (leave_notice, after the cursor is taken off a "Don't show
     this again." box: to_notice_ok). MENU on a notice the camera takes cancels the opening: the row is not passed, and
-    the message gives the --info-ok that names it, its text as read (info_ok_hint; `words` False, on a run that
-    withholds what it reads: the row alone). Returns {"row", "frame", "by"} once passed, else {"refused": why}."""
+    the message gives the --info-ok that names it, its text as read (info_ok_text). With `words` False (a run whose
+    notices may name another setting's value, decision 16: afreg_run's and framepos_run's setup, a --network prove
+    run) the text is never printed nor put in the message: it goes to the run's events.jsonl alone ("notice_not_passed",
+    with the row and the frame; on a --network or --owner run only what safety.notice_kept keeps of it), and the message
+    names the frame and the row and says where the text is. Returns {"row", "frame", "by"} once passed, else
+    {"refused": why}."""
     frame = cam.frame.path.name
     phrase = info_ok_for(INFO_OK, row) if row else None
     if phrase is not None:
@@ -113,11 +116,20 @@ def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
         return got if "refused" in got else {**got, "by": "--info-ok"}
     if not info_screen(cam):
         return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
-    hint = info_ok_hint(cam, row) if words else f'--info-ok "{row or "ROW"}=<its whole text>"'
+    said = info_ok_text(cam)                # read on the notice's own frame, before any press moves it
     to_notice_ok(cam)
     if leave_notice(cam) == "menu":
-        return {"refused": f"the notice ({frame}) took MENU, which cancels it: its OK goes only where --info-ok names "
-                           f"it or where the camera refuses MENU on it. Check its text against {frame} and add {hint}"}
+        why = (f"the notice ({frame}) took MENU, which cancels it: its OK goes only where --info-ok names it or where "
+               "the camera refuses MENU on it")
+        if words:
+            return {"refused": f"{why}. Check its text against {frame} and add "
+                               f'--info-ok "{row or "ROW"}={said or "<its whole text>"}"'}
+        run = getattr(cam, "run", None)
+        if run is not None:
+            private = getattr(cam, "network", None) or getattr(cam, "owner", None)
+            run.log("notice_not_passed", row=row, frame=frame, notice=safety.notice_kept(said) if private else said)
+        return {"refused": f"{why}. Its text is in the run's events.jsonl (\"notice_not_passed\", frame {frame}): check "
+                           f'it against {frame} and add --info-ok "{row or "ROW"}=<that text>"'}
     return {"row": row, "frame": frame, "by": "a lone OK after MENU was refused"}
 
 

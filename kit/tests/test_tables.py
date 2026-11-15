@@ -331,7 +331,7 @@ def test_the_proof_records_the_options_the_list_showed(screen_text, monkeypatch)
         monkeypatch.setattr(tables, fn, lambda *a, **k: None)
     monkeypatch.setattr(tables, "place", lambda cam: cam.at)
     monkeypatch.setattr(tables, "same_place", lambda a, b: a == b)
-    monkeypatch.setattr(tables, "notice_before", lambda cam, row, lit: None)    # no first-time screen before it
+    monkeypatch.setattr(tables, "notice_before", lambda cam, row, lit, **kw: None)    # no first-time screen before it
     monkeypatch.setattr(tables, "lit_text", lambda image, path: "Image Quality Settings")
     monkeypatch.setattr(tables, "on_cell", lambda cam, job: cam.at == "cell")
     monkeypatch.setattr(tables, "cell_value", lambda cam: cam.options[cam.saved])

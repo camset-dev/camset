@@ -447,7 +447,8 @@ def focus_dial_by_menu(cam, cycle, model, dial: str = FOCUS_DIAL):
             name = kept_notice(cam, f"Right on {DIAL_ROW}", t, "dial_screen")
             raise Failed(f"Right on {DIAL_ROW!r} opened {cam.read().kind} ({name}; what it showed is in the run's "
                          "events.jsonl)")
-        got = pass_note(cam, DIAL_ROW, lit)     # the note's OK: --info-ok, or a lone OK where MENU is refused
+        # the note's OK: --info-ok, or a lone OK where MENU is refused; its words to events.jsonl alone (words=False)
+        got = pass_note(cam, DIAL_ROW, lit, words=False)
         if "refused" in got:
             name = kept_notice(cam, f"Right on {DIAL_ROW}", t, "dial_note")
             raise Failed(f"Right on {DIAL_ROW!r} showed a note not passed: {got['refused']} ({name})")

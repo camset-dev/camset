@@ -973,7 +973,7 @@ def test_a_table_job_passes_its_rows_first_time_screen_or_says_the_info_ok_to_ad
     monkeypatch.setattr(tables, "lit_text", lambda image, path: "Custom Key/Dial Set.")
     hint = '--info-ok "Custom Key/Dial Set.=In the next setting screen, you can check ..."'
 
-    def refused(cam, row, lit):
+    def refused(cam, row, lit, words=True):
         seen.append((row, lit))
         return {"refused": f"the notice (00002_right.png) took MENU, which cancels it: add {hint}"}
     monkeypatch.setattr(tables, "notice_before", refused)
@@ -984,7 +984,7 @@ def test_a_table_job_passes_its_rows_first_time_screen_or_says_the_info_ok_to_ad
     class Inside(Exception):
         pass
 
-    def passed(cam, row, lit):
+    def passed(cam, row, lit, words=True):
         cam.kind = "keyset"
         return {"row": row, "frame": "00002_right.png", "by": "--info-ok"}
     monkeypatch.setattr(tables, "notice_before", passed)
@@ -1063,3 +1063,95 @@ def test_the_hold_pings_the_link_on_every_look(tmp_path, monkeypatch):
     with pytest.raises(SystemExit):
         runner.hold_for_owner(link, "eyes", tmp_path / "start.DAT", "it asks")
     assert pings == [("ping", 5)] * 3
+
+
+# ---------------------------------------------------------------- a notice's words, withheld where a run promises it
+
+FIRST_TIME_LINES = [ocr.Line(text="In the next setting screen, you can check", conf=0.9, x=53, y=113, w=535, h=38),
+                    ocr.Line(text="the function assigned to a specific button", conf=0.9, x=52, y=161, w=536, h=32),
+                    ocr.Line(text="by pressing that button on the device.", conf=0.9, x=74, y=207, w=490, h=34),
+                    ocr.Line(text="Don't show this again.", conf=0.9, x=175, y=352, w=286, h=33),
+                    ocr.Line(text="OK", conf=0.9, x=297, y=414, w=46, h=37)]
+
+
+class NoteCam:
+    """A first-time screen (read as no known kind) whose MENU the camera takes; every press kept; a run of its own."""
+    def __init__(self, tmp_path, name, **kw):
+        self.keys, self.run = [], Run(name, root=tmp_path)
+        self.frame = SimpleNamespace(path=tmp_path / "00002_right.png", image=None)
+        for k, v in kw.items():
+            setattr(self, k, v)
+
+    def read(self):
+        return SimpleNamespace(kind="unknown")
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+
+
+def test_pass_note_withholds_a_notices_words_where_the_run_asks(tmp_path, monkeypatch):
+    """pass_note with words=False (afreg_run's and framepos_run's setup, a --network prove run; decision 16: a notice can
+    name another setting's value): its text is in no message, only in the run's events.jsonl ("notice_not_passed", with
+    the row and the frame; on a --network or --owner run only what safety.notice_kept keeps), and the message names the
+    frame and the row and says where the text is, so the owner can still build the --info-ok. words=True as before."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from proving import screens
+    monkeypatch.setattr(screens.ocr, "read", lambda paths, eng=None: {p: list(FIRST_TIME_LINES) for p in paths})
+    monkeypatch.setattr(screens, "notice_lit", lambda cam: "OK" if "down" in cam.keys else "Don't show this again.")
+    monkeypatch.setattr(screens, "INFO_OK", {})
+    row = "Custom Key/Dial Set."
+    cam = NoteCam(tmp_path / "a", "kit2_afreg")
+    refused = screens.pass_note(cam, row, row, words=False)["refused"]
+    assert cam.keys == ["down", "menu"]
+    assert "00002_right.png" in refused and row in refused and "events.jsonl" in refused, refused
+    assert "setting screen" not in refused and "pressing" not in refused, refused
+    [kept] = [e for e in events(cam) if e["kind"] == "notice_not_passed"]
+    assert kept["row"] == row and kept["frame"] == "00002_right.png" and kept["notice"].startswith("In the next setting")
+    cam = NoteCam(tmp_path / "b", "kit2_pass2", network={"Bluetooth Function": "2026-11-13"})
+    screens.pass_note(cam, row, row, words=False)
+    [kept] = [e for e in events(cam) if e["kind"] == "notice_not_passed"]
+    assert kept["notice"] == safety.notice_kept(" ".join(ln.text for ln in FIRST_TIME_LINES[:3]))
+    assert "setting screen" not in kept["notice"]              # no shape the kit knows: nothing of it kept
+    cam = NoteCam(tmp_path / "c", "kit2_tables")
+    refused = screens.pass_note(cam, row, row)["refused"]
+    assert f'--info-ok "{row}=In the next setting screen' in refused and not events(cam)
+
+
+def test_afreg_and_framepos_pass_the_dial_note_with_its_words_withheld(tmp_path, monkeypatch):
+    """afreg_run.focus_dial_by_menu (framepos_run's dial step too) hands Mode Dial Control Set's note to pass_note with
+    words=False, and its failure names the frame alone, as its docstring promises."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "provers"))
+    import afreg_run
+    import mode_switch
+    from camkit import live as L
+    from proving import screens
+    from proving.base import Failed
+    seen = []
+    monkeypatch.setattr(afreg_run, "dial_cell", lambda dial: [1, 2])
+    monkeypatch.setattr(mode_switch, "find", lambda cam, cycle, model, row: None)
+    monkeypatch.setattr(mode_switch, "text", lambda cam: "Set the Mode Dial to change the setting. OK")
+    monkeypatch.setattr(L, "lit_text", lambda image, path: afreg_run.DIAL_ROW)
+    monkeypatch.setattr(screens, "pass_note", lambda cam, row, lit, **kw: seen.append(kw) or {"refused": "not passed"})
+    cam = NoteCam(tmp_path, "kit2_afreg")
+    cam.read = lambda: SimpleNamespace(kind="notice")
+    with pytest.raises(Failed) as e:
+        afreg_run.focus_dial_by_menu(cam, [], {})
+    assert seen == [{"words": False}] and "Mode Dial to change" not in str(e.value)
+
+
+def test_a_table_job_withholds_the_words_on_a_network_run(tmp_path, monkeypatch):
+    """prove_table_row: notice_before with words=not proving.jobs.NETWORK, so a --network prove run prints no screen's
+    text there."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from proving import jobs, tables
+    from proving.base import Failed
+    seen = []
+    monkeypatch.setattr(tables.camset, "read", lambda p: {})
+    monkeypatch.setattr(tables, "place", lambda cam: "row")
+    monkeypatch.setattr(tables, "lit_text", lambda image, path: "Custom Key/Dial Set.")
+    monkeypatch.setattr(tables, "notice_before", lambda cam, row, lit, words=True: seen.append(words) or {"refused": "x"})
+    for network, words in (({}, True), ({"Bluetooth Function": "2026-11-13"}, False)):
+        monkeypatch.setattr(jobs, "NETWORK", network)
+        with pytest.raises(Failed):
+            tables.prove_table_row(TableCam(tmp_path), None, None, table_job(), tmp_path / "base.DAT", None)
+        assert seen[-1] is words
