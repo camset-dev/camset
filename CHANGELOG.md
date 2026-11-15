@@ -184,6 +184,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   keeps what it kept of a screen's text. After a first open's check that leaves the menu on another page the scan
   knows, `crawl_run.py` goes back to its row once as `--start-label` would, and stops with exit 8 as before where it
   cannot.
+- `drive.py` no longer refuses its `--path` row where OCR reads the row's icon as a letter or two before its label
+  ("S Exposure Comp. +0.0"), or where the label ends in a stop before its value ("Exposure Comp. +0.0"): on the first
+  press after the page scan went to that row, the bar is the row where the page scan read it so too and the value is
+  one the kit knows.
 
 ### The docs
 

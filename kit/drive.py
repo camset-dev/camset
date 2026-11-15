@@ -150,8 +150,12 @@ A run (never an --owner one) that opens a --path's last row this camera has not 
 makes that row's first open: only with the owner's blank-cards statement (camkit.statements), only with --press right
 alone and every row above it seen, and its Right goes as an armed press that may drop the link does (RESTORE_BY_HAND
 first, one read after it, MENU and the remote restore); the marker goes only when the start file comes back checked
-with no record differing, else the run exits EXIT_RESTORE_BY_HAND (first_open_or_exit). A camera other than the one
-the kit works on stops the run before anything is pressed.
+with no record differing, else the run exits EXIT_RESTORE_BY_HAND (first_open_or_exit). The lit bar an opening press
+meets is judged by lit_refused: on the first press after the page scan went to a one-label --path's row, a bar read
+with the row's icon as a letter or two before its label ("S Exposure Comp. +0.0"), or its label ending in a stop
+before a value ("Exposure Comp. +0.0"), is that row where the page model keeps that very reading of it and the value
+is one the kit knows for it (icon_reading). A camera other than the one the kit works on stops the run before anything
+is pressed.
 Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same run folder. The settings are downloaded before
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
 checked (docs/decisions/0015: every run ends restoring its start file). On an address, --network or --owner run the
@@ -190,7 +194,7 @@ from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, E
                     definition, hold_for_owner, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
-                    restore_checked, restoring, row_values, screen_named, values_withheld, wait_shooting)
+                    restore_checked, restoring, row_readings, row_values, screen_named, values_withheld, wait_shooting)
 
 
 class NotReached(RuntimeError):
@@ -678,14 +682,21 @@ OPENERS = ENTERS + RIGHTS          # a --press that opens the lit row: the --pat
 ROW_PAGES_OPENED = ("menu", "submenu")      # the pages whose lit row an opening press opens (lit_refused)
 
 
-def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None) -> tuple:
+def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None, gone_to=None) -> tuple:
     """(why the opening press may not open the lit row of the menu page shown, or "", the row's path) for a run that is
     no --owner one. One rule: the row is the longest label the lit text starts with, as a whole word, among those the
     kit knows (`known`: the definition's, the page model's, the --path's last row and the page's own labels read live,
     shown_labels) or of a rows seen there (camkit.first_open.Seen.lit_row); words the lit text runs on with past that
     label must be a value of the row the kit knows (`values`: {label: values}, runner.row_values: the definition's and
     the page model's, compared plain), else the bar may be a longer row's and nothing opens: a seen row showing a value
-    the kit does not know yet (a body with no definition) is named in --path instead. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
+    the kit does not know yet (a body with no definition) is named in --path instead. Where that rule takes the bar for
+    no row, or for the --path's own row with words past its label that are no value of it, and the run went by the page
+    scan to the --path's row at this level and has pressed nothing since (`gone_to`: the page model's row go_to reached
+    and the names other rows go by, an ordinary run's alone: icon_reading), the lit bar is that row where it starts
+    with a reading the page model keeps of it, its label itself or that label with the row's icon read as a letter or two
+    before it ("S Exposure Comp. +0.0"), both with their last stop kept (stop_kept: plain leaves out the stop of
+    "Exposure Comp.", so "Exposure Comp. +0.0" ran on with ". +0.0"), and the words past that reading are none or a
+    value of the row as above; else that rule's refusal stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
     first_open_or_exit; any other opens only where this camera has been seen to open it, so walking within a seen parent
     to a seen row stays plain. Where the page shown cannot be placed (`depth` None, after a MENU or a Left on a menu
     page) nothing opens. `decided`: the row a network decision opens that the lit bar reads as (safety.network_lifted_
@@ -694,19 +705,85 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     if depth is None:
         return f"the menu page shown is not one the run can place, so the lit row cannot be judged: {named}", None
     row = (*depth, decided) if decided else seen.lit_row(depth, lit, {*known, path[-1]})
-    if row is None:
-        return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
-    if not decided:
+    why = f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}" if row is None else ""
+    if row is not None and not decided:
         label = first_open.key(row)[-1]
         rest = safety.plain(lit)[len(label):].strip()
         if rest and rest not in {safety.plain(v) for v in (values or {}).get(label, ())}:
-            return (f"the lit row reads {lit.strip()!r}, which runs on past the row {row[-1]!r} with words that are no "
-                    f"value of it: {named}"), None
+            why = (f"the lit row reads {lit.strip()!r}, which runs on past the row {row[-1]!r} with words that are no "
+                   f"value of it: {named}")
+    own = (*depth, path[-1])
+    if why and not decided and gone_to and list(depth) == list(path[:-1]) \
+            and (row is None or first_open.key(row) == first_open.key(own)):
+        # the navigated row's own reading the bar starts with (icon_reading), the words past it none or a value of it
+        head = icon_reading(lit, path[-1], gone_to[0], {*known, *gone_to[1]})
+        rest = safety.plain(stop_kept(lit)[len(head):]) if head else ""
+        if head and (not rest or rest in {safety.plain(v) for v in (values or {}).get(first_open.key(own)[-1], ())}):
+            row, why = own, ""
+    if why:
+        return why, None
     if list(depth) == list(path[:-1]) and first_open.key(row) == first_open.key((*depth, path[-1])):
         return "", tuple(path)
     if not seen.seen(row):
         return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
     return "", row
+
+
+# what stands before a row's label in a reading of it, compared plain: nothing (the label itself), or the row's icon
+# read as a letter or two ("S Exposure Comp.", "QEnlarge Image"), at most two letters or digits, then at most one space
+# (icon_reading)
+ICON_LEAD = re.compile(r"[0-9a-z]{0,2} ?")
+
+
+def stop_kept(text) -> str:
+    """`text` as safety.plain compares it, but its last stop kept ("S Exposure Comp." -> "s exposure comp."): plain
+    leaves out the signs at a text's end, so a reading ending in a stop would else be followed, in the lit bar, by that
+    stop and anything glued on after it ("S Exposure Comp.ensation")."""
+    return safety.plain(f"{str(text or '').strip()}0")[:-1]
+
+
+def icon_reading(lit: str, label: str, row, others=()) -> str:
+    """The reading of the page model row `row` (the one go_to reached for the --path's row `label`) that ties the lit
+    bar's text `lit` to that row, as stop_kept gives it, or "": the row's label is `label` (compared plain); the reading,
+    compared plain, is that label, or ends with it after at most two letters or digits and at most one space (ICON_LEAD:
+    the row's icon read as a letter or two, "S Exposure Comp.", "QEnlarge Image"); the lit text starts with the reading, both with their
+    last stop kept (stop_kept), alone or before what is no letter or digit of a longer word (Seen.lit_row's rule for a
+    value after a label); and no reading the text so starts with is, compared plain, a name the kit knows another row by
+    (`others`: the definition's row labels, the page model's and the page's own, and the page model's readings of other
+    rows, other_names), so "AF Assist" is never the row "Assist"."""
+    want, seen = safety.plain(label or ""), stop_kept(lit)
+    if not want or not isinstance(row, dict) or safety.plain(row.get("label") or "") != want:
+        return ""
+    hits = {}
+    for reading in row_readings(row):
+        r, head = safety.plain(reading), stop_kept(reading)
+        if r.endswith(want) and ICON_LEAD.fullmatch(r[:len(r) - len(want)]) and seen.startswith(head) \
+                and not seen[len(head):len(head) + 1].isalnum():
+            hits[head] = r
+    if not hits or set(hits.values()) & ({safety.plain(x) for x in others if isinstance(x, str)} - {want}):
+        return ""
+    return max(hits, key=len)
+
+
+def scan_row(cycle, model, j) -> dict | None:
+    """The page model's row at the page scan's position `j` (where crawl_run.go_to went), or None where it has none."""
+    if isinstance(j, bool) or not isinstance(j, int) or j < 0:
+        return None
+    try:
+        row = model[cycle[j]["page"]]["rows"][cycle[j]["row"]]
+    except (IndexError, KeyError, TypeError):
+        return None
+    return row if isinstance(row, dict) else None
+
+
+def other_names(model, label: str) -> set:
+    """Every label and reading the page model (model: {page key: page}) keeps of a row whose label is not `label`
+    (compared plain; a namesake on another page, My Menu's, is the row's own): names a reading of the row `label` must
+    not be to tie a lit bar to it (icon_reading)."""
+    want = safety.plain(label or "")
+    return {t for page in (model or {}).values() if isinstance(page, dict)
+            for row in page.get("rows") or [] if isinstance(row, dict) and safety.plain(row.get("label") or "") != want
+            for t in row_readings(row)}
 
 
 def shown_labels(cam, cycle, model) -> list:
@@ -1338,8 +1415,15 @@ def main():
                 # the owner row's top-level row is gone to in the decision's own tab and group, and the page shown is
                 # checked to be there before anything goes further (owner_place)
                 there = {"place": owner_place[:2]} if owner_info else {}
-                if j is None or go_to(cam, cycle, model, j, a.path[0], **there) is None:
+                at = go_to(cam, cycle, model, j, a.path[0], **there) if j is not None else None
+                if at is None:
                     raise NotReached(a.path[0])
+                # the page model's row the scan went to, where it is the --path's one row, on an ordinary run: its
+                # readings may tie a lit bar read with the row's icon as a letter or two to it, before any other press
+                # (lit_refused, icon_reading)
+                gone_to = scan_row(cycle, model, at) if (seen is not None and not a.network and not owner_info
+                                                         and len(a.path) == 1) else None
+                gone_to = (gone_to, other_names(model, a.path[0])) if gone_to else None
                 if owner_info:
                     why = place_refused(screen_text(cam, a.grip), *owner_place[:2])
                     if why:
@@ -1480,7 +1564,7 @@ def main():
                                    if a.network and lit else None)
                         why, opening_row = lit_refused(lit, depth, a.path, seen,
                                                        known_rows | set(shown_labels(cam, cycle, model)), decided,
-                                                       row_vals)
+                                                       row_vals, gone_to if i == 0 else None)
                     else:
                         why = ""
                     if why:
@@ -1555,7 +1639,10 @@ def main():
                     # a row's first open on this body (first_open_or_exit): its Right, on that very row, goes as an armed
                     # press that may drop the link
                     first_now = bool(first_label) and key in RIGHTS and not inside
-                    if first_now and not (owner_opens or opens or look_bar or reads_row(lit, first_label)):
+                    # the bar read with the row's icon as a letter or two, which lit_refused tied to the --path's row
+                    # (icon_reading), is that row too
+                    tied = bool(gone_to) and i == 0 and opening_row is not None and list(opening_row) == list(a.path)
+                    if first_now and not (owner_opens or opens or look_bar or reads_row(lit, first_label) or tied):
                         print(f"{key} refused: the lit row does not read {first_label!r}, whose first open this run makes; "
                               "cancelling", flush=True)
                         run.log("press_refused", key=key, frame=cam.frame.path.name, why="not the first open's row")

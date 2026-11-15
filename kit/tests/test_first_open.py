@@ -682,11 +682,11 @@ def test_pass1_map_keeps_the_mapping_of_a_row_a_later_lap_only_skipped(own_runs,
 # ------------------------------------------------------------------------------------------------------ drive.py
 
 def drive_run(tmp_path, monkeypatch, path=("Drive Mode",), presses=("right",), changes=(), fail=None, lit="Drive Mode",
-              model_name=None, root=None, states=None, shown=(), values=None, live=None):
+              model_name=None, root=None, states=None, shown=(), values=None, live=None, scan=None, at=True, allow=()):
     """drive.py's main() with its seams faked: the lit row `lit` (or `states`, [(kind, lit)] after the opening MENU
     and after each press), the press raising `fail`, the end's download differing in `changes`, the link naming
-    `model_name`. Returns (exit code, the presses with whether RESTORE_BY_HAND was there, the drive.jsonl line, the
-    printed words)."""
+    `model_name`; `scan` the page scan's (cycle, model), `at` the position go_to reaches, `allow` the --allow labels.
+    Returns (exit code, the presses with whether RESTORE_BY_HAND was there, the drive.jsonl line, the printed words)."""
     import drive
     run = Run("kit2_drive", root=root or tmp_path)
     pressed = []
@@ -713,13 +713,13 @@ def drive_run(tmp_path, monkeypatch, path=("Drive Mode",), presses=("right",), c
                              changes=[SimpleNamespace(key=k, before=0, after=1) for k in changes])
     link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT", press=lambda *a, **k: None,
                            call=says(model_name).call)
-    for name, value in (("check_readers", lambda: None), ("load_scan", lambda scan: ([], {})), ("Run", lambda name: run),
+    for name, value in (("check_readers", lambda: None), ("load_scan", lambda _: scan or ([], {})), ("Run", lambda name: run),
                         ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None,
                                                                        grab=lambda save=False: None, close=lambda: None)),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
                         ("wait_for", lambda *a, **k: None), ("LiveCamera", lambda *a, **k: Cam()),
                         ("find_position", lambda cam, cycle, model: 0),
-                        ("go_to", lambda *a, **k: True), ("enter_any", lambda cam, path, i: None),
+                        ("go_to", lambda *a, **k: at), ("enter_any", lambda cam, path, i: None),
                         ("screen_text", lambda cam, grip: "Drive Mode  Single Shooting"),
                         ("highlighted", lambda image, p: now()[1]), ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("after_armed", lambda cam, grip: ("list", "Single Shooting", "")),
@@ -736,7 +736,8 @@ def drive_run(tmp_path, monkeypatch, path=("Drive Mode",), presses=("right",), c
     monkeypatch.setattr(drive, "submenu_labels", lambda cam: ("page", [{"label": x, "readings": [x]} for x in sub]))
     monkeypatch.setattr(drive, "page_labels", lambda now, cycle, model: list(shown))
     monkeypatch.setattr(sys, "argv", ["drive.py", *[x for p in path for x in ("--path", p)],
-                                      *[x for p in presses for x in ("--press", p)]])
+                                      *[x for p in presses for x in ("--press", p)],
+                                      *[x for p in allow for x in ("--allow", p)]])
     out, code = io.StringIO(), 0
     with contextlib.redirect_stdout(out):
         try:
@@ -879,6 +880,201 @@ def test_lit_row_takes_the_longest_whole_label_it_knows():
     assert seen.lit_row((), "RAW Output  On") == ("raw output",)
     assert seen.lit_row((), "Focus Area Limit On", {"Focus Area Limit"}) == ("focus area limit",)     # known, longest
     assert seen.lit_row((), "Focus Area Limit On", {"Focus Area", "Focus Area Limit"}) == ("focus area limit",)
+
+
+# rows the camera draws with an icon, which OCR reads as a letter or two before the label, on the live bar as in the page
+# scan (kit2_a1fin_expcomp_cancel, 2026-11-15: "S Exposure Comp. +0.0" refused as a row never seen opened)
+EXPOSURE = {"label": "Exposure Comp.", "value": "±0.0",
+            "readings": {"label": {"ocr": "S Exposure Comp.", "ocr2": "Exposure Comp.", "vllm": "Exposure Comp."}}}
+STEP = {"label": "Exposure step", "value": "0.3EV",
+        "readings": {"label": {"ocr": "S Exposure step", "ocr2": "Exposure step", "vllm": "Exposure step"}}}
+ENLARGE = {"label": "Enlarge Image",
+           "readings": {"label": {"ocr": "QEnlarge Image", "ocr2": "@ Enlarge Image", "vllm": "Enlarge Image"}}}
+NOT_SEEN = "a row this camera has not been seen to open: name it in --path"
+
+
+def icon_scan(*rows) -> tuple:
+    """A page scan of one page holding `rows`, a cycle position on each: (cycle, model)."""
+    return ([{"page": "k", "row": i} for i in range(len(rows))],
+            {"k": {"key": "k", "breadcrumb": "Exposure/Color > Exposure Comp.", "rows": list(rows)}})
+
+
+def icon_drive(tmp_path, monkeypatch, row, lit, rows=None, at=0, **kw):
+    """drive_run with --path the label of `row`, over icon_scan's page of `rows` (`row` alone by default), go_to
+    reaching position `at`."""
+    return drive_run(tmp_path, monkeypatch, path=[row["label"]], lit=lit, scan=icon_scan(*(rows or [row])), at=at, **kw)
+
+
+def test_drive_takes_a_bar_read_with_its_icons_letter_for_the_row_it_went_to(tmp_path, monkeypatch, scope):
+    """kit/drive.py's opening check: a lit bar read with the row's icon as a letter or two before its label is the
+    --path's row where the page model's row go_to went to keeps that very reading of its label (icon_reading): its
+    first open where the row is not seen opened, a plain Right where it is, as for the bar read without the icon."""
+    values = {"exposure comp.": {"+0.0"}}
+    scope(BLANK)
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, EXPOSURE, "S Exposure Comp. +0.0", values=values)
+    assert pressed == [("menu", False), ("right", True)] and code in (0, None) and line["first_open"] is True, said
+    looks_of(TEST_CAMERA, look(["Exposure Comp."], by="drive"))
+    for lit in ("S Exposure Comp. +0.0", "S Exposure Comp."):
+        code, pressed, line, said = icon_drive(tmp_path, monkeypatch, EXPOSURE, lit, values=values)
+        assert pressed == [("menu", False), ("right", False)] and code in (0, None), (lit, said)
+        assert "first_open" not in line and not restore_pending(tmp_path)
+    # the icon glued on, or set apart (which plain() already leaves out): first open, then plain (Enlarge Image is an
+    # action of the never-open list: named with --allow, as ever)
+    allow = ["Enlarge Image"]
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, ENLARGE, "QEnlarge Image", allow=allow)
+    assert pressed == [("menu", False), ("right", True)] and line["first_open"] is True, (code, said)
+    looks_of(TEST_CAMERA, look(["Enlarge Image"], by="drive"))
+    for lit in ("QEnlarge Image", "@ Enlarge Image", "Enlarge Image"):
+        code, pressed, line, said = icon_drive(tmp_path, monkeypatch, ENLARGE, lit, allow=allow)
+        assert pressed == [("menu", False), ("right", False)] and code in (0, None), (lit, said)
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, ENLARGE, "QEnlarge Imagery", allow=allow)
+    assert pressed == [("menu", False)] and NOT_SEEN in said
+    # a seen row's icon reading whose bar runs on with words that are no value of it: today's refusal, in its words
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, EXPOSURE, "S Exposure Comp. Plus", values=values)
+    assert pressed == [("menu", False)] and f"'S Exposure Comp. Plus', {NOT_SEEN}" in said
+
+
+def test_drive_refuses_an_icons_reading_that_is_not_the_rows_it_went_to(tmp_path, monkeypatch, scope):
+    """The icon's reading ties a bar to the --path's row only as icon_reading holds; else today's refusal, in its words,
+    whether the row is seen opened or not."""
+    values = {"exposure comp.": {"+0.0"}, "assist": {"On"}, "af assist": {"On"}, "exposure step": {"0.3EV"}}
+    looks_of(TEST_CAMERA, look(["Exposure Comp."], by="drive"), look(["Assist"], by="drive"),
+             look(["Exposure step"], by="drive"))
+    plain_row = {"label": "Exposure Comp.", "readings": {"label": {"ocr": "Exposure Comp.", "vllm": "Exposure Comp."}}}
+    abc = {"label": "Exposure Comp.", "readings": {"label": {"ocr": "ABC Exposure Comp.", "vllm": "Exposure Comp."}}}
+    assist = {"label": "Assist", "readings": {"label": {"ocr": "AF Assist", "vllm": "Assist"}}}
+    af = {"label": "AF Assist", "readings": {"label": {"ocr": "AF Assist", "vllm": "AF Assist"}}}
+    lamp = {"label": "AF Illuminator", "readings": {"label": {"ocr": "AF Assist", "vllm": "AF Illuminator"}}}
+    cases = (
+        # the page model keeps no such reading of the row
+        dict(row=plain_row, lit="S Exposure Comp. +0.0"),
+        # three characters before the label are no icon
+        dict(row=abc, lit="ABC Exposure Comp. +0.0"),
+        # the reading is another row's label the kit knows (on the page shown, or elsewhere in the page model: today's
+        # rule takes the bar for that row, never seen opened), or what the page model reads another row as
+        dict(row=assist, lit="AF Assist On", shown=["AF Assist", "Assist"]),
+        dict(row=assist, lit="AF Assist On", rows=[assist, af]),
+        dict(row=assist, lit="AF Assist On", rows=[assist, lamp]),
+        # the bar runs on into a longer word
+        dict(row=EXPOSURE, lit="S Exposure Comp.ensation"),
+        # another row's reading lit, although the run went to this one
+        dict(row=EXPOSURE, lit="S Exposure step 0.3EV", rows=[EXPOSURE, STEP]),
+        # the position go_to reached is another row's
+        dict(row=EXPOSURE, lit="S Exposure Comp. +0.0", rows=[EXPOSURE, STEP], at=1),
+        # a press went after go_to: the lit bar is no longer the row it went to
+        dict(row=EXPOSURE, lit=None, presses=["down", "right"],
+             states=[("menu", "Exposure Comp. +0.0"), ("menu", "S Exposure Comp. +0.0")]),
+    )
+    for unseen in (False, True):
+        if unseen:
+            scope(BLANK)
+            coverage.append_look(TEST_CAMERA, look(["Exposure Comp."], result="changed"))      # unseen again
+            coverage.append_look(TEST_CAMERA, look(["Assist"], result="changed"))
+        for case in cases:
+            case = dict(case)
+            row, lit = case.pop("row"), case.pop("lit")
+            presses = case.get("presses", ["right"])
+            if unseen and presses != ["right"]:
+                continue        # an unseen row's run is --press right alone (first_open_or_exit)
+            code, pressed, line, said = icon_drive(tmp_path, monkeypatch, row, lit or "", values=values, **case)
+            shown = lit or case["states"][-1][1]
+            assert "right" not in [k for k, _ in pressed] and f"the lit row reads {shown!r}, {NOT_SEEN}" in said, \
+                (unseen, case, said)
+            assert not restore_pending(tmp_path)
+
+
+def test_drive_takes_the_navigated_rows_own_label_with_its_final_stop_kept(tmp_path, monkeypatch, scope):
+    """plain() leaves out the stop "Exposure Comp." ends in, so today's rule reads "Exposure Comp. +0.0" as running on
+    with ". +0.0" and refuses it; the row go_to went to, its own label as the page model keeps it, both with the stop
+    kept, ties that bar to it where "+0.0" is a value of it (icon_reading with nothing before the label). A word glued
+    on past the stop, or words that are no value of it, keep today's refusal in its words; a bar today's rule ties is
+    never asked of icon_reading."""
+    import drive
+    values = {"exposure comp.": {"+0.0"}}
+    plain_row = {"label": "Exposure Comp.",
+                 "readings": {"label": {"ocr": "Exposure Comp.", "ocr2": "Exposure Comp.", "vllm": "Exposure Comp."}}}
+    asked = []
+    real = drive.icon_reading
+
+    def spy(*a, **k):
+        asked.append(a[0])
+        return real(*a, **k)
+    monkeypatch.setattr(drive, "icon_reading", spy)
+    scope(BLANK)
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, plain_row, "Exposure Comp. +0.0", values=values)
+    assert pressed == [("menu", False), ("right", True)] and code in (0, None) and line["first_open"] is True, said
+    assert asked == ["Exposure Comp. +0.0"]
+    looks_of(TEST_CAMERA, look(["Exposure Comp."], by="drive"))
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, plain_row, "Exposure Comp. +0.0", values=values)
+    assert pressed == [("menu", False), ("right", False)] and code in (0, None) and "first_open" not in line, said
+    for lit in ("Exposure Comp.ensation", "Exposure Comp. Reset"):
+        code, pressed, line, said = icon_drive(tmp_path, monkeypatch, plain_row, lit, values=values)
+        assert pressed == [("menu", False)] and not restore_pending(tmp_path), (lit, said)
+        assert (f"the lit row reads {lit!r}, which runs on past the row 'exposure comp' with words that are no value "
+                "of it: name it in --path") in said, (lit, said)
+    # a label with no final stop that today's rule ties, its value known: today's rule alone, icon_reading never asked
+    asked.clear()
+    looks_of(TEST_CAMERA, look(["Drive Mode"], by="drive"))
+    drive_row = {"label": "Drive Mode", "readings": {"label": {"ocr": "Drive Mode", "vllm": "Drive Mode"}}}
+    code, pressed, line, said = icon_drive(tmp_path, monkeypatch, drive_row, "Drive Mode  Single Shooting",
+                                           values={"drive mode": {"Single Shooting"}})
+    assert pressed == [("menu", False), ("right", False)] and asked == [], said
+
+
+def test_icon_reading_is_the_rows_own_reading_with_a_letter_or_two_before_its_label():
+    """drive.icon_reading, compared plain: the reading of the row's label the lit bar starts with, alone or before what
+    is no letter or digit of a longer word; none for a row of another label, a reading with more than two characters
+    or a space more before the label, or one that is another row's label."""
+    import drive
+    assert drive.icon_reading("S Exposure Comp. +0.0", "Exposure Comp.", EXPOSURE) == "s exposure comp."
+    assert drive.icon_reading("S Exposure Comp.", "Exposure Comp.", EXPOSURE) == "s exposure comp."
+    assert drive.icon_reading("QEnlarge Image", "Enlarge Image", ENLARGE) == "qenlarge image"
+    # plain() leaves a reading's last stop out: kept, so a word glued on past it is a longer word, not a value
+    assert drive.icon_reading("S Exposure Comp.ensation", "Exposure Comp.", EXPOSURE) == ""
+    assert drive.icon_reading("S Exposure Comp +0.0", "Exposure Comp.", EXPOSURE) == ""
+    assert drive.icon_reading("S Exposure Comp. +0.0", "Exposure step", EXPOSURE) == ""
+    assert drive.icon_reading("S Exposure Comp. +0.0", "Exposure Comp.", STEP) == ""
+    assert drive.icon_reading("S Exposure Comp. +0.0", "Exposure Comp.", None) == ""
+    assert drive.icon_reading("S Exposure Comp. +0.0", "Exposure Comp.", EXPOSURE, {"S Exposure Comp."}) == ""
+    # three characters, or two that are no letter or digit (the more refusing reading of "a letter or two")
+    for reading in ("ABC Exposure Comp.", "(+ Exposure Comp.", "S. Exposure Comp."):
+        row = {"label": "Exposure Comp.", "readings": {"label": {"ocr": reading}}}
+        assert drive.icon_reading(f"{reading} +0.0", "Exposure Comp.", row) == "", reading
+    row = {"label": "Exposure Comp.", "readings": {"label": {"ocr": "AB Exposure Comp."}}}
+    assert drive.icon_reading("AB Exposure Comp.", "Exposure Comp.", row) == "ab exposure comp."
+    assert drive.icon_reading("AB Exposure Comp.s", "Exposure Comp.", row) == ""
+    # what another row of the page model is known by, this row's own readings and those of its namesakes aside
+    model = icon_scan(EXPOSURE, STEP, {**EXPOSURE, "readings": {"label": {"ocr": "@ Exposure Comp."}}})[1]
+    assert drive.other_names(model, "Exposure Comp.") == {"Exposure step", "S Exposure step"}
+
+
+def test_the_refused_frame_of_exposure_comp_is_tied_to_its_row_by_its_icons_reading():
+    """Opt-in (skipped without the a1 II's two runs in this clone or this computer's OCR): the frame kit/drive.py refused
+    its Right on (kit2_a1fin_expcomp_cancel, 2026-11-15), its lit bar read as the kit reads it, and the page scan's row
+    go_to went to (kit2_page_scan_1113b): the icon's reading ties the bar to Exposure Comp., seen opened."""
+    import drive
+    import runner
+    from camkit import jsonl, ocr, paths
+    from camkit.frames import load
+    run, scan = paths.a1ii_root() / "kit2_a1fin_expcomp_cancel", paths.a1ii_root() / "kit2_page_scan_1113b"
+    if not (run / "events.jsonl").is_file() or not (scan / "model.json").is_file():
+        pytest.skip("the a1 II's kit2_a1fin_expcomp_cancel and kit2_page_scan_1113b are not in this clone")
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    refused = [e for e in jsonl.read(run / "events.jsonl", bad="skip") if e.get("kind") == "press_refused"]
+    frame = run / "shots" / refused[-1]["frame"]
+    lit = drive.highlighted(load(frame).image, frame)
+    model = {p["key"]: p for p in json.loads((scan / "model.json").read_text(encoding="utf-8"))}
+    row = next(r for p in model.values() if p.get("breadcrumb") == "Exposure/Color > Exposure Comp."
+               for r in p["rows"] if r.get("label") == "Exposure Comp.")
+    known = runner.known_labels(model)
+    values = {safety.plain(k): v for k, v in runner.row_values(model).items()}
+    seen = first_open.Seen({("exposure comp.",)})
+    gone_to = (row, drive.other_names(model, "Exposure Comp."))
+    assert drive.lit_refused(lit, [], ["Exposure Comp."], seen, known, None, values, gone_to) == ("", ("Exposure Comp.",))
+    if not drive.reads_row(lit, "Exposure Comp."):      # the bar read with the icon's letter, as on 2026-11-15
+        assert drive.icon_reading(lit, "Exposure Comp.", row, {*known, *gone_to[1]}) == "s exposure comp.", lit
+        assert NOT_SEEN in drive.lit_refused(lit, [], ["Exposure Comp."], seen, known, None, values)[0]
 
 
 def test_held_rows_are_kept_through_a_failed_check_and_a_lost_link(tmp_path):
