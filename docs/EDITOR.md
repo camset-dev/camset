@@ -268,7 +268,37 @@ it (on the page too, and on hover in Compare, the Main tiles and the Memories pa
   Compare) changes this one alone."). A copy that held another value is changed and reverted alone, and stays as it
   is when its setting changes. Whether the camera moves a family's Stills and Movie values together is a setting of
   its own (the a1 II's Different Set for Still/Mv, one box per family), which the editor does not follow, so the
-  shooting mode never decides what follows, and a box changed in a file changes nothing else.
+  shooting mode never decides what follows. Where the definition says what a box does (`keeps_apart` on the box: on
+  the a1 II, the White Balance and Picture Profile boxes), the rows of its family say it while the box is ticked, after
+  the note above on a copy and alone on the setting, on the page too, each value named as the definition names it
+  ("Different Set for Still/Mv: White Balance is Ticked in this file: when this was tried on the camera, a change of
+  White Balance then changed only the copy for the shooting mode it was made in, White Balance (stills) or White
+  Balance (movie). The editor does not follow that setting: here the copies that held White Balance's value when this
+  file was opened or read change with it."). So with the box ticked an edit of White Balance still takes along both
+  copies where they held its value, which a choice on the camera did not (the file is still one the camera can write,
+  by a choice in each mode).
+- Unticking such a box: when it was tried on the camera, unticking it also set its family to a value of the camera's
+  own (White Balance to Auto, the Picture Profile to Off, both copies too), in the states the camera's page lists.
+  Before the change is kept, the window and the page ask, the title naming the box and the value it is to take ("Set
+  Different Set for Still/Mv: White Balance to Not ticked?"): "When this was tried on the camera, setting Different
+  Set for Still/Mv: White Balance to Not ticked also set White Balance to Auto, in White Balance (stills) and White
+  Balance (movie) too. If only Different Set for Still/Mv: White Balance changes here, this file keeps values that this
+  change on the camera does not leave, and what the camera does when it loads such a file is not known." "Do as the
+  camera does" sets the box and the setting and its copies, in one undo step; "Change this setting only" sets the box
+  alone; Cancel leaves it as it was ("Leaves Different Set for Still/Mv: White Balance at Ticked: nothing is
+  changed."). It asks whichever way the change comes: the box's own control, a copy of its row from file B or a
+  memory (the Memories page's arrows), a put-back of it, the History window's Revert of an edit of it, and a copy of
+  several rows at once (Copy all shown rows, a merge, a whole memory's recall or register) unless the rows copied
+  leave the setting and every copy at the other column's values too (set to them, or holding them already), which
+  then come with it. On the page an answer carries the file's state the question was asked of, and one to a file that
+  changed meanwhile (another edit, the history moved) is refused, as the window refuses it. Nothing is
+  asked for a Revert (it puts back the file as opened), where the family already holds that value, or for a box whose
+  definition gives no such value, which then changes alone; ticking a box changes the box alone, as on the camera.
+  Where the camera's way cannot be made here (the box or a setting it would set is view only, or a setting does not
+  take the value in this file), "Do as the camera does" is greyed out, saying why on hover (on the page, and when
+  pressed), and the question stays open; a step that could not set everything it was to set is taken back whole and
+  said (the file, the undo history and a redo as they were), never kept in part. A box the definition says nothing of (the a1 II's other five) changes nothing else, and a
+  definition whose `keeps_apart` names values or settings it does not hold is refused.
 - What is checked: where a set's shooting mode is known (the definition's `camera.live_mode` names the live record
   that says the mode the file was saved in; a memory set's mode is the one `camera.memory_sets.modes` lists it under)
   and the copies say whose mode they are (`copy_for`), the setting must equal the copy for that mode, as in every file

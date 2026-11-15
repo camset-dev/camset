@@ -4,7 +4,9 @@ The camera's hand table names the families (COPIES in its hand tables file, writ
 Profile parameters in use and the profile in use, each with its Stills and Movie copy, and the other settings Different Set for Still/Mv keeps
 per mode); the rule an editor leans on, that in a file the camera wrote the live value equals at least one of its
 copies, is checked here on the camera's own downloads at every write, and a download that contradicts a family stops the
-write. Keys only, never a value (docs/decisions/0016)."""
+write. The switches of the camera's own that keep a family's copies apart (KEEPS_APART: the a1 II's Different Set for
+Still/Mv boxes whose effect on the copies was proved) go on each switch as "keeps_apart" (with_keeps_apart), checked
+against the copies written here. Keys only, never a value (docs/decisions/0016)."""
 import json
 import re
 import sys
@@ -180,3 +182,159 @@ def with_copies(doc: dict, table: dict, run_root: Path, most: int = SAMPLE, mode
     print(f"copies: {len(keep)} live settings with the copies the camera keeps of them ({len(copy_of)} copies), the "
           f"rule held in each of {n} downloads read" + (f", {unread} that could not be read skipped" if unread else ""))
     return len(keep)
+
+
+# the fields of a keeps_apart entry, in the order the definition writes them
+APART_FIELDS = ("setting", "apart", "untick_sets")
+
+
+def apart_problem(switch: dict, e: dict, by_key: dict, taken: dict) -> str | None:
+    """Why the hand table's entry `e` for `switch` (KEEPS_APART) cannot take effect in the definition (`by_key`, its
+    settings by key; `taken`, each family already named by a switch and which), in words, or None: the switch must be a
+    scalar setting with values, `apart` some of them but not all; the family's setting another setting, which lists its
+    copies (copies, as with_copies wrote them), each a setting of the definition saying whose mode it is (copy_for), and
+    named by no other switch; `untick_sets` one of the setting's values and each copy's."""
+    codes = [v for v, _ in switch.get("values") or []]
+    if not switch.get("scalar") or len(codes) < 2:
+        return "the switch is not a setting with named values"
+    if any(v not in codes for v in e["apart"]):
+        return f"apart names a value the switch does not list ({sorted(set(e['apart']) - set(codes))})"
+    if set(codes) <= set(e["apart"]):
+        return "apart names every value of the switch, so the copies would never share one"
+    fam = by_key.get(e["setting"])
+    if fam is None:
+        return f"the definition lacks {e['setting']}"
+    if fam["key"] == switch["key"]:
+        return "the switch names itself"
+    copies = [by_key.get(c) for c in fam.get("copies") or ()]
+    if not copies or None in copies:
+        return f"{e['setting']} lists no copies the definition holds (COPIES, written where the downloads bear it out)"
+    if not all(c.get("copy_for") for c in copies):
+        return f"{e['setting']}'s copies do not say whose mode they are (copy_for: COPY_MODES_UNKNOWN, or no COPY_MODES)"
+    if e["setting"] in taken:
+        return f"{e['setting']} is kept apart by {taken[e['setting']]} already"
+    if "untick_sets" in e:
+        for s in (fam, *copies):
+            if not takes(s, e["untick_sets"]):
+                return f"untick_sets is not one of {s['key']}'s values"
+    return None
+
+
+def takes(s: dict, v: int) -> bool:
+    """Whether setting `s` holds `v` among its values: one it names, or a number of its range on its step."""
+    if v in [x for x, _ in s.get("values") or []]:
+        return True
+    lo, hi = s.get("range") or (None, None)
+    return lo is not None and lo <= v <= hi and (v - lo) % max(1, s.get("step") or 1) == 0
+
+
+def apart_proof(e: dict, part) -> dict:
+    """What proved a KEEPS_APART entry `e`: its "evidence" (the family kept apart and shared by the switch) and its
+    "untick" (the value leaving the apart values gave the family), from the entry itself (the ILCE-1M2's pass, the hand
+    evidence put back into the tables) and from `part`, its part of the hand evidence read apart (the plain pass)."""
+    part = part if isinstance(part, dict) else {}
+    return {f: e.get(f) or part.get(f) for f in ("evidence", "untick") if e.get(f) or part.get(f)}
+
+
+def shared_contradictions(files: list, entries: list, by_key: dict) -> tuple:
+    """({(switch key, family key): (the first file, its section)} where a download holds the switch at a value outside
+    the entry's apart values while the family's setting and its copies hold more than one value, how many files read,
+    how many could not be read, how many sections were checked). `entries`: [(switch key, entry)]. Every section both
+    the switch and the family live in (the live settings, and the memory sets for settings kept in them) whose records
+    the file holds."""
+    from camkit import camset
+    bad, read, unread, checked = {}, 0, 0, 0
+    for f in files:
+        try:
+            cs = camset.read(f)
+        except (ValueError, OSError):
+            unread += 1
+            continue
+        read += 1
+        for key, e in entries:
+            sw, fam = by_key[key], by_key[e["setting"]]
+            family = [fam["key"], *(fam.get("copies") or ())]
+            for section in range(len(cs.sections)):
+                if not all(section == 0 and s.get("area") == "global" or section > 0 and s.get("in_sets")
+                           for s in (sw, *(by_key[k] for k in family))):
+                    continue
+                v = value_of(cs, key, section)
+                held = [value_of(cs, k, section) for k in family]
+                if v is None or None in held or v in e["apart"]:
+                    continue
+                checked += 1
+                if len(set(held)) > 1:
+                    bad.setdefault((key, e["setting"]), (f, section))
+    return bad, read, unread, checked
+
+
+def with_keeps_apart(doc: dict, table: dict, run_root: Path | None = None, evidence: dict | None = None,
+                     most: int = SAMPLE) -> int:
+    """The hand table's switches that keep a family's copies apart (KEEPS_APART: the a1 II's Different Set for Still/Mv
+    boxes whose effect on the copies was proved) written as "keeps_apart" on each switch's setting, its entries in the
+    table's order, each with the fields APART_FIELDS names; every other setting losing an old one. An entry is written
+    only where the hand evidence shows it (apart_proof: "evidence"), its untick_sets only where it shows that too
+    ("untick"): the evidence reaches no field of the definition, but without it the fact is not written, said. An
+    entry that cannot take effect (apart_problem: a switch or a family the definition lacks, a family whose copies or
+    their modes it does not hold, a value the switch or the family does not list, a family a switch named before) is
+    printed, "not applied", and left out. With the camera's downloads (up to `most` of them, spread over its download
+    log, as with_copies reads them), every section where a download holds the switch outside an entry's apart values
+    must hold the family's setting and its copies at one value, the switch read in that same section and only in the
+    sections it lives in (a live switch in the live settings alone, whatever the memory sets hold): a download that
+    contradicts an entry stops the write (exit 1, the switch, the family, the file and the section named, nothing
+    written), as with_copies and check_video_systems stop it, for the hand table is then wrong or incomplete for a
+    state the camera wrote; a download that cannot be read is skipped and counted; with no downloads that is said and
+    the entries are written as the tables give them. A switch none of whose entries takes effect gets no field. Read after with_copies, whose copies and copy_for it leans on.
+    `evidence`: the plain pass's KEEPS_APART part of the hand evidence, read apart ({switch key: {place: fields}});
+    the ILCE-1M2's pass has it put back into the entries. Keys and value codes only, never a value a file held
+    (docs/decisions/0016). Returns how many switches carry one."""
+    by_key = {s["key"]: s for s in doc["settings"]}
+    kept, taken = [], {}
+    for key, entries in table.items():
+        switch = by_key.get(key)
+        if switch is None:
+            print(f"  keeps apart {key}: the definition lacks it; not applied")
+            continue
+        for i, e in enumerate(entries):
+            why = apart_problem(switch, e, by_key, taken)
+            proof = apart_proof(e, ((evidence or {}).get(key) or {}).get(str(i)))
+            if why is None and not proof.get("evidence"):
+                why = "nothing in the hand evidence shows it (its \"evidence\" in KEEPS_APART)"
+            if why:
+                print(f"  keeps apart {key} -> {e['setting']}: {why}; not applied")
+                continue
+            taken[e["setting"]] = key
+            out = {f: e[f] for f in APART_FIELDS if f in e}
+            if "untick_sets" in out and not proof.get("untick"):
+                print(f"  keeps apart {key} -> {e['setting']}: nothing in the hand evidence shows what leaving the apart "
+                      "values gave the family (its \"untick\" in KEEPS_APART); written without untick_sets")
+                out.pop("untick_sets")
+            kept.append((key, out))
+    files = downloads(run_root, most) if run_root is not None else []
+    if kept and not files:
+        print(f"keeps apart: no downloads {f'in {run_root}' if run_root is not None else 'given'} to check the shared "
+              "values on; written as the hand tables give them")
+    elif kept:
+        bad, n, unread, checked = shared_contradictions(files, kept, by_key)
+        if bad:
+            (key, fam), (f, section) = sorted(bad.items(), key=lambda kv: kv[0])[0]
+            sys.exit(f"keeps apart: {f.relative_to(run_root)}, section {section}, holds {key} outside its apart values "
+                     f"with {fam} and its copies at more than one value"
+                     + (f" ({len(bad) - 1} more entries contradicted)" if len(bad) > 1 else "")
+                     + ": the camera's hand table (KEEPS_APART) is wrong or incomplete for a state the camera wrote "
+                     "(another mode, a memory recalled, another menu), or the file is no camera's; nothing written. "
+                     "Take the entry out of KEEPS_APART, or prove the state that file shows, then write again.")
+        print(f"keeps apart: the family held one value in each of {checked} sections with the switch outside its apart "
+              f"values, of {n} downloads read" + (f", {unread} that could not be read skipped" if unread else ""))
+    want = {}
+    for key, e in kept:
+        want.setdefault(key, []).append(e)
+    for s in doc["settings"]:
+        if s["key"] in want:
+            s["keeps_apart"] = want[s["key"]]
+        else:
+            s.pop("keeps_apart", None)
+    if want:
+        print(f"keeps apart: {len(want)} switches with the families they keep apart "
+              f"({sum(len(v) for v in want.values())} families)")
+    return len(want)

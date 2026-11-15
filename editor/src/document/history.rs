@@ -122,6 +122,13 @@ impl App {
             });
         });
         if !open { self.show_history = false; }
+        self.history_revert(actions);
+    }
+
+    /// The History window's Reverts (each a record put back as it was before its edit), made as any edit is; one that
+    /// changes a switch keeping copies apart waits for the question's answer first (`hold_untick`, `untick_window`).
+    pub(crate) fn history_revert(&mut self, actions: Vec<Action>) {
+        let actions = self.hold_untick(actions);
         self.apply(actions);
     }
 

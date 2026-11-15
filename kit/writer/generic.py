@@ -14,7 +14,7 @@ from pass2_report import latest_run, mirrored_values, num, registration_mirrors,
 from runner import read_json
 
 from . import hand_evidence, hand_facts, hand_tables
-from .copies import with_copies
+from .copies import with_copies, with_keeps_apart
 from .fromdata import from_data, model_refused, say_stale, write_definition
 from .gate import gate, questions
 from .labels import clean
@@ -429,6 +429,9 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     # table is emptied loses them
     if tables.COPIES or any({"copies", "copy_of", "copy_for"} & set(s) for s in doc["settings"]):
         with_copies(doc, tables.COPIES, run.parent, modes=tables.COPY_MODES, unknown=tables.COPY_MODES_UNKNOWN)
+    # the switches that keep a family's copies apart (KEEPS_APART), on the copies just written
+    if tables.KEEPS_APART or any("keeps_apart" in s for s in doc["settings"]):
+        with_keeps_apart(doc, tables.KEEPS_APART, run.parent, (evidence or {}).get("KEEPS_APART"))
     without_observed(doc)
     doc = from_data(doc)
     print(f"{sum(1 for s in doc['settings'] if s.get('proved'))} of {len(doc['settings'])} settings proved; "

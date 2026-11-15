@@ -635,6 +635,184 @@ def test_copies_are_written_only_where_the_downloads_bear_the_rule_out(tmp_path,
     jsonschema.Draft202012Validator(schema["$defs"]["setting"]).validate(lean["global:0x0e08"])
 
 
+def apart_doc() -> dict:
+    """A made-up definition: two switches (0x0001, 0x0002, Not ticked 0 / Ticked 1), a family (0x0010, its stills copy
+    0x0011 and its movie copy 0x0012, each saying its modes), a family whose copies do not (0x0020, 0x0021, 0x0022), a
+    numbered family (0x0030, range 0 to 8 by 2, its copies 0x0031 and 0x0032) and a setting with no copies (0x0040)."""
+    tick = [[0, "Not ticked"], [1, "Ticked"]]
+    named = [[0, "Auto"], [1, "Daylight"], [2, "Shade"]]
+
+    def s(rid, name, **more):
+        return {"key": f"global:0x{rid:04x}", "area": "global", "id": rid, "name": name, "tab": "T", "group": "G",
+                "scalar": True, "in_sets": False, **more}
+    return {"settings": [
+        s(0x0001, "Box: Colour", values=tick), s(0x0002, "Box: Look", values=tick),
+        s(0x0010, "Colour", values=named, copies=["global:0x0011", "global:0x0012"]),
+        s(0x0011, "Colour (stills)", values=named, copy_of="global:0x0010", copy_for=["Stills"]),
+        s(0x0012, "Colour (movie)", values=named, copy_of="global:0x0010", copy_for=["Movie", "S&Q"]),
+        s(0x0020, "Look", values=named, copies=["global:0x0021", "global:0x0022"]),
+        s(0x0021, "Look (copy 1)", values=named, copy_of="global:0x0020"),
+        s(0x0022, "Look (copy 2)", values=named, copy_of="global:0x0020"),
+        s(0x0030, "Level", values=[], range=[0, 8], step=2, copies=["global:0x0031", "global:0x0032"]),
+        s(0x0031, "Level (stills)", values=[], range=[0, 8], step=2, copy_of="global:0x0030", copy_for=["Stills"]),
+        s(0x0032, "Level (movie)", values=[], range=[0, 8], step=2, copy_of="global:0x0030", copy_for=["Movie"]),
+        s(0x0040, "Plain", values=named)]}
+
+
+PROVED = {"evidence": "made up", "untick": "made up"}       # what a mapper's hand evidence puts on an entry (made up)
+
+
+def test_keeps_apart_goes_on_the_switch_where_its_family_and_modes_are_the_definitions(capsys):
+    """with_keeps_apart (kit/writer/copies.py): the hand table's KEEPS_APART entry goes on the switch's setting as
+    "keeps_apart", in the table's order with its fields in the definition's order, where the switch lists the values
+    apart names (not all of them), the family is a setting of the definition listing its copies, each saying whose mode
+    it is (copy_for), named by no other switch, and untick_sets is one of the family's values and each copy's (a number
+    of a range on its step too); an entry that fails any of that is printed, "not applied", and left out, a switch with
+    none left gets no field, and a setting the table no longer names loses an old one. An entry is written only where
+    the hand evidence shows it ("evidence"), its untick_sets only where that shows it too ("untick"), whether the
+    evidence was put back into the entry (the ILCE-1M2's pass) or comes apart (the plain pass); no evidence reaches the
+    definition. The field fits the definition's JSON Schema. Made-up keys and codes."""
+    import jsonschema
+    from writer.copies import with_keeps_apart
+    doc = apart_doc()
+    by = {s["key"]: s for s in doc["settings"]}
+    by["global:0x0040"]["keeps_apart"] = [{"setting": "global:0x0010", "apart": [1]}]     # an old one: goes
+    good = {"setting": "global:0x0010", "apart": [1], "untick_sets": 0}
+    table = {"global:0x0001": [{"untick_sets": 0, "apart": [1], "setting": "global:0x0010", **PROVED},
+                               {"setting": "global:0x0030", "apart": [1], "untick_sets": 4, **PROVED}],
+             "global:0x0002": [{"setting": "global:0x0010", "apart": [1], **PROVED}],          # named before
+             "global:0x0009": [{**good, **PROVED}]}                                              # no such switch
+    assert with_keeps_apart(doc, table) == 1
+    said = capsys.readouterr().out
+    assert by["global:0x0001"]["keeps_apart"] == [good, {"setting": "global:0x0030", "apart": [1], "untick_sets": 4}]
+    assert list(by["global:0x0001"]["keeps_apart"][0]) == ["setting", "apart", "untick_sets"]
+    assert [k for k, s in by.items() if "keeps_apart" in s] == ["global:0x0001"]
+    assert "keeps apart global:0x0002 -> global:0x0010: global:0x0010 is kept apart by global:0x0001 already; not applied" in said
+    assert "keeps apart global:0x0009: the definition lacks it; not applied" in said
+    assert "keeps apart: 1 switches with the families they keep apart (2 families)" in said
+    assert "made up" not in json.dumps(doc), "no evidence in the definition"
+    # each entry that cannot take effect, said and left out
+    for entry, why in (
+            ({"setting": "global:0x0010", "apart": [2]}, "apart names a value the switch does not list ([2])"),
+            ({"setting": "global:0x0010", "apart": [0, 1]}, "apart names every value of the switch"),
+            ({"setting": "global:0x0099", "apart": [1]}, "the definition lacks global:0x0099"),
+            ({"setting": "global:0x0001", "apart": [1]}, "global:0x0001 lists no copies the definition holds"),
+            ({"setting": "global:0x0040", "apart": [1]}, "global:0x0040 lists no copies the definition holds"),
+            ({"setting": "global:0x0020", "apart": [1]}, "global:0x0020's copies do not say whose mode they are"),
+            ({"setting": "global:0x0010", "apart": [1], "untick_sets": 7}, "untick_sets is not one of global:0x0010's values"),
+            ({"setting": "global:0x0030", "apart": [1], "untick_sets": 3}, "untick_sets is not one of global:0x0030's values")):
+        doc = apart_doc()
+        assert with_keeps_apart(doc, {"global:0x0002": [{**entry, **PROVED}]}) == 0, entry
+        assert f"keeps apart global:0x0002 -> {entry['setting']}: {why}" in capsys.readouterr().out, entry
+        assert not [s["key"] for s in doc["settings"] if "keeps_apart" in s]
+    # a copy the definition lacks; the switch not one of named values; the switch naming itself
+    doc = apart_doc()
+    doc["settings"] = [s for s in doc["settings"] if s["key"] != "global:0x0012"]
+    assert with_keeps_apart(doc, {"global:0x0001": [{**good, **PROVED}]}) == 0
+    doc = apart_doc()
+    assert with_keeps_apart(doc, {"global:0x0030": [{**good, **PROVED}], "global:0x0001": [{"setting": "global:0x0001", "apart": [1], **PROVED}]}) == 0
+    said = capsys.readouterr().out
+    assert "global:0x0010 lists no copies the definition holds" in said and "the switch is not a setting with named values" in said
+    assert "the switch names itself" in said
+    # the hand evidence: none, not applied; the apart rule without the untick, written without untick_sets; the plain
+    # pass's evidence, read apart, takes effect as the evidence put back does
+    doc = apart_doc()
+    assert with_keeps_apart(doc, {"global:0x0001": [good]}) == 0
+    assert "nothing in the hand evidence shows it (its \"evidence\" in KEEPS_APART); not applied" in capsys.readouterr().out
+    assert with_keeps_apart(doc, {"global:0x0001": [{**good, "evidence": "made up"}]}) == 1
+    assert "written without untick_sets" in capsys.readouterr().out
+    assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == {"global:0x0001": [{"setting": "global:0x0010", "apart": [1]}]}
+    doc = apart_doc()
+    assert with_keeps_apart(doc, {"global:0x0001": [good]}, evidence={"global:0x0001": {"0": {"$setting": "global:0x0010", **PROVED}}}) == 1
+    assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == {"global:0x0001": [good]}
+    # an emptied table takes the field out
+    assert with_keeps_apart(doc, {}) == 0 and not [s["key"] for s in doc["settings"] if "keeps_apart" in s]
+    schema = json.loads(Path(ROOT / "schemas" / "definition.schema.json").read_text(encoding="utf-8"))
+    one = {"key": "global:0x0001", "area": "global", "id": 1, "name": "n", "tab": "t", "group": "g"}
+    check = jsonschema.Draft202012Validator(schema["$defs"]["setting"])
+    check.validate({**one, "keeps_apart": [good]})
+    assert list(check.iter_errors({**one, "keeps_apart": [{"setting": "global:0x0010", "apart": []}]}))
+    assert list(check.iter_errors({**one, "keeps_apart": [{**good, "when": 1}]}))
+
+
+def test_keeps_apart_is_checked_against_the_cameras_downloads(tmp_path, capsys):
+    """with_keeps_apart with the camera's downloads: a download holding the switch outside the entry's apart values
+    while the family's setting and its copies hold more than one value, in a section the switch lives in, stops the
+    write (exit 1, the switch, the family, the file and the section named, never a value), as with_copies does; one
+    holding the family at one value, or the switch at an apart value whatever the family holds, bears it out, and so
+    does a memory set holding the family apart, which a live switch does not live in (the switch is read in the same
+    section only); a download that cannot be read is skipped and counted; with no downloads that is said and the entry
+    written. The a1 II's White Balance box and family as the definition keys them, files made from the sample with
+    made-up values (none written down here)."""
+    from writer.copies import with_keeps_apart
+    cs = camset.read(SAMPLE)
+    raw = lambda rid, v, s=0: v.to_bytes(cs.get(s, rid).size, "little", signed=True)
+    family = (0x0367, 0x0e0e, 0x0e10)
+    memory = next(s for s in range(1, len(cs.sections)) if all(cs.get(s, r) is not None for r in family))
+    assert cs.get(memory, 0x0187) is None, "the box lives in the live settings alone"
+
+    def made(box, values, in_memory=None):
+        changes = {(0, 0x0187): raw(0x0187, box), **{(0, r): raw(r, v) for r, v in zip(family, values, strict=True)}}
+        changes.update({(memory, r): raw(r, v, memory) for r, v in zip(family, in_memory or (), strict=False)})
+        return camset.with_values(cs, changes)
+    root = tmp_path / "runs"
+    (root / "r" / "dat").mkdir(parents=True)
+    names = ["00001_shared.DAT", "00002_apart_ticked.DAT", "00003_memory_apart.DAT", "00004_junk.DAT"]
+    (root / "r" / "dat" / names[0]).write_bytes(made(0, (2, 2, 2)))
+    (root / "r" / "dat" / names[1]).write_bytes(made(1, (2, 2, 1)))
+    (root / "r" / "dat" / names[2]).write_bytes(made(0, (2, 2, 2), in_memory=(2, 2, 1)))
+    (root / "r" / "dat" / names[3]).write_bytes(b"not a settings file")
+    log = root / "downloads.jsonl"
+    log.write_text("".join(json.dumps({"path": f"r/dat/{n}"}) + "\n" for n in names), encoding="utf-8")
+    entry = {"setting": "global:0x0367", "apart": [1], "untick_sets": 0}
+    table = {"global:0x0187": [{**entry, **PROVED}]}
+    doc = json.loads(json.dumps(DOC))
+    assert with_keeps_apart(doc, table, root) == 1
+    said = capsys.readouterr().out
+    assert "the family held one value in each of 2 sections with the switch outside its apart values, of 3 downloads read, 1 that could not be read skipped" in said
+    assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == {"global:0x0187": [entry]}
+    (root / "r" / "dat" / "00005_apart_unticked.DAT").write_bytes(made(0, (2, 2, 1)))
+    with log.open("a", encoding="utf-8") as f:
+        f.write(json.dumps({"path": "r/dat/00005_apart_unticked.DAT"}) + "\n")
+    with pytest.raises(SystemExit) as stop:
+        with_keeps_apart(doc, table, root)
+    said = str(stop.value).replace("\\", "/")
+    assert said.startswith("keeps apart: r/dat/00005_apart_unticked.DAT, section 0, holds global:0x0187 outside its apart values with global:0x0367"), said
+    assert said.endswith("nothing written. Take the entry out of KEEPS_APART, or prove the state that file shows, then write again."), said
+    assert not re.search(r"(?<![\w:x])[12](?![\w])", said.split("section 0")[1]), said
+    assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == {"global:0x0187": [entry]}, "nothing written over"
+    assert with_keeps_apart(doc, table, tmp_path / "none") == 1
+    assert "no downloads in" in capsys.readouterr().out
+
+
+def test_the_shipped_hand_tables_keep_apart_only_what_was_proved():
+    """The a1 II's KEEPS_APART names the two Different Set for Still/Mv boxes whose effect on the copies was proved
+    (White Balance's and Picture Profile's), each keeping its COPIES family apart while ticked and unticking to 0; with
+    the hand evidence (made up here) with_keeps_apart takes both onto a copy of the shipped definition as they stand,
+    and without it neither: the other five boxes get nothing."""
+    from writer.copies import with_keeps_apart
+    public = hand_tables.load(A1, evidence=False).KEEPS_APART
+    assert public == {"global:0x0187": [{"setting": "global:0x0367", "apart": [1], "untick_sets": 0}],
+                      "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}]}
+    doc = json.loads(json.dumps(DOC))
+    assert with_keeps_apart(doc, public) == 0
+    proved = {k: [{**e, **PROVED} for e in es] for k, es in public.items()}
+    assert with_keeps_apart(doc, proved) == 2
+    assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == public
+
+
+# the shipped definition gets its keeps_apart at the next kit/schema_update.py --write, on the machine that holds the
+# a1 II's runs and hand evidence: until then this is expected to fail, and from then on it must pass
+@pytest.mark.xfail(not any("keeps_apart" in s for s in DOC["settings"]), strict=True,
+                   reason="the shipped definition is written again with KEEPS_APART at the next --write")
+def test_the_shipped_definition_keeps_apart_what_the_hand_tables_say():
+    """The shipped definition's keeps_apart is the a1 II's hand table's KEEPS_APART, entry for entry: every switch it
+    names and no other, each with the family, the apart values and the untick value the table gives (so the hand
+    evidence covered each of them when the definition was written)."""
+    public = hand_tables.load(A1, evidence=False).KEEPS_APART
+    assert {s["key"]: s["keeps_apart"] for s in DOC["settings"] if "keeps_apart" in s} == public
+
+
 def test_each_main_page_reads_its_own_modes_copy():
     """The Main pages' tiles (camera.main_tiles) for a setting the camera keeps per mode (COPIES: the record in use, its
     Stills copy, its Movie copy) read the copy of the page's own mode: the Stills page the Stills copy, the Movie and

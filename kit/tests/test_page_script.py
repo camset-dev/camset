@@ -1102,6 +1102,60 @@ refresh = async () => {};
 
 
 @needs_node
+def test_a_change_the_editor_asks_about_waits_for_the_answer(tmp_path):
+    """A change the editor holds back with a question (`ask`: a box whose untick on the camera changes other settings
+    too) shows it in the page's question window, the editor's title and words, each choice with its hover, and Cancel;
+    a choice sends the same request again with the answer in the field the question names, and the answer's reply is
+    drawn as any change's (`done`); Cancel sends nothing more and puts the control back (`undo`, with the row the
+    question came with). The answer carries back the file's state the question was asked of (`rev`, as `ask_rev`). A
+    choice the editor says cannot be made is greyed out with its reason: pressed, it says why and the question stays
+    open. Made-up words and keys."""
+    got = run(tmp_path, """
+act = pageAct;
+const q = { title: "Set Box: Colour to Off?", text: "When this was tried on the camera, setting Box: Colour to Off also set Colour to Auto.", field: "untick", rev: "r1",
+  choices: [["Do as the camera does", "camera", "Sets them all.", null], ["Change this setting only", "box", "Leaves them.", null]], cancel: "Leaves Box: Colour at On." };
+const blocked = { ...q, choices: [["Do as the camera does", "camera", "Sets them all.", "Not changed: Colour is view only here."], q.choices[1]] };
+api = async (name, body) => { sent.push([name, body]); return body.untick ? { row: { key: "k:b" }, done: true } : { ask: q, row: { key: "k:b", value: 1 } }; };
+(async () => {
+  const drawn = [], undone = [];
+  const first = pageAct("set", { target: 0, key: "k:b", value: 0 }, null, { done: (j) => drawn.push(j.done), undo: (e) => undone.push(e.body.row.value) });
+  await tick();
+  const box = $("ask");
+  const shown = { open: !box.hidden, text: box.querySelector("p").textContent,
+    buttons: box.querySelectorAll("button").map((b) => [b.textContent, b.title]).filter(([t]) => t !== "×" && t !== "✕") };
+  box.querySelectorAll("button").find((b) => b.textContent === "Do as the camera does").click();
+  await first;
+  const answered = sent.map(([, b]) => b.untick ?? null);
+  const askRev = [sent[0][1].ask_rev ?? null, sent[1][1].ask_rev];
+  sent.length = 0;
+  const second = pageAct("set", { target: 0, key: "k:b", value: 0 }, null, { done: (j) => drawn.push(j.done), undo: (e) => undone.push(e.body.row.value) });
+  await tick();
+  $("ask").querySelectorAll("button").find((b) => b.textContent === "Cancel").click();
+  await second;
+  const cancelled = sent.length, closed = $("ask").hidden;
+  // a choice that cannot be made: greyed out, its reason said when pressed, the question still open
+  const third = choose(blocked);
+  const off = $("ask").querySelectorAll("button").find((b) => b.textContent === "Do as the camera does");
+  off.click();
+  await tick();
+  const greyed = { off: off.classList.contains("off"), title: off.title, open: !$("ask").hidden, toast: $("toast").textContent };
+  $("ask").querySelectorAll("button").find((b) => b.textContent === "Change this setting only").click();
+  const picked = await third;
+  console.log(JSON.stringify({ shown, answered, askRev, drawn, undone, cancelled, closed, greyed, picked }));
+})();
+""")
+    assert got["shown"]["open"] and got["shown"]["text"] == "When this was tried on the camera, setting Box: Colour to Off also set Colour to Auto."
+    assert [b for b in got["shown"]["buttons"] if b[0] in ("Do as the camera does", "Change this setting only", "Cancel")] == [
+        ["Do as the camera does", "Sets them all."], ["Change this setting only", "Leaves them."], ["Cancel", "Leaves Box: Colour at On."]]
+    assert got["answered"] == [None, "camera"] and got["drawn"] == [True]
+    assert got["askRev"] == [None, "r1"], "the answer carries the file's state the question was asked of"
+    assert got["cancelled"] == 1 and got["undone"] == [1] and got["closed"] is True
+    assert got["greyed"] == {"off": True, "title": "Not changed: Colour is view only here.", "open": True,
+                             "toast": "Not changed: Colour is view only here."}
+    assert got["picked"] == "box"
+
+
+@needs_node
 def test_a_page_load_cut_off_once_is_not_the_editor_gone(tmp_path):
     """One page load that cannot reach the editor (a Wi-Fi blip right after a good poll) counts as a failed poll does:
     the editor-closed notice comes after two in a row, not at once, and no toast is added on top of it."""

@@ -227,8 +227,11 @@ impl App {
                     }
                     return WebReply::error(409, "Nothing to put back: this setting holds what the camera keeps here.");
                 };
-                if let Some(why) = self.apply(acts) {
-                    return WebReply::error(409, &why);
+                // a switch that keeps copies apart, put back to a value that does not: the window's question first
+                match self.web_untick_apply(acts, &body) {
+                    Ok(()) => {}
+                    Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
+                    Err(Err(why)) => return WebReply::error(409, &why),
                 }
                 self.status = with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() });
                 WebReply::json(json!({ "ok": true }))
@@ -498,6 +501,7 @@ impl App {
                     body["keys"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
                 };
                 let rows = self.matrix_rows_for("", None);
+                self.rows_set.take();               // what this copy's rows cover, and nothing left from another
                 let (mut actions, mut n, mut name) = (Vec::new(), 0, String::new());
                 for key in keys {
                     let Some((_, _, linked)) = rows.iter().find(|(_, _, l)| l.iter().any(|s| s.key == key)) else { return WebReply::error(404, "No such setting here.") };
@@ -508,15 +512,19 @@ impl App {
                     }
                     name.clone_from(&linked[0].name);
                 }
-                // every row shown: each takes its own value, a copy too (`pin_families`); one row is an edit of it
+                // every row shown: each takes its own value, a copy too (`pin_families`); one row is an edit of it. A
+                // switch that keeps copies apart, unticked by the copy, asks first as the window does (`web_untick`),
+                // unless the rows copied set its whole family
                 if action == "copy_rows" {
                     for d in &dsts {
                         self.pin_families((src.src == Src::A).then_some(src.section), d.section, &mut actions);
                     }
                 }
                 let left = self.copy_skipped.get();
-                if let Some(why) = self.apply(actions) {
-                    return WebReply::error(409, &why);
+                match self.web_untick_apply(actions, &body) {
+                    Ok(()) => {}
+                    Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
+                    Err(Err(why)) => return WebReply::error(409, &why),
                 }
                 let (f, t) = (self.col_name(src), dsts.iter().map(|d| self.col_name(*d)).collect::<Vec<_>>().join(", "));
                 let said = if action == "copy" { format!("{name} copied from {f} into {t} {from}") } else { format!("{n} row(s) copied from {f} into {t} {from}") };
@@ -543,6 +551,7 @@ impl App {
                     _ => return WebReply::error(400, "No such merge."),
                 };
                 let tab = body["tab"].as_str().filter(|t| !t.is_empty());
+                self.rows_set.take();
                 let (mut actions, mut n) = (Vec::new(), 0);
                 for (_, _, linked) in self.matrix_rows_for(body["q"].as_str().unwrap_or("").trim(), tab) {
                     if self.three_way((tb, ta, tbb), &linked[0]) == want {
@@ -552,8 +561,11 @@ impl App {
                 }
                 self.pin_families(None, ta.section, &mut actions);
                 let left = self.copy_skipped.get();
-                if let Some(why) = self.apply(actions) {
-                    return WebReply::error(409, &why);
+                // a switch that keeps copies apart, unticked by the merge, asks first unless its family comes too
+                match self.web_untick_apply(actions, &body) {
+                    Ok(()) => {}
+                    Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
+                    Err(Err(why)) => return WebReply::error(409, &why),
                 }
                 self.status = with_left(&format!("{n} {said} {from}"), left);
                 WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
@@ -600,6 +612,26 @@ impl App {
             d.path.hash(&mut h);
             d.rev.hash(&mut h);
             d.unchecked_ok.hash(&mut h);
+        }
+        for (p, c) in self.compare.iter().chain(self.base.iter()) {
+            p.hash(&mut h);
+            c.header.hash(&mut h);
+            c.sections.iter().map(|s| s.records.len()).collect::<Vec<_>>().hash(&mut h);
+        }
+        self.base.is_some().hash(&mut h);
+        format!("{:x}", h.finish())
+    }
+
+    /// The state of what a page question (`web_untick`) is about, as a hash: the open file and its state (`Doc::rev`, new
+    /// at every change), whether it is edited unchecked, the definition, Expert mode (which changes what is blocked)
+    /// and files B and the base. Unlike `web_rev` it leaves out how the page shows things (record ids, the proof line,
+    /// raw values, the rows' layout), so a display preference changed meanwhile never refuses an answer.
+    pub(super) fn ask_rev(&self) -> String {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        (self.prefs.expert, &self.schema.origin, self.schema_gen).hash(&mut h);
+        if let Some(d) = &self.doc {
+            (&d.path, d.rev, d.unchecked_ok).hash(&mut h);
         }
         for (p, c) in self.compare.iter().chain(self.base.iter()) {
             p.hash(&mut h);
@@ -1284,6 +1316,8 @@ impl App {
         let copies: Vec<(String, Slot, Option<i64>)> = mains.iter().flat_map(|m| std::iter::once(m.key.clone()).chain(m.copies.iter().cloned()))
             .filter_map(|k| self.schema.settings.iter().find(|c| c.key == k && kept_in(c, target)))
             .map(|c| (c.key.clone(), c.slot(), self.doc.as_ref().and_then(|d| d.value(target, c.slot())))).collect();
+        // the settings an untick as the camera does sets besides the switch (`web_untick`), whose rows the reply carries
+        let mut also: Vec<String> = Vec::new();
         let shown;
         if let Some(text) = body["text"].as_str() {
             let Some(rule) = &s.text else { return refuse(self, 400, "This setting is not a text.") };
@@ -1313,8 +1347,22 @@ impl App {
             if !ok {
                 return refuse(self, 400, "Not a value this setting offers.");
             }
-            // a step that would leave a setting held by none of its copies is refused, with why (`apply`)
-            if let Some(why) = self.apply(Self::set_linked(target, &linked, v)) {
+            let acts = Self::set_linked(target, &linked, v);
+            // a switch that keeps copies apart, unticked: the window's question first (`untick_ask`), answered in
+            // `untick` ("camera": the families too, as one step; "box": the switch alone); nothing changed until then.
+            // A step that would leave a setting held by none of its copies is refused, with why (`apply`)
+            let why = match self.web_untick(&acts, body) {
+                Ok(None) => self.apply(acts),
+                Ok(Some((ask, like_camera))) => {
+                    if like_camera {
+                        also = ask.keys.clone();
+                    }
+                    self.apply_untick(acts, &ask, like_camera)
+                }
+                Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask, "row": self.web_row(target, &linked), "value": cur })),
+                Err(Err(why)) => return refuse(self, 409, &why),
+            };
+            if let Some(why) = why {
                 return refuse(self, 409, &why);
             }
             shown = Self::describe(s, Some(v));
@@ -1345,12 +1393,63 @@ impl App {
                 keys.push(k.clone());
             }
         }
+        // every setting an untick as the camera does set with it
+        for k in also {
+            if !keys.contains(&k) && !linked.iter().any(|l| l.key == k) {
+                keys.push(k);
+            }
+        }
         let rows: Vec<Value> = std::iter::once(row.clone())
             .chain(keys.iter().filter_map(|k| self.web_linked(target, k)).map(|l| self.web_row(target, &l)))
             .collect();
         let edits = self.doc.as_ref().map_or(0, |d| d.changes().len());
         WebReply::json(json!({ "row": row, "rows": rows, "rev": self.web_rev(), "edits": edits,
             "can_undo": !self.undo.is_empty(), "can_redo": !self.redo.is_empty() }))
+    }
+
+    /// The page's side of the window's question before a switch that keeps copies apart leaves the values that keep a
+    /// family apart (`untick_ask`), for the changes `acts`: Ok(None) where nothing is asked; the question and whether
+    /// the answer the request carries (`untick`) is "camera" (true: the families too, `apply_untick` then makes the step
+    /// and refuses a choice that is blocked) or "box" (false: the switch alone), Ok(Some); the question as the page draws
+    /// it (`UntickAsk::web`, with the file's state, `rev`, which the answer must carry back), Err(Ok), while there is no
+    /// answer; or, Err(Err), why an answer is not taken: one to a file since changed, or one the question does not
+    /// offer.
+    fn web_untick(&self, acts: &[Action], body: &Value) -> Result<Option<(UntickAsk, bool)>, Result<Value, String>> {
+        // an answer is to the question asked of the file as it was then (its `rev`, `ask_rev`, which the page sends
+        // back as `ask_rev`): one to a file since changed (another edit, the history moved) is refused, as the window
+        // refuses it
+        if body["untick"].is_string() && body["ask_rev"].as_str() != Some(self.ask_rev().as_str()) {
+            return Err(Err("Not changed: the file changed while the question was open. Make the change again to see the question as the file stands now.".into()));
+        }
+        let Some(ask) = self.untick_ask(acts) else { return Ok(None) };
+        match body["untick"].as_str() {
+            None => {
+                let mut q = ask.web();
+                q["rev"] = json!(self.ask_rev());
+                Err(Ok(q))
+            }
+            Some("box") => Ok(Some((ask, false))),
+            Some("camera") => Ok(Some((ask, true))),
+            Some(_) => Err(Err(format!("Not changed: the question before setting {} to {} has no such answer.", ask.switch, ask.to_label))),
+        }
+    }
+
+    /// `acts` made for a page request that may change a switch as `untick_ask` asks about (`web_untick`): its question
+    /// as the answer (`ask`), or the step made (`apply`, `apply_untick`), Err with why it was refused. What a copy of
+    /// several rows at once told `apply` is let go with a question or a refusal of the answer, so nothing is left for
+    /// the next step.
+    fn web_untick_apply(&mut self, acts: Vec<Action>, body: &Value) -> Result<(), Result<Value, String>> {
+        let made = match self.web_untick(&acts, body) {
+            Ok(None) => self.apply(acts),
+            Ok(Some((ask, like_camera))) => self.apply_untick(acts, &ask, like_camera),
+            Err(e) => {
+                self.rows_copied.take();
+                self.rows_set.take();
+                self.copy_skipped.take();
+                return Err(e);
+            }
+        };
+        made.map_or(Ok(()), |why| Err(Err(why)))
     }
 
     /// Every edited record: where, which setting, what it was and is.
@@ -1808,12 +1907,16 @@ impl App {
         } else {
             self.memory_rows()
         };
+        self.rows_set.take();
         let mut actions: Vec<Action> = rows.iter().flat_map(|r| self.copy_row(&r.2, src, dst)).collect();
         let n = actions.len();
         self.pin_families(Some(src.section), dst.section, &mut actions);
         let left = self.copy_skipped.get();
-        if let Some(why) = self.apply(actions) {
-            return WebReply::error(409, &why);
+        // a switch that keeps copies apart, changed by the copy without its family: the window's question first
+        match self.web_untick_apply(actions, body) {
+            Ok(()) => {}
+            Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
+            Err(Err(why)) => return WebReply::error(409, &why),
         }
         let from = format!(" {from}");
         let (_, _, said) = if recall { self.recall_words(m, "", &from) } else { self.register_words(m, "", &from) };
@@ -1837,11 +1940,15 @@ impl App {
         if !self.editable() {
             return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
         }
+        self.rows_set.take();
         let actions = self.copy_row(&linked, Col::a(a), Col::a(b));
         let n = actions.len();
         let left = self.copy_skipped.get();
-        if let Some(why) = self.apply(actions) {
-            return WebReply::error(409, &why);
+        // one row is an edit of it: a switch that keeps copies apart, changed by it, asks first as the window does
+        match self.web_untick_apply(actions, body) {
+            Ok(()) => {}
+            Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
+            Err(Err(why)) => return WebReply::error(409, &why),
         }
         let cam = &self.schema.camera;
         let said = format!("{}: the value from {} put into {} {from}", linked[0].name, cam.target_name(a), cam.target_name(b));
@@ -1987,8 +2094,12 @@ impl App {
                 if !self.editable() {
                     return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
                 }
-                if let Some(why) = self.apply(vec![Action::SetRecord(si, rec)]) {
-                    return WebReply::error(409, &why);
+                // a switch that keeps copies apart, put back to a value that does not: the window's question first
+                if let Err(e) = self.web_untick_apply(vec![Action::SetRecord(si, rec)], body) {
+                    return match e {
+                        Ok(ask) => WebReply::json(json!({ "ask": ask })),
+                        Err(why) => WebReply::error(409, &why),
+                    };
                 }
                 self.status = format!("Record 0x{id:04x} put back as it was before edit {} {from}", step + 1);
                 ok()

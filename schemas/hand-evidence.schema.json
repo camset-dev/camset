@@ -171,6 +171,37 @@
       }
      }
     },
+    "KEEPS_APART": {
+     "type": "object",
+     "description": "What proved each switch's entry (KEEPS_APART), by the switch's key, then by the entry's place in its list from 0: \"$setting\" names the entry's family, checked against the entry at that place (evidence that no longer fits its entry is refused; the plain pass requires it); \"evidence\" what showed the family kept apart while the switch holds one of its apart values and shared while it does not, without which the entry is not written; \"untick\" what showed the value leaving those values gave the family, without which untick_sets is not written. Neither reaches any field of the definition.",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "propertyNames": {
+       "pattern": "^\\d+$"
+      },
+      "additionalProperties": {
+       "type": "object",
+       "additionalProperties": false,
+       "properties": {
+        "$setting": {
+         "$ref": "#/$defs/key",
+         "description": "The entry's family setting, checked against the entry at that place."
+        },
+        "evidence": {
+         "type": "string",
+         "description": "What showed the family kept apart and shared by the switch: the runs and the day."
+        },
+        "untick": {
+         "type": "string",
+         "description": "What showed the value the family took when the switch left its apart values: the runs and the day."
+        }
+       }
+      }
+     }
+    },
     "UNPROVED": {
      "type": "object",
      "description": "The day each reason was settled, at the reason's place 1 ([kind, day, why]).",

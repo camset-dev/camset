@@ -56,14 +56,30 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   proved,** in Stills and Movie mode, for White Balance and the Picture Profile in use, each kept in the one in use and
   a stills and a movie copy. With the box not ticked, a choice in either mode writes the one in use and both copies;
   ticked, the one in use and only that mode's copy. Ticking a box writes nothing but the box, and unticking it sets
-  the one in use and both copies to White Balance Auto or Picture Profile Off, whatever they held. The notes on the
+  the one in use and both copies to White Balance Auto or Picture Profile Off, in the states tried. The notes on the
   two boxes and the four copies say so (in Expert mode), and the camera's page has a Different Set for Still/Mv row.
   Still not proved: whether that Auto or Off is a default or a value the camera keeps elsewhere; what the boxes do to
   White Balance's colour temperature and fine-tune and to the profiles' parameters; the other five boxes; an untick in
   S&Q or Time-lapse, or in Stills mode with the copies apart and neither Auto nor Off; White Balance options past
   Shade (Cloudy in Stills mode only) and PP3 and later; and what the camera does on loading a file whose box was
-  changed. The editor handles the copies as before: it does not read the boxes, and unticking one in a file changes the
-  box alone.
+  changed. What the editor does with these two boxes is the next point.
+- **Unticking the a1 II's White Balance or Picture Profile box of Different Set for Still/Mv asks first,** in the
+  window and on the web page, before anything is changed, from wherever the change comes (the setting's own control, a
+  copy from file B or from a memory, a copy of several rows or a merge that leaves the family behind, a put-back, the
+  History window's Revert):
+  when it was tried on the camera, unticking it also set White Balance or the Picture Profile to Auto or Off, in both
+  copies too; changing the box alone would leave the file with values that unticking on the camera does not leave, and
+  what the camera does when it loads such a file is not known. "Do as the camera does" unticks the box and sets the
+  setting and both copies to Auto or Off in one step (one Undo takes it all back), "Change this setting only" unticks
+  the box alone, and Cancel leaves it as it was. Where the camera's way cannot be made here (a setting it would set is
+  view only, or does not take the value), that choice is greyed out with why, and nothing is ever made in part; on
+  the page an answer to a question about a file that changed meanwhile is refused. While
+  one of the two boxes is ticked, the rows of its setting and copies say that when this was tried a change on the
+  camera changed only the copy for the shooting mode it was made in, and that the editor does not follow the box: an
+  edit here still takes along the copies that held the same value when the file was opened. The other five boxes are
+  not proved, and change alone as before. The editor knows the two boxes from the definition (`keeps_apart`), names
+  every value by the definition's own words, and refuses a definition whose `keeps_apart` names values or settings it
+  does not hold, so any camera's mapping can say the same of its own switches.
 - A value shown as "7 (no name yet)" says in Expert mode that no choice on the camera wrote it when the setting was
   mapped, and that the camera's list may not offer it, where it said the value was not chosen on the camera, which
   was wrong for one the list never offers.
@@ -93,6 +109,20 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A switch that keeps a family's copies apart is written into the definition, where a proof showed what it does.**
+  The hand tables take `KEEPS_APART`: by the switch's key (a Different Set for Still/Mv box), the family it keeps
+  apart (a `COPIES` family whose copies' modes are known), its values that keep it apart, and what unticking it on the
+  camera sets the family to, where that was proved. `kit/schema_update.py` writes it as `keeps_apart` on the switch,
+  in both passes, after the copies; an entry that cannot take effect (a switch or a family the definition lacks, a
+  family without copies or their modes, a value the switch or the family does not list, a family a switch named
+  before) is said, "not applied", and left out, and the plain pass refuses one naming no `COPIES` family or one in
+  `COPY_MODES_UNKNOWN`. Each entry takes effect only where the mapper's private hand evidence shows it (`KEEPS_APART`
+  there, by the switch and the entry's place, checked by `"$setting"`: `"evidence"` for the entry, `"untick"` for its
+  untick value), so a fact nothing proved is not written, and like the other tables the evidence completes, `--write`
+  stops without the hand evidence file. Where the camera's downloads are there, each section holding the switch
+  outside its apart values must hold the family at one value: a download that contradicts an entry stops the write
+  (exit 1), naming the file and the section, as a contradicted copy does. The a1 II's table names its White Balance
+  and Picture Profile boxes only, each unticking to 0; its definition gets them at the next `--write`.
 - **A row whose screen sits behind an information notice can be walked and proved, where a run names it.** The a1 II's
   Different Set for Still/Mv answers Right with a notice ("You can set different settings for still image mode and
   movie mode in the next screen. ...", a single OK) before its checklist of seven boxes; the crawl, which never presses

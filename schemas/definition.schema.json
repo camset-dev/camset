@@ -524,7 +524,40 @@
      },
      "minItems": 1,
      "uniqueItems": true,
-     "description": "The shooting modes whose value this copy is, named as camera.memory_sets.modes names them (\"Stills\", \"Movie\", \"S&Q\", \"Time-lapse\"): in a section of that mode (the live settings by camera.live_mode, a memory set by memory_sets.modes) a file the camera wrote holds the same value in the setting it copies and in this copy. It is for checking a file, not for deciding what follows an edit (that is the copies rule: whether a family's modes share a value is the camera's Different Set for Still/Mv box, which the definition does not tie to its family). Written by kit/schema_update.py on every copy of every family whose modes the camera's hand table names, the modes it names for the copy's place (kit/writer/copies.py), and checked against the camera's downloads at every write: a section where the setting is not the copy for its mode stops the write. Absent where the copies' modes are not known yet; an editor then keeps the weaker check."
+     "description": "The shooting modes whose value this copy is, named as camera.memory_sets.modes names them (\"Stills\", \"Movie\", \"S&Q\", \"Time-lapse\"): in a section of that mode (the live settings by camera.live_mode, a memory set by memory_sets.modes) a file the camera wrote holds the same value in the setting it copies and in this copy. It is for checking a file, not for deciding what follows an edit (that is the copies rule: whether a family's modes share a value is the camera's own switch, the a1 II's Different Set for Still/Mv box, which keeps_apart on the switch ties to its family where a proof showed what it does). Written by kit/schema_update.py on every copy of every family whose modes the camera's hand table names, the modes it names for the copy's place (kit/writer/copies.py), and checked against the camera's downloads at every write: a section where the setting is not the copy for its mode stops the write. Absent where the copies' modes are not known yet; an editor then keeps the weaker check."
+    },
+    "keeps_apart": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "type": "object",
+      "required": [
+       "setting",
+       "apart"
+      ],
+      "properties": {
+       "setting": {
+        "type": "string",
+        "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+        "description": "The family's setting: one that lists its copies (copies), each copy saying whose mode it is (copy_for)."
+       },
+       "apart": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": {
+         "type": "integer"
+        },
+        "description": "This switch's values with which the camera keeps the family's copies apart (a box's Ticked): each one of this setting's values, never all of them. With any other value the copies share one value."
+       },
+       "untick_sets": {
+        "type": "integer",
+        "description": "What the camera set the family's setting and each of its copies to when this switch was changed on the camera from a value in apart to one that is not (a box unticked), in the states the proof tried (the camera's page lists them): one of the setting's values and each copy's. Absent where that was not proved."
+       }
+      },
+      "additionalProperties": false
+     },
+     "description": "This setting is a switch of the camera's own that keeps a family's per-mode copies apart (the a1 II's Different Set for Still/Mv boxes), and what each keeps apart: written only where a proof on the camera showed what the switch does to the family's copies. A family is named by one switch at most. An editor reads it to say what the camera did when it was tried: while the switch holds a value in apart, a change made on the camera wrote the setting and only the copy for the shooting mode it was made in; with the switch at another value, the setting and every copy. Where untick_sets is given, an editor about to change the switch in a file from a value in apart to one that is not says first what that change did on the camera, and offers to do the same in one step or to change the switch alone (what the camera does on loading a file whose switch was changed alone is not known); it refuses a definition whose entry names values or settings it does not hold. Written by kit/schema_update.py (kit/writer/copies.py) from the camera's hand table (KEEPS_APART) where the family's copies and their modes are the definition's (copies, copy_for), the mapper's hand evidence shows the entry (and its untick value), and no download holds the switch outside apart with the family at more than one value; keys and value codes only (docs/DATA_CONTRACTS.md, \"A value kept in more than one record\")."
     },
     "not_offered": {
      "type": "array",

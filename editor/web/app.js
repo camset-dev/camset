@@ -462,6 +462,19 @@ async function act(name, body = {}, file = null, { done = null, undo = null } = 
   if (a && $("content").contains(a) && !keyboardFocus()) a.blur();
   try {
     const j = await api(name, body, file);
+    // a change the editor holds back with a question (`ask`: a box whose untick on the camera changes other settings
+    // too, as the window asks it): its choices and Cancel, then the same request again with the answer chosen in the
+    // field the question names and the file's state the question was asked of (`rev`, sent back as `ask_rev`: the
+    // editor refuses an answer to a file since changed); Cancel changes nothing and puts the control back
+    if (j && j.ask && Array.isArray(j.ask.choices)) {
+      const answer = await choose(j.ask);
+      if (answer === null) {
+        if (undo) undo({ body: j });
+        await refresh();
+        return null;
+      }
+      return act(name, { ...body, [j.ask.field]: answer, ask_rev: j.ask.rev }, file, { done, undo });
+    }
     keepCamera(j);
     if (done) done(j);
     await refresh();
@@ -679,6 +692,22 @@ function ask(title, text, yes) {
     showWindow(box, title, () => done(false), el("p", {}, text), el("div", { class: "buttons" },
       el("button", { onclick: () => done(true) }, yes),
       el("button", { onclick: () => done(false) }, "Cancel")));
+  });
+}
+
+/** A question the editor asks with choices of its own (`q`: its title and words, each choice as [words, answer,
+ *  hover, why it cannot be chosen or null], Cancel's hover), in the same window as `ask`: the answer chosen, or null
+ *  for Cancel, the window closed, or another question taking its place. A choice that cannot be made is greyed out
+ *  (`offButton`): it stays reachable, says why on hover and when pressed, and leaves the question open. */
+function choose(q) {
+  if (askOpen) askOpen(false);
+  return new Promise((resolve) => {
+    const box = $("ask");
+    const done = (v) => { askOpen = null; box.hidden = true; box.replaceChildren(); setDialog(box, false); resolve(v); };
+    askOpen = () => done(null);
+    showWindow(box, q.title, () => done(null), el("p", {}, q.text), el("div", { class: "buttons" },
+      ...q.choices.map(([words, answer, hover, why]) => offButton({ title: why || hover || undefined }, words, () => done(answer), why || "")),
+      el("button", { title: q.cancel || undefined, onclick: () => done(null) }, "Cancel")));
   });
 }
 

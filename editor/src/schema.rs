@@ -135,6 +135,12 @@ pub struct Setting {
     /// modes (`Camera::mode_of`), the camera keeps the setting and this copy as one value. Empty: not said.
     #[serde(default)]
     pub copy_for: Vec<String>,
+    /// This setting is a switch of the camera's own that keeps families of copies apart (a Different Set for Still/Mv
+    /// box), and what it keeps apart, where a proof showed it (`KeepsApart`): while it holds a value of `apart`, a change
+    /// made on the camera writes the family's setting and only the copy for that mode; unticking it on the camera sets
+    /// the family to `untick_sets`. Empty: not a switch, or what it does is not proved.
+    #[serde(default)]
+    pub keeps_apart: Vec<KeepsApart>,
     /// The values the camera's menus offer under one video system only, by the system's name as the container block
     /// names it (`camera.file.video_system.names`): a value listed under one is offered only in a file saved under
     /// that one, a value listed under none under both. None: every value under both.
@@ -161,6 +167,17 @@ pub struct Setting {
     /// has one for that value (`option_help_from_file`).
     #[serde(default)]
     pub option_help: Vec<(i64, String)>,
+}
+
+/// What a switch keeps apart (`Setting::keeps_apart`): the family's setting (`setting`, a key; one that lists its
+/// copies), the switch's values with which the camera keeps that family's copies apart (`apart`), and what the camera
+/// sets the setting and each copy to when the switch leaves those values on the camera (`untick_sets`), where proved.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct KeepsApart {
+    pub setting: String,
+    pub apart: Vec<i64>,
+    #[serde(default)]
+    pub untick_sets: Option<i64>,
 }
 
 /// One main option of a setting's `option_tree`: as the camera names it, and either one stored value or the choices on
@@ -1568,6 +1585,33 @@ impl Schema {
         if let Some(f) = &self.camera.file {
             f.check().map_err(|e| format!("its file block does not hold together: {e}"))?;
         }
+        self.check_keeps_apart()
+    }
+
+    /// A switch that keeps copies apart (`keeps_apart`) as the kit writes it: some of the switch's own values, not all
+    /// of them, keeping apart a setting the definition holds that lists copies it holds, and a value the camera sets
+    /// them to that each of them holds (one of its named values, or a number of its range on its step). A definition
+    /// that says otherwise is refused, saying which, so the editor never asks a question or writes a value from it.
+    fn check_keeps_apart(&self) -> Result<(), String> {
+        let by_key: std::collections::HashMap<&str, &Setting> = self.settings.iter().map(|s| (s.key.as_str(), s)).collect();
+        let holds = |s: &Setting, v: i64| s.values.iter().any(|(x, _)| *x == v)
+            || s.range.is_some_and(|(lo, hi)| (lo..=hi).contains(&v) && (v - lo) % s.step.unwrap_or(1).max(1) == 0);
+        for sw in self.settings.iter().filter(|s| !s.keeps_apart.is_empty()) {
+            for k in &sw.keeps_apart {
+                let why = |w: String| Err(format!("{} keeps {} apart, but {w}", sw.name, k.setting));
+                if k.apart.is_empty() || k.apart.iter().any(|v| !sw.values.iter().any(|(x, _)| x == v)) || sw.values.iter().all(|(x, _)| k.apart.contains(x)) {
+                    return why(format!("the values it keeps it apart with are not some of {}'s own values", sw.name));
+                }
+                let Some(fam) = by_key.get(k.setting.as_str()) else { return why("the definition holds no such setting".into()) };
+                let copies: Option<Vec<&&Setting>> = fam.copies.iter().map(|c| by_key.get(c.as_str())).collect();
+                let Some(copies) = copies.filter(|c| !c.is_empty()) else { return why(format!("{} lists no copies the definition holds", fam.name)) };
+                if let Some(code) = k.untick_sets {
+                    if let Some(p) = std::iter::once(fam).chain(copies).find(|p| !holds(p, code)) {
+                        return why(format!("the value it says the camera sets them to, {code}, is not one of {}'s values", p.name));
+                    }
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1823,6 +1867,18 @@ mod tests {
         assert_eq!(s.other_system(1, None), None, "the file's system unknown: every value");
         assert_eq!(s.other_system(1, Some("a system the definition does not list")), Some("PAL"), "a value of a listed system is that system's only");
         assert_eq!(made(serde_json::json!({})).other_system(1, Some("NTSC")), None);
+    }
+
+    /// `keeps_apart`, as the kit writes it on a switch: each entry's family, the values that keep it apart and, where
+    /// proved, the untick value; an entry without one reads as none. Without the field, a setting is no switch.
+    #[test]
+    fn a_switch_names_what_it_keeps_apart() {
+        let s = made(serde_json::json!({ "keeps_apart": [{ "setting": "global:0x0010", "apart": [1], "untick_sets": 0 }, { "setting": "global:0x0020", "apart": [1, 2] }] }));
+        assert_eq!(s.keeps_apart, vec![
+            KeepsApart { setting: "global:0x0010".into(), apart: vec![1], untick_sets: Some(0) },
+            KeepsApart { setting: "global:0x0020".into(), apart: vec![1, 2], untick_sets: None },
+        ]);
+        assert!(made(serde_json::json!({})).keeps_apart.is_empty());
     }
 
     /// A proof as the lean definition says it: the values it checked, or a scale sampled and whether on one line; the
@@ -2477,6 +2533,43 @@ mod tests {
         assert_eq!(other.start_columns(true), [0, 1], "no modes: the live settings and the dial");
         assert!(other.more_columns_modes().is_none());
         assert!(Camera::default().mirrors.is_empty());
+    }
+
+    /// A switch's `keeps_apart` that does not hold together refuses the whole definition, saying why: values the switch
+    /// does not list or every one of them, a family the definition does not hold or without copies, an untick value a
+    /// record of the family does not hold. One as the kit writes it is taken.
+    #[test]
+    fn a_keeps_apart_that_does_not_hold_together_refuses_the_definition() {
+        let with = |entry: serde_json::Value| a1_with(move |v| {
+            for s in v["settings"].as_array_mut().unwrap() {
+                if s["key"] == "global:0x0187" { s["keeps_apart"] = serde_json::json!([entry.clone()]); }
+            }
+        });
+        let good = serde_json::json!({ "setting": "global:0x0367", "apart": [1], "untick_sets": 0 });
+        assert!(Schema::from_text(&with(good)).is_ok());
+        for (entry, words) in [
+            (serde_json::json!({ "setting": "global:0x0367", "apart": [7] }), "are not some of"),
+            (serde_json::json!({ "setting": "global:0x0367", "apart": [0, 1] }), "are not some of"),
+            (serde_json::json!({ "setting": "global:0x7ffe", "apart": [1] }), "the definition holds no such setting"),
+            (serde_json::json!({ "setting": "global:0x0182", "apart": [1] }), "lists no copies the definition holds"),
+            (serde_json::json!({ "setting": "global:0x0367", "apart": [1], "untick_sets": 100000 }), "100000, is not one of"),
+        ] {
+            let e = Schema::from_text(&with(entry.clone())).unwrap_err();
+            assert!(e.contains("keeps global:") && e.contains(words), "{entry}: {e}");
+        }
+        // a range: a number on its step is held, one off it is not
+        let ranged = |code: i64| a1_with(move |v| {
+            for s in v["settings"].as_array_mut().unwrap() {
+                if s["key"] == "global:0x0187" { s["keeps_apart"] = serde_json::json!([{ "setting": "global:0x04e9[0]", "apart": [1], "untick_sets": code }]); }
+            }
+        });
+        assert!(Schema::from_text(&ranged(0)).is_ok());
+        assert!(Schema::from_text(&ranged(16)).unwrap_err().contains("16, is not one of"));
+        // every shipped definition holds together, whatever keeps_apart the kit wrote into it
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("definitions");
+        for p in std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
+            assert!(Schema::from_file(&p).is_ok(), "{}: {:?}", p.display(), Schema::from_file(&p).err());
+        }
     }
 
     /// An unknown kind in the file block refuses the whole definition, by name.

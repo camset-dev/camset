@@ -216987,7 +216987,16 @@
      0,
      1
     ]
-   }
+   },
+   "keeps_apart": [
+    {
+     "setting": "global:0x0367",
+     "apart": [
+      1
+     ],
+     "untick_sets": 0
+    }
+   ]
   },
   {
    "key": "global:0x0188",
@@ -217025,7 +217034,16 @@
      0,
      1
     ]
-   }
+   },
+   "keeps_apart": [
+    {
+     "setting": "global:0x0053",
+     "apart": [
+      1
+     ],
+     "untick_sets": 0
+    }
+   ]
   }
  ],
  "menu": [

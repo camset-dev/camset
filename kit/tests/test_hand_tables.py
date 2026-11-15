@@ -114,6 +114,7 @@ def j(**tables) -> str:
 ENTRY = {"like": "global:0x0003", "name": "A", "values": [], "note": ""}
 NOT_OFFERED = {"key": "global:0x0001", "values": [1], "why": "Not on its list.", "menu": "Row"}
 PICKER = {"keys": "^global:0x0001\\[", "walk": "^Fn / Upper / 1$", "table": ["Fn", None], "why": "Walked full circle."}
+APART = {"setting": "global:0x0002", "apart": [1], "untick_sets": 0}
 DEEP = 100000                      # deeper than Python's parser follows
 
 
@@ -171,6 +172,16 @@ DEEP = 100000                      # deeper than Python's parser follows
     (j(VIDEO_SYSTEM_VALUES={"global:0x0001": {"NTSC": []}}), "'global:0x0001' has no 'PAL'"),
     (j(ZONE=[[0, "Centre"], ["1", "Up"]]), "ZONE is not in its shape: the table[1] is ['1', 'Up'], not a [code, name] pair"),
     (j(COPIES={"global:0x0001": "global:0x0002"}), "COPIES is not in its shape: 'global:0x0001' is a string, not an array"),
+    # a switch that keeps a family's copies apart: a list of {setting, apart[, untick_sets]}, each family once
+    (j(KEEPS_APART=[APART]), "KEEPS_APART is not in its shape: the table is an array, not an object"),
+    (j(KEEPS_APART={"global:0x0001": APART}), "KEEPS_APART is not in its shape: 'global:0x0001' is an object, not an array"),
+    (j(KEEPS_APART={"global:0x0001": []}), "KEEPS_APART is not in its shape: 'global:0x0001' lists nothing it keeps apart"),
+    (j(KEEPS_APART={"global:0x0001": [{"apart": [1]}]}), "KEEPS_APART is not in its shape: 'global:0x0001'[0] has no 'setting'"),
+    (j(KEEPS_APART={"global:0x0001": [{**APART, "apart": 1}]}), "'global:0x0001'[0]'s 'apart' is a whole number, not an array"),
+    (j(KEEPS_APART={"global:0x0001": [{**APART, "apart": []}]}), "'global:0x0001'[0]'s 'apart' names no value"),
+    (j(KEEPS_APART={"global:0x0001": [{**APART, "apart": ["1"]}]}), "'global:0x0001'[0]'s 'apart'[0] is a string, not a whole number"),
+    (j(KEEPS_APART={"global:0x0001": [{**APART, "untick_sets": True}]}), "'untick_sets' is true or false, not a whole number"),
+    (j(KEEPS_APART={"global:0x0001": [APART, {**APART, "untick_sets": 2}]}), "KEEPS_APART holds 'global:0x0002' twice"),
     (j(LABEL_FIXES={"Slip": 1}), "LABEL_FIXES is not in its shape: 'Slip' is a whole number, not a string"),
     (j(MY_MENU_EMPTY={"label": "(empty)"}), "MY_MENU_EMPTY is not in its shape: it has no 'line'"),
     # the patterns the writer runs, each compiled (and each replacement tried) as the file is read
@@ -277,6 +288,36 @@ def test_the_hand_evidence_is_put_back_into_the_tables_read_from_the_file(monkey
         "FRAME_PROOFS": {"global:0x0099": {"run": "kit2_x"}}}}), encoding="utf-8")
     with pytest.raises(ValueError, match="no entry 'global:0x0099'"):
         hand_tables.load(CAM)
+
+
+def test_a_keeps_apart_entrys_evidence_lands_on_its_own_entry(monkeypatch, tmp_path):
+    """A KEEPS_APART entry's hand evidence, by the switch's key and the entry's place, checked by "$setting" (its
+    family): put back onto that entry ("evidence", "untick"), and refused where "$setting" names another family or the
+    place holds no entry, so evidence that no longer fits never lands on another entry; the plain pass's check
+    (plain_problems) says the same, and asks for "$setting". Made-up keys."""
+    entries = [{"setting": "global:0x0010", "apart": [1], "untick_sets": 0}, {"setting": "global:0x0020", "apart": [1]}]
+    a_camera(monkeypatch, tmp_path, {"COPIES": {"global:0x0010": ["global:0x0011", "global:0x0012"],
+                                                "global:0x0020": ["global:0x0021", "global:0x0022"]},
+                                     "KEEPS_APART": {"global:0x0001": entries}})
+    write = lambda part: hand_evidence.path(CAM).write_text(json.dumps({"hand_format": hand_evidence.FORMAT, "camera": CAM,
+                                                                        "tables": {"KEEPS_APART": {"global:0x0001": part}}}), encoding="utf-8")
+    write({"1": {"$setting": "global:0x0020", "evidence": "runs kit2_x, 2026-01-02"}})
+    got = hand_tables.load(CAM)
+    assert got.KEEPS_APART["global:0x0001"] == [entries[0], {**entries[1], "evidence": "runs kit2_x, 2026-01-02"}]
+    public = vars(hand_tables.load(CAM, evidence=False))
+    doc = lambda part: {"hand_format": hand_evidence.FORMAT, "camera": CAM, "tables": {"KEEPS_APART": {"global:0x0001": part}}}
+    assert hand_evidence.plain_problems(doc({"1": {"$setting": "global:0x0020", "untick": "x"}}), CAM, public) == []
+    for part, words in (({"0": {"$setting": "global:0x0020", "evidence": "x"}}, "is of 'global:0x0020', the entry of 'global:0x0010'"),
+                        ({"5": {"$setting": "global:0x0010", "evidence": "x"}}, "no entry 5")):
+        write(part)
+        with pytest.raises(ValueError, match=re.escape(words)):
+            hand_tables.load(CAM)
+    assert hand_evidence.plain_problems(doc({"0": {"evidence": "x"}}), CAM, public) == [
+        "KEEPS_APART 'global:0x0001' [0]: no \"$setting\" naming the family of its entry"]
+    assert hand_evidence.plain_problems(doc({"0": {"$setting": "global:0x0020"}}), CAM, public) == [
+        "KEEPS_APART 'global:0x0001' [0]: its \"$setting\" is not the family of the entry at that place"]
+    assert hand_evidence.plain_problems(doc({"7": {"$setting": "global:0x0020"}}), CAM, public) == [
+        "KEEPS_APART 'global:0x0001' [7]: the tables have no entry there"]
 
 
 def test_converting_hand_evidence_needs_the_cameras_tables_file(monkeypatch, tmp_path):

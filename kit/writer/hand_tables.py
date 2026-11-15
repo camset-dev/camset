@@ -6,8 +6,8 @@ definition (docs/decisions/0016, 0020), read from the camera's own public data f
 each table under its name: records whose name or note the camera proved wrong (RECORD_FIXES), records the menus never
 write, found by hand (NEW_RECORDS, FILTER_FLAGS, NEW_LIKE, FRAME_PROOFS), value names no proof can give (CAROUSEL,
 VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKER_LISTS), the values the menus never
-offer (NOT_OFFERED), the copies the camera keeps (COPIES), why a record cannot be proved (UNPROVED), and the label
-fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
+offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that keep a family's copies apart
+(KEEPS_APART), why a record cannot be proved (UNPROVED), and the label fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
 load() (writer/hand_evidence.py). A camera with no file has every table empty.
@@ -50,13 +50,14 @@ TABLES = {
     "ISO_TABLE": "text", "LABEL_FIXES": "words", "GROUP_NAMES": "words", "MY_MENU_ROW": "text",
     "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "PICKER_LISTS": "picker_lists",
     "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
+    "KEEPS_APART": "keeps_apart",
     "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
-         "pattern": lambda: None, "picker_lists": dict}
+         "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
@@ -367,6 +368,26 @@ def _shaped(name: str, kind: str, raw):
             _pattern(e["walk"], f"{k!r}'s walk")
             _row(e["table"], (str, (str, type(None))), f"{k!r}'s table", "[screen, page or section or null]")
         return {k: {f: tuple(v) if f == "table" else v for f, v in e.items()} for k, e in raw.items()}
+    if kind == "keeps_apart":
+        # a switch's key, then what it keeps apart: [{setting, apart, untick_sets?}], the fields the writer reads
+        for k, entries in _need(raw, dict, "the table").items():
+            if not _need(entries, list, repr(k)):
+                raise _Shape(f"{k!r} lists nothing it keeps apart")
+            for i, e in enumerate(entries):
+                where = f"{k!r}[{i}]"
+                _need(e, dict, where)
+                for f, t in (("setting", str), ("apart", list)):
+                    if f not in e:
+                        raise _Shape(f"{where} has no {f!r}")
+                    _need(e[f], t, f"{where}'s {f!r}")
+                if not e["apart"]:
+                    raise _Shape(f"{where}'s 'apart' names no value")
+                for j, v in enumerate(e["apart"]):
+                    _need(v, int, f"{where}'s 'apart'[{j}]")
+                if "untick_sets" in e:
+                    _need(e["untick_sets"], int, f"{where}'s 'untick_sets'")
+            _unique(entries, lambda e: e["setting"])
+        return raw
     if kind == "unproved":
         out = {}
         for k, e in _need(raw, dict, "the table").items():

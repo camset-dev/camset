@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -354,6 +354,20 @@
     "$ref": "#/$defs/key"
    }
   },
+  "KEEPS_APART": {
+   "type": "object",
+   "description": "The camera's own switches that keep a COPIES family's per-mode copies apart (the a1 II's Different Set for Still/Mv boxes), by the switch's key: what each keeps apart, where a proof on the camera showed what the switch does to the family's copies, and only there (a switch whose effect is not proved gets no entry). Written as keeps_apart on the switch's setting in the definition (kit/writer/copies.py) where the definition holds the family with its copies and their modes, the hand evidence shows the entry (its \"evidence\", and its \"untick\" for untick_sets: what proved it stays private, schemas/hand-evidence.schema.json), and no download of the camera's holds the switch outside apart with the family at more than one value (one that does stops the write); an entry that cannot take effect is said, \"not applied\", and left out.",
+   "propertyNames": {
+    "$ref": "#/$defs/key"
+   },
+   "additionalProperties": {
+    "type": "array",
+    "minItems": 1,
+    "items": {
+     "$ref": "#/$defs/keeps_apart"
+    }
+   }
+  },
   "UNPROVED": {
    "type": "object",
    "description": "Why no proof can reach a record, by setting key: [kind, null, why], the kind one the definition's unproved_reason lists and the why in a photographer's words; the day it was settled is the hand evidence's (null here).",
@@ -644,6 +658,33 @@
     "named_by": {
      "$ref": "#/$defs/key",
      "description": "The record whose proved names name a held value."
+    }
+   }
+  },
+  "keeps_apart": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "setting",
+    "apart"
+   ],
+   "properties": {
+    "setting": {
+     "$ref": "#/$defs/key",
+     "description": "The family's setting: a COPIES family whose copies' modes the table names (not one of COPY_MODES_UNKNOWN)."
+    },
+    "apart": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "integer"
+     },
+     "description": "The switch's values with which the camera keeps the family's copies apart (the box's Ticked); with any other the copies share one value. Each one of the switch's values, never all of them."
+    },
+    "untick_sets": {
+     "type": "integer",
+     "description": "What the camera set the family's setting and each of its copies to when the switch was changed from a value in apart to one that is not (the box unticked), in the states the proof tried: one of the setting's values and each copy's. Absent where that was not proved; written only where the hand evidence shows it (its \"untick\")."
     }
    }
   }

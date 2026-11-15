@@ -375,7 +375,11 @@ impl App {
     /// each row's own value (`pin_families`).
     pub(crate) fn copy_row(&self, linked: &[Setting], from: Col, to: Col) -> Vec<Action> {
         let pairs: Vec<(&Setting, i64, i64)> = linked.iter().filter_map(|l| Some((l, self.col_value(from, l)?, self.col_value(to, l)?))).collect();
+        // every place this row leaves at the other column's value (`rows_set`): one holding it already, and one set to
+        // it below; not one left alone (view only, another video system's, another shape)
+        let covered = |places: &mut dyn Iterator<Item = Slot>| self.rows_set.borrow_mut().extend(places.map(|slot| (to.section, slot)));
         if pairs.iter().all(|(_, v, cur)| v == cur) {
+            covered(&mut pairs.iter().map(|(l, _, _)| l.slot()));
             return Vec::new();
         }
         let mut left = self.copy_skipped.get();
@@ -389,6 +393,7 @@ impl App {
         let sys = self.system_in(to.section);
         let (mut locked, mut other) = (false, false);
         let mut out = Vec::new();
+        covered(&mut pairs.iter().filter(|(_, v, cur)| v == cur).map(|(l, _, _)| l.slot()));
         for (l, v, _) in pairs.into_iter().filter(|(_, v, cur)| v != cur) {
             if self.locked(l, to.section) {
                 locked = true;
@@ -396,6 +401,7 @@ impl App {
                 other = true;
             } else {
                 out.push(Action::Set(to.section, l.slot(), v));
+                covered(&mut std::iter::once(l.slot()));
             }
         }
         left.locked += usize::from(locked);

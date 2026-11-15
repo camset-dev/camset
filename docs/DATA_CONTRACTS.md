@@ -472,7 +472,7 @@ wrote that file and an editor would flag it (the memory sets are not checked: th
 spread over each system's own; a contradiction stops the write with exit 1, naming the setting and the file, never a
 value, and a download that cannot be read is skipped and counted. `--from-data` leaves the field as it is.
 
-### A value kept in more than one record (`copies`, `copy_of`, `copy_for`, `camera.live_mode`)
+### A value kept in more than one record (`copies`, `copy_of`, `copy_for`, `keeps_apart`, `camera.live_mode`)
 
 The camera keeps some values in a live record and per-mode copies beside it: each Picture Profile parameter in use
 with its Stills and its Movie copy (a Stills edit writes the one in use and the Stills copy, a Movie edit the one in use
@@ -497,9 +497,29 @@ the a1 II each box is a setting of the definition, proved by ticking and unticki
 family's copies is proved for White Balance and the Picture Profile in use, in Stills and Movie mode: unticked, a
 choice in either mode writes the setting and both copies; ticked, the setting and that mode's copy only; ticking the
 box on the camera writes the box alone, and unticking it sets the setting and both copies to 0 (Auto, Off), whatever
-they held (the camera's page, its Different Set for Still/Mv row, says what is not proved yet). The definition does
-not tie a family to its box, so the copies rule, right in both states but for moving an equal copy when the box is
-ticked, is what an editor follows, and a box changed in a file changes the box alone. `copy_for`
+they held (the camera's page, its Different Set for Still/Mv row, says what is not proved yet).
+
+A box whose effect on its family was proved names the family on the box's own setting: `keeps_apart`, a list of
+entries, each the family's setting (`setting`, one that lists its `copies`, each copy carrying `copy_for`), the box's
+values that keep the family apart (`apart`: Ticked, 1, on the a1 II) and, where proved, what unticking the box on the
+camera set the setting and every copy to in the states tried (`untick_sets`: 0). It sits on the switch rather than on
+the family because
+what was proved is what the switch does, and one switch may come to keep several families apart (White Balance's
+colour temperature and fine-tune, the profiles' parameters, once proved); the family's copies are not listed again, as
+`copies` names them once. On the a1 II only the White Balance box (0x0187, keeping 0x0367 apart) and the Picture
+Profile box (0x0188, keeping 0x0053) have it; the other five boxes have none until a proof shows what they do. An
+editor does not decide from it what follows an edit: the copies rule stays, right in both states but for moving an
+equal copy of the other mode while the box is ticked, and the rows of a family whose box is ticked say so (what the
+camera did then, and that the editor does not follow the box). Before a box is changed from an `apart` value to
+another in a file (by any change of it but a Revert and a copy of several rows whose rows bring the whole family too, the page's answer refused where the file changed since the question), where
+`untick_sets` is given and the family's setting or a copy holds another value, an editor says what that change did on
+the camera and asks: as the camera did (the box, the setting and every copy at `untick_sets`, one step, made whole or
+not at all, and offered only where each of them takes that value here), or the box alone; what the camera does on
+loading a file whose box was changed alone is not known, and only a camera-written file may be loaded to find out, so
+it is never decided for the person (the editor's guide). An editor refuses a definition whose `keeps_apart` names
+values the switch does not list (or all of them), a family it does not hold or one without copies, or an
+`untick_sets` a record of the family does not hold. Without the field a box changed in a file changes the box alone.
+`copy_for`
 and `camera.live_mode` are for checking a file, not for deciding what follows: where a section's mode is known and the
 family's copies carry `copy_for`, a section in which the setting does not equal the copy for its mode is a counted
 issue in the save and write windows, an edit or a Revert that would make it so is refused outside Expert mode, and
@@ -529,6 +549,24 @@ written; a download that cannot be read is skipped and counted, and so is a live
 downloads the definition's fields are left as they are. `copy_for` goes on every copy of every family whose modes the
 hand table names, the modes it names for the copy's place (the Stills copy "Stills", the Movie copy "Movie", "S&Q" and "Time-lapse"), and the
 write checks them against the camera's downloads as above. Keys and mode names only, never a value.
+`keeps_apart` is the hand table's too (`KEEPS_APART`, by the switch's key, each entry as the definition writes it),
+written by `with_keeps_apart` in `kit/writer/copies.py` right after the copies, at every write: an entry goes on the
+switch only where the switch is a setting with named values listing every value of `apart` but not all of its values,
+the family is a setting of the definition other than the switch, with its copies and each copy's `copy_for`, no other
+switch named it before, and `untick_sets` is one of the values (or a number of the range on its step) of the setting
+and of each copy; an entry that fails any of that is said, "not applied", and left out, and a setting the table no
+longer names loses an old field. An entry takes effect only where the mapper's hand evidence shows it (`KEEPS_APART` in
+[the hand evidence file](#the-hand-evidence-file-how-each-hand-fact-was-proved): `"evidence"`, what showed the family
+kept apart and shared, for the entry; `"untick"`, what showed the value leaving `apart` gave the family, for its
+`untick_sets`, which is otherwise left out, said); the evidence reaches no field of the definition, and like the other
+tables it completes, `--write` stops without the hand evidence file. Where the camera's downloads are there (up to 200,
+spread over the download log, as for the copies), every section holding the switch outside `apart` must hold the
+family's setting and its copies at one value, the switch read in that same section, and only in the sections it lives
+in (a live switch in the live settings, whatever the memory sets hold): a download that contradicts an entry stops the
+write with exit 1, naming the switch, the family, the file and the section, nothing written, as for the copies, for
+the table is then wrong or incomplete for a state the camera wrote (take the entry out of `KEEPS_APART`, or prove the
+state that file shows, then write again); a download that cannot be read is skipped and
+counted, and with no downloads that is said. Keys and value codes only.
 `--from-data` leaves the setting fields as they are; `camera.live_mode` is the camera file's.
 
 ### Why no proof can reach a setting (`unproved_reason`)
@@ -694,8 +732,8 @@ writer applies to its definition, table by table: the records whose name or note
 (`RECORD_FIXES`), the records the menus never write, found by hand (`NEW_RECORDS`, `NEW_LIKE`, and `FRAME_PROOFS` with
 each one's note and value names), value names no proof can give (`CAROUSEL`, `VALUE_FIXES`, `KEEP_LABELS` and the
 others), the pickers whose lists were walked whole (`PICKER_LISTS`), the values the menus never offer
-(`NOT_OFFERED`), the copies the camera keeps (`COPIES`), why a record cannot be proved (`UNPROVED`), and the label fixes
-and proof-row rules. It is public and the same for any owner of that model
+(`NOT_OFFERED`), the copies the camera keeps (`COPIES`) and the switches that keep them apart (`KEEPS_APART`), why a
+record cannot be proved (`UNPROVED`), and the label fixes and proof-row rules. It is public and the same for any owner of that model
 and firmware, and written and edited by hand: no kit step writes it, and the writer checks what it can against the
 camera's own files at every write (a picker's list and a not-offered mark against the walks, the copies and the video
 systems against the downloads). A fix to what a record means goes here and nowhere else, never into the definition by hand (the playbook,
@@ -742,7 +780,8 @@ in use, 0x0cbe, as it writes), and the plain pass, every other camera's, reads t
   `kit/pass2_report.py` leaves a value carried over in it to that rule;
 - `PICKER_LISTS`: a picker's list walked whole, which the settings it covers then list and no more, and
   `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES`, `COPY_MODES` and `COPY_MODES_UNKNOWN`: each checked against the
-  walks and the camera's downloads at every write, as the sections above say;
+  walks and the camera's downloads at every write, as the sections above say, and `KEEPS_APART`, checked against the
+  copies written;
 - `UNPROVED`: why no proof reaches a setting, and `unproved_sets` on a memory set's block where the camera file names
   the memories' live copy;
 - `CONTEXT_WORDS`: proof contexts in other words.
@@ -775,7 +814,8 @@ so far, each tied to that pass's code (its checklist records, its Recall Custom 
 spellings), and no pass reads `FRAME_STEPS`. The plain pass stops, before anything is read or written, on a file that
 fills one of them, or that holds an entry no table it reads would use (a `FILTER_FLAGS` entry no `NEW_RECORDS` `$ref`
 takes in, `NEW_WHOLE_LABELS` for no `NEW_LIKE` record, `COPY_MODES` without `COPIES`, a `COPY_MODES_UNKNOWN` family
-`COPIES` lacks, a `NEW_RECORDS` key that is no whole record, a `NEW_LIKE` key that is no whole live record), naming
+`COPIES` lacks, a `KEEPS_APART` family `COPIES` lacks or `COPY_MODES_UNKNOWN` holds, a `NEW_RECORDS` key that is no
+whole record, a `NEW_LIKE` key that is no whole live record), naming
 each and saying which tables it reads: no table is filled in and believed to take effect. The rows below say which
 tables those are. A camera whose tables are all empty gets the plain pass as it was before it read any.
 
@@ -801,6 +841,10 @@ A `NOT_OFFERED` mark:
 
 {{ schema_fields("hand-tables", "$defs/not_offered") }}
 
+A `KEEPS_APART` entry:
+
+{{ schema_fields("hand-tables", "$defs/keeps_apart") }}
+
 ## The hand evidence file: how each hand fact was proved
 
 `private/evidence/<model>_fw<fw>.hand.json` is the mapper's own, beside the definition's evidence file, never
@@ -814,7 +858,11 @@ field in `MY_MENU_EMPTY`). A hand proof in `FRAME_PROOFS` is the values it chose
 `UNPROVED` reason's day is its place `"1"` in `[kind, day, why]`; what shows a `NOT_OFFERED` mark is its `"evidence"`
 (and a held value's downloads, `"files"`), and how a `PICKER_LISTS` picker's list was walked whole (the table walk
 that went round every list, the walks that chose every place, their runs and days) its `"evidence"`. That evidence
-reaches no field of the definition: without it the list is not cut.
+reaches no field of the definition: without it the list is not cut. A `KEEPS_APART` entry's evidence goes by the
+switch's key, then by the entry's place from 0, checked by `"$setting"`, its family: `"evidence"` (what showed the
+family kept apart while the switch holds an `apart` value and shared while it does not, its runs and day) and
+`"untick"` (what showed the value leaving those values gave the family). It reaches no field either: without the
+first the entry is not written, without the second its `untick_sets`.
 
 The two passes read it differently:
 
@@ -829,7 +877,8 @@ The two passes read it differently:
   allows (evidence fields only, table by table, so nothing in it sets a public fact such as a group, a tab, a value's
   name or a held mark), every part on an entry the public tables hold, a `NOT_OFFERED` part with its `"$key"` (and its
   `"$values"` too where the table gives the setting more than one mark, so a reorder or an insertion there never moves
-  one mark's evidence onto another), and a `"note+"` only for an entry with a public note; it stops on anything else
+  one mark's evidence onto another), a `KEEPS_APART` part with its `"$setting"`, and a `"note+"` only for an entry
+  with a public note; it stops on anything else
   in plain words naming the table, the key and the field, never a value. A mark whose part no longer gives evidence
   loses it, said with the mark's value. Then it writes each piece only into a field the definition keeps as evidence, however
   it is worded: a hand proof's values, run, day and rows into the setting's proof, a `"note+"` (its parentheses aside)

@@ -3,7 +3,7 @@
 the camera is, the same for every owner of that model and firmware who maps it (record names, value tables, the copies
 and families, the notes that say what a record holds, the rules the writer applies). How, when, in which run and from
 which state each of its facts was proved (a hand proof's values, run, day and menu row, a sample's count, the owner's
-allowance, a note's evidence, what shows a not-offered mark, how a picker's list was walked whole) is the mapping's
+allowance, a note's evidence, what shows a not-offered mark, how a picker's list was walked whole, what showed a switch keeping copies apart) is the mapping's
 evidence, and is kept in the private overlay beside the definition's own evidence:
 
     private/evidence/<model>_fw<fw>.hand.json   by table name, the fields each entry's evidence adds or replaces
@@ -13,12 +13,12 @@ the tables are in the shapes the writer reads), so the writer reads them whole a
 evidence file as before the split. Without it (a fresh clone, CI) the tables stay the public ones: --from-data and the
 checks need nothing more, and kit/schema_update.py --write, in either pass, refuses to write the definition of a camera
 whose tables hold entries the evidence completes (COMPLETES: a hand proof, a reason's day, what shows a not-offered
-mark, how a picker's list was walked whole), which would lose them (missing). Its shape is schemas/hand-evidence.schema.json's; a mapper who proved none of
+mark, how a picker's list was walked whole, what proved a KEEPS_APART entry), which would lose them (missing). Its shape is schemas/hand-evidence.schema.json's; a mapper who proved none of
 those entries by hand keeps the file with no evidence in it ("tables": {}).
 
 The file's "tables" map a table's name to a patch: for a dict, {key: value or patch}; for a list or a tuple, {index:
 value or patch}, an entry of a list that has a "key" checked by "$key" (and by "$values", its "values", where the
-part gives them). The evidence adds to entries, never makes one,
+part gives them), a KEEPS_APART entry by "$setting", its family. The evidence adds to entries, never makes one,
 and never replaces a public value: a key or index the table lacks is refused; inside an entry a patch of a container
 recurses into it, and any other value adds a field the entry lacks or fills one that is empty (None). Any other public
 value it would replace (a string, a list, a number, a bool, ...) is refused unless the evidence holds the same value,
@@ -59,9 +59,10 @@ def path(camera: str) -> Path:
 SCHEMA_REF = "../../schemas/hand-evidence.schema.json"      # the "$schema" the file names, from private/evidence/
 # the tables whose entries the hand evidence completes in the definition: a FRAME_PROOFS entry's hand proof (its values
 # or sample, run, day and menu rows), an UNPROVED reason's day, what shows a NOT_OFFERED mark, how a PICKER_LISTS
-# picker's list was walked whole (without it the list is not cut). A definition written from tables that hold any of
-# them, without the file, would lose those proofs.
-COMPLETES = ("FRAME_PROOFS", "UNPROVED", "NOT_OFFERED", "PICKER_LISTS")
+# picker's list was walked whole (without it the list is not cut), what proved a KEEPS_APART entry (without it the entry,
+# or its untick_sets, is not written). A definition written from tables that hold any of them, without the file, would
+# lose those proofs.
+COMPLETES = ("FRAME_PROOFS", "UNPROVED", "NOT_OFFERED", "PICKER_LISTS", "KEEPS_APART")
 
 
 def missing(camera: str, found, tables: dict) -> str | None:
@@ -78,7 +79,7 @@ def missing(camera: str, found, tables: dict) -> str | None:
     return (f"schema_update: nothing written. Part of the {camera} definition is proved by its hand tables "
             f"({paths.shown(datafiles.hand_tables_file(camera))}: {', '.join(held)}), and what those proofs were (a "
             "hand proof's values, run and day, a reason's day, what shows a not-offered mark, how a picker's list was "
-            "walked whole) is kept in the mapper's "
+            "walked whole, what showed a switch keeping a family's copies apart) is kept in the mapper's "
             f"private file {paths.shown(path(camera))}, which is not on this computer. Writing without it would drop "
             "those proofs from the definition. Run --write where that file is (the private overlay, private/evidence/), "
             "or point CAMSET_EVIDENCE_DIR at its folder; --from-data needs no evidence. If you map this camera and "
@@ -214,6 +215,17 @@ def plain_problems(doc: dict, camera: str, tables: dict) -> list:
                                "needs: the table gives it more than one mark")
             elif key not in table:
                 out.append(f"{name} {key!r}: the tables have no such entry")
+            elif name == "KEEPS_APART":
+                # a switch's entries, by place, each part naming its entry's family ("$setting")
+                entries = table[key] if isinstance(table[key], (list, tuple)) else []
+                for i, part in fields.items():
+                    part = part if isinstance(part, dict) else {}
+                    if not i.isdigit() or int(i) >= len(entries):
+                        out.append(f"{name} {key!r} [{i}]: the tables have no entry there")
+                    elif "$setting" not in part:
+                        out.append(f"{name} {key!r} [{i}]: no \"$setting\" naming the family of its entry")
+                    elif part["$setting"] != (entries[int(i)] or {}).get("setting"):
+                        out.append(f"{name} {key!r} [{i}]: its \"$setting\" is not the family of the entry at that place")
             elif "note+" in fields and not isinstance((table[key] or {}).get("note") if isinstance(table[key], dict)
                                                       else None, str):
                 out.append(f"{name} {key!r}: \"note+\" for an entry with no note")
@@ -257,6 +269,11 @@ def patched(target, patch: dict, where: str, table: bool = False):
                     raise ValueError(f"{where}[{i}]: the evidence is of {v['$key']!r}, the entry of "
                                      f"{(out[int(i)] or {}).get('key')!r}")
                 v = {f: x for f, x in v.items() if f != "$key"}
+            if isinstance(v, dict) and "$setting" in v:     # a KEEPS_APART entry, by its family's setting
+                if not isinstance(out[int(i)], dict) or out[int(i)].get("setting") != v["$setting"]:
+                    raise ValueError(f"{where}[{i}]: the evidence is of {v['$setting']!r}, the entry of "
+                                     f"{(out[int(i)] or {}).get('setting')!r}")
+                v = {f: x for f, x in v.items() if f != "$setting"}
             if isinstance(v, dict) and "$values" in v:      # checked as "$key" is, where the file gives it
                 if not isinstance(out[int(i)], dict) or not same_values(v["$values"], out[int(i)].get("values")):
                     raise ValueError(f"{where}[{i}]: the evidence's \"$values\" are not the entry's values")

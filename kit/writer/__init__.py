@@ -10,7 +10,8 @@
                 (without_written_with), a list of numbers sampled on a line, an array's one code table
     offered     the values the camera's menus never offer, each mark where its evidence holds; the values they offer
                 under one video system only
-    copies      the copies the camera keeps of a live value, where its downloads bear the rule out
+    copies      the copies the camera keeps of a live value, where its downloads bear the rule out, and the switches
+                that keep a family's copies apart (keeps_apart)
     gate        --write's gate: the report's open questions against the camera's accepted file
     generic     the plain pass for any other camera, from a seed when it has no definition yet, with its hand tables
     hand_tables a camera's hand tables, read from its public data file (data/<model>_fw<fw>/hand_tables_*.json):

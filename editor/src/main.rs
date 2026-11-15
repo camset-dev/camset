@@ -150,6 +150,12 @@ struct App {
     /// or from a set of file A (`Some(Some(set))`: a memory recalled or registered): only then does a Set to the value a
     /// record holds pass the lock guard, and a refusal says what to do about the copy.
     rows_copied: std::cell::Cell<Option<Option<usize>>>,
+    /// The places (set, slot) the rows of that copy set themselves, before `pin_families` pins the rest: a switch that
+    /// keeps copies apart, changed by the copy, asks first unless they set its whole family (`untick_ask`).
+    rows_set: std::cell::RefCell<Vec<(usize, Slot)>>,
+    /// The window's changes held back by the question before a switch that keeps copies apart is unticked
+    /// (`hold_untick`), until it is answered (`untick_window`).
+    untick_pending: Option<UntickPending>,
     /// The last edit that the next may join (a value being dragged): its slots and when, so a drag is one undo step.
     last_edit: Option<(Vec<(usize, Slot)>, std::time::Instant)>,
     /// When the window's size last changed, while that size is not saved yet (it is once it stays put a second).
@@ -329,6 +335,8 @@ impl App {
             review_rev: None,
             copy_skipped: Default::default(),
             rows_copied: Default::default(),
+            rows_set: Default::default(),
+            untick_pending: None,
             last_edit: None,
             window_changed: None,
             place_to_restore,
@@ -673,6 +681,7 @@ impl eframe::App for App {
         self.backups_window(ctx);
         self.unchecked_window(ctx);
         self.def_replace_window(ctx);
+        self.untick_window(ctx);
         self.recovery_window(ctx);
         self.changes_window(ctx);
         self.unsaved_window(ctx);
@@ -757,6 +766,8 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        // a change that unticks a switch keeping copies apart waits for the question's answer (`untick_window`)
+        let actions = self.hold_untick(actions);
         self.apply(actions);
         self.journal_tick(ctx);
 

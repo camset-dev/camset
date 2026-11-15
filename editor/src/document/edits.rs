@@ -297,13 +297,25 @@ impl App {
     }
 
     /// What a row or tile says beside a setting the camera keeps in more than one record (`copies`, `copy_of`) in set
-    /// `section`, and its hover. Where file A does not keep what the camera keeps there (`CopyRule::keeps`: the setting
-    /// apart from the copy for the set's shooting mode, or where that is not known held by none of its copies): that it
-    /// is out of step, and what to do. Else, beside a copy, what changing it changes (`apply`): one in step with its
-    /// setting (`follows`) takes the setting and the copies in step with it along, and its Revert is theirs; one apart
-    /// changes alone; in Expert mode a copy changes alone. The words hold whatever the camera does with the other modes'
-    /// copies, which no proof has read. None for any other setting.
+    /// `section`, and its hover: what the copies rule says (`copies_note`), then, while a switch of the camera's own
+    /// keeps the family apart there (`keeps_apart`), what the camera does then and that the editor does not follow it
+    /// (`apart_note`). None for any other setting.
     pub(crate) fn copy_note(&self, s: &Setting, section: usize) -> Option<(String, String)> {
+        match (self.copies_note(s, section), self.apart_note(s, section)) {
+            (Some((words, hover)), Some(apart)) => Some((format!("{words} {apart}"), hover)),
+            (None, Some(apart)) => Some((apart, "The camera keeps this value in more than one record, and a setting of its own decides whether each shooting mode has its own; what that setting did when it was tried on the camera is said here.".into())),
+            (note, None) => note,
+        }
+    }
+
+    /// The copies rule's part of `copy_note`. Where file A does not keep what the camera keeps there (`CopyRule::keeps`:
+    /// the setting apart from the copy for the set's shooting mode, or where that is not known held by none of its
+    /// copies): that it is out of step, and what to do. Else, beside a copy, what changing it changes (`apply`): one in
+    /// step with its setting (`follows`) takes the setting and the copies in step with it along, and its Revert is
+    /// theirs; one apart changes alone; in Expert mode a copy changes alone. The words hold whatever the camera does
+    /// with the other modes' copies, which `apart_note` says where a proof showed it. None for any other setting, and
+    /// for the setting itself in step.
+    fn copies_note(&self, s: &Setting, section: usize) -> Option<(String, String)> {
         let d = self.doc.as_ref()?;
         let rule = self.rule_of(s)?;
         if !rule.main.kept_in(section) {
@@ -550,6 +562,7 @@ impl App {
         let skipped = self.copy_skipped.replace(Left::default());
         // a copy of several rows at once (`pin_families`): a refusal says what to do about the copy
         let copied = self.rows_copied.replace(None);
+        self.rows_set.take();
         if skipped.total() > 0 {
             self.status = with_left(&self.status, skipped);
         }
@@ -866,7 +879,7 @@ impl App {
             Some(before) => {
                 let changed = before.sections.iter().zip(&doc.edited.sections).any(|(a, b)| a.records != b.records);
                 if changed {
-                    if self.undo.len() >= 300 {
+                    if self.undo.len() >= UNDO_LIMIT {
                         self.undo.remove(0);
                     }
                     self.undo.push(before);
@@ -881,6 +894,9 @@ impl App {
     }
 }
 
+/// How many steps Undo keeps: a new step past it lets go of the oldest (`apply`, `apply_untick`).
+pub(crate) const UNDO_LIMIT: usize = 300;
+
 /// Names in a sentence: "A", "A and B", "A, B and C".
 pub(crate) fn and_list(names: &[String]) -> String {
     match names {
@@ -894,7 +910,7 @@ pub(crate) fn and_list(names: &[String]) -> String {
 /// mode (`locked_why`), whichever view edits or reverts them: the detail panel, the page, Compare's copy, the Memories
 /// page, the Main tiles, My Menu, Undo, Revert, the history.
 #[cfg(test)]
-mod copies_tests {
+pub(crate) mod copies_tests {
     use super::*;
     use crate::web::tests::answer;
     use egui::accesskit::Role;
@@ -906,11 +922,11 @@ mod copies_tests {
 
     /// A Picture Profile parameter in use (PP1's Black Level) and its stills and movie copies, the records the
     /// definition's copies are made of here (`copies`, `copy_of`), as the kit writes them.
-    const MAIN: &str = "global:0x04e9[0]";
-    const STILLS: &str = "global:0x04ff[0]";
-    const MOVIE: &str = "global:0x0515[0]";
+    pub(crate) const MAIN: &str = "global:0x04e9[0]";
+    pub(crate) const STILLS: &str = "global:0x04ff[0]";
+    pub(crate) const MOVIE: &str = "global:0x0515[0]";
 
-    fn setting(app: &App, key: &str) -> Setting {
+    pub(crate) fn setting(app: &App, key: &str) -> Setting {
         app.schema.settings.iter().find(|s| s.key == key).cloned().unwrap_or_else(|| panic!("{key}"))
     }
 
@@ -923,7 +939,7 @@ mod copies_tests {
 
     /// The file as opened changed by `f`: what it held when opened (`original`), as edited and as the baseline the
     /// edits are judged against and copies follow from (`baseline`), as though the camera had written it so.
-    fn as_opened(app: &mut App, f: impl Fn(&mut CamSet)) {
+    pub(crate) fn as_opened(app: &mut App, f: impl Fn(&mut CamSet)) {
         let d = app.doc.as_mut().unwrap();
         f(&mut d.original);
         d.edited = d.original.clone();
@@ -932,7 +948,7 @@ mod copies_tests {
 
     /// The sample open with the copies made here, the three records holding `v`, `stills` and `movie` in every set as
     /// the file was opened; no copy says whose mode it is (`copy_for`), so the copies in step go with the setting.
-    fn with_copies(v: i64, stills: i64, movie: i64) -> (App, [Setting; 3]) {
+    pub(crate) fn with_copies(v: i64, stills: i64, movie: i64) -> (App, [Setting; 3]) {
         let mut app = App::new(vec![], Prefs::default());
         app.open_sample_now();
         for s in app.schema.settings.iter_mut() {
@@ -957,7 +973,7 @@ mod copies_tests {
     /// `camera.memory_sets.modes` lists and its second the second (a third it does not name); the stills copy is the
     /// first mode's, the movie copy every other mode's. The live settings are saved in the first mode (`first`) or the
     /// second; returns the modes' names, the first two.
-    fn with_modes(app: &mut App, first: bool) -> (String, String) {
+    pub(crate) fn with_modes(app: &mut App, first: bool) -> (String, String) {
         let modes: Vec<String> = app.schema.camera.modes().iter().map(|(m, _)| m.to_string()).collect();
         let mode = app.schema.settings.iter().find(|s| s.area == "global" && s.scalar && s.text.is_none() && s.copies.is_empty() && s.copy_of.is_none() && s.values.len() >= 3 && s.range.is_none() && s.index.is_none() && !s.in_sets).cloned().unwrap();
         let (a, b) = (mode.values[0].0, mode.values[1].0);
@@ -971,7 +987,7 @@ mod copies_tests {
         (modes[0].clone(), modes[1].clone())
     }
 
-    fn held(app: &App, three: &[Setting; 3], si: usize) -> [Option<i64>; 3] {
+    pub(crate) fn held(app: &App, three: &[Setting; 3], si: usize) -> [Option<i64>; 3] {
         let d = app.doc.as_ref().unwrap();
         [d.value(si, three[0].slot()), d.value(si, three[1].slot()), d.value(si, three[2].slot())]
     }

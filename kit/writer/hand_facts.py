@@ -8,8 +8,8 @@ never write, found by hand (NEW_RECORDS, with FILTER_FLAGS' entries it takes in,
 download), a record a proof found laid out like a sibling (NEW_LIKE, NEW_WHOLE_LABELS), what a record holds and its
 hand proof (FRAME_PROOFS), value names no proof gives (CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS), the pickers
 whose lists were walked whole (PICKER_LISTS), the values the menus never offer (NOT_OFFERED), the values offered under
-one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES, COPY_MODES, COPY_MODES_UNKNOWN), why a record cannot be
-proved (UNPROVED) and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the
+one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES, COPY_MODES, COPY_MODES_UNKNOWN) and the switches that keep
+them apart (KEEPS_APART), why a record cannot be proved (UNPROVED) and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the
 ILCE-1M2's own pass alone reads so far (A1_PASS_ONLY), or no part of the kit's passes (NO_READER): the plain pass
 refuses a camera whose file fills one (refusals), in plain words, for a mapper who fills in a table must not believe
 it took effect. Where an entry cannot take effect (a setting
@@ -45,7 +45,7 @@ from .proofs import sampled_scale
 # the tables the plain pass reads, in the order DATA_CONTRACTS lists them
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
          "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "PICKER_LISTS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES",
-         "COPY_MODES", "COPY_MODES_UNKNOWN", "UNPROVED", "CONTEXT_WORDS")
+         "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "UNPROVED", "CONTEXT_WORDS")
 # a table a prover reads for the camera it works on, which no pass of the writer reads
 PROVERS = {"ZONE": "kit/provers/framepos_run.py --zone-grid"}
 # the tables only the ILCE-1M2's own pass (kit/schema_update.py main) reads so far, each with what it is for: rules tied
@@ -80,7 +80,8 @@ def refusals(tables) -> list:
     """Why the plain pass will not take the camera's hand tables as they stand, one line each, or []: a table it does
     not read filled (A1_PASS_ONLY, NO_READER), or an entry no table it reads would ever use (FILTER_FLAGS' entry no
     NEW_RECORDS $ref takes in, NEW_WHOLE_LABELS for no NEW_LIKE record, COPY_MODES without COPIES, a
-    COPY_MODES_UNKNOWN family COPIES lacks), or a key the plain pass cannot lay a record out by (a NEW_RECORDS key that
+    COPY_MODES_UNKNOWN family COPIES lacks, a KEEPS_APART family COPIES lacks or whose copies' modes are not known), or a
+    key the plain pass cannot lay a record out by (a NEW_RECORDS key that
     is no whole record, a NEW_LIKE key that is no whole live record). `tables`: writer/hand_tables.load's."""
     out = [f"{name} ({what}): read only by the ILCE-1M2's own pass so far" for name, what in A1_PASS_ONLY.items()
            if getattr(tables, name)]
@@ -94,6 +95,11 @@ def refusals(tables) -> list:
         out.append("COPY_MODES: read only with COPIES' families, and COPIES holds none")
     out += [f"COPY_MODES_UNKNOWN's {k!r}: read only for a COPIES family, and COPIES does not hold it"
             for k in sorted(tables.COPY_MODES_UNKNOWN) if k not in tables.COPIES]
+    out += [f"KEEPS_APART's {k!r}: {e['setting']!r} is no COPIES family, so it has no copies to keep apart"
+            for k, es in tables.KEEPS_APART.items() for e in es if e["setting"] not in tables.COPIES]
+    out += [f"KEEPS_APART's {k!r}: {e['setting']!r} is in COPY_MODES_UNKNOWN, so nothing says whose mode each copy is"
+            for k, es in tables.KEEPS_APART.items() for e in es
+            if e["setting"] in tables.COPIES and e["setting"] in tables.COPY_MODES_UNKNOWN]
     out += [f"NEW_RECORDS' {k!r}: a record found by hand is a whole record, \"global:0x....\" or \"set:0x....\""
             for k in tables.NEW_RECORDS if not WHOLE.fullmatch(k)]
     out += [f"NEW_LIKE's {k!r}: a record laid out like a sibling is a whole live record, \"global:0x....\""

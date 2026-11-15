@@ -26,8 +26,10 @@ EVIDENCE_KEYS = {"run", "date", "proved", "sampled", "linear", "allowance", "evi
 EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run", "date", "menu", "allowance"},
                    "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
                    "NOT_OFFERED": {"$key", "$values", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
-                   "PICKER_LISTS": {"evidence"},
+                   "PICKER_LISTS": {"evidence"}, "KEEPS_APART": {"$setting", "evidence", "untick"},
                    "UNPROVED": {"1"}, "MY_MENU_EMPTY": {"line+"}}
+# the tables whose evidence goes one place deeper: a switch's entries, by place
+BY_PLACE = ("KEEPS_APART",)
 # the mapper's hand evidence for the a1 II, where this computer holds the private overlay
 HAND_EVIDENCE = hand_evidence.path(paths.A1II)
 
@@ -98,6 +100,8 @@ def test_the_hand_evidence_schema_takes_evidence_and_nothing_else():
     for name, want in EVIDENCE_FIELDS.items():
         node = tables[name] if name == "MY_MENU_EMPTY" else tables[name].get("additionalProperties") or \
             schema["$defs"][tables[name]["$ref"].split("/")[-1]]["additionalProperties"]
+        if name in BY_PLACE:
+            node = node["additionalProperties"]
         assert set(node["properties"]) == want, name
     check = jsonschema.Draft202012Validator(schema)
     empty = {"$schema": hand_evidence.SCHEMA_REF, "hand_format": hand_evidence.FORMAT, "camera": "ILCE-0X0_fw1.00",
@@ -105,6 +109,8 @@ def test_the_hand_evidence_schema_takes_evidence_and_nothing_else():
     check.validate(empty)
     for bad in ({**empty, "tables": {"FRAME_PROOFS": {"global:0x0001": {"name": "A"}}}},
                 {**empty, "tables": {"RECORD_FIXES": {"global:0x0001": {"note": "A whole note."}}}},
+                {**empty, "tables": {"KEEPS_APART": {"global:0x0001": {"0": {"untick_sets": 0}}}}},
+                {**empty, "tables": {"KEEPS_APART": {"global:0x0001": {"first": {"evidence": "x"}}}}},
                 {**empty, "tables": {"KEEP_LABELS": {}}}, {**empty, "hand_format": 1},
                 {k: v for k, v in empty.items() if k != "camera"}, {**empty, "values": []}):
         assert not check.is_valid(bad), bad
@@ -277,6 +283,9 @@ def test_the_hand_evidence_holds_evidence_only():
     for name, patch in doc["tables"].items():
         for key, fields in patch.items():
             extra = set(fields) - EVIDENCE_FIELDS[name] if isinstance(fields, dict) else {"(whole)"}
+            if name in BY_PLACE:
+                extra = {f for part in fields.values() for f in (part if isinstance(part, dict) else {"(whole)"})} \
+                    - EVIDENCE_FIELDS[name] if isinstance(fields, dict) else {"(whole)"}
             if name == "MY_MENU_EMPTY":
                 extra = {key} - EVIDENCE_FIELDS[name]
             if extra:

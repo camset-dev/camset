@@ -833,7 +833,10 @@ The Still/Movie/S&Q switch is physical, so the owner moves it.
 5. Prove again the rows "Different Set for Still/Mv" splits: each keeps a stills record and a movie record beside
    the record in use (the a1 II's: its page, the Movie / stills row). Prove too what each box does to them, with the
    box ticked and unticked and from each mode, and what ticking and unticking it writes: on the a1 II unticking a box
-   set the record in use and both copies to 0 (its page, the Different Set for Still/Mv row).
+   set the record in use and both copies to 0 (its page, the Different Set for Still/Mv row). A box whose effect is
+   proved goes into the hand tables' `KEEPS_APART` (the family it keeps apart, its Ticked value, what unticking it
+   set), and the runs and day that showed it into the hand evidence (`"evidence"`, `"untick"`), without which it is
+   not written; that tells the editor to say so. A box not proved gets no entry.
 
 ### Phase 5: sessions with the owner
 
@@ -919,7 +922,8 @@ section 8).
    takes in (a record the menus never write, found by hand, laid out like a record the definition holds), `NEW_LIKE`
    with `NEW_WHOLE_LABELS`, `FRAME_PROOFS` (what a record holds, and a hand proof), `CAROUSEL`, `VALUE_FIXES`,
    `PP7_VALUES`, `KEEP_LABELS`, `PICKER_LISTS`, `NOT_OFFERED`, `VIDEO_SYSTEM_VALUES`, `COPIES` (with `COPY_MODES` and
-   `COPY_MODES_UNKNOWN`), `UNPROVED` (why no proof reaches a record) and `CONTEXT_WORDS`, and stops, naming it, on a
+   `COPY_MODES_UNKNOWN`), `KEEPS_APART` (a switch that keeps a family's copies apart), `UNPROVED` (why no proof
+   reaches a record) and `CONTEXT_WORDS`, and stops, naming it, on a
    table only the a1 II's own pass reads so far (the list in [the hand tables file](DATA_CONTRACTS.md#the-hand-tables-file-what-the-mapping-found-by-hand)).
    There a value a table names is named, not proved: an editor offers it outside Expert mode only once a proof covers
    it, and taking an entry out takes its record or hand proof out on the next `--write`.

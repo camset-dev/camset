@@ -137,6 +137,7 @@ TABLES = {
     "VIDEO_SYSTEM_VALUES": {"global:0x04d2": {"NTSC": [0], "PAL": [4]}},
     "COPIES": {"global:0x01d8": ["global:0x01da", "global:0x01dc"]},
     "COPY_MODES": [["Stills"], ["Movie", "S&Q", "Time-lapse"]],
+    "KEEPS_APART": {"global:0x0050": [{"setting": "global:0x01d8", "apart": [1], "untick_sets": 0}]},
     "UNPROVED": {"global:0x0052": ["state", None, "The camera keeps it while it works."]},
     "CONTEXT_WORDS": {", as set\\]": "]"},
 }
@@ -146,7 +147,9 @@ EVIDENCE = {
                                        "menu": "Setup > Hand row", "note+": "(seen on the camera, 2026-11-12)"}},
     "RECORD_FIXES": {"global:0x04d2": {"note+": "(runs/kit2_hand)"}},
     "UNPROVED": {"global:0x0052": {"1": "2026-11-12"}},
-    "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "the row walked whole in Movie mode, 2026-11-12"}}}
+    "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "the row walked whole in Movie mode, 2026-11-12"}},
+    "KEEPS_APART": {"global:0x0050": {"0": {"$setting": "global:0x01d8", "evidence": "runs kit2_apart_*, 2026-11-12",
+                                           "untick": "run kit2_apart_untick, 2026-11-12"}}}}
 
 
 def test_every_table_the_kit_knows_is_read_by_the_plain_pass_or_refused_there():
@@ -164,7 +167,8 @@ def test_each_table_the_plain_pass_reads_takes_effect_and_its_evidence_stays_pri
     value the files hold outside the lists is added ("hand table" each); a hand proof proves its record, its run, day and
     menu row in the evidence only; a reason why a record cannot be proved is written, its day private; a not-offered
     mark holds while the walk never wrote the value, what shows it private; a video system's values where no row was
-    walked under both; the copies written once the downloads bear them out, each copy with its modes; a context the
+    walked under both; the copies written once the downloads bear them out, each copy with its modes, and the switch that
+    keeps them apart on its setting; a context the
     runs reworded is the definition's in its new words. The public file names no run, day or hand proof, and check_public's
     rule finds nothing in it; the hand evidence file is in its JSON Schema's shape."""
     import jsonschema
@@ -215,6 +219,9 @@ def test_each_table_the_plain_pass_reads_takes_effect_and_its_evidence_stays_pri
     assert drive["copies"] == ["global:0x01da", "global:0x01dc"]
     assert (by["global:0x01da"]["copy_of"], by["global:0x01da"]["copy_for"]) == ("global:0x01d8", ["Stills"])
     assert by["global:0x01dc"]["copy_for"] == ["Movie", "S&Q", "Time-lapse"]
+    # KEEPS_APART: on the switch, the family it keeps apart and what unticking it sets them to
+    assert by["global:0x0050"]["keeps_apart"] == [{"setting": "global:0x01d8", "apart": [1], "untick_sets": 0}]
+    assert [k for k, s in by.items() if "keeps_apart" in s] == ["global:0x0050"]
     # decision 16: nothing of how anything was proved in the public file
     assert definitions.evidence_in_public(pub) == [] and not EVIDENCE_WORDS.search(text)
     assert not datafiles.evidence_in_public(datafiles.hand_tables_file(CAM))
@@ -321,6 +328,12 @@ SHAPED = {"NEW_CHECK_NAMES": {"global:0x0001": "A"}, "LATE_COPY": {"0x0001": " A
     ({"COPY_MODES": [["Stills"], ["Movie"]]}, "COPY_MODES: read only with COPIES' families"),
     ({"COPIES": {"global:0x0001": ["global:0x0002", "global:0x0003"]}, "COPY_MODES_UNKNOWN": ["global:0x0009"]},
      "COPY_MODES_UNKNOWN's 'global:0x0009'"),
+    ({"COPIES": {"global:0x0001": ["global:0x0002", "global:0x0003"]},
+      "KEEPS_APART": {"global:0x0004": [{"setting": "global:0x0009", "apart": [1]}]}},
+     "KEEPS_APART's 'global:0x0004': 'global:0x0009' is no COPIES family"),
+    ({"COPIES": {"global:0x0001": ["global:0x0002", "global:0x0003"]}, "COPY_MODES_UNKNOWN": ["global:0x0001"],
+      "KEEPS_APART": {"global:0x0004": [{"setting": "global:0x0001", "apart": [1]}]}},
+     "KEEPS_APART's 'global:0x0004': 'global:0x0001' is in COPY_MODES_UNKNOWN"),
     ({"NEW_RECORDS": {"global:0x0001[2]": {"like": "global:0x0002", "name": "A", "values": [], "note": ""}}},
      "NEW_RECORDS' 'global:0x0001[2]': a record found by hand is a whole record"),
     ({"NEW_LIKE": {"set:0x0001": {"like": "set:0x0002", "name": "A"}}}, "NEW_LIKE's 'set:0x0001'"),
@@ -399,7 +412,9 @@ WELL_FORMED = {     # every evidence field, each with canaries beside a run or a
     "UNPROVED": {"global:0x0052": {"1": "2026-01-02 CNRYPERSON Jan 2nd"}},
     "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "CNRYNOFF CNRYPERSON walked in zebrarun, 2026-01-02",
                           "files": ["00777_cnry.DAT"]}},
-    "VIDEO_SYSTEM_VALUES": {"global:0x04d2": {"evidence": "CNRYVSV CNRYPERSON saw it, 2026-01-02, 00778_cnry.png"}}}
+    "VIDEO_SYSTEM_VALUES": {"global:0x04d2": {"evidence": "CNRYVSV CNRYPERSON saw it, 2026-01-02, 00778_cnry.png"}},
+    "KEEPS_APART": {"global:0x0050": {"0": {"$setting": "global:0x01d8", "evidence": "CNRYNOTE kit2_cnryrun zebrarun 2026-01-02",
+                                           "untick": "CNRYPERSON saw it in zebrarun, 00777_cnry.DAT, Jan 2nd"}}}}
 BARE = {            # the same fields worded with no run folder and no ISO day, as a mapper might write them
     "FRAME_PROOFS": {"global:0x0051": {"proved": [0, 1], "run": "zebrarun", "date": "Jan 2nd", "menu": "CNRYMENU > Row",
                                        "note+": "(CNRYNOTE seen by CNRYPERSON in zebrarun)",
@@ -407,7 +422,9 @@ BARE = {            # the same fields worded with no run folder and no ISO day, 
     "RECORD_FIXES": {"global:0x04d2": {"note+": "(CNRYPERSON; 2026-01-02)"}},
     "NEW_RECORDS": {"global:0x0051": {"note+": "seen by CNRYPERSON"}},
     "UNPROVED": {"global:0x0052": {"1": "Jan 2nd"}},
-    "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "CNRYNOFF CNRYPERSON"}}}
+    "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "CNRYNOFF CNRYPERSON"}},
+    "KEEPS_APART": {"global:0x0050": {"0": {"$setting": "global:0x01d8", "evidence": "CNRYNOTE CNRYPERSON",
+                                           "untick": "CNRYPERSON zebrarun"}}}}
 
 
 def public_texts(c) -> dict:
