@@ -46,6 +46,9 @@ def rows_with_frames(rows, path=()):
 
 
 def main():
+    if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
+        print(__doc__.strip())
+        sys.exit(0)
     run = paths.run_path(sys.argv[1] if len(sys.argv) > 1 else "kit2_pass1")
     shots = run / "shots"
     if not (run / "rows.jsonl").exists():          # nothing to read: never an empty options.jsonl over the old one

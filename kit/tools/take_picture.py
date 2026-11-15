@@ -254,3 +254,7 @@ def picture(link, eyes, camera: str, live: dict, defn: dict, scope: dict, scope_
     print("the shutter was released once; the picture stays on the card", flush=True)
     time.sleep(3)
     return ""
+
+
+if __name__ == "__main__":
+    main()

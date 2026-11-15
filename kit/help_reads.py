@@ -83,6 +83,9 @@ def built_readers() -> list:
 
 
 def main():
+    if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
+        print(__doc__.strip())
+        sys.exit(0)
     runs.private_if_marked(RUN)              # a --network or --owner run's folder: help_reads.jsonl 0600 in it too
     vlm.local_only_runs(RUN)                 # a --network run's frames: local readers only (make_reader)
     asked = built_readers()

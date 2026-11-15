@@ -22,6 +22,9 @@ from page_model import same_text  # noqa: E402
 
 
 def main():
+    if {"-h", "--help"} & set(sys.argv[1:]):     # before anything is read, connected or asked
+        print(__doc__.strip())
+        sys.exit(0)
     if len(sys.argv) != 2:
         sys.exit("usage: kit/tiebreak.py RUN (a run in the camera's runs/<model>_fw<fw>/, or a path)")
     readers(stop=True)                        # none listed: its sentence, and nothing read
