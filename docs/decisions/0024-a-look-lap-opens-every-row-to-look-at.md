@@ -23,4 +23,6 @@ it (`safety.row_judged`).
 ## Consequences
 
 This cannot protect against a row that acts on being opened where no record changes and no link drops, nor a list
-where choosing is the act, which is why choosing stays closed.
+where choosing is the act, which is why choosing stays closed. Nor do the lists tell a misread name from another row:
+an action's name read with other text after it ("Format  Slot 1") or with a letter dropped ("SSID/PW Rset") opens as
+any row does. There the first-open procedure, the blank cards and sending no Enter are what protect.
