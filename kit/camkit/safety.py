@@ -19,7 +19,8 @@ The guards:
                              (lifted_readings, row_read_as, glued_icon), that icon read live with a letter misread
                              (icon_slip); bar_on_row, the lit bar back on such a row.
   group_refused(name, known) a group the menu's group column must not step into: never_open, or one letter from a
-                             never-open group's or action's name ("FTP Transter").
+                             never-open group's or action's name ("FTP Transter"), judged without the column's number
+                             read beside it too ("10 FTP Transter": group_number).
   look_refused(key, lit, row, options)  inside such a row: up, down and MENU, and Enter only on an option the decision
                              names (network_options); a row with none named is looked at only. The callers' locks
                              (camkit.live.LiveCamera, kit/drive.py) end only once a MENU or such an Enter has gone out
@@ -739,18 +740,40 @@ def one_apart(a: str, b: str) -> bool:
     return a[i + (len(a) == len(b)):] == b[i + 1:]
 
 
+def group_number(text) -> tuple:
+    """(the number, the rest) of a group's text read with a number before or after it, set apart by a space: the number
+    the group column draws in a badge beside each group's name, which a lit bar read on the camera's own picture takes
+    in, OCR reading it as a line of its own ("10 Shooting Display", 2026-11-15; its reading order may put it after the
+    name); (None, the text) where no number stands so. Digits glued on are no such number ("0Cnct./Remote Sht.": an icon
+    glyph read as a digit)."""
+    t = str(text or "")
+    m = re.fullmatch(r"\s*(\d+)\s+(\S.*?)\s*", t, re.S)
+    if m:
+        return int(m[1]), m[2]
+    m = re.fullmatch(r"\s*(.*?\S)\s+(\d+)\s*", t, re.S)
+    return (int(m[2]), m[1]) if m else (None, t)
+
+
+# a number set apart by a space before or after a group's name, punctuation round it or not ("Delete (10)",
+# "10. Delete", "[10] Delete"): group_refused judges the name without it too, which can only add a refusal
+_NUMBER_APART = re.compile(r"^\W*\d+\W*\s+|\s+\W*\d+\W*$")
+
+
 def group_refused(name, known=()) -> str | None:
     """Why the menu's group column must not step into the group named `name` (Right on it in the column: kit/crawl_run.py
     go_to's jump, and find_position's way back from the column), or None: never_open on it, every reading judged with
     its slips undone; or, in any reading (readings), one letter apart (a letter read for another, dropped or put in:
     "FTP Transter", 2026-11-13) from a name never_open refuses, of `known` (the group names the camera's definition and
     page model hold: runner.known_groups) or of the actions the list names whole (_ACTION_NAMES, "FTP Transfer" among
-    them), both at least GROUP_MIN letters and digits long. Only adds refusals to never_open's, for group names alone:
-    the rows' own checks (never_open, open_refused, path_refused) are as they were."""
-    why = never_open(name)
+    them), both at least GROUP_MIN letters and digits long. The name is judged as read and, read with a number before or
+    after it (group_number: the column's badge, "10 FTP Transter", "FTP Transfer 3"; _NUMBER_APART: with punctuation
+    round it, "Delete (10)"), without it too. Only adds refusals to never_open's, for group names alone: the rows' own
+    checks (never_open, open_refused, path_refused) are as they were."""
+    texts = list(dict.fromkeys((name, group_number(name)[1], _NUMBER_APART.sub("", str(name or "")))))
+    why = next((w for w in map(never_open, texts) if w), None)
     if why:
         return why
-    keys = {k for k in (name_key(r) for r in readings(name)) if len(k) >= GROUP_MIN}
+    keys = {k for t in texts for k in (name_key(r) for r in readings(t)) if len(k) >= GROUP_MIN}
     for other in (*known, *_ACTION_NAMES):
         if not isinstance(other, str) or len(name_key(other)) < GROUP_MIN:
             continue

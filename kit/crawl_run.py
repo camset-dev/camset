@@ -53,10 +53,11 @@ the crawl lost or off the scan) EXIT_INCOMPLETE (8); a STOP, the lap complete or
 did not check out exits EXIT_UNRESTORED (4) (kit/exit_status.py; kit/tools/chain.py stops on each).
 
 Navigation guesses nothing: the lit group in the group column is read whole, by its letters and digits, whatever icon
-glyph the bar or the scan glued on (group_near); where it cannot be read, it is read again once after a short settle,
-then on the camera's own picture of its screen (the SDK's OSD image); if none names it, nothing more is pressed and the
-row is not reached (jump, from_groups: lit_group). The menu found reopened with the cursor in the group column is stepped
-into a group it may enter before the lap begins (find_position, as kit/drive.py finds it).
+glyph the bar or the scan glued on, and with the group's own number where the bar is read with it (group_near); where
+it cannot be read, it is read again once after a short settle, then on the camera's own picture of its screen (the
+SDK's OSD image); if none names it, nothing more is pressed and the row is not reached (jump, from_groups: lit_group).
+The menu found reopened with the cursor in the group column is stepped into a group it may enter before the lap begins
+(find_position, as kit/drive.py finds it).
 
 Results: kit2_crawl/rows.jsonl (one line per row), frames and presses in shots/ and events.jsonl. Every run folder
 named here is in the camera's runs/<model>_fw<fw>/ (camkit.paths).
@@ -343,12 +344,29 @@ def said(cam, text: str) -> str:
 def group_near(text: str, names: list) -> int | None:
     """Which of a tab's groups a lit group's text names, judged whole: its letters and digits (safety.name_key), as read
     or with a glued icon glyph left off (unglued), the very group's name, or, for one of at least safety.GROUP_MIN, one
-    letter from it (safety.one_apart: the scan read "FTP Transter" where the camera draws "FTP Transfer"). None when no
-    group, or more than one, is so named: a lit row's text ("File Format  RAW") names no group ("File"), so a focus read
-    as the group column on a page of rows sends no Right onto that row."""
-    keys = {k for k in (safety.name_key(text), safety.name_key(unglued(text))) if k}
-    got = [i for i, n in enumerate(names) if n and any(
-        k == safety.name_key(n) or (len(k) >= safety.GROUP_MIN and safety.one_apart(k, safety.name_key(n))) for k in keys)]
+    letter from it (safety.one_apart: the scan read "FTP Transter" where the camera draws "FTP Transfer"). A text read
+    with a number before or after it, set apart by a space (safety.group_number: the badge the column draws, read into
+    the bar on the camera's own picture, "10 Shooting Display", 2026-11-15), names the group of that number (the
+    column's i-th group, numbered i + 1) where the rest names it so and is not another group's very name ("2 Drive Mode"
+    names no "Drive Made" beside a "Drive Mode"); a group of another number only where the whole text, number and all,
+    is its very name: a number is never taken for a letter put in. None when no group, or more than one, is so named: a
+    lit row's text ("File Format  RAW") names no group ("File"), so a focus read as the group column on a page of rows
+    sends no Right onto that row."""
+    number, rest = safety.group_number(text)
+
+    def keys(t) -> set:
+        return {k for k in (safety.name_key(t), safety.name_key(unglued(t))) if k}
+
+    def near(found, name, slips=True) -> bool:
+        key = safety.name_key(name)
+        return any(k == key or (slips and len(k) >= safety.GROUP_MIN and safety.one_apart(k, key)) for k in found)
+    whole, own = keys(text), keys(rest)
+
+    def other(n) -> bool:
+        # the rest is another group's very name: the number names none (a group named twice is told apart by it)
+        return any(m and safety.name_key(m) != safety.name_key(n) and near(own, m, slips=False) for m in names)
+    got = [i for i, n in enumerate(names) if n and (
+        (number == i + 1 and near(own, n) and not other(n)) or near(whole, n, slips=number is None))]
     return got[0] if len(got) == 1 else None
 
 

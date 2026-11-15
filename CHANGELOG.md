@@ -117,8 +117,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - White Balance > Cloudy no longer stops a run as a cloud-service row; cloud rows are still refused as written, run
   together or split.
 - The menu navigation every run shares guesses less: it reads the lit group again instead of taking the first, finds a
-  group bar or row read with a stray icon or a letter off, never jumps into a group read one letter off a never-open
-  one, and presses nothing where it cannot tell.
+  group bar or row read with a stray icon or a letter off, or a group bar read with its number (on OSD eyes a jump to
+  group 10 or later stopped), never jumps into a group read one letter off a never-open one, and presses nothing where
+  it cannot tell.
 - `kit/tools/help_extras.py` and `kit/provers/customshoot_values.py --counted` read your own camera's shooting-mode
   record (the camera file's `live_mode`) and Focus Area order (from its definition; `--order-from` names the record),
   where they read the a1 II's on every body, and stop, saying what is missing, where yours has none.

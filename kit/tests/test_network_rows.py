@@ -3789,3 +3789,147 @@ def test_a_tool_writes_owner_only_into_a_folder_a_network_run_marked(own_runs, m
     os.chmod(plain_run.dir / "options.jsonl", 0o644)
     assert runs.private_if_marked(held.dir / "shots", plain_run.dir) == [held.dir.resolve()]
     assert stat.S_IMODE((plain_run.dir / "options.jsonl").stat().st_mode) == 0o644
+
+
+# ---------------------------------------------------------------- the group's number read into its bar (2026-11-15)
+
+# The a1 II's Shooting tab, its groups in column order: the column draws each one's number (1 to 12) in a red badge
+# before its name. On the camera's own picture (OSD eyes) the orange bar's box reaches over that badge, so OCR's "10",
+# a line of its own, is read into the lit text ("10 Shooting Display"); on HDMI the box starts at the name
+SHOOTING = ["Image Quality/Rec", "Media", "File", "Shooting Mode", "Drive Mode", "Composite RAW Sht.", "Shutter/Silent",
+            "Image Stabilization", "Zoom", "Shooting Display", "Marker Display", "Shooting Option"]
+C1CAM = {"osd": "kit2_c1cam_prove_osd", "osd2": "kit2_c1cam_prove_osd2", "hdmi": "kit2_c1cam_prove_hdmi"}
+
+
+def need(path: Path) -> Path:
+    if not path.exists():
+        pytest.skip(f"{path} not present")
+    return path
+
+
+@pytest.mark.parametrize("run, frame, want", [
+    ("osd", "00018_group-again.png", 9),       # the jump's second look, where Grid Line Type was not reached
+    ("osd2", "00017_down.png", 9),             # the same jump run again
+    ("hdmi", "00023_down.png", 9),             # the same group on HDMI eyes: the name alone
+    ("osd", "00010_down.png", 2),              # the badge's 3 read as a Cyrillic letter, which no key keeps
+    ("osd", "00009_down.png", 1),              # the badge inside the box, its 2 not read
+], ids=["osd-group-again", "osd2-down", "hdmi-down", "osd-file", "osd-media"])
+def test_the_lit_group_read_with_its_number_on_the_cameras_own_frames(run, frame, want):
+    """live.lit_text on the a1 II's group column, read by this computer's OCR (skipped without runs/ or an OCR engine),
+    names the lit group through crawl_run.group_near: on OSD eyes as "10 Shooting Display", the group's number read
+    into its bar, which group_near refused as no group (prove_run did not reach Grid Line Type, 2026-11-15), and on
+    HDMI eyes as the name alone."""
+    import crawl_run
+    from camkit import ocr, paths
+    from camkit.frames import load
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    path = need(paths.a1ii_root() / C1CAM[run] / "shots" / frame)
+    f = load(path)
+    got = live.lit_text(f.image, path)
+    assert crawl_run.group_near(got, SHOOTING) == want, got
+
+
+def test_a_lit_group_read_with_its_own_number_is_that_group_and_no_other():
+    """crawl_run.group_near: a lit group read with a number before or after its name, set apart by a space
+    (safety.group_number), is the group of that number (the column's i-th, numbered i + 1) where the rest reads as its
+    name, with the slips a name has; a number that is not the group's, or a rest that is another group's name, names no
+    group. A digit glued on stays a glyph slip, as before ("0Cnct./Remote Sht.")."""
+    import crawl_run
+    near = crawl_run.group_near
+    assert near("10 Shooting Display", SHOOTING) == 9 and near("Shooting Display 10", SHOOTING) == 9
+    assert near("10  Shooting Display", SHOOTING) == 9 and near("10 Shooting Dlsplay", SHOOTING) == 9
+    assert near("12 Shooting Option", SHOOTING) == 11 and near("11 Marker Display", SHOOTING) == 10
+    assert near("1 Image Quality/Rec", SHOOTING) == 0 and near("Drive Mode 5", SHOOTING) == 4
+    assert near("3 File", SHOOTING) == 2 and near("З File", SHOOTING) == 2 and near("9 Zoom", SHOOTING) == 8
+    # another group's number, or another group's name after the number: none
+    for read in ("11 Shooting Display", "9 Shooting Display", "Shooting Display 11", "10 Marker Display",
+                 "2 Image Quality/Rec", "Image Quality/Rec 2", "4 File", "1 Media", "12 Shooting Display",
+                 "10", "10 ", "10 Shooting", "110 Shooting Display", "10 11 Shooting Display"):
+        assert near(read, SHOOTING) is None, read
+    # a digit glued on is a slip, judged as before: one letter put in
+    assert near("0Cnct./Remote Sht.", ["Wi-Fi", "[Cnct./Remote Sht."]) == 1
+    assert near("10Shooting Display", SHOOTING) is None
+    assert safety.group_number("10 Shooting Display") == (10, "Shooting Display")
+    assert safety.group_number("Drive Mode 5") == (5, "Drive Mode")
+    assert safety.group_number("0Cnct./Remote Sht.") == (None, "0Cnct./Remote Sht.")
+    assert safety.group_number("10") == (None, "10")
+    # the rest read with an icon glyph glued on (unglued) and a letter off is still the group of that number
+    assert near("1 DCnct./Rcmote Sht.", ["Cnct./Remote Sht.", "FTP Transfer", "Wi-Fi"]) == 0
+
+
+def test_a_numbered_reading_names_no_group_where_the_rest_is_another_groups_very_name():
+    """crawl_run.group_near: two groups of a tab one letter apart (a trailing digit apart, or a letter): the rest read
+    after a number that is the other group's very name names neither, where the number alone would have named its own
+    group by the one-letter slip; the rest that is that group's name, exactly or a letter off, names it; a group named
+    twice in a tab is told apart by the number."""
+    import crawl_run
+    near = crawl_run.group_near
+    assert near("2 Drive Mode", ["Drive Mode", "Drive Made"]) is None
+    assert near("2 Drive Made", ["Drive Mode", "Drive Made"]) == 1
+    assert near("2 Drlve Made", ["Drive Mode", "Drive Made"]) == 1
+    assert near("1 Drive Mode", ["Drive Mode", "Drive Made"]) == 0
+    assert near("2 Memory 1", ["Memory 1", "Memory 2"]) is None
+    assert near("2 Memory 2", ["Memory 1", "Memory 2"]) == 1 and near("Memory 2 2", ["Memory 1", "Memory 2"]) == 1
+    assert near("3 Media", ["Media", "File", "Media"]) == 2 and near("1 Media", ["Media", "File", "Media"]) == 0
+
+
+def test_a_group_read_with_a_number_is_still_refused_where_its_name_is():
+    """safety.group_refused judges the name with a number before or after it taken off too (safety.group_number), so a
+    lit bar read with its group's number refuses as the name alone does: one letter from a never-open name ("10 FTP
+    Transter"), or a never-open name the number after it hides from the whole-label check ("FTP Transfer 3", "Delete
+    10"); a number with punctuation round it alike ("Delete (10)", "[10] Delete"). The groups the column enters are not
+    refused, numbered or not."""
+    known = ["Streaming", "FTP Transfer", "Accessibility", "Delete", "Creators' Cloud"]
+    for name in ("FTP Transter", "FTP Transfer", "Delete", "Accessibility", "Streamlng", "Creators' Clond", "Delet"):
+        assert safety.group_refused(name, known), name
+        for n in (1, 3, 9, 10, 12, 14):
+            for read in (f"{n} {name}", f"{name} {n}"):
+                assert safety.group_refused(read, known), read
+    assert "one letter" in safety.group_refused("10 FTP Transter", known)
+    # a never-open name too short to be compared one letter apart, the number after it: never_open on the rest
+    for read in ("Copy 10", "Crop 12", "Copy 3"):
+        assert safety.never_open(read) is None and safety.group_refused(read, known), read
+    # a number with punctuation round it, before or after the name: judged without it too
+    for read in ("Delete (10)", "(10) Delete", "10. Delete", "Copy 10.", "[10] Delete", "(3) FTP Transter",
+                 "FTP Transter [12]", "Crop (2)"):
+        assert safety.group_refused(read, known), read
+    apart = ("({n}) {name}", "{name} ({n})", "{n}. {name}", "[{n}] {name}", "{name} {n}.")
+    for name in SHOOTING + ["Wired LAN", "Wi-Fi", "Bluetooth", "Network Option", "Cnct./Remote Sht.", "Edit",
+                            "Setup Option", "Touch Operation", "Flash"]:
+        for read in (name, *(f"{n} {name}" for n in range(1, 15)), *(f"{name} {n}" for n in range(1, 15)),
+                     *(form.format(n=n, name=name) for form in apart for n in (1, 10))):
+            assert safety.group_refused(read, known) is None, read
+
+
+def test_the_jump_reaches_a_group_read_with_its_number_and_never_one_refused(monkeypatch):
+    """crawl_run.jump on a column read as the camera's own picture shows it, each lit bar with its group's number: it
+    reaches group 10 and steps into its rows, where before it stopped there ("the group column did not reach group
+    10"); a bar read with another group's number gets no Right; and a lit group the column never enters, read with its
+    number before or after it, gets no Right either."""
+    import crawl_run
+    monkeypatch.setattr(crawl_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(crawl_run, "osd_lit", lambda c: "")
+    numbered = [f"{i + 1} {n}" for i, n in enumerate(SHOOTING)]
+    for drawn in (numbered, [f"{n} {i + 1}" for i, n in enumerate(SHOOTING)]):
+        cam, cycle, model = columns(monkeypatch, SHOOTING, drawn)
+        cam.focus = "rows"
+        assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 18, model) == 18
+        assert cam.keys == ["left", "left", "right"] + ["down"] * 9 + ["right"] and cam.rights == [drawn[9]]
+    # the bar after the Downs read with the next group's number: no Right
+    cam, cycle, model = columns(monkeypatch, SHOOTING, numbered[:9] + ["11 Shooting Display"] + numbered[10:])
+    cam.focus = "rows"
+    assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 18, model) is None and cam.rights == []
+    # a group the column never enters, its page model's name what the bar reads less its number: no Right
+    tab = ["Wi-Fi", "Bluetooth", "Wired LAN", "Network Option", "Cnct./Remote Sht.", "Media", "File", "Zoom", "Flash",
+           "FTP Transter"]
+    for target in ("10 FTP Transter", "FTP Transter 10"):
+        cam, cycle, model = columns(monkeypatch, tab, [f"{i + 1} {n}" for i, n in enumerate(tab[:9])] + [target])
+        cam.focus = "rows"
+        assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 18, model) is None, target
+        assert cam.rights == [], target
+    for target in ("FTP Transfer 3", "3 FTP Transfer", "3 FTP Transter"):
+        cam, cycle, model = columns(monkeypatch, ["Wi-Fi", "Bluetooth", "FTP Transfer"], ["1 Wi-Fi", "2 Bluetooth", target])
+        cam.focus = "rows"
+        assert crawl_run.jump(cam, cycle, crawl_run.page_groups(cycle, model), 4, model) is None, target
+        assert cam.rights == [], target

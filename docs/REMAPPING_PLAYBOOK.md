@@ -1089,7 +1089,9 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   leaving the cursor in the column for the next run to step out of so (`crawl_run.py` steps out of it too, as `drive.py`
   does). The jump and the way back read the lit group alike, its name whole by its letters and digits: the bar draws a
   group's icon glyph otherwise than the page scan stored it ("(Cnct./Remote Sht." for "[Cnct./Remote Sht."), and
-  matching the scan's text as read left every jump into the Network tab unreachable (2026-11-14).
+  matching the scan's text as read left every jump into the Network tab unreachable (2026-11-14). On OSD eyes the bar is
+  also read with the group's number ("10 Shooting Display"): a number before or after the name names the group of that
+  number only, and the never-open check judges the name without it too (2026-11-15).
 - **A row's icon reads otherwise on its lit bar than on its page** → OCR reads a row's icon as letters, and reads it
   differently with the row lit (the a1 II's IP Address Setting: the page scan's readings show the Wired LAN icon glued on
   in one reading and set apart in another; the lit bar shows it with a letter misread). The kit takes the icon the page
