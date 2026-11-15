@@ -140,6 +140,12 @@ asked, MENU alone; an action's screens are shown and kept as their field names a
 text goes to drive.jsonl only, the console showing their field names and "(values in drive.jsonl)". A --owner run asks
 local readers only, and its folder is marked so no batch tool asks any reader about its frames
 (camkit.vlm.NO_READER_MARKER). Nothing is typed: a keyboard or an entry screen takes MENU alone.
+A run (never an --owner one) that opens a --path's last row this camera has not been seen to open (camkit.first_open)
+makes that row's first open: only with the owner's blank-cards statement (camkit.statements), only with --press right
+alone and every row above it seen, and its Right goes as an armed press that may drop the link does (RESTORE_BY_HAND
+first, one read after it, MENU and the remote restore); the marker goes only when the start file comes back checked
+with no record differing, else the run exits EXIT_RESTORE_BY_HAND (first_open_or_exit). A camera other than the one
+the kit works on stops the run before anything is pressed.
 Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same run folder. The settings are downloaded before
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
 checked (docs/decisions/0015: every run ends restoring its start file). On an address, --network or --owner run the
@@ -161,11 +167,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen, session  # noqa: E402
-from camkit import coverage  # noqa: E402
+from camkit import coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
 from camkit.live import (LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_text, lone_of,  # noqa: E402
-                         open_refused, osd_kind, press, text_of)
+                         open_refused, osd_kind, press, submenu_labels, text_of)
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
@@ -173,8 +179,9 @@ from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED,  # noqa: E402
-                    add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument, changes_kept,
-                    close_for_restore, confirm_phrase_or_exit, defined_values, hold_for_owner, info_ok_or_exit,
+                    add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument,
+                    cards_statement_refused, changes_kept, close_for_restore, confirm_phrase_or_exit, defined_values,
+                    definition, hold_for_owner, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
                     restore_checked, restoring, row_values, screen_named, values_withheld)
@@ -613,18 +620,16 @@ def typed_word(label: str, place: list, what: str, camera: str, read=None, tty=N
     prompt asks for the row's name and never prints it as the answer to type. Only a real terminal answers (`tty`,
     sys.stdin.isatty() unless given); no flag or environment variable does (2026-11-14, a fourth review). It stops a
     careless agent, not a determined one: a program driving a pseudo-terminal can answer it, so the owner types the
-    answer themselves (a fifth review). `read`: input, unless given."""
-    tty = sys.stdin.isatty() if tty is None else tty
-    if not tty:
+    answer themselves (a fifth review). `read`: input, unless given. The terminal is read as the owner's statements
+    are (camkit.statements.typed)."""
+    from camkit.statements import typed
+    got = typed(f"the owner row {' > '.join(place)!r} on the camera {camera}: the run's last press may {what}. The owner "
+                "types the row's name, the last label of its place, to go on (anything else stops the run):",
+                read or input, tty)
+    if got is None:
         return ("its armed press needs the person at a terminal to type the row's name, and this run has no terminal "
                 "(standard input is no TTY): nothing was sent. Run it in a terminal, or the owner writes "
                 "\"unattended\": true in the decision (docs/decisions/0004 and 0005)")
-    print(f"the owner row {' > '.join(place)!r} on the camera {camera}: the run's last press may {what}. The owner "
-          "types the row's name, the last label of its place, to go on (anything else stops the run):", flush=True)
-    try:
-        got = (read or input)("> ")
-    except (EOFError, KeyboardInterrupt):
-        got = ""
     if safety.plain(got) != safety.plain(label):
         return f"the person typed {got.strip()!r}, not {label!r}: nothing was sent"
     return ""
@@ -658,14 +663,104 @@ def armed_words(info: dict) -> str:
     return "only open the row, to look: nothing in it is chosen or confirmed"
 
 
-def intend_by_hand(run, before: Path, label: str, entry: str) -> Path:
+OPENERS = ENTERS + RIGHTS          # a --press that opens the lit row: the --path's last row, on its page
+ROW_PAGES_OPENED = ("menu", "submenu")      # the pages whose lit row an opening press opens (lit_refused)
+
+
+def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None) -> tuple:
+    """(why the opening press may not open the lit row of the menu page shown, or "", the row's path) for a run that is
+    no --owner one. One rule: the row is the longest label the lit text starts with, as a whole word, among those the
+    kit knows (`known`: the definition's, the page model's, the --path's last row and the page's own labels read live,
+    shown_labels) or of a rows seen there (camkit.first_open.Seen.lit_row); words the lit text runs on with past that
+    label must be a value of the row the kit knows (`values`: {label: values}, runner.row_values: the definition's and
+    the page model's, compared plain), else the bar may be a longer row's and nothing opens: a seen row showing a value
+    the kit does not know yet (a body with no definition) is named in --path instead. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
+    first_open_or_exit; any other opens only where this camera has been seen to open it, so walking within a seen parent
+    to a seen row stays plain. Where the page shown cannot be placed (`depth` None, after a MENU or a Left on a menu
+    page) nothing opens. `decided`: the row a network decision opens that the lit bar reads as (safety.network_lifted_
+    row: its icon glued on and its value judged there), which is then the row."""
+    named = "name it in --path, so its first open runs under the link-loss procedure"
+    if depth is None:
+        return f"the menu page shown is not one the run can place, so the lit row cannot be judged: {named}", None
+    row = (*depth, decided) if decided else seen.lit_row(depth, lit, {*known, path[-1]})
+    if row is None:
+        return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
+    if not decided:
+        label = first_open.key(row)[-1]
+        rest = safety.plain(lit)[len(label):].strip()
+        if rest and rest not in {safety.plain(v) for v in (values or {}).get(label, ())}:
+            return (f"the lit row reads {lit.strip()!r}, which runs on past the row {row[-1]!r} with words that are no "
+                    f"value of it: {named}"), None
+    if list(depth) == list(path[:-1]) and first_open.key(row) == first_open.key((*depth, path[-1])):
+        return "", tuple(path)
+    if not seen.seen(row):
+        return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
+    return "", row
+
+
+def shown_labels(cam, cycle, model) -> list:
+    """The row labels of the menu page shown, read as the crawl reads them: a submenu page's live, its every reading
+    (camkit.live.submenu_labels: OCR and the reader), a top-level page's from the page scan's model (page_labels); []
+    where they cannot be read."""
+    try:
+        if cam.read().kind == "submenu":
+            return [t for r in submenu_labels(cam)[1] for t in (r.get("label"), *(r.get("readings") or ())) if t]
+        return page_labels(cam.read(), cycle, model)
+    except Exception:       # noqa: BLE001 (labels not read: the rule falls back on what the kit knows)
+        return []
+
+
+def next_depth(depth, key: str, before: str, opened, now: str):
+    """The labels above the menu page shown after a press of `key` on a screen of kind `before`: the row `opened` (its
+    path) when the press opened a submenu; unknown (None) after a MENU or a Left on a menu page, which may leave it;
+    else as they were."""
+    if opened and now == "submenu":
+        return list(opened)
+    if canonical_key(key) in ("menu", "left") and before in ROW_PAGES_OPENED:
+        return None
+    return depth
+
+
+def first_open_or_exit(a, seen=None) -> str | None:
+    """The --path's last label when the run opens it (a --press of OPENERS) and this camera has not been seen to open it
+    (camkit.first_open), else None: its first open goes under the link-loss procedure as an armed press does
+    (RESTORE_BY_HAND first, one read after it), and the run's start and end downloads are its check. Stops before
+    anything connects where a label above it, which the walk opens, is not seen either (each is opened the first time
+    in a run of its own), where --press is not Right alone (a first open is a look), or where the camera's reviewed
+    scope holds no current blank-cards statement (camkit.statements). Not on an --owner run: the owner route writes its
+    own RESTORE_BY_HAND and asks the owner's typed word."""
+    if getattr(a, "owner", False):
+        return None
+    keys = [parse_press(p) for p in a.press]
+    opens = any(k in OPENERS for k, _, _ in keys)
+    seen = seen if seen is not None else first_open.seen_record()
+    fresh = [p for p in seen.unseen(a.path) if len(p) < len(a.path) or opens]
+    if not fresh:
+        return None
+    label = " > ".join(fresh[0])
+    if len(fresh[0]) < len(a.path):
+        sys.exit(f"{label!r} has not been seen opened on this body: open it first in a run of its own (its --path, "
+                 "--press right), then the rows below it: nothing was sent to the camera")
+    if [(k, y) for k, y, _ in keys] != [("right", None)]:
+        sys.exit(f"{label!r} has not been seen opened on this body, and its first open is a look: --press right alone, "
+                 "the presses you meant in the next run: nothing was sent to the camera")
+    why = cards_statement_refused("drive.py")
+    if why:
+        sys.exit(f"{label!r} has not been seen opened on this body, and {why}: nothing was sent to the camera")
+    print(f"{label!r} has not been seen opened on this body: it opens under the link-loss procedure (RESTORE_BY_HAND "
+          "first; taken away once the start file is checked to be unchanged)", flush=True)
+    return a.path[-1]
+
+
+def intend_by_hand(run, before: Path, label: str, entry: str, why: str = "") -> Path:
     """RESTORE_BY_HAND written before the run's armed press that may drop the link is handed over (camkit.runs: in the
     run root and the clone's own runs/ for the camera), naming the start file `before`: the intent, so that a crash, a
     lost link or a question left open after that press leaves no camera a later run would start from. When it cannot
-    be written, nothing is pressed: what was written is taken away and a RuntimeError says so."""
+    be written, nothing is pressed: what was written is taken away and a RuntimeError says so. `why`: the marker's words,
+    for a row's first open on the body."""
     try:
         return mark_restore_by_hand(run.root, run.dir.name, before,
-                                    f"the last press inside {label!r} ({entry}) may drop the link")
+                                    why or f"the last press inside {label!r} ({entry}) may drop the link")
     except Exception as e:
         with contextlib.suppress(Exception):
             clear_restore_by_hand(run.root)
@@ -1067,6 +1162,9 @@ def main():
     why = press_args_refused(a.press) or on_shooting_refused(a.on_shooting) or c4_presses_refused(a.press, a.c4_press)
     if why:
         sys.exit(why)
+    # the --path's last row when this camera has not been seen to open it: a look under the link-loss procedure
+    seen = None if a.owner else first_open.seen_record()       # the rows this camera has been seen to open
+    first_label = first_open_or_exit(a, seen)
     ledger = coverage.drive_gate(a)     # what the coverage ledger says of the --path, printed; drive.py never skips
     on_shooting = frozenset(safety.canonical_input(k) for k in a.on_shooting)
     cam_network = camera_network(network, address)
@@ -1100,6 +1198,9 @@ def main():
         here = page_labels(cam.read(), cycle, model) if hide and not inside else []
         return shown_screen(cam, a.grip, t, hide, labels, told, logged, kind, names, by_row, here)
     cycle, model = scan if scan is not None else load_scan(a.scan)
+    # the row labels the kit knows, against which a lit bar a press is about to open is read (lit_refused)
+    known_rows = (known_labels(model) | row_labels(definition())) if seen is not None else set()
+    row_vals = ({safety.plain(k): v for k, v in row_values(model).items()} if seen is not None else {})
     values = network_values(cam_network, model) if a.network else {}
     if owner_info:
         values = {**values, **network_values(owner_cam, model)}
@@ -1165,9 +1266,15 @@ def main():
     # with MENU; "answered" when the link answered with another screen. None: no such press, or it was refused before it
     # went (the marker taken away again)
     byhand, marker, question, stuck, unfinished, why_by_hand = None, None, None, False, False, ""
+    # the press that went was the --path's first open on this body (first_open_or_exit), not an owner's armed press:
+    # the marker then stays where any record differs at the end, and what the owner does is said in its own words
+    first_went = False
     unreached = None        # the --path label the scan did not reach (NotReached): the run exits EXIT_INCOMPLETE
     try:
         with Link(run) as link:
+            why = first_open.other_body(link, run.root.name)
+            if why:
+                sys.exit(f"{why}: nothing was sent to the camera")
             hdmi.attach(link)
             if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
                 link.press("menu", cleanup=True)
@@ -1204,6 +1311,7 @@ def main():
                     # from here the camera opens no row but the owner row, and takes no Enter outside it
                     # (LiveCamera.owner_only), whatever its lit text reads as
                     cam.owner_only = True
+                depth = list(a.path[:-1])       # the labels above the menu page shown (next_depth)
                 for i, p in enumerate(a.press):
                     # the key as the guards judge it and as it is sent (canonical_key; press_args_refused saw that
                     # every key is one)
@@ -1303,7 +1411,7 @@ def main():
                         break
                     # the owner row (--owner): what this press is there, judged here on this reading before the camera
                     # judges it on its own (LiveCamera): its opening, or a press inside it
-                    owner_what, owner_opens = "", None
+                    owner_what, owner_opens, opening_row, kind_before = "", None, None, cam.read().kind
                     if owner_info and inside and inside.get("owner"):
                         why, owner_what = owner_press_decision(key, inside, owner_info,
                                                                lit if key in ENTERS else "", t, kind_now(), last,
@@ -1321,6 +1429,14 @@ def main():
                         # press inside it: a lit row misread ("Formal") is no ordinary row to open (2026-11-14, a review)
                         why = ("in an --owner run no Right or Enter goes out but the opening of the owner row and the "
                                f"presses inside it, and the lit row does not read as {owner_label!r} (docs/decisions/0008)")
+                    elif not inside and key in OPENERS and cam.read().kind in ROW_PAGES_OPENED and seen is not None:
+                        # a press that opens the lit row of a menu page: a row this camera has not been seen to open
+                        # opens only as the --path's own last row (first_open_or_exit), never reached by the presses
+                        decided = (safety.network_lifted_row(lit, cam_network, bool(address), values, readings, known)
+                                   if a.network and lit else None)
+                        why, opening_row = lit_refused(lit, depth, a.path, seen,
+                                                       known_rows | set(shown_labels(cam, cycle, model)), decided,
+                                                       row_vals)
                     else:
                         why = ""
                     if why:
@@ -1375,21 +1491,33 @@ def main():
                         print(f"   {key} inside {owner_label!r} as {owner_what}: the owner's decision and --confirm"
                               + (", as the run's last press" if armed else ""), flush=True)
                         run.log("owner_press", key=key, frame=cam.frame.path.name, row=owner_label, what=owner_what)
-                    if armed:
-                        # a press that may drop the link (its decision's link_loss: safety.loses_link): RESTORE_BY_HAND
-                        # is written first (a), taken away when the press is refused before it goes (b), kept when
-                        # anything else goes wrong (c), and then the screen read once decides (d, e, f)
-                        may_lose = safety.loses_link(owner_label, owner_what)
+                    # a row's first open on this body (first_open_or_exit): its Right, on that very row, goes as an armed
+                    # press that may drop the link
+                    first_now = bool(first_label) and key in RIGHTS and not inside
+                    if first_now and not (owner_opens or opens or reads_row(lit, first_label)):
+                        print(f"{key} refused: the lit row does not read {first_label!r}, whose first open this run makes; "
+                              "cancelling", flush=True)
+                        run.log("press_refused", key=key, frame=cam.frame.path.name, why="not the first open's row")
+                        ok = False
+                        break
+                    if armed or first_now:
+                        # a press that may drop the link (its decision's link_loss: safety.loses_link; a row's first
+                        # open on this body): RESTORE_BY_HAND is written first (a), taken away when the press is refused
+                        # before it goes (b), kept when anything else goes wrong (c), and then the screen read once
+                        # decides (d, e, f)
+                        may_lose = first_now or safety.loses_link(owner_label, owner_what)
                         handed = getattr(cam, "handed", 0)
                         if may_lose:
-                            marker = intend_by_hand(run, before, owner_label, owner_entry)
-                            byhand = "pending"
+                            marker = intend_by_hand(run, before, owner_label, owner_entry, why=(
+                                f"the first open of {' > '.join(a.path)!r} on this body may drop the link or act"
+                                if first_now and not armed else ""))
+                            byhand, first_went = "pending", first_now and not armed
                         try:
                             cam.press(key)          # once: no retry of an armed press
                         except (safety.Refused, StopRequested, CameraRefused):
                             if may_lose:            # (b) refused before it went, or "not accepted": nothing done
                                 clear_restore_by_hand(run.root)
-                                byhand = None
+                                byhand, first_went = None, False
                             raise
                         except Exception as e:
                             if may_lose:            # (c) it may have gone: the marker stays, nothing more is pressed
@@ -1403,14 +1531,16 @@ def main():
                         if may_lose:
                             kind_after, t, why_not = after_armed(cam, a.grip)
                             frame_now = getattr(getattr(cam.frame, "path", None), "name", None)
-                            entry = {"after": p, "frame": frame_now, "kind": kind_after, "armed": owner_what}
+                            entry = {"after": p, "frame": frame_now, "kind": kind_after,
+                                     **({"armed": owner_what} if armed else {}),
+                                     **({"first_open": True} if first_now else {})}
                             # kept as every screen of the owner row is, its opening's included: its field names and
                             # row labels, its text in drive.jsonl only where the decision logs values (owner_kept)
                             if why_not:
                                 # (d) nothing after it can be judged: the marker stays, nothing more is pressed
                                 byhand, why_by_hand = "lost", why_not
                                 print(f"{p:32s} -> sent; {why_not}: nothing more is read or pressed", flush=True)
-                            elif safety.own_question(kind_after, t, owner_label):
+                            elif owner_info and safety.own_question(kind_after, t, owner_label):
                                 # (e) the row's own question: nothing was done yet. MENU alone cancels it (never
                                 # Enter); then the run restores as ever, and says nothing was confirmed
                                 question = frame_now
@@ -1428,8 +1558,9 @@ def main():
                                 # (f) the link answered with another screen: MENU alone back to the shooting screen
                                 # and the remote restore, the marker taken away only when the restore checks out
                                 byhand = "answered"
-                                console, kept = owner_kept(cam, a.grip, t, labels, told, owner_info, kind_after,
-                                                           defined.get(owner_label, ()), by_row)
+                                console, kept = (owner_kept(cam, a.grip, t, labels, told, owner_info, kind_after,
+                                                            defined.get(owner_label, ()), by_row)
+                                                 if owner_info else shown(t))
                                 entry.update(kept)
                                 print(f"{p:32s} -> {kind_after:9s} {frame_now}  {console}", flush=True)
                             screens.append(entry)
@@ -1468,6 +1599,7 @@ def main():
                         opened = cam.frame.path.name
                         run.log("address_screen_opened", key=key, frame=opened)
                     t = screen_text(cam, a.grip)
+                    depth = next_depth(depth, key, kind_before, opening_row, cam.read().kind)
                     if closes:
                         inside["closing"] = True
                     if owner_opens:
@@ -1545,7 +1677,9 @@ def main():
                 # judged, or its question is still open: no cleanup press and no remote restore over it; the start file
                 # goes back by hand, and no link opens before that (camkit.runs RESTORE_BY_HAND, docs/decisions/0015)
                 log.write(json.dumps({"path": a.path, "presses": a.press, "note": a.note, "completed": ok,
-                                      "owner": {owner_entry: {k: v for k, v in owner_info.items() if k != "why"}},
+                                      **({"owner": {owner_entry: {k: v for k, v in owner_info.items() if k != "why"}}}
+                                         if owner_info else {}),
+                                      **({"first_open": True} if first_label else {}),
                                       **({"network": dict(network)} if a.network else {}),
                                       "screens": screens, "before": before.name, "restore": "by hand",
                                       "outcome": ("question left open" if stuck else why_by_hand or "may have gone"),
@@ -1586,6 +1720,7 @@ def main():
                                                  if byhand == "question" else {}),
                                               **({"outcome": "pressed; the link answered", "marker": marker.name}
                                                  if byhand == "answered" else {}),
+                                              **({"first_open": True} if first_label else {}),
                                               "screens": screens, "before": before.name,
                                               "after": ending.after.name if ending.after else None,
                                               "changes": changes_kept(ending.changes, keep_values)}) + "\n")
@@ -1612,9 +1747,15 @@ def main():
         log.close()
         run.seal()          # a private run's folder checked owner-only, the eyes' polling target taken away
         ledger.after()      # one look into the coverage ledger's looks file; a failed write changes no exit status
-    if byhand in ("question", "answered") and restored:
+    # a first open whose start file came back unchanged: the link answered and no record differed (camkit.first_open)
+    first_changed = [c.key for c in ending.changes] if first_went and ending is not None else []
+    if byhand in ("question", "answered") and restored and not first_changed:
         clear_restore_by_hand(run.root)
         run.log("restore_by_hand_cleared", outcome=byhand, frame=question)
+        if first_went and byhand == "answered":
+            print(f"the first open of {' > '.join(a.path)!r} on this body: the link held and no record differed from "
+                  "the start file, so it opens as any row from now on", flush=True)
+            return
         if byhand == "question":
             print(f"nothing was confirmed: the last press inside {owner_label!r} brought up its own question ({question}), "
                   "which MENU cancelled, and the start file is back and checked. The frame is the evidence that the "
@@ -1623,6 +1764,13 @@ def main():
         print(f"the last press inside {owner_label!r} went and the link still answered: the start file is back and "
               "checked (what no settings file holds, a network setup a reset wipes among it, is not)", flush=True)
         return
+    if byhand and first_went:
+        why = (f"{len(first_changed)} records then differed from the start file ({', '.join(first_changed[:8])}), "
+               f"{'put back and checked' if restored else 'not put back and checked'}" if first_changed
+               else "the restore after it did not check out" if byhand == "answered"
+               else why_by_hand or "the link may have gone")
+        print(first_open.owner_words([a.path], why, marker, before, run), flush=True)
+        sys.exit(EXIT_RESTORE_BY_HAND)
     if byhand:
         why = ("its question was not seen gone after three MENUs: a person must cancel it on the camera (MENU or "
                "Cancel, never Enter)" if stuck

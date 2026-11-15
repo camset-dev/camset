@@ -29,6 +29,36 @@ def own_runs(tmp_path_factory, monkeypatch):
     return top
 
 
+# The test modules whose kit/drive.py runs open, with Right or Enter and more presses after it, rows of a made-up
+# camera that has no looks or crawls: on a real body each would be a first open (camkit.first_open), refused before it
+# connects unless the press is Right alone (29 tests, 2026-11-15)
+DRIVES_MADE_UP_ROWS = ("test_guards", "test_network_rows")
+
+
+@pytest.fixture(autouse=True)
+def rows_seen(request, monkeypatch):
+    """In DRIVES_MADE_UP_ROWS every row reads as seen, as on a body the kit has crawled, so their runs test what they
+    test; everywhere else the camera's own records decide (kit/tests/test_first_open.py)."""
+    if request.module.__name__ not in DRIVES_MADE_UP_ROWS:
+        return
+    from camkit import first_open
+    monkeypatch.setattr(first_open, "seen_record", lambda camera=None: _AllSeen())
+
+
+class _AllSeen:
+    """rows_seen's record: every row seen."""
+    opened: set = set()
+
+    def seen(self, path) -> bool:
+        return bool(path)
+
+    def unseen(self, path) -> list:
+        return []
+
+    def lit_row(self, parent, lit, known=()) -> tuple:
+        return (*parent, lit)
+
+
 @pytest.fixture(autouse=True)
 def own_umask():
     """The process's umask and camkit.runs.UMASK_FLOOR as they were before the test, put back after it: a private run

@@ -26,7 +26,8 @@ gives as its "sha256" instead ("none": no "sha256" at all; Windows passes no var
 a child, so the empty value cannot say it), as a camlink that did not check the bytes would. With $FAKE_CAMLINK_DISCONNECT naming a command, the camera's session
 drops on it as camlink's OnDisconnected drops it: {"event": "disconnected"} on stderr (unless
 $FAKE_CAMLINK_DISCONNECT_SILENT is set), and from then every command but ping, that one included, is answered
-{"ok": false, "error": "disconnected"}, ping with "connected": false.
+{"ok": false, "error": "disconnected"}, ping with "connected": false. Started with --picture it answers release once and
+refuses every press but menu, every dial and every property set, and without it refuses release, as camlink does.
 
 Start it as COMMAND does: with -X utf8, since it imports camkit, which on Windows needs Python's UTF-8 mode, and a
 "-X utf8" given to the test run is not passed on to the processes it starts (PYTHONUTF8=1 is).
@@ -61,6 +62,7 @@ def main():
     out.write(json.dumps({k: v for k, v in ready.items() if k not in omit}) + "\n")
     out.flush()
     disconnected = False
+    picture, released = "--picture" in sys.argv[1:], False
     for raw in sys.stdin.buffer:
         if log:
             with open(log, "a", encoding="utf-8") as f:
@@ -97,6 +99,12 @@ def main():
             out.write(json.dumps({"ok": False, "error": "disconnected", **rid}) + "\n")
             out.flush()
             continue
+        refused = picture_refused(cmd, args, picture, released)
+        if refused:
+            out.write(json.dumps({"ok": False, "error": refused, "cause": "refused", **rid}) + "\n")
+            out.flush()
+            continue
+        released = released or cmd == "release"
         reply = {"ok": True, "cmd": cmd, "args": args, **rid}
         if cmd == "ping":
             reply["connected"] = not disconnected
@@ -121,6 +129,16 @@ def main():
             reply.update(known.get(name, {"ok": False, "error": f"unknown property {name}"}))
         out.write(json.dumps(reply) + "\n")
         out.flush()
+
+
+def picture_refused(cmd, args, picture: bool, released: bool) -> str:
+    """camlink's --picture rule (camlink.cpp cmdRelease, runCommand): release only with --picture, once; with it, no
+    press but menu, no dial and no property set."""
+    if cmd == "release":
+        return ("" if picture and not released else "release is answered only by a camlink started with --picture, once")
+    if picture and (cmd in ("dial", "set", "setstr") or (cmd == "press" and args[:1] != ["menu"])):
+        return "a camlink started with --picture presses no button but menu, turns no dial and sets no property"
+    return ""
 
 
 def upload(path, expected=""):

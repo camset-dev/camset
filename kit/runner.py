@@ -1443,6 +1443,26 @@ def decisions_scope_or_exit(f: Path, flag: str) -> dict:
     return scope
 
 
+def statements_scope_or_exit(flag: str) -> tuple:
+    """(the camera's reviewed scope as read, its file) for the owner's statements (camkit.statements): {} where the
+    camera has none yet; one that cannot be read or that git tracks stops the run (decisions_scope_or_exit)."""
+    f = reviewed_scope()
+    return (decisions_scope_or_exit(f, flag) if f.is_file() else {}), f
+
+
+def cards_statement_refused(flag: str) -> str:
+    """Why the camera's reviewed scope holds no current blank-cards statement (camkit.statements.cards_refused: what to
+    do, in plain words), or "": what a row's first open on the body needs (camkit.first_open). Where it holds one, its
+    date is said: a statement holds until the owner withdraws it."""
+    from camkit import statements
+    scope = statements_scope_or_exit(flag)[0]
+    why = statements.cards_refused(scope)
+    if not why:
+        print(f"the owner said on {statements.latest(scope, 'cards')[0]['date']} that the cards in the camera hold "
+              "nothing they want kept (withdraw it with kit/tools/owner_statement.py cards --withdraw)", flush=True)
+    return why
+
+
 def known_places(model=None) -> list:
     """The menu places the kit knows, each a tuple of labels from the tab: (tab, group, row) for every menu row of the
     camera's definition and every row of the page scan's pages (model: {page key: page}, its breadcrumb "Tab > Group"),

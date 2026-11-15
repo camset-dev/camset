@@ -4,7 +4,8 @@ the camera code kit/runner.py brings along."""
 EXIT_UNRESTORED = 4     # a run's exit when the camera is not known to be as its start file: a chain stops there
 # a run's exit when its last press, which an owner decision allowed with "link_loss" (kit/drive.py --owner), may have
 # dropped the link, or left a question open that MENU did not cancel, or when the restore after it did not check out;
-# or when a session's end found a screen no restore may go over and the owner cleared it (runner.hold_for_owner): the
+# or when a session's end found a screen no restore may go over and the owner cleared it (runner.hold_for_owner), or a
+# row's first open on the body lost the link or changed a record (camkit.first_open): the
 # camera's runs/<model>_fw<fw>/RESTORE_BY_HAND.json names the start file, and no link opens until
 # kit/tools/upload_check.py has put it back (camkit.runs); a chain stops there and uploads no end file
 EXIT_RESTORE_BY_HAND = 5

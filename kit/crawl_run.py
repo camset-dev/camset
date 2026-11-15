@@ -52,6 +52,13 @@ press on the row, cancels the lap. Once its start file is back and checked, a ru
 the crawl lost or off the scan) EXIT_INCOMPLETE (8); a STOP, the lap complete or --limit reached exit 0; a restore that
 did not check out exits EXIT_UNRESTORED (4) (kit/exit_status.py; kit/tools/chain.py stops on each).
 
+A row this camera has not been seen to open (camkit.first_open) opens under the link-loss procedure: RESTORE_BY_HAND
+before its Right, and after its top-level row's visit MENU, a download compared with the start file and MENU again; the
+marker goes only when no record differs, else the run exits EXIT_RESTORE_BY_HAND (5) saying what the owner does.
+Without the owner's blank-cards statement (camkit.statements), or with --panels, each such row is skipped and recorded
+(camkit.first_open.SKIPPED), as is a row whose first open failed, and the lap goes on. --first-open-check page checks
+once per menu page. A camera other than the one the kit works on stops the run before anything is pressed.
+
 Navigation guesses nothing: the lit group in the group column is read whole, by its letters and digits, whatever icon
 glyph the bar or the scan glued on, and with the group's own number where the bar is read with it (group_near); where
 it cannot be read, it is read again once after a short settle, then on the camera's own picture of its screen (the
@@ -64,6 +71,7 @@ named here is in the camera's runs/<model>_fw<fw>/ (camkit.paths).
 """
 import argparse
 import contextlib
+import functools
 import json
 import re
 import sys
@@ -72,19 +80,20 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen  # noqa: E402
-from camkit import coverage  # noqa: E402
+from camkit import coverage, first_open  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
-from camkit.crawl import crawl  # noqa: E402
+from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
 from camkit.live import lit_text, LiveCamera, submenu_labels, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
-from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_network_argument, add_scan_argument,  # noqa: E402
-                    close_for_restore, end_session, known_groups, known_labels, label_readings, load_scan,
-                    network_decided_or_exit, network_readings, network_values, restore_checked, row_readings,
-                    row_values, values_withheld, wait_shooting)
+from proving.base import LOCK_S  # noqa: E402
+from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, add_network_argument,  # noqa: E402
+                    add_scan_argument, cards_statement_refused, close_for_restore, end_session, known_groups,
+                    known_labels, label_readings, load_scan, network_decided_or_exit, network_readings, network_values,
+                    restore_checked, row_readings, row_values, values_withheld, wait_shooting)
 from runner import add_info_ok_argument, definition, info_ok_for, info_ok_or_exit, row_labels  # noqa: E402
 
 
@@ -616,6 +625,10 @@ def main():
                                                 "and My Menu), e.g. Playback")
     ap.add_argument("--panels", action="store_true",
                     help="open carousel › panels (commits the option); the start file is uploaded afterwards")
+    ap.add_argument("--first-open-check", choices=("row", "page"), default="row",
+                    help="check the rows this body has not been seen to open (camkit.first_open) after each top-level "
+                         "row (the default), or once per menu page: a difference then stops the lap and every row of "
+                         "that page is opened alone next time")
     add_network_argument(ap)
     add_info_ok_argument(ap)
     coverage.add_skip_argument(ap, crawl=True)
@@ -629,12 +642,31 @@ def main():
     if a.network:
         run.make_private()                # owner-only from here (camkit.runs), checked at the end (seal)
     network = network_settings_or_exit(run) if a.network else {}
+    # the rows this camera has not been seen to open: each opens the first time under the link-loss procedure
+    # (camkit.first_open), only with the owner's blank-cards statement (camkit.statements) and never with --panels;
+    # else each is skipped and recorded, and the lap goes on
+    seen = first_open.seen_record(run.root.name)
+    fresh = [x for x in lap_rows(cycle, model, tuple(a.tabs.split(",")) if a.tabs else LAP_TABS, network)
+             if not seen.seen([x])]
+    try:
+        skip_why = cards_statement_refused("crawl_run.py")
+    except SystemExit as e:
+        skip_why = str(e.code)      # a scope that cannot be read makes no first open, and stops no lap
+    if a.panels and not skip_why:
+        skip_why = "--panels commits options, while a first open is a look: crawl without --panels first"
+    if fresh:
+        print(f"{len(fresh)} rows of this lap have not been seen opened on this body: "
+              + (f"each is skipped and recorded, since {skip_why}" if skip_why else
+                 f"each opens under the link-loss procedure, checked once per {a.first_open_check}"), flush=True)
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
-    ending, refused, complete = None, False, False
+    ending, refused, complete, first = None, False, False, None
     try:
         with Link(run) as link:
+            why = first_open.other_body(link, run.root.name)
+            if why:
+                sys.exit(f"{why}: nothing was sent to the camera")
             hdmi.attach(link)
             if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
                 link.press("menu", cleanup=True)           # a plain menu page: close it ourselves
@@ -643,6 +675,8 @@ def main():
             before = link.download("before")
             print(f"settings saved: {before.name}", flush=True)
             ledger = coverage.crawl_gate(run, a, before)    # the ledger's word on each row; --skip-settled skips
+            first = first_open.FirstOpens(link, hdmi, run, before, seen, skip_why, LOCK_S, private=bool(network),
+                                          per=a.first_open_check)
             time.sleep(5)                                  # MENU within ~3 s of a download locks the menu
             # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused)
             cam = LiveCamera(link, hdmi, run, network=network, values=network_values(network, model),
@@ -651,17 +685,22 @@ def main():
             try:
                 complete = crawl_from_menu(cam, link, cycle, model, a.limit, results, a.start_label, a.panels,
                                            tuple(a.tabs.split(",")) if a.tabs else None, network=network,
-                                           info_ok=info_ok_pass(named), ledger=ledger)
+                                           info_ok=info_ok_pass(named), ledger=ledger, first=first)
             except StopRequested:                           # a STOP: cancelled as ever, and no failure
                 print("STOP file: cancelling", flush=True)
                 complete = True
                 close_for_restore(cam, link, before)
             except Exception as e:                          # never leave a dialog or the menu open
+                said_e = f"{type(e).__name__}: {e}"
+                print(f"error: {safety.quoted_withheld(said_e) if network else said_e}; cancelling", flush=True)
+                if first.marker is not None and link.gone():
+                    # a first open is pending or failed its check and the link has gone: nothing more is pressed or
+                    # restored over the link; the start file goes back by hand (camkit.first_open)
+                    first.lost(f"the link has gone ({link.gone()})")
+                    sys.exit(EXIT_RESTORE_BY_HAND)
                 # a refusal that stops the lap (after a press on its row, or on the way to a row): the run's work is
                 # not done, whatever the restore says (EXIT_REFUSED below)
                 refused = isinstance(e, safety.Refused)
-                said_e = f"{type(e).__name__}: {e}"
-                print(f"error: {safety.quoted_withheld(said_e) if network else said_e}; cancelling", flush=True)
                 close_for_restore(cam, link, before)            # cleanup presses; when they fail too, the restore all the same
             # every run ends restoring its start file (decision 15), not only a --panels run, and even when the
             # shooting screen does not come back
@@ -669,11 +708,16 @@ def main():
             ending = end_session(link, hdmi, before, "the final settings download", reach=wait_shooting,
                                  **values_withheld(bool(network)))
             ledger.lap(ending)                              # the lap's diff, by record keys, into the looks file
-        restored = restore_checked(run, ending, before, **values_withheld(bool(network)))
+        # while a first open's marker is there, the check reconnects as kit/tools/upload_check.py does
+        held = first is not None and first.marker is not None
+        checking = {"link_class": functools.partial(Link, pending_restore=True)} if held else {}
+        restored = restore_checked(run, ending, before, **values_withheld(bool(network)), **checking)
     finally:
         hdmi.close()
         results.close()
         run.seal()                            # a --network run's folder checked owner-only
+    if first is not None and first.ended(restored, ending):
+        sys.exit(EXIT_RESTORE_BY_HAND)       # a first open's check did not come out clean: the marker stays
     if not restored:
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
     if refused:
@@ -717,12 +761,13 @@ def info_ok_pass(named: dict):
 
 
 def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, panels=False, tabs=None,
-                    network=frozenset(), info_ok=None, ledger=None) -> bool:
+                    network=frozenset(), info_ok=None, ledger=None, first=None) -> bool:
     """MENU, find where it opened in the scan's cycle (find_position, kit/drive.py's way: a menu reopened with the
     cursor in the group column, where a refused jump left it, is stepped into the rows of a group it may enter
     (from_groups); one opened on a page the scan does not match goes by the columns to the Shooting tab's first group),
     crawl from there, close the menu. network: the Wi-Fi and Bluetooth settings a dated owner decision opens
-    (camkit.crawl.network_open). True when the lap ended as it should (complete, --limit reached, or a STOP); False when
+    (camkit.crawl.network_open). first: a row's first open on the body (camkit.first_open.FirstOpens). True when the
+    lap ended as it should (complete, --limit reached, or a STOP); False when
     the menu opened on a screen the scan does not know and none of those ways reached one it does, the start label was
     not reached, or the crawl stopped short (off the scan, lost, an error)."""
     cam.press("menu")
@@ -747,7 +792,8 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
             results.flush()
             show(row)
             if ledger is not None:
-                ledger.after(row, model)            # one look per row opened (camkit.coverage), never a value
+                # one look per row opened (camkit.coverage), never a value; a first open's held until its check
+                ledger.after(row, model, **({"hold": first.takes} if first is not None else {}))
         try:
             # a Wi-Fi or Bluetooth setting that answers Right with a notice keeps the notice's text where it is one the
             # kit knows and names no identity (camkit.crawl, safety.notice_kept)
@@ -756,11 +802,15 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
                         panels=panels, network=network,
                         notices=(text_of, known_labels(model), row_values(model)) if network else None,
                         **({"info_ok": info_ok} if info_ok is not None else {}),
-                        skip=ledger.skip if ledger is not None else None)
+                        skip=ledger.skip if ledger is not None else None, first=first)
             print(f"crawl ended: {(safety.quoted_withheld(out.stopped) if network else out.stopped) or 'lap complete'}; "
                   f"{out.presses} presses, "
                   f"{len(out.rows)} rows; the menu closed by itself {len(out.recoveries)} times "
                   f"(reopened with MENU)", flush=True)
+            unseen = sum(unseen_skips(r) for r in out.rows)
+            if unseen:
+                print(f"{unseen} rows not seen opened on this body were skipped, each recorded in rows.jsonl: "
+                      f"{first.skip_why if first is not None and first.skip_why else 'see their outcomes'}", flush=True)
             complete = not out.stopped or out.stopped.startswith(LAP_ENDS)
         except StopRequested:
             print("STOP file: cancelling to the menu", flush=True)
@@ -769,6 +819,13 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
     if cam.read().kind in ("menu", "tiles"):
         link.press("menu", cleanup=True)
     return complete
+
+
+def unseen_skips(r) -> int:
+    """How many rows a first open's rule skipped (camkit.first_open.SKIPPED) in a crawl's row result, its submenu's
+    rows included."""
+    sub = getattr(r.walk, "rows", None) if type(r.walk).__name__ == "SubCrawl" else None
+    return r.outcome.startswith(first_open.SKIPPED) + sum(unseen_skips(x) for x in sub or ())
 
 
 # camkit.crawl's stops that end a lap as asked: --limit reached, a STOP; any other stop (off the scan, lost, an error)

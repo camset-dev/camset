@@ -2672,14 +2672,17 @@ class CrawlGate:
             _failed("crawl_run.py's gate", e)
             return None
 
-    def after(self, row: dict, model: dict) -> None:
+    def after(self, row: dict, model: dict, hold=None) -> None:
+        """The row's looks written; `hold(look)` keeps back one it returns True for (camkit.first_open.FirstOpens.takes:
+        a row's first open not yet checked)."""
         try:
             page = model.get(row.get("page")) or next((p for p in model.values() if isinstance(p, dict)
                                                         and p.get("page") == row.get("page")), {})
             crumb = [x.strip() for x in str(page.get("breadcrumb") or "").split(" > ")]
             for lk in crawl_looks(row, crumb, self.mode, self.run, self.camera):
                 lk["start_sha256"] = self.start_sha
-                append_look(self.camera, lk, private=self.private)
+                if hold is None or not hold(lk):
+                    append_look(self.camera, lk, private=self.private)
         except (Exception, SystemExit) as e:    # noqa: BLE001
             _say(f"the look was not recorded ({type(e).__name__}: {e})")
 
@@ -2701,9 +2704,14 @@ def crawl_gate(run, a, start) -> CrawlGate:
     return CrawlGate(run, a, start)
 
 
-def crawl_skipped(run) -> int:
-    """How many rows of a crawl's rows.jsonl a --skip-settled run left out (CRAWL_SKIPPED): its map has a hole at each."""
-    return sum(1 for r in _jsonl(Path(run) / "rows.jsonl") if str(r.get("outcome") or "").startswith(CRAWL_SKIPPED))
+def crawl_skipped(run, prefix: str = CRAWL_SKIPPED) -> int:
+    """How many rows of a crawl's rows.jsonl, its submenus' included, a run left out with an outcome led by `prefix`: a
+    --skip-settled run's (CRAWL_SKIPPED), whose map has a hole at each, or a first open's rule's
+    (camkit.first_open.SKIPPED)."""
+    def count(rows) -> int:
+        return sum(str(r.get("outcome") or "").startswith(prefix) + count(r.get("submenu") or [])
+                   for r in rows if isinstance(r, dict))
+    return count(_jsonl(Path(run) / "rows.jsonl"))
 
 
 def crawl_looks(row: dict, crumb: list, mode, run: str, camera: str, parent=()) -> list:

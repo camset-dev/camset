@@ -1204,6 +1204,8 @@ list checked out on the camera (2026-11-08, `kit/runner.py` close_for_restore). 
 cannot read, nothing is restored and the link is not closed: the run writes `RESTORE_BY_HAND.json`, asks you to clear
 the screen by hand (MENU or Cancel, never OK) and exits with status 5 once the shooting screen is back or the link has
 gone; a STOP does not close it, a second Ctrl-C does. Then put the start file back with `kit/tools/upload_check.py`.
+A row's first open on the body (section 16) that lost the link or changed a record leaves `RESTORE_BY_HAND.json` and
+exit status 5 too: look at the camera first, then the same.
 
 1. Do not start anything new. Look at the camera:
    - HDMI (`HdmiSource.grab`), and the OSD (`link.osd`) if HDMI is black;
@@ -1363,8 +1365,15 @@ the same generation, never as proof:
    `kit/tools/help_extras.py` reads a drive's mode by it and stops without it; `kit/provers/customshoot_values.py
    --counted` reads the Focus Area order from this camera's own definition (`--order-from` its Focus Area record) and
    stops before the camera is touched while there is none.
-7. **Then Phase 1.** How long the work takes is in section 11.
-8. **Read the camera's own help** for every row (`kit/help_run.py`) and every option
+7. **Blank cards, then one picture.** Ask the owner to put in cards that hold nothing they want kept and to leave them
+   in for the whole mapping, then to run `kit/tools/owner_statement.py cards` in their own terminal: only they answer
+   it. A row the kit has not yet seen opened on this body opens only with that statement, under `RESTORE_BY_HAND`
+   (`kit/camkit/first_open.py`: `crawl_run.py` checks each with a download and skips and records it without the
+   statement, `drive.py` takes `--press right` alone for it, named as the `--path`'s last row, never reached by its
+   presses), and Format and Delete stay refused. Then, with the owner
+   at their terminal, `kit/tools/take_picture.py` puts one picture on the card for the Playback rows (decision 2).
+8. **Then Phase 1.** How long the work takes is in section 11.
+9. **Read the camera's own help** for every row (`kit/help_run.py`) and every option
    (`prove_run --help-text`) once Phase 1's maps exist: C4 opens it where the footer draws the help
    button, and the kit sends it on no other screen (decision 7, rule 13). Then
    `kit/help_reads.py` reads every saved guide frame again with the VLM readers, where OCR slips. For the ILCE-1M2,

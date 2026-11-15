@@ -7,7 +7,8 @@ kit/prove_run.py, kit/axis_walk.py, kit/schema_update.py and the proof viewer re
 ("run"), whose shots/ hold its frames. A map_all.json that differs from the one made now is replaced only with
 --replace (the differences are listed); --dry-run writes nothing. Into a run folder a --network or --owner run marked,
 it writes owner-only (camkit.runs.private_if_marked). A crawl run with --skip-settled (kit/crawl_run.py) left out the
-rows the coverage ledger had settled, so its map has holes: it is refused for kit2_pass1's map, and --own says so.
+rows the coverage ledger had settled, so its map has holes: it is refused for kit2_pass1's map, and --own says so. A row
+a crawl only skipped as not seen opened on this body (camkit.first_open.SKIPPED) keeps the mapping made before of it.
 
 Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + vLLM) and, if present,
 <run>/tiebreak.jsonl (omlx as a third reader where those two disagreed) and <run>/checked_labels.json
@@ -29,7 +30,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import coverage, jsonl, paths  # noqa: E402
+from camkit import coverage, first_open, jsonl, paths  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from runner import read_json  # noqa: E402
 
@@ -74,10 +75,13 @@ def build(run: Path) -> dict:
             label, source = vsel or ocr, "unresolved"
         rows.setdefault(key, {"path": list(key), "kind": o["kind"], "options": []})["options"].append(
             {"index": o["index"], "label": label, "source": source, "frame": o["frame"]})
-    # a label corrected by hand in the map made before (the playbook: the entry's "by" says how) is kept
-    fixed = {}
+    # a label corrected by hand in the map made before (the playbook: the entry's "by" says how) is kept, and so is a
+    # row the crawl's laps only skipped as not seen opened on this body (camkit.first_open.SKIPPED)
+    fixed, unseen = {}, unseen_only(run)
     if (run / "map.json").exists():
         for r in read_json(run / "map.json").get("rows") or []:
+            if tuple(r["path"]) not in rows and under(r["path"], unseen):
+                rows[tuple(r["path"])] = r
             for op in r.get("options") or []:
                 if op.get("by"):
                     fixed[(tuple(r["path"]), json.dumps(op.get("index")), op.get("frame"))] = op
@@ -87,6 +91,27 @@ def build(run: Path) -> dict:
             if hand:
                 op.update(label=hand["label"], source="by hand", by=hand["by"])
     return {"rows": list(rows.values()), "review": review}
+
+
+def unseen_only(run: Path) -> set:
+    """The row paths (labels from the top-level row) a crawl's rows.jsonl holds only as skipped by a first open's rule
+    (camkit.first_open.SKIPPED), never walked in another lap."""
+    skipped, other = set(), set()
+
+    def walk(rows, parent):
+        for r in rows:
+            if not isinstance(r, dict):
+                continue
+            k = (*parent, r.get("label") or f"#{r.get('slot')}")
+            (skipped if str(r.get("outcome") or "").startswith(first_open.SKIPPED) else other).add(k)
+            walk(r.get("submenu") or [], k)
+    walk(jsonl.read(run / "rows.jsonl", bad="skip") if (run / "rows.jsonl").exists() else [], ())
+    return skipped - other
+
+
+def under(path, rows: set) -> bool:
+    """Whether the map row's path is one of `rows` or under one."""
+    return any(tuple(path[:i]) in rows for i in range(1, len(path) + 1))
 
 
 def merged(maps: list) -> tuple:
@@ -143,6 +168,10 @@ def main(argv=None):
                      "--skip-settled (or write its own map.json alone with --own)")
         if holes:
             print(f"{run.name}: {holes} rows skipped as settled (--skip-settled): its map.json has holes there")
+        unseen = coverage.crawl_skipped(run, first_open.SKIPPED)
+        if unseen:
+            print(f"{run.name}: {unseen} rows skipped as not seen opened on this body (kit/crawl_run.py): the mapping "
+                  "made before of each is kept")
     if not a.dry_run:
         # a --network or --owner run's folder: map.json, and the map of them all where it is one, 0600 in it too
         root = paths.run_root(required=False)
@@ -165,6 +194,10 @@ def main(argv=None):
         print(f"  {path}: in {first} and {later}; {first}'s kept")
     target = paths.run_root() / "kit2_pass1" / MAP_ALL
     old = read_json(target) if target.exists() else None
+    unseen = set().union(*(unseen_only(run) for run in runs))
+    have = {tuple(r["path"]) for r in everything["rows"]}
+    everything["rows"] += [r for r in (old or {}).get("rows") or []
+                           if tuple(r["path"]) not in have and under(r["path"], unseen)]
     changed = differences(old, everything) if old is not None else None
     print(f"{MAP_ALL}: {summary(everything)}, from {', '.join(n for n, _ in maps)}")
     if old is not None and not changed:

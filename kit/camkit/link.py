@@ -13,7 +13,9 @@ the screen (judged: camkit.live, safety.enter_refused, 2026-11-14), and only whi
 is sent past that check or on a screen it did not judge; a property set only when it is live exposure,
 and never one that
 makes sound, light or motion, holds credentials or identity, or acts (safety.check_property; no text property is
-set); an upload only of the camera's own download (camkit.provenance), with that download's SHA-256 on the line, which
+set); the shutter released only on a link opened for kit/tools/take_picture.py, once, on the shooting screen
+(PICTURE_ONLY); an upload only of the camera's own download (camkit.provenance), with that download's SHA-256 on the
+line, which
 camlink checks the bytes it reads against, so a file swapped in after the check is never sent ("hash_mismatch"), and
 a link opens only to a camlink that says so in its ready line ("upload_sha256"); and before anything that changes the
 camera (press, dial, set, setstr), the STOP file. A command the kit does not send is refused. camlink refuses the never
@@ -157,7 +159,11 @@ def parse_command(line: str) -> tuple:
 # Commands that only read the camera, sent whatever the run's state; a command named neither here nor below is refused
 READS = frozenset({"hello", "ping", "props", "get", "osd", "download"})
 # Commands that change the camera: none after a STOP, except a cleanup press (MENU to cancel a dialog)
-CHANGES = frozenset({"press", "dial", "set", "setstr"})
+CHANGES = frozenset({"press", "dial", "set", "setstr", "release"})
+# The shutter released once (camlink's release, Sony's Release command down and up): kit/tools/take_picture.py's alone,
+# on a link opened with picture=True, which starts camlink with --picture and sends no press but MENU, no dial and no
+# property; on any other link it is refused, and camlink without --picture refuses it too (docs/decisions/0002)
+PICTURE_ONLY = "release"
 # CameraOperatingMode as the SDK numbers it (CrCameraOperatingMode_Playback): C4 deletes the picture shown there
 PLAYBACK_MODE = 2
 # The property C4's check reads (c4_refused). camlink answers get with "unknown property NAME" both when the body does
@@ -166,7 +172,7 @@ PLAYBACK_MODE = 2
 MODE_PROPERTY = "CameraOperatingMode"
 # Commands that can change the screen without a LiveCamera seeing it: the link counts them (moves), and LiveCamera reads
 # the screen afresh before judging a press when the count has moved since its last read (camkit.live)
-MOVES = frozenset({"press", "dial", "download", "upload"})
+MOVES = frozenset({"press", "dial", "download", "upload", "release"})
 # Link.open's refusal of a camlink whose ready line does not say "upload_sha256" (one built before 2026-11-08)
 OLD_CAMLINK = ("camlink is older than the kit: it does not take the SHA-256 the kit now sends with every upload, so a "
                "run could not put the camera back. Nothing was sent to the camera. Rebuild it with python3 kit/setup.py, "
@@ -228,12 +234,14 @@ def _catch_signals(run):
 
 class Link:
     def __init__(self, run: Run, ip: str | None = None, usb: bool = False, binary: Path | list = LINK_BIN,
-                 catch_signals: bool = True, pending_restore: bool = False):
+                 catch_signals: bool = True, pending_restore: bool = False, picture: bool = False):
         """binary: camlink, or a command line that starts one (the tests' stand-in: [python, script]). pending_restore:
-        kit/tools/upload_check.py's alone, putting back the start file a run's RESTORE_BY_HAND names (open)."""
+        kit/tools/upload_check.py's alone, putting back the start file a run's RESTORE_BY_HAND names (open). picture:
+        kit/tools/take_picture.py's alone, the one link that may release the shutter, once (PICTURE_ONLY)."""
         self.run = run
         self.catch_signals = catch_signals
         self.pending_restore = bool(pending_restore)
+        self.picture, self.released = bool(picture), False
         # CAMSET_USB=1: USB remote shooting instead of the LAN (after the camera's Initialize wiped its
         # network setup, 2026-10-30); every script then connects over USB unchanged
         usb = usb or os.environ.get("CAMSET_USB") == "1"
@@ -248,6 +256,8 @@ class Link:
         model = None if usb else config(required=False).get("camera_model")
         if model:                                  # the SDK's model number, for a LAN body (default ILCE-1M2)
             self.args += ["--model", model]
+        if self.picture:
+            self.args += ["--picture"]
         self.proc = None
         self._out = queue.Queue()
         self._seq = 0             # the last request id sent ("@N"; camlink's reply echoes it)
@@ -450,6 +460,8 @@ class Link:
             raise
         if not self.proc:
             raise LinkError("link is not open")
+        if verb == PICTURE_ONLY:
+            self.released = True                # once per link, answered or not
         if verb in MOVES:
             self.moves += 1                     # sent, answered or not: the screen may have moved
         t0, n = time.monotonic(), self._next_id()
@@ -475,7 +487,20 @@ class Link:
 
     def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None):
         """Raises when the command may not go out (the module docstring's guards); returns when it may."""
-        if verb == "press":
+        picture = getattr(self, "picture", False)
+        if picture and (verb in ("dial", "set", "setstr") or (verb == "press" and args[:1] != ["menu"])):
+            raise safety.Refused("a picture link (kit/tools/take_picture.py) sends no press but MENU, no dial and no "
+                                 "property")
+        if verb == PICTURE_ONLY:
+            if not picture:
+                raise safety.Refused("the shutter is released only by kit/tools/take_picture.py, on a link opened for "
+                                     "it (docs/decisions/0002)")
+            if args or getattr(self, "released", False):
+                raise safety.Refused("release takes no argument and goes once per link")
+            if getattr(screen, "kind", screen) != "shooting":
+                raise safety.Refused(f"the shutter is released only on the shooting screen, not on a "
+                                     f"{getattr(screen, 'kind', screen)!r} screen")
+        elif verb == "press":
             if not args or len(args) > 3 or args[2:] not in ([], ["allowed"]):
                 raise safety.Refused(f"press takes BUTTON [HOLD_MS] [allowed], not {' '.join(args)!r}")
             safety.check_input(args[0], allow)
@@ -634,6 +659,11 @@ class Link:
         names the dial, and with no screen given, named or not)."""
         self._name_checked("dial", dial)
         return self._must(f"dial {dial} {int(steps)}", screen=screen, on_shooting=on_shooting)
+
+    def release(self, screen) -> dict:
+        """The shutter released once, on the shooting screen the caller read last (`screen`): on a link opened with
+        picture=True alone (PICTURE_ONLY, kit/tools/take_picture.py), once per link."""
+        return self._must(PICTURE_ONLY, screen=screen)
 
     # -------------------------------------------------------------- reads and files
 

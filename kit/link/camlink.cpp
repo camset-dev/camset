@@ -6,7 +6,10 @@
 // SDK events (disconnects, warnings, errors) are JSON lines on stderr, so replies never interleave
 // with them. camlink holds no menu knowledge: the Python side decides what to press and when.
 //
-//   camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2]
+//   camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2] [--picture]
+//                                         --picture: kit/tools/take_picture.py's link alone. It answers release once
+//                                         and refuses every press but MENU, every dial and every property set; without
+//                                         it release is refused (docs/decisions/0002).
 //                                         LAN by default (CAMSET_IP or --ip); credentials come from
 //                                         ~/.config/camset/network.json (%USERPROFILE% on Windows), below.
 //                                         --model (or CAMSET_MODEL) names the body for a LAN camera the SDK
@@ -89,6 +92,8 @@
 //                                         _camlink_upload_<pid>.DAT), removed however the command ends (the kit's
 //                                         download pickers skip the name, should a crash leave one). The reply
 //                                         carries their sha256.
+//   release                               --picture only, once: the shutter released (Sony's Release command, down,
+//                                         35 ms, up, as its sample sends it; the up tried for about 2 s)
 //   ping                                  connection state
 //   quit
 //
@@ -479,6 +484,29 @@ static void cmdDial(const std::string& name, const std::string& stepsText) {
     reply(Obj().b("ok", true).i("ms", msSince(t0)));
 }
 
+// --picture (the header): the one release kit/tools/take_picture.py makes, and nothing else that changes the camera
+static bool g_picture = false, g_released = false;
+
+static void cmdRelease() {
+    if (!g_picture) return replyRefused("release is answered only by a camlink started with --picture (kit/tools/take_picture.py)");
+    if (g_released) return replyRefused("one release per camlink started with --picture");
+    g_released = true;
+    const auto t0 = Clock::now();
+    const SCRSDK::CrError down = SCRSDK::SendCommand(g_dev, SCRSDK::CrCommandId_Release, SCRSDK::CrCommandParam_Down);
+    std::this_thread::sleep_for(35ms);
+    // the up tried for about 2 s: a shutter left held takes picture after picture in a continuous drive mode
+    SCRSDK::CrError up = SCRSDK::SendCommand(g_dev, SCRSDK::CrCommandId_Release, SCRSDK::CrCommandParam_Up);
+    for (const auto end = Clock::now() + 2s; up != SCRSDK::CrError_None && Clock::now() < end;) {
+        std::this_thread::sleep_for(100ms);
+        up = SCRSDK::SendCommand(g_dev, SCRSDK::CrCommandId_Release, SCRSDK::CrCommandParam_Up);
+    }
+    if (up != SCRSDK::CrError_None)
+        return reply(Obj().b("ok", false).s("error", "release not accepted: its up was refused for 2 s, so the shutter "
+                                                     "may still be held").s("cause", "button_held"));
+    if (down != SCRSDK::CrError_None) return replyError("release not accepted: " + errorText(down));
+    reply(Obj().b("ok", true).i("ms", msSince(t0)));
+}
+
 static void cmdOsd(const std::string& path) {
     if (path.empty()) return replyError("bad arguments: osd PATH");   // else the camera is asked and ./.part written
     const auto t0 = Clock::now();
@@ -547,6 +575,8 @@ static void cmdUpload(const std::string& path, const std::string& expected) {
 static void runCommand(const std::string& cmd, std::istringstream& in) {
     auto rest = [&]() { return protocol::rest(in); };
     auto word = [&]() { std::string w; protocol::word(in, w); return w; };
+    if (g_picture && (cmd == "dial" || cmd == "set" || cmd == "setstr"))
+        return replyRefused("a camlink started with --picture turns no dial and sets no property");
     if (cmd == "hello") {
         Obj o = Obj().b("ok", true).s("model", g_model).s("connection", g_connection);
         reply(g_mac.empty() ? o : o.s("mac", g_mac));
@@ -559,8 +589,10 @@ static void runCommand(const std::string& cmd, std::istringstream& in) {
     else if (cmd == "press") {
         const std::string b = word(), h = word(), mark = word();
         if (!mark.empty() && mark != "allowed") throw std::runtime_error("press BUTTON [HOLD_MS] [allowed]");
+        if (g_picture && b != "menu") return replyRefused("a camlink started with --picture presses no button but menu");
         cmdPress(b, h, mark == "allowed");
     }
+    else if (cmd == "release") cmdRelease();
     else if (cmd == "dial") { const std::string d = word(); cmdDial(d, word()); }
     else if (cmd == "osd") cmdOsd(rest());
     else if (cmd == "download") { const std::string d = word(); cmdDownload(d, rest()); }
@@ -660,7 +692,8 @@ int main(int argc, char** argv) {
         if (a == "--usb") usb = true;
         else if (a == "--ip" && k + 1 < argc) ip = argv[++k];
         else if (a == "--model" && k + 1 < argc) modelName = argv[++k];
-        else { std::cerr << "usage: camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2]\n"; return 2; }
+        else if (a == "--picture") g_picture = true;
+        else { std::cerr << "usage: camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2] [--picture]\n"; return 2; }
     }
     if (!usb && ip.empty()) { std::cerr << "camlink: give --ip (or CAMSET_IP) or --usb\n"; return 2; }
     if (!SCRSDK::Init()) { reply(Obj().b("ok", false).s("error", "SDK init failed").s("cause", "connect_failed")); return 1; }

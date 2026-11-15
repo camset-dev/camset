@@ -226,7 +226,9 @@ battery templates from the new camera's own frames (playbook, "New model: first 
   mode's scan a run of its own.
 - `page_model.py` lists the labels the readers disagree on: read them off the frames into
   `runs/$CAM/kit2_page_scan/checked_labels.json` and run it again.
-- The crawl must end with `0 records differ from the start file`: walking a row read-only changed nothing.
+- The crawl must end with `0 records differ from the start file`: walking a row read-only changed nothing. On a new
+  body it opens the row only once the owner has answered `kit/tools/owner_statement.py cards` in their own terminal
+  (the playbook's section 16); until then it skips the row and says so.
 
 ## 8. Prove one setting
 
