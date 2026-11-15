@@ -227,8 +227,8 @@ pub(crate) fn video_badge(c: &CamSet) -> (String, String) {
 /// block names, NTSC and PAL for example). Off, so such a write is refused (`write_check`): the two use different
 /// frame rates, a camera numbers its frame-rate settings differently under each (docs/decisions/0008), and nobody has
 /// tried what a camera does with a file from the other, so the editor fails closed. This is the one place the rule
-/// lives, for the window and the web page alike; the owner may turn it on once a camera has been tried, and
-/// docs/EDITOR.md ("The camera link") says so.
+/// lives, for the window and the web page alike; the owner may turn it on once a camera has been tried.
+/// docs/EDITOR.md ("The camera link") says the refusal in words.
 pub(crate) const WRITE_ACROSS_VIDEO_SYSTEMS: bool = false;
 
 /// Before a write: the camera's settings read just now (`before`) and the file about to be sent (`sent`) must be
