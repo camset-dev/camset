@@ -15,18 +15,27 @@ It reads every settings file in a run folder's dat/ (runs/<model>_fw<fw>/<run>/d
 model or firmware saved, is not read, counted, and breaks the chain there. A step is two files read one after the
 other in one run folder, ordered by the leading number of their names (00010 after 0009; a name with none after the
 numbered ones, by name), compared with camset.diff, which leaves out the camera file's volatile records: those are left
-out of the leads too, so the ledger claims nothing of them. A step's row is the row of each setting whose record
-changed in it, or, where the run's proofs.jsonl names the step's later file as a proof's "dat" (one with a download of
-its own: its "base" another file), that proof's "path". For each record no setting covers it counts the steps it
-changed in ("changes"), its distinct values across every file read ("values": a memory-set record's value is the
-twelve sets' together), the rows of those steps ("rows", the 8 most frequent; "other_rows", how many more) and the run
-folders it changed in ("runs"), and classes it:
+out of the leads too, so the ledger claims nothing of them. Where the run's proofs.jsonl names the step's later file as
+a proof's "dat" (one with a download of its own: its "base" another file), the step's row is that proof's "path", and
+the step is never broad. Otherwise the step's rows are the rows of the settings whose records changed in it: a step is
+"broad" when they are more than BROAD_ROWS (3) distinct rows (a restore, a reset or a mode switch), and a broad step
+gives no rows to any record; a step with 1 to 3 rows gives those rows. For each record no setting covers it counts all
+the steps it changed in ("changes"), the broad ones among them ("broad", left out when none), its distinct values across
+every file read ("values": a memory-set record's value is the twelve sets' together), the rows of the narrow steps it
+changed in ("rows", the 8 most frequent; "other_rows", how many more) and the run folders it changed in ("runs"), and
+classes it, judged on the narrow steps only:
 
     NEVER     one value in every file read
     BETWEEN   more than one value, but never changed inside a step (between run folders, or across a file not read)
-    SPECIFIC  changed inside steps, every one with a row naming the same single row
-    SEVERAL   changed inside steps attributed to two rows or more
-    ALONE     changed only inside steps with no row
+    SPECIFIC  changed in at least one step that has rows, and every such step names the same single row (a step that
+              carries two or three rows is not the same single row unless they are all that one row)
+    SEVERAL   its narrow steps name two rows or more
+    BROAD     changed inside steps, at least one of them broad, and never in a step that has rows (it moves only when
+              a whole file is put back or a mode is switched)
+    ALONE     changed only in steps with no row that are not broad
+
+--top lists SPECIFIC first by its narrow steps (changes less broad), then SEVERAL by the share of its narrow steps its
+most frequent row was named in, then BROAD by "broad", each as "key  cls  changes  row (steps); row (steps)  [broad N]".
 
 --write writes camkit.coverage.leads_file (private/evidence/<model>_fw<fw>/leads_<model>_fw<fw>.json, owner-only,
 written whole), and nothing else anywhere; without it nothing is written. Never a record's value, in the file or on the
@@ -42,7 +51,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import paths  # noqa: E402
 
-CLASSES = ("NEVER", "BETWEEN", "SPECIFIC", "SEVERAL", "ALONE")
+CLASSES = ("NEVER", "BETWEEN", "SPECIFIC", "SEVERAL", "BROAD", "ALONE")
+BROAD_ROWS = 3                      # a step whose changed records are more rows than this, and no proof names, is broad
 ROWS_KEPT = 8
 RECENT = 32                         # parsed files kept by their bytes' hash: a file met again soon is not parsed again
 NUMBER = re.compile(r"^(\d+)")
@@ -89,15 +99,19 @@ def row_label(s: dict) -> str:
 
 
 def entry(key: str, values: int, stat: dict | None) -> dict:
-    """One record's lead: its class from its distinct values and the steps it changed in (stat: {"changes", "rows":
-    {row: steps}, "runs": {run folder}}, None when it changed in none). Counts and row labels only."""
+    """One record's lead: its class from its distinct values and the steps it changed in (stat: {"changes", "broad",
+    "rows": {row: narrow steps}, "runs": {run folder}}, None when it changed in none). Counts and row labels only."""
     if values <= 1:
         return {"key": key, "cls": "NEVER", "values": values}
     if not stat or not stat["changes"]:
         return {"key": key, "cls": "BETWEEN", "changes": 0, "values": values}
     rows = sorted(Counter(stat["rows"]).items(), key=lambda kv: (-kv[1], kv[0]))
-    cls = "ALONE" if not rows else "SPECIFIC" if len(rows) == 1 else "SEVERAL"
-    out = {"key": key, "cls": cls, "changes": stat["changes"], "values": values}
+    broad = stat.get("broad", 0)
+    cls = "SPECIFIC" if len(rows) == 1 else "SEVERAL" if rows else "BROAD" if broad else "ALONE"
+    out = {"key": key, "cls": cls, "changes": stat["changes"]}
+    if broad:
+        out["broad"] = broad
+    out["values"] = values
     if rows:
         out["rows"] = dict(rows[:ROWS_KEPT])
     if len(rows) > ROWS_KEPT:
@@ -213,13 +227,19 @@ class Miner:
             prev = got
 
     def step(self, run: str, changed: set, proved: str | None) -> None:
+        """One step's changes counted: its rows (the proof's, else the changed settings' own) given to each record no
+        setting covers that changed in it, unless the step is broad (no proof, more than BROAD_ROWS rows)."""
         rows = {proved} if proved else {r for k in changed for r in self.rows_of.get(k, ())}
+        broad = not proved and len(rows) > BROAD_ROWS
         for k in changed:
             if k not in self.values:
                 continue
-            st = self.stats.setdefault(k, {"changes": 0, "rows": Counter(), "runs": set()})
+            st = self.stats.setdefault(k, {"changes": 0, "broad": 0, "rows": Counter(), "runs": set()})
             st["changes"] += 1
             st["runs"].add(run)
+            if broad:
+                st["broad"] += 1
+                continue
             for r in rows:
                 st["rows"][r] += 1
 
@@ -256,16 +276,35 @@ def summary(doc: dict) -> list:
     return out
 
 
+TOP = ("SPECIFIC", "SEVERAL", "BROAD")
+
+
+def strength(x: dict) -> float:
+    """How strong a lead is within its class (higher first): a SPECIFIC's narrow steps (changes less broad), a
+    SEVERAL's share of its narrow steps that named its most frequent row, a BROAD's broad steps."""
+    narrow = x["changes"] - x.get("broad", 0)
+    if x["cls"] == "SPECIFIC":
+        return narrow
+    if x["cls"] == "SEVERAL":
+        return max(x["rows"].values()) / narrow if narrow else 0.0
+    return x.get("broad", 0)
+
+
 def strongest(doc: dict, n: int) -> list:
-    """The `n` strongest leads, each "key  cls  changes  row (steps)": SPECIFIC by changes, then SEVERAL."""
-    leads = [(p, x) for p, part in enumerate(("live", "sets")) for x in doc[part] if x["cls"] in ("SPECIFIC", "SEVERAL")]
-    leads.sort(key=lambda px: (px[1]["cls"] != "SPECIFIC", -px[1]["changes"], px[0], key_number(px[1]["key"])))
+    """The `n` strongest leads, each "key  cls  changes  row (steps); row (steps)  [broad N]": SPECIFIC, then SEVERAL,
+    then BROAD, each by its strength."""
+    leads = [(p, x) for p, part in enumerate(("live", "sets")) for x in doc[part] if x["cls"] in TOP]
+    leads.sort(key=lambda px: (TOP.index(px[1]["cls"]), -strength(px[1]), px[0], key_number(px[1]["key"])))
     out = []
     for _, x in leads[:max(n, 0)]:
         rows = list(x.get("rows", {}).items())
         more = len(rows) - 3 + x.get("other_rows", 0)
-        said = "; ".join(f"{r} ({c})" for r, c in rows[:3]) + (f"; {more} more rows" if more > 0 else "")
-        out.append(f"{x['key']}  {x['cls']}  {x['changes']}  {said}")
+        parts = [x["key"], x["cls"], str(x["changes"])]
+        if rows:
+            parts.append("; ".join(f"{r} ({c})" for r, c in rows[:3]) + (f"; {more} more rows" if more > 0 else ""))
+        if x.get("broad"):
+            parts.append(f"[broad {x['broad']}]")
+        out.append("  ".join(parts))
     return out
 
 
@@ -289,7 +328,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  epilog="The camera: --camera <model>_fw<fw>, CAMSET_CAMERA or private/config.json.")
     ap.add_argument("--write", action="store_true", help="write the private leads file the coverage ledger reads")
-    ap.add_argument("--top", type=int, metavar="N", help="list the N strongest leads (SPECIFIC, then SEVERAL)")
+    ap.add_argument("--top", type=int, metavar="N", help="list the N strongest leads (SPECIFIC, then SEVERAL, then "
+                                                         "BROAD)")
     a = ap.parse_args()
     got = paths.camera()
     if not got:

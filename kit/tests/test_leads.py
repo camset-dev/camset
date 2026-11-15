@@ -37,8 +37,14 @@ def setting(rid, name, row, **kw):
             "count": 1, "modes": "", **kw}
 
 
+# six more mapped rows, for the broad steps (run3), and the records no setting covers that run3 moves
+G_MORE = dict(zip(("Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India"), (0x0076, 0x0078, 0x00de, 0x00e1, 0x00e6,
+                                                                          0x00e8), strict=True))
+V_ONE, V_SEV, V_SPEC_BROAD, V_BROAD, V_P6, V_N3, V_B4 = 0x00ec, 0x00ef, 0x00f2, 0x00f4, 0x00f6, 0x00f7, 0x00f9
+
 SETTINGS = [setting(G_ALPHA, "Alpha", ["Alpha"]), setting(G_BRAVO, "Bravo", ["Bravo"]),
-            setting(G_CHARLIE, "Charlie", ["Charlie"], in_sets=True)]
+            setting(G_CHARLIE, "Charlie", ["Charlie"], in_sets=True)] + \
+    [setting(rid, name, [name]) for name, rid in G_MORE.items()]
 
 
 def one_byte(v: int) -> bytes:
@@ -192,7 +198,7 @@ def test_mapped_records_are_never_listed_and_a_set_record_lands_in_sets(cam):
 
 
 def test_the_shared_rule_is_the_ledgers():
-    on = coverage.records_covered(SETTINGS + [{"key": "set3:0x0200"}, {"key": "global:0x0300@4"}])
+    on = coverage.records_covered(SETTINGS[:3] + [{"key": "set3:0x0200"}, {"key": "global:0x0300@4"}])
     assert set(on) == {key(G_ALPHA), key(G_BRAVO), key(G_CHARLIE), key(G_CHARLIE, "set"), "set:0x0200",
                        "global:0x0300"}
 
@@ -204,10 +210,89 @@ def test_at_most_eight_rows_the_rest_counted():
     assert list(lead["rows"]) == [f"Row {i:02d}" for i in range(8)]
 
 
+# ---------------------------------------------------------------- broad steps: a restore, a reset, a mode switch
+
+W_BROAD = 0x010f                    # 4 bytes: holds the planted value, moved only in a broad step
+
+
+def broad_run(cam):
+    """run3, after the fixture's two:
+
+        00001  the sample
+        00002  Delta..Hotel (5 rows), V_SPEC_BROAD, V_BROAD, W_BROAD (PLANTED)   broad
+        00003  Delta..India (6 rows), V_SPEC_BROAD, V_P6                        a proof names it: "Setup > Proof Row"
+        00004  Delta, Echo, Foxtrot (3 rows), V_N3                              narrow
+        00005  Delta..Golf (4 rows), V_B4                                       broad
+        00006  Alpha, V_SEV, V_ONE
+        00007  Bravo, V_SEV
+        00008  Alpha, V_ONE
+    """
+    rows = [G_MORE[n] for n in ("Delta", "Echo", "Foxtrot", "Golf", "Hotel", "India")]
+    steps = [rows[:5] + [V_SPEC_BROAD, V_BROAD], rows + [V_SPEC_BROAD, V_P6], rows[:3] + [V_N3], rows[:4] + [V_B4],
+             [G_ALPHA, V_SEV, V_ONE], [G_BRAVO, V_SEV], [G_ALPHA, V_ONE]]
+    d = cam / "run3" / "dat"
+    data = write(d / "00001_s.DAT", SAMPLE.read_bytes(), {})
+    for i, rids in enumerate(steps):
+        changes = {(0, rid): one_byte(60 + i) for rid in rids}
+        if i == 0:
+            changes[(0, W_BROAD)] = PLANTED.to_bytes(4, "little", signed=True)
+        data = write(d / f"{i + 2:05d}_s.DAT", data, changes)
+    (d.parent / "proofs.jsonl").write_text(json.dumps({"path": ["Setup", "Proof Row"], "dat": "00003_s.DAT",
+                                                       "base": "00001_s.DAT"}) + "\n", encoding="utf-8")
+
+
+def test_a_broad_step_gives_no_rows(cam):
+    broad_run(cam)
+    got = entries(mined())
+    # one proof-named step and one 5-row step: SPECIFIC on the proof's row, the broad step counted apart
+    assert got[key(V_SPEC_BROAD)] == {"key": key(V_SPEC_BROAD), "cls": "SPECIFIC", "changes": 2, "broad": 1,
+                                      "values": 3, "rows": {"Setup > Proof Row": 1}, "runs": 1}
+    # moved only in broad steps (5 rows, 4 rows): BROAD, no rows
+    assert got[key(V_BROAD)] == {"key": key(V_BROAD), "cls": "BROAD", "changes": 1, "broad": 1, "values": 2,
+                                 "runs": 1}
+    assert got[key(V_B4)]["cls"] == "BROAD" and "rows" not in got[key(V_B4)] and got[key(W_BROAD)]["cls"] == "BROAD"
+
+
+def test_three_rows_are_narrow_four_are_broad_and_a_proof_is_never_broad(cam):
+    broad_run(cam)
+    got = entries(mined())
+    assert got[key(V_N3)]["cls"] == "SEVERAL" and "broad" not in got[key(V_N3)]           # 3 rows: narrow
+    assert got[key(V_N3)]["rows"] == {"Delta": 1, "Echo": 1, "Foxtrot": 1}
+    assert got[key(V_B4)]["broad"] == 1 and got[key(V_B4)]["changes"] == 1                # 4 rows: broad
+    assert got[key(V_P6)]["cls"] == "SPECIFIC" and "broad" not in got[key(V_P6)]          # 6 rows, a proof names it
+    assert got[key(V_P6)]["rows"] == {"Setup > Proof Row": 1}
+    assert tool().BROAD_ROWS == 3
+
+
+def test_several_needs_two_rows_across_narrow_steps(cam):
+    broad_run(cam)
+    got = entries(mined())
+    assert got[key(V_SEV)]["cls"] == "SEVERAL" and got[key(V_SEV)]["rows"] == {"Alpha": 1, "Bravo": 1}
+    assert got[key(V_ONE)]["cls"] == "SPECIFIC" and got[key(V_ONE)]["rows"] == {"Alpha": 2}   # one row, twice
+    # a record that only ever moved in steps with no row and no breadth stays ALONE
+    assert tool().entry("global:0x0001", 2, {"changes": 3, "broad": 0, "rows": {}, "runs": {"r"}})["cls"] == "ALONE"
+
+
+def test_the_top_leads_go_specific_several_broad(cam, monkeypatch, capsys):
+    broad_run(cam)
+    run_main(monkeypatch, "--top", "40")
+    out = capsys.readouterr().out
+    assert "BETWEEN 1, SPECIFIC 5, SEVERAL 3, BROAD 3, ALONE 1" in out
+    lines = leads_in(out)
+    classes = [ln.split()[1] for ln in lines]
+    assert classes == ["SPECIFIC"] * 6 + ["SEVERAL"] * 3 + ["BROAD"] * 3
+    assert lines[0].split()[0] == key(V_ONE)                     # SPECIFIC by narrow steps: two
+    assert lines[6].split()[0] == key(V_N3)                      # SEVERAL by its top row's share: 1 of 1
+    spec_broad = next(ln for ln in lines if ln.startswith(key(V_SPEC_BROAD)))
+    assert spec_broad == f"{key(V_SPEC_BROAD)}  SPECIFIC  2  Setup > Proof Row (1)  [broad 1]"
+    assert f"{key(V_BROAD)}  BROAD  1  [broad 1]" in lines
+
+
 # ---------------------------------------------------------------- never a value; written only with --write
 
 def test_no_value_is_written_or_printed(cam, monkeypatch, capsys):
-    run_main(monkeypatch, "--write", "--top", "20")
+    broad_run(cam)                                               # the planted value moves in a broad step too
+    run_main(monkeypatch, "--write", "--top", "40")
     out = capsys.readouterr().out
     text = coverage.leads_file(CAM).read_text(encoding="utf-8")
     for said in (text, out):
@@ -216,8 +301,8 @@ def test_no_value_is_written_or_printed(cam, monkeypatch, capsys):
     doc = json.loads(text)
     assert set(doc) == {"about", "camera", "files", "steps", "not_read", "live", "sets"}
     for x in doc["live"] + doc["sets"]:
-        assert set(x) <= {"key", "cls", "changes", "values", "rows", "other_rows", "runs"}
-        assert all(isinstance(x[f], int) for f in ("changes", "values", "other_rows", "runs") if f in x)
+        assert set(x) <= {"key", "cls", "changes", "broad", "values", "rows", "other_rows", "runs"}
+        assert all(isinstance(x[f], int) for f in ("changes", "broad", "values", "other_rows", "runs") if f in x)
         assert all(isinstance(n, int) for n in (x.get("rows") or {}).values())
         if x["cls"] == "NEVER":
             assert set(x) == {"key", "cls", "values"}
@@ -229,7 +314,8 @@ def test_the_summary_and_the_top_leads(cam, monkeypatch, capsys):
     assert "7 files read, 5 steps, 1 not read" in out
     live = next(ln for ln in out.splitlines() if ln.startswith("live records"))
     sets = next(ln for ln in out.splitlines() if ln.startswith("memory sets"))
-    assert "BETWEEN 1, SPECIFIC 2, SEVERAL 1, ALONE 1" in live and "BETWEEN 0, SPECIFIC 1, SEVERAL 0, ALONE 0" in sets
+    assert "BETWEEN 1, SPECIFIC 2, SEVERAL 1, BROAD 0, ALONE 1" in live
+    assert "BETWEEN 0, SPECIFIC 1, SEVERAL 0, BROAD 0, ALONE 0" in sets
     assert not leads_in(out)                                     # no keys without --top
     run_main(monkeypatch, "--top", "3")
     lines = leads_in(capsys.readouterr().out)
