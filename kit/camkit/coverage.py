@@ -25,8 +25,8 @@ and, where they are on this computer (the mapper's own, never published):
                             download (the record ids)
     the accepted rulings    private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json ("new" records)
     the leads               private/evidence/<model>_fw<fw>/leads_<model>_fw<fw>.json: which unmapped records ever
-                            changed in the camera's own downloads, and their mapped neighbours (the "who moved it"
-                            mining's leads.json shape)
+                            changed in the camera's own downloads, and the rows of the steps they changed in
+                            (kit/tools/leads.py --write; never a value)
 
 Two forms are written by kit/tools/coverage.py --write. The PUBLIC lean form, data/<model>_fw<fw>/coverage_<model>_
 fw<fw>.json, is built from the public sources ALONE (load_sources(public=True): the definition without its evidence,
@@ -1645,7 +1645,10 @@ def _values_left(led: Ledger) -> None:
             e["values_left"] = first["values_left"]
 
 
-def _record_statuses(led: Ledger, settings: list, src: Sources, facts: Facts) -> None:
+def records_covered(settings: list) -> dict:
+    """{record key: [the settings on it]}: a setting covers its own record (record_base of its key), and a live one the
+    memory sets copy (in_sets) the sets' record of the same id too. A record it does not name is one no setting covers
+    (unmapped): the records' statuses and kit/tools/leads.py judge it by this one rule."""
     on = {}
     for s in settings:
         base = record_base(s["key"])
@@ -1654,6 +1657,11 @@ def _record_statuses(led: Ledger, settings: list, src: Sources, facts: Facts) ->
         on.setdefault(base, []).append(s)
         if s.get("in_sets") and base.startswith("global:"):
             on.setdefault("set:" + base.split(":", 1)[1], []).append(s)
+    return on
+
+
+def _record_statuses(led: Ledger, settings: list, src: Sources, facts: Facts) -> None:
+    on = records_covered(settings)
     leads = {}
     for part in ("live", "sets"):
         for x in (src.leads or {}).get(part) or []:

@@ -104,6 +104,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   or `check_public.py` refuses the form. `drive.py`, `crawl_run.py` and `prove_run.py` print what it says of a row
   before pressing on it, and `crawl_run.py` or `prove_run.py` given `--skip-settled` leave settled rows out (never on
   the crawl that builds pass 1's map).
+- `kit/tools/leads.py` reads your camera's own downloads and says which records no setting covers ever changed, and
+  with which rows; `--write` gives the coverage ledger its private leads file (counts only, never a value).
 - The writer reads every camera's own hand tables file (`data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json`), where
   it read only the a1 II's (now a data file, the pattern), and stops in plain words on a table it does not read yet or
   a file that breaks its schema. While your tables hold `FRAME_PROOFS`, `UNPROVED`, `NOT_OFFERED`, `PICKER_LISTS` or

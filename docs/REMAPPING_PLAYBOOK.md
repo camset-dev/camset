@@ -218,9 +218,10 @@ Every kit command here runs with the venv's Python, as `.venv/bin/python -u kit/
 [DATA_CONTRACTS](DATA_CONTRACTS.md#the-coverage-ledger-what-is-settled-and-what-a-proof-needs)), never from memory or
 the log: `kit/tools/coverage.py` (the counts per tab and status), `kit/tools/coverage.py --todo` (what is left, by
 expected yield, with what each next step needs) and `kit/tools/coverage.py --row "<label>"` (one row and what it rests
-on). Plan the session from `--todo`: remote work first, then one message to the owner per physical action (section 9).
-`--skip-settled` leaves settled rows out of a crawl or a prove run, but **a crawl meant to build pass 1's map must not
-skip.**
+on). Run `kit/tools/leads.py --write` before `--todo`, so the ledger knows which records no setting covers ever changed
+in the camera's downloads. Plan the session from `--todo`: remote work first, then one message to the owner per
+physical action (section 9). `--skip-settled` leaves settled rows out of a crawl or a prove run, but **a crawl meant to
+build pass 1's map must not skip.**
 
 ### Phase 1: map the menu
 
