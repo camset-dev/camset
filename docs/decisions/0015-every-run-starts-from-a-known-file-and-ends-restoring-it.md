@@ -7,11 +7,14 @@
 
 ## Context
 
-A run that crashes before its restore leaves the next run starting from its leftovers, and some state lives outside the file (the focus point, the zone's place).
+A run that crashes before its restore leaves the next run starting from its leftovers; some state lives outside the
+file (the focus point, the zone's place); and a session dropped with a dialog open applies what the open dialog
+shows.
 
 ## Decision
 
-A run downloads a start file first and, at its end, uploads it and checks that 0 records differ; live state the file does not hold is put back by hand and checked. A run is never killed with a dialog open: it is stopped with a STOP file.
+A run downloads a start file first and, at its end, uploads it and checks that 0 records differ; live state the file
+does not hold is put back by hand and checked.
 
 ## Consequences
 

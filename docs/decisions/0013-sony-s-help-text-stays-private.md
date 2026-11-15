@@ -7,20 +7,16 @@
 
 ## Context
 
-The kit reads the camera's In-Camera Guide text per item and option off the camera, for private use; it is Sony's.
+The kit reads the camera's In-Camera Guide text off the camera, for private use; it is Sony's.
 
 ## Decision
 
-It is kept in one's own `private/help/`, never in a definition, a data file or the docs. A definition's help fields
-hold the project's own words (`data/<model>_fw<fw>/help_<model>_fw<fw>.json`), and the editor and the proof viewer show
-the private text in their place where they find it. The proof viewer, which shows it, stays local.
+It stays in one's own `private/help/`, never in a definition, a data file or the docs. A definition's help fields hold
+the project's own words, which the editor and the proof viewer replace with the private text where they find it.
 
-Before 2026-11-03 the schema carried that text itself, stripped before anything was published.
+Before 2026-11-03 the schema carried that text, stripped before anything was published.
 
 ## Consequences
 
-The published definitions and the .ksy carry no help text of Sony's, and `kit/tools/check_public.py` refuses a commit
-whose help text stays too close to the camera's own, as far as the clone's `private/help/` lets it compare.
-
-See also: [decision 18](0018-one-public-codebase-with-a-private-overlay.md) (the private overlay) and
-[RELEASING](../RELEASING.md) (what the project publishes under the SDK's terms).
+`kit/tools/check_public.py` refuses a commit whose help text stays too close to the camera's own, as far as the clone's
+`private/help/` lets it compare.

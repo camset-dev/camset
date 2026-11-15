@@ -1255,11 +1255,10 @@ def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple
 def answers_folder(given, places: list) -> Path:
     """The folder the readers' answers go to: given (--cache), else one in the system's temporary folder. Refused (a
     SystemExit) when it lies inside the runs folder (camkit.paths.runs_top, the clone's runs/) or inside a camera's run
-    root the tool reads: the runs are evidence, only read (docs/decisions/0015)."""
+    root the tool reads: the runs are evidence, only read."""
     folder = Path(given).expanduser() if given else Path(tempfile.gettempdir()) / "camset_reader_census" / "answers"
     if in_runs(folder, places):
-        sys.exit("--cache: the folder given is inside the runs, which this tool only reads (docs/decisions/0015); "
-                 "give a folder outside them")
+        sys.exit("--cache: the folder given is inside the runs, which this tool only reads; give a folder outside them")
     return folder
 
 
@@ -1526,8 +1525,8 @@ def read_truth(path, places: list = ()) -> dict:
     from camkit import ROOT
     target = Path(path).expanduser().resolve()
     if in_runs(target, list(places)):
-        sys.exit("--truth: the file given is inside the runs, which this tool only reads (docs/decisions/0015); keep "
-                 "it outside the repository or in private/")
+        sys.exit("--truth: the file given is inside the runs, which this tool only reads; keep it outside the repository "
+                 "or in private/")
     root = Path(ROOT).resolve()
     if target.is_relative_to(root) and not target.is_relative_to((root / "private").resolve()):
         sys.exit("--truth: the file given is inside the repository, where it could be committed (the owner's labels: "

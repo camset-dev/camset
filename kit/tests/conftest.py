@@ -1,6 +1,6 @@
 """Every test has a runs/ folder of its own (CAMSET_RUNS) and a made-up camera (CAMSET_CAMERA), so no test, nor a kit
-command a test starts, reads or writes the runs of the clone it runs in (docs/decisions/0015: the owner's runs are
-evidence). The a1 II's frames some tests read are found by their own path (camkit.paths.a1ii_root()), and those
+command a test starts, reads or writes the runs of the clone it runs in (the owner's runs are evidence). The a1 II's
+frames some tests read are found by their own path (camkit.paths.a1ii_root()), and those
 tests skip without them. Nor does any test change a file of the clone's own data/ or private/evidence/ (the
 mapper's evidence: guard_the_clones_files), whatever folder it points the kit at. A test that reads the screen through
 camkit.reading fakes both its eyes, OCR and the reader, in one place: the eyes fixture (Eyes)."""
