@@ -20,8 +20,9 @@ screen, and a fresh download must say the same again. Nothing deletes the pictur
 camera did not answer cleanly may have left the shutter held: nothing more is sent, RESTORE_BY_HAND is written, the
 owner is told to switch the camera off, and the run exits EXIT_RESTORE_BY_HAND (5). Otherwise the run ends as every run
 does, its start file put back where a record differs and checked (docs/decisions/0015); a refusal once connected exits
-EXIT_REFUSED (7), a restore that does not check out EXIT_UNRESTORED (4). Another camera than the one the kit works on
-stops it before anything is pressed.
+EXIT_REFUSED (7), a restore that does not check out EXIT_UNRESTORED (4), as does a link that never opened (a camlink
+older than the kit, say), which says so and that nothing was sent. Another camera than the one the kit works on stops
+it before anything is pressed.
 """
 import argparse
 import sys
@@ -198,9 +199,12 @@ def main(argv=None) -> None:
             ending = session.finish(link, before)
         restored = restore_checked(run, ending, before)
     except Exception as e:
-        print(f"take_picture.py: {type(e).__name__}: {e}; the start file is not known to be back"
-              + (f": put it back with kit/tools/upload_check.py {run.dir.name}/dat/{before.name}" if before else ""),
-              flush=True)
+        if isinstance(e, LinkError) and not e.opened:       # before the link's ready line: nothing was sent
+            print(f"take_picture.py: {e}\nthe link never opened: nothing was sent to the camera", flush=True)
+        else:
+            print(f"take_picture.py: {type(e).__name__}: {e}; the start file is not known to be back"
+                  + (f": put it back with kit/tools/upload_check.py {run.dir.name}/dat/{before.name}" if before else ""),
+                  flush=True)
         restored = False
     finally:
         eyes.close()

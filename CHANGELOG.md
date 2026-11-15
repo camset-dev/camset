@@ -168,6 +168,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - `kit/provers/mode_switch.py` now takes the table the a1 II's Mode Dial Control Set opens, where it stopped before,
   and puts the Shooting Mode Dial's cell alone on Set with Menu once it has checked that the lit item is that cell.
   Anything it cannot check stops the switch with MENU alone, and the Set All buttons are never pressed.
+- A camera helper (`kit/link/build/camlink`) built before an option a tool needs now says so, and that
+  `python3 kit/setup.py` rebuilds it, instead of "camera link exited". `kit/tools/take_picture.py` then says the link
+  never opened and nothing was sent, not that the start file is not known to be back.
 
 ### The docs
 

@@ -1135,3 +1135,52 @@ def test_a_release_not_answered_cleanly_sends_nothing_more_and_asks_for_the_came
         tp.main([])
     assert e.value.code == EXIT_RESTORE_BY_HAND and restore_pending(tmp_path) and after == ["wait"]
     assert "Switch the camera off now" in out.getvalue() and "no picture" not in out.getvalue()
+
+
+def picture_main(tp, monkeypatch, tmp_path, link=None) -> tuple:
+    """take_picture's main on `link` (a context), or else on the stand-in camlink: (exit status, what it printed)."""
+    run = Run("kit2_picture", root=tmp_path)
+    opened = (lambda r, **k: contextlib.nullcontext(link)) if link is not None else \
+        (lambda r, **k: Link(r, ip="192.0.2.10", binary=fake_camlink.COMMAND, catch_signals=False, **k))
+    monkeypatch.delenv("CAMSET_USB", raising=False)
+    for name, value in (("Run", lambda name: run), ("Link", opened),
+                        ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda l: None, close=lambda: None,
+                                                                       grab=lambda save=False: None)),
+                        ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
+                        ("session", SimpleNamespace(wait_for=lambda *a, **k: None))):
+        monkeypatch.setattr(tp, name, value)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), pytest.raises(SystemExit) as e:
+        tp.main([])
+    return e.value.code, out.getvalue()
+
+
+def test_take_picture_says_an_older_camlink_never_opened_the_link(picture_seams, scope, monkeypatch, tmp_path):
+    """camlink built before --picture prints its usage line and exits: take_picture says the helper is older than the
+    kit, how to rebuild it, and that the link never opened, never that the start file is not known to be back; the
+    exit status stays EXIT_UNRESTORED."""
+    from exit_status import EXIT_UNRESTORED
+    tp = picture_seams
+    scope(BLANK)
+    monkeypatch.setenv("FAKE_CAMLINK_STDERR", json.dumps(["usage: camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2]"]))
+    monkeypatch.setenv("FAKE_CAMLINK_NO_READY", "2")
+    code, said = picture_main(tp, monkeypatch, tmp_path)
+    assert code == EXIT_UNRESTORED
+    assert ("the camera helper (kit/tests/fake_camlink.py) is older than the kit and does not know an option this tool "
+            "needs: rebuild it with  python3 kit/setup.py  and run this again. Nothing was sent to the camera.") in said
+    assert "the link never opened: nothing was sent to the camera" in said
+    assert "the start file is not known to be back" not in said
+
+
+def test_take_picture_keeps_its_words_for_a_link_error_once_the_link_opened(picture_seams, scope, monkeypatch,
+                                                                           tmp_path):
+    from exit_status import EXIT_UNRESTORED
+    tp = picture_seams
+    scope(BLANK)
+
+    def gone(tag):
+        raise LinkError("camera link exited")
+    code, said = picture_main(tp, monkeypatch, tmp_path, SimpleNamespace(model=None, download=gone))
+    assert code == EXIT_UNRESTORED
+    assert "take_picture.py: LinkError: camera link exited; the start file is not known to be back" in said
+    assert "never opened" not in said

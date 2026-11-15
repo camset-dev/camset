@@ -16,6 +16,8 @@ stray lines, as an SDK or a library may print them: a line of text and a reply w
 received, as raw bytes, goes to the file $FAKE_CAMLINK_LOG (one repr per line). $FAKE_CAMLINK_STDERR (a JSON list of
 lines; $FAKE_CAMLINK_STDERR_FILE names a file holding that list instead, for more than Windows lets one environment
 variable carry, 32767 characters) is written to stderr before the ready line, as camlink's events and a library's prints would be; with
+$FAKE_CAMLINK_NO_READY set to a status, the stand-in exits with it after those lines, no ready line written, as a
+camlink that could not start (one given an option it does not know prints its usage line and exits 2); with
 $FAKE_CAMLINK_EXIT naming a command, the stand-in exits on it without a reply, as a camlink that crashed. A request
 id is read as camlink reads it: "@007" echoes 7, and an id with no command gets an error reply. upload PATH [SHA256]
 reads the file once, as camlink does, and answers with its "sha256"; one whose bytes do not have the SHA256 given
@@ -57,6 +59,8 @@ def main():
     for line in json.loads(lines or "[]"):
         sys.stderr.write(line + "\n")
     sys.stderr.flush()
+    if os.environ.get("FAKE_CAMLINK_NO_READY"):
+        sys.exit(int(os.environ["FAKE_CAMLINK_NO_READY"]))
     ready = {"ok": True, "ready": "ILCE-1M2", "connection": "lan 192.0.2.10", "login": "none", "upload_sha256": True}
     omit = {k.strip() for k in os.environ.get("FAKE_CAMLINK_READY_OMIT", "").split(",")}
     out.write(json.dumps({k: v for k, v in ready.items() if k not in omit}) + "\n")

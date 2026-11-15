@@ -50,12 +50,18 @@ import threading
 import time
 from pathlib import Path
 
-from . import LINK_BIN, ConfigMissing, config, provenance, safety
+from . import LINK_BIN, ConfigMissing, config, paths, provenance, safety
 from .runs import RESTORE_BY_HAND, Run, restore_pending_any
 
 
 class LinkError(Exception):
-    pass
+    """opened: False for one Link.open raised before the link opened (camlink not started, no ready line, or one the
+    kit refuses), when nothing was sent to the camera; True for every other."""
+    opened = True
+
+    def __init__(self, *args, opened: bool = True):
+        super().__init__(*args)
+        self.opened = opened
 
 
 class CameraRefused(LinkError):
@@ -177,6 +183,11 @@ MOVES = frozenset({"press", "dial", "download", "upload", "release"})
 OLD_CAMLINK = ("camlink is older than the kit: it does not take the SHA-256 the kit now sends with every upload, so a "
                "run could not put the camera back. Nothing was sent to the camera. Rebuild it with python3 kit/setup.py, "
                "then start again.")
+# Link.open's words when camlink printed its usage line and exited before its ready line: it was started with an option
+# it does not know (--picture, before 2026-11-15), so it was built before the kit asked for it
+OLD_HELPER = ("the camera helper ({helper}) is older than the kit and does not know an option this tool needs: rebuild it "
+              "with  python3 kit/setup.py  and run this again. Nothing was sent to the camera.")
+USAGE = "usage: camlink"            # how camlink's usage line starts (kit/link/camlink.cpp main, on stderr)
 
 
 def lists_mode(reply: dict) -> bool | None:
@@ -246,6 +257,7 @@ class Link:
         # network setup, 2026-10-30); every script then connects over USB unchanged
         usb = usb or os.environ.get("CAMSET_USB") == "1"
         cmd = [str(x) for x in binary] if isinstance(binary, (list, tuple)) else [str(binary)]
+        self.helper = Path(cmd[-1])         # camlink, or the script a command line starts (OLD_HELPER names it)
         # the camera's address is your config's (private/config.json; refused without one), unless given
         if not usb and not ip:
             ip = config().get("camera_ip")
@@ -295,7 +307,7 @@ class Link:
                    f"with kit/tools/upload_check.py {pending.get('start')} (docs/decisions/0015); no link opens until "
                    "then")
             self.run.log("link_refused", why=why)
-            raise LinkError(why)
+            raise LinkError(why, opened=False)
         # a process group of its own: a terminal's Ctrl-C reaches this process only, which stops the run cleanly
         own_group = ({"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP} if os.name == "nt"
                      else {"start_new_session": True})
@@ -307,21 +319,37 @@ class Link:
         self.output_ended = False
         self.disconnected, self._dropped_after = "", -1      # a new session: nothing of the last one's drop
         threading.Thread(target=self._pump, args=(self.proc.stdout, self._stdout_line), daemon=True).start()
-        threading.Thread(target=self._pump, args=(self.proc.stderr, self._event), daemon=True).start()
-        first = self._reply(timeout)
+        self._stderr_pump = threading.Thread(target=self._pump, args=(self.proc.stderr, self._event), daemon=True)
+        self._stderr_pump.start()
+        try:
+            first = self._reply(timeout)
+        except LinkError as e:
+            raise LinkError(self._not_ready(str(e)), opened=False) from None
         self.run.log("link_open", args=self.args[1:], reply=first)
         if not first.get("ok"):
             self.proc.wait(5)
-            raise LinkError(f"camera link did not connect: {first.get('error')}")
+            raise LinkError(f"camera link did not connect: {first.get('error')}", opened=False)
         if first.get("upload_sha256") is not True:
             # an older camlink refuses every upload line the kit now sends, so a run would change the camera and fail
             # at its put-back: it is refused here, before anything is sent
             self.run.log("link_refused", why=OLD_CAMLINK)
             self.close()
-            raise LinkError(OLD_CAMLINK)
+            raise LinkError(OLD_CAMLINK, opened=False)
         self.model = first.get("ready")
         self._mode_listed = None                # learnt afresh for every link opened
         return self
+
+    def _not_ready(self, why: str) -> str:
+        """Why no ready line came: OLD_HELPER when camlink exited after printing its usage line (an option it does not
+        know), naming the helper started (inside the repository, from its root); else `why` as it was."""
+        if not self.output_ended:
+            return why                  # no reply in time: camlink runs on
+        with contextlib.suppress(subprocess.TimeoutExpired):
+            self.proc.wait(5)
+        self._stderr_pump.join(5)       # its stderr read to the end, the usage line among the events
+        if any(ev.get("event") == "text" and str(ev.get("text") or "").startswith(USAGE) for ev in list(self.events)):
+            return OLD_HELPER.format(helper=paths.shown(self.helper))
+        return why
 
     def use_run(self, run: Run):
         """Go on in another run folder: kit/tools/identify.py opens the link before the camera has said which it is,

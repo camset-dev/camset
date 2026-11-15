@@ -105,6 +105,50 @@ def test_a_camlink_that_does_not_take_the_hash_is_refused_when_the_link_opens(sp
         assert again.call("ping")["ok"]
 
 
+USAGE = "usage: camlink [--usb] [--ip A.B.C.D] [--model ILCE-1M2]"         # a camlink built before --picture
+
+
+def test_a_camlink_that_prints_its_usage_and_exits_says_it_is_older_than_the_kit(spaced, monkeypatch):
+    """A camlink started with an option it does not know prints its usage line and exits before the ready line: the
+    link says the helper is older than the kit and how to rebuild it, names the path it started, and that nothing was
+    sent; the error says the link never opened (opened False)."""
+    from camkit.link import LinkError
+    run, log = spaced
+    monkeypatch.setenv("FAKE_CAMLINK_STDERR", json.dumps([USAGE]))
+    monkeypatch.setenv("FAKE_CAMLINK_NO_READY", "2")
+    link = Link(run, ip="192.0.2.10", binary=CAMLINK, catch_signals=False, picture=True)
+    with pytest.raises(LinkError) as e:
+        link.open()
+    assert str(e.value) == ("the camera helper (kit/tests/fake_camlink.py) is older than the kit and does not know an "
+                            "option this tool needs: rebuild it with  python3 kit/setup.py  and run this again. Nothing "
+                            "was sent to the camera.")
+    assert e.value.opened is False
+    assert link._seq == 0 and not log.exists()                          # no command went out, none was received
+    events = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert "cmd" not in [ev["kind"] for ev in events]
+
+
+def test_a_camlink_that_exits_early_with_other_words_keeps_todays_message(spaced, monkeypatch):
+    from camkit.link import LinkError
+    run, log = spaced
+    monkeypatch.setenv("FAKE_CAMLINK_STDERR", json.dumps(["dyld: Library not loaded: libCr_Core.dylib"]))
+    monkeypatch.setenv("FAKE_CAMLINK_NO_READY", "1")
+    link = Link(run, ip="192.0.2.10", binary=CAMLINK, catch_signals=False)
+    with pytest.raises(LinkError) as e:
+        link.open()
+    assert str(e.value) == "camera link exited" and e.value.opened is False and not log.exists()
+
+
+def test_a_link_error_after_the_ready_line_is_one_of_an_open_link(spaced, monkeypatch):
+    from camkit.link import CameraRefused, LinkError
+    run, _ = spaced
+    assert LinkError("x").opened is True and CameraRefused("x").opened is True      # every other raise, as before
+    monkeypatch.setenv("FAKE_CAMLINK_EXIT", "ping")
+    with Link(run, ip="192.0.2.10", binary=CAMLINK, catch_signals=False) as link, pytest.raises(LinkError) as e:
+        link.call("ping")
+    assert str(e.value) == "camera link exited" and e.value.opened is True
+
+
 @pytest.mark.parametrize("said", ["none", "0" * 64])          # "none": the reply carries no "sha256"
 def test_an_upload_answered_without_the_checked_hash_is_not_taken_as_done(spaced, monkeypatch, said):
     """camlink's reply names the SHA-256 of the bytes it sent. A reply with none, or with another, means they were not
