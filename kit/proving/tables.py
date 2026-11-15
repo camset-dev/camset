@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 
 from camkit import camset, match, ocr, safety, screen
+from camkit.live import leave_notice, lit_text
 from camkit.vlm import PROMPTS
 from runner import read_json, changes_of, write_json
 
@@ -17,7 +18,7 @@ from .base import RUN_ROOT, Failed, RestoreAfter
 from .nav import after_download, move_to, to_row
 from .options import function_name, option_index, same_functions
 from .putback import put_back_leftovers, say_put_back
-from .screens import (BAR_X, _matches, ask_second, bar_text, first_time_notice, info_notice_ok, option_key, place,
+from .screens import (BAR_X, _matches, ask_second, bar_text, info_notice_ok, notice_before, option_key, place,
                       refuse_or_fail, same_place, vlm_option)
 
 # Picker functions that open a setup screen of their own when chosen (a Recall Custom hold's registration, which
@@ -468,8 +469,16 @@ def prove_table_row(cam, link, run, job, base_path: Path, out, top=None) -> Path
             to_row(cam, path, top, row_place)
             if not same_place(place(cam), row_place):
                 raise Failed(f"{name}: back at the row, the page or cursor row is not the one proved before")
+        lit = lit_text(cam.frame.image, cam.frame.path)     # the lit bar before Right: --info-ok's judgement reads it
         cam.press("right")
-        if cam.read().kind != where and not (first_time_notice(cam) and cam.read().kind == where):
+        if cam.read().kind != where:
+            # a first-time screen before the row's own (Custom Key/Dial Set.'s "Don't show this again." / OK), or the
+            # notice --info-ok names for the row: passed as pass_note passes it; one not passed fails the cell, the
+            # message giving the --info-ok that would name it
+            got = notice_before(cam, " > ".join(path), lit)
+            if got is not None and "refused" in got:
+                raise Failed(f"{name}: Right opened a notice before the {where}, not passed: {got['refused']}")
+        if cam.read().kind != where:
             if order is None:
                 refuse_or_fail(cam, name, f"not a {where}")
             raise Failed(f"{name}: Right opened {cam.read().kind}, not the {where}")
@@ -540,14 +549,19 @@ def prove_table_row(cam, link, run, job, base_path: Path, out, top=None) -> Path
         info = None
         if cam.read().kind == "notice":
             # an information notice after OK (2026-10-29: after a My Dial choice, a note that a custom key brings
-            # that dial set up) takes its own OK; anything that reads like a confirmation fails the cell
+            # that dial set up), left as a notice the kit does not answer is left (leave_notice: MENU, which closes it
+            # and the menu with it; its OK only where the camera refuses MENU and OK is its only button, 2026-11-14);
+            # anything that reads like a confirmation fails the cell
             text_n = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
             if not text_n or safety.confirmation(text_n) or not re.search(r"can be|will be|is set|recalled", text_n, re.I):
                 raise Failed(f"{name}: after the table's OK a notice came up ({cam.frame.path.name}): {text_n[:80]!r}")
             info = {"text": text_n, "frame": cam.frame.path.name}
-            print(f"   information after OK: {text_n[:70]!r}", flush=True)
-            cam.press("enter")
-        if not same_place(place(cam), row_place):
+            info["left_by"] = leave_notice(cam)
+            print(f"   information after OK, {'closed with MENU' if info['left_by'] == 'menu' else 'taken with its OK'}: "
+                  f"{text_n[:70]!r}", flush=True)
+            if info["left_by"] == "menu" and cam.read().kind == "shooting":
+                info["menu_closed"] = True      # MENU closed the notice and the menu: the download shows what applied
+        if not same_place(place(cam), row_place) and not (info or {}).get("menu_closed"):
             raise Failed(f"{name}: after the table's OK the screen is {cam.read().kind} ({cam.frame.path.name}), "
                          f"not the row")
         dat = link.download(f"{path[-1]}-{k}")

@@ -227,7 +227,7 @@ class OptionList:
 def screen_text(monkeypatch, tmp_path):
     """OCR reads whatever the fake list draws now; its frame is a file the reader can be handed."""
     def use(cam):
-        cam.frame = SimpleNamespace(path=tmp_path / "01226_enter.png")
+        cam.frame = SimpleNamespace(path=tmp_path / "01226_enter.png", image=None)
         cam.frame.path.write_bytes(b"a frame")
         monkeypatch.setattr(tables.ocr, "read", lambda ps, eng=None: {p: cam.lines() for p in ps})
         monkeypatch.setattr(tables, "vlm_option", lambda cam: "")
@@ -331,7 +331,8 @@ def test_the_proof_records_the_options_the_list_showed(screen_text, monkeypatch)
         monkeypatch.setattr(tables, fn, lambda *a, **k: None)
     monkeypatch.setattr(tables, "place", lambda cam: cam.at)
     monkeypatch.setattr(tables, "same_place", lambda a, b: a == b)
-    monkeypatch.setattr(tables, "first_time_notice", lambda cam: False)
+    monkeypatch.setattr(tables, "notice_before", lambda cam, row, lit: None)    # no first-time screen before it
+    monkeypatch.setattr(tables, "lit_text", lambda image, path: "Image Quality Settings")
     monkeypatch.setattr(tables, "on_cell", lambda cam, job: cam.at == "cell")
     monkeypatch.setattr(tables, "cell_value", lambda cam: cam.options[cam.saved])
     monkeypatch.setattr(tables, "to_ok", lambda cam: setattr(cam, "at", "ok"))

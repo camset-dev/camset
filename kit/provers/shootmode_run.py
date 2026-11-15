@@ -118,7 +118,7 @@ def main():
                 # the start file put back before the link closes, since a dropped session applies the dialog on screen
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
                 looked = e
-                close_for_restore(cam, link)
+                close_for_restore(cam, link, start)
                 ending = end_session(link, hdmi, start, "the restore after a stop", tag="stop")
         if looked is not None:
             restore_checked(run, ending, start)
@@ -173,7 +173,7 @@ def main():
                         # after OK at the latest, before the upload that puts the start file back
                         print(f"stopped: {type(e).__name__}: {e}", flush=True)
                         failed = e
-                        close_for_restore(cam, link)
+                        close_for_restore(cam, link, start)
                         ending = end_session(link, hdmi, start, "the restore after a stop", tag="stop")
                     if failed is None and ch:
                         with restoring("the restore after the proof"):      # refused or unanswered: exit 4

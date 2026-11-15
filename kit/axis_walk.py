@@ -116,7 +116,7 @@ def main():
                             raise RuntimeError(f"MENU did not cancel the {row} carousel ({cam.read().kind})")
             except Exception as e:
                 print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
-                close_for_restore(cam, link)        # cleanup presses; when they fail too, the restore all the same
+                close_for_restore(cam, link, before)        # cleanup presses; when they fail too, the restore all the same
             # a read-only walk; if anything changed, the start goes back
             ending = end_session(link, hdmi, before, "the settings download after the walk")
         restored = restore_checked(run, ending, before)

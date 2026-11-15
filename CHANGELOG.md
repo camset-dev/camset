@@ -86,6 +86,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The kit no longer presses Enter on a screen that asks something, whatever its words or language, unless the run
+  names that screen.** `drive.py --confirm` now takes the screen's text and covers one press, and formatting or
+  deleting a card needs the owner route (`drive.py --owner`).
 - **A coverage ledger** (`kit/tools/coverage.py`, decision 23) says for every menu row, value and record what is
   settled and what is left (`--todo`); `--write` writes a public form and a seen file into the data folder, holding
   nothing of your camera's state, and once they are committed, run it again after each `kit/schema_update.py --write`,

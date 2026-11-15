@@ -48,6 +48,7 @@ from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_arg
                     scan_arg, write_json, write_text)
 
 ROW = "Add Item"
+CONSENT = f"--allow {ROW!r}"        # the run's consent to answer the row's own screens (LiveCamera.answer_once)
 PATH = ["My Menu Setting", "Add Item"]
 PAGES, SLOTS = 6, 7
 EMPTY = 2                       # an empty slot (camera.my_menu.empty)
@@ -258,6 +259,10 @@ def add_one(cam, link, item: dict, page: int, slot: int, prev: Path, records: li
     """Add the lit item to My Menu `page` below its `slot` items, download, and diff with `prev`: the page's record
     must gain the code in slot `slot` and nothing else move."""
     chosen = cam.frame.path.name
+    # each Enter on Add Item's own screens (its picker, the location, the slots) goes by the run's --allow "Add Item",
+    # consent to answer that row's screens, whatever kind they read as (the camera's answer_once, 2026-11-14): the
+    # confirmation words still judge them
+    cam.answer_once = CONSENT
     cam.press("enter")
     st = state(cam)
     if st["kind"] == "items":
@@ -269,10 +274,12 @@ def add_one(cam, link, item: dict, page: int, slot: int, prev: Path, records: li
             cam.press("menu")
         raise Failed(f"Enter on {item['label']!r} opened {st['kind']} ({cam.frame.path.name}): {st['text'][:80]!r}")
     move_pages(cam, page)
+    cam.answer_once = CONSENT
     cam.press("enter")
     st = state(cam)
     if st["kind"] != "slot":
         raise Failed(f"Enter on My Menu{page} left {st['kind']} ({cam.frame.path.name})")
+    cam.answer_once = CONSENT
     cam.press("enter")                   # the slot cursor opens below the page's items: the item is appended
     end = time.monotonic() + 8.0
     while state(cam)["kind"] not in ("added", "items"):
@@ -438,7 +445,7 @@ def main():
                 except Exception as e:              # a Failed choice, a press refused, a STOP: end here, restoring
                     say(f"stopped: {type(e).__name__}: {e}")
                     k = len(items) if items is not None else k   # no second guess at the camera's state
-                close_for_restore(cam, link)        # cleanup presses: they go out after a STOP too
+                close_for_restore(cam, link, start)        # cleanup presses: they go out after a STOP too
                 ending = end_session(link, hdmi, start, "the end of the fill")
             if not restore_checked(run, ending, start):      # says so: THE START FILE DID NOT TAKE
                 unrestored = True

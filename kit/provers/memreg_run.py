@@ -29,12 +29,15 @@ One session, bracketed as every run is (decision 15; runner.prover_session):
      Enter never falls on M1-M4, which register to the card; a lit tab that cannot be measured, after one fresh look,
      fails the registration before Enter (never assumed); then Enter as drive.py's vouched "enter!:Memory" sends
      it (press_decision: the kit's reader cannot size the square, so the lit text is unread; the screen's whole text
-     must name nothing never-open but the row allowed). The camera says "Registered." (00155_enter.png, no
+     must name nothing never-open but the row allowed). The slot screen reads as no known kind, on which no Enter goes
+     by its shape (safety.enter_refused, 2026-11-14): the run's --allow is the consent to answer it (press_decision's
+     consent, the camera's answer_once), the confirmation words still judged. The camera says "Registered." (00155_enter.png, no
      confirmation, a filled slot overwritten at once) and goes back to the menu by itself (00156). MENU out,
      download A: the slot now holds the live values.
   b. Each row set through the menu (kit/provers/mode_switch.py set_row: the row by the scan, Right, Down to the
      option, OK), MENU out between rows. A row the camera refuses ("not available as follows" after OK) has its
-     notice closed with its OK and is kept as refused, its notice's text in spotcheck.json only; a row that fails
+     notice left with MENU, and with its OK where the camera refuses MENU and OK is its only button
+     (camkit.live.leave_notice), and is kept as refused, its notice's text in spotcheck.json only; a row that fails
      (not reached, its option not found) is skipped; three in a row end the changes. Download B.
   c. Register the slot again (as a.), download C.
   d. Judge, per row: the live record changed from A to B (else "the setting did not take"), and the slot's copy in C
@@ -253,8 +256,10 @@ class RefusedRow(Exception):
 
 def watcher(cam, notes: list, say):
     """set_row's `say`: its choice said as it is; a notice after OK kept in `notes`, not printed (it can name another
-    setting's value), and when it reads "not available", closed with its OK (MENU is refused on it) and the row
-    refused; an information screen after the choice kept too."""
+    setting's value), and when it reads "not available", left as a notice the kit does not answer is left (MENU, and its
+    OK where the camera refuses MENU, as it does on these, and OK is its only button: camkit.live.leave_notice) and the
+    row refused; an information screen after the choice kept too."""
+    from camkit.live import leave_notice
     from mode_switch import text
 
     def watch(msg: str):
@@ -262,16 +267,17 @@ def watcher(cam, notes: list, say):
             t = " ".join(text(cam).split())
             notes.append(t)
             if re.search(r"not\s+available", t, re.I) and not safety.confirmation(t):
-                cam.press("enter")
+                leave_notice(cam)
                 raise RefusedRow(t)
             say("   a notice after OK, closed with MENU (its text is in spotcheck.json)")
             return
         if "information after the choice" in msg:
             # set_row says the frame only; the screen's words are in events.jsonl (set_row_information)
             m = re.search(r"\(([^;()]+);", msg)
-            notes.append(f"an information screen after the choice ({m.group(1) if m else 'frame not said'}), taken "
-                         "with its OK: its words are in events.jsonl under set_row_information")
-            say("   an information screen after the choice, taken with its OK")
+            how = "closed with MENU" if "closed with MENU" in msg else "taken with its OK"
+            notes.append(f"an information screen after the choice ({m.group(1) if m else 'frame not said'}), {how}: "
+                         "its words are in events.jsonl under set_row_information")
+            say(f"   an information screen after the choice, {how}")
             return
         say(msg)
     return watch
@@ -312,11 +318,15 @@ def register_slot(cam, cycle, model, slot: str, say, allow=(MEMORY_ROW,)) -> dic
     if tab != slot:
         raise Failed(f"the slot screen lights {f'tab {tab}' if tab else 'no tab the kit can place'}, not {slot} "
                      f"({cam.frame.path.name})")
+    # the slot screen reads as no known kind: its Enter goes by the run's --allow, consent to answer the row's own
+    # screen (the shape check lifted, never the confirmation words), as the camera judges it too (answer_once)
+    consent = f"--allow {MEMORY_ROW!r}"
     why, vouched = press_decision("enter!:Memory", "enter", highlighted(cam.frame.image, cam.frame.path), t, kind,
-                                  False, tuple(allow))
+                                  False, tuple(allow), consent=consent)
     if why:
         raise Failed(f"Enter on slot {slot} refused: {why} ({cam.frame.path.name})")
     slot_frame = cam.frame.path.name
+    cam.answer_once = consent
     cam.press("enter")
     said = ""
     for _ in range(3):                  # the notice shows about a second (00155), then the menu is back (00156)

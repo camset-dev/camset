@@ -33,7 +33,8 @@ proofs file holds them, and a session with the camera that always ends restoring
                                                   before anything connects (camkit.vlm.LOCAL_ONLY set)
     sys.exit(EXIT_RESTORE_BY_HAND)                a run's exit when its last press, an owner decision's "link_loss",
                                                   may have dropped the link, or its restore did not check out after
-                                                  it: the start file goes back by hand (camkit.runs)
+                                                  it, or the owner cleared a screen no restore may go over
+                                                  (hold_for_owner): the start file goes back by hand (camkit.runs)
     sys.exit(EXIT_NOT_CONFIRMED)                  a run's exit when that press brought up the row's own question,
                                                   cancelled with MENU and restored: nothing confirmed
     sys.exit(EXIT_REFUSED)                        a run's exit when a refusal stopped its work part way, its start
@@ -57,7 +58,8 @@ from pathlib import Path
 from camkit import safety, screen, session
 from camkit.frames import load
 from camkit.link import Link, StopRequested
-from camkit.live import LiveCamera, close, text_of, withheld_on
+from camkit.live import LiveCamera, body_of, close, lit_text, lone_of, text_of, withheld_on
+from camkit.runs import mark_restore_by_hand
 from camkit.vlm import check_readers
 from camkit.screen import same_position
 # A runner's exit status when the camera is not known to be as its start file at the end: the restore did not check
@@ -742,7 +744,7 @@ def restoring(what: str = "the restore", withhold: bool = False):
     try:
         yield
     except SystemExit as e:
-        if e.code in (None, 0, EXIT_UNRESTORED):
+        if e.code in (None, 0, EXIT_UNRESTORED, EXIT_RESTORE_BY_HAND):     # the run's own word on how it ended stands
             raise
         print(f"{what} did not finish ({said(e)}): the camera may not be on its start file", flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e
@@ -757,8 +759,13 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
     """The session's end (decision 15): back to the shooting screen, then camkit.session.finish (download, compare with
     `start`, upload it when anything differs). `reach(link, eyes, why)` gets there: prove_run's to_shooting by default
     (MENU until the shooting screen), wait_shooting for a walker that has closed the menu itself. When the shooting
-    screen does not come (to_shooting gives up after 5 minutes, wait_for after 15, the eyes' feed is gone), the restore
-    is still tried, never skipped: the download closes a menu itself, and finish says so when the camera refuses it.
+    screen does not come (to_shooting gives up after 5 minutes, wait_for after 15, the eyes' feed is gone), the screen
+    on show is looked at afresh (restorable_now): over one that asks nothing by its shape and reads as no confirmation
+    the restore is still tried (the download closes a menu itself, and finish says so when the camera refuses it); over
+    any other, or one that cannot be looked at, nothing is downloaded or uploaded (an upload restarts the camera, and a
+    session dropped with a question open can apply it): hold_for_owner writes RESTORE_BY_HAND, keeps the link open,
+    asks the owner to clear the screen and closes once the shooting screen is back, exit EXIT_RESTORE_BY_HAND
+    (2026-11-14, a review).
     A STOP asked for while that wait goes on (camkit.session.wait_for's StopRequested) ends the wait as the other
     failures do, and the restore goes on all the same (2026-11-08: it used to leave the camera unrestored and exit
     EXIT_UNRESTORED): the STOP still refuses every further press (camkit.link: no press, dial or set after a STOP but
@@ -773,15 +780,134 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
         from proving.nav import to_shooting as reach
     said = safety.quoted_withheld if keys else str
     with restoring(f"the session's end ({why})", withhold=keys):
+        reached = False
         try:
             reach(link, eyes, why)
+            reached = True
         except StopRequested:                   # the STOP holds for every press; only the restore goes on
             print("STOP file: the wait for the shooting screen ends here; restoring all the same", flush=True)
         except Exception as e:                  # Failed (no shooting screen), RuntimeError (the feed), LinkError
             print(f"   {why}: {said(f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
+        if not reached:
+            # the shooting screen did not come: the restore (a download, an upload that restarts the camera) goes only
+            # over a screen that asks nothing, judged on a fresh frame; else the owner clears it first (2026-11-14)
+            kind, why_not = restorable_now(link, eyes)
+            if kind is None:
+                hold_for_owner(link, eyes, start, why_not, keys)
         time.sleep(1)
         return session.finish(link, start, tag=tag, **({} if show is None else {"show": show}),
                               **({"expected": frozenset(expected)} if expected else {}), **({"keys": True} if keys else {}))
+
+
+OWNER_CLEARS_POLL = 5.0          # s between looks while the owner clears a screen no restore may go over
+OWNER_CLEARS_SAY = 120.0         # s between the reminders said meanwhile
+
+
+def osd_picture(link):
+    """(the camera's own picture of its screen, its reading), fetched as camkit.session.osd_shooting fetches it into a
+    file in the run's own folder (owner-only on a --network or --owner run) taken away after with camlink's .part, or
+    (None, None) when it cannot be fetched or read."""
+    path = Path(link.run.dir) / f"_restore_osd_{os.getpid()}.png"
+    try:
+        f = load(link.osd(path))
+        return f, screen.read(f)
+    except Exception:
+        return None, None
+    finally:
+        for left in (path, path.with_name(path.name + ".part")):
+            left.unlink(missing_ok=True)
+
+
+def restorable_now(link, eyes) -> tuple:
+    """(the screen's kind, "") when a restore may go over the screen on show now, else (None, why not): a fresh grab of
+    `eyes`, or where the eyes cannot grab (their feed gone) the camera's own picture (osd_picture), judged alike; the
+    shooting screen as it is, or a black frame the camera's own picture reads as the shooting screen
+    (camkit.session.osd_shooting: HDMI blanked by Auto Framing); any other screen judged as restorable_after_close
+    judges a last screen (a known kind that asks nothing by its shape and reads as no confirmation), its frame written
+    for OCR into the run's own folder (owner-only on a --network or --owner run) and taken away after."""
+    try:
+        f = eyes.grab(save=False)
+        s = screen.read(f)
+    except Exception as e:
+        f, s = osd_picture(link)
+        if f is None:
+            return None, f"the screen cannot be looked at ({type(e).__name__}: {e}), nor the camera's own picture"
+    if s.kind == "shooting" or session.osd_shooting(link, f):
+        return "shooting", ""
+    from types import SimpleNamespace
+
+    from PIL import Image
+    path = Path(link.run.dir) / f"_restore_check_{os.getpid()}.png"
+    try:
+        Image.fromarray(f.image).save(path)
+        return restorable_after_close(SimpleNamespace(read=lambda: s, frame=SimpleNamespace(image=f.image, path=path)))
+    except Exception as e:
+        return None, f"the screen cannot be judged ({type(e).__name__}: {e})"
+    finally:
+        path.unlink(missing_ok=True)
+
+
+def hold_for_owner(link, eyes, start: Path, why: str, keys: bool = False, poll: float | None = None,
+                   say_every: float | None = None):
+    """The session's end found a screen no restore may go over (restorable_now): a download or an upload over a
+    question can answer it, and a session dropped with it open can apply it (decision 15). RESTORE_BY_HAND is written
+    first (camkit.runs: no link opens until kit/tools/upload_check.py has put the start file back), the link is kept
+    open and nothing is pressed, the owner is asked to clear the screen by hand (MENU, or Cancel on the camera), and the
+    run waits, looking every `poll` s, until the screen reads as the shooting screen; only then does it close, exiting
+    EXIT_RESTORE_BY_HAND with the command that puts the start file back. With keys (a --network or --owner run) the
+    reason's quoted texts are withheld.
+    It leaves the wait, the marker kept, exit EXIT_RESTORE_BY_HAND, as soon as the link has gone (Link.gone: camlink
+    exited, its output ended, or the camera's session dropped, a ping sent on every look asking): nothing can be kept
+    open then. A STOP
+    (its file, or a first Ctrl-C) ends nothing here: it is said once that the link stays open until the screen is
+    cleared, since closing it could apply the screen, and that a second Ctrl-C closes it anyway, the marker kept. No
+    time limit closes it: closing on a timer could apply the screen, so an unattended run keeps waiting and says the
+    request again every `say_every` s (2026-11-14, a review)."""
+    said = safety.quoted_withheld if keys else str
+    poll = OWNER_CLEARS_POLL if poll is None else poll
+    say_every = OWNER_CLEARS_SAY if say_every is None else say_every
+    run = link.run
+    marker = mark_restore_by_hand(run.root, run.dir.name, start,
+                                  f"the session's end found a screen it may not restore over ({said(why)})")
+    run.log("restore_held", why=said(why), marker=str(marker))
+    ask = (f"the camera shows a screen no restore may go over ({said(why)}): clear it on the camera by hand (MENU, or "
+           "Cancel), never with OK; the link stays open, nothing is pressed, and the run waits for the shooting screen")
+    print(ask, flush=True)
+    said_at, stop_said = time.monotonic(), False
+    try:
+        while True:
+            if callable(getattr(link, "call", None)):
+                with contextlib.suppress(Exception):
+                    link.call("ping", timeout=5)    # a read: a camera that dropped says so ("connected": false)
+            gone = link.gone() if callable(getattr(link, "gone", None)) else ""
+            if gone:
+                print(f"the link has gone ({gone}) and the camera may still show that screen: clear it by hand (MENU, "
+                      f"or Cancel, never OK), then put the start file back with kit/tools/upload_check.py ({marker} "
+                      "names it)", flush=True)
+                run.log("restore_held_link_gone", why=gone, marker=str(marker))
+                raise SystemExit(EXIT_RESTORE_BY_HAND)
+            kind, _ = restorable_now(link, eyes)
+            if kind == "shooting":
+                break
+            if not stop_said and run.stop_requested():
+                print("a stop was asked for: the link stays open until the screen is cleared, since closing it with "
+                      "that screen up could apply it. A second Ctrl-C closes it anyway; RESTORE_BY_HAND stays",
+                      flush=True)
+                run.log("restore_held_stop", marker=str(marker))
+                stop_said = True
+            if time.monotonic() - said_at >= say_every:
+                print(f"   still waiting: {ask}", flush=True)
+                said_at = time.monotonic()
+            time.sleep(poll)
+    except KeyboardInterrupt:
+        print(f"a second Ctrl-C: the link closes with that screen up. Clear it on the camera by hand (MENU, or Cancel, "
+              f"never OK), then put the start file back with kit/tools/upload_check.py ({marker} names it)", flush=True)
+        run.log("restore_held_interrupted", marker=str(marker))
+        raise
+    print(f"the shooting screen is back; the run closes without a restore. Put the start file back with "
+          f"kit/tools/upload_check.py ({marker} names it)", flush=True)
+    run.log("restore_held_cleared", marker=str(marker))
+    raise SystemExit(EXIT_RESTORE_BY_HAND)
 
 
 def wait_shooting(link, eyes, why: str):
@@ -848,9 +974,13 @@ RESTORABLE_KINDS = frozenset({"menu", "submenu", "tiles", "list", "fields", "sid
 
 def restorable_after_close(cam) -> tuple:
     """(the last screen's kind, "") when the restore may be tried over it after camkit.live.close gave up: a kind
-    RESTORABLE_KINDS names whose text safety.confirmation_refused does not take for a confirmation (its words run
-    together too: a refusal only). (None, why not) when the kind is another (unknown, a dialog, a picker), the text asks
-    to execute something, or the frame or its text cannot be read: then no restore is tried, and a person looks."""
+    RESTORABLE_KINDS names that asks nothing by its shape (safety.enter_refused, 2026-11-14: no question mark above its
+    footer, and a notice, which has refused every MENU close sent, only with its OK plainly its only button,
+    safety.lone_ok) and whose text safety.confirmation_refused does not take for a confirmation (its words run together
+    too: a refusal only). (None, why not) when the kind is another (unknown, a dialog, a picker), the screen asks or may
+    ask, the text asks to execute something, or the frame or its text cannot be read: then no restore is tried, and a
+    person looks: an upload over an open question can answer it. A notice's lit button must read OK (safety.enter_refused:
+    a lone "Recover" acts)."""
     try:
         kind = cam.read().kind
     except Exception as e:
@@ -863,13 +993,22 @@ def restorable_after_close(cam) -> tuple:
         return None, f"the text of its last screen ({kind}) cannot be read ({type(e).__name__}: {e})"
     if not text.strip():
         return None, f"no text could be read on its last screen ({kind}), so no confirmation check can judge it"
+    try:
+        body = body_of(cam)
+        lone = lone_of(cam.frame.image, cam.frame.path) if kind == "notice" else None
+        lit = lit_text(cam.frame.image, cam.frame.path) if kind == "notice" else ""
+    except Exception as e:
+        return None, f"the text of its last screen ({kind}) cannot be read ({type(e).__name__}: {e})"
+    why = safety.enter_refused(kind, text, lit, body, "camkit.live.close's MENU refused" if kind == "notice" else "", lone)
+    if why:
+        return None, f"its last screen asks or may ask ({why})"
     why = safety.confirmation_refused(text)
     if why:
         return None, f"its last screen ({kind}) reads as a confirmation ({why})"
     return kind, ""
 
 
-def close_for_restore(cam, link) -> None:
+def close_for_restore(cam, link, start: Path) -> None:
     """After a body failed: back to the shooting screen with cleanup presses (camkit.live.close), which go out after a
     STOP too. When that fails as well (the eyes' feed gone: a RuntimeError), it is said and the session goes on to
     end_session, whose reach closes what is still open and whose restore is tried all the same: an unguarded close
@@ -878,9 +1017,12 @@ def close_for_restore(cam, link) -> None:
     side list, a table, a checklist, a look panel, the white balance grid or a notice, none of them reading as a
     confirmation, it is said ("closing gave up on a <kind> screen; restoring all the same") and the session goes on to
     end_session as after the other failures, the download closing what is open. On any other screen (unknown, a
-    dialog), one that reads as a confirmation, or none that can be read, the run ends as it says, with exit
-    EXIT_UNRESTORED (restoring): no restore is tried over it, and a person looks. On a --network or --owner run every
-    line it prints has an error's quoted texts withheld (camkit.live.withheld_on), as the run's first error line has."""
+    dialog), one that reads as a confirmation, or none that can be read, no restore is tried over it and the link is not
+    closed over it either, since a session dropped with a question open can apply it: hold_for_owner writes
+    RESTORE_BY_HAND for `start`, the run's start file, keeps the link open while the owner clears the screen, and exits
+    EXIT_RESTORE_BY_HAND (2026-11-14, a review: it closed the link over the screen, exit EXIT_UNRESTORED). On a
+    --network or --owner run every line it prints has an error's quoted texts withheld (camkit.live.withheld_on), as the
+    run's first error line has."""
     withhold = bool(getattr(cam, "network", None) or getattr(cam, "owner", None))
     with restoring("closing the camera before its restore", withhold=withhold):
         try:
@@ -891,7 +1033,7 @@ def close_for_restore(cam, link) -> None:
             kind, why_not = restorable_after_close(cam)
             if kind is None:
                 print(f"closing gave up and {withheld_on(cam, why_not)}: no restore is tried over it", flush=True)
-                raise                           # restoring: said, exit EXIT_UNRESTORED
+                hold_for_owner(link, getattr(cam, "hdmi", None), start, why_not, keys=withhold)
             print(f"closing gave up on a {kind} screen; restoring all the same", flush=True)
         except Exception as e:
             print(f"closing: {withheld_on(cam, f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
@@ -940,7 +1082,7 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
                 yield ps
             except Exception as e:
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
-                close_for_restore(cam, link)
+                close_for_restore(cam, link, start)
             ending = end_session(link, eyes, start, end_why, tag=end_tag, show=show, expected=expected)
         restored = ps.restored = restore_checked(run, ending, start, note, **({} if show is None else {"show": show}),
                                                  **({"expected": frozenset(expected)} if expected else {}))
@@ -1106,13 +1248,70 @@ def info_ok_or_exit(values, rows=None, labels=None) -> dict:
         why = safety.confirmation(given) or safety.plain_view(safety.screen_refused, given)
         if why:
             sys.exit(f"--info-ok {row!r}: the phrase reads as what no notice passed may say ({why})")
-        if rows is not None and not any(safety.plain(r) == safety.plain(row) for r in rows):
+        if rows is not None and not any(safety.plain(r.split(" / ")[0]) == safety.plain(row) for r in rows):
+            # a table's cell is named "<row> / <cell>" (proving.tables.in_scope): its row is the part before " / "
             sys.exit(f"--info-ok: {row!r} is not one of the rows named with --rows")
         out[row] = phrase
     for row, phrase in out.items():
         print(f"--info-ok: after Right on {row!r} the OK of the information notice reading {phrase!r} is taken",
               flush=True)
     return out
+
+
+def confirm_phrase_or_exit(value, flag: str = "--confirm") -> str:
+    """A run's --confirm "SCREEN TEXT" without --owner (kit/drive.py, kit/tools/card_actions.py) as the phrase's words
+    (notice_words): the whole text of the one screen the run will answer, compared as --info-ok compares a notice's
+    (proving.screens.notice_cover: its words in order, at most INFO_OK_SLACK letters left over). It lifts the shape check
+    (safety.enter_refused) for one Enter on that screen alone, never the confirmation words (2026-11-14, a review: a
+    flag an agent types lifted every Enter of the run): a screen that asks to format, delete or reset goes only by the
+    owner route, drive.py --owner --confirm, whose row name the person at the terminal types. Exits before anything
+    connects on a bare flag, a phrase with a pattern's sign, one of fewer than INFO_OK_WORDS words or INFO_OK_MIN letters,
+    or one that reads as a confirmation (safety.confirmation_refused) or names what the never-open list holds."""
+    if value is True or not str(value or "").strip():
+        sys.exit(f"{flag} on a run without --owner names the one screen it answers: {flag} \"SCREEN TEXT\", the screen's "
+                 "whole text as written (compared as --info-ok compares a notice's). It lifts the shape check for that "
+                 "one Enter, never the confirmation words: a format, a delete or a reset goes only by the owner route "
+                 "(drive.py --owner --confirm)")
+    given, phrase = str(value), notice_words(value)
+    if INFO_OK_SIGNS & set(given):
+        sys.exit(f"{flag} {given!r}: give the screen's whole text as written, with no sign such as "
+                 f"{' '.join(sorted(INFO_OK_SIGNS & set(given)))} (it is compared word for word, never as a pattern)")
+    if len(phrase.split()) < INFO_OK_WORDS or sum(c.isalnum() for c in phrase) < INFO_OK_MIN:
+        sys.exit(f"{flag} {given!r}: give at least {INFO_OK_WORDS} words and {INFO_OK_MIN} letters: the screen's whole "
+                 "text as written")
+    why = safety.confirmation_refused(given) or safety.plain_view(safety.screen_refused, given)
+    if why:
+        sys.exit(f"{flag} {given!r}: the screen reads as what only the owner route answers ({why}): drive.py --owner "
+                 "--confirm, the row's name typed at the terminal; nothing was sent to the camera")
+    print(f"{flag}: one Enter, on the screen reading {phrase!r} alone, past the shape check (never the confirmation "
+          "words)", flush=True)
+    return phrase
+
+
+def screen_named(phrase: str, lines) -> str:
+    """Why the screen whose OCR lines are `lines` is not the one `phrase` (confirm_phrase_or_exit's words) names, or "":
+    proving.screens.notice_cover, every line counted (its buttons too), no word of three letters or more left out and at
+    most INFO_OK_SLACK letters or digits over."""
+    from proving.screens import notice_cover
+    cover = notice_cover(phrase, list(lines or ()))
+    if cover is None:
+        return "the screen's words are not the phrase's, in order"
+    left, why = cover
+    if why or left > INFO_OK_SLACK:
+        return f"the screen has {left} letters or digits beyond the phrase{f', {why}' if why else ''}"
+    return ""
+
+
+def notes_named_or_exit(values, rows) -> dict:
+    """--info-ok for a prover that passes a note Right on one of `rows` opens before the row's own screen (Mode Dial
+    Control Set's, kit/provers/mode_switch.py, afreg_run.py and framepos_run.py: proving.screens.pass_note): each value
+    judged as info_ok_or_exit judges it, its row one of `rows`, and put into proving.screens.INFO_OK, the dict the notes
+    are passed by. Since 2026-11-14 such a note's OK goes only as --info-ok names it, or where the camera refuses MENU on
+    it and OK is its only button (camkit.live.leave_notice). Exits before anything connects on a value refused."""
+    from proving import screens
+    named = info_ok_or_exit(values, rows) if values else {}
+    screens.INFO_OK.update(named)
+    return named
 
 
 def info_ok_for(named: dict, row: str):

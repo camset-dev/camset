@@ -425,16 +425,20 @@ def test_a_key_not_written_as_the_guards_read_it_is_refused(spaced, name):
 
 def test_every_key_the_kit_names_still_goes_out(spaced):
     """The rule only adds refusals: every menu input goes out as before, a guarded one where it is allowed, and every
-    key name a press or dial call in kit/ writes out is one the rule accepts."""
+    key name a press or dial call in kit/ writes out is one the rule accepts. An Enter (or the multi-selector's centre)
+    goes with the camera layer's word that its check of what the screen asks judged it (Link.press's judged,
+    2026-11-14)."""
     import re
     from types import SimpleNamespace
     from camkit import safety
     run, _ = spaced
     with Link(run, ip="192.0.2.10", binary=CAMLINK, catch_signals=False) as link:
         for name in sorted(safety.MENU_INPUTS):
-            assert link.press(name, screen=SimpleNamespace(kind="menu"))["args"][0] == name
+            judged = {"judged": link.moves} if name in safety.ENTER_KEYS | safety.TRASH_KEYS else {}
+            assert link.press(name, screen=SimpleNamespace(kind="menu"), **judged)["args"][0] == name
         for name in sorted(safety.GUARDED_INPUTS):
-            assert link.press(name, allow={name}, screen=SimpleNamespace(kind="menu"))["args"] == [name, "60", "allowed"]
+            judged = {"judged": link.moves} if name in safety.TRASH_KEYS else {}
+            assert link.press(name, allow={name}, screen=SimpleNamespace(kind="menu"), **judged)["args"] == [name, "60", "allowed"]
         assert link.dial("wheel", -1, screen="menu")["args"] == ["wheel", "-1"]
     for name in safety.MENU_INPUTS | safety.GUARDED_INPUTS | safety.NEVER_INPUTS:
         assert safety.name_refused(name) == "", name

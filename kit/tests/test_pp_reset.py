@@ -189,6 +189,9 @@ class PanelCam:
 
     def press(self, key, **kw):
         self.pressed.append((key, self.may_open_exact is not None))
+        if key == "enter":                  # the way past the run names for this Enter, used up as the camera uses it
+            self.confirms = [*getattr(self, "confirms", []), getattr(self, "confirm_once", False)]
+            self.confirm_once = False
         self.n += 1
         if self.state == "panel" and key in ("right", "enter"):
             self.state = "question"
@@ -241,6 +244,9 @@ def test_a_reset_opens_reset_lifted_for_that_press_alone_and_ends_back_on_the_pr
     assert cam.pressed[0][1] is True and cam.pressed[1][1] is False, "lifted for Right alone"
     assert cam.may_open == frozenset() and cam.may_open_exact is None, "Reset is never a may_open name"
     assert got["question"] == QUESTION and got["profile"] == "PP1" and got["row_by"] == "title"
+    # the OK carries the profile's own reset question as its way past, which the camera judges again itself
+    # (LiveCamera.profile_reset_passed), never free words that would lift every check
+    assert cam.confirms == [("profile_reset", "PP1")]
     later = panel(lit="Cancel", moves={("Cancel", "up"): "OK"})
     M.reset_one(later, None, None, "PP1", lambda m: None)
     assert keys(later) == ["right", "up", "enter"], "from Cancel Up, Enter on OK alone"
@@ -519,12 +525,23 @@ def test_menu_refused_on_the_completion_notice_closes_it_with_ok_through_drives_
         seen.append((key, lit, text, kind, confirm))
         return real(key, lit, text, kind, confirm, **kw)
     monkeypatch.setattr(drive, "press_refused", guard)
+    import camkit.live
+    monkeypatch.setattr(camkit.live, "lone_of", lambda image, path: "")     # its OK plainly its only button
     cam = panel(after="complete", csecond=CSECOND, menu_refused=True)
     got = M.reset_one(cam, None, None, "PP1", lambda m: None)
     assert keys(cam) == ["right", "enter", "menu", "enter"] and got["complete_closed_by"] == "enter"
     assert seen[-1] == ("enter", "OK", COMPLETE, "notice", False), "judged as a notice, never as a confirmation"
     assert cam.refreshed == ["complete-notice"] and got["back"] == "confirmed"
-    assert drive.press_refused("enter", "OK", COMPLETE, "notice") == ""
+    # a notice takes Enter only as one that has just refused MENU with its OK alone (2026-11-14): drive.py's guard says so
+    assert drive.press_refused("enter", "OK", COMPLETE, "notice") != ""
+    assert drive.press_refused("enter", "OK", COMPLETE, "notice", notice_way=camkit.live.MENU_REFUSED, lone="") == ""
+    from camkit.link import LinkError
+    from prove_run import Failed
+    monkeypatch.setattr(camkit.live, "lone_of", lambda image, path: "a line sits below its OK")
+    cam = panel(after="complete", csecond=CSECOND, menu_refused=True)
+    with pytest.raises((Failed, LinkError)):                                 # a second button: no OK, the run stops
+        M.reset_one(cam, None, None, "PP1", lambda m: None)
+    assert keys(cam).count("enter") == 1, "the question's OK alone: none on a notice whose OK is not alone"
 
 
 @pytest.mark.parametrize("text,lit,second,ok", [
@@ -566,7 +583,8 @@ class LiveWorld:
         self.stop_on_question, self.stop, self.sent, self.n, self.moves = stop_on_question, False, [], 0, 0
 
     # the link
-    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset()):
+    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset(),
+              judged=False):
         from camkit.link import StopRequested
         if self.stop and not cleanup:
             raise StopRequested("STOP: the run's STOP file asks it to stop")
@@ -610,6 +628,7 @@ def live_world(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "lit_text", lambda image, path: image["lit"])
     monkeypatch.setattr(live, "lit_box", lambda image, kind=None: (0, 0, 10, 10))
     monkeypatch.setattr(live, "text_of", lambda cam: cam.frame.image["text"])
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))     # the screen judged
     monkeypatch.setattr(M, "title", lambda cam: cam.frame.image["title"])
     monkeypatch.setattr(M, "ask_reader", lambda path, prompt: None)
     monkeypatch.setattr(M, "to_reset_row", lambda cam, cycle, model, profile: None)
@@ -1738,8 +1757,9 @@ def test_menu_refused_on_the_notice_then_another_screen_is_never_okd(panel, monk
             cam.state, cam.after_text, cam.menu_refused = "notice", "This function is currently disabled. OK", False
     cam.refresh = refresh
     import drive
-    assert drive.press_refused("enter", "OK", "This function is currently disabled. OK", "notice") == "", \
-        "drive.py alone would OK it"
+    from camkit.live import MENU_REFUSED
+    assert drive.press_refused("enter", "OK", "This function is currently disabled. OK", "notice",
+                               notice_way=MENU_REFUSED, lone="") == "", "drive.py alone would OK it"
     with pytest.raises(Failed, match="MENU refused on the completion notice, and then"):
         M.reset_one(cam, None, None, "PP1", lambda m: None)
     assert keys(cam).count("enter") == 1, "the question's OK alone"

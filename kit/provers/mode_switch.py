@@ -51,9 +51,9 @@ from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, bar_text, enter_any, info_notice_ok, option_key, to_shooting  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
-                    close_screen, end_session, forget_refused, in_mode, load_scan, menu_from_shooting, read_json,
-                    restore_checked, restoring, scan_arg, scan_mode, scan_position, shown_mode, switch_advice,
-                    switch_left, write_json)
+                    add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
+                    menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
+                    scan_position, shown_mode, switch_advice, switch_left, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
 
 DIAL_ROW = "Mode Dial Control Set"
@@ -93,8 +93,12 @@ def open_menu(cam):
 
 def dial_by_menu(cam, cycle, model, say):
     """Mode Dial Control Set = Set with Menu: Right on the row shows a note about the setting first (its OK leads on,
-    2026-11-01), then the two-option list."""
+    2026-11-01), then the two-option list. The note's OK goes only as the run's --info-ok names it, or where the camera
+    refuses MENU on it and OK is its only button (proving.screens.pass_note, since 2026-11-14): MENU on a note the camera
+    takes cancels the row, and the switch stops there."""
+    from proving.screens import pass_note
     find(cam, cycle, model, DIAL_ROW)
+    lit = lit_text(cam.frame.image, cam.frame.path)     # the lit bar before Right: --info-ok's judgement reads it
     cam.press("right")
     for _ in range(2):
         if cam.read().kind == "list":
@@ -102,7 +106,9 @@ def dial_by_menu(cam, cycle, model, say):
         t = text(cam)
         if not re.search(r"mode dial", t, re.I):
             raise Failed(f"Right on {DIAL_ROW!r} opened {cam.read().kind} ({cam.frame.path.name}): {t[:80]!r}")
-        cam.press("enter")                      # the note's OK
+        got = pass_note(cam, DIAL_ROW, lit)     # the note's OK
+        if "refused" in got:
+            raise Failed(f"Right on {DIAL_ROW!r} showed a note not passed: {got['refused']}")
     if cam.read().kind != "list":
         raise Failed(f"{DIAL_ROW!r}: no list came ({cam.read().kind}, {cam.frame.path.name})")
     for _ in range(3):
@@ -154,8 +160,9 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
 def set_row(cam, cycle, model, path: list, option: str, say):
     """A list row (a top-level row, or a submenu's: "Proxy Settings > Px Proxy Recording") put on `option` and left
     there: to the row by the scan, Right, Down through the list to the option (by the bar's text), OK; an
-    information screen with buttons after the choice is taken with its OK (Exposure Ctrl Type), a notice closed with
-    MENU. For the state a prove run needs; the switch's --restore puts the start file back over it. The bar is read
+    information screen with buttons after the choice is taken with its OK where it reads as a table (Exposure Ctrl
+    Type), and where it reads as no known kind left with MENU, its OK only where the camera refuses MENU and OK is its
+    only button (proving.screens.info_notice_ok, 2026-11-14); a notice closed with MENU. For the state a prove run needs; the switch's --restore puts the start file back over it. The bar is read
     without the radio ring OCR can put before the saved option ("o Set with Dial", kit2_tables 08452_enter.png), so a
     row already on `option` is found there too (camkit.match.clean). A row inside a panel ("Viewfinder Bright. >
     Brightness Setup"): OK brings the panel back, its title the panel's own, with its slider lit (an OK in its footer,
@@ -198,9 +205,10 @@ def set_row(cam, cycle, model, path: list, option: str, say):
     elif kind in ("table", "unknown"):
         info = info_notice_ok(cam, " > ".join(path), kinds=("table", "unknown"), words=False)
         if info:
-            cam.run.log("set_row_information", step=" > ".join(path), frame=info["frame"], text=" ".join(info["text"].split()))
-            say(f"   information after the choice, taken with its OK ({info['frame']}; its words are in the run's "
-                "events.jsonl)")
+            cam.run.log("set_row_information", step=" > ".join(path), frame=info["frame"], text=" ".join(info["text"].split()),
+                        left_by=info.get("left_by"))
+            how = "closed with MENU" if info.get("left_by") == "menu" else "taken with its OK"
+            say(f"   information after the choice, {how} ({info['frame']}; its words are in the run's events.jsonl)")
 
 
 def switched_mode(to: str) -> str:
@@ -275,7 +283,9 @@ def main():
                          "default: the camera's latest page scan made in that mode, runner.latest_scan)")
     add_in_argument(ap, default=None, said="Stills for a switch; with --set, the mode the waiting switch left")
     ap.add_argument("--run", default="kit2_pass2")
+    add_info_ok_argument(ap)    # Mode Dial Control Set's note before its list (dial_by_menu: proving.screens.pass_note)
     a = ap.parse_args()
+    notes_named_or_exit(a.info_ok, [DIAL_ROW])
     run = Run(a.run)
     say = lambda m: print(m, flush=True)
     kept = run.dir / KEPT

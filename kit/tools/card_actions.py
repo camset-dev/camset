@@ -16,8 +16,11 @@ run   goes to the row and sends the presses in order, each judged as kit/drive.p
       the key as the guards read it (drive.canonical_key), menu keys only, each sent once; a press written "key:regex"
       only when the screen's text matches the regex (case-insensitive), so a screen nobody looked at with peek is
       cancelled with MENU; Enter (and the multi-selector's centre) only with a regex, only on a lit text the kit can
-      read, never on Initialize or Reset Network Set., and never on a screen that reads like a confirmation unless
-      --confirm is given; Right or Enter onto a never-open row only when --allow names it, never on the cards' Format
+      read, never on Initialize or Reset Network Set., never on a screen that reads like a confirmation (a question
+      to format, delete or reset goes only by the owner route, drive.py --owner --confirm), and on a screen that asks
+      by its shape (a notice, a screen of no known kind, a question mark) only once, where --confirm "SCREEN TEXT"
+      gives that screen's whole text (since 2026-11-14); Right or Enter onto a never-open row only when --allow names
+      it, never on the cards' Format
       or Delete, Initialize, Reset Network Set., credentials or the camera's identity (safety.never_lifted); no key but
       MENU on the shooting screen (decision 21).
 Either way the session ends as every runner's does (kit/runner.py; docs/decisions/0015): the camera closed back to the
@@ -48,7 +51,8 @@ from camkit.screen import same_position  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
-                    close_for_restore, end_session, load_scan, restore_checked, restoring, wait_shooting)
+                    close_for_restore, confirm_phrase_or_exit, end_session, load_scan, restore_checked, restoring,
+                    wait_shooting)
 
 # 2026-11-01 (user): "Please don't delete the cards." Format is off the list: nothing on the cards
 # is deleted or formatted remotely (Delete was never on it)
@@ -81,22 +85,29 @@ def allowance_of(row: str, allow) -> str:
     return allowed_or_exit(allow)
 
 
-def press_judged(cam, p: str, confirm: bool, allow) -> str:
+def press_judged(cam, p: str, confirm, allow) -> str:
     """Why the press `p` may not go out on the screen now, or "" once it has gone: the regex first (the screen's text
     must match it), then the shooting screen (no key but MENU there), then drive.press_decision on the lit text and the
-    whole screen's, as kit/drive.py judges its own."""
+    whole screen's, as kit/drive.py judges its own. confirm: {"phrase", "left"} of --confirm "SCREEN TEXT", or None: an
+    Enter on the screen it names, once, goes past the shape check (drive.enter_ways' consent, the camera's answer_once),
+    never past the confirmation words."""
     key, _, want = drive.parse_press(p)
     t = text_of(cam)
     if want and not re.search(want, t, re.I):
         return f"the screen does not match {want!r}: {t[:160]!r}"
     kind = cam.read().kind
     why = drive.shooting_press_refused(key, kind, ())
+    consent = ""
     if not why:
         lit = drive.highlighted(cam.frame.image, cam.frame.path) if key in drive.ENTERS + drive.RIGHTS else ""
-        why, _ = drive.press_decision(p, key, lit, t, kind, confirm, allow)
+        phrase = confirm["phrase"] if confirm and confirm["left"] else None
+        consent = drive.enter_ways(cam, key, phrase, {})[0]
+        why, _ = drive.press_decision(p, key, lit, t, kind, False, allow, consent=consent)
     if why:
         return f"{key} refused: {why}"
-    press(cam, key, confirm=bool(confirm and key in drive.ENTERS))     # judged with --confirm: the camera's check too
+    press(cam, key, answer=consent or None)     # the consent named for this screen: the camera's check too
+    if consent:
+        confirm["left"] = 0                     # --confirm lifts one Enter only
     return ""
 
 
@@ -114,13 +125,18 @@ def main():
     ap.add_argument("what", choices=["peek", "run"])
     ap.add_argument("row")
     ap.add_argument("--press", action="append", default=[], help="key, or key:regex the screen must match first")
-    ap.add_argument("--confirm", action="store_true", help="allow Enter on a screen that reads like a confirmation")
+    ap.add_argument("--confirm", default=None, metavar="SCREEN TEXT",
+                    help="the whole text of the one screen whose Enter this run may send past the shape check, once; "
+                         "never past the confirmation words (a format, a delete or a reset: the owner route, drive.py "
+                         "--owner --confirm)")
     ap.add_argument("--wait", type=float, default=2.0, help="seconds after the last press (formatting takes a while)")
     add_scan_argument(ap, default=LATEST_SCAN, mode="Stills")    # the Stills page scan the camera's provers navigate by
     add_allow_argument(ap)
     a = ap.parse_args()
     if a.row not in CARD_ROWS:
         sys.exit(f"{a.row!r} is not a card action this script may open ({sorted(CARD_ROWS)})")
+    # one Enter, on the screen it names, past the shape check; never past the confirmation words
+    confirm = {"phrase": confirm_phrase_or_exit(a.confirm), "left": 1} if a.confirm is not None else None
     presses = ["right"] if a.what == "peek" else a.press
     why = press_args_refused(presses)
     if why:
@@ -146,7 +162,7 @@ def main():
             try:
                 to_row(cam, cycle, model, a.row)
                 for p in presses:
-                    why = press_judged(cam, p, a.confirm, a.allow)
+                    why = press_judged(cam, p, confirm, a.allow)
                     if why:
                         print(f"{why}; cancelling", flush=True)
                         ok = False
@@ -168,7 +184,7 @@ def main():
             # the diff and the start file put back when anything differs, and only then the results line (a line that
             # cannot be written skips nothing). Whatever ends it early, the line's write too, exits EXIT_UNRESTORED
             with restoring("card_actions.py's restore"):
-                close_for_restore(cam, link)
+                close_for_restore(cam, link, before)
                 ending = end_session(link, hdmi, before, "the settings download after the action", reach=wait_shooting,
                                      show=30)
                 log.write(json.dumps({"what": a.what, "row": a.row, "presses": presses, "completed": ok,

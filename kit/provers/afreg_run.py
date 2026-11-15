@@ -33,7 +33,9 @@ with Menu, then Drive Mode = Single Shooting (Continuous AF is refused under som
 notice when the Focus Mode row is set, so the prover sets Drive Mode to Single Shooting through the menu first and the
 restore puts the file's own back; --drive-mode auto|menu|leave), Mode Dial Control Set's Focus Mode Dial = Set with
 Menu, then Focus Mode = Continuous AF. A step whose OK is answered by a "not available as follows" notice fails the
-setup (the notice closed with its OK first): the console says a notice refused the step and names its frame, and the
+setup (the notice left first with MENU, and with its OK where the camera refuses MENU and OK is its only button:
+camkit.live.leave_notice); Mode Dial Control Set's note before its table is passed only as --info-ok names it, or as such
+a lone OK (proving.screens.pass_note): the console says a notice refused the step and names its frame, and the
 notice's words go to the run's events.jsonl only, as a notice can name another setting's value, the camera's own
 (decision 16). A download after the setup is kept in setup.jsonl with what it changed. The start file put back at the
 end restores the two dials and the drive mode with the rest.
@@ -74,7 +76,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(1, str(Path(__file__).resolve().parent))
 from camkit import definitions, jsonl, match, paths, safety  # noqa: E402
-from runner import LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json  # noqa: E402
+from runner import (LATEST_SCAN, add_allow_argument, add_info_ok_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
+                    notes_named_or_exit, read_json)
 
 MENU = "AF Area Registration On, Fn held on the shooting screen"   # the proofs' row: the REG table's menu
 ROW = "Focus Area"
@@ -421,29 +424,33 @@ def dial_cell(name: str = FOCUS_DIAL) -> list:
 
 def focus_dial_by_menu(cam, cycle, model, dial: str = FOCUS_DIAL):
     """Mode Dial Control Set's `dial` cell = Set with Menu, so Focus Mode (or Drive Mode) is the menu's (the a1 II's
-    focus mode and drive mode are dials). Right on the row (a note about the setting first, its OK leading on, as mode_switch.dial_by_menu takes
-    it; a first-time note's OK without its tick box: first_time_notice), the table, the Focus Mode Dial cell
-    (proving.tables.to_cell, its name read under the picture), Enter, Set with Menu, OK: the table takes it at once
-    (table_walk: commit "menu"). The Set All buttons are never pressed."""
+    focus mode and drive mode are dials). Right on the row (a note about the setting first, its OK leading on, as
+    mode_switch.dial_by_menu takes it, and a first-time note without its tick box: proving.screens.pass_note, only as the
+    run's --info-ok names the note, or where the camera refuses MENU on it and OK is its only button), the table, the
+    Focus Mode Dial cell (proving.tables.to_cell, its name read under the picture), Enter, Set with Menu, OK: the table
+    takes it at once (table_walk: commit "menu"). The Set All buttons are never pressed."""
     from camkit import ocr
+    from camkit.live import lit_text
     from mode_switch import find, text
     from prove_run import Failed
-    from proving.screens import bar_text, first_time_notice, option_key
+    from proving.screens import bar_text, option_key, pass_note
     from proving.tables import to_cell
     cell = dial_cell(dial)
     find(cam, cycle, model, DIAL_ROW)
+    lit = lit_text(cam.frame.image, cam.frame.path)     # the lit bar before Right: --info-ok's judgement reads it
     cam.press("right")
     for _ in range(3):
         t = text(cam)
         if cam.read().kind == "table" and re.search(r"set\s*all\s*with", t, re.I):
             break
-        if first_time_notice(cam):
-            continue
-        if cam.read().kind == "list" or not re.search(r"mode dial", t, re.I) or safety.confirmation(t):
+        if cam.read().kind == "list" or not re.search(r"mode dial|show this again", t, re.I) or safety.confirmation(t):
             name = kept_notice(cam, f"Right on {DIAL_ROW}", t, "dial_screen")
             raise Failed(f"Right on {DIAL_ROW!r} opened {cam.read().kind} ({name}; what it showed is in the run's "
                          "events.jsonl)")
-        cam.press("enter")                      # the note's OK
+        got = pass_note(cam, DIAL_ROW, lit)     # the note's OK: --info-ok, or a lone OK where MENU is refused
+        if "refused" in got:
+            name = kept_notice(cam, f"Right on {DIAL_ROW}", t, "dial_note")
+            raise Failed(f"Right on {DIAL_ROW!r} showed a note not passed: {got['refused']} ({name})")
     else:
         raise Failed(f"{DIAL_ROW}: its table did not come ({cam.read().kind}, {cam.frame.path.name})")
     to_cell(cam, cell)
@@ -484,8 +491,10 @@ def kept_notice(cam, step: str, words: str | None = None, kind: str = "setup_not
 
 def refused_by_notice(cam, say, step: str):
     """A `say` for set_row (it calls it with "   notice after OK (...)" before closing the notice with MENU): the notice's
-    words are kept (kept_notice) and never said; when it is "not available as follows", it is closed with its OK and
-    the step fails, the message naming the step and the notice's frame only."""
+    words are kept (kept_notice) and never said; when it is "not available as follows", it is left with MENU, and with its
+    OK where the camera refuses MENU and OK is its only button (camkit.live.leave_notice), and the step fails, the
+    message naming the step and the notice's frame only."""
+    from camkit.live import leave_notice
     from mode_switch import text
     from prove_run import Failed
 
@@ -500,7 +509,7 @@ def refused_by_notice(cam, say, step: str):
             if safety.confirmation(t):          # never Enter on a confirmation (camkit.safety)
                 raise Failed(f"a notice after {step} reads like a confirmation ({name}): no Enter; the setup stops "
                              "here and the start file goes back")
-            cam.press("enter")
+            leave_notice(cam)
             raise Failed(f"a notice refused {step} ({name}; its words are in the run's events.jsonl): the setup stops "
                          "here and the start file goes back")
         say(f"   a notice after OK ({name}), closed with MENU; its words are in the run's events.jsonl")
@@ -521,8 +530,9 @@ def set_setup_row(cam, cycle, model, path: list, option: str):
 
 def drive_single(cam, cycle, model):
     """Drive Mode = Single Shooting: the row's carousel (Enter, as bracket_run opens it), Up/Down the short way to
-    the option, every step read (carousel_text, the vision reader when it is blank), OK. A notice after OK closes with
-    its OK and fails the step, its words kept in the run's events.jsonl (kept_notice), never printed."""
+    the option, every step read (carousel_text, the vision reader when it is blank), OK. A notice after OK is left with
+    MENU (its OK only where the camera refuses MENU and OK is its only button: camkit.live.leave_notice) and fails the
+    step, its words kept in the run's events.jsonl (kept_notice), never printed."""
     from camkit import ocr
     from mode_switch import find, text
     from pass3_run import labels_of
@@ -562,12 +572,13 @@ def drive_single(cam, cycle, model):
     print(f"{DRIVE_ROW}: choosing {SINGLE!r}", flush=True)
     cam.press("enter")
     if cam.read().kind == "notice":
+        from camkit.live import leave_notice
         t = text(cam)
         name = kept_notice(cam, f"{DRIVE_ROW} = {SINGLE}", t)
         if safety.confirmation(t):              # never Enter on a confirmation (camkit.safety)
             raise Failed(f"a notice after {DRIVE_ROW} = {SINGLE} reads like a confirmation ({name}): no Enter; the "
                          "setup stops here and the start file goes back")
-        cam.press("enter")                      # the notice's OK
+        leave_notice(cam)                       # MENU; the notice's OK only where MENU is refused and OK is alone
         raise Failed(f"a notice refused {DRIVE_ROW} = {SINGLE} ({name}; its words are in the run's events.jsonl): the "
                      "setup stops here and the start file goes back")
 
@@ -768,7 +779,9 @@ def main(argv=None) -> int:
     ap.add_argument("--list", action="store_true", help="print the plan only; no camera")
     ap.add_argument("--proved", action="store_true", help="print the codes the run's applied lines proved; no camera")
     add_allow_argument(ap)
+    add_info_ok_argument(ap)    # Mode Dial Control Set's note before its table (focus_dial_by_menu: pass_note)
     a = ap.parse_args(argv)
+    notes_named_or_exit(a.info_ok, [DIAL_ROW])
     if a.proved:
         got = proved_codes(jsonl.read(paths.run_root() / a.run / "proofs.jsonl"))
         for k, codes in got.items():

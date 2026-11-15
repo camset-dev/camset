@@ -243,9 +243,9 @@ def test_the_named_notice_is_passed_and_its_checklist_walked(monkeypatch, capsys
      "reads as a confirmation"),
     ("two buttons", NOTICE + [line("Cancel", 352, x=460, w=60)], ROW, OK_BAR, "not a single OK"),
     ("Cancel alone, lit", SENTENCE + [line("Cancel", 352, x=300, w=60)], ROW, OK_BAR, "not a single OK"),
-    ("the lit item is no OK (a Don't show this again box)",
+    ("the lit item is no OK (a Don't show this again box), and Down does not reach OK",
      SENTENCE + [line("Don't show this again.", 260, x=210, w=220), OK_LINE], ROW, (200, 250, 240, 50),
-     "the lit button is not OK"),
+     "its OK could not be taken"),
     ("nothing lit", NOTICE, ROW, None, "the lit button is not OK"),
     ("an identity notice", SENTENCE + [line("Enter the account of the server.", 220), OK_LINE], ROW, OK_BAR,
      "identity or credentials"),
@@ -254,7 +254,8 @@ def test_the_named_notice_is_passed_and_its_checklist_walked(monkeypatch, capsys
 ])
 def test_a_notice_failing_any_guard_gets_no_enter(monkeypatch, why, lines, lit_bar, lit, refused):
     cam, r = crawl_with(monkeypatch, lines, lit_bar=lit_bar, lit=lit)
-    assert cam.keys == ["right", "menu"], (why, cam.keys)
+    # a lit "Don't show this again." box is left with Down (at most three, never Enter on it) on the way to OK
+    assert cam.keys == ["right", *(["down"] * 3 if "box" in why else []), "menu"], (why, cam.keys)
     assert r.outcome.startswith("notice (named, not passed: ") and r.info_ok is None, (why, r.outcome)
     assert refused in r.outcome, (why, r.outcome)
     for t in ("independent", "Delete all", "account", "Screen Reader"):    # no text read off the screen is kept
@@ -653,8 +654,8 @@ def test_the_runners_refuse_the_flag_where_it_has_no_place(monkeypatch, tmp_path
     the_map.write_text(json.dumps({"rows": [{"path": [ROW], "kind": "checklist", "options": []},
                                             {"path": ["ISO"], "kind": "list", "options": []}]}), encoding="utf-8")
     monkeypatch.setattr(prove_run.proving.base, "MAP", prove_run.proving.base.MAP)        # put back after the test
-    for argv, said in ((["prove_run", "--info-ok", INFO], "--info-ok passes a notice for the checklist rows named "
-                                                          "with --rows only"),
+    for argv, said in ((["prove_run", "--info-ok", INFO], "--info-ok passes a notice for the checklist and table "
+                                                          "rows named with --rows only"),
                        (["prove_run", "--info-ok", INFO, "--rows", ROW, "--network"],
                         "--info-ok passes no notice on a --network run"),
                        (["prove_run", "--info-ok", INFO, "--rows", ROW, "--help-text"],
@@ -672,12 +673,13 @@ def test_the_runners_refuse_the_flag_where_it_has_no_place(monkeypatch, tmp_path
         crawl_run.main()
 
 
-def test_prove_run_passes_a_notice_before_a_checklist_only():
+def test_prove_run_passes_a_notice_before_a_checklist_or_a_table_only():
     import prove_run
     named = parsed(INFO)
     assert prove_run.info_ok_jobs_or_exit([{"path": [ROW], "kind": "checklist"}, {"path": ["ISO"], "kind": "list"}],
                                           named) is None
-    with pytest.raises(SystemExit, match="before a checklist only"):
+    assert prove_run.info_ok_jobs_or_exit([{"path": [ROW], "kind": "table"}], named) is None
+    with pytest.raises(SystemExit, match="before a checklist or a table only"):
         prove_run.info_ok_jobs_or_exit([{"path": [ROW], "kind": "list"}], named)
 
 

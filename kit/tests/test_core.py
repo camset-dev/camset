@@ -3650,30 +3650,107 @@ def test_schema_no_overlaps_or_dangling_links(definition):
 # --- prove_run: the one-time notice, a table cell in scope, the Fn Menu walk's late frames
 
 class FakeNoticeCamera:
-    """A camera whose screen is one saved frame; presses are recorded and change nothing."""
-    def __init__(self, path: Path):
-        self.frame, self.keys = type("F", (), {"path": path})(), []
+    """A camera whose screen is one saved frame (or made-up OCR lines over a blank picture: `kind` the reading then);
+    presses are recorded and move nothing but the lit button: after Down it reads "OK" (notice_lit, patched by
+    first_time_branches). The camera refuses MENU (CameraRefused, nothing done) where `refuses`, else takes it."""
+    def __init__(self, path: Path, refuses: bool = False, kind: str | None = None):
+        image = load(path).image if kind is None else __import__("numpy").zeros((480, 640, 3), "uint8")
+        self.frame = type("F", (), {"path": path, "image": image})()
+        self.kind = screen.read(load(path)).kind if kind is None else kind
+        self.refuses, self.keys = refuses, []
 
-    def press(self, key):
+    def read(self):
+        return type("S", (), {"kind": self.kind})()
+
+    def press(self, key, **kw):
+        from camkit.link import CameraRefused
         self.keys.append(key)
+        if key == "menu" and self.refuses:
+            raise CameraRefused("press menu 60: button not accepted")
 
 
-def test_first_time_notice_is_okayed_and_nothing_else_is():
-    """first_time_notice: the camera's one-time notice before the Custom Key screen ("In the next setting screen, you
-    can check the function assigned ...", "Don't show this again" / OK) is answered Down to OK and Enter, the box
-    never ticked; an ordinary menu page is left alone."""
+# the a1 II's first-time screen before Custom Key/Dial Set. (kit2_pass2's 215457_right.png), as its --info-ok names it
+CUSTOM_KEY = "Custom Key/Dial Set."
+CUSTOM_KEY_NOTICE = ("In the next setting screen, you can check the function assigned to a specific button by pressing "
+                     "that button on the device.")
+
+
+def first_time_branches(monkeypatch, make):
+    """first_time_notice on the screen `make(refuses)` builds, in its three branches since 2026-11-14: MENU refused by the
+    camera (Down off the box, never ticking it, then MENU, then its lone OK: passed); MENU taken (cancelled, not passed,
+    nothing else pressed, the --info-ok that names it said); named by --info-ok (Down off the box, then its OK: passed).
+    The screen reads as no known kind: a first-time screen draws no notice's frame lines."""
+    import prove_run as P
+    from proving import screens
+    from runner import notice_words
+    monkeypatch.setattr(screens, "notice_lit", lambda cam: "OK" if "down" in cam.keys else "Don't show this again.")
+    monkeypatch.setattr(screens, "INFO_OK", {})
+    cam = make(True)
+    assert cam.read().kind == "unknown"
+    assert P.first_time_notice(cam, CUSTOM_KEY, CUSTOM_KEY) is True and cam.keys == ["down", "menu", "enter"]
+    cam = make(False)
+    got = screens.notice_before(cam, CUSTOM_KEY, CUSTOM_KEY)
+    assert "refused" in got and cam.keys == ["down", "menu"], got
+    assert f'--info-ok "{CUSTOM_KEY}=In the next setting screen' in got["refused"], got
+    monkeypatch.setitem(screens.INFO_OK, CUSTOM_KEY, notice_words(CUSTOM_KEY_NOTICE))
+    cam = make(False)
+    assert P.first_time_notice(cam, CUSTOM_KEY, CUSTOM_KEY) is True and cam.keys == ["down", "enter"]
+    cam = make(False)                   # named, but the lit bar before Right was another row: nothing pressed
+    assert P.first_time_notice(cam, CUSTOM_KEY, "Drive Mode") is False and cam.keys == []
+
+
+def test_first_time_notice_is_passed_only_by_a_refused_menu_or_its_name():
+    """The real frame (kit2_pass2's first-time screen before Custom Key/Dial Set.: "In the next setting screen, you can
+    check the function assigned ...", "Don't show this again." over its OK), through first_time_notice's three branches
+    (first_time_branches); an ordinary menu page is left alone. Until 2026-11-14 it was answered Down and Enter at once."""
     import prove_run as P
     from camkit import ocr
     if not ocr.available():
         pytest.skip("no OCR engine")
-    cam = FakeNoticeCamera(need(A1 / "kit2_pass2" / "shots" / "215457_right.png"))
-    assert P.first_time_notice(cam) is True and cam.keys == ["down", "enter"]
+    frame = need(A1 / "kit2_pass2" / "shots" / "215457_right.png")
+    mp = pytest.MonkeyPatch()
+    try:
+        first_time_branches(mp, lambda refuses: FakeNoticeCamera(frame, refuses))
+    finally:
+        mp.undo()
     shots = sorted(need(A1 / "kit2_page_scan_osd3" / "shots").glob("*.png"))
     page = next((f for f in shots[:60] if screen.read(load(f)).kind == "menu"), None)
     if page is None:
         pytest.skip("no menu page among the scan's first frames")
     cam = FakeNoticeCamera(page)
     assert P.first_time_notice(cam) is False and cam.keys == []
+
+
+def test_first_time_notice_branches_on_made_up_lines(tmp_path, monkeypatch):
+    """The same three branches on made-up OCR lines laid out as the real frame's (its text, the box's line, its OK), so
+    the path is tested where no runs/ folder is."""
+    from camkit import ocr
+    lines = [ocr.Line(text="In the next setting screen, you can check", conf=0.9, x=53, y=113, w=535, h=38),
+             ocr.Line(text="the function assigned to a specific button", conf=0.9, x=52, y=161, w=536, h=32),
+             ocr.Line(text="by pressing that button on the device.", conf=0.9, x=74, y=207, w=490, h=34),
+             ocr.Line(text="Don't show this again.", conf=0.9, x=175, y=352, w=286, h=33),
+             ocr.Line(text="OK", conf=0.9, x=297, y=414, w=46, h=37)]
+    monkeypatch.setattr(ocr, "read", lambda paths, eng=None: {p: list(lines) for p in paths})
+    frame = tmp_path / "00001_right.png"
+    first_time_branches(monkeypatch, lambda refuses: FakeNoticeCamera(frame, refuses, kind="unknown"))
+    # a screen of no known kind without the box is no first-time screen: left alone, nothing pressed
+    monkeypatch.setattr(ocr, "read", lambda paths, eng=None: {p: lines[:3] + lines[4:] for p in paths})
+    cam = FakeNoticeCamera(frame, True, kind="unknown")
+    from proving import screens
+    assert screens.notice_before(cam, CUSTOM_KEY, CUSTOM_KEY) is None and cam.keys == []
+    # named, such a screen is still no notice: nothing pressed
+    from runner import notice_words
+    monkeypatch.setitem(screens.INFO_OK, CUSTOM_KEY, notice_words(CUSTOM_KEY_NOTICE))
+    cam = FakeNoticeCamera(frame, True, kind="unknown")
+    assert screens.notice_before(cam, CUSTOM_KEY, CUSTOM_KEY) is None and cam.keys == []
+    # a plain notice (its frame lines drawn, no box): named, passed by its name; unnamed, left to its caller
+    monkeypatch.setattr(ocr, "read", lambda paths, eng=None: {p: lines[:3] + lines[4:] for p in paths})
+    monkeypatch.setattr(screens, "notice_lit", lambda cam: "OK")
+    cam = FakeNoticeCamera(frame, False, kind="notice")
+    assert screens.first_time_notice(cam, CUSTOM_KEY, CUSTOM_KEY) is True and cam.keys == ["enter"]
+    monkeypatch.setattr(screens, "INFO_OK", {})
+    cam = FakeNoticeCamera(frame, True, kind="notice")
+    assert screens.notice_before(cam, CUSTOM_KEY, CUSTOM_KEY) is None and cam.keys == []
 
 
 def test_a_table_cell_is_in_scope_by_its_job_key_or_its_tables_row_key():

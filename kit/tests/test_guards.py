@@ -251,7 +251,8 @@ class Presses:
     def __init__(self):
         self.sent, self.judged = [], []           # the keys sent; the (screen, on_shooting) each went with
 
-    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset()):
+    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset(),
+              judged=False):
         self.sent.append(key)
         self.judged.append((screen, on_shooting))
 
@@ -264,9 +265,24 @@ def camera(tmp_path, kind, lit, may_open=()):
     return cam
 
 
+def readable(monkeypatch, text="Shooting 2/40 Drive Mode Single Shooting"):
+    """The screen's text as the camera's own Enter check reads it (live.text_of, body_of, title_of): a menu page's, which
+    asks nothing, for a test whose made-up frame OCR cannot read (the check refuses a screen it cannot read)."""
+    for name in ("text_of", "body_of", "title_of"):
+        monkeypatch.setattr(live, name, lambda cam: text)
+    unchanged(monkeypatch)
+
+
+def unchanged(monkeypatch):
+    """The screen looked at again just before an Enter (live.look_again) is the one judged: a made-up camera has no
+    eyes to grab from."""
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))
+
+
 @pytest.mark.parametrize("key", ["right", "enter", "ms_right", "ms_enter"])
 def test_choke_point_refuses_opening_a_never_open_row(tmp_path, monkeypatch, key):
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Access Authen. Info")
+    unchanged(monkeypatch)              # an Enter looks at the screen again first (LiveCamera.look_before)
     cam = camera(tmp_path, "submenu", "Access Authen. Info", may_open={"Access Authen. Info"})
     with pytest.raises(safety.Refused, match="never opened"):
         cam.press(key)
@@ -280,12 +296,14 @@ def test_choke_point_judges_a_key_however_it_is_spelled(tmp_path, monkeypatch, k
     """The never-open check judges the key as the guards read it: a padded, quoted, upper-case or look-alike Right or
     Enter on a never-open row is refused by the row check, and on any other row by the link, which presses only a
     key written as its own name. Neither press goes out."""
+    unchanged(monkeypatch)              # an Enter looks at the screen again first (LiveCamera.look_before)
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Access Authen. Info")
     cam = camera(tmp_path, "submenu", "Access Authen. Info")
     with pytest.raises(safety.Refused, match="never opened"):
         cam.press(key)
     assert cam.link.sent == []
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Drive Mode  Single Shooting")
+    readable(monkeypatch)                   # past the camera's own Enter check, which asks a readable screen
     with fake_link(tmp_path, monkeypatch) as lk:
         cam = camera(tmp_path, "submenu", "")
         cam.link = lk
@@ -295,6 +313,7 @@ def test_choke_point_judges_a_key_however_it_is_spelled(tmp_path, monkeypatch, k
 
 def test_choke_point_lets_a_named_row_and_other_presses_through(tmp_path, monkeypatch):
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Reg. Custom Shoot Set")
+    readable(monkeypatch)
     cam = camera(tmp_path, "submenu", "")
     with pytest.raises(safety.Refused):
         cam.press("right")
@@ -346,7 +365,7 @@ def fake_link(tmp_path, monkeypatch):
 def test_c4_goes_out_on_a_menu_option_or_panel_screen(tmp_path, monkeypatch, kind):
     """No config and no per-body yes: C4 is sent on a menu, option, panel or editor screen the caller read last."""
     with fake_link(tmp_path, monkeypatch) as lk:
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind=kind))["args"] == ["c4", "60", "allowed"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind=kind), judged=lk.moves)["args"] == ["c4", "60", "allowed"]
 
 
 @pytest.mark.parametrize("kind,why", [("shooting", "assigns to it"), ("unknown", "picture is displayed"),
@@ -370,17 +389,19 @@ def test_c4_refused_while_the_camera_says_it_is_in_playback(tmp_path, monkeypatc
     monkeypatch.setenv("FAKE_CAMLINK_PROPS", json.dumps([{"name": "CameraOperatingMode"}]))
     monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"CameraOperatingMode": {"current": L.PLAYBACK_MODE}}))
     with fake_link(tmp_path, monkeypatch) as lk, pytest.raises(safety.Refused, match="in Playback"):
-        lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))
+        lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)
     monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"CameraOperatingMode": {"current": 1}}))       # Record
     with fake_link(tmp_path, monkeypatch) as lk:
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))["ok"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)["ok"]
 
 
-def test_live_camera_hands_its_screen_to_the_link(tmp_path):
+def test_live_camera_hands_its_screen_to_the_link(tmp_path, monkeypatch):
     """LiveCamera.press, the way every walker presses, gives the link the screen it read last."""
     seen = []
+    readable(monkeypatch)                   # C4 meets the camera's check of what the screen asks too
     cam = camera(tmp_path, "menu", "")
-    cam.link = SimpleNamespace(press=lambda key, hold_ms=60, allow=frozenset(), screen=None, on_shooting=frozenset():
+    cam.link = SimpleNamespace(press=lambda key, hold_ms=60, allow=frozenset(), screen=None, on_shooting=frozenset(),
+                               judged=None:
                                seen.append(screen))
     cam.hdmi = SimpleNamespace(settle=lambda *a, **k: (_ for _ in ()).throw(RuntimeError("sent")))
     with pytest.raises(RuntimeError):
@@ -494,6 +515,7 @@ class Reader:
 
 def unread_camera(tmp_path, monkeypatch, reader, kind="submenu", bar=True, ocr_lines=()):
     monkeypatch.setattr(live.ocr, "read", lambda paths, eng=None: {p: list(ocr_lines) for p in paths})
+    unchanged(monkeypatch)              # an Enter looks at the screen again first (LiveCamera.look_before)
     monkeypatch.setattr(live, "ask_role", reader)
     cam = camera(tmp_path, kind, "")
     cam.frame = lit_frame(tmp_path, bar)
@@ -561,6 +583,7 @@ def test_a_row_ocr_reads_and_a_screen_with_no_bar_never_ask_the_reader(tmp_path,
     with pytest.raises(RuntimeError, match="sent"):
         cam.press("right")
     cam = unread_camera(tmp_path, monkeypatch, reader, kind="list")   # a list's Enter chooses an option: not a row
+    readable(monkeypatch, "Drive Mode Single Shooting Continuous Shooting")     # a list that asks nothing
     with pytest.raises(RuntimeError, match="sent"):
         cam.press("enter")
     assert reader.asked == []
@@ -684,8 +707,11 @@ def test_the_link_sends_no_key_but_menu_on_the_shooting_screen(tmp_path, monkeyp
         with pytest.raises(safety.Refused, match="shooting screen"):
             lk.call(f"press {key} 60", screen="shooting")              # a raw line is judged the same
         assert lk.press("menu", screen=shooting)["ok"] and lk.press("menu", cleanup=True)["ok"]
-        assert lk.press(key, screen=shooting, on_shooting=key)["args"][0] == key       # named for this press
-        assert lk.press(key, screen=SimpleNamespace(kind="menu"))["args"][0] == key    # a menu is no shooting screen
+        # an Enter goes with the camera layer's word that its check judged it (camkit.live), named or not
+        def judged():                   # the link's move count now: what the camera layer's check hands it
+            return {"judged": lk.moves} if key in safety.ENTER_KEYS else {}
+        assert lk.press(key, screen=shooting, on_shooting=key, **judged())["args"][0] == key       # named for this press
+        assert lk.press(key, screen=SimpleNamespace(kind="menu"), **judged())["args"][0] == key    # no shooting screen
     assert sum(f"press {key} " in l for l in sent_lines(log)) == 2
 
 
@@ -921,8 +947,10 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
             return SimpleNamespace(kind=kind)
 
         def press(self, key, **kw):
-            sent.append(("cam", key, {**kw, "confirm_once": True} if getattr(self, "confirm_once", False) else kw))
-            self.confirm_once = False
+            said = {**kw, **({"confirm_once": True} if getattr(self, "confirm_once", False) else {}),
+                    **({"answer_once": self.answer_once} if getattr(self, "answer_once", None) else {})}
+            sent.append(("cam", key, said))
+            self.confirm_once, self.answer_once = False, None
 
         def dial(self, name, steps, **kw):
             sent.append(("cam", f"dial {name} {steps}", kw))
@@ -941,7 +969,7 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
                         ("enter_any", lambda cam, path, i: None), ("bar_at", lambda cam, y: False),
                         ("screen_text", lambda cam, grip: text), ("highlighted", lambda image, path: lit),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
-                        ("close_for_restore", lambda cam, link: sent.append(("closed",))),
+                        ("close_for_restore", lambda cam, link, start: sent.append(("closed",))),
                         ("session", SimpleNamespace(ended=lambda link, before, show=30: ending,
                                                     put_back=lambda link, e, before: e)),
                         ("restore_checked", lambda r, e, before: True)):
@@ -1057,9 +1085,11 @@ def test_drive_sends_c4set_and_c4reset_only_with_the_owners_word(tmp_path, monke
 
 def test_the_notice_ok_of_to_shooting_goes_out_judged_on_the_notice(tmp_path, monkeypatch):
     """proving.nav.to_shooting: an information notice that refuses MENU takes OK, a cleanup press sent straight through
-    the link: it carries the screen read (the notice), so the link's guard lets it out."""
+    the link: judged as the camera judges a notice that has just refused MENU (live.menu_refused_enter: its OK lit and
+    alone, no question mark, no confirmation's words), it carries the screen read (the notice) and the camera layer's
+    judged word, so the link's guards let it out."""
     sys.path.insert(0, str(ROOT / "kit"))
-    from camkit.link import LinkError
+    from camkit.link import CameraRefused
     from proving import nav
     log = tmp_path / "received.txt"
     monkeypatch.setenv("FAKE_CAMLINK_LOG", str(log))
@@ -1067,14 +1097,17 @@ def test_the_notice_ok_of_to_shooting_goes_out_judged_on_the_notice(tmp_path, mo
     monkeypatch.setattr(nav.screen, "read", lambda f: SimpleNamespace(kind=next(kinds)))
     monkeypatch.setattr(nav, "run_tmp_png", lambda f: tmp_path / "notice.png")
     monkeypatch.setattr(nav.ocr, "read", lambda paths, eng=None: {p: [] for p in paths})
-    monkeypatch.setattr(nav.ocr, "text_in", lambda lines, box: "This operation or setting not available.")
+    monkeypatch.setattr(nav.ocr, "text_in", lambda lines, box: "OK" if box == (200, 340, 440, 395)    # its lit OK
+                        else "This operation or setting not available.")
+    monkeypatch.setattr(live, "lit_found", lambda image, kind=None: ((200, 340, 440, 395), True))     # its lit OK
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", SimpleNamespace(image=None)))  # unchanged
     monkeypatch.setattr(nav.time, "sleep", lambda s: None)
     with fake_link(tmp_path, monkeypatch) as lk:
         real = lk.press
 
         def press(key, **kw):
             if key == "menu":
-                raise LinkError("press menu 60: button not accepted")
+                raise CameraRefused("press menu 60: button not accepted")      # the camera's own refusal
             return real(key, **kw)
         lk.press = press
         nav.to_shooting(lk, SimpleNamespace(grab=lambda save=False: SimpleNamespace(image=None)), "the test", tries=1)
@@ -1279,7 +1312,7 @@ def test_c4_refused_when_a_listed_mode_cannot_be_read(tmp_path, monkeypatch, ans
     monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"CameraOperatingMode": answer} if answer else {}))
     with fake_link(tmp_path, monkeypatch) as lk, pytest.raises(safety.Refused, match="lists its operating mode but did "
                                                                                     "not give it"):
-        lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))
+        lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)
     assert not any("press c4" in l for l in sent_lines(log))
 
 
@@ -1290,7 +1323,7 @@ def test_c4_refused_when_the_question_gets_no_reply(tmp_path, monkeypatch):
     lk = fake_link(tmp_path, monkeypatch).open()
     try:
         with pytest.raises(safety.Refused, match="a link in trouble"):
-            lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))
+            lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)
     finally:
         lk.close()
 
@@ -1305,7 +1338,7 @@ def test_c4_refused_when_props_cannot_be_read(tmp_path, monkeypatch, fails):
     lk = fake_link(tmp_path, monkeypatch).open()
     try:
         with pytest.raises(safety.Refused, match="could not be read .props"):
-            lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))
+            lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)
         assert lk._mode_listed is None
     finally:
         lk.close()
@@ -1317,8 +1350,8 @@ def test_c4_goes_on_the_screen_alone_for_a_body_that_does_not_list_the_mode(tmp_
     monkeypatch.setenv("FAKE_CAMLINK_PROPS", json.dumps([{"name": "FNumber", "current": 800}]))
     monkeypatch.delenv("FAKE_CAMLINK_GET", raising=False)
     with fake_link(tmp_path, monkeypatch) as lk:
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))["ok"]
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="dialog"))["ok"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)["ok"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="dialog"), judged=lk.moves)["ok"]
         events = [json.loads(l) for l in (lk.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
     cmds = [e["cmd"] for e in events if e["kind"] == "cmd"]
     assert cmds.count("props") == 1 and not any(c.startswith("get ") for c in cmds)
@@ -1328,7 +1361,7 @@ def test_c4_goes_on_a_listed_mode_that_is_not_playback(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_CAMLINK_PROPS", json.dumps([{"name": "CrDeviceProperty_CameraOperatingMode"}]))
     monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"CameraOperatingMode": {"current": 1}}))       # Record
     with fake_link(tmp_path, monkeypatch) as lk:
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))["ok"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)["ok"]
 
 
 def test_the_mode_question_logs_no_property_value(tmp_path, monkeypatch):
@@ -1340,7 +1373,7 @@ def test_the_mode_question_logs_no_property_value(tmp_path, monkeypatch):
     monkeypatch.setenv("FAKE_CAMLINK_PROPS", json.dumps(made_up))
     monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"CameraOperatingMode": {"current": 1}}))
     with fake_link(tmp_path, monkeypatch) as lk:
-        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"))["ok"]
+        assert lk.press("c4", allow={"c4"}, screen=SimpleNamespace(kind="menu"), judged=lk.moves)["ok"]
         asked = [json.loads(l) for l in (lk.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
         assert lk.props() == made_up
         later = [json.loads(l) for l in (lk.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -1579,13 +1612,24 @@ class Sent(Exception):
     pass
 
 
-def asking_camera(tmp_path, monkeypatch, kind, text, lit=None):
-    """A LiveCamera on a screen read as `kind` whose whole text is `text` and lit text `lit` (the whole text when not
-    given); its link raises Sent."""
+def asking_camera(tmp_path, monkeypatch, kind, text, lit=None, body=None, lone=""):
+    """A LiveCamera on a screen read as `kind` whose whole text is `text`, its text above the footer `body` (the whole
+    text when not given) and lit text `lit` (the whole text when not given), a notice's lone OK verdict `lone`
+    (live.lone_of: "" when OK is its only button); its link raises Sent, and CameraRefused for MENU."""
+    from camkit.link import CameraRefused
     monkeypatch.setattr(live, "lit_text", lambda image, path: text if lit is None else lit)
     monkeypatch.setattr(live, "text_of", lambda cam: text)
+    monkeypatch.setattr(live, "body_of", lambda cam: text if body is None else body)
+    monkeypatch.setattr(live, "title_of", lambda cam: "")
+    monkeypatch.setattr(live, "lone_of", lambda image, path: lone)
+    unchanged(monkeypatch)
     cam = camera(tmp_path, kind, text)
-    cam.link = SimpleNamespace(press=lambda *a, **k: (_ for _ in ()).throw(Sent()), moves=0, menus=0)
+
+    def press(key, *a, **k):
+        if key == "menu":
+            raise CameraRefused("press menu 60: button not accepted")
+        raise Sent(k)
+    cam.link = SimpleNamespace(press=press, moves=0, menus=0)
     cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
     return cam
 
@@ -1597,7 +1641,7 @@ def test_the_camera_refuses_enter_on_a_confirmation_unless_its_caller_judged_it(
     --confirm through live.press's confirm) or drive.py allowed it as an owner row's armed press (permit)."""
     kind = "notice" if "?" not in text else "dialog"
     cam = asking_camera(tmp_path, monkeypatch, kind, text)
-    with pytest.raises(safety.Refused, match="confirmation text"):
+    with pytest.raises(safety.Refused, match="a notice|question mark"):       # by its shape, before any word
         cam.press("enter")
     cam = asking_camera(tmp_path, monkeypatch, kind, text)
     with pytest.raises(Sent):
@@ -1608,8 +1652,12 @@ def test_the_camera_refuses_enter_on_a_confirmation_unless_its_caller_judged_it(
     with pytest.raises(Sent):
         cam.press("enter")
     cam = asking_camera(tmp_path, monkeypatch, "list", text)
-    with pytest.raises(Sent):                           # an option list: its Enter chooses, never confirms
-        cam.press("enter")
+    if "?" in text:                                     # a question mark asks, whatever kind the screen reads as
+        with pytest.raises(safety.Refused, match="question mark"):
+            cam.press("enter")
+    else:
+        with pytest.raises(Sent):                       # an option list: its Enter chooses, never confirms
+            cam.press("enter")
 
 
 def definition_carousels() -> list:
@@ -1661,6 +1709,282 @@ def test_the_camera_refuses_enter_where_it_cannot_read_the_screen(tmp_path, monk
     monkeypatch.setattr(live, "text_of", lambda cam: (_ for _ in ()).throw(RuntimeError("no OCR")))
     with pytest.raises(safety.Refused, match="cannot be read"):
         cam.press("enter")
+
+
+# ---------------------------------------------------------------- Enter by the screen's shape (2026-11-14, step C1)
+
+FACES = "Clear registered faces? OK Cancel"          # a question holding none of the confirmation words
+
+
+def test_a_question_holding_no_confirmation_word_was_let_through_and_is_refused_now(tmp_path, monkeypatch):
+    """The finding: the words gated nothing they did not name, so "Clear registered faces? OK Cancel" passed the camera's
+    check on a notice, a dialog and a screen of no known kind, and drive.py's. Each refuses it now, by its shape."""
+    import drive
+    assert safety.confirmation_refused(FACES) is None              # no word of the list: the old check let it go
+    for kind in ("notice", "dialog", "unknown"):
+        for key in ("enter", "ms_enter"):                          # the multi-selector's centre answers it too
+            with pytest.raises(safety.Refused):
+                asking_camera(tmp_path, monkeypatch, kind, FACES, "OK").press(key)
+    with pytest.raises(safety.Refused, match="question mark"):     # and the trash button, which confirms a delete
+        asking_camera(tmp_path, monkeypatch, "list", FACES, "OK").press("c4", allow={"c4"})
+        assert drive.press_refused("enter", "OK", FACES, kind), kind
+        assert safety.enter_refused(kind, FACES, "OK"), kind
+    assert drive.press_refused("enter", "OK", FACES, "notice", confirm=True) == ""     # the owner's word lifts it
+
+
+@pytest.mark.parametrize("kind,text,lit", [
+    ("notice", "Speicherkarte formatieren? Ausführen Abbrechen", "Ausführen"),
+    ("dialog", "Supprimer toutes les images ? OK Annuler", "OK"),
+    ("notice", "¿Borrar todas las imágenes? Aceptar Cancelar", "Aceptar"),
+    ("notice", "Effacer la carte Valider Annuler", "Valider"),                 # no mark, no English word: a notice
+    ("unknown", "Gerät koppeln Weiter Abbrechen", "Weiter"),                    # no mark: a screen of no known kind
+    ("list", "هل تريد حذف كل الصور؟ موافق إلغاء", "موافق"),                     # an Arabic mark on any kind
+    ("list", "メモリーカードをフォーマットしますか？ 実行 キャンセル", "実行")])     # a full-width mark on any kind
+def test_a_question_in_another_language_is_refused_by_its_shape(tmp_path, monkeypatch, kind, text, lit):
+    """A camera not set to English: none of the confirmation words is there to read. The question mark, the notice and
+    the screen of no known kind refuse it all the same, at the camera and in drive.py."""
+    import drive
+    assert safety.confirmation_refused(text) is None
+    with pytest.raises(safety.Refused):
+        asking_camera(tmp_path, monkeypatch, kind, text, lit).press("enter")
+    assert drive.press_refused("enter", lit, text, kind)
+
+
+@pytest.mark.parametrize("kind", ["dialog", "notice"])
+def test_a_two_button_dialog_with_no_question_mark_is_refused(tmp_path, monkeypatch, kind):
+    """"Pair this device OK Cancel": no question mark. As a carousel it asks by its buttons (safety.asks: Cancel, the
+    pair; English words, honestly); as a notice by its kind. And after a refused MENU a notice with a second button below
+    its lit OK, or a line reading Cancel, is no lone OK (safety.lone_ok)."""
+    text = "Pair this device OK Cancel"
+    with pytest.raises(safety.Refused, match="asks|notice"):
+        asking_camera(tmp_path, monkeypatch, kind, text, "OK").press("enter")
+    ok, cancel, sentence = ("OK", 300, 352, 40, 30), ("Cancel", 290, 410, 60, 30), ("Pair this device", 100, 120, 400, 30)
+    box = (200, 340, 440, 395)
+    assert "beside or below" in safety.lone_ok("OK", [sentence, ok, cancel], box)
+    assert "beside or below" in safety.lone_ok("OK", [sentence, ok, ("Cancel", 460, 352, 60, 30)], box)
+    assert "reads as a button" in safety.lone_ok("OK", [sentence, ("Cancel", 290, 280, 60, 30), ok], box)
+    assert safety.lone_ok("OK", [sentence, ok], box) == ""
+    assert safety.lone_ok("", [sentence, ok], box) and safety.lone_ok("OK", [sentence, ok], None)
+
+
+def test_an_unreadable_dialog_gets_no_enter(tmp_path, monkeypatch):
+    """A carousel whose lit option and title line read nothing, a screen whose text reads nothing, and one whose reading
+    fails: nothing tells what Enter would answer."""
+    with pytest.raises(safety.Refused, match="lit text that cannot be read"):
+        asking_camera(tmp_path, monkeypatch, "dialog", "Drive Mode", "").press("enter")
+    with pytest.raises(safety.Refused, match="nothing on the list screen can be read"):
+        asking_camera(tmp_path, monkeypatch, "list", "", "").press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, "picker", "x")
+    monkeypatch.setattr(live, "body_of", lambda cam: (_ for _ in ()).throw(RuntimeError("no OCR")))
+    with pytest.raises(safety.Refused, match="cannot be read"):
+        cam.press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, "dialog", "Drive Mode", "")       # its title line read instead
+    monkeypatch.setattr(live, "title_of", lambda cam: "Single Shooting")
+    with pytest.raises(Sent):
+        cam.press("enter")
+
+
+def test_a_lone_ok_notice_takes_enter_right_after_it_refused_menu(tmp_path, monkeypatch):
+    """The one way out of an information notice: MENU first (live.leave_notice); where the camera refuses it, the next
+    Enter, on that very screen with nothing sent between, goes when OK is plainly its only button and the text reads as
+    no confirmation. Without the refused MENU, after another press, on another screen, with a second button or with a
+    question mark, no Enter."""
+    from camkit.link import CameraRefused
+    text = "This operation or setting not available as follows Picture Profile OK"
+    cam = asking_camera(tmp_path, monkeypatch, "notice", text, "OK")
+    with pytest.raises(safety.Refused, match="a notice"):
+        cam.press("enter")                                          # no MENU refused before it
+    cam = asking_camera(tmp_path, monkeypatch, "notice", text, "OK")
+    with pytest.raises(Sent):
+        live.leave_notice(cam)                                      # MENU refused, then the lone OK
+    events = [json.loads(l) for l in (cam.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["kind"] for e in events][-2:] == ["menu_refused", "enter_passed"]
+    assert events[-1]["by"] == live.MENU_REFUSED
+    for spoil in ("a press between", "another screen", "a second button", "a question mark", "a confirmation"):
+        t = text.replace("OK", "OK?") if spoil == "a question mark" else \
+            "All data will be deleted OK" if spoil == "a confirmation" else text
+        cam = asking_camera(tmp_path, monkeypatch, "notice", t, "OK", lone="a line sits below" if spoil == "a second button" else "")
+        with pytest.raises(CameraRefused):
+            cam.press("menu")
+        if spoil == "a press between":
+            cam.link.moves = 1                                      # something went out since the refusal
+        if spoil == "another screen":
+            cam.screen = SimpleNamespace(kind="notice", signature="other")
+            cam.menu_refused["screen"] = SimpleNamespace(kind="notice", signature="one", struct=(1,), bits=np.zeros(0))
+        with pytest.raises(safety.Refused):
+            cam.press("enter")
+
+
+def test_each_explicit_way_past_and_only_it(tmp_path, monkeypatch):
+    """The ways past the shape check, each named and logged: --confirm (confirm_once, every check lifted), an owner
+    decision's armed press (permit), a prover's --allow for its own row (answer_once: the shape lifted, the words still
+    refuse), a notice --info-ok names (notice_ok: a lone OK, no question mark, no confirmation's words). Each is used up
+    by one press."""
+    slots = "MR Memory 1 2 3 M1 M2 M3 M4 MENU OK"                   # memreg's slot screen reads as no known kind
+    cam = asking_camera(tmp_path, monkeypatch, "unknown", slots, "")
+    with pytest.raises(safety.Refused, match="no known kind|'unknown'"):
+        cam.press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, "unknown", slots, "")
+    cam.answer_once = "--allow 'Camera Set. Memory'"
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert cam.answer_once is None                                  # used up
+    cam = asking_camera(tmp_path, monkeypatch, "unknown", "Format all data will be lost OK", "")
+    cam.answer_once = "--allow 'Camera Set. Memory'"
+    with pytest.raises(safety.Refused, match="does not answer"):    # the words still refuse under the consent
+        cam.press("enter")
+    cam = asking_camera(tmp_path, monkeypatch, "unknown", "", "")
+    cam.answer_once = "--allow 'Camera Set. Memory'"
+    with pytest.raises(safety.Refused, match="'unknown'"):          # nothing read: no consent answers it
+        cam.press("enter")
+    for way in ("confirm", "permit"):
+        cam = asking_camera(tmp_path, monkeypatch, "notice", FACES, "OK")
+        if way == "confirm":
+            cam.confirm_once = "--confirm"
+        else:
+            cam.permit = {"row": "Face Memory", "what": "confirm"}
+        with pytest.raises(Sent):
+            cam.press("enter")
+    notice = "You can set different settings for still image mode and movie mode in the next screen. OK"
+    with pytest.raises(Sent):
+        asking_camera(tmp_path, monkeypatch, "notice", notice, "OK").press("enter", notice_ok="Different Set for Still/Mv")
+    with pytest.raises(safety.Refused, match="only one"):
+        asking_camera(tmp_path, monkeypatch, "notice", notice, "OK", lone="a line sits below").press(
+            "enter", notice_ok="Different Set for Still/Mv")
+    with pytest.raises(safety.Refused, match="question mark"):
+        asking_camera(tmp_path, monkeypatch, "notice", FACES, "OK").press("enter", notice_ok="Different Set for Still/Mv")
+    import drive
+    assert "no known kind" in drive.press_refused("enter", "", slots, "unknown", vouched=True) or \
+        "'unknown'" in drive.press_refused("enter", "", slots, "unknown", vouched=True)  # a vouch alone: no
+    assert drive.press_refused("enter", "", slots, "unknown", vouched=True, consent="--allow 'Camera Set. Memory'") == ""
+    assert drive.press_refused("enter", "OK", "", "unknown", consent="--allow 'Camera Set. Memory'")   # nothing read
+    assert drive.press_refused("enter", "OK", "Complete. OK", "notice", notice_way=live.MENU_REFUSED, lone="") == ""
+    assert drive.press_refused("enter", "OK", "Complete. OK", "notice", notice_way=live.MENU_REFUSED, lone="2 buttons")
+    assert drive.press_refused("enter", "OK", "Complete. OK", "notice")
+
+
+def test_the_shape_check_judges_the_text_above_the_footer_and_every_kind_it_does_not_list(tmp_path, monkeypatch):
+    """The footer's help glyph draws a "?" on every menu and option screen: the question mark is judged above it
+    (live.body_of). A kind camkit.screen does not list as one whose Enter chooses or opens gets no Enter; the trash
+    button meets the question mark and the kind, never the carousel's buttons (Focus Area's SET, a look's Reset)."""
+    menu = "Shooting 2/40 Drive Mode Single Shooting Interval Shoot Func."
+    with pytest.raises(Sent):
+        asking_camera(tmp_path, monkeypatch, "menu", menu + " MENU ? Help", "Drive Mode", body=menu).press("enter")
+    with pytest.raises(safety.Refused, match="question mark"):
+        asking_camera(tmp_path, monkeypatch, "menu", menu + " Delete? OK", "Drive Mode").press("enter")
+    for kind in ("unknown", "notice", "carousel_v2", None, ""):
+        assert safety.enter_refused(kind, menu, "x"), kind
+    assert safety.enter_refused("look", "Creative Look ST Reset Cancel OK", "", key="c4") == ""
+    assert safety.enter_refused("look", "Reset this look? Cancel OK", "", key="c4")
+    assert safety.enter_refused("notice", "Delete this image Delete Cancel", "", key="c4")
+    # a reading that failed refuses as one; a notice takes Enter only by a named way past AND a lone OK judged
+    assert "cannot be read" in safety.enter_refused("list", None, "x")
+    assert safety.enter_refused("notice", "Complete. OK", "OK", lone="")                    # a lone OK, no way named
+    assert safety.enter_refused("notice", "Complete. OK", "OK", passed=live.MENU_REFUSED)   # a way, the OK unjudged
+    assert safety.enter_refused("notice", "Complete. OK", "OK", passed=live.MENU_REFUSED, lone="") == ""
+    listed = {"menu", "submenu", "tiles", "shooting", "list", "dialog", "sidelist", "checklist", "checkgrid", "fields",
+              "picker", "table", "keyset", "fnmenu", "look", "slider", "wbgrid", "guide", "helppop"}
+    assert listed == set(safety.ENTER_KINDS), "a kind added to the list is one more screen Enter goes on: on purpose"
+
+
+def test_the_link_sends_no_enter_the_camera_layer_did_not_judge(tmp_path, monkeypatch):
+    """Nothing bypasses the camera's check: the link refuses an Enter, or the multi-selector's centre, sent without the
+    camera layer's word that it judged it (Link.press's judged), a raw command line too; LiveCamera.press gives that word."""
+    log = tmp_path / "received.txt"
+    monkeypatch.setenv("FAKE_CAMLINK_LOG", str(log))
+    with fake_link(tmp_path, monkeypatch) as lk:
+        for key in ("enter", "ms_enter"):
+            with pytest.raises(safety.Refused, match="judged"):
+                lk.press(key, screen=SimpleNamespace(kind="list"))
+            with pytest.raises(safety.Refused, match="judged"):
+                lk.call(f"press {key} 60", screen="list")
+            assert lk.press(key, screen=SimpleNamespace(kind="list"), judged=lk.moves)["args"][0] == key
+        assert lk.press("down", screen=SimpleNamespace(kind="list"))["ok"]          # other keys need no word
+    assert sum("press enter " in l for l in sent_lines(log)) == 1
+    cam = asking_camera(tmp_path, monkeypatch, "list", "Drive Mode Single Shooting", "Single Shooting")
+    with pytest.raises(Sent) as got:
+        cam.press("enter")
+    assert got.value.args[0].get("judged") == cam.link.moves      # the move count it judged the screen at
+
+
+def test_an_information_notice_after_a_choice_is_left_with_menu_first(tmp_path, monkeypatch):
+    """proving.screens.info_notice_ok took an information notice's OK on the words alone. Now MENU goes first
+    (live.leave_notice), and OK only where the camera refuses MENU (the camera then judges that lone OK); a screen read
+    as a table (Exposure Ctrl Type's information) takes its OK as before, and a notice --info-ok names takes it with the
+    run's name for it (LiveCamera.press's notice_ok)."""
+    sys.path.insert(0, str(ROOT / "kit"))
+    from camkit.link import CameraRefused
+    from proving import screens
+    monkeypatch.setattr(screens.ocr, "read", lambda paths, eng=None: {p: [] for p in paths})
+    monkeypatch.setattr(screens.ocr, "text_in", lambda lines, box: "Enters the state with Flash Effect applied. OK")
+    monkeypatch.setattr(screens, "notice_lit", lambda cam: "OK")
+
+    class Cam:
+        def __init__(self, kind, refuses=False):
+            self.kind, self.refuses, self.pressed = kind, refuses, []
+            self.frame = SimpleNamespace(path=tmp_path / "00009_notice.png", image=None)
+
+        def read(self):
+            return SimpleNamespace(kind=self.kind)
+
+        def press(self, key, **kw):
+            self.pressed.append((key, kw))
+            if key == "menu" and self.refuses:
+                raise CameraRefused("press menu 60: button not accepted")
+    for kind, refuses, pressed, left in (("notice", False, ["menu"], "menu"), ("unknown", False, ["menu"], "menu"),
+                                         ("notice", True, ["menu", "enter"], "ok")):
+        cam = Cam(kind, refuses)
+        assert screens.info_notice_ok(cam, "Sync Terminal")["left_by"] == left
+        assert [k for k, _ in cam.pressed] == pressed, (kind, refuses)
+    cam = Cam("table")
+    assert screens.info_notice_ok(cam, "Exposure Ctrl Type", kinds=("table",))["left_by"] == "ok"
+    assert cam.pressed == [("enter", {})]
+    cam = Cam("notice")
+    screens.info_notice_ok(cam, "Different Set for Still/Mv", kinds=("notice",), named="Different Set for Still/Mv")
+    assert cam.pressed == [("enter", {"notice_ok": "Different Set for Still/Mv"})]
+
+
+NOT_AVAILABLE = "This operation or setting not available as follows Picture Profile OK"
+
+
+@pytest.mark.parametrize("text,sends,error", [(FACES, False, "refused"),
+                                              ("Speicherkarte formatieren Ausführen Abbrechen", False, "refused"),
+                                              (NOT_AVAILABLE, True, "refused"), (NOT_AVAILABLE, False, "timeout")])
+def test_to_shooting_sends_its_ok_only_where_the_camera_layer_passes_it(tmp_path, monkeypatch, text, sends, error):
+    """proving.nav.to_shooting sent its OK on a notice that refused MENU straight through the link, judged by the words
+    alone: "Clear registered faces? OK Cancel" got it. It is judged now as the camera judges a notice that has just
+    refused MENU (live.menu_refused_enter: no question mark, OK plainly its only button, no confirmation's words), and
+    goes with the link's judged word; a question, or a second button, gets no OK and the wait fails closed. A MENU that
+    failed otherwise (no reply: it may have gone) is no refusal, and gets no OK either."""
+    sys.path.insert(0, str(ROOT / "kit"))
+    from camkit.link import CameraRefused, LinkError
+    from proving import nav
+    log = tmp_path / "received.txt"
+    monkeypatch.setenv("FAKE_CAMLINK_LOG", str(log))
+    kinds = iter(["notice"] + ["shooting"] * 3)
+    monkeypatch.setattr(nav.screen, "read", lambda f: SimpleNamespace(kind=next(kinds, "shooting")))
+    monkeypatch.setattr(nav, "run_tmp_png", lambda f: tmp_path / "notice.png")
+    words = text.replace(" OK", "").replace(" Ausführen Abbrechen", "")
+    lines = [nav.ocr.Line(text=words, conf=0.9, x=40, y=120, w=560, h=30),
+             nav.ocr.Line(text="Ausführen" if "Ausführen" in text else "OK", conf=0.9, x=300, y=352, w=40, h=30)]
+    if text != NOT_AVAILABLE:                                       # the questions show their second button
+        lines.append(nav.ocr.Line(text="Cancel" if text == FACES else "Abbrechen", conf=0.9, x=290, y=410, w=60, h=30))
+    monkeypatch.setattr(nav.ocr, "read", lambda paths, eng=None: {p: lines for p in paths})
+    monkeypatch.setattr(live, "lit_found", lambda image, kind=None: ((200, 340, 440, 395), True))
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", SimpleNamespace(image=None)))  # unchanged
+    monkeypatch.setattr(nav.time, "sleep", lambda s: None)
+    with fake_link(tmp_path, monkeypatch) as lk:
+        real = lk.press
+
+        def press(key, **kw):
+            if key == "menu" and error == "refused":
+                raise CameraRefused("press menu 60: button not accepted")
+            if key == "menu":
+                raise LinkError("press menu 60: no reply within 30 s")
+            return real(key, **kw)
+        lk.press = press
+        nav.to_shooting(lk, SimpleNamespace(grab=lambda save=False: SimpleNamespace(image=None)), "the test", tries=1)
+    assert sum("press enter 60" in l for l in sent_lines(log)) == (1 if sends else 0)
 
 
 @pytest.mark.parametrize("label", ["De lete AII", "Dele te AII", "DeIete AII"])
@@ -1853,16 +2177,65 @@ def test_the_camelcase_reading_sets_a_digit_apart_from_its_letters():
         assert safety.plain_view(safety.never_open, label) is None, label
 
 
-def test_drive_gives_the_camera_its_confirm_word_for_an_enter_it_judged_with_confirm(tmp_path, monkeypatch):
-    """C: drive.py passes --confirm on to the camera (live.press's confirm, LiveCamera.confirm_once) for an Enter it
-    judged with it; without it every real --confirm Enter on a confirmation would be refused by the camera's own
-    check. Without --confirm drive.py refuses that Enter itself."""
-    question = "Format the memory card? Enter Cancel"
-    pressed, _, line = drive_on_shooting(tmp_path / "a", monkeypatch, ["enter:memory card"], kind="dialog",
-                                         more=["--confirm"], text=question, lit="Enter")
-    assert ("cam", "enter", {"confirm_once": True}) in pressed and line["completed"] is True
-    pressed, _, line = drive_on_shooting(tmp_path / "b", monkeypatch, ["enter:memory card"], kind="dialog",
-                                         text=question, lit="Enter")
+def ocr_reads(monkeypatch, *texts):
+    """What drive.py's OCR reads on any frame: one line per text, top to bottom (for --confirm's screen_named)."""
+    import drive
+    from camkit import ocr
+    lines = [ocr.Line(text=t, conf=0.9, x=40, y=100 + 40 * i, w=400, h=30) for i, t in enumerate(texts)]
+    monkeypatch.setattr(drive.ocr, "read", lambda paths, eng=None: {p: lines for p in paths})
+
+
+def test_drive_confirm_without_owner_names_one_screen_and_lifts_its_shape_alone(tmp_path, monkeypatch):
+    """Fix 2 of the C1 review: --confirm without --owner lifted every check for every Enter of the run. Now it names one
+    screen by its whole text and lifts the shape check for one Enter on it (the camera's answer_once, which keeps the
+    word list); a second Enter, or one on another screen, is refused."""
+    question = "Clear registered faces? OK Cancel"
+    ocr_reads(monkeypatch, "Clear registered faces?", "OK", "Cancel")
+    pressed, _, line = drive_on_shooting(tmp_path / "a", monkeypatch, ["enter:faces"], kind="dialog",
+                                         more=["--confirm", question], text=question, lit="OK")
+    assert ("cam", "enter", {"answer_once": "--confirm 'clear registered faces ok cancel'"}) in pressed
+    assert line["completed"] is True
+    pressed, _, line = drive_on_shooting(tmp_path / "b", monkeypatch, ["enter:faces", "enter:faces"], kind="dialog",
+                                         more=["--confirm", question], text=question, lit="OK")
+    assert [p[1] for p in pressed].count("enter") == 1 and line["completed"] is False     # once only
+    ocr_reads(monkeypatch, "Pair this device?", "OK", "Cancel")
+    pressed, _, line = drive_on_shooting(tmp_path / "c", monkeypatch, ["enter:device"], kind="dialog",
+                                         more=["--confirm", question], text="Pair this device? OK Cancel", lit="OK")
+    assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False   # another screen
+    pressed, _, line = drive_on_shooting(tmp_path / "d", monkeypatch, ["enter:faces"], kind="dialog",
+                                         text=question, lit="OK")
+    assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False   # no --confirm: refused
+
+
+@pytest.mark.parametrize("args,said", [
+    (["--confirm"], "names the one screen it answers"),
+    (["--confirm", "Format the memory card? Enter Cancel"], "only the owner route answers"),
+    (["--confirm", "Delete this image? Delete Cancel"], "only the owner route answers"),
+    (["--confirm", "Clear registered faces? OK Cancel", "--owner"], "takes no screen text")])
+def test_drive_confirm_never_lifts_the_confirmation_words(args, said):
+    """A format, a delete or a reset goes only by the owner route (--owner --confirm, the row's name typed at the
+    terminal): --confirm without it refuses such a screen before anything connects, and names one screen."""
+    r = subprocess.run([sys.executable, str(ROOT / "kit" / "drive.py"), "--path", "Drive Mode", *args],
+                       capture_output=True, text=True, timeout=60)
+    assert r.returncode != 0 and said in r.stderr, r.stderr
+
+
+def test_drive_info_ok_takes_a_named_notices_ok_and_no_other(tmp_path, monkeypatch):
+    """Fix 2: drive.py --info-ok "ROW=PHRASE" (ROW a --path label) takes the OK of the plain notice it names, so
+    --confirm is not needed for one; the camera gets it as notice_ok. A notice it does not name gets no Enter."""
+    import drive
+    from proving import screens
+    notice = "This operation or setting not available as follows Picture Profile OK"
+    monkeypatch.setattr(screens, "notice_refused", lambda cam, phrase, words=True: "" if "picture profile" in phrase
+                        else "not the notice named")
+    monkeypatch.setattr(drive, "lone_of", lambda image, path: "")
+    pressed, _, line = drive_on_shooting(tmp_path / "a", monkeypatch, ["enter:not available"], kind="notice",
+                                         more=["--info-ok", "Drive Mode=This operation or setting not available as "
+                                               "follows Picture Profile"], text=notice, lit="OK")
+    assert ("cam", "enter", {"notice_ok": "Drive Mode"}) in pressed and line["completed"] is True
+    pressed, _, line = drive_on_shooting(tmp_path / "b", monkeypatch, ["enter:not available"], kind="notice",
+                                         more=["--info-ok", "Drive Mode=Something else entirely shown here"],
+                                         text=notice, lit="OK")
     assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False
 
 

@@ -524,9 +524,10 @@ def test_the_carousel_option_is_known_from_a_title_the_frames_corner_overdrew():
 def test_a_setup_notice_is_kept_in_the_run_and_never_printed(capsys, monkeypatch):
     """afreg_run's setup (also framepos_run's): a notice after a row's OK can name another setting's value, the camera's
     own (docs/decisions/0016), so its words go to the run's events.jsonl only; a "not available as follows" notice is
-    closed with its OK and fails the step, the message naming the step and the frame, but one that reads like a
-    confirmation gets no Enter (camkit.safety); set_row's lit option ("(on '...')") is scrubbed from a failure. Drive
-    Mode's notice: the test after this one."""
+    left with MENU, its OK only where the camera refuses MENU (camkit.live.leave_notice, 2026-11-14), and fails the
+    step, the message naming the step and the frame, but one that reads like a confirmation gets no Enter
+    (camkit.safety); set_row's lit option ("(on '...')") is scrubbed from a failure. Drive Mode's notice: the test after
+    this one."""
     from types import SimpleNamespace
     A = afreg_module()
     import mode_switch
@@ -552,8 +553,21 @@ def test_a_setup_notice_is_kept_in_the_run_and_never_printed(capsys, monkeypatch
     with pytest.raises(Failed) as got:
         watch(f"   notice after OK: {words!r}")
     assert "Made-up" not in str(got.value) and "Focus Mode = Continuous AF" in str(got.value) and "00042" in str(got.value)
-    assert said == ["Focus Mode: choosing 'Continuous AF'"] and cam.pressed == ["enter"]
+    # left as a notice the kit does not answer is left (camkit.live.leave_notice): MENU, which this camera takes
+    assert said == ["Focus Mode: choosing 'Continuous AF'"] and cam.pressed == ["menu"]
     assert logged == [("setup_notice", {"step": "Focus Mode = Continuous AF", "frame": "00042_enter.png", "notice": words})]
+    from camkit.link import CameraRefused
+
+    class Refusing(Cam):
+        def press(self, key, **kw):
+            self.pressed.append(key)
+            if key == "menu":
+                raise CameraRefused("press menu 60: button not accepted")
+    refusing = Refusing()
+    refusing.pressed = []
+    with pytest.raises(Failed):
+        A.refused_by_notice(refusing, said.append, "Focus Mode = Continuous AF")(f"   notice after OK: {words!r}")
+    assert refusing.pressed == ["menu", "enter"], "its OK only once MENU was refused (the camera judges that OK)"
     monkeypatch.setattr(mode_switch, "text", lambda c: "Made-up information")
     A.refused_by_notice(cam, said.append, "X = Y")("   notice after OK: 'Made-up information'")
     assert "Made-up" not in said[-1] and "events.jsonl" in said[-1] and logged[-1][1]["notice"] == "Made-up information"
@@ -616,8 +630,9 @@ def test_a_notice_after_an_areas_ok_is_kept_in_the_run_and_never_in_the_message(
     ("Execute? Made-up Row: Made-up Value", True)])
 def test_drive_modes_notice_is_kept_in_the_run_and_never_entered_when_it_confirms(words, confirms, capsys, monkeypatch):
     """afreg_run.drive_single: OK on Single Shooting answered by a notice keeps the notice's words in the run's
-    events.jsonl and fails naming the step and the frame, never the words; the notice is closed with its OK, unless it
-    reads like a confirmation, which gets no Enter. A made-up camera and map."""
+    events.jsonl and fails naming the step and the frame, never the words; the notice is left with MENU (its OK only
+    where the camera refuses MENU: camkit.live.leave_notice), unless it reads like a confirmation, which gets nothing.
+    A made-up camera and map."""
     from types import SimpleNamespace
     A = afreg_module()
     import camkit.ocr
@@ -657,7 +672,7 @@ def test_drive_modes_notice_is_kept_in_the_run_and_never_entered_when_it_confirm
     with pytest.raises(Failed, match="reads like a confirmation" if confirms else "a notice refused Drive Mode") as got:
         A.drive_single(cam, None, None)
     assert "Made-up" not in str(got.value) and "00003_x.png" in str(got.value)
-    assert cam.pressed == ["enter", "enter"] + ([] if confirms else ["enter"])
+    assert cam.pressed == ["enter", "enter"] + ([] if confirms else ["menu"])     # left with MENU (leave_notice)
     assert logged == [("setup_notice", {"step": "Drive Mode = Single Shooting", "frame": "00003_x.png", "notice": words})]
     assert "Made-up" not in capsys.readouterr().out
 
@@ -835,7 +850,7 @@ def cards_world(tmp_path, monkeypatch, restored=True):
                         ("LiveCamera", lambda link, eyes, run, may_open=(): calls.append(("may_open", set(may_open)))
                          or SimpleNamespace()),
                         ("to_row", lambda *a: (_ for _ in ()).throw(RuntimeError("a screen the scan did not record"))),
-                        ("close_for_restore", lambda cam, link: calls.append("closed")),
+                        ("close_for_restore", lambda cam, link, start: calls.append("closed")),
                         ("end_session", lambda link, eyes, start, why, reach=None, show=None:
                          calls.append(("end", start.name, reach)) or ending),
                         ("restore_checked", lambda r, e, start: calls.append("checked") or restored)):
@@ -882,21 +897,32 @@ def test_a_card_results_line_that_cannot_be_written_exits_unrestored_after_the_r
 
 def test_card_actions_judges_each_press_as_drive_does(monkeypatch):
     """The regex first, then no key but MENU on the shooting screen, then drive.press_decision: Enter on a confirmation
-    only with --confirm, never on Initialize."""
+    never (a question to create a folder, format or reset goes only by the owner route), never on Initialize; and on a
+    screen that asks by its shape, once, only where --confirm "SCREEN TEXT" names it (the camera's answer_once, which
+    keeps the confirmation words: review of C1, fix 2)."""
     from pathlib import Path as P
     from types import SimpleNamespace
+    from camkit import ocr
     C = cards_module()
     sent, now = [], {"kind": "dialog", "text": "Create a new folder? Execute OK Cancel", "lit": "OK"}
     cam = SimpleNamespace(read=lambda: SimpleNamespace(kind=now["kind"]), frame=SimpleNamespace(image=None, path=P("x.png")))
     monkeypatch.setattr(C, "text_of", lambda c: now["text"])
     monkeypatch.setattr(C.drive, "highlighted", lambda image, path: now["lit"])
-    monkeypatch.setattr(C, "press", lambda c, key, confirm=False: sent.append((key, confirm)))
-    assert "confirmation text" in C.press_judged(cam, "enter:folder", False, ["Create New Folder"])
-    assert "does not match" in C.press_judged(cam, "enter:no such words", True, ["Create New Folder"])
-    # judged with --confirm: the camera's own confirmation check is lifted for that press (live.press's confirm)
-    assert C.press_judged(cam, "enter:folder", True, ["Create New Folder"]) == "" and sent == [("enter", True)]
+    monkeypatch.setattr(C.drive.ocr, "read", lambda paths, eng=None: {p: [ocr.Line(text=now["text"], conf=0.9, x=40,
+                                                                                     y=100, w=500, h=30)] for p in paths})
+    monkeypatch.setattr(C, "press", lambda c, key, answer=None: sent.append((key, answer)))
+    folder = {"phrase": "create a new folder execute ok cancel", "left": 1}
+    assert "confirmation text" in C.press_judged(cam, "enter:folder", None, ["Create New Folder"])
+    assert "confirmation text" in C.press_judged(cam, "enter:folder", folder, ["Create New Folder"])   # words stay
+    assert "does not match" in C.press_judged(cam, "enter:no such words", folder, ["Create New Folder"])
+    now.update(text="Select the folder to record to? OK Cancel")
+    named = {"phrase": "select the folder to record to ok cancel", "left": 1}
+    assert C.press_judged(cam, "enter:folder", None, ["Select REC Folder"])          # the question's shape refuses
+    assert C.press_judged(cam, "enter:folder", named, ["Select REC Folder"]) == ""
+    assert sent == [("enter", "--confirm 'select the folder to record to ok cancel'")] and named["left"] == 0
+    assert C.press_judged(cam, "enter:folder", named, ["Select REC Folder"])         # once only
     now.update(text="Setting Reset Camera Settings Reset Initialize", lit="Initialize")
-    assert "Initialize" in C.press_judged(cam, "enter:reset", True, [])
+    assert "Initialize" in C.press_judged(cam, "enter:reset", None, [])
     now.update(kind="shooting", text="", lit="")
-    assert "shooting screen" in C.press_judged(cam, "down", False, [])
-    assert sent == [("enter", True)]
+    assert "shooting screen" in C.press_judged(cam, "down", None, [])
+    assert len(sent) == 1

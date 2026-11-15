@@ -637,14 +637,14 @@ def main():
             except StopRequested:                           # a STOP: cancelled as ever, and no failure
                 print("STOP file: cancelling", flush=True)
                 complete = True
-                close_for_restore(cam, link)
+                close_for_restore(cam, link, before)
             except Exception as e:                          # never leave a dialog or the menu open
                 # a refusal that stops the lap (after a press on its row, or on the way to a row): the run's work is
                 # not done, whatever the restore says (EXIT_REFUSED below)
                 refused = isinstance(e, safety.Refused)
                 said_e = f"{type(e).__name__}: {e}"
                 print(f"error: {safety.quoted_withheld(said_e) if network else said_e}; cancelling", flush=True)
-                close_for_restore(cam, link)            # cleanup presses; when they fail too, the restore all the same
+                close_for_restore(cam, link, before)            # cleanup presses; when they fail too, the restore all the same
             # every run ends restoring its start file (decision 15), not only a --panels run, and even when the
             # shooting screen does not come back
             # a --network run says the records that differ by their keys alone (runner.values_withheld)

@@ -8,8 +8,8 @@ import contextlib
 import re
 import time
 
-from camkit import ocr, safety, screen, vlm
-from camkit.link import LinkError
+from camkit import live, ocr, safety, screen, vlm
+from camkit.link import CameraRefused, LinkError
 from camkit.screen import same_position, same_state
 from camkit.session import osd_shooting
 from crawl_run import go_to
@@ -174,39 +174,56 @@ def enter_any(cam, path, start: int):
 
 
 def to_shooting(link, hdmi, why: str, tries: int = 6):
-    """Back to the shooting screen with MENU (cleanup presses: OK only on an information notice that
-    refuses MENU and names no identity or credentials, never on a --network run), looking after each press.
+    """Back to the shooting screen with MENU (cleanup presses: OK only on a notice that has just refused MENU, asks
+    nothing by its shape and shows OK as its only button, and names no identity or credentials, never on a --network
+    run), looking after each press.
     After a row failed on a screen the reader misread, the cancel can stop short (a PP carousel left
     open, 2026-10-29); this run holds the only remote connection, so it must close what is open
     itself rather than wait for a hand on the camera. Falls back to waiting if MENU does not do it."""
     for _ in range(tries):
         f = hdmi.grab(save=False)
-        kind = screen.read(f).kind
+        seen = screen.read(f)
+        kind = seen.kind
         if kind == "shooting" or (kind == "unknown" and osd_shooting(link, f)):
             return
         try:
             link.press("menu", cleanup=True)
         except LinkError as e:
             # an information notice can take only OK ("not available as follows Picture Profile On":
-            # MENU was refused and the run crashed before its restore, 2026-10-29). OK it when its
-            # text is no confirmation and names no identity or credentials ("Connect to <SSID>?"); never otherwise,
-            # and never on a --network run (camkit.vlm.LOCAL_ONLY): a row a decision opened may be behind it, whose
-            # look-only lock this press, sent straight through the link, would pass by (docs/decisions/0008). The
-            # wait below then fails closed
-            text = ""
-            if kind == "notice" and not vlm.LOCAL_ONLY:
-                tmp = run_tmp_png(f)
-                try:
-                    text = ocr.text_in(ocr.read([tmp])[tmp], (0, 0, 640, 480))
-                finally:
-                    tmp.unlink(missing_ok=True)
-            if kind == "notice" and text and not safety.confirmation(text) and not vlm.LOCAL_ONLY \
+            # MENU was refused and the run crashed before its restore, 2026-10-29). OK it only where the camera itself
+            # refused MENU ("button not accepted": CameraRefused; never a MENU left held, nor one never answered, which
+            # may have gone), on the screen looked at again after that refusal and found the same (live.look_again),
+            # judged there as camkit.live.LiveCamera judges a notice that has just refused MENU (live.menu_refused_enter:
+            # no question mark, OK plainly its only button and reading OK, no confirmation's words), and where its text
+            # names no identity or credentials ("Connect to <SSID>?"); never otherwise, and never on a --network run
+            # (camkit.vlm.LOCAL_ONLY): a row a decision opened may be behind it, whose look-only lock this press, sent
+            # straight through the link, would pass by (docs/decisions/0008). The OK carries the link's count of moving
+            # commands at that judgement (Link.press's judged). The wait below then fails closed
+            text, refused_by = "", ""
+            refused_menu = isinstance(e, CameraRefused)
+            if kind == "notice" and not vlm.LOCAL_ONLY and refused_menu:
+                stale, again = live.look_again(hdmi, seen, "menu-refused", getattr(link, "moved_at", None))
+                if stale:
+                    refused_by = stale
+                else:
+                    tmp = run_tmp_png(again)
+                    try:
+                        text = ocr.text_in(ocr.read([tmp])[tmp], (0, 0, 640, 480))
+                        refused_by = live.menu_refused_enter(kind, again.image, tmp)
+                    finally:
+                        tmp.unlink(missing_ok=True)
+            judged_at = getattr(link, "moves", None)
+            if kind == "notice" and refused_menu and text and not refused_by and not vlm.LOCAL_ONLY \
                     and not safety.identity_screen(text):
-                print(f"   an information notice took only OK: {text[:70]!r}", flush=True)
-                link.press("enter", cleanup=True, screen=kind)       # on the notice read: the link's guards judge it
-            elif kind == "notice" and (vlm.LOCAL_ONLY or safety.identity_screen(text)):
+                print(f"   a notice refused MENU and shows OK alone: OK ({text[:70]!r})", flush=True)
+                # judged above as LiveCamera judges a notice that has just refused MENU: the link's guards judge it too
+                link.press("enter", cleanup=True, screen=kind, judged=judged_at)
+            elif kind == "notice" and refused_menu and (vlm.LOCAL_ONLY or safety.identity_screen(text)):
                 why = "a --network run sends it no OK" if vlm.LOCAL_ONLY else "it names identity or credentials"
                 print(f"   an information notice refused MENU, and {why} (its text withheld); waiting", flush=True)
+                time.sleep(3.0)
+            elif kind == "notice" and refused_by:
+                print(f"   a notice refused MENU, and no OK goes on it: {refused_by}; waiting", flush=True)
                 time.sleep(3.0)
             else:
                 print(f"   MENU refused ({e}); waiting", flush=True)

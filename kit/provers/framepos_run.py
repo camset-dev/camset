@@ -108,7 +108,8 @@ sys.path.insert(1, str(Path(__file__).resolve().parent))
 import afreg_run  # noqa: E402
 from afreg_run import bare, slug  # noqa: E402
 from camkit import definitions, jsonl, match, paths, safety  # noqa: E402
-from runner import LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json  # noqa: E402
+from runner import (LATEST_SCAN, add_allow_argument, add_info_ok_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
+                    notes_named_or_exit, read_json)
 from writer import hand_tables  # noqa: E402
 
 # the Zone grid's places, [code, name], of the camera the kit works on (its hand tables' ZONE, writer/hand_tables.py:
@@ -685,10 +686,15 @@ def register_slot(cam, cycle, model, allow) -> dict:
     if slot != "1":
         raise Failed(f"{MEMORY_ROW}: the lit tab measures as {slot or 'none'}, not slot 1 ({cam.frame.path.name})")
     t, lit = text_of(cam), drive.highlighted(cam.frame.image, cam.frame.path)
-    why, _ = drive.press_decision(f"enter!:{SLOT_SCREEN.pattern}", "enter", lit, t, cam.read().kind, False, allow)
+    # the slot screen reads as no known kind: the run's --allow is the consent to answer it, the shape check lifted and
+    # the confirmation words still judged, here and by the camera (answer_once, 2026-11-14)
+    consent = f"--allow {MEMORY_ROW!r}"
+    why, _ = drive.press_decision(f"enter!:{SLOT_SCREEN.pattern}", "enter", lit, t, cam.read().kind, False, allow,
+                                  consent=consent)
     if why:
         raise Failed(f"{MEMORY_ROW}: Enter refused on the slot screen ({cam.frame.path.name}): {why}")
     slots = cam.frame.path.name
+    cam.answer_once = consent
     cam.press("enter")
     said = text_of(cam)
     if not re.search(r"registered", said, re.I):
@@ -1081,7 +1087,9 @@ def main(argv=None) -> int:
     ap.add_argument("--limit", type=int, default=0, help="the first N areas of the plan only")
     ap.add_argument("--list", action="store_true", help="print the plan only; no camera")
     ap.add_argument("--summary", action="store_true", help="print what the run's lines found, deltas only; no camera")
+    add_info_ok_argument(ap)    # Mode Dial Control Set's note before its table (afreg_run.focus_dial_by_menu: pass_note)
     a = ap.parse_args(argv)
+    notes_named_or_exit(a.info_ok, [afreg_run.DIAL_ROW])
     if a.summary:
         got = summary_lines(jsonl.read(paths.run_root() / a.run / "framepos.jsonl"))
         print("\n".join(got) if got else "no line in the run")

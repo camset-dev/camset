@@ -418,7 +418,7 @@ def main():
                         say(f"{item}: stopped: {type(e).__name__}: {e}")
                         stop = True
                     finally:
-                        close_for_restore(cam, link)
+                        close_for_restore(cam, link, start)
                     # each item ends restoring its start file, whatever ended it (decision 15)
                     ending = end_session(link, hdmi, start, "the check after the item", tag="check")
                 unrestored = not restore_checked(run, ending, start,

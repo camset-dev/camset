@@ -101,6 +101,7 @@ def test_the_session_end_restores_when_the_shooting_screen_does_not_come(monkeyp
     finished = []
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     monkeypatch.setattr(runner.session, "finish", lambda link, start, tag="after": finished.append((start, tag)) or "end")
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # a menu page on show: the restore may go over it
 
     def gives_up(link, eyes, why):
         raise Failed(f"no shooting screen for {why} after MENU and 5 minutes")
@@ -122,6 +123,7 @@ def test_a_stop_while_waiting_for_the_shooting_screen_still_restores(monkeypatch
     finished = []
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     monkeypatch.setattr(runner.session, "finish", lambda link, start, tag="after": finished.append((start, tag)) or "end")
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # a menu page on show: the restore may go over it
 
     def stopped(link, eyes, why):
         raise StopRequested("a stop was asked for while waiting (a test) on a 'menu' screen: the wait ends here")
@@ -147,6 +149,7 @@ def test_a_stop_in_the_last_wait_restores_with_the_link_and_still_refuses_presse
     monkeypatch.setenv("FAKE_CAMLINK_LOG", str(tmp_path / "received.txt"))
     monkeypatch.delenv("CAMSET_USB", raising=False)
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # a menu page on show: the restore may go over it
     run = Run("kit2_stop", root=tmp_path / "runs" / "TEST-CAM_fw9.99")
 
     def stop_arrives(link, eyes, why):
@@ -193,28 +196,38 @@ def test_an_upload_that_fails_in_the_restore_exits_unrestored(monkeypatch, capsy
     assert "LinkError: upload: no reply in 150 s" in capsys.readouterr().out
 
 
-def test_a_close_that_gives_up_exits_unrestored_without_a_restore(monkeypatch, capsys):
-    """camkit.live.close's SystemExit (8 tries, "close it on the camera by hand") passed through close_for_restore
-    as exit 1. With no screen to judge (this camera has no frame), it exits EXIT_UNRESTORED, with no restore tried
-    over a screen it could not close."""
+def test_a_close_that_gives_up_over_a_screen_it_cannot_judge_holds_for_the_owner(monkeypatch, capsys):
+    """camkit.live.close's SystemExit (8 tries, "close it on the camera by hand") passed through close_for_restore.
+    With no screen to judge (this camera has no frame), no restore is tried over it, and the link is not closed over it
+    either (2026-11-14, a review: exit EXIT_UNRESTORED closed it): hold_for_owner, for the session's start file, exit
+    EXIT_RESTORE_BY_HAND."""
     from proving.base import Failed
     log, eyes = _prover_world(monkeypatch), FakeEyes()
 
     def gives_up(cam, link):
         raise SystemExit("could not get back to the shooting screen: please close it on the camera by hand")
     monkeypatch.setattr(runner, "close", gives_up)
+    holds = []
+
+    def hold(link, eyes, start, why, keys=False):
+        holds.append((start.name, why))
+        raise SystemExit(runner.EXIT_RESTORE_BY_HAND)
+    monkeypatch.setattr(runner, "hold_for_owner", hold)
     with pytest.raises(SystemExit) as stop, runner.prover_session("run", eyes):
         raise Failed("the cursor is not on 'ISO 400'")
-    assert stop.value.code == runner.EXIT_UNRESTORED and log["finished"] == [] and eyes.closed == 1
-    assert "please close it on the camera by hand" in capsys.readouterr().out
+    assert stop.value.code == runner.EXIT_RESTORE_BY_HAND and log["finished"] == [] and eyes.closed == 1
+    assert holds and holds[0][0] == "00001_before.DAT" and "cannot be read" in holds[0][1]
+    assert "no restore is tried over it" in capsys.readouterr().out
 
 
 GAVE_UP = "could not get back to the shooting screen: please close it on the camera by hand"
 
 
-def last_screen(kind, text="Grid Line Display  Rule of 3rds Grid  Square Grid  Diag. + Square Grid  Off"):
-    """A camera whose last frame the reader read as `kind`, OCR reading `text` on it (an exception: no text)."""
-    return types.SimpleNamespace(read=lambda: types.SimpleNamespace(kind=kind), frame=None, text=text)
+def last_screen(kind, text="Grid Line Display  Rule of 3rds Grid  Square Grid  Diag. + Square Grid  Off", lone=""):
+    """A camera whose last frame the reader read as `kind`, OCR reading `text` on it (an exception: no text), a notice's
+    lone OK verdict `lone` (camkit.live.lone_of: "" when OK is its only button)."""
+    return types.SimpleNamespace(read=lambda: types.SimpleNamespace(kind=kind), frame=types.SimpleNamespace(
+        image=None, path=None), text=text, lone=lone)
 
 
 def gives_up_on(monkeypatch, cam, how=SystemExit):
@@ -227,6 +240,9 @@ def gives_up_on(monkeypatch, cam, how=SystemExit):
             raise c.text
         return c.text
     monkeypatch.setattr(runner, "text_of", text_of)
+    monkeypatch.setattr(runner, "body_of", text_of)          # the text above the footer: the same, made up
+    monkeypatch.setattr(runner, "lone_of", lambda image, path: getattr(cam, "lone", ""))
+    monkeypatch.setattr(runner, "lit_text", lambda image, path: getattr(cam, "lit", "OK"))     # a notice's lit OK
 
 
 @pytest.mark.parametrize("kind", sorted(runner.RESTORABLE_KINDS))
@@ -236,7 +252,7 @@ def test_a_close_that_gives_up_on_a_known_screen_restores_all_the_same(monkeypat
     gives up on a screen the reader knows that reads as no confirmation, the session goes on to its restore."""
     cam = last_screen(kind)
     gives_up_on(monkeypatch, cam, how)
-    runner.close_for_restore(cam, "link")
+    runner.close_for_restore(cam, "link", Path("start.DAT"))
     assert f"closing gave up on a {kind} screen; restoring all the same" in capsys.readouterr().out
 
 
@@ -244,23 +260,36 @@ def test_a_close_that_gives_up_on_a_known_screen_restores_all_the_same(monkeypat
     (last_screen("unknown"), "reads as 'unknown', not a menu, list, panel or notice"),
     (last_screen("dialog"), "reads as 'dialog'"),
     (last_screen("picker"), "reads as 'picker'"),
-    (last_screen("list", "Format  Execute  Cancel  All data will be deleted. Format?"), "reads as a confirmation"),
-    (last_screen("notice", "Initialize? Execute"), "reads as a confirmation"),
+    (last_screen("list", "Format  Execute  Cancel  All data will be deleted. Format"), "reads as a confirmation"),
+    (last_screen("notice", "Initialize Execute"), "reads as a confirmation"),
+    # asks by its shape, whatever its words (2026-11-14): a question mark, a notice with a second button
+    (last_screen("list", "Format  Execute  Cancel  All data will be deleted. Format?"), "holds a question mark"),
+    (last_screen("notice", "Clear registered faces? OK Cancel"), "holds a question mark"),
+    (last_screen("notice", "Pair this device OK", lone="a line sits beside or below its lit button"),
+     "does not show its lit button as its only one"),
     (last_screen("menu", ""), "no text could be read"),
     (last_screen("list", RuntimeError("the capture stopped")), "cannot be read (RuntimeError: the capture stopped)"),
     (types.SimpleNamespace(read=lambda: (_ for _ in ()).throw(RuntimeError("no frame")), text=""),
      "its last screen cannot be read (RuntimeError: no frame)"),
 ])
 @pytest.mark.parametrize("how", [SystemExit, runner.CloseGaveUp])
-def test_a_close_that_gives_up_elsewhere_exits_unrestored(monkeypatch, capsys, cam, why, how):
-    """An unknown screen, a dialog, a confirmation or no readable frame: as before, no restore is tried over it, the
-    run says so and exits EXIT_UNRESTORED, and a person looks."""
+def test_a_close_that_gives_up_elsewhere_holds_for_the_owner(monkeypatch, capsys, cam, why, how):
+    """An unknown screen, a dialog, a confirmation or no readable frame: no restore is tried over it, the run says so,
+    and the link stays open while the owner clears it (hold_for_owner, for the start file given), exit
+    EXIT_RESTORE_BY_HAND; until 2026-11-14 it closed the link over it, exit EXIT_UNRESTORED."""
     gives_up_on(monkeypatch, cam, how)
+    holds = []
+
+    def hold(link, eyes, start, why_not, keys=False):
+        holds.append((link, start, why_not, keys))
+        raise SystemExit(runner.EXIT_RESTORE_BY_HAND)
+    monkeypatch.setattr(runner, "hold_for_owner", hold)
     with pytest.raises(SystemExit) as stop:
-        runner.close_for_restore(cam, "link")
-    assert stop.value.code == runner.EXIT_UNRESTORED
+        runner.close_for_restore(cam, "link", Path("start.DAT"))
+    assert stop.value.code == runner.EXIT_RESTORE_BY_HAND
+    assert holds and holds[0][:2] == ("link", Path("start.DAT")) and why in holds[0][2] and holds[0][3] is False
     out = capsys.readouterr().out
-    assert why in out and "no restore is tried over it" in out and "may not be on its start file" in out
+    assert why in out and "no restore is tried over it" in out
 
 
 def test_a_prover_whose_close_gives_up_on_an_open_list_restores_and_exits_restored(monkeypatch, capsys):
@@ -350,6 +379,7 @@ def _prover_world(monkeypatch, uploaded=True, restored=0):
     ending = session.Ending(Path("after.DAT"), ["a change"], uploaded)
     monkeypatch.setattr(runner.session, "finish", lambda link, start, tag="after": log["finished"].append(start) or ending)
     monkeypatch.setattr(runner.session, "check_restore", lambda run, e, start: log["checked"].append(start) or restored)
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # where the shooting screen does not come, a menu page is on show
     return log
 
 

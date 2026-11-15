@@ -58,7 +58,8 @@ nothing never-open, of identity or credentials; one button line, OK, lit; no oth
 action, or on or below the OK's band), and each proof line carries "info_ok": {"row", "passed", "frame"}; a notice it
 refuses fails the row with nothing pressed on it. A row with no map row of its own is mapped first:
 kit/crawl_run.py --start-label ROW --limit 1 --info-ok ..., then pass1_labels.py, tiebreak.py and pass1_map.py --own,
-and --map that map. Only for checklist jobs, and not with --network or --help-text.
+and --map that map. For checklist and table jobs (a table's or Custom Key/Dial Set.'s first-time screen, "Don't show
+this again." and OK, read as no known kind: proving.screens.notice_before), not with --network or --help-text.
 
 Results: runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, one line per option; frames and downloads numbered on.
 
@@ -154,6 +155,21 @@ def kept_option(text, labels) -> str:
     return text if isinstance(text, str) and safety.plain(text) and safety.plain(text) in names else "(withheld)"
 
 
+def enter_chosen(cam, evidence: tuple, again) -> tuple:
+    """Enter on the option the loop chose, `evidence` its proof of the choice on the screen it read. The camera refuses
+    an Enter on a screen that changed since that reading (safety.ScreenChanged, its fresh frame and reading kept):
+    `again()` makes the loop's check of its choice on the fresh screen (Failed where it no longer holds) and the Enter
+    is tried once more, so the proof records the choice the press went on. Returns the evidence of that press."""
+    try:
+        cam.press("enter")
+        return evidence
+    except safety.ScreenChanged as e:
+        print(f"   the screen changed before Enter ({e}); the choice read again", flush=True)
+    evidence = again()
+    cam.press("enter")
+    return evidence
+
+
 def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """Every option of one list row; returns the last download (equal to base_path's settings). Each proof carries
     the attempt's id; the attempt is recorded as finished (finish_attempt) only when the row ended as it began."""
@@ -214,13 +230,17 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         else:
             cur = c
         move_to(cam, cur, k, n, kind)
-        if which_option(cam, job) != k:
-            raise Failed(f"{name}: the cursor is not on {labels[k]!r} ({text(cam)!r})")
-        chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)                   # evidence: the option under the cursor
-        shown = text(cam)                              # as the camera shows it now (a carousel: with its axis value)
-        if network_row:             # inside a network row only the map's own option names are kept (KEPT)
-            shown, seen_vlm = kept_option(shown, labels), kept_option(seen_vlm, labels)
-        cam.press("enter")
+
+        def chosen_now(k=k):
+            """The cursor on option k on the screen as read now, and the evidence of it; Failed where it is not."""
+            if which_option(cam, job) != k:
+                raise Failed(f"{name}: the cursor is not on {labels[k]!r} ({text(cam)!r})")
+            frame, seen = cam.frame.path.name, vlm_option(cam)                    # evidence: the option under the cursor
+            now = text(cam)                            # as the camera shows it now (a carousel: with its axis value)
+            if network_row:         # inside a network row only the map's own option names are kept (KEPT)
+                now, seen = kept_option(now, labels), kept_option(seen, labels)
+            return frame, seen, now
+        chosen, seen_vlm, shown = enter_chosen(cam, chosen_now(), chosen_now)
         if network_row:
             print(f"   proof {step + 1} of {len(order)}", flush=True)
         s = cam.read()
@@ -510,8 +530,15 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                 cam.press("up")
             if option_key(axis_title(cam)) != option_key(saved):
                 raise Failed(f"{name}: back up {downs0}, the carousel shows {axis_title(cam)!r}, not {saved!r}")
-        chosen, shown, seen_vlm = cam.frame.path.name, axis_title(cam), vlm_option(cam)
-        cam.press("enter")
+
+        def axis_now(k=k, final=final, saved=saved):
+            """The carousel on value k (back on the option it opened on, when final) as read now, and the evidence."""
+            if final and option_key(axis_title(cam)) != option_key(saved):
+                raise Failed(f"{name}: the carousel shows {axis_title(cam)!r}, not {saved!r}")
+            if not final and axis_reading(cam, vals)[0] != k:
+                raise Failed(f"{name}: the axis is not on {vals[k]!r} ({axis_title(cam)!r})")
+            return cam.frame.path.name, axis_title(cam), vlm_option(cam)
+        chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), vlm_option(cam)), axis_now)
         s = cam.read()
         notice, refused = None, False
         if s.kind == "notice":
@@ -798,14 +825,19 @@ def network_jobs_or_exit(todo: list, named: dict, options: dict) -> list:
     return todo
 
 
+# the job kinds whose row --info-ok may name (info_ok_jobs_or_exit)
+INFO_OK_KINDS = frozenset({"checklist", "table"})
+
+
 def info_ok_jobs_or_exit(todo: list, named: dict) -> None:
-    """--info-ok passes a notice before a checklist only (proving.checklists.INFO_OK): stops before anything connects
-    when a row it names (`named`) is proved as another kind of job."""
+    """--info-ok passes a notice before a checklist or a table (proving.checklists.INFO_OK, proving.screens'
+    notice_before for the tables and Custom Key/Dial Set.): stops before anything connects when a row it names
+    (`named`) is proved as another kind of job."""
     other = sorted({r for r in named for j in todo
-                    if safety.plain(" > ".join(j["path"])) == safety.plain(r) and j["kind"] != "checklist"})
+                    if safety.plain(" > ".join(j["path"])) == safety.plain(r) and j["kind"] not in INFO_OK_KINDS})
     if other:
-        sys.exit(f"--info-ok passes a notice before a checklist only: {', '.join(map(repr, other))} is proved as "
-                 "another kind")
+        sys.exit(f"--info-ok passes a notice before a checklist or a table only: {', '.join(map(repr, other))} is "
+                 "proved as another kind")
 
 
 def main():
@@ -871,7 +903,7 @@ def main():
         sys.exit("--network proves a Wi-Fi or Bluetooth setting's list options only: not with --help-text, --looks, "
                  "--look-base, --wb, --wb-corners or --tables")
     if a.info_ok and not a.rows:
-        sys.exit("--info-ok passes a notice for the checklist rows named with --rows only")
+        sys.exit("--info-ok passes a notice for the checklist and table rows named with --rows only")
     if a.info_ok and a.network:
         sys.exit("--info-ok passes no notice on a --network run: its rows are looked at, or chosen in, only")
     if a.info_ok and a.help_text:

@@ -463,6 +463,9 @@ class Cam:
 
     def press(self, key, **kw):
         self.pressed.append(key)
+        # the consent the press carried to the camera's own check (LiveCamera.answer_once), used up by it
+        self.consents = [*getattr(self, "consents", []), getattr(self, "answer_once", None)]
+        self.answer_once = None
         nxt = self.script.pop(0) if self.script else self.now
         if isinstance(nxt, Exception):
             raise nxt
@@ -545,6 +548,9 @@ def test_slot_one_is_registered_only_when_its_tab_is_measured_lit(menu):
                      {"kind": "notice", "text": "Registered.", "then": "menu"}])
     got = F.register_slot(cam, None, None, ["Camera Set. Memory"])
     assert cam.pressed == ["enter", "left", "enter"] and got["said"] == "Registered." and len(got["frames"]) == 4
+    # the slot screen reads as no known kind: its Enter carries the run's --allow as consent to the camera's own check,
+    # the row's opening and the Left none (review of C1, P2)
+    assert cam.consents == [None, None, "--allow 'Camera Set. Memory'"]
 
 
 @pytest.mark.parametrize("screen,words", [

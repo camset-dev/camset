@@ -624,7 +624,8 @@ class Presses:
     def __init__(self, go):
         self.sent, self.go, self.menus, self.cleanups = [], go, 0, []
 
-    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset()):
+    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset(),
+              judged=False):
         self.sent.append(key)
         self.cleanups.append(cleanup)
         self.menus += key == "menu"
@@ -645,6 +646,7 @@ class Screens:
                                                                                                          None))
         monkeypatch.setattr(live.screen, "same_state", lambda a, b: False)
         monkeypatch.setattr(live, "text_of", lambda cam: self.states[self.at][1])
+        monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))     # the screen judged
         monkeypatch.setattr(live, "lit_text", lambda image, path: self.states[self.at][2])
         monkeypatch.setattr(live.time, "sleep", lambda s: None)
 
@@ -1051,7 +1053,7 @@ def drive_run(tmp_path, monkeypatch, scope_file, presses, path, decision, states
             places.append(k.get("place"))
         return True
 
-    def close_for_restore(cam, link):
+    def close_for_restore(cam, link, start):
         restore.append("closed")
         if close_exits:
             raise SystemExit(EXIT_UNRESTORED)

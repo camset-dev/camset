@@ -1,7 +1,8 @@
 """Reading what the camera's screen shows: the label under the cursor bar (OCR, the vision model as the decider),
 a carousel's title and its second axis's strip, a row found by its label, the cursor's place without text, and the
-notices a choice can bring up (the camera's refusal, a one-time explanation, an information notice taken with its
-OK)."""
+notices a choice can bring up (the camera's refusal, a one-time explanation, an information notice), each left with
+MENU first and given its OK only where the camera refuses MENU and OK is its only button (camkit.live.leave_notice), or
+where the run names it with --info-ok (pass_named_notice, pass_note), since 2026-11-14."""
 import difflib
 import os
 import re
@@ -10,19 +11,27 @@ from pathlib import Path
 import numpy as np
 
 from camkit import match, ocr, safety, screen
+from camkit.live import leave_notice
 from camkit.vlm import PROMPTS, ask_role
 from page_model import key_text, same_text
-from runner import INFO_OK_SLACK, joined, notice_words
+from runner import INFO_OK_SLACK, info_ok_for, joined, notice_words
 
 from .base import Blocked, Failed
 
 BAR_X = {"menu": (140, 470), "submenu": (55, 470), "list": (110, 556),   # label crops, as in pass 1
          "picker": (370, 636)}                                            # the function picker, right of its radio
 
+# The notices a run names with --info-ok ({row: the phrase's words}, runner.info_ok_or_exit), whichever runner takes the
+# flag (kit/prove_run.py, kit/provers/mode_switch.py, afreg_run.py, framepos_run.py): pass_note and the checklist prover
+# (proving.checklists.INFO_OK, the same dict) pass a notice before a row's screen only as it names it
+INFO_OK: dict = {}
+
 
 def refuse_or_fail(cam, name: str, what: str):
     """Right did not open the row's screen. The camera's own refusal ("not available as follows Gamma
-    HLG2": PP10's Black Gamma, 2026-10-29) is OKed and raised as Blocked; anything else is Failed."""
+    HLG2": PP10's Black Gamma, 2026-10-29) is left as a notice the kit does not answer is left (leave_notice: MENU, and
+    OK only where the camera refuses MENU there and OK is its only button) and raised as Blocked; anything else is
+    Failed."""
     s = cam.read()
     if s.kind == "notice":
         text = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
@@ -30,23 +39,86 @@ def refuse_or_fail(cam, name: str, what: str):
             reason = re.sub(r"\s+", " ", text.split("as follows", 1)[-1])
             reason = re.sub(r"[\s•●]*(\bOK\b)?[\s•●]*$", "", reason).strip()     # the OK button and its dot
             reason = re.sub(r"^\W+", "", reason)                             # an icon read as "%"
-            cam.press("enter")                  # an information notice: OK goes back to the row
+            leave_notice(cam)                   # MENU; OK back to the row only where MENU is refused (the a1 II's)
             raise Blocked(f"{name}: blocked by {reason!r}", reason)
     raise Failed(f"{name}: Right opened {s.kind}, {what}")
 
 
-def first_time_notice(cam) -> bool:
-    """A screen the camera explains once before it opens (Custom Key/Dial Set. after a settings reset: "In the next
-    setting screen, you can check the function assigned to a specific button by pressing that button on the device",
-    with "Don't show this again" and OK, 2026-11-07). The cursor sits on the tick box: Down to OK, Enter, and the
-    screen behind it opens. The box is never ticked (that would be a setting changed for a proof). False for any
-    other screen, which is left as it is."""
-    text = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
-    if not re.search(r"show this again", text, re.I) or safety.confirmation(text):
-        return False
-    cam.press("down")
-    cam.press("enter")
-    return True
+def to_notice_ok(cam) -> None:
+    """The cursor off a notice's "Don't show this again." box onto its OK (Down, at most twice), never ticking the box: a
+    tick would be a setting changed for a proof. Moves the cursor only."""
+    for _ in range(2):
+        if not re.search(r"don.?t show", notice_lit(cam) or "", re.I):
+            return
+        cam.press("down")
+
+
+def info_screen(cam) -> bool:
+    """Whether the screen on show is one pass_note and pass_named_notice may pass: a notice, or a first-time screen read
+    as no known kind (it draws no notice's frame lines) with a "Don't show this again." line (dont_show), Custom
+    Key/Dial Set.'s on the a1 II (safety.first_time_screen judges it so at the press)."""
+    kind = cam.read().kind
+    if kind == "notice":
+        return True
+    return kind == "unknown" and any(dont_show(ln) for ln in ocr.read([cam.frame.path])[cam.frame.path])
+
+
+def info_ok_hint(cam, row: str) -> str:
+    """The --info-ok that would name the notice on show for `row`: its text as OCR reads it, its OK and its "Don't show
+    this again." line left out, to be checked against its frame before it is given; a placeholder where it cannot be
+    read."""
+    try:
+        lines = ocr.read([cam.frame.path])[cam.frame.path]
+    except Exception:
+        lines = []
+    said = " ".join(ln.text for ln in lines if not dont_show(ln) and not BUTTON_LINE.fullmatch(ln.text or ""))
+    return f'--info-ok "{row or "ROW"}={" ".join(said.split()) or "<its whole text>"}"'
+
+
+def notice_before(cam, row: str, lit_before: str = "", words: bool = True) -> dict | None:
+    """After Right on the row `row` ("A > B"): the screen the camera shows before the row's own, when it is one a run may
+    pass (a first-time screen with "Don't show this again." and OK, Custom Key/Dial Set.'s after a settings reset: "In
+    the next setting screen, you can check the function assigned to a specific button by pressing that button on the
+    device", 2026-11-07; or any notice where --info-ok names the row), passed as pass_note passes it; None for any other
+    screen, left as it is (a refusal notice is its caller's). Returns pass_note's answer."""
+    if not info_screen(cam):
+        return None
+    if info_ok_for(INFO_OK, row) is None:
+        text = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+        if not re.search(r"show this again", text, re.I) or safety.confirmation(text):
+            return None
+    return pass_note(cam, row, lit_before, words)
+
+
+def first_time_notice(cam, row: str | None = None, lit_before: str = "") -> bool:
+    """notice_before as a yes or no: True once a first-time screen (or the notice --info-ok names for `row`) is passed
+    and the screen behind it opens; False for any other screen, left as it is, or one not passed (MENU on it cancels the
+    row's opening). The box is never ticked."""
+    got = notice_before(cam, row or "", lit_before)
+    return got is not None and "refused" not in got
+
+
+def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
+    """A notice that Right on `row` opened before the row's own screen (Mode Dial Control Set's note, a first-time
+    screen with "Don't show this again.": info_screen), its OK taken so the screen behind it opens: only as the run
+    names it with --info-ok (INFO_OK; pass_named_notice judges it, the lit bar read before Right as the row), or where
+    the camera refuses MENU on it and OK is its only button (leave_notice, after the cursor is taken off a "Don't show
+    this again." box: to_notice_ok). MENU on a notice the camera takes cancels the opening: the row is not passed, and
+    the message gives the --info-ok that names it, its text as read (info_ok_hint; `words` False, on a run that
+    withholds what it reads: the row alone). Returns {"row", "frame", "by"} once passed, else {"refused": why}."""
+    frame = cam.frame.path.name
+    phrase = info_ok_for(INFO_OK, row) if row else None
+    if phrase is not None:
+        got = pass_named_notice(cam, row, phrase, lit_before, words)
+        return got if "refused" in got else {**got, "by": "--info-ok"}
+    if not info_screen(cam):
+        return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
+    hint = info_ok_hint(cam, row) if words else f'--info-ok "{row or "ROW"}=<its whole text>"'
+    to_notice_ok(cam)
+    if leave_notice(cam) == "menu":
+        return {"refused": f"the notice ({frame}) took MENU, which cancels it: its OK goes only where --info-ok names "
+                           f"it or where the camera refuses MENU on it. Check its text against {frame} and add {hint}"}
+    return {"row": row, "frame": frame, "by": "a lone OK after MENU was refused"}
 
 
 def bar_text(cam) -> str:
@@ -300,28 +372,41 @@ def notice_focus(img):
     return max(bars, key=lambda b: b[2] * b[3]) if bars else None
 
 
-def info_notice_ok(cam, name: str, kinds: tuple = ("notice", "unknown"), words: bool = True) -> dict | None:
+def info_notice_ok(cam, name: str, kinds: tuple = ("notice", "unknown"), words: bool = True,
+                   named: str = "") -> dict | None:
     """An information notice after a choice ("You can perform detailed settings ... Select on Cam &
     Send", with a "Don't show this again." box above its OK, after Send (This Image) on a playback Fn
-    tile, 2026-10-29): Down to its OK, never ticking the box, and OK. Anything that reads like a
-    confirmation, or a cursor that is not on OK, fails the cell. None when no notice is up (the screen is not one
-    of `kinds`: a list prover passes "table" for an information screen with buttons, Exposure Ctrl Type's). words
+    tile, 2026-10-29): the cursor taken to its OK (Down, never ticking the box), then left as a notice the kit does not
+    answer is left (leave_notice: MENU, which on the a1 II closes it and the menu with it; OK only where the camera
+    refuses MENU and OK is its only button), since 2026-11-14: OK straight away only where the screen's kind takes it (a
+    list prover passes "table" for an information screen with buttons, Exposure Ctrl Type's) or the run names the
+    notice with --info-ok (`named`, which pass_named_notice has judged: the camera judges it again, LiveCamera.press's
+    notice_ok). Anything that reads like a confirmation, or a cursor that is not on OK, fails the cell. None when no
+    notice is up (the screen is not one of `kinds`). Returns {"text", "frame", "left_by": "ok" or "menu"}. words
     False: what the screen reads is neither printed nor put in a failure's message (the frame is named; the caller
     keeps the words where it keeps a notice's), for a setup step whose screen can show the owner's values."""
-    if cam.read().kind not in kinds:
+    kind = cam.read().kind
+    if kind not in kinds:
         return None
     lines = ocr.read([cam.frame.path])[cam.frame.path]
     text = ocr.text_in(lines, (0, 0, 640, 480))
     said = f": {text[:80]!r}" if words else ""
     if not text or safety.confirmation(text) or not re.search(r"\bOK\b", text):
         raise Failed(f"{name}: a notice came up ({cam.frame.path.name}){said}")
+    frame = cam.frame.path.name
     for _ in range(3):
         focused = notice_lit(cam)
         if re.fullmatch(r"\W*OK\W*", focused or ""):
+            if named or kind in safety.ENTER_KINDS:
+                if words:
+                    print(f"   information after the choice, taken with its OK: {text[:70]!r}", flush=True)
+                cam.press("enter", **({"notice_ok": named} if named else {}))
+                return {"text": text, "frame": frame, "left_by": "ok"}
+            left = leave_notice(cam)
             if words:
-                print(f"   information after the choice, taken with its OK: {text[:70]!r}", flush=True)
-            cam.press("enter")
-            return {"text": text, "frame": cam.frame.path.name}
+                print(f"   information after the choice, {'closed with MENU' if left == 'menu' else 'taken with its OK (MENU refused)'}: "
+                      f"{text[:70]!r}", flush=True)
+            return {"text": text, "frame": frame, "left_by": left}
         if not re.search(r"don.?t show", focused or "", re.I):
             break
         cam.press("down")                    # off the "Don't show this again." box, never Enter on it
@@ -439,7 +524,8 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
     a single OK, 2026-11-03). Only for a notice that explains and asks nothing, whose whole text the run gives
     (`phrase`, runner.notice_words: letters, digits and single spaces; punctuation and glyphs ignored in both). Enter goes
     out once, and only when all hold:
-    - the screen is a notice;
+    - the screen is a notice, or a first-time screen read as no known kind with a "Don't show this again." line
+      (info_screen);
     - the lit bar read before Right (`lit_before`) is the row's last label (safety.bar_on_row, or page_model.same_text
       with its short first word kept: keeps_lead);
     - the phrase's words are found in the notice's lines, in order (notice_cover), its OK line aside, and a line that
@@ -454,21 +540,44 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
     - the phrase accounts for the whole notice (notice_cover): no word of three letters or more it skips, no line
       outside its text that holds none of its words, and at most runner.INFO_OK_SLACK of its letters and digits left over
       (an icon read as a letter or two, a slip), so no sentence or button the phrase does not name can ride along;
-    - the lit button reads OK (notice_lit), and info_notice_ok, which judges it so too, presses the Enter.
+    - the lit button reads OK (notice_lit), or the box above it is lit, and info_notice_ok, which takes the cursor Down
+      off the box (never ticking it) and judges OK lit, presses the Enter.
     Every reading judged is spaced as read (safety.plain_view: as read, folded, OCR's capital I as an l, slips undone):
     the guards' run-together view takes every space out of the text, so ordinary prose reads as what it never says ("a
     different screen" holds "ntsc", "camera settings" "erase", "You can change" "canc"; 2026-11-14), and words run
     together are judged inside one word alone (runner.joined). The camera's own Enter check judges the notice again at
-    the press (camkit.live.LiveCamera.confirm_refused: safety.confirmation_refused, its words run together too).
+    the press (camkit.live.LiveCamera.confirm_refused, given the run's --info-ok as its notice_ok: no question mark, OK
+    plainly its only button, safety.lone_ok, and safety.confirmation_refused, its words run together too).
     Returns {"row", "frame": the notice's frame} once passed, else {"refused": why} with nothing pressed; no text read
     off the screen is in either. Where the phrase leaves more of the notice over, the notice's text is printed (`words`:
     False on a run that withholds what it reads), so that its whole text can be given."""
     frame = cam.frame.path.name
-    if cam.read().kind != "notice":
+    if not info_screen(cam):
         return {"refused": f"not a notice ({cam.read().kind}, {frame})"}
     row = name.split(" > ")[-1]
     if not (safety.bar_on_row(lit_before, row) or (same_text(lit_before, row) and keeps_lead(lit_before, row))):
         return {"refused": "the lit bar read before Right is not the row named"}
+    why = notice_refused(cam, phrase, words)
+    if why:
+        return {"refused": why}
+    try:
+        # the run's --info-ok, judged here: the camera judges the notice again at the press (LiveCamera's notice_ok)
+        if info_notice_ok(cam, name, kinds=("notice", "unknown"), words=False, named=name) is None:
+            return {"refused": f"no notice was up for its OK ({frame})"}
+    except Failed:
+        return {"refused": f"its OK could not be taken ({frame})"}
+    return {"row": name, "frame": frame}
+
+
+def notice_refused(cam, phrase: str, words: bool = True) -> str:
+    """Why the notice on screen is not the one --info-ok names by its whole text `phrase` (runner.notice_words), or
+    "": every check of pass_named_notice's but the row's own (the phrase accounts for the notice, no question mark, no
+    confirmation nor never-open name nor identity, a single OK alone on its band, the lit button OK). kit/drive.py judges
+    a notice its --info-ok names with it alone (its presses open no row before the notice). No text read off the screen
+    is in the reason; `words` False prints none either."""
+    frame = cam.frame.path.name
+    if not info_screen(cam):
+        return f"not a notice ({cam.read().kind}, {frame})"
     lines = ocr.read([cam.frame.path])[cam.frame.path]
     text = " ".join(ln.text for ln in lines).strip()
 
@@ -481,38 +590,34 @@ def pass_named_notice(cam, name: str, phrase: str, lit_before: str, words: bool 
     if cover is None and len(aside) < len(said):
         cover = notice_cover(phrase, said)          # a phrase that names the box's words too
     if cover is None:
-        return {"refused": f"not the notice named ({frame})"}
+        return f"not the notice named ({frame})"
 
     def spaced(t) -> list:
         return safety.plain_view(safety.readings, t)
     if any(q in r for r in spaced(text) for q in "?？"):
-        return {"refused": f"it asks a question ({frame})"}
+        return f"it asks a question ({frame})"
     for check, why in ((safety.confirmation, "it reads as a confirmation"),
                        (lambda t: joined(t, CONFIRM_NAMES), "it reads as a confirmation, its words run together"),
                        (lambda t: safety.plain_view(safety.screen_refused, t), "it names what the never-open list holds"),
                        (lambda t: safety.plain_view(safety.identity_screen, t), "it names identity or credentials")):
         if check(text):
-            return {"refused": f"{why} ({frame})"}
+            return f"{why} ({frame})"
     buttons = [ln for ln in lines if BUTTON_LINE.fullmatch(ln.text or "")]
     if [BUTTON_LINE.fullmatch(ln.text)[1].lower() for ln in buttons] != ["ok"]:
-        return {"refused": f"not a single OK: {len(buttons)} button lines ({frame})"}
+        return f"not a single OK: {len(buttons)} button lines ({frame})"
     ok_line = buttons[0]
     others = [ln for ln in lines if ln is not ok_line]
     if any(NOT_BESIDE_OK.search(r) for ln in others for r in spaced(ln.text)):
-        return {"refused": f"a line beside its OK names a button, a choice or an action ({frame})"}
+        return f"a line beside its OK names a button, a choice or an action ({frame})"
     if any(ln.y + ln.h / 2 >= ok_line.y - OK_BAND for ln in others):
-        return {"refused": f"a line sits on or below its OK's band ({frame})"}
+        return f"a line sits on or below its OK's band ({frame})"
     left_over, why = cover
     if why or left_over > INFO_OK_SLACK:
         if words:
             print(f"   the notice reads {text!r}: give its whole text as written with --info-ok", flush=True)
-        return {"refused": f"the notice has {left_over} letters or digits beyond the phrase{f', {why}' if why else ''}: "
-                           f"give its whole text as written ({frame})"}
-    if not re.fullmatch(r"\W*OK\W*", notice_lit(cam) or ""):
-        return {"refused": f"the lit button is not OK ({frame})"}
-    try:
-        if info_notice_ok(cam, name, kinds=("notice",), words=False) is None:
-            return {"refused": f"no notice was up for its OK ({frame})"}
-    except Failed:
-        return {"refused": f"its OK could not be taken ({frame})"}
-    return {"row": name, "frame": frame}
+        return (f"the notice has {left_over} letters or digits beyond the phrase{f', {why}' if why else ''}: give its "
+                f"whole text as written ({frame})")
+    lit = notice_lit(cam) or ""
+    if not re.fullmatch(r"\W*OK\W*", lit) and not re.search(r"don.?t show", lit, re.I):
+        return f"the lit button is not OK ({frame})"         # on the box, the cursor goes Down to OK (info_notice_ok)
+    return ""

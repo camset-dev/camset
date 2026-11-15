@@ -254,6 +254,9 @@ class SlotCam:
 
     def press(self, key, **kw):
         self.pressed.append(key)
+        # the consent the press carried to the camera's own check (LiveCamera.answer_once), used up by it
+        self.consents = [*getattr(self, "consents", []), getattr(self, "answer_once", None)]
+        self.answer_once = None
         self.kind = "unknown"
 
     def refresh(self, tag):
@@ -281,11 +284,19 @@ def test_a_lit_tab_that_cannot_be_measured_fails_the_registration_and_no_enter_i
     assert cam.pressed == ["enter"], "the row's Enter only: none on the slot screen"
     import drive
     monkeypatch.setattr(drive, "highlighted", lambda image, path: "")
-    monkeypatch.setattr(drive, "press_decision", lambda *a: ("the made-up guard", False))
+    monkeypatch.setattr(drive, "press_decision", lambda *a, **k: ("the made-up guard", False))
     later = SlotCam([blank, tab_frame(224, 273)])
     with pytest.raises(Failed, match="Enter on slot 1 refused: the made-up guard"):
         M.register_slot(later, None, None, "1", said.append, ("Camera Set. Memory",))
     assert later.pressed == ["enter"] and not said
+    # drive.py's guard passes it: the slot screen, read as no known kind, gets its Enter with the run's --allow as consent,
+    # in drive.py's judgement and at the camera's own check (answer_once); the row's opening carries none (review, P1)
+    judged = []
+    monkeypatch.setattr(drive, "press_decision", lambda *a, **k: judged.append(k.get("consent")) or ("", True))
+    goes = SlotCam([blank, tab_frame(224, 273)])
+    M.register_slot(goes, None, None, "1", said.append, ("Camera Set. Memory",))
+    assert goes.pressed == ["enter", "enter"] and judged == ["--allow 'Camera Set. Memory'"]
+    assert goes.consents == [None, "--allow 'Camera Set. Memory'"]
 
 
 # ---------------------------------------------------------------- memreg_run: the judgement

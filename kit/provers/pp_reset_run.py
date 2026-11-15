@@ -982,8 +982,9 @@ def dismiss_complete(cam, profile: str, ok_frame: str, notice: dict) -> str:
     """The completion notice closed the kit's way for a notice that asks nothing (proving.nav.to_shooting, the
     session's cleanup): MENU, which the a1 II took on this very notice back to the profile's settings (kit2_pp_reset_trial
     00045 then 00046_cancel.png); OK only when the camera refuses MENU, on the notice read afresh and judged again
-    (complete_judged) and passed by drive.py's own Enter guard as a notice, never as a confirmation. Returns the key
-    that closed it."""
+    (complete_judged) and passed by drive.py's own Enter guard as a notice that has just refused MENU with its OK
+    plainly its only button (safety.lone_ok), never as a confirmation; the camera judges that OK so too
+    (camkit.live.leave_notice's rule). Returns the key that closed it."""
     import drive
     from camkit.link import LinkError
     try:
@@ -997,7 +998,11 @@ def dismiss_complete(cam, profile: str, ok_frame: str, notice: dict) -> str:
     if again["why"]:
         stop_after_ok(cam, profile, ok_frame, {**again, "looks": [notice, again]},
                       f"MENU refused on the completion notice, and then {again['why']}")
-    why = drive.press_refused("enter", again["lit"], again["text"], again["kind"])
+    # a notice that has just refused MENU, its OK plainly its only button (safety.lone_ok): drive.py's guard judges it
+    # so, and the camera again at the press (LiveCamera's menu_refused, recorded when MENU was refused)
+    from camkit.live import MENU_REFUSED, lone_of
+    why = drive.press_refused("enter", again["lit"], again["text"], again["kind"], notice_way=MENU_REFUSED,
+                              lone=lone_of(cam.frame.image, cam.frame.path))
     if why:
         stop_after_ok(cam, profile, ok_frame, {**again, "looks": [notice, again]},
                       f"MENU refused on the completion notice, and OK refused: {why}")
@@ -1036,7 +1041,10 @@ def reset_one(cam, cycle, model, profile: str, say, open_key: str = "right", nee
     if why:
         back_out(cam, f"{profile}: Enter refused: {why}")
     ok_frame = cam.frame.path.name
-    cam.confirm_once = True                 # the question judged above: the camera's own confirmation check, this press
+    # the question judged above, whole, under the run's --allow for the profile's own Reset row: the camera's own check
+    # lets this press go only where its own fresh reading is that profile's reset question (LiveCamera.
+    # profile_reset_passed), for this press alone, and its log names why
+    cam.confirm_once = ("profile_reset", profile)
     cam.press("enter")
     after = after_ok(cam, profile)
     if after["seen"] == "unknown":

@@ -14,12 +14,19 @@ centre) always needs a regex. A key is judged and sent as camkit.safety names it
 "Enter", quoted, a look-alike letter: canonical_key), and anything that is not a key is refused before anything
 connects. The guards fail closed
 (press_refused): Enter is refused when the lit text cannot be read, when it reads Initialize or Reset Network
-Set., when the screen reads either and the lit text is not Camera Settings Reset, and on a screen that reads
-like a confirmation (safety.confirmation_refused: confirmation, its words run together too) unless --confirm is given,
-which never lifts the rest; the camera checks the same on a dialog or a notice (camkit.live.LiveCamera), lifted for a
-press drive.py judged with --confirm (live.press's confirm) or allowed as an owner row's (LiveCamera.permit). Right or Enter
-onto a lit row on the never-open list is refused unless --allow names it, and Right on a menu page whose lit
-row cannot be read is refused.
+Set., when the screen reads either and the lit text is not Camera Settings Reset, on a screen that asks or may ask by
+its shape (safety.enter_refused, since 2026-11-14: a notice, a screen of no known kind, one whose text reads nothing, a
+question mark above its footer, a carousel that asks), and on a screen that reads like a confirmation
+(safety.confirmation_refused: confirmation, its words run together too). The ways past are named and narrow: the owner
+route (--owner --confirm, the row's name typed at the terminal) lifts both for its step or armed press, never the rest;
+--confirm "SCREEN TEXT" without --owner lifts the shape check, once, for an Enter on the screen whose whole text it
+gives (runner.confirm_phrase_or_exit, runner.screen_named), never the confirmation words, so a format, a delete or a
+reset goes only by the owner route; --info-ok "ROW=PHRASE", ROW a --path label, takes the OK of the plain notice it
+names (proving.screens.notice_refused: OK alone, no question, the phrase its whole text). The camera makes the shape
+check itself on every Enter (camkit.live.LiveCamera.confirm_refused), on the screen looked at again just before the
+press, lifted only for a press drive.py allowed as an owner row's (live.press's confirm, LiveCamera.permit), and given
+the consent or the notice named. Right or Enter onto a lit row on the never-open list is refused unless --allow names
+it, and Right on a menu page whose lit row cannot be read is refused.
 "enter!:regex" is Enter vouched by the operator (2026-11-09), for a screen that lights nothing the kit can read (the a1
 II's MR Memory slots) although the operator looking at the frame can see what the cursor is on. The a1 II's owner
 allowed it on their own camera (2026-11-09, with any button but the delete key while a picture is shown); on another
@@ -31,8 +38,9 @@ and whose whole text names nothing on the never-open list (safety.screen_refused
 action, credentials, a by-hand row, sound, light or motion; a name --allow gives lifts its own words, never the cards,
 Initialize, Reset Network Set., credentials or the camera's identity, a connection or its region). The log line and
 drive.jsonl say "vouched". Only the unreadable lit text
-is lifted: the never-open list, Initialize, Reset Network Set., the confirmation check (--confirm) and C4 stay as they
-are (press_decision).
+is lifted: the never-open list, Initialize, Reset Network Set., the confirmation check and the shape check (since
+2026-11-14 the MR Memory slots, read as no known kind, take a vouched Enter only with --confirm naming their screen)
+and C4 stay as they are (press_decision).
 "help" presses C4 (the trash button) for the In-Camera Guide, only on a menu or option screen whose
 footer draws the help button; Enter on its popup only on "In-Camera Guide", never Add to My Menu.
 --grip up|down (the camera held vertically, 2026-11-02): dialogs opened from the menu turn on screen while
@@ -156,7 +164,8 @@ from camkit import ocr, safety, screen, session  # noqa: E402
 from camkit import coverage  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
-from camkit.live import LiveCamera, black, lit_text, open_refused, osd_kind, press, text_of  # noqa: E402
+from camkit.live import (LiveCamera, black, body_of, lit_text, lone_of, open_refused, osd_kind, press,  # noqa: E402
+                         text_of)
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
@@ -164,10 +173,11 @@ from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED,  # noqa: E402
-                    add_network_argument, add_owner_argument, add_scan_argument, changes_kept, close_for_restore,
-                    defined_values, known_labels, known_values, label_readings, load_scan, log_network_decided,
-                    log_owner_decided, network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
-                    restore_checked, restoring, row_values, values_withheld)
+                    add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument, changes_kept,
+                    close_for_restore, confirm_phrase_or_exit, defined_values, hold_for_owner, info_ok_or_exit,
+                    known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
+                    network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
+                    restore_checked, restoring, row_values, screen_named, values_withheld)
 
 
 class NotReached(RuntimeError):
@@ -325,11 +335,21 @@ armed_wiping = safety.armed_wiping
 
 def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                   vouched: bool = False, on_shooting=(), network=frozenset(), screens: bool = False,
-                  values=None, readings=None, owner=None, armed_row: str = "", labels=None) -> str:
+                  values=None, readings=None, owner=None, armed_row: str = "", labels=None, body=None,
+                  consent: str = "", notice_way: str = "", lone=None) -> str:
     """Why drive.py may not send this press, or "" when it may. Fails closed: a lit text that cannot be read is
     no permission (decisions 5 and 9). lit: the text in the orange cursor (highlighted); text: the whole screen's.
-    --confirm (confirm) allows Enter on a confirmation, never on Initialize or Reset Network Set. The key is judged as
-    canonical_key folds it (" enter" is Enter), and one that is no key is refused.
+    `confirm`, the owner route's (--owner --confirm, for a press its gates judged a step or the armed press), allows
+    Enter on a confirmation, never on Initialize or Reset Network Set. The key is judged as canonical_key folds it
+    (" enter" is Enter), and one that is no key is refused.
+    Enter is refused, since 2026-11-14, on a screen that asks or may ask by its shape (safety.enter_refused, as the
+    camera's own check judges it: a notice, a screen of no known kind, one whose text reads nothing, a question mark
+    above its footer, `body` when given, else in the whole text, a carousel that asks), unless `confirm`; or `consent`,
+    named for this one screen (a prover's --allow for its own row, kit/provers/memreg_run.py's slot screen; --confirm
+    "SCREEN TEXT" without --owner, once): the shape refuses nothing, the confirmation check still does; or, on a notice,
+    `notice_way` (the notice has just refused MENU; the notice --info-ok names) where `lone` (safety.lone_ok's verdict)
+    says its OK is its only button. A vouch (enter!:regex) lifts the unreadable lit text alone, never this: the MR
+    Memory slots, read as no known kind, need --confirm naming them.
     vouched (enter!:regex): the operator vouches for Enter, so an unreadable lit text alone does not refuse it, on a
     screen that is not in VOUCH_REFUSED, whose whole text reads something (a regex such as ".*" matches a blank
     screen too, and a blank text gives screen_refused nothing to judge) and names nothing never-open
@@ -371,6 +391,10 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
         said = safety.confirmation_refused(text)       # its words run together too ("Formatthe memory card?")
         if said and not confirm:
             return f"{said} on {(text or '')[:120]!r}"
+        # what the screen asks, by its shape: the camera judges it too (camkit.live.LiveCamera.confirm_refused)
+        asked = safety.enter_refused(kind, text, lit, body, notice_way, lone, key=key)
+        if asked and not confirm and not (consent and str(text or "").strip()):
+            return f"{asked}: only with --confirm, the owner's word"
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
@@ -383,16 +407,47 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
 
 def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                    on_shooting=(), network=frozenset(), screens: bool = False, values=None, readings=None, owner=None,
-                   armed_row: str = "", labels=None) -> tuple:
+                   armed_row: str = "", labels=None, body=None, consent: str = "", notice_way: str = "",
+                   lone=None) -> tuple:
     """(why the press is refused or "", whether it goes as vouched) for the --press `p` whose key is `key`, on a screen
     whose lit text is `lit`, whole text `text` and kind `kind`, as main() sends it: a press written enter!:regex is
     vouched for (press_refused's vouched) only when it is Enter, and goes as vouched only when nothing lit could be
     read and nothing refuses it. on_shooting: the keys --on-shooting named; network, screens, values, readings:
-    --network's; owner, armed_row: --owner's (press_refused)."""
+    --network's; owner, armed_row: --owner's; body, consent, notice_way, lone: the text above the footer, a consent named
+    for this screen (a prover's --allow for its own row; --confirm "SCREEN TEXT") and a notice's way past with its lone
+    OK verdict (press_refused)."""
     vouched = vouched_press(p) and key in ENTERS and not (kind == "shooting" and key in on_shooting)    # named instead
     why = press_refused(key, lit, text, kind, confirm, allow, vouched, on_shooting, network=network, screens=screens,
-                        values=values, readings=readings, owner=owner, armed_row=armed_row, labels=labels)
+                        values=values, readings=readings, owner=owner, armed_row=armed_row, labels=labels, body=body,
+                        consent=consent, notice_way=notice_way, lone=lone)
     return why, bool(vouched and not why and not (lit or "").strip())
+
+
+def enter_ways(cam, key: str, phrase, named: dict, words: bool = True) -> tuple:
+    """(consent, notice row, lone verdict) for the press `key` about to be judged, the ways past the shape check a run
+    without --owner names (2026-11-14): `phrase`, --confirm's words (runner.confirm_phrase_or_exit), gives the consent
+    "--confirm '...'" where the screen on show is the one it names (runner.screen_named: every OCR line, its buttons too),
+    for press_refused's consent and the camera's answer_once, which keep the confirmation words; `named`, --info-ok's
+    {row: phrase}, gives the row whose notice the screen is (proving.screens.notice_refused) and that notice's lone OK
+    verdict (camkit.live.lone_of), for press_refused's notice_way and the camera's notice_ok. ("", "", None) for any key
+    but Enter, and where nothing names the screen."""
+    if key not in ENTERS:
+        return "", "", None
+    consent = ""
+    if phrase:
+        try:
+            lines = ocr.read([cam.frame.path])[cam.frame.path]
+        except Exception:
+            lines = None
+        if lines is not None and not screen_named(phrase, lines):
+            consent = f"--confirm {phrase!r}"
+    notice_row, lone = "", None
+    if named and cam.read().kind == "notice":
+        from proving.screens import notice_refused
+        notice_row = next((row for row, said in named.items() if not notice_refused(cam, said, words)), "")
+        if notice_row:
+            lone = lone_of(cam.frame.image, cam.frame.path)
+    return consent, notice_row, lone
 
 
 ARMED = ("confirm", "choose", "open", "final")     # the owner presses armed as the run's last press: one per run
@@ -931,7 +986,11 @@ def main():
     ap.add_argument("--c4-press", action="append", default=[], choices=sorted(C4_OWNER_PRESSES),
                     help="the owner's word for this run for a C4 press their own body allows: c4set (Focus Area's SET "
                          "with Custom 1-3 lit), c4reset (a Creative Look panel's Reset)")
-    ap.add_argument("--confirm", action="store_true", help="allow Enter on a screen that reads like a confirmation")
+    ap.add_argument("--confirm", nargs="?", const=True, default=None, metavar="SCREEN TEXT",
+                    help="with --owner: the owner route's step or armed last press (the person at the terminal types the "
+                         "row's name); without it: \"SCREEN TEXT\", the whole text of the one screen whose Enter this "
+                         "run may send past the shape check, once, never past the confirmation words")
+    add_info_ok_argument(ap)
     ap.add_argument("--wait", type=float, default=1.0, help="seconds after the last press")
     ap.add_argument("--run", default="kit2_drive")
     ap.add_argument("--note", default="", help="what this drive tests (kept with the result)")
@@ -940,6 +999,19 @@ def main():
     add_network_argument(ap)
     add_owner_argument(ap)
     a = ap.parse_args()
+    # --confirm: with --owner the owner route's flag (typed row name, armed last press); without it the one screen whose
+    # Enter the run may send past the shape check, named by its whole text, once, never past the confirmation words
+    confirm_phrase = None
+    if a.owner and isinstance(a.confirm, str):
+        sys.exit("--owner --confirm takes no screen text: the person at the terminal types the row's name instead")
+    if a.confirm is not None and not a.owner:
+        confirm_phrase = confirm_phrase_or_exit(a.confirm)
+    a.confirm = bool(a.owner and a.confirm)
+    # --info-ok "ROW=PHRASE": a plain notice met after the run's presses, its OK taken where it is that notice alone,
+    # as the crawl and the provers take theirs (proving.screens.notice_refused); ROW one of --path's labels
+    if a.info_ok and (a.owner or a.network):
+        sys.exit("--info-ok passes no notice on a --network or --owner run: their rows are looked at, or armed, only")
+    named_notes = info_ok_or_exit(a.info_ok, rows=a.path, labels=a.path) if a.info_ok else {}
     for label in a.allow:
         # nothing on the cards (2026-11-01, the owner: "Please don't delete the cards"), Initialize, Reset Network Set.,
         # credentials, nor the camera's identity, a connection or its region (decisions 4, 5, 8 and 9), nor a Wi-Fi or
@@ -1046,6 +1118,7 @@ def main():
     # the owner row's decision logs values (runner.values_withheld, changes_kept)
     private = bool(address or a.network or a.owner)
     keep_values = not private or bool(owner_info and owner_info.get("logged"))
+    confirm_left = 1 if confirm_phrase else 0           # --confirm "SCREEN TEXT": one Enter on that screen, then none
     if private:
         # its frames, drive.jsonl, events and downloads may hold addresses, credentials or logged values: the folder
         # owner-only from here, every file the run writes 0600 (camkit.runs; checked again at the end: seal)
@@ -1256,12 +1329,27 @@ def main():
                         ok = False
                         break
                     armed = owner_what in ARMED
-                    # the run's --confirm covers only a press the owner gates judged a step or its armed press
-                    confirm_now = a.confirm and owner_what in ("step", *ARMED) if owner_info else a.confirm
+                    # the owner route's --confirm covers only a press the owner gates judged a step or its armed press;
+                    # without --owner nothing lifts every check
+                    confirm_now = a.confirm and owner_what in ("step", *ARMED) if owner_info else False
+                    # the text above the footer, where a question mark is judged (held vertically, or where it cannot be
+                    # read alone, the whole text: the stricter)
+                    body = None
+                    if key in ENTERS and not a.grip:
+                        try:
+                            body = "" if getattr(cam, "blank", False) else body_of(cam)
+                        except Exception:
+                            body = None
+                    # --confirm "SCREEN TEXT" (no --owner): one Enter, on that screen alone, past the shape check;
+                    # --info-ok "ROW=PHRASE": the notice it names, its OK alone (enter_ways)
+                    consent, notice_row, lone = enter_ways(cam, key, confirm_phrase if confirm_left else None,
+                                                           named_notes, words=not private)
                     why, vouched = press_decision(p, key, lit, t, cam.read().kind, confirm_now, a.allow, on_shooting,
                                                   network=cam_network, screens=bool(address), values=values,
                                                   readings=readings, owner=owner_cam,
-                                                  armed_row=owner_label if armed else "", labels=known)
+                                                  armed_row=owner_label if armed else "", labels=known, body=body,
+                                                  consent=consent,
+                                                  notice_way=f"--info-ok {notice_row}" if notice_row else "", lone=lone)
                     if vouched:
                         print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
@@ -1350,9 +1438,15 @@ def main():
                             run.log("c4_press", key=key, frame=cam.frame.path.name)
                         cam.press("c4", allow={"c4"})
                     else:
-                        # an Enter judged here with --confirm: the camera's own confirmation check is lifted for it
-                        press(cam, key, confirm=bool(confirm_now and key in ENTERS),
+                        # an Enter judged here as the owner route's step or armed press: the camera's own check is lifted
+                        # for it; one judged on the screen --confirm names: its shape check alone (answer), once; one on
+                        # the notice --info-ok names: that notice's OK alone (notice_ok)
+                        press(cam, key, confirm=bool(confirm_now and key in ENTERS), answer=consent or None,
+                              **({"notice_ok": notice_row} if notice_row else {}),
                               **shooting_word(cam, run, key, on_shooting))
+                        if consent:
+                            confirm_left = 0            # --confirm lifts one Enter only
+                            run.log("confirm_used", key=key, frame=cam.frame.path.name)
                         # on the help popup a Down can go unanswered: the cursor stayed on Add to My
                         # Menu in 4 of 8 drives (S&Q, 2026-11-02), 0.3 s or 1.3 s after C4 alike.
                         # Down again while the lit entry still reads Add to My Menu, at most twice
@@ -1460,13 +1554,17 @@ def main():
                 result_written = False
                 try:
                     with restoring("drive.py's restore", withhold=private):
-                        close_for_restore(cam, link)
+                        close_for_restore(cam, link, before)
                         try:
                             wait_for(hdmi, ("shooting",), "the settings download after the presses", link=link)
                         except RuntimeError as e:
-                            # the wait gave up: the restore is still tried, never skipped (decision 15); the download
-                            # closes a menu itself, and ended() says so when the camera refuses it
+                            # the wait gave up: the restore is still tried (decision 15), the download closing a menu
+                            # itself, over a screen that asks nothing, judged on a fresh frame; over any other the owner
+                            # clears it first, the link kept open (runner.hold_for_owner, as end_session does)
                             print(f"   {say(str(e))}; restoring all the same", flush=True)
+                            kind, why_not = restorable_now(link, hdmi)
+                            if kind is None:
+                                hold_for_owner(link, hdmi, before, why_not, keys=private)
                         time.sleep(1)
                         ending = session.ended(link, before, **(values_withheld(private) or {"show": 30}))
                         session.put_back(link, ending, before)      # first: a log that cannot be written skips nothing

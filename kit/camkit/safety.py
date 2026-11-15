@@ -31,9 +31,13 @@ The guards:
   kept_screen(kind, lines)   what a --network or --owner run keeps of every screen, from its start to its end: row
                              labels, field names, a list's known option names, a notice as notice_kept keeps it, the
                              count withheld; the shooting screen as its kind alone (kept_said, as the console says it).
+  enter_refused(kind, text, lit)  whether Enter may go on a screen, judged by its shape and never by its words (since
+                             2026-11-14): no Enter on a notice, a screen of no known kind, one whose text cannot be read
+                             or reads nothing, one that shows a question mark above its footer, or a carousel that asks;
+                             a notice only by a named way past and with its OK plainly its only button (lone_ok).
   confirmation(text)         dialog text asking to execute something; never press Enter on it. confirmation_refused,
                              the same with its words run together too: a refusal only (drive.py's and the camera's
-                             Enter checks), never what permits an armed press.
+                             Enter checks, a second check beside enter_refused), never what permits an armed press.
   fold(text)                 a reading as the checks compare it: Unicode look-alikes, dashes and spacing mended.
   readings(text)             every reading a guard judges (as read, folded, slips undone, run together): any one
                              matching refuses; plain_view, the readings spaced as read alone, which a permission needs too.
@@ -193,6 +197,14 @@ class RowRefused(Refused):
     lights is one the run may not open, or one no reader could read): the crawl skips that row and goes on
     (camkit.crawl.visit_row). Any other refusal (a lock still on, the link's own guard, a STOP) is no such refusal, and
     stops the lap."""
+
+
+class ScreenChanged(Refused):
+    """An Enter (or a trash button) refused because the screen looked at again just before it is not the state its
+    caller read (camkit.live.LiveCamera.look_before): the caller chose that press, and judged its words, on a screen the
+    camera has left, so it is never sent on the one now on show. Nothing went out, and the camera's frame and reading
+    are the fresh ones: a caller that reads the screen again and chooses afresh may try once more (camkit.live.press,
+    drive.py's press loop); any other fails that row closed, as for every refusal."""
 
 
 def check_input(name: str, allow: frozenset | set = frozenset()):
@@ -2071,7 +2083,10 @@ def asks(text, lit) -> str | None:
     text that is a button's word (Enter, OK, Execute, Yes); or a lit text that is an action's word whose screen, that
     word taken off its end, still reads as a confirmation ("Delete this image Delete": a "?" and Cancel OCR missed). A
     carousel asks nothing: its title and its lit option ("Custom Key Setting Delete", "File Number Reset": the title
-    alone reads as no confirmation). What camkit.live.LiveCamera's own confirmation check judges a dialog by."""
+    alone reads as no confirmation). What enter_refused judges a dialog by, each sign refusing Enter on its own since
+    2026-11-14 (until then they only let confirmation_refused's words judge it). The Cancel, the pair and the button
+    words are English words: on a camera in another language a carousel's buttons are caught by none of them, only by
+    the question mark and the lit text."""
     t = str(text or "")
     if "?" in t:
         return "a question mark"
@@ -2093,6 +2108,138 @@ def asks(text, lit) -> str | None:
         if confirmation_refused(rest):
             return f"the lit {seen!r} on a screen that reads as a confirmation without it"
     return None
+
+
+# ------------------------------------------------------------------ Enter by the screen's shape (2026-11-14)
+#
+# "Is this a question?" judged by what the screen is, never by what it is called: a notice, a screen of no known kind or
+# one whose text cannot be read gets no Enter, nor does any screen that shows a question mark, nor a carousel that asks
+# (asks). Until 2026-11-14 the camera's own check only gated confirmation_refused's list of English words, so "Clear
+# registered faces? OK Cancel", or any question on a camera not set to English, passed every Enter check (the guards
+# inventory, step C1). The word list stays beside it, a second and stricter check that is never the only one.
+
+# The screens on which Enter chooses an option, applies an editor's own setting or opens a row (camkit.screen's kinds):
+# no question by their kind. A notice, a screen of no known kind, and a kind not listed here (one camkit.screen adds
+# later among them) take no Enter but by one of the explicit ways past (enter_refused)
+ENTER_KINDS = frozenset({"menu", "submenu", "tiles", "shooting", "list", "dialog", "sidelist", "checklist", "checkgrid",
+                         "fields", "picker", "table", "keyset", "fnmenu", "look", "slider", "wbgrid", "guide", "helppop"})
+# The keys that answer what a screen asks: the control wheel's centre and the multi-selector's, and the trash button,
+# which confirms the Delete confirmation screen ("If the delete button is pressed in the delete confirmation screen,
+# the target image is deleted", the a1 II's own help: _confirms). The trash button is C4 on the a1 II, and the SDK's
+# Delete key
+ENTER_KEYS = frozenset({"enter", "ms_enter"})
+TRASH_KEYS = frozenset({"c4", "delete"})
+# A question mark in any script the kit may meet: ASCII, full-width, inverted (Spanish), Arabic
+QUESTION_MARKS = "?？¿؟"
+# A line of a notice that is a button's word alone, its dot or bullet aside (lone_ok's words, a refusal only)
+_BUTTON_LINE = re.compile(r"[\s•●.:]*(?:ok|enter|execute|yes|no|cancel|set|done|back|close|exit|apply)[\s•●.:]*")
+# how far above the lit button's top a line's middle may lie and still sit on its band (proving.screens.OK_BAND's)
+LONE_BAND = 4
+
+
+# a "Don't show this again." box, as a first-time screen draws it above its OK
+DONT_SHOW = re.compile(r"\bdon.?t\s+show\s+this\s+again\b", re.I)
+
+
+def first_time_screen(kind, text) -> bool:
+    """A screen the camera explains once before a row opens, read as no known kind (it draws no notice's frame lines)
+    and holding a "Don't show this again." box (Custom Key/Dial Set.'s on the a1 II, 2026-11-07): judged as a notice is
+    (enter_refused's notice rules, its OK only by a way past), never as a screen whose Enter is unknown and goes."""
+    return kind == "unknown" and bool(DONT_SHOW.search(fold(text or "")))
+
+
+def question_mark(text) -> bool:
+    """Whether a question mark (QUESTION_MARKS) stands in the text, as read or folded. No word is read."""
+    return any(m in t for t in (str(text or ""), fold(text)) for m in QUESTION_MARKS)
+
+
+def lone_ok(lit, lines, box) -> str:
+    """Why a notice's lit button is not plainly its only one, or "" when it is: the check that a notice that has just
+    refused MENU, or one --info-ok names, must pass before Enter (enter_refused's `lone`). lines: the screen's OCR lines
+    as (text, x, y, w, h); box: the lit button's (x0, y0, x1, y1) as camkit.live finds the orange cursor, or None.
+    By layout first, no word read: a lit button found and its text read, and no other line whose middle lies on, beside
+    or below the lit button's band (LONE_BAND: a second button stands beside the lit one or under it). Then by words, a
+    refusal only: no other line that is a button's word alone (_BUTTON_LINE), and none that reads "canc" ("Cance1"), in
+    any reading. What neither catches: a second button drawn above the lit one whose word is none of those (a camera in
+    another language): the layout rule is calibrated on the a1 II's notices, whose buttons sit at the bottom."""
+    if box is None:
+        return "no lit button can be found on it"
+    if not str(lit or "").strip():
+        return "its lit button cannot be read"
+    x0, y0, x1, y1 = box
+    others = []
+    for t, x, y, w, h in lines or ():
+        mx, my = x + w / 2, y + h / 2
+        if x0 <= mx <= x1 and y0 <= my <= y1:
+            continue                    # the lit button's own text
+        if my >= y0 - LONE_BAND:
+            return f"a line ({str(t).strip()[:40]!r}) sits beside or below its lit button: a second button may"
+        others.append(str(t))
+    for t in others:
+        for r in readings(t):
+            if _BUTTON_LINE.fullmatch(r) or "canc" in r:
+                return f"another line reads as a button ({t.strip()[:40]!r})"
+    return ""
+
+
+def enter_refused(kind, text, lit, body=None, passed: str = "", lone=None, key: str = "enter") -> str:
+    """Why `key` (Enter or the multi-selector's centre, ENTER_KEYS; the trash button, TRASH_KEYS) may not go on a screen
+    read as `kind`, whose whole text is `text` (None: its reading failed), its text above the footer `body` (the whole
+    text when None) and its lit text `lit`, or "" when it may: by the screen's shape, never by what it is called.
+    Refused, whatever the words say:
+    - a screen of a kind not in ENTER_KINDS ("unknown" among them; a notice below): what Enter does there is not known;
+    - a screen whose text cannot be read, or reads nothing (the shooting screen aside, where a key goes only as the run
+      names it for that press: shooting_refused): whether it asks cannot be told;
+    - a question mark in its text above the footer (question_mark; the footer is left out, where camkit.screen's help
+      glyph draws one on every menu and option screen);
+    - a notice, unless the caller names a way past (`passed`: the notice --info-ok names, judged by
+      proving.screens.pass_named_notice; the notice that has just refused MENU, camkit.live.LiveCamera), its lit
+      button is plainly its only one (`lone`, lone_ok's verdict, "" when it is; None, not judged, refuses) and that
+      button reads OK (`lit`, plain: a lone "Recover" or "Ausführen" acts, and a camera whose OK reads otherwise stops
+      there, fail closed);
+    - a carousel (a dialog) that asks as asks() reads it: Cancel outside quoted option names, a pair of buttons, a lit
+      text that is a button's word or cannot be read, a lit action's word on a screen that reads as a confirmation
+      without it;
+    and a notice passed whose text reads as a confirmation (confirmation_refused). Here the word list judges only a
+    notice let through; on an option screen that passes the shape (a carousel titled "Delete confirm.") no word is
+    judged. The trash button meets the first three alone: its own guard (c4_refused) keeps it to menu and option
+    screens, and Focus Area's SET and a Creative Look panel's Reset draw buttons by design.
+    How name-free each is: the kinds come from camkit.screen's pixel rules (calibrated on the a1 II); the question mark
+    and an unreadable text read no word; lone_ok's layout reads none, its button words are a refusal only; asks()'s
+    Cancel, button pair and button words, and a notice's OK, are English words. What lifts it is the caller's
+    explicit way past (camkit.live.LiveCamera's confirm_once and permit, the owner route's; answer_once, which keeps
+    the word list)."""
+    trash = canonical_input(key) in TRASH_KEYS
+    if kind not in ENTER_KINDS and kind != "notice":
+        return f"the screen reads as {kind or 'no known kind'!r}, not one whose Enter chooses or opens: what it does is not known"
+    if text is None:
+        return f"the {kind} screen's text cannot be read, so whether it asks cannot be told"
+    t = str(text)
+    if not t.strip() and kind != "shooting":
+        # the shooting screen's readouts may read nothing over HDMI: a key goes there only as the run names it for that
+        # press (shooting_refused, decision 21), which judges it
+        return f"nothing on the {kind} screen can be read, so whether it asks cannot be told"
+    if question_mark(t if body is None or kind == "notice" else body):
+        return f"the {kind} screen holds a question mark: it asks"
+    if trash:
+        return "" if kind != "notice" else "the screen is a notice"
+    if kind == "notice":
+        if not passed:
+            return ("the screen is a notice, which may ask: Enter goes on one only where --info-ok names it, or where it "
+                    "has just refused MENU and OK is its only button")
+        if lone is None or lone:
+            return f"the notice ({passed}) does not show its lit button as its only one ({lone or 'not judged'})"
+        if plain(lit) != "ok":
+            # a lone lit button that is no OK ("Recover", "Execute", "Ausführen") acts: never pressed as a way out. On a
+            # camera whose OK reads otherwise the kit stops on the notice (fail closed)
+            return f"the notice's ({passed}) lit button reads {str(lit or '').strip()!r}, not OK"
+        said = confirmation_refused(t)
+        return f"the notice ({passed}) reads as a confirmation ({said})" if said else ""
+    if kind == "dialog":
+        why = asks(t if body is None else body, lit)
+        if why:
+            return f"the dialog asks ({why})"
+    return ""
 
 
 # ------------------------------------------------------------------ owner decisions (decisions 4, 5, 8 and 9)

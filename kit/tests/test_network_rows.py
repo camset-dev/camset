@@ -306,7 +306,8 @@ class Presses:
     def __init__(self):
         self.sent = []
 
-    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset()):
+    def press(self, key, hold_ms=60, allow=frozenset(), cleanup=False, screen=None, on_shooting=frozenset(),
+              judged=False):
         self.sent.append(key)
 
     def dial(self, name, steps, screen=None, on_shooting=frozenset()):
@@ -333,6 +334,7 @@ def events(cam) -> list:
 
 def test_the_press_check_opens_a_decided_setting_and_refuses_the_rest(tmp_path, monkeypatch):
     rows = decided(DECISION)
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Bluetooth Function  On")
     cam = camera(tmp_path, rows, values=VALUES)
     with pytest.raises(RuntimeError, match="sent"):
@@ -359,6 +361,7 @@ class InsideCamera:
         monkeypatch.setattr(live.screen, "read", lambda f: SimpleNamespace(kind=self.kind, focus="rows",
                                                                           where=self.where))
         monkeypatch.setattr(live, "text_of", lambda cam: self.words)
+        monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))     # the screen judged
         monkeypatch.setattr(live.screen, "same_position",
                             lambda a, b: getattr(a, "where", None) is not None and a.where == getattr(b, "where", None))
         monkeypatch.setattr(live.screen, "same_state", lambda a, b: False)
@@ -389,6 +392,8 @@ def inside_camera(tmp_path, monkeypatch, options=None, kind="list", words="Bluet
     cam.presses, cam._seen = 0, cam._moves()
     monkeypatch.setattr(live, "lit_text", lambda image, path: lit)
     monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    for name in ("text_of", "body_of", "title_of"):     # what the camera's own Enter check reads: the row's list
+        monkeypatch.setattr(live, name, lambda cam: words)
     cam.press("right")
     return cam
 
@@ -603,7 +608,7 @@ def test_to_shootings_ok_on_a_notice_never_goes_on_a_network_run_nor_on_identity
     network row's lock; never on a --network run (camkit.vlm.LOCAL_ONLY: its text is not even read, nor printed), nor on
     a notice naming identity or credentials ("Connect to <SSID>?"): then it waits, failing closed."""
     from camkit import vlm
-    from camkit.link import Link, LinkError
+    from camkit.link import CameraRefused, Link
     from proving import nav
     log = tmp_path / "received.txt"
     monkeypatch.setenv("FAKE_CAMLINK_LOG", str(log))
@@ -614,7 +619,10 @@ def test_to_shootings_ok_on_a_notice_never_goes_on_a_network_run_nor_on_identity
     monkeypatch.setattr(nav, "run_tmp_png", lambda f: tmp_path / "notice.png")
     read = []
     monkeypatch.setattr(nav.ocr, "read", lambda paths, eng=None: read.append(paths) or {p: [] for p in paths})
-    monkeypatch.setattr(nav.ocr, "text_in", lambda lines, box: NOTICE_TEXTS[text])
+    monkeypatch.setattr(nav.ocr, "text_in", lambda lines, box: "OK" if box == (200, 340, 440, 395)    # its lit OK
+                        else NOTICE_TEXTS[text])
+    monkeypatch.setattr(live, "lit_found", lambda image, kind=None: ((200, 340, 440, 395), True))    # its lit OK
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", SimpleNamespace(image=None)))  # unchanged
     monkeypatch.setattr(nav.time, "sleep", lambda s: None)
     fake = [sys.executable, "-X", "utf8", str(Path(__file__).resolve().parent / "fake_camlink.py")]
     with Link(Run("nav", root=tmp_path), ip="192.0.2.10", binary=fake, catch_signals=False) as lk:
@@ -622,7 +630,7 @@ def test_to_shootings_ok_on_a_notice_never_goes_on_a_network_run_nor_on_identity
 
         def press(key, **kw):
             if key == "menu":
-                raise LinkError("press menu 60: button not accepted")
+                raise CameraRefused("press menu 60: button not accepted")      # the camera's own refusal
             return real(key, **kw)
         lk.press = press
         nav.to_shooting(lk, SimpleNamespace(grab=lambda save=False: SimpleNamespace(image=None)), "the test", tries=1)
@@ -1071,7 +1079,7 @@ def drive_address(tmp_path, monkeypatch, scope_file, presses: list, path=("Displ
 def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision, open_lines, open_kind, page_lit,
                open_lit, page_kind="submenu", slow=False, misread=(), misread_lit=False, menu_does="page",
                page_lines=None, own="", model=None, shooting_lines=None, changes=(), definition=None, reach=True,
-               exits=None, end_raises=None):
+               exits=None, end_raises=None, end_wait_raises=None, patches=()):
     """drive.py's main() on a made-up camera, no LiveCamera under it: the path's row lit (page_lit) on a page of
     page_kind until a Right or an Enter goes out, then a screen of open_kind showing open_lines, its lit bar open_lit;
     MENU, or Enter there, brings the page back, at the place it was (drive.same_position: the same kind at the same
@@ -1084,8 +1092,9 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
     inside the row closes the menu onto the shooting screen, which shows these lines (its status line); changes: the
     records the session's end finds differing; definition: the camera's definition (camkit.definitions.active); reach:
     whether the scan reaches the path's first label (crawl_run.go_to); exits: a list that takes the exit status main()
-    exits with, where it exits (else the exit is raised); end_raises: what the session's end raises (the link gone).
-    A read without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys
+    exits with, where it exits (else the exit is raised); end_raises: what the session's end raises (the link gone);
+    end_wait_raises: what the wait for the shooting screen after the closing presses raises; patches: more (name, value)
+    pairs set on drive. A read without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys
     pressed, the console, drive.jsonl's line, the run's events)."""
     import drive as D
     from camkit import definitions, vlm
@@ -1167,7 +1176,8 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None,
                                                                        close=lambda: None)),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
-                        ("wait_for", lambda *a, **k: None), ("Link", Link),
+                        ("wait_for", lambda *a, **k: (_ for _ in ()).throw(end_wait_raises)
+                         if end_wait_raises is not None and ("closed",) in sent else None), ("Link", Link),
                         ("LiveCamera", camera),
                         ("find_position", lambda cam, cycle, model: 0),
                         ("go_to", lambda *a, **k: True if reach else None),
@@ -1181,9 +1191,10 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("osd_kind", lambda link: own),
                         ("network_values", lambda rows, model: {r: v for r, v in VALUES.items() if r in rows}),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
-                        ("close_for_restore", lambda cam, link: sent.append(("closed",))),
+                        ("close_for_restore", lambda cam, link, start: sent.append(("closed",))),
                         ("session", SimpleNamespace(ended=ended, put_back=lambda link, e, before: e)),
-                        ("restore_checked", lambda r, e, before, **kw: seen.update(checked=kw) or True)):
+                        ("restore_checked", lambda r, e, before, **kw: seen.update(checked=kw) or True),
+                        *patches):
         monkeypatch.setattr(D, name, value)
     argv = ["drive.py", "--network", *[x for p in path for x in ("--path", p)], *[x for p in presses for x in ("--press", p)]]
     monkeypatch.setattr(sys, "argv", argv)
@@ -2728,7 +2739,7 @@ def crawl_main(tmp_path, monkeypatch, raised, restored=True, network=None, argv=
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
                         ("wait_for", lambda *a, **k: None), ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("LiveCamera", lambda *a, **k: SimpleNamespace()), ("crawl_from_menu", crawl_from_menu),
-                        ("close_for_restore", lambda cam, link: None),
+                        ("close_for_restore", lambda cam, link, start: None),
                         ("end_session", lambda *a, **k: log.append(("end", {x: k[x] for x in k if x != "reach"}))
                          or SimpleNamespace(after=None, changes=[], uploaded=False)),
                         ("restore_checked", lambda r, e, before, **kw: log.append(("check", kw)) or restored),
@@ -3621,15 +3632,22 @@ def test_a_private_runs_closing_lines_withhold_what_its_first_error_line_withhol
             live.close(cam, link)                        # each try's line, then it gives up
         out = capsys.readouterr().out
         assert out.count("closing: ") == 8 and ("/Users/you" in out) is not hidden and ("'(withheld)'" in out) is hidden
-        # close_for_restore: the close gives up and the last screen cannot be read (the link gone): no restore, exit 4
+        # close_for_restore: the close gives up and the last screen cannot be read (the link gone): no restore, and
+        # the link is not closed over it either: the owner clears it (hold_for_owner, the reason withheld likewise)
         monkeypatch.setattr(runner, "close", lambda c, lk: (_ for _ in ()).throw(SystemExit("could not get back")))
+        holds = []
+
+        def hold(lk, eyes, start, why, keys=False, holds=holds):
+            holds.append(keys)
+            raise SystemExit(runner.EXIT_RESTORE_BY_HAND)
+        monkeypatch.setattr(runner, "hold_for_owner", hold)
         with pytest.raises(SystemExit) as e:
-            runner.close_for_restore(cam, link)
+            runner.close_for_restore(cam, link, Path("start.DAT"))
         out = capsys.readouterr().out
-        assert e.value.code == runner.EXIT_UNRESTORED and "cannot be read" in out and "did not finish" in out
+        assert e.value.code == runner.EXIT_RESTORE_BY_HAND and "cannot be read" in out and holds == [hidden]
         assert ("/Users/you" in out) is not hidden and ("'(withheld)'" in out) is hidden, out
         monkeypatch.setattr(runner, "close", gone)    # the close fails outright: said, and the restore goes on
-        runner.close_for_restore(cam, link)
+        runner.close_for_restore(cam, link, Path("start.DAT"))
         out = capsys.readouterr().out
         assert "restoring all the same" in out and ("/Users/you" in out) is not hidden, out
     for withhold in (True, False):
@@ -3639,6 +3657,7 @@ def test_a_private_runs_closing_lines_withhold_what_its_first_error_line_withhol
         assert e.value.code == runner.EXIT_UNRESTORED and ("/Users/you" in out) is not withhold, out
     # end_session: keys (a --network or --owner run, values_withheld) withholds its reach's error too
     monkeypatch.setattr(runner.session, "finish", lambda *a, **k: "finished")
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # a menu page on show: the restore may go over it
     for kw, hidden in ((runner.values_withheld(True), True), ({}, False)):
         assert runner.end_session(link, None, Path("start.DAT"), "the end", reach=gone, **kw) == "finished"
         out = capsys.readouterr().out
@@ -3664,6 +3683,29 @@ def test_drive_keeps_a_result_line_when_its_restore_does_not_finish(tmp_path, mo
     assert "did not finish" in out and "'(withheld)'" in out
     for where in (out, json.dumps(line), logged):
         assert "/Users/you" not in where
+
+
+def test_drive_holds_for_the_owner_where_its_restore_finds_a_screen_that_asks(tmp_path, monkeypatch, scope_file):
+    """drive.py's restore: where the wait for the shooting screen after the closing presses gives up, the screen on show
+    is judged afresh (runner.restorable_now) as end_session judges it: over one that asks nothing is downloaded or
+    uploaded and the owner clears it, the link kept open (runner.hold_for_owner, exit EXIT_RESTORE_BY_HAND); over a menu
+    page the restore goes as before."""
+    import runner
+    for looks, code in (((None, "its last screen asks or may ask"), runner.EXIT_RESTORE_BY_HAND), (("menu", ""), None)):
+        exits, holds = [], []
+
+        def hold(link, eyes, start, why, keys=False, holds=holds):
+            holds.append((start.name, why, keys))
+            raise SystemExit(runner.EXIT_RESTORE_BY_HAND)
+        _, _, line, _ = drive_fake(tmp_path / str(code), monkeypatch, scope_file, ["right", "menu"],
+                                   ("Bluetooth Function",), RMT, RMT_LIST, "list", page_lit="Bluetooth Function  On",
+                                   open_lit="Off", exits=exits, end_wait_raises=RuntimeError("gave up waiting"),
+                                   patches=(("restorable_now", lambda link, eyes, v=looks: v), ("hold_for_owner", hold)))
+        if code is None:
+            assert holds == [] and exits in ([], [0])
+        else:
+            assert exits == [code] and holds and holds[0][0].endswith(".DAT") and holds[0][2] is True
+            assert line["outcome"] != "" and "changes" not in line
 
 
 def test_the_navigation_says_no_length_of_what_it_withholds(monkeypatch, capsys):

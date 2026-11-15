@@ -17,14 +17,14 @@ from . import nav
 from .base import Failed, finish_attempt, frame_file
 from .nav import after_download, to_row
 from .putback import mirrored_boxes, put_back_leftovers, say_put_back
-from .screens import option_key, pass_named_notice, place, same_place, vlm_option
+from .screens import INFO_OK, option_key, pass_named_notice, place, same_place, vlm_option
 
 CHECK_LATER = ("DISP",)          # DISP (Screen Disp) Set: radio sub-options inside, done last, by itself (--rows names it)
 OK_RIGHT = ("DISP (Screen Disp) Set",)   # checklists whose OK/Cancel sit in a column right of the boxes (Down wraps)
-# --info-ok: {row: the notice's whole text as its words} (runner.info_ok_or_exit), set by kit/prove_run.py's main(): the information notice Right
-# opens on such a row before its checklist (the a1 II's Different Set for Still/Mv) is taken with its OK on each visit,
-# by pass_named_notice's judgement; a row not named, or a notice it refuses, fails as before
-INFO_OK: dict = {}
+# --info-ok: {row: the notice's whole text as its words} (runner.info_ok_or_exit), set by kit/prove_run.py's main(): the
+# information notice Right opens on such a row before its checklist (the a1 II's Different Set for Still/Mv) is taken
+# with its OK on each visit, by pass_named_notice's judgement; a row not named, or a notice it refuses, fails as before.
+# INFO_OK is proving.screens.INFO_OK, the one dict every runner's --info-ok fills
 
 DISP_MODES = {"global:0x04e5", "global:0x04e6"}   # the display mode in use, on the monitor and in the finder
 

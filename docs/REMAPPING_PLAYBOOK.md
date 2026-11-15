@@ -162,9 +162,16 @@ and the default is no.
    `head`: SIGPIPE kills it mid-run.
 8. **A press happens only on a screen the reader recognises.**
    - Fail closed: an unknown screen gets MENU (cancel), never Enter.
-   - Enter only where the screen's text is not a confirmation (`safety.confirmation`). That is each caller's check
-     (drive.py's `press_decision`, each prover before its OK): the press choke point (`LiveCamera.press`,
-     `Link.press`) does not make it.
+   - Enter only on a screen that asks nothing, whatever its words or language (`safety.enter_refused`): never on a
+     notice, a screen of no known kind or no readable text, one with a question mark, or a carousel that asks. The
+     camera checks every Enter and trash press on a frame grabbed just before it, and the link sends none it did not
+     judge. The ways past are named and narrow: the owner route (`drive.py --owner --confirm`); `--confirm "SCREEN
+     TEXT"` (the screen's whole text, one press, never a format, delete or reset); a prover's `--allow` for its own
+     row's screen; `--info-ok` for a named notice; a notice's lone OK after the camera refused MENU on it.
+   - **What this check cannot see:** a question drawn as an option screen with no question mark, or one whose mark OCR
+     misses; a list where choosing is the act (a slot in Format, an item in Delete); button words in another language
+     on a carousel or beside a lone OK; Right and the dials; a question the camera raises by itself just before the
+     press (on OSD eyes, within 3.5 s of the kit's last move); a held Enter.
    - Never press Enter on table buttons ("Set All", "Rec. Media Settings") or on a "Don't show
      this again" box.
    - A dial turns only on a screen a regex names: on the shooting screen a dial changes the live
@@ -632,12 +639,17 @@ downloads back a valid proof, and deletes nothing.
   - Walk them read-only first with `kit/table_walk.py --rows ...`.
   - Then prove with `kit/prove_run.py --tables --picker-sample`: one full list per identical
     picker, and three functions on each other slot.
+  - Where a row opens behind a first-time screen ("Don't show this again." and OK) that the camera closes on MENU, name
+    it by its whole text, as the run's message prints it: `kit/prove_run.py --tables --rows "Custom Key/Dial Set."
+    --info-ok "Custom Key/Dial Set.=In the next setting screen, you can check the function assigned to a specific
+    button by pressing that button on the device."` (`kit/table_walk.py` takes the same `--info-ok`).
   - A function that opens a setup screen of its own when chosen (a Recall Custom hold's registration, Rating Set,
     Recog. Target Select, the My Dial functions' My Dial Settings) is proved like any other: the key takes the
     function, the prover leaves the screen with MENU (its footer's Cancel; nothing on it is pressed, since Register
     would write the hold) and goes on. A radio list open on its saved option over the picker (Cnt Sht Spd Bst
     Settings, the speed the function uses) is left with Enter on that option, the choice it already holds. An
-    information notice before the screen is taken with its OK first. The report credits such a function with the
+    information notice before the screen is left with MENU (its OK only where the camera refuses MENU and OK is its
+    only button). The report credits such a function with the
     key's record alone: the records only such functions write are the screen's (the hold copied into its
     registration working copy). A saved Recall Custom hold is never chosen back to put the key as it was, because
     that copy outlives an upload; its proof is the key's record as the start file holds it, and the session's upload
@@ -683,9 +695,11 @@ downloads back a valid proof, and deletes nothing.
 - **Shoot Mode set with the menu** (Mode Dial Control Set's Set with Menu): `kit/provers/shootmode_run.py --start FILE`,
   from a start file holding that setting; every proof ends by uploading it again.
 - **Rows another mode's menu offers** (Movie, S&Q, or a stills exposure mode: Flash Mode's Autoflash in Intelligent
-  Auto alone, ISO AUTO Min. SS not in M): `kit/provers/mode_switch.py --to Movie [--mode M] --keep` puts the camera
-  there through the menu (Mode Dial Control Set = Set with Menu, then Shoot Mode's carousel; never a memory recall),
-  keeping the stills start file's name; the prove runs that follow (`--eyes osd-all`, that mode's own OSD scan and map,
+  Auto alone, ISO AUTO Min. SS not in M): `kit/provers/mode_switch.py --to Movie [--mode M] --keep [--info-ok "Mode
+  Dial Control Set=<the note's whole text>"]` puts the camera there through the menu (Mode Dial Control Set = Set with
+  Menu, then Shoot Mode's carousel; never a memory recall), keeping the stills start file's name; without `--info-ok`
+  it stops at the note Mode Dial Control Set shows where the camera takes MENU there, and says so. The prove runs that
+  follow (`--eyes osd-all`, that mode's own OSD scan and map,
   `--context` naming the mode) take the camera as they find it and put that back; `mode_switch.py --restore` uploads
   the stills file and checks it took. That file is the camera's settings from before the switch: whatever was changed
   on the camera since is undone too, so a switch record left over after the camera was put back another way (by hand,
@@ -722,7 +736,8 @@ downloads back a valid proof, and deletes nothing.
   that proof as the item's row in the state "box ticked", apart from the chooser's options.
 - **AF Area Registration** (a Focus Area registered by holding Fn on the shooting screen, a registration: only with your
   owner's word, rules 2 and 14): `kit/provers/afreg_run.py --allow "Fn hold on the shooting
-  screen" --areas missing` (`--list` alone touches no camera and needs none) chooses each area in Focus Area's menu,
+  screen" --areas missing [--info-ok "Mode Dial Control Set=<the note's whole text>"]` (`--list` alone touches no camera
+  and needs none; `--info-ok` as for `mode_switch.py` above) chooses each area in Focus Area's menu,
   holds Fn and diffs the downloads around the hold;
   `--proved` prints what its lines proved. A Tracking area needs Focus Mode on Continuous AF, which the run sets
   through the menu (the Focus Mode dial set with the menu), and the camera refuses Continuous AF under some drive
@@ -742,7 +757,8 @@ downloads back a valid proof, and deletes nothing.
   row's proof: the report keeps them out of its rows and the writer marks each live setting whose copy took
   (`in_sets_proved`, in the evidence file). The run is marked as a proof run.
 - **Where a focus frame's place is kept** (also Camera Set. Memory, `--allow` as above): `kit/provers/framepos_run.py
-  [--areas ...] [--list]` chooses each area whose frame moves, registers slot 1, moves the frame with the
+  [--areas ...] [--list] [--info-ok "Mode Dial Control Set=<the note's whole text>"]` (`--info-ok` as for
+  `mode_switch.py` above) chooses each area whose frame moves, registers slot 1, moves the frame with the
   multi-selector, registers it again and diffs the two (the console and `framepos_summary.txt` give each record's
   delta, never what it held; `framepos.jsonl` keeps both values, as the run's evidence in runs/, which is never
   published), then puts the frame back and checks a third registration matches the first; `--summary` prints the
@@ -766,8 +782,8 @@ downloads back a valid proof, and deletes nothing.
   parameters are checked so far (the reset file lists what Initialize puts back for the settings tested); for them
   the sample takes the values the camera holds after each offered profile's own Reset, in Stills and in Movie.
   `kit/provers/pp_reset_run.py --peek` first (it opens the first profile's question and cancels), then a one-profile
-  trial (`--profiles PP1`), then the run in Stills, `kit/provers/mode_switch.py --to Movie --keep`, the run `--in
-  Movie`, and `mode_switch.py --restore`. A run first shows on one profile that its Reset writes the records a
+  trial (`--profiles PP1`), then the run in Stills, `kit/provers/mode_switch.py --to Movie --keep [--info-ok ...]`,
+  the run `--in Movie`, and `mode_switch.py --restore`. A run first shows on one profile that its Reset writes the records a
   settings file saves: it changes one parameter, downloads, resets, and requires the changed records to be written
   (the run's control: one parameter of one profile, which must move only that profile's element, in the record in use
   and in the copy of the run's mode, and which that profile's Reset must write back). Then each profile the camera's
@@ -1109,9 +1125,11 @@ Each line is a symptom, then its cause, then the fix now in the kit.
   scan) before any run.
 - **"Back on the saved value, records still differ"** → a first-use record, a record written on
   every OK, or a one-way flag. Note it as found; the upload restores the camera.
-- **An information screen after OK** (it may have a "Don't show this again" box) → take its OK
-  only if the text is not a confirmation, never ticking the box (`info_notice_ok`). A notice that
-  starts "not available as follows" is a refusal: the proof records it as not applied.
+- **An information screen after OK** (it may have a "Don't show this again" box) → leave it with MENU; its OK goes
+  only where the camera refuses MENU there and OK is plainly its only button, never ticking the box
+  (`camkit.live.leave_notice`). A notice that starts "not available as follows" is a refusal (the a1 II refuses MENU on
+  it): the proof records it as not applied. A note before a row's own screen (Mode Dial Control Set's) passes only so,
+  or as `--info-ok` names it.
 - **A row whose screen sits behind an information notice** (the a1 II's Different Set for Still/Mv: "You can set
   different settings for still image mode and movie mode in the next screen. The setting set for ☑ is independent.",
   a single OK, then its checklist): the crawl records it as `notice`, so pass 1's map has no row for it, and the
@@ -1179,9 +1197,11 @@ Each line is a symptom, then its cause, then the fix now in the kit.
 ## 10. Recovering from a stopped run
 
 A run whose cleanup presses could not get back to the shooting screen restores all the same when its last screen is
-one the reader knows (a menu, list, table, panel or notice) and reads as no confirmation, since a restore over an open
-option list checked out on the camera (2026-11-08, `kit/runner.py` close_for_restore); on any other screen, or one it
-cannot read, it stops with exit status 4 and leaves the camera to these steps.
+one the reader knows (a menu, list, table, panel or notice) that asks nothing, since a restore over an open option
+list checked out on the camera (2026-11-08, `kit/runner.py` close_for_restore). Over any other screen, or one it
+cannot read, nothing is restored and the link is not closed: the run writes `RESTORE_BY_HAND.json`, asks you to clear
+the screen by hand (MENU or Cancel, never OK) and exits with status 5 once the shooting screen is back or the link has
+gone; a STOP does not close it, a second Ctrl-C does. Then put the start file back with `kit/tools/upload_check.py`.
 
 1. Do not start anything new. Look at the camera:
    - HDMI (`HdmiSource.grab`), and the OSD (`link.osd`) if HDMI is black;

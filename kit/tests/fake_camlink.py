@@ -23,7 +23,10 @@ gets camlink's refusal ({"ok": false, "cause": "hash_mismatch"}), and a file tha
 ready line says "upload_sha256": true, as camlink's does; $FAKE_CAMLINK_READY_OMIT (names, comma-separated) leaves
 those out of it, as an older camlink would, and $FAKE_CAMLINK_UPLOAD_SHA256, when set, is what a sent upload's reply
 gives as its "sha256" instead ("none": no "sha256" at all; Windows passes no variable set to the empty string on to
-a child, so the empty value cannot say it), as a camlink that did not check the bytes would.
+a child, so the empty value cannot say it), as a camlink that did not check the bytes would. With $FAKE_CAMLINK_DISCONNECT naming a command, the camera's session
+drops on it as camlink's OnDisconnected drops it: {"event": "disconnected"} on stderr (unless
+$FAKE_CAMLINK_DISCONNECT_SILENT is set), and from then every command but ping, that one included, is answered
+{"ok": false, "error": "disconnected"}, ping with "connected": false.
 
 Start it as COMMAND does: with -X utf8, since it imports camkit, which on Windows needs Python's UTF-8 mode, and a
 "-X utf8" given to the test run is not passed on to the processes it starts (PYTHONUTF8=1 is).
@@ -57,6 +60,7 @@ def main():
     omit = {k.strip() for k in os.environ.get("FAKE_CAMLINK_READY_OMIT", "").split(",")}
     out.write(json.dumps({k: v for k, v in ready.items() if k not in omit}) + "\n")
     out.flush()
+    disconnected = False
     for raw in sys.stdin.buffer:
         if log:
             with open(log, "a", encoding="utf-8") as f:
@@ -84,7 +88,18 @@ def main():
             return
         if cmd == os.environ.get("FAKE_CAMLINK_EXIT"):
             sys.exit(3)
+        if cmd == os.environ.get("FAKE_CAMLINK_DISCONNECT") and not disconnected:
+            disconnected = True
+            if not os.environ.get("FAKE_CAMLINK_DISCONNECT_SILENT"):
+                sys.stderr.write(json.dumps({"event": "disconnected", "code": 33282, "text": "disconnected"}) + "\n")
+                sys.stderr.flush()
+        if disconnected and cmd != "ping":
+            out.write(json.dumps({"ok": False, "error": "disconnected", **rid}) + "\n")
+            out.flush()
+            continue
         reply = {"ok": True, "cmd": cmd, "args": args, **rid}
+        if cmd == "ping":
+            reply["connected"] = not disconnected
         if cmd == "download":
             dst = Path(args[0]) / f"{args[1]}.DAT"
             dst.parent.mkdir(parents=True, exist_ok=True)

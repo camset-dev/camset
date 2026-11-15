@@ -40,18 +40,27 @@ mode that draws no battery) is not caught: the kit presses on unknown screens on
 The screen judged is never one the camera has left behind this camera's back: the link counts what can move it (a
 download, an upload, any press or dial), and when that count has moved since the last read, the screen is grabbed and
 read afresh before the press is judged (_fresh: a refresh, never a refusal).
-Enter on a confirmation is each caller's check (safety.confirmation, as drive.py's press_decision and the provers make
-it before their OK), and since 2026-11-14 (a review: the lower layer must not rest on drive.py) this camera's too, on a
-notice, or on a dialog or a screen of no known kind that asks (safety.asks: a question mark, Cancel outside quoted
-option names, a lit Enter, OK, Execute or Yes, a lit action's word on a screen that reads as a confirmation without it,
-a lit text unread; never a carousel, which reads as a dialog too and asks nothing: confirm_refused), Enter is refused
-when the whole text reads as a confirmation (safety.confirmation_refused, its words run together too), and on a notice
-whose text reads nothing, a dialog or a screen of no known kind whose text and lit text both read nothing, or a screen
-whose text cannot be read at all (its reading fails), unless the caller judged that very press with
-the check lifted (confirm_once: drive.py's and card_actions.py's --confirm, through press's confirm; pp_reset_run's
-profile reset question) or drive.py allowed it as an owner row's step or armed press (permit). The tools that press OK
-on a notice after their own check (table_walk.py, afreg_run.py, memreg_run.py, mode_switch.py, proving/screens.py)
-check no question of their own and are given no such word: a notice that reads so stops their run.
+Whether a screen asks is this camera's own check (confirm_refused, since 2026-11-14), made on every Enter, every press
+of the multi-selector's centre and every trash button, by the screen's shape and never by what it is called
+(safety.enter_refused): no Enter on a notice, a screen of no known kind, one whose text cannot be read or reads nothing,
+one that shows a question mark above its footer, or a carousel that asks (safety.asks); and always on the screen on
+show: it is looked at again just before the press (look_again: one fresh grab, on OSD eyes once OSD_LAG has passed
+since the kit's last move) and that frame is judged (judge_fresh), so a question the camera raised by itself while the
+kit read, or a popup drawn after the settle, is never answered on an older reading. The word list
+(safety.confirmation_refused) judges here only a notice let through and a consent's screen; on an option screen that
+passes the shape no word is judged. The ways past are explicit, named by the caller and logged: the owner route's
+judgement of that very press with every check lifted (confirm_once: drive.py --owner --confirm through press's
+confirm, beside drive.py's word for an owner row's step or armed press, permit); pp_reset_run's profile reset
+question, ("profile_reset", "PPn"), which goes only where the screen read afresh is that question
+(profile_reset_passed); a consent named for one
+press on one named screen (answer_once: a prover's --allow for its own row's screen, drive.py's and card_actions.py's
+--confirm "SCREEN TEXT"), which lifts the shape and never the word list; on a notice, the run's --info-ok (press's
+notice_ok, after proving.screens.pass_named_notice's judgement) or a refused MENU on that very screen just before
+(menu_refused, leave_notice, whose OK goes on that notice alone: require_notice), each only where the notice's lit
+button reads OK and is plainly its only one (safety.lone_ok). An Enter or a trash button goes to the link only with
+the link's count of moving commands at that look (Link.press's judged), which the link refuses once anything has moved
+since, so no press sent past this camera (proving.nav.to_shooting's, which judges with menu_refused_enter on a frame
+grabbed after the refusal) escapes the check, nor a judgement grown stale.
 
 The orange cursor is found as a bar first (lit_box). A dialog or table that lights its item without one (the White
 Balance chooser's orange text, a two-slot table's narrow cell) is read from the largest orange region instead, on those
@@ -68,7 +77,7 @@ import numpy as np
 
 from . import ocr, safety, screen, vlm
 from .frames import keep
-from .link import LinkError
+from .link import CameraRefused, LinkError
 from .vlm import PROMPTS, ask_role, log_to, scrub
 
 
@@ -212,6 +221,142 @@ def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: b
     return f"the lit row {lit.strip()!r} is never opened ({why})"
 
 
+FOOTER_TOP = 415        # px: the footer band (camkit.screen's help glyph from y 415, the footer line at 424-429) starts here
+# a carousel's title line, where camkit.screen's dialog draws its lit option in orange (proving.screens.carousel_text's)
+DIALOG_TITLE = (110, 60, 636, 112)
+MENU_REFUSED = "the notice has just refused MENU"     # the way past a notice that refused MENU (safety.enter_refused)
+
+
+def body_of(cam) -> str:
+    """The text OCR reads above the footer band (FOOTER_TOP): a screen's message, options and buttons, without its
+    footer's key hints and help glyph, whose "?" no question mark check takes for one (safety.enter_refused)."""
+    f = cam.frame
+    return ocr.text_in(ocr.read([f.path])[f.path], (0, 0, 640, FOOTER_TOP)).strip()
+
+
+def title_of(cam) -> str:
+    """A carousel's title line as OCR reads it (DIALOG_TITLE): its lit option, read there where the orange region
+    lit_text finds is the selected icon (a title of one or two characters)."""
+    f = cam.frame
+    return ocr.text_in(ocr.read([f.path])[f.path], DIALOG_TITLE).strip()
+
+
+def notice_read(image, path) -> tuple:
+    """(OCR lines, the orange cursor's box or None, the text inside it) of the screen at `path`, its picture `image`: what
+    safety.lone_ok judges a notice by. Raises when the frame or its text cannot be read."""
+    box, _ = lit_found(image, "notice")
+    lines = ocr.read([path])[path]
+    return lines, box, (ocr.text_in(lines, box) if box else "")
+
+
+def lone_of(image, path) -> str:
+    """safety.lone_ok on the notice at `path` (its picture `image`): why its lit button is not plainly its only one, or
+    "" (notice_read); a notice that cannot be read is no lone OK."""
+    try:
+        lines, box, lit = notice_read(image, path)
+    except Exception as e:
+        return f"it cannot be read ({type(e).__name__})"
+    return safety.lone_ok(lit, [(ln.text, ln.x, ln.y, ln.w, ln.h) for ln in lines], box)
+
+
+def menu_refused_enter(kind, image, path) -> str:
+    """Why OK may not go on the screen at `path` (its picture `image`, read as `kind`) right after the camera refused MENU
+    on it, or "": safety.enter_refused with that way past (MENU_REFUSED) and the notice's lone OK (safety.lone_ok). The
+    judgement proving.nav.to_shooting makes before the OK it sends straight through the link (Link.press's `judged`),
+    with no LiveCamera to read the screen: the same check LiveCamera.confirm_refused makes after a refused MENU. Only a
+    notice: a refused MENU vouches for nothing else (an option screen's Enter would open or choose)."""
+    if kind != "notice":
+        return f"the screen reads as {kind!r}, not a notice: a refused MENU vouches for an OK on a notice alone"
+    try:
+        lines, box, lit = notice_read(image, path)
+    except Exception as e:
+        return f"the {kind} screen cannot be read ({type(e).__name__}), so whether it asks cannot be told"
+    lone = safety.lone_ok(lit, [(ln.text, ln.x, ln.y, ln.w, ln.h) for ln in lines], box)
+    return safety.enter_refused(kind, ocr.text_in(lines, (0, 0, 640, 480)), lit,
+                                ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)), MENU_REFUSED, lone)
+
+
+# what an owner decision's permit allows that lifts the camera's check of what the screen asks (drive.py's word for an
+# owner row's step or armed press: LiveCamera.confirm_refused)
+ARMED_WHATS = ("step", "confirm", "final", "choose")
+# s the camera's own picture (OSD eyes) can lag the screen: it froze 3.25 s while the camera went on (2026-11-06,
+# camkit.frames.OsdSource), and OK held it about 3 s. A freeze longer than this (6.6 s was seen once) is not covered.
+# On the a1 II's OSD runs the next Enter was sent a median 1.17 s after the move before it (90 runs, 17,100 Enters), so
+# the wait before its look (osd_wait) is a median 2.3 s
+OSD_LAG = 3.5
+
+
+def osd_wait(moved_at, now: float | None = None) -> float:
+    """How long an OSD frame grabbed now could still be older than the kit's own last move (camkit.link.Link.moved_at,
+    None before any): OSD_LAG after that move, less the time gone since; 0 when it has passed."""
+    if moved_at is None:
+        return 0.0
+    return max(0.0, moved_at + OSD_LAG - (time.monotonic() if now is None else now))
+
+
+def look_again(eyes, judged, tag: str, moved_at=None) -> tuple:
+    """(why the screen on show now is not the screen judged, or "", the frame grabbed, None when none could be): the
+    screen `judged` (a camkit.screen.Screen) compared with one fresh grab of `eyes`, read again (same_screen:
+    screen.same_state), so a question the camera raised by itself while the kit read, or a popup drawn after the
+    settle's quiet window, is seen before an Enter answers it. On the camera's own picture (OSD eyes, which can lag the
+    screen by seconds) the grab waits until OSD_LAG has passed since the kit's own last move (`moved_at`: osd_wait), so
+    the frame shows that move's outcome (2026-11-14, a review: it replaced a second grab OSD_LAG after the first, which
+    caught the same and cost 3.5 s on every Enter; a question the camera raises by itself within OSD_LAG of the press is
+    missed by both). Nothing is pressed or saved. A grab or a reading that fails is a refusal. "Same state" compares the
+    screen's kind and structure (a list: its title strip and lit row), not every word: the caller judges the frame
+    returned (LiveCamera.confirm_refused reads its text afresh)."""
+    if getattr(eyes, "name", "") == "osd":
+        wait = osd_wait(moved_at)
+        if wait > 0:
+            time.sleep(wait)
+    try:
+        f = eyes.grab(f"{tag}-again", save=False)
+        now = screen.read(f)
+    except Exception as e:
+        return f"the screen could not be looked at again before the press ({type(e).__name__})", None
+    if not same_screen(now, judged):
+        return (f"the screen changed since it was judged (now {getattr(now, 'kind', None)!r}): the press is not sent "
+                "on a screen nobody judged"), f
+    return "", f
+
+
+def same_picture(a, b) -> bool:
+    """Whether two frames hold the very same picture, pixel for pixel (LiveCamera.look_before keeps the caller's frame
+    then, whose text is read already); a frame without a picture is no such proof."""
+    x, y = getattr(a, "image", None), getattr(b, "image", None)
+    return isinstance(x, np.ndarray) and isinstance(y, np.ndarray) and x.shape == y.shape and np.array_equal(x, y)
+
+
+def same_screen(a, b) -> bool:
+    """Whether two readings are of one screen (screen.same_state; the very reading, too); a reading that cannot be
+    compared is no proof that it is."""
+    if a is b and a is not None:
+        return True
+    try:
+        return screen.same_state(a, b)
+    except Exception:
+        return False
+
+
+def leave_notice(cam) -> str:
+    """Out of a notice the kit does not answer: MENU first, which confirms nothing (on the a1 II it closes an information
+    notice and the menu with it, and cancels a question). Only where the camera refuses MENU there ("button not
+    accepted": camkit.link.CameraRefused, which LiveCamera.press records) does Enter go, and the camera's own check
+    lets it go only when the notice shows no question mark and its lit button is plainly its only one
+    (safety.enter_refused, safety.lone_ok): "the one case of a notice that has just refused MENU where OK is its only
+    button" (2026-11-14), how the a1 II's "not available as follows" notices are left. The OK is bound to that very
+    notice (LiveCamera.press's require_notice): a screen read afresh as anything else gets no Enter. Only the camera's
+    own refusal counts: a MENU that failed otherwise (no reply, a button left held) raises, and no OK goes. Returns
+    "menu" when MENU was taken, "ok" when OK went; a refusal of that OK raises (safety.Refused)."""
+    try:
+        cam.press("menu")
+        return "menu"
+    except CameraRefused:
+        pass
+    cam.press("enter", require_notice=True)
+    return "ok"
+
+
 OK_LATE = 4.0           # how long OK gets to show when the camera is busy applying what it chose (seconds)
 # a frame this dark on average shows no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
 BLACK = 6.0
@@ -280,9 +425,17 @@ class LiveCamera:
         # one row lifted for one press (kit/provers/pp_reset_run.py's Reset): a predicate (frame, lit) -> bool, set
         # by the caller for its next press and used up by that press; None (unset) changes nothing
         self.may_open_exact = None
-        # the caller's word that it judged its next press with the confirmation check lifted (drive.py --confirm, its
-        # profile reset question for pp_reset_run): used up by that press (confirm_refused)
+        # the caller's word that it judged its next press with the confirmation check lifted (drive.py --owner --confirm):
+        # used up by that press (confirm_refused). True, or the words naming it; or ("profile_reset", "PPn") for
+        # pp_reset_run's question, which this camera judges again itself (profile_reset_passed)
         self.confirm_once = False
+        # a prover's consent, named by its run's --allow for its own row, to answer that row's screen with its next press
+        # (memreg_run's and framepos_run's slot screen, mymenu_run's picker, customshoot's Register): the screen's shape
+        # no longer refuses that Enter, the word list still does (confirm_refused); the words naming it, used up likewise
+        self.answer_once = None
+        # the camera refused MENU on the screen read last ({"moves", "screen", "frame"}): the next Enter, on that very
+        # screen with nothing sent between, may answer a notice whose OK is its only button (leave_notice)
+        self.menu_refused = None
         self.frame = hdmi.grab("live-start")
         self.screen = screen.read(self.frame)
         self.screen.frame_path = self.frame.path.name
@@ -304,22 +457,35 @@ class LiveCamera:
         self.run.log("screen_stale", key=key, frame=self.frame.path.name, moves=self._moves())
         self.refresh("stale")
 
-    def press(self, key: str, allow=frozenset(), hold_ms=60, on_shooting=frozenset()):
+    def press(self, key: str, allow=frozenset(), hold_ms=60, on_shooting=frozenset(), notice_ok: str = "",
+              require_notice: bool = False):
         """One press, read once it settles. allow: the guarded buttons named (safety.GUARDED_INPUTS); on_shooting: the
         keys named for this press on the shooting screen, where a key does what the body makes of it (decision 21):
-        a caller names a key there only where pressing it there is the point."""
+        a caller names a key there only where pressing it there is the point. notice_ok: the run's --info-ok for the
+        notice on screen, which its caller judged (proving.screens.pass_named_notice): an Enter on that notice goes when
+        it shows no question mark, its OK is plainly its only button and reads OK, and it reads as no confirmation
+        (confirm_refused). require_notice: an Enter meant for the notice that has just refused MENU (leave_notice) and
+        nothing else: refused unless the screen is that notice."""
         exact = getattr(self, "may_open_exact", None)
         if exact is not None:
             self.may_open_exact = None      # one press only, whatever it is
         permit = getattr(self, "permit", None)
         self.permit = None                  # drive.py's word for one owner press: used up by this press, whatever it is
-        confirmed = bool(getattr(self, "confirm_once", False))
+        confirmed = getattr(self, "confirm_once", False) or False
         self.confirm_once = False           # a caller's confirmation check made for one press: used up by it likewise
+        answer = getattr(self, "answer_once", None)
+        self.answer_once = None             # a prover's consent for one press: used up likewise
+        menu_refused = getattr(self, "menu_refused", None)
+        self.menu_refused = None            # a refused MENU vouches for the press right after it alone
         arming = self.inside_refused(key, permit)       # inside a network row: look only, or MENU alone
         # a MENU, or an Enter inside_refused let through (an option the decision names), may close the row once it has
         # gone out: only then can the lock end (_inside_after)
         closes = getattr(self, "network_open", None) is not None and safety.canonical_input(key) in CLOSES
         self._fresh(key)                    # the screen the press is judged on is never one the camera has left
+        if safety.canonical_input(key) in safety.ENTER_KEYS | safety.TRASH_KEYS:
+            # an Enter or a trash button: the screen looked at again, and that frame the one every check below judges
+            # (look_before); a screen changed since its caller read it is refused (safety.ScreenChanged)
+            self.look_before(key)
         # the never-open check judges the key as the guards read it (" right" and "Right" are Right), so a padded or
         # look-alike spelling never skips it; the link then refuses any spelling that is not the key's own name
         network, screens = getattr(self, "network", ()), getattr(self, "screens", False)
@@ -369,8 +535,13 @@ class LiveCamera:
                              "the lit row does not read as the owner row (docs/decisions/0008)")
         if owner and canon in ("enter", "ms_enter"):
             self.wiping_refused(key, arming)    # Initialize's kin: this camera's own check, beside drive.py's
-        if canon in ("enter", "ms_enter"):
-            self.confirm_refused(key, permit, confirmed)    # a confirmation: this camera's own check too
+        confirming = canon in safety.ENTER_KEYS | safety.TRASH_KEYS
+        judged_at = None
+        if confirming:
+            # what the screen asks, by its shape, on the screen on show now: this camera's own check, which nothing
+            # pressing through it bypasses; judged_at, the link's count of moving commands when it looked
+            judged_at = self.confirm_refused(key, permit, confirmed, answer=answer, notice_ok=notice_ok,
+                                             menu_refused=menu_refused, require_notice=require_notice)
         judged = self.judged_screen(key)
         t = time.monotonic()
         before = self.screen
@@ -378,9 +549,18 @@ class LiveCamera:
             self.owner_done = True          # an armed press, once: from here only MENU, whatever answers it
             self.run.log("armed_press", key=key, frame=self.frame.path.name, row=arming[0], what=arming[1])
         # the safety allow-list, the STOP check, C4's screen check and the shooting screen's live there: the screen
-        # read last goes with it
+        # read last goes with it; an Enter or a trash button carries the link's count of moving commands at the moment
+        # its check looked at the screen (Link.press's judged), which the link refuses when anything has moved since
         self.handed = getattr(self, "handed", 0) + 1
-        self.link.press(key, hold_ms, allow=allow, screen=judged, on_shooting=on_shooting)
+        try:
+            self.link.press(key, hold_ms, allow=allow, screen=judged, on_shooting=on_shooting,
+                            **({"judged": judged_at} if confirming else {}))
+        except CameraRefused:
+            if canon == "menu":
+                # the camera refused MENU on this screen: the next Enter, on it, may take a lone OK (leave_notice)
+                self.menu_refused = {"moves": self._moves(), "screen": self.screen, "frame": self.frame.path.name}
+                self.run.log("menu_refused", frame=self.frame.path.name)
+            raise
         if closes:
             self.menu_went_out()
         if owner_row is not None:
@@ -513,43 +693,137 @@ class LiveCamera:
             self.refuse(key, f"the screen reads {m.group(0)!r} and the press is no armed confirmation of that very "
                              "action (docs/decisions/0005)")
 
-    def confirm_refused(self, key: str, permit, confirmed: bool) -> None:
-        """Refused, logged, for an Enter on a notice, or on a dialog or a screen of no known kind that asks
-        (safety.asks: a question mark, Cancel outside quoted option names, a lit button's or action's word, a lit text
-        that cannot be read), whose whole text reads as a confirmation (safety.confirmation_refused: confirmation, its
-        words run together too), this camera's own check beside drive.py's, so that the lower layer does not rest on it
-        (2026-11-14, a review): unless the caller judged this very press with the confirmation check lifted
-        (`confirmed`, confirm_once: drive.py's and card_actions.py's --confirm through press's confirm, pp_reset_run's
-        profile reset question) or drive.py allowed it as an owner row's step or armed press (`permit`, which
-        owner_inside_refused has judged). A carousel reads as a dialog too (screen.classify: its divider) and asks
-        nothing: Enter on it chooses the lit option, which the provers prove on rows whose own title holds a
-        confirmation's word (32 of the a1 II definition's 3,584 carousel texts: Delete confirm., File Name Format,
-        Custom Key Setting's Delete, File Number's Reset...), and drive.py's check judges every screen alike. Refused
-        too, since nothing could judge them: a screen whose text cannot be read (its reading fails), a notice whose text
-        reads nothing, and a dialog or a screen of no known kind whose text and lit text both read nothing (one with
-        text but nothing lit, Camera Set. Memory's slot screen among them, is judged by its text as above)."""
+    def confirm_refused(self, key: str, permit, confirmed, answer=None, notice_ok: str = "", menu_refused=None,
+                        require_notice: bool = False) -> int:
+        """Refused, logged, for an Enter (or the multi-selector's centre, or the trash button) on a screen that asks or
+        may ask, judged by its shape and never by what it is called (safety.enter_refused, 2026-11-14): a notice, a
+        screen of no known kind, one whose text cannot be read or reads nothing, one that shows a question mark above
+        its footer (body_of), a carousel that asks (safety.asks). This camera's own check, which every walker, prover
+        and drive.py press goes through, beside drive.py's, so that the lower layer rests on no caller's (2026-11-14, two
+        reviews). Until 2026-11-14 it only gated a list of English words (safety.confirmation_refused), and a question
+        that held none ("Clear registered faces? OK Cancel"), or any question on a camera not set to English, passed.
+        The screen it judges is the one press looked at again just before (look_before: one fresh grab, on OSD eyes once
+        OSD_LAG has passed since the kit's last move, its text read afresh), so a question the camera raised by itself, a
+        popup drawn after the settle, or an overlay that leaves the screen's kind and structure as they were, is never
+        answered on an older reading; a screen that changed since its caller read it was refused there
+        (safety.ScreenChanged). Returns the link's count of moving commands at that look, which the press carries
+        (Link.press's judged) and the link checks again.
+        The explicit ways past, each named by its caller and logged ("enter_passed"):
+        - `confirmed` (confirm_once): the caller judged this very press with every check lifted: the owner route
+          (drive.py --owner --confirm, for a step or the armed press it allowed, beside `permit`); `permit`: drive.py
+          allowed it as an owner row's step or armed press (owner_inside_refused). ("profile_reset", "PPn"),
+          pp_reset_run's one question under its --allow, lifts nothing by itself: the screen read afresh here must be
+          that profile's own reset question (safety.profile_reset_dialog), else no Enter;
+        - `answer` (answer_once): a consent named for one press on one named screen (a prover's --allow for its own
+          row's screen; drive.py's and card_actions.py's --confirm with the screen's whole text): the shape refuses
+          nothing, the word list still refuses a confirmation;
+        - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
+          `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
+          only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
+          reads as no confirmation. `require_notice` (leave_notice's OK): refused unless the screen is that notice,
+          passed so.
+        A carousel reads as a dialog too (screen.classify: its divider) and asks nothing: Enter on it chooses the lit
+        option, which the provers prove on rows whose own title holds a confirmation's word (32 of the a1 II
+        definition's 3,584 carousel texts: Delete confirm., File Name Format, Custom Key Setting's Delete, File Number's
+        Reset...); its lit option is read on its title line where lit_text finds the selected icon (title_of)."""
+        canon = safety.canonical_input(key)
+        armed = isinstance(permit, dict) and permit.get("what") in ARMED_WHATS
         kind = self.screen.kind
-        if kind not in safety.CONFIRM_KINDS and kind != "unknown":
-            return
-        if confirmed or (isinstance(permit, dict) and permit.get("what") in ("step", "confirm", "final", "choose")):
-            return
+        judged_at = self._moves()
+        if isinstance(confirmed, tuple):
+            return self.profile_reset_passed(key, confirmed, judged_at)
+        by = (confirmed if isinstance(confirmed, str) else "--confirm") if confirmed else \
+            ("an owner decision's armed press" if armed else "")
+        if by and not require_notice:
+            self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=kind, by=by)
+            return judged_at
         try:
-            text = text_of(self)
-            lit = lit_text(self.frame.image, self.frame.path) if kind != "notice" else ""
+            text, body = text_of(self), body_of(self)
+            lit = lit_text(self.frame.image, self.frame.path) if canon in safety.ENTER_KEYS else ""
+            if kind == "dialog" and canon in safety.ENTER_KEYS and not lit.strip():
+                lit = title_of(self)        # the carousel's lit option on its title line
         except Exception as e:
-            self.refuse(key, f"the {kind} screen's text cannot be read ({type(e).__name__}), so the confirmation check "
-                             "cannot judge it")
-        if kind == "notice" and not str(text or "").strip():
-            self.refuse(key, "nothing on the notice can be read, so the confirmation check cannot judge it")
-        if kind != "notice" and not str(text or "").strip() and not str(lit or "").strip():
-            self.refuse(key, f"nothing on the {kind} screen can be read, neither its text nor a lit item, so the "
-                             "confirmation check cannot judge it")
-        if kind != "notice" and not safety.asks(text, lit):
-            return                          # a carousel, or a screen that asks nothing
-        why = safety.confirmation_refused(text)
+            self.refuse(key, f"the {kind} screen's text cannot be read ({type(e).__name__}), so whether it asks cannot "
+                             "be told")
+        passed, lone = "", None
+        if safety.first_time_screen(kind, text):
+            kind = "notice"         # a first-time screen (no notice's frame lines, a "Don't show this again." box)
+        if kind == "notice" and canon in safety.ENTER_KEYS:
+            if notice_ok:
+                passed = f"--info-ok {notice_ok}"
+            elif isinstance(menu_refused, dict) and menu_refused.get("moves") == self._moves() \
+                    and same_screen(self.screen, menu_refused.get("screen")):
+                passed = MENU_REFUSED
+            if passed:
+                lone = lone_of(self.frame.image, self.frame.path)
+        if require_notice and passed != MENU_REFUSED:
+            self.refuse(key, f"this OK was meant for a notice that had just refused MENU, and the screen ({kind}) is not "
+                             "that notice: no Enter")
+        why = safety.enter_refused(kind, text, lit, body, passed, lone, key=canon)
+        if why and answer and not require_notice and str(text or "").strip():
+            # a consent named for this press on its own named screen: the shape refuses nothing, the word list still
+            # does (a screen that reads nothing gives the words nothing to judge: no consent answers it)
+            said = safety.confirmation_refused(text)
+            if not said:
+                self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=kind, by=str(answer))
+                return judged_at
+            why = f"{why}; and it reads as a confirmation ({said}), which {answer} does not answer"
         if why:
-            self.refuse(key, f"{why}: Enter on a confirmation goes only where its caller judged that very press with "
-                             "the check lifted (--confirm, an owner decision's armed press)")
+            self.refuse(key, f"{why}. Enter on such a screen goes only by an explicit way past: the owner route "
+                             "(drive.py --owner --confirm), a consent named for this screen (a prover's --allow, "
+                             "--confirm with the screen's text), a notice --info-ok names, or a lone OK on a notice "
+                             "that has just refused MENU")
+        if passed:
+            self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=kind, by=passed)
+        return judged_at
+
+    def look_before(self, key: str) -> None:
+        """Before an Enter or a trash button is judged: the screen looked at again (look_again: one fresh grab, on OSD eyes
+        once OSD_LAG has passed since the link's last move, Link.moved_at) and that frame made the one judged
+        (judge_fresh), so every check of the press, the never-open row's and what the screen asks among them, reads it.
+        Refused, logged, when no frame could be grabbed or read; and when the screen changed since its caller read it
+        (safety.ScreenChanged, the fresh frame and reading kept): the caller chose the press, and judged its words, on
+        the screen it read, so the press is never sent on another (2026-11-14, a third review: it was judged as it now
+        was, and the proof recorded the old screen's choice). When the fresh frame is the caller's own picture, pixel
+        for pixel, the caller's frame stays (its text, read already, is not read again)."""
+        stale, fresh = look_again(getattr(self, "hdmi", None), self.screen, key, getattr(self.link, "moved_at", None))
+        if stale and fresh is None:
+            self.refuse(key, stale)
+        if fresh is None or same_picture(fresh, self.frame):
+            return
+        self.judge_fresh(fresh, key, changed=bool(stale))
+        if stale:
+            self.refuse(key, f"{stale}; read the screen again and choose afresh", changed=True)
+
+    def judge_fresh(self, f, key: str, changed: bool = False) -> None:
+        """The frame look_again grabbed before a press made the one it is judged on: saved as evidence (black on a row
+        whose values are withheld, as every frame then), read, its text read afresh by whoever reads it next. changed:
+        the screen is not the state its caller read (logged)."""
+        keep(f, self.run.shot_path(f"{key}-judged"), getattr(self, "blank", False))
+        self.frame, self.screen = f, screen.read(f)
+        self.screen.frame_path = f.path.name
+        if changed:
+            self.run.log("screen_changed_before_press", key=key, frame=f.path.name, screen=self.screen.kind)
+
+    def profile_reset_passed(self, key: str, confirmed: tuple, judged_at: int) -> int:
+        """pp_reset_run's way past, ("profile_reset", "PPn"): the Enter goes only where the screen read afresh here is
+        that profile's own reset question (safety.profile_reset_dialog), so the lift covers that question alone and no
+        free words a caller writes lift every check. Anything else is refused.
+        In the final design the destructive word list keeps "reset" and is lifted only by the owner's typed word: this
+        question must then either be carved out of it by this exact match or move to the owner route (not decided
+        here, 2026-11-14)."""
+        what, profile = (tuple(confirmed) + ("", ""))[:2]
+        if what != "profile_reset":
+            self.refuse(key, f"{confirmed!r} is no way past this camera knows: no Enter")
+        try:
+            why = safety.profile_reset_dialog(text_of(self), str(profile))
+        except Exception as e:
+            why = f"its text cannot be read ({type(e).__name__})"
+        if why:
+            self.refuse(key, f"the screen is not {profile}'s own reset question ({why}): no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind,
+                     by=f"pp_reset_run --allow: {profile}'s own reset question, read again at the press")
+        return judged_at
 
     def owner_inside_refused(self, key: str, inside: dict, permit):
         """Refused, logged, for a key that may not go out inside the owner row open (inside), else the row when the
@@ -611,14 +885,16 @@ class LiveCamera:
         if why:
             self.refuse(key, why)
 
-    def refuse(self, key: str, why: str, row: bool = False) -> None:
+    def refuse(self, key: str, why: str, row: bool = False, changed: bool = False) -> None:
         """A press refused: logged in the run's events.jsonl and raised (safety.Refused; safety.RowRefused where `row`:
-        the lit row itself may not be opened, which a crawl skips). On a --network run (network given) the reason's quoted
-        texts are withheld in both, since a row's bar can carry an identity value (a device's name, an SSID, an
-        address): safety.quoted_withheld."""
+        the lit row itself may not be opened, which a crawl skips; safety.ScreenChanged where `changed`: the screen is
+        not the state the caller read, look_before). On a --network run (network given) the reason's quoted texts are
+        withheld in both, since a row's bar can carry an identity value (a device's name, an SSID, an address):
+        safety.quoted_withheld."""
         said = safety.quoted_withheld(why) if getattr(self, "network", None) or getattr(self, "owner", None) else why
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=said)
-        raise (safety.RowRefused if row else safety.Refused)(f"{key}: {said}")
+        kind = safety.ScreenChanged if changed else safety.RowRefused if row else safety.Refused
+        raise kind(f"{key}: {said}")
 
     def menu_went_out(self) -> None:
         """A MENU (or an Enter inside_refused let through) has gone out while a row a network decision opened is open:
@@ -854,18 +1130,38 @@ def text_of(cam) -> str:
     return ocr.text_in(ocr.read([f.path])[f.path], (0, 0, 640, 480)).strip()
 
 
-def press(cam, key: str, confirm: bool = False, **kw):
+def press(cam, key: str, confirm=False, answer=None, **kw):
     """A press the camera may refuse for a moment while it reads the card (Select REC Folder
     refused Up 0.3 s after opening and took MENU 1.6 s later, 2026-10-29). kw: LiveCamera.press's (on_shooting).
-    confirm: the caller judged this press with the confirmation check lifted (drive.py --confirm): the camera's own
-    check (LiveCamera.confirm_refused) is lifted for each try of it (confirm_once)."""
+    confirm: the caller judged this press with the confirmation check lifted (the owner route's step or armed press;
+    True, or the words naming it); answer: a consent named for this press's screen (LiveCamera.answer_once). Either is
+    given to the first try, and to a later one only when the screen, read again, is the state the caller judged: a
+    retry never answers a screen nobody judged. Only the camera's own refusal ("button not accepted":
+    camkit.link.CameraRefused, nothing done) is tried again; a button left held ("button_held": it went down and may
+    have acted), no reply or anything else raises at once, and nothing is pressed again. A press refused because the
+    screen changed since the caller read it (safety.ScreenChanged) is tried once more, and only where the screen read
+    afresh is again the state the caller judged (a popup gone, a picture that caught up and back): the caller chose the
+    press on that state; else the refusal stands."""
+    judged = getattr(cam, "screen", None)
+    changed = None
     for attempt in range(6):
         try:
-            if confirm:
-                cam.confirm_once = True
+            if attempt:
+                cam.refresh("retry")            # the screen the retry is judged on, read afresh
+            same = attempt == 0 or same_screen(getattr(cam, "screen", None), judged)
+            if changed is not None and not same:
+                raise changed                   # still not the state the caller judged: no press on it
+            if confirm and same:
+                cam.confirm_once = confirm
+            if answer and same:
+                cam.answer_once = answer
             return cam.press(key, **kw)
-        except LinkError as e:
-            if "not accepted" not in str(e) or attempt == 5:
+        except safety.ScreenChanged as e:
+            if changed is not None or attempt == 5:
+                raise
+            changed = e
+        except CameraRefused:
+            if attempt == 5:
                 raise
             time.sleep(1.0)
 

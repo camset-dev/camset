@@ -1,6 +1,7 @@
 """Read-only walk of the screens pass 1 could not read: setting tables and the function picker.
 
     .venv/bin/python -u kit/table_walk.py [--rows "Image Quality Settings"] [--max-options 400]
+        [--info-ok "Custom Key/Dial Set.=<the first-time screen's whole text>"]
 
 Screens (TABLES): Image Quality Settings (SLOT 1/2 cells, each opening a list), Mode Dial Control Set
 (Shooting / Drive / Focus Mode Dial rows, each a Set with Dial / Set with Menu list), My Dial Settings
@@ -8,7 +9,10 @@ Screens (TABLES): Image Quality Settings (SLOT 1/2 cells, each opening a list), 
 second row of that name, 2 x 6 for playback), whose cells open the function picker; Custom Key/Dial Set. for stills and movies (walk_keyset: six page
 tabs of keys and the Dial/Wheel grid, each opening the picker). Per table, from its menu row:
   1. Right opens the table; every (cell, arrow) is pressed once, travelling by moves already seen,
-     so every cell and button the cursor can reach is found (screen.Screen.marker = its centre);
+     so every cell and button the cursor can reach is found (screen.Screen.marker = its centre). A first-time screen
+     before it ("Don't show this again." and OK, Custom Key/Dial Set.'s after a settings reset) is passed as
+     proving.screens.notice_before passes it: its OK where --info-ok names it by its whole text, or where the camera
+     refuses MENU on it and OK is its only button; else the walk stops, saying the --info-ok to add (right_on_row);
   2. per cell: its row and column labels (OCR), Enter opens its list or picker, Down runs through
      every option until the first comes round, each option's label read; MENU cancels (nothing is
      chosen). A cell that opens a notice ("not available as follows ...") is recorded and OKed only
@@ -28,14 +32,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import LiveCamera  # noqa: E402
+from camkit.live import LiveCamera, leave_notice, lit_text  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, at_label, bar_text, place, same_place, to_shooting  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
-                    read_json, restore_checked, write_json)
+from runner import (EXIT_UNRESTORED, add_info_ok_argument, add_scan_argument, close_for_restore,  # noqa: E402
+                    end_session, info_ok_or_exit, load_scan, read_json, restore_checked, write_json)
+from proving import screens  # noqa: E402
 
 TABLES = {
     "Image Quality Settings": {"path": ["Image Quality Settings"], "screen": "table"},
@@ -213,7 +218,8 @@ def walk_options(cam, kind: str, limit: int) -> dict:
 
 def open_and_walk(cam, info: dict, limit: int):
     """Enter on the cell or key under the cursor: walk the list or picker it opens and cancel it with
-    MENU. A notice is recorded and closed (OK only when it is information, never a confirmation)."""
+    MENU. A notice is recorded and closed with MENU (OK only on the camera's refusal, "not available", where the camera
+    refuses MENU and OK is its only button: camkit.live.leave_notice; never on a confirmation)."""
     cam.press("enter")
     s = cam.read()
     if s.kind in ("list", "picker"):
@@ -222,19 +228,35 @@ def open_and_walk(cam, info: dict, limit: int):
     elif s.kind == "notice":
         text = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
         info.update(opens="notice", notice=text, notice_frame=cam.frame.path.name)
-        if safety.confirmation(text):
+        if safety.confirmation(text) or not re.search(r"not available|invalid", text, re.I):
             cam.press("menu")
         else:
-            cam.press("enter" if re.search(r"not available|invalid", text, re.I) else "menu")
+            # the camera's refusal: MENU, and its OK only where the camera refuses MENU and OK is its only button
+            info.update(notice_left_by=leave_notice(cam))
     else:
         info.update(opens=s.kind, frame_opened=cam.frame.path.name)
         cam.press("menu")
 
 
+def right_on_row(cam, name: str) -> None:
+    """Right on the table `name`'s row, and the screen the camera may show before the table's own passed as
+    proving.screens.notice_before passes it (a first-time screen, "Don't show this again." and OK; the notice --info-ok
+    names for the row); one not passed stops the walk, its message giving the --info-ok to add. No name: Right alone."""
+    if not name:
+        cam.press("right")
+        return
+    row = " > ".join(TABLES[name]["path"])
+    lit = lit_text(cam.frame.image, cam.frame.path)     # the lit bar before Right: --info-ok's judgement reads it
+    cam.press("right")
+    got = screens.notice_before(cam, row, lit)
+    if got is not None and "refused" in got:
+        raise Failed(f"Right on {name!r} opened a notice before its screen, not passed: {got['refused']}")
+
+
 def walk_table(cam, name: str, limit: int, only=None, had=None) -> dict:
     """only: the cells (their pos, as recorded) to open this time; the others keep what `had` holds."""
     row_place = place(cam)
-    cam.press("right")
+    right_on_row(cam, name)
     start = pos_of(cam.read())
     if start is None or cam.read().kind != TABLES[name]["screen"]:
         raise Failed(f"Right on {name!r} opened {cam.read().kind}, not a {TABLES[name]['screen']} ({cam.frame.path.name})")
@@ -291,12 +313,12 @@ def key_tabs(cam, g: int):
     raise Failed(f"Custom Key page tab {g} not reached")
 
 
-def reopen(cam, row_place, g: int, focus: str, step=None):
-    """Back where the walk was after MENU left the screen for the menu row: Right, the page's tab,
-    Enter, then `step` (moves along the keys or grid cells) checked by the caller."""
+def reopen(cam, row_place, g: int, focus: str, step=None, name: str = ""):
+    """Back where the walk was after MENU left the screen for the menu row: Right (right_on_row, for the table `name`),
+    the page's tab, Enter, then `step` (moves along the keys or grid cells) checked by the caller."""
     if not same_place(place(cam), row_place):
         raise Failed(f"not on the Custom Key row ({cam.read().kind}, {cam.frame.path.name})")
-    cam.press("right")
+    right_on_row(cam, name)
     key_tabs(cam, g)
     cam.press("enter")
     if cam.read().kind != "keyset" or cam.read().focus != focus:
@@ -322,7 +344,7 @@ def key_info(cam) -> dict:
     return out
 
 
-def back_on(cam, row_place, g, focus, test, step) -> None:
+def back_on(cam, row_place, g, focus, test, step, name: str = "") -> None:
     """After a list or picker was cancelled: on the same key or cell again (MENU may have left the
     whole screen, in which case the walk goes back in the same way)."""
     if test(cam.read()):
@@ -332,7 +354,7 @@ def back_on(cam, row_place, g, focus, test, step) -> None:
         for k in step:
             cam.press(k)
     elif same_place(place(cam), row_place):
-        reopen(cam, row_place, g, focus, step)
+        reopen(cam, row_place, g, focus, step, name)
     if not test(cam.read()):
         raise Failed(f"after the picker the cursor is not back where it was ({cam.read().kind}, {cam.frame.path.name})")
 
@@ -343,7 +365,7 @@ def walk_keyset(cam, name: str, limit: int) -> dict:
     grid is walked as a snake (Right, Down, Left, Down...): each move must land on a new cell. Its
     checkbox ("Separate M mode and other modes") is never pressed. MENU leaves to the row."""
     row_place = place(cam)
-    cam.press("right")
+    right_on_row(cam, name)
     s = cam.read()
     if s.kind != "keyset" or s.focus != "tabs":
         raise Failed(f"Right on {name!r} opened {s.kind} ({s.focus}), not the Custom Key tabs ({cam.frame.path.name})")
@@ -367,7 +389,7 @@ def walk_keyset(cam, name: str, limit: int) -> dict:
                 info = {"row": r, **key_info(cam)}
                 open_and_walk(cam, info, limit)
                 back_on(cam, row_place, g, "keys",
-                        lambda x, r=r: x.kind == "keyset" and x.focus == "keys" and x.row == r, step)
+                        lambda x, r=r: x.kind == "keyset" and x.focus == "keys" and x.row == r, step, name)
                 items.append(info)
                 print(f"   page {g} key {r} {info['key']!r} = {info['value']!r}: {info['opens']}, "
                       f"{len(info.get('options', []))} options", flush=True)
@@ -386,7 +408,7 @@ def walk_keyset(cam, name: str, limit: int) -> dict:
                 info = {"pos": list(here), **key_info(cam)}
                 open_and_walk(cam, info, limit)
                 back_on(cam, row_place, g, "cell",
-                        lambda x, h=here: x.kind == "keyset" and x.focus == "cell" and x.marker == h, step)
+                        lambda x, h=here: x.kind == "keyset" and x.focus == "cell" and x.marker == h, step, name)
                 items.append(info)
                 print(f"   page {g} cell {here} = {info['value']!r}: {info['opens']}, "
                       f"{len(info.get('options', []))} options", flush=True)
@@ -412,7 +434,7 @@ def walk_keyset(cam, name: str, limit: int) -> dict:
         pages.append(page)
         cam.press("menu")                                  # out of the keys: the camera goes back to the row
         if same_place(place(cam), row_place):
-            cam.press("right")
+            right_on_row(cam, name)
             key_tabs(cam, g)
         elif not (cam.read().kind == "keyset" and cam.read().focus == "tabs"):
             raise Failed(f"MENU from page {g}'s keys went to {cam.read().kind} ({cam.frame.path.name})")
@@ -434,8 +456,12 @@ def main():
                     help="with one --rows table: open only this cell (its pos as in tables.json, e.g. 1,5) and "
                          "keep the others' earlier walk")
     add_scan_argument(ap)
+    add_info_ok_argument(ap)
     a = ap.parse_args()
     todo = [t for t in TABLES if not a.rows or t in a.rows]
+    # --info-ok names a table's first-time screen by its row ("Custom Key/Dial Set.") and the screen's whole text
+    screens.INFO_OK.update(info_ok_or_exit(a.info_ok, [" > ".join(TABLES[t]["path"]) for t in todo],
+                                           labels={x for t in todo for x in TABLES[t]["path"]}))
     cycle, model = load_scan(a.scan)
     run = Run("kit2_tables")
     out_path = run.dir / "tables.json"
@@ -477,7 +503,7 @@ def main():
                 print("STOP file: cancelling", flush=True)
             except Exception as e:
                 print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
-            close_for_restore(cam, link)            # cleanup presses; when they fail too, the restore all the same
+            close_for_restore(cam, link, before)            # cleanup presses; when they fail too, the restore all the same
             # a read-only walk; if anything changed, the start goes back
             ending = end_session(link, hdmi, before, "the settings download after the walk")
         restored = restore_checked(run, ending, before)

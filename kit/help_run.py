@@ -133,7 +133,7 @@ def main():
                 walk(cam, cycle, model, done, out, a)
             except Exception as e:                  # a dropped link or anything else too: the guide is closed first
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
-            close_for_restore(cam, link)
+            close_for_restore(cam, link, before)
             print(f"{len(done) - had} rows read", flush=True)
             # a help walk changes nothing; if it did, the start goes back, even when the shooting screen does not come
             ending = end_session(link, hdmi, before, "the settings download after the walk", reach=wait_shooting)

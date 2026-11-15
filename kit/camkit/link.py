@@ -7,7 +7,10 @@ and the rest never), held at most safety.MAX_HOLD_MS, and C4 only on the menu, o
 caller read last, never on the shooting screen, in Playback or with a picture displayed (c4_refused, decision 7), nor,
 on a body that lists its operating mode, when that mode cannot be read; on a screen read as the shooting screen no
 button or dial but MENU unless the caller names that key for the press (on_shooting), and with no screen given none
-but MENU at all, named or not (safety.shooting_refused, decision 21); a property set only when it is live exposure,
+but MENU at all, named or not (safety.shooting_refused, decision 21); an Enter, the multi-selector's centre or a trash
+button only with the link's count of moving commands when the camera layer's check of what the screen asks looked at
+the screen (judged: camkit.live, safety.enter_refused, 2026-11-14), and only while nothing has moved since, so no Enter
+is sent past that check or on a screen it did not judge; a property set only when it is live exposure,
 and never one that
 makes sound, light or motion, holds credentials or identity, or acts (safety.check_property; no text property is
 set); an upload only of the camera's own download (camkit.provenance), with that download's SHA-256 on the line, which
@@ -251,6 +254,17 @@ class Link:
         self.model = None
         self.events = []          # SDK events (disconnects, warnings) as they arrive
         self.moves = 0            # commands sent that can change the screen (MOVES), LiveCamera's own among them
+        # when the last of them was answered (time.monotonic(); None before any): an OSD frame is no older than the kit's
+        # own last move only once camkit.live.OSD_LAG has passed since (camkit.live.look_again)
+        self.moved_at = None
+        self.output_ended = False     # camlink's output has ended (it exited, or its pipe broke): no reply comes again
+        # the camera's session dropped while camlink runs on (gone): why, from the SDK's "disconnected" event or a reply
+        # saying "disconnected" (camlink answers so to every command once OnDisconnected has run; the SDK is connected
+        # with reconnecting off, kit/common/sdk_session.h), "" again once a request sent after it is answered
+        self.disconnected = ""
+        # the last request id sent when the drop was learnt: a reply to that request or an earlier one, its "ok" made
+        # before the drop, clears nothing (2026-11-15, a review: the event can land while such a reply is on its way)
+        self._dropped_after = -1
         # MENU presses sent, a cleanup's among them: a network row's lock (camkit.live.LiveCamera.network_left) ends only
         # after one, however it was sent
         self.menus = 0
@@ -280,7 +294,9 @@ class Link:
         # bytes both ways (see the module docstring); buffered, and every command is flushed
         self.proc = subprocess.Popen(self.args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, **own_group)
-        threading.Thread(target=self._pump, args=(self.proc.stdout, self._out.put), daemon=True).start()
+        self.output_ended = False
+        self.disconnected, self._dropped_after = "", -1      # a new session: nothing of the last one's drop
+        threading.Thread(target=self._pump, args=(self.proc.stdout, self._stdout_line), daemon=True).start()
         threading.Thread(target=self._pump, args=(self.proc.stderr, self._event), daemon=True).start()
         first = self._reply(timeout)
         self.run.log("link_open", args=self.args[1:], reply=first)
@@ -345,6 +361,27 @@ class Link:
                 sink(raw.decode("utf-8", errors="replace"))
         sink(None)
 
+    def _stdout_line(self, line):
+        """A line of camlink's stdout into the reply queue; None, its end, also marks the output ended (gone)."""
+        if line is None:
+            self.output_ended = True
+        self._out.put(line)
+
+    def gone(self) -> str:
+        """Why camlink can do nothing more on the camera, or "": its process has exited, its output has ended, the link
+        was closed, or the camera's session dropped while camlink runs on (disconnected: a power-off, a cable out, a
+        Wi-Fi drop; camlink then answers "disconnected" to everything). runner.hold_for_owner leaves its wait on it: a
+        link that has gone cannot be kept open over a screen."""
+        proc = getattr(self, "proc", None)
+        if proc is None:
+            return "the link is closed"
+        code = proc.poll()
+        if code is not None:
+            return f"camlink has exited (status {code})"
+        if getattr(self, "output_ended", False):
+            return "camlink's output has ended"
+        return getattr(self, "disconnected", "")
+
     def _event(self, line):
         """An SDK event from camlink's stderr, kept and logged. camlink writes objects ({"event": ...}); anything else
         a library prints there is kept as text. Nothing here may raise: this runs on the thread that drains stderr,
@@ -358,6 +395,9 @@ class Link:
         if not isinstance(ev, dict):
             ev = {"event": "text", "text": line.strip()}
         self.events.append(ev)
+        if ev.get("event") == "disconnected":
+            self._dropped_after = self._seq
+            self.disconnected = "the SDK reported the camera disconnected"
         try:
             # the log's own keys ("t", "kind") are kept apart from the event's
             self.run.log("sdk_event", **{(f"event_{k}" if k in ("t", "kind") else k): v for k, v in ev.items()})
@@ -391,18 +431,20 @@ class Link:
         return self._seq
 
     def call(self, command: str, timeout=30.0, allow=frozenset(), cleanup=False, screen=None,
-             on_shooting=frozenset(), logged=None) -> dict:
+             on_shooting=frozenset(), logged=None, judged=None) -> dict:
         """The one way a command reaches camlink, whoever sends it: the guards (_guard) first, then the line.
         allow: the guarded buttons the caller names (safety.GUARDED_INPUTS); cleanup: a press that cancels a dialog
         after a STOP; screen: the screen read last (camkit.screen.Screen, or its kind), which C4 and every button or
         dial but MENU need; on_shooting: the keys the caller names for this press on the shooting screen (decision 21);
         logged: what the run's log keeps of the reply, for a question the kit asks of its own (the whole reply when
-        None)."""
+        None); judged: for an Enter or a trash button, the link's count of moving commands (moves) when the camera
+        layer's check of what the screen asks looked at the screen: it goes only while that count is still the link's
+        (_guard), so neither a judgement made on a screen that has moved since nor a word given without one goes out."""
         if "\n" in command or "\r" in command:
             raise ValueError(f"{command!r}: a command is one line")
         verb, args = parse_command(command)
         try:
-            self._guard(verb or "", args, allow, cleanup, screen, on_shooting)
+            self._guard(verb or "", args, allow, cleanup, screen, on_shooting, judged)
         except (safety.Refused, StopRequested, LinkError) as e:
             self.run.log("cmd_refused", cmd=command, why=f"{type(e).__name__}: {e}")
             raise
@@ -416,14 +458,22 @@ class Link:
             self.proc.stdin.flush()
         except OSError:
             pass                # camlink has exited (a signal): its last reply, if any, is waiting in the queue
-        r = self._reply(timeout, want=n)
+        try:
+            r = self._reply(timeout, want=n)
+        finally:
+            if verb in MOVES:
+                self.moved_at = time.monotonic()    # answered or not: the screen may have moved until now
         if verb == "press" and args[:1] == ["menu"] and isinstance(r, dict) and r.get("ok"):
             self.menus += 1                     # a MENU the camera took: one it refused, or no answer, counts none
+        if isinstance(r, dict) and (r.get("error") == "disconnected" or (verb == "ping" and r.get("connected") is False)):
+            self.disconnected = "camlink answers that the camera is disconnected"
+        elif isinstance(r, dict) and r.get("ok") and n > self._dropped_after:
+            self.disconnected = ""              # a request sent after the drop answered: the session is there
         self.run.log("cmd", cmd=command, id=n, reply=r if logged is None else logged(r),
                      ms=round((time.monotonic() - t0) * 1000))
         return r
 
-    def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset()):
+    def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None):
         """Raises when the command may not go out (the module docstring's guards); returns when it may."""
         if verb == "press":
             if not args or len(args) > 3 or args[2:] not in ([], ["allowed"]):
@@ -435,6 +485,14 @@ class Link:
                 if why:
                     raise safety.Refused(f"C4 refused: {why} (docs/decisions/0007)")
             self._shooting_checked(args[0], screen, on_shooting)
+            if args[0] in safety.ENTER_KEYS | safety.TRASH_KEYS and (
+                    isinstance(judged, bool) or not isinstance(judged, int) or judged != self.moves):
+                # an Enter (or the trash button) answers whatever the screen asks: it goes only with the link's count of
+                # moving commands at the moment the camera layer's check looked at the screen (camkit.live.LiveCamera.
+                # press; proving.nav.to_shooting, live.menu_refused_enter), and only while nothing has moved since
+                raise safety.Refused(f"{args[0]} refused: no Enter goes out unless camkit.live's check of what the "
+                                     "screen asks judged the screen on show (its count of moving commands "
+                                     f"{judged!r}, the link's now {self.moves})")
         elif verb == "dial":
             if len(args) != 2 or not re.fullmatch(r"-?\d+", args[1]):
                 raise safety.Refused(f"dial takes DIAL STEPS, not {' '.join(args)!r}")
@@ -504,17 +562,20 @@ class Link:
             raise safety.Refused(why)
 
     def press(self, button: str, hold_ms=60, allow=frozenset(), cleanup=False, screen=None,
-              on_shooting=frozenset()) -> dict:
+              on_shooting=frozenset(), judged=None) -> dict:
         """One button press. cleanup=True skips the STOP check (used to cancel a dialog on stop). A guarded button
         the caller allows goes out marked so ("allowed"): camlink presses no guarded button without it. screen: the
         screen the caller read last (camkit.screen.Screen, or its kind), which C4 needs (safety.c4_refused) and every
         button but MENU (safety.shooting_refused, decision 21: none on the shooting screen unless on_shooting names it
-        for this press, and none with no screen given, named or not). The button's name must be written as the guards read it
-        ("down", never " Down" or '"down"'): name_refused."""
+        for this press, and none with no screen given, named or not). judged: an Enter, the multi-selector's centre or a
+        trash button goes only with the link's count of moving commands at the moment the camera layer's check of what
+        the screen asks looked at the screen (camkit.live, 2026-11-14), and only while it is still the link's count: a
+        press sent past that check, or judged on a screen that has moved since, is refused here. The button's name must
+        be written as the guards read it ("down", never " Down" or '"down"'): name_refused."""
         self._name_checked("press", button)
         mark = " allowed" if button in safety.GUARDED_INPUTS and button in allow else ""
         return self._must(f"press {button} {int(hold_ms)}{mark}", allow=allow, cleanup=cleanup, screen=screen,
-                          on_shooting=on_shooting)
+                          on_shooting=on_shooting, judged=judged)
 
     def c4_refused(self, screen) -> str:
         """Why C4 may not go out now, or "": the screen read last must be a menu, option, panel or editor screen

@@ -9,11 +9,14 @@ MR = "Mr Memory 1 2 M1 M2 M3 M4 MENU OK"               # the MR Memory slots: no
 TITLED = "Camera Set. Memory 1 2 3 M1 M2 M3 M4 MENU OK"  # the same with the row's own name in the title
 
 
-def decide(p, lit, text, kind="unknown", confirm=False, allow=()):
+def decide(p, lit, text, kind="unknown", confirm=False, allow=(), consent=""):
     """press_decision as main() calls it, after the press arguments were checked."""
     assert not drive.press_args_refused([p]), p
     key = drive.parse_press(p)[0]
-    return drive.press_decision(p, key, lit, text, kind, confirm, allow)
+    return drive.press_decision(p, key, lit, text, kind, confirm, allow, consent=consent)
+
+
+MEMORY = "--allow 'Camera Set. Memory'"            # memreg_run's and framepos_run's consent to answer the slot screen
 
 
 def test_plain_enter_is_refused_when_nothing_lit_can_be_read():
@@ -22,12 +25,18 @@ def test_plain_enter_is_refused_when_nothing_lit_can_be_read():
 
 
 def test_vouched_enter_goes_ahead_where_nothing_lit_can_be_read_and_says_so():
-    assert decide("enter!:memory", "", MR) == ("", True)
+    """Since 2026-11-14 the MR Memory slots, read as no known kind, take no Enter by their shape (safety.enter_refused):
+    a vouch lifts the unreadable lit text alone, and the Enter goes with --confirm, the owner's word, or a prover's
+    --allow for its own row (press_refused's consent)."""
+    assert "no known kind" in decide("enter!:memory", "", MR)[0] or "'unknown'" in decide("enter!:memory", "", MR)[0]
+    assert decide("enter!:memory", "", MR, confirm=True) == ("", True)
+    assert decide("enter!:memory", "", MR, consent=MEMORY) == ("", True)
     assert drive.parse_press("enter!:memory")[0] == "enter"
 
 
 def test_vouched_enter_is_only_vouched_when_nothing_lit_was_read():
-    assert decide("enter!:memory", "M2", MR) == ("", False)       # a lit text read: the usual checks, no vouching
+    assert decide("enter!:memory", "M2", MR, confirm=True) == ("", False)     # a lit text read: no vouching
+    assert decide("enter!:memory", "M2", MR)[0]                    # and the screen's shape still asks its word
     assert decide("enter!:memory", "Format", MR)[0]                # and the usual refusals
 
 
@@ -68,7 +77,7 @@ def test_no_vouching_on_a_screen_naming_the_cards_or_a_never_open_row():
 
 def test_a_name_the_run_was_allowed_lifts_only_its_own_words_on_the_screen():
     assert decide("enter!:memory", "", TITLED)[0], "an action's name on the screen, not allowed"
-    assert decide("enter!:memory", "", TITLED, allow=("Camera Set. Memory",)) == ("", True)
+    assert decide("enter!:memory", "", TITLED, allow=("Camera Set. Memory",), consent=MEMORY) == ("", True)
     assert decide("enter!:memory", "", TITLED + " Delete", allow=("Camera Set. Memory",))[0]
 
 

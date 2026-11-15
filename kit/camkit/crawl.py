@@ -93,9 +93,9 @@ class Counted:
     def __init__(self, cam):
         self.cam, self.presses = cam, 0
 
-    def press(self, key):
+    def press(self, key, **kw):
         self.presses += 1
-        self.cam.press(key)
+        self.cam.press(key, **kw)           # kw: the camera's (a notice --info-ok names: notice_ok)
 
     def read(self):
         return self.cam.read()

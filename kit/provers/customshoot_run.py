@@ -249,7 +249,7 @@ def main():
             try:
                 cancel_hold(cam, link, cycle, model, LAST_OPENED)
             except Exception:
-                close_for_restore(cam, link)        # cleanup presses before the link closes over an open dialog
+                close_for_restore(cam, link, start)        # cleanup presses before the link closes over an open dialog
                 raise
             to_shooting(link, hdmi, "the last download")
             time.sleep(1)
