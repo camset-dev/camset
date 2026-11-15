@@ -35,7 +35,9 @@ The screen read last goes with every press and dial to the link, whose guards ju
 but MENU on the shooting screen (decision 21: refused there unless the caller names the key for that press,
 on_shooting). A screen read as no known kind whose frame is black (HDMI blanked: Auto Framing On in Movie mode) is
 asked of the camera's own picture first (judged_screen), and judged as the shooting screen when that reads as one; when
-that picture cannot be read, no key but MENU goes. A shooting screen that is drawn but read as another kind (a DISP
+that picture cannot be read, no key but MENU goes. A screen read as the shooting screen while the camera says it is in
+Playback is its playback view, kind "playback" (reading, camkit.session.playback_kind), where the link lets no key but
+MENU out, named or not (decision 21). A shooting screen that is drawn but read as another kind (a DISP
 mode that draws no battery) is not caught: the kit presses on unknown screens on purpose (the memory slots read as one).
 The screen judged is never one the camera has left behind this camera's back: the link counts what can move it (a
 download, an upload, any press or dial), and when that count has moved since the last read, the screen is grabbed and
@@ -82,6 +84,7 @@ import numpy as np
 from . import ocr, safety, screen, vlm
 from .frames import keep
 from .link import CameraRefused, LinkError
+from .session import playback_kind
 from .vlm import PROMPTS, ask_role, log_to, scrub
 
 
@@ -531,7 +534,7 @@ class LiveCamera:
         # screen with nothing sent between, may answer a notice whose OK is its only button (leave_notice)
         self.menu_refused = None
         self.frame = hdmi.grab("live-start")
-        self.screen = screen.read(self.frame)
+        self.screen = self.reading(self.frame)
         self.screen.frame_path = self.frame.path.name
         self.presses = 0
         self._seen = self._moves()      # the link's count of screen-moving commands at the screen's last read
@@ -540,6 +543,16 @@ class LiveCamera:
         """The link's count of the commands sent that can move the screen (camkit.link.MOVES: a download, an upload,
         any press or dial, this camera's own among them); 0 for a link that keeps none."""
         return getattr(self.link, "moves", 0)
+
+    def reading(self, f) -> screen.Screen:
+        """The screen on frame `f` as this camera reads it, every reading of its own made here: camkit.screen's, its
+        kind "playback" where it reads as the shooting screen while the camera says it is in Playback
+        (camkit.session.playback_kind, docs/decisions/0021), so the walkers, drive.py and the link (which lets no key
+        but MENU out there, and the Playback button only to leave it) see the playback view, never the shooting
+        screen."""
+        s = screen.read(f)
+        s.kind = playback_kind(getattr(self, "link", None), s.kind)
+        return s
 
     def _fresh(self, key: str):
         """The screen read afresh when something moved it since the last read without this camera seeing it (a
@@ -710,7 +723,7 @@ class LiveCamera:
         # every press expects a change: a press that seems ignored gets a full second before it counts
         # as "nothing happened" (Picture Profile: a Down showed no change within 0.5 s, 2026-10-28)
         f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
-        self.frame, self.screen = f, screen.read(f)
+        self.frame, self.screen = f, self.reading(f)
         self.rest(f"{key}-rest")
         f = self.frame
         if screen.same_state(self.screen, before):
@@ -724,7 +737,7 @@ class LiveCamera:
             while True:
                 time.sleep(0.5)
                 f2 = self.hdmi.grab(f"{key}-late", save=False)
-                s2 = screen.read(f2)
+                s2 = self.reading(f2)
                 if not screen.same_state(s2, before):
                     keep(f2, self.run.shot_path(f"{key}-late"), getattr(self, "blank", False))
                     f, self.frame, self.screen = f2, f2, s2
@@ -932,7 +945,7 @@ class LiveCamera:
         whose values are withheld, as every frame then), read, its text read afresh by whoever reads it next. changed:
         the screen is not the state its caller read (logged)."""
         keep(f, self.run.shot_path(f"{key}-judged"), getattr(self, "blank", False))
-        self.frame, self.screen = f, screen.read(f)
+        self.frame, self.screen = f, self.reading(f)
         self.screen.frame_path = f.path.name
         if changed:
             self.run.log("screen_changed_before_press", key=key, frame=f.path.name, screen=self.screen.kind)
@@ -1153,7 +1166,7 @@ class LiveCamera:
                    "goes out (docs/decisions/0021)")
             self.run.log("press_refused", key=key, frame=self.frame.path.name, why=why)
             raise safety.Refused(f"{key}: {why}")
-        return "shooting" if kind == "shooting" else self.screen
+        return playback_kind(self.link, "shooting") if kind == "shooting" else self.screen
 
     def dial(self, name: str, steps: int, on_shooting=frozenset()) -> screen.Screen:
         """A dial turned `steps` (drive.py's dial.NAME.STEPS), judged at the link on the screen read last as a press is
@@ -1188,7 +1201,7 @@ class LiveCamera:
     def refresh(self, tag: str) -> screen.Screen:
         """Grab and read the screen now, without a press (after a download closed the menu)."""
         self.frame = self.hdmi.grab(tag)
-        self.screen = screen.read(self.frame)
+        self.screen = self.reading(self.frame)
         self.screen.frame_path = self.frame.path.name
         self.rest(f"{tag}-rest")
         self._seen = self._moves()
@@ -1204,25 +1217,27 @@ class LiveCamera:
             if not (self.screen.kind == "menu" and self.screen.focus is None):
                 break
             self.frame, _ = self.hdmi.settle(self.frame, tag, expect_change=False, quiet=0.5, timeout=3.0)
-            self.screen = screen.read(self.frame)
+            self.screen = self.reading(self.frame)
             self.screen.frame_path = self.frame.path.name
         return self.screen
 
     def cancel_to_menu(self, tries: int = 3):
-        """After a STOP or an error: MENU (cleanup presses skip the STOP check) until a menu page."""
+        """After a STOP or an error: MENU (cleanup presses skip the STOP check) until a menu page, or the shooting screen
+        or the playback view, where nothing is open to cancel (the run's end leaves the playback view:
+        proving.nav.leave_playback)."""
         for _ in range(tries):
-            if self.screen.kind in ("menu", "tiles", "shooting"):
+            if self.screen.kind in ("menu", "tiles", "shooting", "playback"):
                 self._inside_after()
                 return True
             t = time.monotonic()
             self.link.press("menu", cleanup=True)
             self.menu_went_out()
             f, _ = self.hdmi.settle(self.frame, "cancel", expect_change=True, sent_at=t)
-            self.frame, self.screen = f, screen.read(f)
+            self.frame, self.screen = f, self.reading(f)
             self._seen = self._moves()
             self._inside_after()                # judged on the read right after this MENU (network_left spends it)
         self._inside_after()
-        return self.screen.kind in ("menu", "tiles", "shooting")
+        return self.screen.kind in ("menu", "tiles", "shooting", "playback")
 
 
 def submenu_labels(cam, vlm_timeout: float = 25.0):
@@ -1311,7 +1326,9 @@ def withheld_on(cam, text) -> str:
 def close(cam, link):
     """Back to the shooting screen. The camera can refuse a button for a moment ("button not
     accepted" right after Select REC Folder opened, while it read the card, 2026-10-29): wait and
-    try again; never return with a screen open, since disconnecting then is not allowed."""
+    try again; never return with a screen open, since disconnecting then is not allowed. The camera's playback view
+    (LiveCamera.reading) holds nothing open either: close stops there, with MENU alone sent, as it did while that view
+    read as the shooting screen, and the run's end leaves it (proving.nav.leave_playback, before its download)."""
     for _ in range(8):
         try:
             cam.cancel_to_menu()
@@ -1319,7 +1336,7 @@ def close(cam, link):
                 link.press("menu", cleanup=True)
                 getattr(cam, "menu_went_out", lambda: None)()       # a network row's lock may end on the shooting screen
                 time.sleep(1.0)
-            if cam.refresh("closing").kind == "shooting":
+            if cam.refresh("closing").kind in ("shooting", "playback"):
                 return
         except LinkError as e:
             print(f"closing: {withheld_on(cam, e)}; trying again", flush=True)

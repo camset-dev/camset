@@ -31,7 +31,9 @@ never sends it there (decision 7). Cleanup presses (MENU after a STOP) go as bef
 screen changes what no settings file holds (a focus frame's place, the live exposure), so the run's restore does not
 put it back: the operator names, and presses, the keys that do (2026-11-10: a named ms_left on the camera, its ms_right
 refused by drive.py's older check of an unread row, left a frame moved, put back by hand; that check no longer meets a
-named key there).
+named key there). A screen read as the shooting screen while the camera says it is in Playback is the playback view,
+not the shooting screen: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or
+Delete (`camkit.session.playback_kind`, `proving.nav.leave_playback`, 2026-11-15).
 
 ## Consequences
 

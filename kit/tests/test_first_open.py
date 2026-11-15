@@ -476,7 +476,9 @@ def test_per_page_the_check_comes_as_the_lap_leaves_each_page(tmp_path):
 
 
 def test_the_per_row_cost_over_the_link_is_three_commands(tmp_path, monkeypatch, capsys):
-    """A first open's check over the stand-in camlink: MENU, a download, MENU, with LOCK_S waited between (0 here)."""
+    """A first open's check over the stand-in camlink: MENU, a download, MENU, with LOCK_S waited between (0 here); and
+    before the download the camera's word on Playback, a read (props once per link: the stand-in lists no mode, so no
+    get follows; on a body that lists it, one get per check, 2026-11-15)."""
     log = tmp_path / "camlink.log"
     monkeypatch.setenv("FAKE_CAMLINK_LOG", str(log))
     run = Run("kit2_crawl", root=tmp_path)
@@ -491,9 +493,11 @@ def test_the_per_row_cost_over_the_link_is_three_commands(tmp_path, monkeypatch,
             t = time.monotonic()
             fo.settle(cam)
             times.append(time.monotonic() - t)
-    sent = [ast.literal_eval(x).decode().split()[1] for x in log.read_text(encoding="utf-8").splitlines()
-            if x.startswith("b'@")]
+    every = [ast.literal_eval(x).decode().split()[1] for x in log.read_text(encoding="utf-8").splitlines()
+             if x.startswith("b'@")]
+    sent = [x for x in every if x not in ("props", "get")]
     assert sent == ["press", "download", "press"] * 5 and not restore_pending(tmp_path)
+    assert [x for x in every if x in ("props", "get")] == ["props"]
     with capsys.disabled():
         print(f"\nfirst open, per row over the stand-in camlink: {len(sent) // 5} commands, "
               f"{1000 * sorted(times)[2]:.0f} ms median, besides the camera's own time and the menu's lock after the "

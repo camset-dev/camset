@@ -190,7 +190,7 @@ from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, E
                     definition, hold_for_owner, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
-                    restore_checked, restoring, row_values, screen_named, values_withheld)
+                    restore_checked, restoring, row_values, screen_named, values_withheld, wait_shooting)
 
 
 class NotReached(RuntimeError):
@@ -333,8 +333,12 @@ def press_name(key: str) -> str:
 def shooting_press_refused(key: str, kind: str, on_shooting=()) -> str:
     """Why drive.py may not send the --press key `key` (as canonical_key gives it) on a screen read as `kind`, or "":
     on the shooting screen no key but MENU, unless --on-shooting names it (`on_shooting`, keys as canonical_input gives
-    them; a dial turn is named by its dial) (decision 21)."""
+    them; a dial turn is named by its dial), and on the camera's playback view (kind "playback", camkit.live's reading)
+    none but MENU, named or not (decision 21)."""
     name = press_name(key)
+    if kind == "playback" and name not in safety.SHOOTING_FREE:
+        return ("the screen is the camera's playback view (it says it is in Playback), not the shooting screen: no key "
+                "but MENU goes out there, --on-shooting or not")
     if kind != "shooting" or name in safety.SHOOTING_FREE or name in on_shooting:
         return ""
     return (f"the screen is the shooting screen, where {name!r} does what the body makes of it: only with the owner's "
@@ -1764,7 +1768,8 @@ def main():
                     with restoring("drive.py's restore", withhold=private):
                         close_for_restore(cam, link, before)
                         try:
-                            wait_for(hdmi, ("shooting",), "the settings download after the presses", link=link)
+                            # the camera's playback view left with its Playback button once (runner.wait_shooting)
+                            wait_shooting(link, hdmi, "the settings download after the presses", wait=wait_for)
                         except RuntimeError as e:
                             # the wait gave up: the restore is still tried (decision 15), the download closing a menu
                             # itself, over a screen that asks nothing, judged on a fresh frame; over any other the owner

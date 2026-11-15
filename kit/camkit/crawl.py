@@ -20,7 +20,9 @@ rows and the Screen Reader, a row whose opening acts, and a format, delete or re
 opened (seen), skipped with nothing pressed. Such a row is looked at
 only: Down round its list or carousel (LOOK_WALKED), never a second axis, a panel or a submenu, with --panels too, and
 not even that where the camera holds MENU alone (a blanked row, an address screen, a screen naming identity); the
-camera's own check (camkit.live.LiveCamera) refuses anything else there besides.
+camera's own check (camkit.live.LiveCamera) refuses anything else there besides. A row whose Right brings up the
+camera's playback view (camkit.live's reading: a screen read as the shooting screen while the camera says it is in
+Playback) is left with MENU alone, never walked, "a playback view, left unwalked".
 
 A row whose Right opens an information notice is recorded as "notice", nothing pressed on it but MENU; only where the run
 names the row and the notice's words (info_ok: kit/crawl_run.py --info-ok, runner.info_ok_or_exit) is its OK taken,
@@ -223,9 +225,10 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
             out.stopped = f"row limit ({max_rows}) reached"
             break
         s = cam.read()
-        if not _at(s, pos) and s.kind == "shooting":
+        if not _at(s, pos) and s.kind in ("shooting", "playback"):
             # the camera left the menu by itself (2026-10-28: a CautionDisplay warning came with it, no
-            # message stayed on screen): MENU reopens on the same row; check the position again
+            # message stayed on screen): MENU reopens on the same row; check the position again (MENU alone on the
+            # playback view too, as while it read as the shooting screen)
             cam.press("menu")
             s = cam.read()
             out.recoveries.append(i)
@@ -383,7 +386,10 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             except Exception as e:
                 r.outcome = f"incomplete: {type(e).__name__}"
         else:
-            r.outcome = f"network row: a {s.kind} screen, left unwalked (looked at only)"
+            # the camera's playback view (a Playback row's own screen, camkit.live's reading) is left with MENU alone,
+            # never walked: there a key changes the picture shown or acts on it (the link lets none but MENU out)
+            seen = "playback view" if s.kind == "playback" else f"{s.kind} screen"
+            r.outcome = f"network row: a {seen}, left unwalked (looked at only)"
             if s.kind == "notice" and r.network == safety.LIFT_NETWORK and notices is not None:
                 read, words, told = notices
                 try:

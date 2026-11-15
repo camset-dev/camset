@@ -171,6 +171,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - A camera helper (`kit/link/build/camlink`) built before an option a tool needs now says so, and that
   `python3 kit/setup.py` rebuilds it, instead of "camera link exited". `kit/tools/take_picture.py` then says the link
   never opened and nothing was sent, not that the start file is not known to be back.
+- A screen read as the shooting screen while the camera says it is in Playback is now the playback view some Playback
+  rows open, where the kit sends no key but MENU and the Playback button, once, to get back (decision 21). A first
+  open's check and a run's end ask no download while the camera says Playback: where the view is not left, the run
+  writes `RESTORE_BY_HAND`, says how to leave it by hand and exits 5, where the first look lap over the Playback tab
+  asked for a download the camera refused.
 
 ### The docs
 

@@ -758,7 +758,8 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
                 reach=None, show: int | None = None, expected=frozenset(), keys: bool = False):
     """The session's end (decision 15): back to the shooting screen, then camkit.session.finish (download, compare with
     `start`, upload it when anything differs). `reach(link, eyes, why)` gets there: prove_run's to_shooting by default
-    (MENU until the shooting screen), wait_shooting for a walker that has closed the menu itself. When the shooting
+    (MENU until the shooting screen), wait_shooting for a walker that has closed the menu itself, each leaving the
+    camera's playback view with its Playback button once (proving.nav.leave_playback). When the shooting
     screen does not come (to_shooting gives up after 5 minutes, wait_for after 15, the eyes' feed is gone), the screen
     on show is looked at afresh (restorable_now): over one that asks nothing by its shape and reads as no confirmation
     the restore is still tried (the download closes a menu itself, and finish says so when the camera refuses it); over
@@ -824,7 +825,11 @@ def restorable_now(link, eyes) -> tuple:
     shooting screen as it is, or a black frame the camera's own picture reads as the shooting screen
     (camkit.session.osd_shooting: HDMI blanked by Auto Framing); any other screen judged as restorable_after_close
     judges a last screen (a known kind that asks nothing by its shape and reads as no confirmation), its frame written
-    for OCR into the run's own folder (owner-only on a --network or --owner run) and taken away after."""
+    for OCR into the run's own folder (owner-only on a --network or --owner run) and taken away after. The camera's word
+    is asked first: while it says it is in Playback (camkit.session.in_playback_now), where a download is refused,
+    nothing is restorable now, whatever the screen reads as (None, session.PLAYBACK_HELD, which says how it is left)."""
+    if session.in_playback_now(link):
+        return None, session.PLAYBACK_HELD
     try:
         f = eyes.grab(save=False)
         s = screen.read(f)
@@ -832,8 +837,11 @@ def restorable_now(link, eyes) -> tuple:
         f, s = osd_picture(link)
         if f is None:
             return None, f"the screen cannot be looked at ({type(e).__name__}: {e}), nor the camera's own picture"
-    if s.kind == "shooting" or session.osd_shooting(link, f):
+    s.kind = session.kind_seen(link, f, s)
+    if s.kind == "shooting":
         return "shooting", ""
+    if s.kind == session.PLAYBACK:
+        return None, session.PLAYBACK_HELD
     from types import SimpleNamespace
 
     from PIL import Image
@@ -870,8 +878,11 @@ def hold_for_owner(link, eyes, start: Path, why: str, keys: bool = False, poll: 
     marker = mark_restore_by_hand(run.root, run.dir.name, start,
                                   f"the session's end found a screen it may not restore over ({said(why)})")
     run.log("restore_held", why=said(why), marker=str(marker))
-    ask = (f"the camera shows a screen no restore may go over ({said(why)}): clear it on the camera by hand (MENU, or "
-           "Cancel), never with OK; the link stays open, nothing is pressed, and the run waits for the shooting screen")
+    waits = "the link stays open, nothing is pressed, and the run waits for the shooting screen"
+    # in Playback (restorable_now's session.PLAYBACK_HELD) MENU leaves nothing: the reason says how the view is left
+    ask = (f"{why}; {waits}" if why == session.PLAYBACK_HELD else
+           f"the camera shows a screen no restore may go over ({said(why)}): clear it on the camera by hand (MENU, or "
+           f"Cancel), never with OK; {waits}")
     print(ask, flush=True)
     said_at, stop_said = time.monotonic(), False
     try:
@@ -910,10 +921,16 @@ def hold_for_owner(link, eyes, start: Path, why: str, keys: bool = False, poll: 
     raise SystemExit(EXIT_RESTORE_BY_HAND)
 
 
-def wait_shooting(link, eyes, why: str):
-    """end_session's reach for a walker that closed the menu itself: wait for the shooting screen (camkit.session's
-    wait_for, a black HDMI frame read on the SDK's OSD)."""
-    session.wait_for(eyes, ("shooting",), why, link=link)
+def wait_shooting(link, eyes, why: str, wait=None):
+    """end_session's reach for a walker that closed the menu itself, and kit/drive.py's before its restore: wait for the
+    shooting screen (`wait`, by default camkit.session's wait_for: a black HDMI frame read on the SDK's OSD). The
+    camera's playback view (read as the shooting screen while the camera says it is in Playback), where it refuses a
+    download, is left with its Playback button once (proving.nav.leave_playback); RuntimeError when it is not, which the
+    caller takes as a shooting screen that did not come (restorable_now: no restore over that view, hold_for_owner)."""
+    if (wait or session.wait_for)(eyes, ("shooting", session.PLAYBACK), why, link=link) == session.PLAYBACK:
+        from proving.nav import leave_playback
+        if not leave_playback(link, eyes):
+            raise RuntimeError(f"the camera stayed in its playback view ({why}), where it refuses a settings download")
 
 
 # what the session's end says and keeps of the records that differ on a run whose records can hold an address, an

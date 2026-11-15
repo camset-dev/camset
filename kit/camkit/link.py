@@ -7,7 +7,10 @@ and the rest never), held at most safety.MAX_HOLD_MS, and C4 only on the menu, o
 caller read last, never on the shooting screen, in Playback or with a picture displayed (c4_refused, decision 7), nor,
 on a body that lists its operating mode, when that mode cannot be read; on a screen read as the shooting screen no
 button or dial but MENU unless the caller names that key for the press (on_shooting), and with no screen given none
-but MENU at all, named or not (safety.shooting_refused, decision 21); an Enter, the multi-selector's centre or a trash
+but MENU at all, named or not (safety.shooting_refused, decision 21); on the camera's playback view (a screen read as
+the shooting screen while the camera says it is in Playback: in_playback, camkit.session.playback_kind) none but MENU,
+named or not, and the Playback button once, only to leave it (press_playback, judged at the press by
+playback_refused: proving.nav.leave_playback's alone); an Enter, the multi-selector's centre or a trash
 button only with the link's count of moving commands when the camera layer's check of what the screen asks looked at
 the screen (judged: camkit.live, safety.enter_refused, 2026-11-14), and only while nothing has moved since, so no Enter
 is sent past that check or on a screen it did not judge; a property set only when it is live exposure,
@@ -172,8 +175,8 @@ CHANGES = frozenset({"press", "dial", "set", "setstr", "release"})
 PICTURE_ONLY = "release"
 # CameraOperatingMode as the SDK numbers it (CrCameraOperatingMode_Playback): C4 deletes the picture shown there
 PLAYBACK_MODE = 2
-# The property C4's check reads (c4_refused). camlink answers get with "unknown property NAME" both when the body does
-# not list a property and when the SDK's read of a listed one fails (kit/link/camlink.cpp cmdGet), so the words of the
+# The property C4's check and in_playback read (operating_mode). camlink answers get with "unknown property NAME" both
+# when the body does not list a property and when the SDK's read of a listed one fails (kit/link/camlink.cpp cmdGet), so the words of the
 # answer never say which: whether the body lists it is learnt from props, once per open link (mode_listed)
 MODE_PROPERTY = "CameraOperatingMode"
 # Commands that can change the screen without a LiveCamera seeing it: the link counts them (moves), and LiveCamera reads
@@ -291,6 +294,7 @@ class Link:
         # after one, however it was sent
         self.menus = 0
         self._mode_listed = None  # whether the body lists MODE_PROPERTY, once props has said (mode_listed)
+        self._props_failed = False    # props failed on this open link: in_playback asks it no more (C4's check does)
 
     # -------------------------------------------------------------- lifetime
 
@@ -336,7 +340,7 @@ class Link:
             self.close()
             raise LinkError(OLD_CAMLINK, opened=False)
         self.model = first.get("ready")
-        self._mode_listed = None                # learnt afresh for every link opened
+        self._mode_listed, self._props_failed = None, False     # learnt afresh for every link opened
         return self
 
     def _not_ready(self, why: str) -> str:
@@ -469,7 +473,7 @@ class Link:
         return self._seq
 
     def call(self, command: str, timeout=30.0, allow=frozenset(), cleanup=False, screen=None,
-             on_shooting=frozenset(), logged=None, judged=None) -> dict:
+             on_shooting=frozenset(), logged=None, judged=None, leaving=False) -> dict:
         """The one way a command reaches camlink, whoever sends it: the guards (_guard) first, then the line.
         allow: the guarded buttons the caller names (safety.GUARDED_INPUTS); cleanup: a press that cancels a dialog
         after a STOP; screen: the screen read last (camkit.screen.Screen, or its kind), which C4 and every button or
@@ -477,12 +481,13 @@ class Link:
         logged: what the run's log keeps of the reply, for a question the kit asks of its own (the whole reply when
         None); judged: for an Enter or a trash button, the link's count of moving commands (moves) when the camera
         layer's check of what the screen asks looked at the screen: it goes only while that count is still the link's
-        (_guard), so neither a judgement made on a screen that has moved since nor a word given without one goes out."""
+        (_guard), so neither a judgement made on a screen that has moved since nor a word given without one goes out.
+        leaving: press_playback's alone, the one press of the Playback button (playback_refused)."""
         if "\n" in command or "\r" in command:
             raise ValueError(f"{command!r}: a command is one line")
         verb, args = parse_command(command)
         try:
-            self._guard(verb or "", args, allow, cleanup, screen, on_shooting, judged)
+            self._guard(verb or "", args, allow, cleanup, screen, on_shooting, judged, leaving)
         except (safety.Refused, StopRequested, LinkError) as e:
             self.run.log("cmd_refused", cmd=command, why=f"{type(e).__name__}: {e}")
             raise
@@ -513,7 +518,8 @@ class Link:
                      ms=round((time.monotonic() - t0) * 1000))
         return r
 
-    def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None):
+    def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None,
+               leaving: bool = False):
         """Raises when the command may not go out (the module docstring's guards); returns when it may."""
         picture = getattr(self, "picture", False)
         if picture and (verb in ("dial", "set", "setstr") or (verb == "press" and args[:1] != ["menu"])):
@@ -537,6 +543,10 @@ class Link:
                 why = self.c4_refused(screen)
                 if why:
                     raise safety.Refused(f"C4 refused: {why} (docs/decisions/0007)")
+            if args[0] == "playback":
+                why = self.playback_refused(screen, leaving)
+                if why:
+                    raise safety.Refused(f"Playback refused: {why} (docs/decisions/0021)")
             self._shooting_checked(args[0], screen, on_shooting)
             if args[0] in safety.ENTER_KEYS | safety.TRASH_KEYS and (
                     isinstance(judged, bool) or not isinstance(judged, int) or judged != self.moves):
@@ -641,28 +651,81 @@ class Link:
         why = safety.c4_refused(getattr(screen, "kind", screen))
         if why or not self.proc:
             return why
-        listed, why_not = self.mode_listed()
+        listed, current, why_not = self.operating_mode()
         if listed is None:
             return (f"whether the camera lists its operating mode could not be read (props: {why_not}): a link in "
                     "trouble is no ground for the trash button")
         if not listed:
             return ""                           # the body does not list it: the screen alone decides (decision 7)
+        if current is None:
+            return (f"the camera lists its operating mode but did not give it ({why_not}): a link in trouble is no "
+                    "ground for the trash button")
+        if current == PLAYBACK_MODE:
+            return "the camera says it is in Playback, where C4 deletes the picture shown"
+        return ""
+
+    def operating_mode(self) -> tuple:
+        """(listed, mode, why) of the camera's CameraOperatingMode, the one way the kit asks it (c4_refused, in_playback):
+        listed as mode_listed gives it (None when props failed, why saying so; False when the body does not list it),
+        and, where listed, the integer mode a get gives, asked afresh on every call, or None with why (the read failed,
+        or gave no integer: camlink answers "unknown property" for a failed read as for a property not listed)."""
+        listed, why_not = self.mode_listed()
+        if not listed:
+            return listed, None, why_not
         try:
             mode = self.call(f"get {MODE_PROPERTY}")
         except (LinkError, ValueError) as e:
             mode = {"ok": False, "error": f"{type(e).__name__}: {e}"}
         current = mode.get("current") if mode.get("ok") else None
         if not isinstance(current, int) or isinstance(current, bool):
-            return (f"the camera lists its operating mode but did not give it ({mode.get('error') or current!r}): a "
-                    "link in trouble is no ground for the trash button")
-        if current == PLAYBACK_MODE:
-            return "the camera says it is in Playback, where C4 deletes the picture shown"
+            return True, None, str(mode.get("error") or repr(current))
+        return True, current, ""
+
+    def in_playback(self) -> bool | None:
+        """The camera's word on whether it is in Playback, asked afresh on every call (operating_mode, never kept across
+        presses): True when the body lists its operating mode and the camera gives Playback (PLAYBACK_MODE), False when
+        it gives another, None when the body lists none, the link is not open, or the read fails. The camera's playback
+        view (one picture with its file name, date and exposure along the bottom) reads as the shooting screen to the
+        reader: where this says True, the kit takes such a screen for the playback view (camkit.session.playback_kind,
+        docs/decisions/0021). A props that failed once on this open link is remembered for this question alone: from
+        then on it is None with nothing asked (each screen read as the shooting screen would else wait on props again);
+        C4's check still asks, and refuses (c4_refused)."""
+        if not getattr(self, "proc", None) or getattr(self, "_props_failed", False):
+            return None
+        listed, current, _ = self.operating_mode()
+        if listed is None:
+            self._props_failed = True
+        if not listed or current is None:
+            return None
+        return current == PLAYBACK_MODE
+
+    def playback_refused(self, screen, leaving: bool = False) -> str:
+        """Why the Playback button may not go out now, or "": only to leave the camera's playback view (`leaving`:
+        press_playback's, for proving.nav.leave_playback alone), judged at the press as C4 is, on the screen the caller
+        read last, which must be the playback view (kind "playback": camkit.session.playback_kind), and on the camera's
+        word, asked again here, that it is in Playback (in_playback True; False or None refuses)."""
+        if not leaving:
+            return ("the Playback button goes out only to leave the camera's playback view (proving.nav.leave_playback, "
+                    "Link.press_playback)")
+        kind = getattr(screen, "kind", screen)
+        if kind != "playback":
+            return f"the screen read last is {kind!r}, not the camera's playback view"
+        if self.in_playback() is not True:
+            return "the camera does not say it is in Playback"
         return ""
 
+    def press_playback(self, screen) -> dict:
+        """The Playback button pressed once, marked allowed, to leave the camera's playback view: proving.nav.
+        leave_playback's alone (playback_refused judges it at the press: the screen read last, `screen`, is the playback
+        view and the camera says it is in Playback). Every other request for the Playback button is refused, and C4 and
+        Delete stay refused there (safety.c4_refused, safety.shooting_refused). Not a cleanup press: after a STOP it is
+        refused (StopRequested)."""
+        return self._must("press playback 60 allowed", allow=frozenset({"playback"}), screen=screen, leaving=True)
+
     def mode_listed(self) -> tuple:
-        """(whether the body lists MODE_PROPERTY, "") from props, asked the first time C4 is judged on this link and
-        kept for it; (None, why) when props fails, gives no list or cannot be read, which is kept for nothing (the next
-        C4 asks again). The run's log keeps only what was asked for (mode_answer): the count of properties and whether
+        """(whether the body lists MODE_PROPERTY, "") from props, asked the first time the mode is (operating_mode: C4
+        judged, or in_playback) on this link and kept for it; (None, why) when props fails, gives no list or cannot be
+        read, which is kept for nothing (the next question asks again). The run's log keeps only what was asked for (mode_answer): the count of properties and whether
         the mode is listed, never a property's value (props holds the body's serial number, the photographer's and the
         copyright texts) nor another name; Link.props() and identify.py log their own replies as before.
         Matched by name only: camlink names each property through the SDK's table (camlink.cpp propName), and the

@@ -1,6 +1,7 @@
 """Getting to a row and back: Down to a submenu row by its label, Right into each submenu, back to the row after a
 download closed the menu (by its place, else its label, else by the page scan), the short way round a list, out of
-whatever is open with MENU (never OK), and back to the shooting screen.
+whatever is open with MENU (never OK), and back to the shooting screen, out of the camera's playback view with its
+Playback button pressed once (leave_playback, docs/decisions/0021).
 
 QUIET_SHOOTING, CYCLE and MODEL are the run's: a checklist prover sets nav.QUIET_SHOOTING while a DISP Set row is
 proved, and main() fills CYCLE and MODEL from the page scan."""
@@ -9,9 +10,9 @@ import re
 import time
 
 from camkit import live, ocr, safety, screen, vlm
-from camkit.link import CameraRefused, LinkError
+from camkit.link import CameraRefused, LinkError, StopRequested
 from camkit.screen import same_position, same_state
-from camkit.session import osd_shooting
+from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
 
 from .base import LOCK_S, Failed
@@ -173,21 +174,72 @@ def enter_any(cam, path, start: int):
         enter_path(cam, path, start)
 
 
+LEAVE_S = 3.0           # s leave_playback looks for the shooting screen after its one press
+
+
+def leave_playback(link, eyes, wait: float = LEAVE_S) -> bool:
+    """Out of the camera's playback view with its Playback button, pressed once (docs/decisions/0021): only where the
+    screen read just now is that view (camkit.session.kind_seen gives "playback": read as the shooting screen while the
+    camera says it is in Playback, Link.in_playback True), never over a menu, a dialog, a notice or a screen of no known
+    kind. The link judges the press again (Link.press_playback: the screen it is given is the playback view and the
+    camera says Playback), and lets the Playback button out for this call alone. Then looks again, for up to `wait` s,
+    until the camera says it is not in Playback (in_playback False) and the screen reads as the shooting screen. True
+    when that happened; False otherwise, with nothing more pressed: the screen was not the playback view, the press was
+    refused (a STOP among the reasons: it is no cleanup press) or went unanswered, or the camera stayed in Playback."""
+    try:
+        f = eyes.grab(save=False)
+        kind = kind_seen(link, f)
+    except Exception as e:      # noqa: BLE001 (a screen that cannot be read is no playback view)
+        kind = f"unread ({type(e).__name__})"
+    if kind != "playback":
+        return False
+    try:
+        link.press_playback(screen=kind)
+    except (safety.Refused, LinkError, StopRequested) as e:
+        print(f"   the Playback button did not go out to leave the playback view: {type(e).__name__}", flush=True)
+        return False
+    end = time.monotonic() + wait
+    while True:
+        time.sleep(0.3)
+        try:
+            f = eyes.grab(save=False)
+            s = screen.read(f)
+            back = (s.kind == "shooting" or osd_shooting(link, f)) and link.in_playback() is False
+        except Exception:   # noqa: BLE001 (a look that fails is no shooting screen)
+            back = False
+        if back:
+            return True
+        if time.monotonic() >= end:
+            print(f"   the camera still shows its playback view {wait:.0f} s after the Playback button", flush=True)
+            return False
+
+
 def to_shooting(link, hdmi, why: str, tries: int = 6):
     """Back to the shooting screen with MENU (cleanup presses: OK only on a notice that has just refused MENU, asks
     nothing by its shape and shows OK as its only button, and names no identity or credentials, never on a --network
     run), looking after each press.
     After a row failed on a screen the reader misread, the cancel can stop short (a PP carousel left
     open, 2026-10-29); this run holds the only remote connection, so it must close what is open
-    itself rather than wait for a hand on the camera. Falls back to waiting if MENU does not do it."""
+    itself rather than wait for a hand on the camera. Falls back to waiting if MENU does not do it.
+    Where a MENU it sent leaves the camera on its playback view (camkit.session.kind_seen: read as the shooting screen
+    while the camera says it is in Playback), leave_playback presses the Playback button once instead of another MENU;
+    when that does not bring the shooting screen, to_shooting ends there, Failed, with no other key pressed and no
+    wait."""
+    pressed = False
     for _ in range(tries):
         f = hdmi.grab(save=False)
         seen = screen.read(f)
-        kind = seen.kind
-        if kind == "shooting" or (kind == "unknown" and osd_shooting(link, f)):
+        kind = playback_kind(link, "shooting" if seen.kind == "unknown" and osd_shooting(link, f) else seen.kind)
+        if kind == "shooting":
             return
+        if kind == "playback" and pressed:
+            if leave_playback(link, hdmi):
+                return
+            # nothing more is pressed, and no wait: MENU there only opens and closes the menu over the view
+            raise Failed(f"the camera stayed in its playback view for {why}: nothing more was pressed")
         try:
             link.press("menu", cleanup=True)
+            pressed = True                  # a MENU the camera took: the playback view after it is MENU's doing
         except LinkError as e:
             # an information notice can take only OK ("not available as follows Picture Profile On":
             # MENU was refused and the run crashed before its restore, 2026-10-29). OK it only where the camera itself
@@ -233,7 +285,7 @@ def to_shooting(link, hdmi, why: str, tries: int = 6):
     last_menu = time.monotonic()
     while time.monotonic() < end:
         f = hdmi.grab(save=False)
-        if screen.read(f).kind == "shooting" or osd_shooting(link, f):
+        if kind_seen(link, f) == "shooting":
             return
         if time.monotonic() - last_menu > 20:          # a slow camera may need one more MENU
             last_menu = time.monotonic()

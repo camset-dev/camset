@@ -139,9 +139,9 @@ def question(camera: str, mode: str, f: dict) -> str:
 
 
 def shooting_now(link, eyes) -> bool:
-    """Whether the screen reads as the shooting screen now (a black frame read on the camera's own picture)."""
-    f = eyes.grab(save=False)
-    return screen.read(f).kind == "shooting" or session.osd_shooting(link, f)
+    """Whether the screen reads as the shooting screen now (a black frame read on the camera's own picture), never the
+    camera's playback view (camkit.session.kind_seen: read so while the camera says it is in Playback)."""
+    return session.kind_seen(link, eyes.grab(save=False)) == "shooting"
 
 
 def main(argv=None) -> None:

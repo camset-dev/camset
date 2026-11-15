@@ -131,7 +131,9 @@ NEVER_INPUTS = {"movie", "af_on", "ael", "mode", "home", "thumbnail", "c1", "c2"
 # named or not. C4's own guard (c4_refused) stands beside it: naming C4 never sends it there. What this does not cover:
 # a shooting screen the reader takes for another kind (a DISP mode that draws no battery reads "unknown", and the kit
 # presses on unknown screens on purpose: the memory slots read as one); camkit.live asks the camera's own picture only
-# when the frame is black (HDMI blanked).
+# when the frame is black (HDMI blanked). A screen read as the shooting screen while the camera says it is in Playback
+# is its playback view, never the shooting screen (camkit.session.playback_kind): there no key but these, named or not,
+# and the Playback button once, only to leave it (shooting_refused, camkit.link.Link.press_playback).
 SHOOTING_FREE = frozenset({"menu"})
 # A press holds its button this long at most: a Down accepted and an Up refused would leave it held (2026-11-06)
 MAX_HOLD_MS = 2000
@@ -265,13 +267,19 @@ def shooting_refused(key, kind, named=frozenset()) -> str:
     """Why `key` (a button pressed, or a dial turned) may not go out on a screen the reader read as `kind`, or "" when
     it may (decision 21): MENU always; on the shooting screen any other key only when the caller names it (`named`, the
     keys named for this press; one name given as a string is that name, as check_input's allow); with no screen given
-    at all (kind None), no key but MENU, since nothing says it is not the shooting screen. Any other kind, "unknown"
-    among them, is not judged here (SHOOTING_FREE's comment says what that leaves)."""
+    at all (kind None), no key but MENU, since nothing says it is not the shooting screen. On the camera's playback view
+    (kind "playback": a screen read as the shooting screen while the camera says it is in Playback,
+    camkit.session.playback_kind) no key but MENU, named or not, and the Playback button, which the link sends only to
+    leave it (camkit.link.Link.playback_refused). Any other kind, "unknown" among them, is not judged here
+    (SHOOTING_FREE's comment says what that leaves)."""
     named = {named} if isinstance(named, str) else named
     if key in SHOOTING_FREE:
         return ""
     if kind is None:
         return "a key is pressed only on a screen just read, and none was given: unseen, only MENU goes out"
+    if kind == "playback" and key != "playback":
+        return (f"the screen is the camera's playback view (it says it is in Playback), where {key!r} changes the "
+                "picture shown or acts on it: only MENU goes out there, named or not, and the Playback button to leave it")
     if kind == "shooting" and key not in named:
         return (f"the screen is the shooting screen, where {key!r} does what the body makes of it (a Custom Key, the "
                 "focus frame, or the live exposure on a dial): only MENU goes out there, unless the caller names the key")

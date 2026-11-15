@@ -203,14 +203,15 @@ class FirstOpens:
     (per "row", or per "page": the check made once the lap leaves the page, a row a page's check could not clear
     checked alone); ended(restored, ending) at the run's end. `seen`: seen_record's; `skip_why`: why no first open is
     made on this run (no current blank-cards statement, --panels), "" when they are; `lock`: the menu's lock after a
-    download (proving.base.LOCK_S); `wait`: camkit.session.wait_for."""
+    download (proving.base.LOCK_S); `wait`: camkit.session.wait_for; `leave`: proving.nav.leave_playback (None: that
+    one, found when first needed)."""
 
     def __init__(self, link, eyes, run, start: Path, seen: Seen, skip_why: str, lock: float, wait=None,
-                 private: bool = False, per: str = "row", name=None):
+                 private: bool = False, per: str = "row", name=None, leave=None):
         from .session import wait_for
         self.link, self.eyes, self.run, self.start = link, eyes, run, Path(start)
         self.seen, self.skip_why, self.lock, self.private, self.per = seen, skip_why, lock, private, per
-        self.wait = wait or wait_for
+        self.wait, self.leave = wait or wait_for, leave
         self.marker, self.pending, self.deferred, self.notices = None, [], [], set()
         self.failure, self.failed = "", []         # why a check failed, and the rows it was for: the marker stays
         self.held = []                              # rows greyed again: checked by the next download, or the run's end
@@ -300,10 +301,14 @@ class FirstOpens:
         run's end (ended): no download of their own. Else MENU closes the menu, the
         settings are downloaded on the shooting screen and compared with the start file (the body's volatile records
         aside); with none differing the marker goes, the held looks are written (the rows are seen) and after `lock` s
-        MENU reopens the menu, where crawl() checks the position. Raises FirstOpenFailed, the marker kept, when a record
+        MENU reopens the menu, where crawl() checks the position. Where MENU leaves the camera on its playback view
+        (camkit.session.wait_for gives "playback": a Playback row's own screen, where the camera refuses a download), the
+        view is left first (leave: proving.nav.leave_playback, the Playback button once); one not left, or a camera that
+        still says it is in Playback just before the download (camkit.session.in_playback_now, whatever the screen
+        reads as), is a check that cannot be made, no download asked. Raises FirstOpenFailed, the marker kept, when a record
         differs (each row's look says "changed", or PAGE where the rows of a page cannot be told apart) or the check
         cannot be made; a STOP leaves them pending for the run's end (ended)."""
-        from .session import compared
+        from .session import PLAYBACK_HELD, compared, in_playback_now
         rows = list(self.pending)
         if all(key(p) in self.notices for p in rows):
             try:
@@ -319,7 +324,11 @@ class FirstOpens:
                 return
         try:
             cam.press("menu")
-            self.wait(self.eyes, ("shooting",), "a first open's check", link=self.link)
+            seen = self.wait(self.eyes, ("shooting", "playback"), "a first open's check", link=self.link)
+            if seen == "playback" and not self.left_playback():
+                raise RuntimeError("the camera stayed in its playback view, where it refuses a settings download")
+            if in_playback_now(self.link):          # whatever the screen read as: no download in Playback
+                raise RuntimeError(f"{PLAYBACK_HELD}: no download was asked")
             after = self.link.download("first-open")
             changes = compared(self.start, after, say=lambda m: None)
         except StopRequested:
@@ -336,6 +345,14 @@ class FirstOpens:
         self._clean(rows, "checked")
         time.sleep(self.lock)
         cam.press("menu")
+
+    def left_playback(self) -> bool:
+        """The camera's playback view left (leave, by default proving.nav.leave_playback, found here: camkit stays free
+        of the provers' parts until it needs one): its answer."""
+        leave = self.leave
+        if leave is None:
+            from proving.nav import leave_playback as leave
+        return bool(leave(self.link, self.eyes))
 
     def _clean(self, rows, how: str) -> None:
         for lk in self.deferred:

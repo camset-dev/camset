@@ -9,8 +9,9 @@ editor/definitions/ILCE-1M2_fw4.00.DAT; for a NAME ending "_after", $FAKE_CAMLIN
 camera would. props answers with $FAKE_CAMLINK_PROPS (a JSON list of {"name", "text"}; none without it) and its
 count, or, with $FAKE_CAMLINK_PROPS_FAIL set, as camlink answers when the SDK's read fails ({"ok": false, "error":
 "GetDeviceProperties failed"}); get NAME with $FAKE_CAMLINK_GET's entry for NAME merged in (a JSON object {name:
-{"current": ...}}), and a NAME it holds no entry for as camlink answers both a property the body does not list and a
-listed one whose read fails ({"ok": false, "error": "unknown property NAME"}). A line's leading "@N" (the
+{"current": ...}}; $FAKE_CAMLINK_GET_FILE names a file holding that object instead, read afresh on every get, so a
+test can change the camera's answer between two questions), and a NAME it holds no entry for as camlink answers both a
+property the body does not list and a listed one whose read fails ({"ok": false, "error": "unknown property NAME"}). A line's leading "@N" (the
 request's id, protocol::command) is echoed as "id": N. With $FAKE_CAMLINK_STRAY set, every reply comes after two
 stray lines, as an SDK or a library may print them: a line of text and a reply with another id. Every line
 received, as raw bytes, goes to the file $FAKE_CAMLINK_LOG (one repr per line). $FAKE_CAMLINK_STDERR (a JSON list of
@@ -128,7 +129,9 @@ def main():
             reply.update({"ok": False, "error": "GetDeviceProperties failed"} if os.environ.get("FAKE_CAMLINK_PROPS_FAIL")
                          else {"count": len(props), "props": props})
         elif cmd == "get":
-            known, name = json.loads(os.environ.get("FAKE_CAMLINK_GET") or "{}"), args[0] if args else ""
+            got = (Path(os.environ["FAKE_CAMLINK_GET_FILE"]).read_text(encoding="utf-8")
+                   if os.environ.get("FAKE_CAMLINK_GET_FILE") else os.environ.get("FAKE_CAMLINK_GET"))
+            known, name = json.loads(got or "{}"), args[0] if args else ""
             # a property it was not given is one the body does not list, answered as camlink's cmdGet answers it
             reply.update(known.get(name, {"ok": False, "error": f"unknown property {name}"}))
         out.write(json.dumps(reply) + "\n")

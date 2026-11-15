@@ -128,7 +128,9 @@ on their own camera. Those allowances are not yours to assume: ask your owner, a
     frame, a dial's change to the live exposure, which no file puts back). No key but MENU goes there unless the run
     names that key for the press (`drive.py --on-shooting KEY`, your owner's word; decision 21), and none but MENU
     with no screen given, named or not. The run's restore does not put back what a named key changed: name and press
-    the keys that do (`ms_right` after `ms_left`).
+    the keys that do (`ms_right` after `ms_left`). A screen read as the shooting screen while the camera says it is in
+    Playback is the playback view, not the shooting screen: there no key goes out but MENU, and the Playback button
+    once, only to get back; never C4 or Delete.
 
 ## 2. What carries over to a new model, and what does not
 
