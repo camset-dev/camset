@@ -338,6 +338,35 @@ def same_screen(a, b) -> bool:
         return False
 
 
+def info_ok_text(cam) -> str:
+    """The notice on show's text as --info-ok would name it: OCR's reading, its OK (a line that is a button's word alone)
+    and its "Don't show this again." line left out; "" where it cannot be read."""
+    try:
+        lines = ocr.read([cam.frame.path])[cam.frame.path]
+    except Exception:
+        return ""
+    kept = [ln.text for ln in lines if not safety.DONT_SHOW.search(safety.fold(ln.text or ""))
+            and not any(safety._BUTTON_LINE.fullmatch(r) for r in safety.readings(ln.text))]
+    return " ".join(" ".join(kept).split())
+
+
+def info_ok_hint(cam, row: str, frame: str, said: str, words: bool = True) -> str:
+    """How a refusal on a notice not passed ends: the --info-ok that names it for `row`, to be checked against its frame
+    `frame` (`said`: info_ok_text, read on that frame). The refusal is logged in the run's events.jsonl
+    ("notice_not_passed": the row, the frame and the text; on a --network or --owner run only what safety.notice_kept
+    keeps of it). With `words` False (a run whose notices may name another setting's value, decision 16: afreg_run's and
+    framepos_run's setup, a --network run) the text is in no message: it names the frame and the row and says where
+    the text is, so the owner can still build the flag (proving.screens.pass_note, kit/drive.py, the crawl)."""
+    run = getattr(cam, "run", None)
+    if run is not None:
+        private = getattr(cam, "network", None) or getattr(cam, "owner", None)
+        run.log("notice_not_passed", row=row, frame=frame, notice=safety.notice_kept(said) if private else said)
+    if words:
+        return f'check its text against {frame} and add --info-ok "{row or "ROW"}={said or "<its whole text>"}"'
+    return (f'its text is in the run\'s events.jsonl ("notice_not_passed", frame {frame}): check it against {frame} and '
+            f'add --info-ok "{row or "ROW"}=<that text>"')
+
+
 def leave_notice(cam) -> str:
     """Out of a notice the kit does not answer: MENU first, which confirms nothing (on the a1 II it closes an information
     notice and the menu with it, and cancels a question). Only where the camera refuses MENU there ("button not

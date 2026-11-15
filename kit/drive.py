@@ -164,8 +164,8 @@ from camkit import ocr, safety, screen, session  # noqa: E402
 from camkit import coverage  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
-from camkit.live import (LiveCamera, black, body_of, lit_text, lone_of, open_refused, osd_kind, press,  # noqa: E402
-                         text_of)
+from camkit.live import (LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_text, lone_of,  # noqa: E402
+                         open_refused, osd_kind, press, text_of)
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
@@ -394,7 +394,7 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
         # what the screen asks, by its shape: the camera judges it too (camkit.live.LiveCamera.confirm_refused)
         asked = safety.enter_refused(kind, text, lit, body, notice_way, lone, key=key)
         if asked and not confirm and not (consent and str(text or "").strip()):
-            return f"{asked}: only with --confirm, the owner's word"
+            return f"{asked}: only with --confirm naming this screen by its whole text (once), or by the owner route"
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
@@ -1353,7 +1353,14 @@ def main():
                     if vouched:
                         print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
-                        print(f"{key} refused: {say(why)}; cancelling", flush=True)
+                        # on a notice (or a first-time screen) no --info-ok names: the flag that would, its text
+                        # withheld on a --network or --owner run (live.info_ok_hint, which logs it in events.jsonl)
+                        kind_now = cam.read().kind
+                        hint = (f"; {info_ok_hint(cam, a.path[-1], cam.frame.path.name, info_ok_text(cam), not private)}"
+                                if key in ENTERS and not notice_row and a.path
+                                and (kind_now == "notice" or safety.first_time_screen(kind_now, t)) else "")
+                        print(f"{key} refused: {say(why)}{hint}; cancelling", flush=True)
+                        run.log("press_refused", key=key, frame=cam.frame.path.name, why=say(why))
                         ok = False
                         break
                     # the row this press opens, when a network decision opens it: from then on it is looked at only,

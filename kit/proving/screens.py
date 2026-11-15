@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from camkit import match, ocr, safety, screen
-from camkit.live import leave_notice
+from camkit.live import info_ok_hint, info_ok_text, leave_notice
 from camkit.vlm import PROMPTS, ask_role
 from page_model import key_text, same_text
 from runner import INFO_OK_SLACK, info_ok_for, joined, notice_words
@@ -63,17 +63,6 @@ def info_screen(cam) -> bool:
     return kind == "unknown" and any(dont_show(ln) for ln in ocr.read([cam.frame.path])[cam.frame.path])
 
 
-def info_ok_text(cam) -> str:
-    """The notice on show's text as --info-ok would name it: OCR's reading, its OK and its "Don't show this again." line
-    left out; "" where it cannot be read."""
-    try:
-        lines = ocr.read([cam.frame.path])[cam.frame.path]
-    except Exception:
-        return ""
-    return " ".join(" ".join(ln.text for ln in lines
-                             if not dont_show(ln) and not BUTTON_LINE.fullmatch(ln.text or "")).split())
-
-
 def notice_before(cam, row: str, lit_before: str = "", words: bool = True) -> dict | None:
     """After Right on the row `row` ("A > B"): the screen the camera shows before the row's own, when it is one a run may
     pass (a first-time screen with "Don't show this again." and OK, Custom Key/Dial Set.'s after a settings reset: "In
@@ -119,17 +108,8 @@ def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
     said = info_ok_text(cam)                # read on the notice's own frame, before any press moves it
     to_notice_ok(cam)
     if leave_notice(cam) == "menu":
-        why = (f"the notice ({frame}) took MENU, which cancels it: its OK goes only where --info-ok names it or where "
-               "the camera refuses MENU on it")
-        if words:
-            return {"refused": f"{why}. Check its text against {frame} and add "
-                               f'--info-ok "{row or "ROW"}={said or "<its whole text>"}"'}
-        run = getattr(cam, "run", None)
-        if run is not None:
-            private = getattr(cam, "network", None) or getattr(cam, "owner", None)
-            run.log("notice_not_passed", row=row, frame=frame, notice=safety.notice_kept(said) if private else said)
-        return {"refused": f"{why}. Its text is in the run's events.jsonl (\"notice_not_passed\", frame {frame}): check "
-                           f'it against {frame} and add --info-ok "{row or "ROW"}=<that text>"'}
+        return {"refused": f"the notice ({frame}) took MENU, which cancels it: its OK goes only where --info-ok names it "
+                           f"or where the camera refuses MENU on it; {info_ok_hint(cam, row, frame, said, words)}"}
     return {"row": row, "frame": frame, "by": "a lone OK after MENU was refused"}
 
 
@@ -436,10 +416,12 @@ def notice_lit(cam) -> str:
 # --info-ok has one, its OK
 BUTTON_LINE = re.compile(r"[\s•●.]*(" + "|".join(sorted(safety.BUTTON_WORDS)) + r")[\s•●.]*", re.I)
 # what no line of such a notice but its OK may say, in any reading of the line (safety.readings): a second button, read
-# whole or not ("Cance1", "x Cancel", "Back"), or a word of a choice or an action, inflected too ("Apply", "deleted",
+# whole or not ("Cance1", "x Cancel", "Back"), its word whole (a button's word is no prefix of prose: "No" is no "not",
+# "Start" no "starts", 2026-11-15), or a word of a choice or an action, inflected too ("Apply", "deleted",
 # "overwritten", "Executed.")
-NOT_BESIDE_OK = re.compile(r"canc|\b(?:yes|no|back|close|execute|enter|start|apply|register|proceed|continue|confirm|"
-                           r"delete|format|reset|overwrit|eras|initiali[sz])")
+NOT_BESIDE_OK = re.compile(r"canc|\b(?:yes|no|back|close|enter|start|return|stop|resume|retry|later|abort|quit|"
+                           r"not now)\b|\b(?:execute|apply|register|proceed|continue|confirm|delete|format|reset|"
+                           r"overwrit|eras|initiali[sz])")
 
 
 def _confirm_names() -> tuple:

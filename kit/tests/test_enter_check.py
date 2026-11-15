@@ -1114,7 +1114,8 @@ def test_pass_note_withholds_a_notices_words_where_the_run_asks(tmp_path, monkey
     assert "setting screen" not in kept["notice"]              # no shape the kit knows: nothing of it kept
     cam = NoteCam(tmp_path / "c", "kit2_tables")
     refused = screens.pass_note(cam, row, row)["refused"]
-    assert f'--info-ok "{row}=In the next setting screen' in refused and not events(cam)
+    assert f'--info-ok "{row}=In the next setting screen' in refused
+    assert [e["notice"][:27] for e in events(cam) if e["kind"] == "notice_not_passed"] == ["In the next setting screen,"]
 
 
 def test_afreg_and_framepos_pass_the_dial_note_with_its_words_withheld(tmp_path, monkeypatch):
@@ -1155,3 +1156,90 @@ def test_a_table_job_withholds_the_words_on_a_network_run(tmp_path, monkeypatch)
         with pytest.raises(Failed):
             tables.prove_table_row(TableCam(tmp_path), None, None, table_job(), tmp_path / "base.DAT", None)
         assert seen[-1] is words
+
+
+# ---------------------------------------------------------------- the camera session: prose is no second button
+
+# the a1 II's Custom Key/Dial Set. first-time screen after Down (kit2_c1cam_ckey_info's 00005_down.png), as OCR read it,
+# its lit OK's box as camkit.live finds it
+CKEY_LINES = [("In the next setting screen, you can check", 53, 113, 535, 38),
+              ("the function assigned to a specific button", 52, 161, 536, 33),
+              ("by pressing that button on the device.", 74, 207, 490, 34),
+              ("Don't show this again", 175, 351, 285, 35), ("OK", 297, 413, 46, 38)]
+CKEY_BOX = (60, 404, 580, 462)
+
+
+def test_a_sentence_holding_can_c_is_no_second_button():
+    """The camera session's false refusal (2026-11-15): "you can check" read run together ("youcancheck") holds "canc",
+    and lone_ok took that line for a Cancel button, so the first-time screen had no way past at all. A second button is
+    a line of its own (safety.button_line): the screen, its text and its OK, passes now, and the camera's whole check
+    with --info-ok as its way past goes."""
+    assert safety.lone_ok("OK", CKEY_LINES, CKEY_BOX) == ""
+    text = " ".join(t for t, *_ in CKEY_LINES)
+    assert safety.first_time_screen("unknown", text)
+    assert safety.enter_refused("notice", text, "OK", text, "--info-ok Custom Key/Dial Set.", "") == ""
+    for prose in ("Limits the ISO values you can choose to a", "Only the Custom Looks can change it; each",
+                  "you can check", "You can set different settings for still", "image mode and movie mode in the next",
+                  "The setting set for  is independent.", "by pressing that button on the device."):
+        assert not safety.button_line(prose), prose
+    # prose that holds a Cancel as OCR may give it fails closed (CANCEL_SEEN), as does one ending in a button's word
+    for closed in ("The recording was cancelled by the camera.", "you can celebrate", "the level you set"):
+        assert safety.button_line(closed), closed
+
+
+def test_a_named_notices_other_lines_name_a_button_by_its_whole_word():
+    """proving.screens.NOT_BESIDE_OK (pass_named_notice): a button's word counts whole ("No", "Back", "Start"), never as
+    the start of prose ("not available", "starts", "background"); an action's word counts inflected too ("deleted")."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from proving.screens import NOT_BESIDE_OK
+    for said in ("No", "Back", "Start", "Close", "Enter", "Yes", "deleted", "Executed.", "x Cancel", "overwritten"):
+        assert NOT_BESIDE_OK.search(said.lower()), said
+    for prose in ("this operation or setting not available as follows", "the movie starts at once", "background",
+                  "a normal noise level", "enters the state"):
+        assert not NOT_BESIDE_OK.search(prose), prose
+
+
+@pytest.mark.parametrize("line", [("Cancel", 290, 280, 60, 30), ("Cance1", 290, 280, 60, 30), ("Can cel", 280, 280, 80, 30),
+                                  ("x Cance1", 100, 280, 200, 30), ("MENU Cancel", 100, 280, 200, 30),
+                                  ("Cancel>", 290, 280, 60, 30), ("Execute", 290, 280, 60, 30), ("Yes", 290, 280, 60, 30),
+                                  ("No", 290, 280, 40, 30), ("Delete all data Cancel", 60, 280, 500, 30),
+                                  ("Press MENU to cancel this operation", 53, 113, 535, 38),
+                                  # the review of 84a00fa: a Cancel as OCR gives it, run together or not, in a longer line
+                                  ("Back to the menu Cance1", 60, 280, 500, 30), ("Return to the menu Canc el", 60, 280, 500, 30),
+                                  ("Use this setting now Can cel", 60, 280, 500, 30), ("Cancelar y volver atras", 60, 280, 500, 30),
+                                  ("Back to the menu Cance!", 60, 280, 500, 30), ("Back to the menu Cancei", 60, 280, 500, 30),
+                                  # the words the lists never had, alone
+                                  *((w, 290, 280, 80, 30) for w in ("Return", "Stop", "Start", "Resume", "Retry", "Later",
+                                                                   "Abort", "Quit", "Not now")),
+                                  # a button OCR merged onto the right end of a prose line: its last word, or two
+                                  ("Delete all data Yes", 60, 280, 500, 30), ("Proceed with this Execute No", 60, 280, 500, 30),
+                                  ("Try again in a moment Not now", 60, 280, 500, 30)])
+def test_a_second_button_above_a_lone_ok_still_refuses(line):
+    """The reviewers' cases stay refused: a button's word alone (the lists' new words too: Return, Stop, Start, Resume,
+    Retry, Later, Abort, Quit, Not now), or as the line's last word or two (merged onto prose), and a Cancel as OCR may
+    give it anywhere in any reading ("Cance1", "Can cel", "Cancelar"); beside or below the OK, the layout refuses
+    whatever the words."""
+    box, ok = (200, 340, 440, 395), ("OK", 300, 352, 40, 30)
+    assert "reads as a button" in safety.lone_ok("OK", [line, ok], box), line
+    assert "beside or below" in safety.lone_ok("OK", [("Something", 460, 352, 60, 30), ok], box)
+
+
+def test_a_cancel_split_across_two_lines_above_the_ok_refuses():
+    """lone_ok reads the lines above its lit OK joined too, so a Cancel OCR split across two lines ("...Can" / "cel") is
+    caught; the a1 II's Custom Key screen, its lines joined, holds none ("...youcancheck...")."""
+    box, ok = (200, 340, 440, 395), ("OK", 300, 352, 40, 30)
+    split = [("Back to the menu Can", 60, 240, 500, 30), ("cel", 60, 280, 60, 30), ok]
+    assert "joined, as a Cancel" in safety.lone_ok("OK", split, box)
+    assert safety.lone_ok("OK", CKEY_LINES, CKEY_BOX) == ""
+
+
+def test_a_named_notices_other_lines_name_the_new_button_words_whole():
+    """NOT_BESIDE_OK takes the words the lists never had, whole: Return, Stop, Resume, Retry, Later, Abort, Quit, Not
+    now; never as the start of prose ("returned", "stopped", "lateral")."""
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from proving.screens import NOT_BESIDE_OK
+    for said in ("return", "stop", "resume", "retry", "later", "abort", "quit", "not now", "try again later"):
+        assert NOT_BESIDE_OK.search(said), said
+    for prose in ("the file was returned", "recording stopped", "a lateral move", "resumed earlier"):
+        assert not NOT_BESIDE_OK.search(prose), prose
+

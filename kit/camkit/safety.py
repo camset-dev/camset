@@ -1074,7 +1074,8 @@ def plain(text) -> str:
 
 # The words a button or a key says (an OK, a Cancel, a keyboard's Done), which no decision names as an option: Enter on
 # one commits or cancels, whatever the decision meant (option_refused)
-BUTTON_WORDS = frozenset({"ok", "enter", "execute", "yes", "no", "cancel", "set", "done"})
+BUTTON_WORDS = frozenset({"ok", "enter", "execute", "yes", "no", "cancel", "set", "done", "return", "stop", "start",
+                          "resume", "retry", "later", "abort", "quit", "not now"})
 
 
 def option_refused(option) -> str:
@@ -2132,9 +2133,29 @@ TRASH_KEYS = frozenset({"c4", "delete"})
 # A question mark in any script the kit may meet: ASCII, full-width, inverted (Spanish), Arabic
 QUESTION_MARKS = "?？¿؟"
 # A line of a notice that is a button's word alone, its dot or bullet aside (lone_ok's words, a refusal only)
-_BUTTON_LINE = re.compile(r"[\s•●.:]*(?:ok|enter|execute|yes|no|cancel|set|done|back|close|exit|apply)[\s•●.:]*")
+_BUTTON_LINE = re.compile(r"[\s•●.:]*(?:ok|enter|execute|yes|no|cancel|set|done|back|close|exit|apply|return|stop|"
+                          r"start|resume|retry|later|abort|quit|not\s*now)[\s•●.:]*")
+# Cancel as OCR may give it, in any reading, words run together included ("Cance1", "Canc el", "Cancelar"): a refusal
+# only (button_line, lone_ok); prose that holds it ("you can celebrate") fails closed
+CANCEL_SEEN = re.compile(r"cance[l1i|!]")
 # how far above the lit button's top a line's middle may lie and still sit on its band (proving.screens.OK_BAND's)
 LONE_BAND = 4
+
+
+def button_line(t) -> bool:
+    """Whether an OCR line reads as a button (lone_ok's word rule, a refusal only): in any reading the whole line is a
+    button's word (_BUTTON_LINE), as read, folded, its slips undone or run together ("OK", "Retry", "Not now", "Can
+    cel"); or so is its last word, or its last two, on their own (a button OCR merged onto the right end of a prose
+    line: "... Yes", "... Execute No", "... Not now"); or any reading, words run together included, holds Cancel as OCR
+    may give it (CANCEL_SEEN: "Back to the menu Cance1", "Use this setting now Can cel", "Cancelar y volver atras"). A
+    sentence is no button by the other letters it holds: "In the next setting screen, you can check" ("...youcancheck")
+    passes (2026-11-15: the a1 II's Custom Key/Dial Set. first-time screen was refused on "canc", its only way past),
+    and prose that holds a Cancel ("you can celebrate") fails closed."""
+    words = str(t or "").split()
+    for part in (t, " ".join(words[-1:]), " ".join(words[-2:])):
+        if part and any(_BUTTON_LINE.fullmatch(r) for r in readings(part)):
+            return True
+    return any(CANCEL_SEEN.search(r) for r in readings(t))
 
 
 # a "Don't show this again." box, as a first-time screen draws it above its OK
@@ -2159,9 +2180,13 @@ def lone_ok(lit, lines, box) -> str:
     as (text, x, y, w, h); box: the lit button's (x0, y0, x1, y1) as camkit.live finds the orange cursor, or None.
     By layout first, no word read: a lit button found and its text read, and no other line whose middle lies on, beside
     or below the lit button's band (LONE_BAND: a second button stands beside the lit one or under it). Then by words, a
-    refusal only: no other line that is a button's word alone (_BUTTON_LINE), and none that reads "canc" ("Cance1"), in
-    any reading. What neither catches: a second button drawn above the lit one whose word is none of those (a camera in
-    another language): the layout rule is calibrated on the a1 II's notices, whose buttons sit at the bottom."""
+    refusal only: no other line that reads as a button (button_line: the whole line a button's word in any reading, or
+    its last word or two, or a Cancel as OCR may give it anywhere in it), and no Cancel in the lines above the OK read
+    joined (a button's word split across two OCR lines: "...Can" / "cel"); a sentence is never taken for one by its
+    other letters. What neither catches: a second button drawn above the lit one whose word is none of those (a camera
+    in another language): the layout rule is calibrated on the a1 II's notices, whose buttons sit at the bottom. And a
+    notice whose OK is drawn only as the footer's key hint ("(dot) OK", the a1 II's "not available as follows"), no lit
+    button at all, is never lone here: it stays refused, fail closed (2026-11-15, decided on the camera's frame)."""
     if box is None:
         return "no lit button can be found on it"
     if not str(lit or "").strip():
@@ -2176,9 +2201,10 @@ def lone_ok(lit, lines, box) -> str:
             return f"a line ({str(t).strip()[:40]!r}) sits beside or below its lit button: a second button may"
         others.append(str(t))
     for t in others:
-        for r in readings(t):
-            if _BUTTON_LINE.fullmatch(r) or "canc" in r:
-                return f"another line reads as a button ({t.strip()[:40]!r})"
+        if button_line(t):
+            return f"another line reads as a button ({t.strip()[:40]!r})"
+    if any(CANCEL_SEEN.search(r) for r in readings(" ".join(others))):
+        return "the lines above its lit button read, joined, as a Cancel (a button's word split across two lines)"
     return ""
 
 

@@ -3753,6 +3753,35 @@ def test_first_time_notice_branches_on_made_up_lines(tmp_path, monkeypatch):
     assert screens.notice_before(cam, CUSTOM_KEY, CUSTOM_KEY) is None and cam.keys == []
 
 
+def test_the_custom_key_first_time_screen_takes_its_named_ok_on_the_real_frame():
+    """kit2_c1cam_ckey_info's 00005_down.png, the a1 II's Custom Key/Dial Set. first-time screen after Down (its OK lit):
+    the camera's own check with --info-ok as its way past refused it on 2026-11-15 ("you can check" read as a Cancel);
+    its lit OK is plainly its only button now, and the whole check passes."""
+    from camkit import live, ocr
+    if not ocr.available():
+        pytest.skip("no OCR engine")
+    frame = need(A1 / "kit2_c1cam_ckey_info" / "shots" / "00005_down.png")
+    f = load(frame)
+    cam = type("C", (), {"frame": f})()
+    text, body = live.text_of(cam), live.body_of(cam)
+    kind = "notice" if safety.first_time_screen(screen.read(f).kind, text) else screen.read(f).kind
+    lone = live.lone_of(f.image, frame)
+    assert kind == "notice" and lone == "", lone
+    assert safety.enter_refused(kind, text, live.lit_text(f.image, frame), body, "--info-ok Custom Key/Dial Set.",
+                                lone) == ""
+
+
+def test_the_not_available_notice_with_a_footer_ok_stays_refused_on_the_real_frame():
+    """kit2_c1cam_notice_a's 00021_right.png, "This operation or setting not available as follows / HDMI Info. Display /
+    On", its OK drawn only as the footer's key hint: no lit button, so no lone OK, fail closed (the a1 II takes MENU on
+    it; a body that refused MENU there would hold for the owner). Decided on this frame, 2026-11-15."""
+    from camkit import live, ocr
+    if not ocr.available():
+        pytest.skip("no OCR engine")
+    frame = need(A1 / "kit2_c1cam_notice_a" / "shots" / "00021_right.png")
+    assert live.lone_of(load(frame).image, frame) == "no lit button can be found on it"
+
+
 def test_a_table_cell_is_in_scope_by_its_job_key_or_its_tables_row_key():
     """in_scope: --rows names a cell by "<path> / <cell>" (the job key --list prints) or by the tables file's own row
     key, which carries the screen for a second screen of one row; the row alone names all its cells."""

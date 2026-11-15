@@ -272,8 +272,9 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
                 except Exception:                # a text that cannot be read keeps nothing, as before
                     r.notice = ""
     elif s.kind == "notice":
-        # the frame is the evidence (blocker and its value)
+        # the frame is the evidence (blocker and its value); the --info-ok that would pass it is said (notice_hint)
         r.outcome = "notice" + (f" (named, not passed: {not_passed})" if not_passed else "")
+        notice_hint(cam, " > ".join((*path, label)), network)
     elif s.kind in WALKERS:
         try:
             if s.kind == "dialog" and labels is not None:
@@ -304,10 +305,35 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
         r.outcome = "left for kit/table_walk.py"   # cells that open lists or the function picker
     else:
         r.outcome = "unknown screen"
+        if first_time(cam, s.kind):
+            notice_hint(cam, " > ".join((*path, label)), network)   # a first-time screen, "Don't show this again."
     if r.outcome != "no response to Right" and not back_to(cam, Place(row_screen, parent, index)):
         r.outcome = "lost"
     r.presses = cam.presses - p0
     return r
+
+
+def first_time(cam, kind) -> bool:
+    """Whether the screen on show is a first-time screen (safety.first_time_screen: no known kind, a "Don't show this
+    again." box), read by OCR on the camera's own frame; False where it cannot be read (a twin camera's)."""
+    try:
+        from .live import text_of
+        return safety.first_time_screen(kind, text_of(cam))
+    except Exception:
+        return False
+
+
+def notice_hint(cam, name: str, network=frozenset()) -> None:
+    """A notice (or a first-time screen) the crawl leaves on the row `name`, nothing pressed on it but MENU: the --info-ok
+    that would pass it printed, its text withheld on a --network crawl, and the refusal logged in the run's events.jsonl
+    (camkit.live.info_ok_hint); nothing where the camera has no frame of its own (a twin camera's)."""
+    try:
+        from .live import info_ok_hint, info_ok_text
+        frame = cam.frame.path.name
+        print(f"   {name}: a notice not passed; {info_ok_hint(cam, name, frame, info_ok_text(cam), not network)}",
+              flush=True)
+    except Exception:
+        return
 
 
 MAX_DEPTH = 4                  # Picture Profile > PPn > Knee > Auto Set (2026-10-28)

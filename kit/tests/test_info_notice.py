@@ -354,15 +354,16 @@ def test_the_whole_text_phrase_takes_an_icon_read_as_a_letter_or_two(monkeypatch
 
 
 @pytest.mark.parametrize("why,lines,said", [
-    ("an extra sentence", NOTICE + [line("Settings return to defaults.", 220)], "letters or digits beyond the phrase"),
+    # "return" is a button's word now (2026-11-15): refused before the phrase is weighed
+    ("an extra sentence", NOTICE + [line("Settings return to defaults.", 220)], "names a button, a choice or an action"),
     ("an extra sentence", NOTICE + [line("Images are sent.", 220)], "a word it does not name"),
     ("an extra sentence", NOTICE + [line("This will clear your saved faces.", 220)], "a word it does not name"),
     ("an extra sentence", NOTICE + [line("Power will be turned off.", 220)], "a word it does not name"),
     ("an extra sentence on the text's own line", [*SENTENCE[:2], line("is independent. Images are sent.", 180),
                                                   OK_LINE], "a word it does not name"),
-    ("a button stacked above the OK", NOTICE + [line("Stop", 300, x=300, w=50)], "a word it does not name"),
+    ("a button stacked above the OK", NOTICE + [line("Stop", 300, x=300, w=50)], "not a single OK"),
     ("a button stacked above the OK", NOTICE + [line("Skip", 300, x=300, w=50)], "a word it does not name"),
-    ("a button stacked above the OK", NOTICE + [line("Later", 300, x=300, w=50)], "a word it does not name"),
+    ("a button stacked above the OK", NOTICE + [line("Later", 300, x=300, w=50)], "not a single OK"),
     ("a stray letter stacked above the OK", NOTICE + [line("x", 300, x=310, w=15)], "a line outside its text"),
     ("a stray mark stacked above the OK", NOTICE + [line("•", 300, x=310, w=15)], "a line outside its text"),
     ("the glyph read as three letters", [*SENTENCE[:2], line("MIR is independent.", 180), OK_LINE],
@@ -371,7 +372,8 @@ def test_the_whole_text_phrase_takes_an_icon_read_as_a_letter_or_two(monkeypatch
 def test_a_notice_the_phrase_does_not_wholly_name_gets_no_enter(monkeypatch, capsys, why, lines, said):
     got, keys = judged(monkeypatch, lines)
     assert keys == [] and "refused" in got and said in got["refused"], (why, got)
-    assert "give its whole text as written" in got["refused"] and "the notice reads" in capsys.readouterr().out
+    if said not in ("names a button, a choice or an action", "not a single OK"):     # weighed against the phrase
+        assert "give its whole text as written" in got["refused"] and "the notice reads" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("why,lines,passes", [
@@ -789,3 +791,45 @@ def test_the_shipped_definitions_menu_gives_the_tabs_the_writer_gave_before():
     before = {"Recognition Target": "Focus", "Reg. Flash Shooting Set": "Exposure/Color",
               "Rating Set(Custom Key)": "Playback", "DISP (Screen Disp) Set": "Setup", "Focus Area Limit": "Focus"}
     assert {r: S.menu_tab(menu, r) for r in before} == before
+
+
+# ---------------------------------------------------------------- the camera session: a notice not passed says how
+
+def test_the_crawl_says_the_info_ok_a_notice_needs_and_logs_it(tmp_path, monkeypatch, capsys):
+    """A crawl that meets a notice it is not told to pass prints the --info-ok that would (the row and the text read)
+    and logs the refusal in the run's events.jsonl ("notice_not_passed"); on a --network crawl the text is printed
+    nowhere and kept only as safety.notice_kept keeps it."""
+    fake_ocr(monkeypatch, NOTICE)
+    cam = NoticeCamera(tmp_path / "a")
+    cam.run = Run("kit2_crawl", root=tmp_path / "a")
+    assert visit(cam).outcome == "notice"
+    out = capsys.readouterr().out
+    assert f'--info-ok "{ROW}=You can set different settings for still image mode' in out, out
+    logged = [json.loads(x) for x in (cam.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["row"] for e in logged if e["kind"] == "notice_not_passed"] == [ROW]
+    cam = NoticeCamera(tmp_path / "b")
+    cam.run, cam.network = Run("kit2_crawl", root=tmp_path / "b"), {"Bluetooth Function": "2026-11-13"}
+    assert visit(cam, network=frozenset({"Bluetooth Function"})).outcome == "notice"
+    out = capsys.readouterr().out
+    assert "events.jsonl" in out and "You can set" not in out, out
+    logged = [json.loads(x) for x in (cam.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert [e["notice"] for e in logged if e["kind"] == "notice_not_passed"] == [""]
+
+
+def test_the_crawl_says_it_for_a_first_time_screen_too(tmp_path, monkeypatch, capsys):
+    """A first-time screen (no known kind, "Don't show this again." and OK: Custom Key/Dial Set.'s) is recorded as an
+    unknown screen and its --info-ok said, its box never touched."""
+    lines = [line("In the next setting screen, you can check", 113), line("the function assigned to a specific button", 161),
+             line("by pressing that button on the device.", 207), line("Don't show this again.", 352, x=175, w=286),
+             line("OK", 414, x=297, w=46)]
+    fake_ocr(monkeypatch, lines)
+
+    class FirstTime(NoticeCamera):
+        def read(self):
+            s = super().read()
+            return SimpleNamespace(**{**vars(s), "kind": "unknown"}) if self.where == "notice" else s
+    cam = FirstTime(tmp_path)
+    cam.run = Run("kit2_crawl", root=tmp_path)
+    assert visit(cam).outcome == "unknown screen" and "enter" not in cam.keys and "down" not in cam.keys
+    assert f'--info-ok "{ROW}=In the next setting screen' in capsys.readouterr().out
+

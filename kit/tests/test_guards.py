@@ -943,6 +943,9 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
     class Cam:
         frame = SimpleNamespace(path=tmp_path / "00001_shooting.png", image=None)
 
+        def __init__(self):
+            self.run = run                  # the run's events.jsonl, where a refused notice is logged
+
         def read(self):
             return SimpleNamespace(kind=kind)
 
@@ -2237,6 +2240,23 @@ def test_drive_info_ok_takes_a_named_notices_ok_and_no_other(tmp_path, monkeypat
                                          more=["--info-ok", "Drive Mode=Something else entirely shown here"],
                                          text=notice, lit="OK")
     assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False
+
+
+def test_drive_says_the_info_ok_a_refused_notice_needs_and_logs_the_refusal(tmp_path, monkeypatch, capsys):
+    """The camera session (2026-11-15): drive.py refused Enter on Different Set for Still/Mv's notice, no --info-ok
+    given, without saying the flag that passes it and without an event. It prints the --info-ok (the last --path label
+    and the text read) and logs press_refused and the notice not passed."""
+    import drive
+    notice = "You can set different settings for still image mode and movie mode in the next screen. OK"
+    monkeypatch.setattr(drive, "info_ok_text", lambda cam: notice[:-3])
+    pressed, events, line = drive_on_shooting(tmp_path, monkeypatch, ["enter:different settings"], kind="notice",
+                                              text=notice, lit="OK")
+    out = capsys.readouterr().out
+    assert not any(p[1] == "enter" for p in pressed) and line["completed"] is False
+    assert '--info-ok "Drive Mode=You can set different settings for still image mode' in out, out
+    assert "the owner's word" not in out and "naming this screen by its whole text" in out
+    assert any(e["kind"] == "press_refused" and e["key"] == "enter" for e in events)
+    assert any(e["kind"] == "notice_not_passed" and e["row"] == "Drive Mode" for e in events)
 
 
 # ---------------------------------------------------------------- White Balance's Cloudy is no cloud row (2026-11-14)
