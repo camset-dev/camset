@@ -6,7 +6,9 @@
     .venv/bin/python kit/provers/mode_switch.py --forget --shows "Stills M"   # a stale record only: renamed, nothing sent
 
 The Still/Movie/S&Q switch and the mode dial are physical, but the a1 II can be told to take both from the menu:
-Mode Dial Control Set = Set with Menu, then Shoot Mode, a two-axis carousel (Up/Down the family: Stills, Movie, S&Q
+Mode Dial Control Set = Set with Menu (Right on the row gives a two-option list, or, as on the a1 II, a table of one
+cell per dial with Set All buttons below, where the Shooting Mode Dial's cell alone is put on Set with Menu and the
+buttons are never pressed), then Shoot Mode, a two-axis carousel (Up/Down the family: Stills, Movie, S&Q
 Motion, Time-lapse; Left/Right the exposure mode within it, the orange title naming it). Choosing a Movie family mode
 puts the whole camera in Movie mode, its own menu up. The memory-recall modes (MR, M1-M4) are never chosen: recalling
 a memory rewrites dozens of settings.
@@ -40,7 +42,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr  # noqa: E402
+from camkit import camset, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
@@ -50,14 +52,16 @@ from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, bar_text, enter_any, info_notice_ok, option_key, to_shooting  # noqa: E402
+from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_table, on_dial_cell,  # noqa: E402
+                            to_dial_cell)
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
                     scan_position, shown_mode, switch_advice, switch_left, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
 
-DIAL_ROW = "Mode Dial Control Set"
-BY_MENU = "Set with Menu"
+BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"
+SHOOTING_DIAL = "Shooting Mode Dial"           # the dial whose cell the table path puts on Set with Menu
 # Mode Dial Control Set sits in Setup > Accessibility on firmware 4.00, under the Screen Reader row. The group is
 # never-open for the Screen Reader's sake (decision 3); this run may step onto the group's page (Right on the group
 # name), where the jump lands on the Screen Reader row and only presses Down past it: the Screen Reader row itself
@@ -92,8 +96,13 @@ def open_menu(cam):
 
 
 def dial_by_menu(cam, cycle, model, say):
-    """Mode Dial Control Set = Set with Menu: Right on the row shows a note about the setting first (its OK leads on,
-    2026-11-01), then the two-option list. The note's OK goes only as the run's --info-ok names it, or where the camera
+    """Mode Dial Control Set = Set with Menu. Right on the row shows a note about the setting first (its OK leads on,
+    2026-11-01), then one of two screens:
+    - a two-option list: Down to Set with Menu, OK (choose_by_menu);
+    - the table of one cell per dial with the Set All buttons below (the a1 II's: kit2_a1fin_movie_m
+      00016_right.png), known as afreg_run knows it (proving.tables.dial_table): shooting_cell_by_menu puts the
+      Shooting Mode Dial's cell alone on Set with Menu and never presses a Set All button.
+    Any other screen stops the switch. The note's OK goes only as the run's --info-ok names it, or where the camera
     refuses MENU on it and OK is its only button (proving.screens.pass_note, since 2026-11-14): MENU on a note the camera
     takes cancels the row, and the switch stops there."""
     from proving.screens import pass_note
@@ -104,24 +113,78 @@ def dial_by_menu(cam, cycle, model, say):
         if cam.read().kind == "list":
             break
         t = text(cam)
+        if dial_table(cam.read().kind, t):
+            break
         if not re.search(r"mode dial", t, re.I):
             raise Failed(f"Right on {DIAL_ROW!r} opened {cam.read().kind} ({cam.frame.path.name}): {t[:80]!r}")
         got = pass_note(cam, DIAL_ROW, lit)     # the note's OK
         if "refused" in got:
             raise Failed(f"Right on {DIAL_ROW!r} showed a note not passed: {got['refused']}")
+    if cam.read().kind != "list" and dial_table(cam.read().kind, text(cam)):
+        shooting_cell_by_menu(cam, say)
+        return
     if cam.read().kind != "list":
         raise Failed(f"{DIAL_ROW!r}: no list came ({cam.read().kind}, {cam.frame.path.name})")
+    choose_by_menu(cam, DIAL_ROW, say)
+    if cam.read().kind == "notice":
+        say(f"   notice after OK: {text(cam)[:80]!r}")
+        cam.press("menu")
+
+
+def choose_by_menu(cam, where: str, say):
+    """The open two-option list put on Set with Menu: Down until the lit bar reads it (three presses at most), OK."""
     for _ in range(3):
         if option_key(bar_text(cam)) == option_key(BY_MENU):
             break
         cam.press("down")
     else:
-        raise Failed(f"{DIAL_ROW!r}: {BY_MENU!r} is not in its list ({bar_text(cam)!r})")
-    say(f"{DIAL_ROW}: choosing {BY_MENU!r}")
+        raise Failed(f"{where!r}: {BY_MENU!r} is not in its list ({bar_text(cam)!r})")
+    say(f"{where}: choosing {BY_MENU!r}")
     cam.press("enter")
-    if cam.read().kind == "notice":
-        say(f"   notice after OK: {text(cam)[:80]!r}")
-        cam.press("menu")
+
+
+def shooting_cell_by_menu(cam, say):
+    """Mode Dial Control Set's table (dial_by_menu): the Shooting Mode Dial's cell on Set with Menu, the other dials'
+    cells and the Set All buttons untouched. The lit cell is brought to that dial's cell as the table walk found it and
+    checked to be a cell whose dial, named at the right, is the Shooting Mode Dial (proving.tables.to_dial_cell, as
+    afreg_run checks its dials), else the switch stops with nothing pressed but the close's MENU; that check is what keeps
+    Enter off the Set All buttons (the playbook's rule 8). A cell already on Set with Menu gets no press: MENU back to the
+    menu page. A cell on Set with Dial gets Enter, which must open the two-option list, chosen as the list path chooses
+    (choose_by_menu); the table must then be back, its lit cell still that dial's and on Set with Menu, and MENU goes
+    back to the menu page. A cell read as neither stops the switch, its reading (the camera's own setting) kept in the
+    run's events.jsonl, never in the message; so does a menu page that MENU does not bring back."""
+    where = f"{DIAL_ROW} / {SHOOTING_DIAL}"
+    to_dial_cell(cam, dial_cell(SHOOTING_DIAL), SHOOTING_DIAL)
+    shown = option_key(dial_option(cell_value(cam)))
+    if shown == option_key(BY_MENU):
+        say(f"{where}: already {BY_MENU!r}, nothing chosen")
+        back_to_menu(cam, where)
+        return
+    if shown != option_key(BY_DIAL):
+        cam.run.log("dial_cell_unread", step=where, frame=cam.frame.path.name, cell=cell_value(cam))
+        raise Failed(f"{where}: its cell reads neither {BY_DIAL!r} nor {BY_MENU!r} ({cam.frame.path.name}; what it "
+                     "read is in the run's events.jsonl)")
+    if safety.confirmation(text(cam)):
+        raise Failed(f"{DIAL_ROW}: the table reads like a confirmation ({cam.frame.path.name})")
+    cam.press("enter")
+    if cam.read().kind != "list":
+        raise Failed(f"{where}: Enter opened {cam.read().kind}, not its list ({cam.frame.path.name})")
+    choose_by_menu(cam, where, say)
+    if not dial_table(cam.read().kind, text(cam)):
+        raise Failed(f"{where}: after OK the screen is {cam.read().kind}, not the table ({cam.frame.path.name})")
+    on_dial_cell(cam, SHOOTING_DIAL)
+    if option_key(dial_option(cell_value(cam))) != option_key(BY_MENU):
+        raise Failed(f"{where}: after OK its cell does not read {BY_MENU!r} ({cam.frame.path.name})")
+    back_to_menu(cam, where)
+
+
+def back_to_menu(cam, where: str):
+    """MENU on Mode Dial Control Set's table, which must bring the menu page back (kit2_diffset_movie_switch_m
+    00026_menu.png)."""
+    cam.press("menu")
+    if cam.read().kind != "menu":
+        raise Failed(f"{where}: MENU on the table did not bring the menu page back ({cam.read().kind}, "
+                     f"{cam.frame.path.name})")
 
 
 def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:

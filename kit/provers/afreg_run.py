@@ -408,18 +408,9 @@ def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None
 
 def dial_cell(name: str = FOCUS_DIAL) -> list:
     """The `name` cell (Focus Mode Dial, Drive Mode Dial) of Mode Dial Control Set's table, as the table walk found it
-    (kit2_tables)."""
-    from prove_run import Failed
-    from proving.base import TABLES
-    try:
-        cells = read_json(TABLES)[DIAL_ROW]["cells"]
-    except (OSError, ValueError, KeyError) as e:
-        raise Failed(f"{DIAL_ROW} is not in the table walk ({TABLES}): kit/table_walk.py --rows '{DIAL_ROW}' first "
-                     f"({type(e).__name__})") from None
-    hit = [c["pos"] for c in cells if match.key(c.get("row_label")) == match.key(name)]
-    if len(hit) != 1:
-        raise Failed(f"{DIAL_ROW}: the table walk has no one {name!r} cell")
-    return hit[0]
+    (kit2_tables; proving.tables.dial_cell, which mode_switch shares)."""
+    from proving import tables
+    return tables.dial_cell(name)
 
 
 def focus_dial_by_menu(cam, cycle, model, dial: str = FOCUS_DIAL):
@@ -427,21 +418,21 @@ def focus_dial_by_menu(cam, cycle, model, dial: str = FOCUS_DIAL):
     focus mode and drive mode are dials). Right on the row (a note about the setting first, its OK leading on, as
     mode_switch.dial_by_menu takes it, and a first-time note without its tick box: proving.screens.pass_note, only as the
     run's --info-ok names the note, or where the camera refuses MENU on it and OK is its only button), the table, the
-    Focus Mode Dial cell (proving.tables.to_cell, its name read under the picture), Enter, Set with Menu, OK: the table
-    takes it at once (table_walk: commit "menu"). The Set All buttons are never pressed."""
-    from camkit import ocr
+    Focus Mode Dial cell (proving.tables.to_dial_cell, its name read under the picture), Enter, Set with Menu, OK: the
+    table takes it at once (table_walk: commit "menu"). The Set All buttons are never pressed. The table's recognition
+    and the cell's check are proving.tables', which mode_switch.dial_by_menu shares."""
     from camkit.live import lit_text
     from mode_switch import find, text
     from prove_run import Failed
     from proving.screens import bar_text, option_key, pass_note
-    from proving.tables import to_cell
+    from proving.tables import dial_table, to_dial_cell
     cell = dial_cell(dial)
     find(cam, cycle, model, DIAL_ROW)
     lit = lit_text(cam.frame.image, cam.frame.path)     # the lit bar before Right: --info-ok's judgement reads it
     cam.press("right")
     for _ in range(3):
         t = text(cam)
-        if cam.read().kind == "table" and re.search(r"set\s*all\s*with", t, re.I):
+        if dial_table(cam.read().kind, t):
             break
         if cam.read().kind == "list" or not re.search(r"mode dial|show this again", t, re.I) or safety.confirmation(t):
             name = kept_notice(cam, f"Right on {DIAL_ROW}", t, "dial_screen")
@@ -454,10 +445,7 @@ def focus_dial_by_menu(cam, cycle, model, dial: str = FOCUS_DIAL):
             raise Failed(f"Right on {DIAL_ROW!r} showed a note not passed: {got['refused']} ({name})")
     else:
         raise Failed(f"{DIAL_ROW}: its table did not come ({cam.read().kind}, {cam.frame.path.name})")
-    to_cell(cam, cell)
-    name = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (380, 320, 640, 370))
-    if cam.read().focus != "cell" or match.key(dial) not in match.key(name):
-        raise Failed(f"{DIAL_ROW}: the lit cell is not the {dial} ({name!r}, {cam.frame.path.name})")
+    to_dial_cell(cam, cell, dial)
     if safety.confirmation(text(cam)):
         raise Failed(f"{DIAL_ROW}: the table reads like a confirmation ({cam.frame.path.name})")
     cam.press("enter")

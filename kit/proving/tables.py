@@ -278,6 +278,52 @@ def to_cell(cam, cell, limit: int = 12, kind: str = "table", columns=None):
     raise Failed(f"the cell at {cell} not reached in {limit} presses")
 
 
+# Mode Dial Control Set's table, as kit/provers/afreg_run.py (a dial's cell for its setup) and mode_switch.py (the
+# Shooting Mode Dial's) open it: on the a1 II one cell per dial (1 the Shooting Mode Dial, 2 the Drive Mode Dial, 3 the
+# Focus Mode Dial), each opening a two-option list, and the Set All buttons below, never pressed (the playbook's rule 8)
+DIAL_ROW = "Mode Dial Control Set"
+DIAL_NAME_BOX = (380, 320, 640, 370)        # the lit cell's dial, named under the picture at the right
+
+
+def dial_table(kind: str, text: str) -> bool:
+    """The screen is Mode Dial Control Set's table: read as a table, with its Set All buttons' words in its text."""
+    return kind == "table" and bool(re.search(r"set\s*all\s*with", text, re.I))
+
+
+def dial_cell(name: str) -> list:
+    """The `name` cell (Shooting Mode Dial, Drive Mode Dial, Focus Mode Dial) of Mode Dial Control Set's table, as the
+    table walk found it (kit2_tables)."""
+    try:
+        cells = read_json(base.TABLES)[DIAL_ROW]["cells"]
+    except (OSError, ValueError, KeyError) as e:
+        raise Failed(f"{DIAL_ROW} is not in the table walk ({base.TABLES}): kit/table_walk.py --rows '{DIAL_ROW}' first "
+                     f"({type(e).__name__})") from None
+    hit = [c["pos"] for c in cells if match.key(c.get("row_label")) == match.key(name)]
+    if len(hit) != 1:
+        raise Failed(f"{DIAL_ROW}: the table walk has no one {name!r} cell")
+    return hit[0]
+
+
+def on_dial_cell(cam, dial: str):
+    """Failed unless the table's lit item is a cell (never a Set All button) whose dial, named at the right
+    (DIAL_NAME_BOX), is `dial`."""
+    name = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], DIAL_NAME_BOX)
+    if cam.read().focus != "cell" or match.key(dial) not in match.key(name):
+        raise Failed(f"{DIAL_ROW}: the lit cell is not the {dial} ({name!r}, {cam.frame.path.name})")
+
+
+def to_dial_cell(cam, cell, dial: str):
+    """Arrows to the table walk's `cell` (to_cell), then the lit cell checked to be `dial`'s (on_dial_cell)."""
+    to_cell(cam, cell)
+    on_dial_cell(cam, dial)
+
+
+def dial_option(value: str) -> str:
+    """The option a dial's cell shows, without the dial's number before it as OCR reads it ("1 Set with Menu",
+    "① Set with Menu", "(1) Set with Menu": "Set with Menu")."""
+    return re.sub(r"^[\s(\[]*(?:[1-9Il|](?=[\s)\].])|[①-⑨])[\s)\].]*", "", str(value or "").strip()).strip()
+
+
 TILE_STALL_S = 7.0
 
 

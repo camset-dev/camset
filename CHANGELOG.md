@@ -165,6 +165,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   (decision 22) would treat each reading, and compares the reader's questions (`--questions`; `--claude-cli` asks
   Claude through Claude Code on your own plan, and no hosted reader is sent a frame that may name the network, an
   address or a credential). No run reads, decides or presses differently yet.
+- `kit/provers/mode_switch.py` now takes the table the a1 II's Mode Dial Control Set opens, where it stopped before,
+  and puts the Shooting Mode Dial's cell alone on Set with Menu once it has checked that the lit item is that cell.
+  Anything it cannot check stops the switch with MENU alone, and the Set All buttons are never pressed.
 
 ### The docs
 
