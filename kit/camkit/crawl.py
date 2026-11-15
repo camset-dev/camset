@@ -13,9 +13,14 @@ Right); without one they are recorded and left.
 
 A Wi-Fi or Bluetooth setting, or an identity or connection row, a dated owner decision names is walked too when the
 crawl is given those rows (network: kit/crawl_run.py --network, docs/decisions/0008), on network_open's terms: never an
-address screen, never a row whose stored reason or any reading says another class. Such a row is looked at only: Down round its list or
-carousel (LOOK_WALKED), never a second axis, a panel or a submenu, with --panels too; the camera's own check
-(camkit.live.LiveCamera) refuses anything else there besides.
+address screen, never a row whose stored reason or any reading says another class. On a look lap (look: every
+kit/crawl_run.py --network run, docs/decisions/0024) every other never-open row is walked so too, no decision naming it,
+but what safety.look_lap_refused refuses in its label or any reading kept beside it, never-open or not: OWNER_NEVER's
+rows and the Screen Reader, a row whose opening acts, and a format, delete or reset this body's records have not shown
+opened (seen), skipped with nothing pressed. Such a row is looked at
+only: Down round its list or carousel (LOOK_WALKED), never a second axis, a panel or a submenu, with --panels too, and
+not even that where the camera holds MENU alone (a blanked row, an address screen, a screen naming identity); the
+camera's own check (camkit.live.LiveCamera) refuses anything else there besides.
 
 A row whose Right opens an information notice is recorded as "notice", nothing pressed on it but MENU; only where the run
 names the row and the notice's words (info_ok: kit/crawl_run.py --info-ok, runner.info_ok_or_exit) is its OK taken,
@@ -108,13 +113,13 @@ LAP_TABS = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")      # th
 
 
 def lap_rows(cycle: list, model: dict, tabs=LAP_TABS, network=frozenset(), start=None, limit=None,
-             opens=None) -> list | None:
+             opens=None, look: bool = False, seen=None) -> list | None:
     """The names of the top-level rows a lap of crawl() reaches, in its order, each once: a menu page of `tabs`' rows
     that visit_row does not skip as never-open, a row a network decision opens by its decided name (closed_row). From
     the cycle's position `start` round to the one before it (None: the whole cycle, wherever it starts) as far as the
     row that brings the rows opened to `limit` (crawl()'s max_rows; None: no limit), a row counting toward it where
     `opens(name)` (None: every row; a row a first open's rule skips counts toward none). None where the rows reached
-    depend on where the menu opens: a limit with no start."""
+    depend on where the menu opens: a limit with no start. look, seen: a look lap's (closed_row)."""
     if limit is not None and start is None:
         return None
     out, opened = [], 0
@@ -127,35 +132,70 @@ def lap_rows(cycle: list, model: dict, tabs=LAP_TABS, network=frozenset(), start
         rows = page.get("rows") or []
         row = rows[pos["row"]] if pos.get("row") is not None and pos["row"] < len(rows) else None
         label = (row or {}).get("label") or ""
-        why, decided = closed_row(page, row or {}, network)
+        why, decided = closed_row(page, row or {}, network, look, seen)
         if label and not (why and decided is None):
             out.append(decided or label)
             opened += opens is None or bool(opens(decided or label))
     return list(dict.fromkeys(out))
 
 
-def closed_row(page: dict, row: dict, network=frozenset()) -> tuple:
+def closed_row(page: dict, row: dict, network=frozenset(), look: bool = False, seen=None, path=()) -> tuple:
     """(why, decided) of a page model row: why it is never-open (its stored reason, else safety.never_open of its
     label; empty when it is not) and, for such a row, the decided row a network decision opens it as (network_row),
-    else None. visit_row leaves the row unopened where there is a why and no decided row."""
+    else, on a look lap (`look`), the row's own label, else None. On a look lap a row look_open refuses, never-open or
+    not, gives (the look lap's refusal, None). visit_row leaves the row unopened where there is a why and no decided
+    row. seen(path): whether this body's records show the row at `path` (labels from the top-level row: `path` and the
+    row's label, or a reading of it: look_open) opened (camkit.first_open.Seen.seen); None: nothing seen."""
+    if look:
+        refused = look_open(row, seen, path)
+        if refused:
+            return refused, None
     why = row.get("never_open") or safety.never_open(row.get("label") or "")
+    if not why:
+        return why, None
+    decided = network_row(row, network, _group(page))
+    if decided is None and look:
+        return why, row.get("label") or None
+    return why, decided
+
+
+def _group(page: dict) -> str:
+    """The group of a page model's page: its breadcrumb's second part ("Network > Wired LAN" is Wired LAN), or ""."""
     crumb = str(page.get("breadcrumb") or "").split(" > ")
-    return why, (network_row(row, network, crumb[1] if len(crumb) > 1 else "") if why else None)
+    return crumb[1] if len(crumb) > 1 else ""
 
 
-def left_unopened(page: dict, row: dict, network=frozenset(), first=None) -> bool:
+def look_open(row: dict, seen=None, path=()) -> str | None:
+    """Why a look lap (docs/decisions/0024) leaves the row `row` unopened, or None: safety.look_lap_refused on its label
+    or on any reading kept beside it (row_readings), a refusal in any of them winning, never-open or not, each judged
+    by seen(path + its own text): whether this body's records show that row opened (None: not seen)."""
+    label = row.get("label") or ""
+    for t in dict.fromkeys((label, *row_readings(row))):
+        why = safety.look_lap_refused(t, bool(seen and t and seen((*path, t))))
+        if why:
+            return why
+    return None
+
+
+def left_unopened(page: dict, row: dict, network=frozenset(), first=None, look: bool = False) -> bool:
     """Whether visit_row leaves the top-level row unopened, nothing pressed, by a rule known before its Right: never-open
     with no network decision opening it (closed_row), or not seen opened on this body where a first open's rule skips
     it (camkit.first_open.FirstOpens.skips). A refusal at the press itself (safety.RowRefused) is known only then."""
-    why, decided = closed_row(page, row, network)
+    why, decided = closed_row(page, row, network, look, seen_of(first))
     if why and decided is None:
         return True
     skips = getattr(first, "skips", None)
     return bool(skips and skips(((decided or row.get("label") or ""),)))
 
 
+def seen_of(first):
+    """The seen(path) a first open's record gives (camkit.first_open.FirstOpens' seen.seen), or None."""
+    return getattr(getattr(first, "seen", None), "seen", None)
+
+
 def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_rows: int | None = None, on_row=None,
-          labels=None, panels=False, network=frozenset(), notices=None, info_ok=None, skip=None, first=None) -> Crawl:
+          labels=None, panels=False, network=frozenset(), notices=None, info_ok=None, skip=None, first=None,
+          look: bool = False) -> Crawl:
     """cycle: the page scan's positions in Down order, each {"page": key, "row": slot, "signature",
     "kind"}; model: page key -> {"breadcrumb", "page", "rows": [{"label", "never_open", ...}]}.
     max_rows: stop after opening that many rows (skipped rows do not count). on_row(result) is
@@ -166,7 +206,9 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
     run names to pass (visit_row); None passes none. skip(page, row, opened=): why the coverage ledger says the row is
     settled (camkit.coverage.CrawlGate.skip, only on a kit/crawl_run.py --skip-settled run), or None: such a row is not
     opened, "skipped: <why>"; `opened` False where the lap leaves the row unopened all the same (left_unopened), so the
-    ledger's line never says it is opened. first: a row's first open on the body (camkit.first_open.FirstOpens):
+    ledger's line never says it is opened. look: a look lap (kit/crawl_run.py --network, docs/decisions/0024): a
+    never-open row no decision names opens to look at where safety.look_lap_refused lets it (closed_row). first: a row's
+    first open on the body (camkit.first_open.FirstOpens):
     opening(path) before each Right (visit_row), and after a top-level row whose visit left a first open pending, where
     due(), settle(cam), which
     checks it and reopens the menu; the lap stops where the menu is then not back on the row."""
@@ -193,7 +235,7 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
         page = model.get(pos["page"])
         if pos["kind"] != "tiles" and page is not None and page["breadcrumb"].startswith(tabs):
             row = page["rows"][pos["row"]] if pos["row"] is not None and pos["row"] < len(page["rows"]) else None
-            settled = (skip(page, row, opened=not left_unopened(page, row, network, first))
+            settled = (skip(page, row, opened=not left_unopened(page, row, network, first, look))
                        if skip is not None and row is not None else None)
             if settled:
                 out.rows.append(RowResult(page.get("page", ""), pos["row"], row.get("label") or "",
@@ -202,7 +244,7 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
                     on_row(out.rows[-1])
             elif row is not None:
                 out.rows.append(visit_row(cam, s, page, pos["row"], row, labels, panels=panels, network=network,
-                                          notices=notices, info_ok=info_ok, first=first))
+                                          notices=notices, info_ok=info_ok, first=first, look=look))
                 opened += not out.rows[-1].outcome.startswith("skipped")
                 if on_row:
                     on_row(out.rows[-1])
@@ -256,7 +298,8 @@ def network_row(row: dict, network, group: str = "") -> str | None:
 
 
 def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=None, panels=False,
-              index: int = 0, network=frozenset(), notices=None, info_ok=None, first=None) -> RowResult:
+              index: int = 0, network=frozenset(), notices=None, info_ok=None, first=None,
+              look: bool = False) -> RowResult:
     """Open one row (Right), walk what opens, come back to the row. `parent` is how to get back
     here if MENU throws us out (camkit.crawl.Place), and `index` the row's place in its submenu (Downs from its
     first row), which that way back counts; `labels(cam)` -> (page key, [labels]) reads a
@@ -271,24 +314,36 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     `frame`, None without one): None where the run names no notice for the row, {"refused": why} where it pressed
     nothing, {"row", "frame"} where it took the notice's OK (kit/crawl_run.py's info_ok_pass); the screen behind it is
     walked only when it is one WALKERS knows, else left with MENU. first: crawl()'s; a row it refuses to open the first
-    time on this body is skipped, "skipped: <why>", nothing pressed."""
+    time on this body is skipped, "skipped: <why>", nothing pressed. look: a look lap's (closed_row): a never-open row
+    no decision names opens as one a decision opened with no option named, its class safety.look_class's."""
     label = row.get("label") or ""
     r = RowResult(page.get("page", ""), slot, label, "")
-    why, decided = closed_row(page, row, network)
+    why, decided = closed_row(page, row, network, look, seen_of(first), path)
     if why and decided is None:
         r.outcome = f"skipped: {why}"
         return r
-    looked_at = bool(why)           # a row a network decision opens: its options are read, nothing is committed
+    looked_at = bool(why)           # a row a network decision or a look lap opens: its options are read, nothing committed
+    by_look = looked_at and network_row(row, network, _group(page)) is None
     if looked_at:
-        r.network, r.decided = safety.lift_class(label) or "", decided
+        # a row a look lap opened: its class (safety.look_class), and no decided name, since its label as the page
+        # model read it can carry a value (kit/crawl_run.py keeps a label only where it is one the kit knows)
+        r.network = safety.look_class(label) if by_look else safety.lift_class(label) or ""
+        r.decided = "" if by_look else decided
     refused = first.opening((*path, decided or label)) if first is not None else None
     if refused:
         r.outcome = f"skipped: {refused}"
         return r
     p0 = cam.presses
     before = getattr(cam, "frame", None) if info_ok is not None and not looked_at else None
+    # on a look lap the camera is told which row this Right opens: the one name Seen and the pending first opens were
+    # asked about, and whether its whole path is seen opened or under its first open (camkit.live.bar_is_row,
+    # docs/decisions/0024)
+    where = (*path, decided or label)
+    told = {"row": {"expected": (where[-1],),
+                    "seen": bool(seen_of(first) and seen_of(first)(where)),
+                    "first": first is not None and tuple(where) in getattr(first, "pending", ())}} if look else {}
     try:
-        cam.press("right")
+        cam.press("right", **told)
     except safety.RowRefused as e:
         # refused before it went out because of the lit row itself (the camera's own check): nothing was pressed on this
         # row, so it is skipped and the lap goes on, the reason's quoted texts withheld (a bar can carry a value); never
@@ -318,7 +373,7 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     elif same_state(s, row_screen):
         r.outcome = "no response to Right"
     elif looked_at:
-        if s.kind in LOOK_WALKED:
+        if s.kind in LOOK_WALKED and not menu_alone(cam):
             # Down round its options only: no second axis, no panel, no submenu, whatever --panels says
             try:
                 r.walk = walk_cycle(cam, budget=120)
@@ -338,11 +393,11 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     elif s.kind == "notice":
         # the frame is the evidence (blocker and its value); the --info-ok that would pass it is said (notice_hint)
         r.outcome = "notice" + (f" (named, not passed: {not_passed})" if not_passed else "")
-        notice_hint(cam, " > ".join((*path, label)), network)
+        notice_hint(cam, "(withheld)" if look else " > ".join((*path, label)), network or look)
     elif s.kind in WALKERS:
         try:
             if s.kind == "dialog" and labels is not None:
-                r.walk = walk_dialog_deep(cam, labels, path + (label,), panels=panels, network=network)
+                r.walk = walk_dialog_deep(cam, labels, path + (label,), panels=panels, network=network, look=look)
             else:
                 r.walk = WALKERS[s.kind](cam)
             r.outcome = "walked" if getattr(r.walk, "complete", False) else f"incomplete: {r.walk.note}"
@@ -353,7 +408,7 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     elif s.kind == "submenu" and labels is not None and len(path) < MAX_DEPTH:
         here = Place(row_screen, parent, index)
         sub = crawl_submenu(cam, labels, path + (label,), here, network=network, notices=notices, info_ok=info_ok,
-                            first=first)
+                            first=first, look=look)
         r.walk, r.outcome = sub, ("submenu crawled" if not sub.stopped else f"submenu: {sub.stopped}")
         if sub.stopped.startswith("lost"):
             r.outcome = "lost"
@@ -371,11 +426,19 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
     else:
         r.outcome = "unknown screen"
         if first_time(cam, s.kind):
-            notice_hint(cam, " > ".join((*path, label)), network)   # a first-time screen, "Don't show this again."
+            notice_hint(cam, "(withheld)" if look else " > ".join((*path, label)), network or look)   # a first-time screen
     if r.outcome != "no response to Right" and not back_to(cam, Place(row_screen, parent, index)):
         r.outcome = "lost"
     r.presses = cam.presses - p0
     return r
+
+
+def menu_alone(cam) -> bool:
+    """Whether the camera holds MENU alone on the screen a row opened (camkit.live.LiveCamera's address_open or
+    identity_open: an address screen, a blanked row, a screen naming identity or credentials): the walk then presses
+    nothing there, so the row is left with MENU rather than the lap cancelled by a refused Down. A camera without them
+    (the menu twin) holds none."""
+    return bool(getattr(cam, "address_open", None) or getattr(cam, "identity_open", None))
 
 
 def first_time(cam, kind) -> bool:
@@ -426,7 +489,12 @@ def back_to(cam, place: "Place", tries: int = 4) -> bool:
     for _ in range(tries):
         s = cam.read()
         if same_state(s, place.screen):
-            return True
+            if getattr(cam, "network_open", None) is None:
+                return True
+            # the camera still holds the row's look lock on its page (a blanked row's frames are never read, so only the
+            # shooting screen ends it: camkit.live.LiveCamera.network_left): MENU closes the menu, and MENU opens it again
+            cam.press("menu")
+            continue
         if s.kind == "shooting":
             cam.press("menu")
             continue
@@ -463,7 +531,7 @@ class SubCrawl:
 
 
 def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset(), notices=None,
-                  info_ok=None, first=None) -> SubCrawl:
+                  info_ok=None, first=None, look: bool = False) -> SubCrawl:
     """Every row of the submenu just opened: Down until its first screen comes back (submenus wrap
     like lists). At each row its label is read live first (labels(cam) -> (page key, [rows]),
     each row a label or {"label", "never_open"}, cached per page) and checked against the
@@ -487,7 +555,7 @@ def crawl_submenu(cam, labels, path: tuple, parent: "Place", network=frozenset()
             res = RowResult(page["page"], slot, "", "skipped: no label read")
         else:
             res = visit_row(cam, s, page, slot, entry, labels, path, parent, index=index, network=network,
-                            notices=notices, info_ok=info_ok, first=first)
+                            notices=notices, info_ok=info_ok, first=first, look=look)
         out.rows.append(res)
         if res.outcome == "lost":
             out.stopped = f"lost at {entry.get('label')!r}"
@@ -516,7 +584,7 @@ class DeepWalk:
         return self.main.options if self.main else []
 
 
-def walk_dialog_deep(cam, labels, path, panels: bool = False, network=frozenset()) -> DeepWalk:
+def walk_dialog_deep(cam, labels, path, panels: bool = False, network=frozenset(), look: bool = False) -> DeepWalk:
     """Carousels whose options lead further (Drive Mode, Focus Area, White Balance...). First the
     options, by walk_cycle. Then once more round: at each option that SHOWS a second axis (side or
     strip ‹ ›), Right to its end and Left to the other end, by those marks.
@@ -542,7 +610,7 @@ def walk_dialog_deep(cam, labels, path, panels: bool = False, network=frozenset(
         if panels and not side:
             # panels mode (a run that restores the start file afterwards): Right may open a panel,
             # which COMMITS this option; Picture Profile's ›, White Balance's ›, Creative Look's looks
-            info = open_panel(cam, here, labels, path + (f"option {k}",), walked, network=network)
+            info = open_panel(cam, here, labels, path + (f"option {k}",), walked, network=network, look=look)
             if info is not None:
                 d.details[k] = info
             if cam.read().kind != here.kind:
@@ -571,7 +639,7 @@ def walk_dialog_deep(cam, labels, path, panels: bool = False, network=frozenset(
     return d
 
 
-def open_panel(cam, here, labels, path, walked: set, network=frozenset()):
+def open_panel(cam, here, labels, path, walked: set, network=frozenset(), look: bool = False):
     """Right from a carousel option; if a panel opens, walk it by its type (fully the first time a
     type is met in this dialog, else record its first screen) and come back (Left from a submenu,
     MENU otherwise). None when Right changed nothing; {"axis": ...} when it moved a second axis."""
@@ -586,7 +654,7 @@ def open_panel(cam, here, labels, path, walked: set, network=frozenset()):
         info = {"panel": kind, "walked": "same type as before: first screen recorded",
                 "frame": getattr(s, "frame_path", None)}
     elif kind == "submenu":
-        info = {"panel": kind, "walk": crawl_submenu(cam, labels, path, Place(here), network=network)}
+        info = {"panel": kind, "walk": crawl_submenu(cam, labels, path, Place(here), network=network, look=look)}
     elif kind in WALKERS and kind != "dialog":
         info = {"panel": kind, "walk": WALKERS[kind](cam)}
     else:

@@ -1722,8 +1722,8 @@ def test_the_crawl_and_prove_run_read_no_owner_decision(scope_file, tmp_path):
     import crawl_run
     import prove_run
     scope_file({"rows": [FORMAT, "Pairing", CREATE], "confirm": [FORMAT]})
-    with pytest.raises(SystemExit, match="no dated owner decision"):
-        crawl_run.network_settings_or_exit(Run("net", root=tmp_path))
+    # a look lap needs no decision (docs/decisions/0024), and an owner decision opens nothing for it
+    assert crawl_run.network_settings_or_exit(Run("net", root=tmp_path)) == {}
     with pytest.raises(SystemExit, match="no dated owner decision"):
         prove_run.network_rows_or_exit(["Format"])
 

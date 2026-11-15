@@ -1,9 +1,9 @@
 # 9. Credentials are never read or stored
 
-- **Date:** 2026-10 (first kit); changed 2026-11-05, 2026-11-13 and 2026-11-14
+- **Date:** 2026-10 (first kit); changed 2026-11-05, 2026-11-13, 2026-11-14 and 2026-11-15
 - **Status:** accepted
 - **Rule:** The login lives only in a file the owner writes; the kit never types a password, and opens a credentials
-  screen only where a dated owner decision names it.
+  screen only on a look lap or by a dated owner decision.
 
 ## Context
 
@@ -20,9 +20,11 @@ set, as both the camera link and the editor look it up), written by the owner by
 never types a password or any text: on a keyboard or an entry screen only MENU goes out. Its Python never reads that
 file.
 
-By default the kit never reads, OCRs, screenshots or stores a password, and never opens Access Authen. Info or another
-credentials screen (Access Authen. Settings, Wi-Fi Direct Info. and Settings); every camera keeps that unless its owner
-writes a dated owner decision in its reviewed scope. A dated
+By default the kit never reads, OCRs, screenshots or stores a password, and opens Access Authen. Info or another
+credentials screen (Access Authen. Settings, Wi-Fi Direct Info. and Settings) only on a look lap (decision 24), which
+presses MENU alone there and has the eyes write every frame of it black from the press that opened it, whatever a
+decision says of values, no reader asked; every camera keeps that unless its owner writes a dated owner decision in its
+reviewed scope. A dated
 owner decision in the reviewed scope that names the screen (`"lifts": "owner"`, decision 8) opens it for `kit/drive.py
 --owner` alone, as the last label of its `--path`, to look: inside it only MENU goes out on any screen that is not an
 option list, and an option list takes Enter only on an option the decision names that is one of the row's own listed
@@ -73,7 +75,8 @@ trusts: the fingerprint (SSH host key) each camera showed at its first successfu
 and its address. A login goes only to a camera whose fingerprint matches; the editor's Forget removes the trust with
 the login. The maintainer, the a1 II's owner, decided the owner decision's part for their own camera on 2026-11-13.
 
-Before 2026-11-14 such a run folder took the person's umask (folders 0755 and files 0644 as a rule, readable by other
+Before 2026-11-15 no run opened a credentials screen but one a dated owner decision named. Before 2026-11-14 such a
+run folder took the person's umask (folders 0755 and files 0644 as a rule, readable by other
 users of the computer), left `_live.png` at its top, and the console showed a logged screen's field names without the
 count of lines not shown, and none of a credentials screen's own field names (Password, Fingerprint, Access Authen.).
 Before 2026-11-13 no decision opened a credentials screen, and the kit never read one; before 2026-11-05 the record

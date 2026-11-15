@@ -69,11 +69,17 @@ Enter there still meets the Initialize and confirmation checks. camkit.link refu
 named for the press. A key named for the shooting screen changes what no settings file holds (a focus frame's place,
 the live exposure): the run's restore does not put it back, so the operator names, and presses, the keys that do (a
 frame moved with ms_left is put back with ms_right, both named).
---network opens the Wi-Fi and Bluetooth rows, address screens and identity rows a dated owner decision in the reviewed
-scope names ({"lifts": "network", "date", "rows", "why"}: runner.network_decided_or_exit, docs/decisions/0008); without
-it, or for a row no decision names, they stay closed, and no --allow opens one. A --path label such a decision names
-needs no --allow. A decision naming credentials, an identity row that stays closed, an action or the serial number
-stops the run before anything connects. A --network run asks local readers only (camkit.vlm.LOCAL_ONLY) and marks its
+--network makes the run a look lap (docs/decisions/0024): a never-open row opens to look at, no decision naming it,
+but what safety.look_lap_refused refuses: OWNER_NEVER's rows and the Screen Reader, a row whose opening acts (the
+owner's own run, each time) and a format, delete or reset this body's records have not shown opened (the owner's own run
+first): a --path naming one stops the run before anything connects; a --path label it opens needs no --allow. Such a
+row is looked at as a row a decision opened with no option named, the frames of what the owner route blanks saved black
+from its opening (safety.look_blank), and the
+camera's own check judges the same. --network also opens the Wi-Fi and Bluetooth rows, address screens and identity
+rows a dated owner decision in the reviewed scope names ({"lifts": "network", "date", "rows", "why"}:
+runner.network_decided_or_exit, docs/decisions/0008), with the options it names; without --network they stay closed,
+and no --allow opens one. A decision naming credentials, an identity row that stays closed, an action or the serial
+number stops the run before anything connects. A --network run asks local readers only (camkit.vlm.LOCAL_ONLY) and marks its
 folder so (runner.log_network_decided) for the tools that read its frames later. Once a press has opened such a row it
 is looked at only (inside_refused, safety.look_refused) until the screen read right after a MENU, or an Enter on a
 named option, is the shooting screen or the page it was opened from with its lit bar on the row itself (network_left;
@@ -170,15 +176,15 @@ from camkit import ocr, safety, screen, session  # noqa: E402
 from camkit import coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
-from camkit.live import (LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_text, lone_of,  # noqa: E402
-                         open_refused, osd_kind, press, submenu_labels, text_of)
+from camkit.live import (WITHHELD_ROW, LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_text,  # noqa: E402
+                         lone_of, look_row, open_refused, osd_kind, press, submenu_labels, text_of)
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
-from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED,  # noqa: E402
+from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
                     add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument,
                     cards_statement_refused, changes_kept, close_for_restore, confirm_phrase_or_exit, defined_values,
                     definition, hold_for_owner, info_ok_or_exit, row_labels,
@@ -343,7 +349,7 @@ armed_wiping = safety.armed_wiping
 def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                   vouched: bool = False, on_shooting=(), network=frozenset(), screens: bool = False,
                   values=None, readings=None, owner=None, armed_row: str = "", labels=None, body=None,
-                  consent: str = "", notice_way: str = "", lone=None) -> str:
+                  consent: str = "", notice_way: str = "", lone=None, look: bool = False, row=None) -> str:
     """Why drive.py may not send this press, or "" when it may. Fails closed: a lit text that cannot be read is
     no permission (decisions 5 and 9). lit: the text in the orange cursor (highlighted); text: the whole screen's.
     `confirm`, the owner route's (--owner --confirm, for a press its gates judged a step or the armed press), allows
@@ -367,7 +373,8 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     On every other screen, "unknown" among them, nothing changes.
     network, screens, values, readings, labels (--network): the Wi-Fi and Bluetooth rows a dated owner decision opens,
     whether an address screen among them may, the values known for each, the page model's readings of each and every
-    label the kit knows (live.open_refused); --allow never lifts those rows.
+    label the kit knows (live.open_refused); --allow never lifts those rows. look, row: a look lap's (--network,
+    docs/decisions/0024: live.open_refused), row the --path's last row when this press opens it (live.bar_is_row).
     owner (--owner): the one row an owner decision opens for this run ({label: info}): a lit text that is that row, of
     its class (safety.owner_lifted_row), passes the never-open check, the press that opens it and an action's own
     button among them ("Delete" on Delete's question); whether the press may go is owner_press_decision's and
@@ -405,7 +412,7 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     if key in RIGHTS and not lit and kind in ROW_KINDS and not named:
         return f"nothing lit can be read on a {kind!r} screen, so the row Right would open is unknown"
     if key in ENTERS + RIGHTS and lit and not named:
-        why = open_refused(lit, allow, network, screens, values, readings, labels)
+        why = open_refused(lit, allow, network, screens, values, readings, labels, look, row)
         if why and owner and safety.owner_lifted_row(lit, owner, values) is not None:
             return ""
         return why
@@ -415,18 +422,18 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
 def press_decision(p: str, key: str, lit: str, text: str, kind: str, confirm: bool = False, allow=(),
                    on_shooting=(), network=frozenset(), screens: bool = False, values=None, readings=None, owner=None,
                    armed_row: str = "", labels=None, body=None, consent: str = "", notice_way: str = "",
-                   lone=None) -> tuple:
+                   lone=None, look: bool = False, row=None) -> tuple:
     """(why the press is refused or "", whether it goes as vouched) for the --press `p` whose key is `key`, on a screen
     whose lit text is `lit`, whole text `text` and kind `kind`, as main() sends it: a press written enter!:regex is
     vouched for (press_refused's vouched) only when it is Enter, and goes as vouched only when nothing lit could be
     read and nothing refuses it. on_shooting: the keys --on-shooting named; network, screens, values, readings:
     --network's; owner, armed_row: --owner's; body, consent, notice_way, lone: the text above the footer, a consent named
     for this screen (a prover's --allow for its own row; --confirm "SCREEN TEXT") and a notice's way past with its lone
-    OK verdict (press_refused)."""
+    OK verdict (press_refused); look, row: a look lap's (press_refused)."""
     vouched = vouched_press(p) and key in ENTERS and not (kind == "shooting" and key in on_shooting)    # named instead
     why = press_refused(key, lit, text, kind, confirm, allow, vouched, on_shooting, network=network, screens=screens,
                         values=values, readings=readings, owner=owner, armed_row=armed_row, labels=labels, body=body,
-                        consent=consent, notice_way=notice_way, lone=lone)
+                        consent=consent, notice_way=notice_way, lone=lone, look=look, row=row)
     return why, bool(vouched and not why and not (lit or "").strip())
 
 
@@ -835,7 +842,8 @@ def inside_refused(key: str, cam, inside: dict, options) -> str:
             f"{'an address screen' if inside['address'] else 'a screen naming identity or credentials, or of no known kind,'}"
             f" is open inside {inside['row']!r}: no key but MENU goes out on it (docs/decisions/0008)")
     lit = highlighted(cam.frame.image, cam.frame.path) if key in ENTERS else ""      # a dial or C4 is refused there too
-    return safety.look_refused(key, lit, inside["row"], (options or {}).get(inside["row"]))
+    return safety.look_refused(key, lit, inside["row"], (options or {}).get(inside["row"]) if not inside.get("look")
+                               else None)
 
 
 # Inside a row a network decision opened, the presses after which it may be left: MENU, and an Enter inside_refused
@@ -891,6 +899,26 @@ def network_path(paths: list, network) -> tuple:
         return lifted, None, (f"--path {addresses[0]!r}: an address screen is opened only as the last label of --path, "
                               "one per run, and looked at with one press (docs/decisions/0008)")
     return lifted, (addresses[-1] if addresses and addresses[-1] in lifted else None), ""
+
+
+def look_path_or_exit(paths: list, seen, address=None) -> tuple:
+    """(the --path labels a look lap opens that never_open names, the address screen the path ends on or None) for a run
+    given --network (docs/decisions/0024). A label safety.look_lap_refused refuses, never-open or not, stops the run
+    before anything connects: what OWNER_NEVER names, and a format, delete or reset this body's records have not shown
+    opened (`seen`: camkit.first_open.Seen, the path up to the label judged; None, an --owner run's, sees nothing), whose
+    first open is the owner's own run. An address screen a look lap opens is looked at as one a decision names
+    (`address`, network_path's), as the last label alone."""
+    looked = []
+    for i, label in enumerate(paths):
+        was = bool(seen is not None and seen.seen(paths[:i + 1]))
+        why = safety.look_lap_refused(label, was)
+        if why:
+            sys.exit(f"{label!r}: {why}: nothing was sent to the camera")
+        if safety.never_open(label):
+            looked.append(label)
+    if address is None and paths and paths[-1] in looked and safety.address_screen(paths[-1]):
+        address = paths[-1]
+    return looked, address
 
 
 def camera_network(network, address) -> dict:
@@ -979,7 +1007,7 @@ def menu_only(inside: dict, kind: str, text: str) -> str | None:
     of values), safety.inside_menu_only inside a row a network decision opened."""
     if inside.get("owner"):
         return safety.owner_menu_only(inside.get("class"), kind, text, inside["row"], inside.get("blank", False))
-    return safety.inside_menu_only(inside.get("class"), kind, text)
+    return safety.inside_menu_only(inside.get("class"), kind, text, inside["row"])
 
 
 # "help" presses C4, the trash button, which opens the In-Camera Guide on these screens when their
@@ -1116,10 +1144,18 @@ def main():
             sys.exit(f"--allow {label!r}: {why}")
     # the dated owner decisions that open Wi-Fi and Bluetooth rows, read before anything connects (a decision naming
     # what none opens stops the run here); logged in the run once it is open
-    network, options, _ = network_decided_or_exit() if a.network else ({}, {}, "")
+    network, options, _ = network_decided_or_exit(look=not a.owner) if a.network else ({}, {}, "")
     lifted, address, why = network_path(a.path, network)
     if why:
         sys.exit(why)
+    # a look lap (docs/decisions/0024): every --network run but an --owner one, whose row is its decision's alone. A
+    # --path label it opens needs no --allow; one it never opens (OWNER_NEVER's, and a format, delete or reset this body
+    # has not been seen to open, its first open being the owner's own run) stops the run here
+    look = bool(a.network and not a.owner)
+    if look:
+        print(LOOK_LAP, flush=True)
+        looked, address = look_path_or_exit(a.path, first_open.seen_record(), address)
+        lifted += looked
     # the one row an owner decision opens for this run (--owner): the last label of --path, told by the menu places the
     # page scan and the definition know; read before anything connects, as the network decisions are
     scan = load_scan(a.scan) if a.owner else None
@@ -1150,7 +1186,7 @@ def main():
             sys.exit(f"--owner: {why}: nothing was sent to the camera")
     for i, label in enumerate(a.path):
         if label in lifted:
-            continue                # a dated owner decision names it (--network): no --allow, which none would give
+            continue                # a dated owner decision names it, or a look lap opens it (--network): no --allow
         if owner_info and i == len(a.path) - 1:
             continue                # the row an owner decision names (--owner): owner_path saw that it is that row
         hard = safety.allow_refused(label)
@@ -1201,12 +1237,16 @@ def main():
     # the row labels the kit knows, against which a lit bar a press is about to open is read (lit_refused)
     known_rows = (known_labels(model) | row_labels(definition())) if seen is not None else set()
     row_vals = ({safety.plain(k): v for k, v in row_values(model).items()} if seen is not None else {})
-    values = network_values(cam_network, model) if a.network else {}
+    # the values the kit knows by row, which an opening check takes off a bar to judge the row alone (safety.row_judged:
+    # every run but an --owner one, whose row is its decision's), a decided row's own as network_values gives them
+    decided_values = network_values(cam_network, model) if a.network else {}
+    values = decided_values if a.owner else {**row_values(model), **decided_values}
     if owner_info:
         values = {**values, **network_values(owner_cam, model)}
     readings = network_readings(cam_network, model) if a.network else {}
-    # every label the kit knows a row by: a tail after a decided row's label whose values none knows makes none of them
-    known = label_readings(model) if a.network else None
+    # every label the kit knows a row by: a tail after a decided row's label whose values none knows makes none of them,
+    # and a bar read whole as one is judged whole (safety.row_judged)
+    known = label_readings(model) if a.network or not a.owner else None
     # what a withholding run keeps of a screen: the row labels the kit knows (the decisions' own rows among them), never
     # a value it knows; a list's option names as the definition gives them for its row; a notice judged by row_values
     labels = (known_labels(model) | set(network) | ({owner_label} if owner_label else set())
@@ -1283,7 +1323,7 @@ def main():
             before = link.download("before")
             time.sleep(5)
             cam = LiveCamera(link, hdmi, run, may_open=a.allow, network=cam_network, screens=bool(address),
-                             options=options, values=values, readings=readings, labels=known,
+                             options=options, values=values, readings=readings, labels=known, look=look,
                              **({"owner": owner_cam} if owner_cam else {}))
             screens, ok = [], True
             opened = None           # on an address run, the frame a press opened a row on: from then MENU only
@@ -1460,12 +1500,24 @@ def main():
                     # --info-ok "ROW=PHRASE": the notice it names, its OK alone (enter_ways)
                     consent, notice_row, lone = enter_ways(cam, key, confirm_phrase if confirm_left else None,
                                                            named_notes, words=not private)
+                    # this press is the --path's own first open on this body (first_open_or_exit), its RESTORE_BY_HAND
+                    # written just before it goes: a look lap opens that never-open row under the procedure
+                    first_intent = bool(first_label) and key in RIGHTS and not inside and reads_row(lit, first_label)
+                    # on a look lap the camera is told the row a press opens only where it is the --path's last row:
+                    # its label, whether its whole path is seen opened, whether its first open is under way
+                    # (camkit.live.bar_is_row); any other opening press names no row (docs/decisions/0024)
+                    target = ({"expected": (a.path[-1],), "seen": bool(seen is not None and seen.seen(a.path)),
+                               "first": first_intent}
+                              if look and key in OPENERS and opening_row is not None
+                              and list(opening_row) == list(a.path) else None)
+                    opening = {"row": target} if target else {}
                     why, vouched = press_decision(p, key, lit, t, cam.read().kind, confirm_now, a.allow, on_shooting,
                                                   network=cam_network, screens=bool(address), values=values,
                                                   readings=readings, owner=owner_cam,
                                                   armed_row=owner_label if armed else "", labels=known, body=body,
                                                   consent=consent,
-                                                  notice_way=f"--info-ok {notice_row}" if notice_row else "", lone=lone)
+                                                  notice_way=f"--info-ok {notice_row}" if notice_row else "", lone=lone,
+                                                  look=look, row=target)
                     if vouched:
                         print(f"Enter vouched by the operator on {shown(t)[0]}", flush=True)
                     if why:
@@ -1483,7 +1535,12 @@ def main():
                     # until a MENU or an Enter on a named option (closes) brings back the page it is opened from now
                     opens = (safety.network_lifted_row(lit, cam_network, bool(address), values, readings, known)
                              if key in ENTERS + RIGHTS and lit and not inside and not owner_opens else None)
-                    opened_from = cam.read() if opens or owner_opens else None
+                    # a row a look lap opens, no decision naming it: looked at as a decided row with no option named,
+                    # as the camera judges it (camkit.live.look_row); its bar as read ends the lock
+                    look_bar = (look_row(lit, values, known, target)
+                                if look and not opens and key in ENTERS + RIGHTS and lit and not inside
+                                and not owner_opens and kind_before in ROW_PAGES_OPENED else None)
+                    opened_from = cam.read() if opens or owner_opens or look_bar else None
                     closes = bool(inside) and key in CLOSES          # inside_refused let it through above
                     if owner_what in ("step", *ARMED):
                         # the camera presses it only with this word, for this row and this press (LiveCamera.permit)
@@ -1494,7 +1551,7 @@ def main():
                     # a row's first open on this body (first_open_or_exit): its Right, on that very row, goes as an armed
                     # press that may drop the link
                     first_now = bool(first_label) and key in RIGHTS and not inside
-                    if first_now and not (owner_opens or opens or reads_row(lit, first_label)):
+                    if first_now and not (owner_opens or opens or look_bar or reads_row(lit, first_label)):
                         print(f"{key} refused: the lit row does not read {first_label!r}, whose first open this run makes; "
                               "cancelling", flush=True)
                         run.log("press_refused", key=key, frame=cam.frame.path.name, why="not the first open's row")
@@ -1513,7 +1570,7 @@ def main():
                                 if first_now and not armed else ""))
                             byhand, first_went = "pending", first_now and not armed
                         try:
-                            cam.press(key)          # once: no retry of an armed press
+                            cam.press(key, **opening)          # once: no retry of an armed press
                         except (safety.Refused, StopRequested, CameraRefused):
                             if may_lose:            # (b) refused before it went, or "not accepted": nothing done
                                 clear_restore_by_hand(run.root)
@@ -1581,7 +1638,7 @@ def main():
                         # the notice --info-ok names: that notice's OK alone (notice_ok)
                         press(cam, key, confirm=bool(confirm_now and key in ENTERS), answer=consent or None,
                               **({"notice_ok": notice_row} if notice_row else {}),
-                              **shooting_word(cam, run, key, on_shooting))
+                              **shooting_word(cam, run, key, on_shooting), **opening)
                         if consent:
                             confirm_left = 0            # --confirm lifts one Enter only
                             run.log("confirm_used", key=key, frame=cam.frame.path.name)
@@ -1619,11 +1676,21 @@ def main():
                         inside = {"row": opens, "class": cls, "address": cls == safety.LIFT_ADDRESS, "identity": False,
                                   "from": opened_from, "closing": False, "suspect": None}
                         run.log("network_row_opened", key=key, frame=cam.frame.path.name, row=opens, lifted_from=cls)
+                    elif look_bar:
+                        # named withheld in the logs: its bar can carry the row's value, the owner's; a credentials row
+                        # is blanked from its opening, as the camera blanks it (safety.look_blank)
+                        cls = safety.look_class(lit)
+                        blank = any(safety.look_blank(x) for x in (lit, *safety.row_judged(lit, values, known)))
+                        inside = {"row": WITHHELD_ROW, "bar": look_bar, "class": cls, "look": True, "blank": blank,
+                                  "address": cls == safety.LIFT_ADDRESS, "identity": blank, "from": opened_from,
+                                  "closing": False, "suspect": None}
+                        run.log("network_row_opened", key=key, frame=cam.frame.path.name, row=WITHHELD_ROW,
+                                lifted_from=cls, look=True, blank=blank)
                     elif inside:
                         # judged on this read alone, right after the closing key: the evidence is spent either way
                         if network_left(cam.read(), inside["from"], inside["closing"],
                                         highlighted(cam.frame.image, cam.frame.path) if inside["closing"] else "",
-                                        inside["row"], inside.get("suspect"),
+                                        inside.get("bar") or inside["row"], inside.get("suspect"),
                                         # the camera's own picture, into its own folder while a withheld row is open
                                         lambda: (cam.osd_seen() if hasattr(cam, "osd_seen")
                                                  else osd_kind(getattr(cam, "link", None))), readings, known):

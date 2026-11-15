@@ -1,9 +1,9 @@
 # 8. By hand only: USB, language, region and network identity
 
-- **Date:** 2026-10 (first kit); changed 2026-11-02, 2026-11-11, 2026-11-13 and 2026-11-14
+- **Date:** 2026-10 (first kit); changed 2026-11-02, 2026-11-11, 2026-11-13, 2026-11-14 and 2026-11-15
 - **Status:** accepted
-- **Rule:** USB, language, region and network rows by hand; Auto Power OFF Temp. when a run names it; a dated owner
-  decision opens a row it names, look-only by default.
+- **Rule:** USB, language, region and network rows by hand; Auto Power OFF Temp. when named; a look lap looks; a
+  decision chooses, never Language, NTSC/PAL, Area/Date/Time.
 
 ## Context
 
@@ -31,9 +31,10 @@ refuses such a label before anything connects and the row however a run named it
 in stills"); it stays on the kit's by-hand list, so a run opens it only when it names the row with `--allow`.
 
 A dated owner decision in the camera's reviewed scope that names the row, `{"date": "YYYY-MM-DD", "lifts": "network",
-"rows": [...], "why": "..."}`, opens it for a run given `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with
-`--rows`); a decision without `"lifts": "network"` opens nothing for such a run (an owner decision, below, is
-`drive.py --owner`'s alone), and one dated after the day it is read opens nothing at all. It may name:
+"rows": [...], "why": "..."}`, lets a run given `--network` (`drive.py`, `crawl_run.py`, and `prove_run.py` with
+`--rows`) choose there the options it names, a look lap opening the row to look at without one (decision 24); a decision
+without `"lifts": "network"` counts for nothing for such a run (an owner decision, below, is `drive.py --owner`'s
+alone), and one dated after the day it is read counts for nothing at all. It may name:
 
 - a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth Function, Bluetooth Rmt
   Ctrl, Airplane Mode);
@@ -50,7 +51,7 @@ lifted, since opening and leaving it over the link dropped the link (2026-11-14)
 USB Power Supply, Language, NTSC/PAL and Area/Date/Time are not lifted until someone has seen them opened over the
 link. They stay by the owner's hand.
 
-A row so named is looked at only: the kit opens it, reads its options with up and down, and leaves it with MENU; it
+A row so named, or opened by a look lap, is looked at only: the kit opens it, reads its options with up and down, and leaves it with MENU; it
 presses no Enter, no Right or Left and turns no dial there, which could choose or commit an option, until it is back
 where it opened the row: until the screen read right after a MENU, or after an Enter on an option the decision
 names, is the shooting screen, or the page the row was opened from with its lit bar on the row itself (its label, or
@@ -97,7 +98,7 @@ A proof of a network row says nothing of the option it was saved on: the named o
 each said as "proof i of N", the records they changed said by key, and every such row ends with the session's upload of
 the start file; the proofs' diffs against the start file tell it by nature, as do the run's `events.jsonl` (its presses
 tell the way the cursor went from the saved option) and its frames, and all stay in the run's owner-only folder. An `--owner` run keeps alike, but for the owner row's own screens where its decision says
-`"values": "logged"` (decision 9). Such a run's folder is the owner's alone on macOS and Linux (decision 9). Whatever a network decision says, these stay by hand:
+`"values": "logged"` (decision 9). Such a run's folder is the owner's alone on macOS and Linux (decision 9). No network decision names these, whatever a look lap opens of them (decision 24):
 IP Address Setting and the USB, language, NTSC/PAL and area and date rows (above);
 credentials and the screens that show them (decision 9), the SSID, WPS, access point and pairing rows, Import Root
 Certificate, the copyright and IPTC rows, Display Serial Number, and every action and reset (SSID/PW Reset, Reset
@@ -167,7 +168,8 @@ frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the con
 The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
 decides for theirs, and the default stays by hand (the playbook's rule 3).
 
-Before 2026-11-14 IP Address Setting and the region and USB rows (USB Connection Mode, USB LUN Setting, USB Power
+Before 2026-11-15 a run given `--network` opened only the rows a dated network decision named, and stopped where none
+named one. Before 2026-11-14 IP Address Setting and the region and USB rows (USB Connection Mode, USB LUN Setting, USB Power
 Supply, Language, NTSC/PAL, Area/Date/Time) were liftable to look at, listed as rows whose opening starts or ends
 nothing though nobody had seen one opened over the link, an owner decision could open IP Address Setting to look
 without `--confirm`, a decision could name Wi-Fi Frequency Band's options, and a

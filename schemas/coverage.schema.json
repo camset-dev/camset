@@ -145,7 +145,7 @@
        "never"
       ]
      },
-     "description": "What opens it under today's code: a dated network decision, a dated owner decision (kit/drive.py), a run's --allow, an approved motion decision, or nothing."
+     "description": "What opens it under today's code: a look lap or a dated network decision (--network), a dated owner decision (kit/drive.py), a run's --allow, an approved motion decision, or nothing."
     },
     "never_choose": {
      "const": true,

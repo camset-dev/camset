@@ -110,8 +110,12 @@ STATUSES = (
     ("kit cannot read", "Private only: opened or tried, but the kit failed in a way it fails again until the kit "
                         "changes (an unknown screen, no response to Right); the kit's message is kept. A lost row, an "
                         "error or a walk cut short is retried, never this. A kit issue, never a camera fact."),
-    ("closed by rule", "camkit.safety.never_open names it and nothing above applies; its class and what opens it "
-                       "today (--network, --owner, --allow, an approved motion decision, or never) are kept."),
+    ("closed by rule", "camkit.safety.never_open names it, a look lap does not open it (camkit.safety."
+                       "look_lap_refused: what OWNER_NEVER names and the Screen Reader, never; a row whose opening acts, "
+                       "the owner's own run each time; a format, a delete or a reset, whose first open on a body is the "
+                       "owner's own run), and nothing above applies; its class and what opens it today (--network, "
+                       "--owner, --allow, an approved motion decision, or never) are kept. Another never-open row is "
+                       "not yet tried: a look lap opens it."),
     ("not yet tried", "None of the above."),
 )
 STATUS_NAMES = tuple(n for n, _ in STATUSES)
@@ -666,14 +670,16 @@ def rule_class(label: str) -> str | None:
 
 
 def openers(label: str) -> list:
-    """What opens a never-open row under today's code: --network (a dated network decision: safety.lift_class),
-    --owner (a dated owner decision, kit/drive.py: safety.owner_class), --allow (a run's own allowance:
-    safety.allow_refused), motion (an approved_rows decision: safety.owner_may_approve), or never."""
+    """What opens a never-open row under today's code: --network (a look lap, docs/decisions/0024: every row
+    safety.look_lap_refused lets open on a body with no records, so never a format, a delete or a reset, whose first open
+    is the owner's own run; or a dated network decision: safety.lift_class), --owner (a dated owner decision,
+    kit/drive.py: safety.owner_class), --allow (a run's own allowance: safety.allow_refused), motion (an approved_rows
+    decision: safety.owner_may_approve), or never."""
     why = safety.never_open(label)
     if not why:
         return []
     out = []
-    if safety.lift_class(label):
+    if safety.lift_class(label) or not safety.look_lap_refused(label, False):
         out.append("--network")
     if safety.owner_class(label):
         out.append("--owner")
@@ -1466,13 +1472,17 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
     keys = list(dict.fromkeys(e["settings"] + e["tied"]))
     ss = [by_key[k] for k in keys if k in by_key]
     states = [setting_state(s) for s in ss]
-    rule, opener, never_choose = None, None, False
+    rule, opener, never_choose, closed = None, None, False, None
     for lab in e["path"]:
         rule = rule_class(lab)
         if rule:
             opener = openers(lab)
             never_choose = bool(safety.never_choose(lab))
             break
+    # closed by rule: a never-open row a look lap does not open, as if never seen (the public form knows no body's
+    # records); any other never-open row a look lap opens, and is not yet tried (docs/decisions/0024)
+    if rule:
+        closed = next((lab for lab in e["path"] if rule_class(lab) and safety.look_lap_refused(lab, False)), None)
     e["rule"], e["opener"] = rule, opener
     if never_choose:
         e["never_choose"] = True
@@ -1551,7 +1561,7 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
         if msg:
             e["kit_message"] = msg
         e["kit"] = next((c.get("kit") for c in reversed(cites) if c.get("kit")), None)
-    elif rule:
+    elif closed:
         status = "closed by rule"
     else:
         status = "not yet tried"
@@ -2341,8 +2351,10 @@ def decide(led: Ledger, e: dict, start: Path | None = None, option=None, judge: 
         return Verdict(False, f"{name}: the kit could not read it before; "
                               f"{'a newer kit commit' if newer else 'the kit commit cannot be compared'}", st)
     if st == "closed by rule":
-        return Verdict(False, f"{name}: closed by rule ({e.get('rule')}); opens with {', '.join(e.get('opener') or [])}"
-                              ": this run's own guards decide", st)
+        first = "; its first open on this body is the owner's own run" if any(safety.look_destructive(x)
+                                                                             for x in e["path"]) else ""
+        return Verdict(False, f"{name}: closed by rule ({e.get('rule')}){first}; opens with "
+                              f"{', '.join(e.get('opener') or [])}: this run's own guards decide", st)
     return Verdict(False, f"{name}: {st}", st)
 
 

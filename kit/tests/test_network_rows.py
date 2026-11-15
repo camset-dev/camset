@@ -973,9 +973,8 @@ def test_the_jobs_take_a_decided_setting_and_keep_the_scopes_exclusions(scope_fi
 
 def test_the_walk_takes_settings_only(scope_file, tmp_path):
     import crawl_run
-    scope_file({**DECISION, "rows": ["Display Wi-Fi Info."]})
-    with pytest.raises(SystemExit, match="only address screens"):
-        crawl_run.network_settings_or_exit(Run("net", root=tmp_path))
+    scope_file({**DECISION, "rows": ["Display Wi-Fi Info."]})          # a look lap needs no decision (decision 24)
+    assert crawl_run.network_settings_or_exit(Run("net", root=tmp_path)) == {}
     scope_file(DECISION)
     assert crawl_run.network_settings_or_exit(Run("net", root=tmp_path)) == {"Bluetooth Function": DAY,
                                                                                "Wi-Fi Frequency Band": DAY}
@@ -1023,12 +1022,13 @@ def test_drive_refuses_a_network_row_without_network():
 def test_drive_refuses_network_with_no_decision(scope_file):
     r = drive("--network", "--path", "Bluetooth Function")
     assert r.returncode != 0 and "no reviewed scope" in r.stderr and "nothing was sent" in r.stderr
-    scope_file(KEEP_BY_HAND)
-    r = drive("--network", "--path", "Bluetooth Function")
-    assert r.returncode != 0 and "no dated owner decision" in r.stderr
-    scope_file({**DECISION, "rows": ["Wi-Fi Connect"]})            # a decision, but not for this row
-    r = drive("--network", "--path", "Bluetooth Function")
-    assert r.returncode != 0 and "no --allow opens it" in r.stderr
+    # a look lap needs no decision to look (docs/decisions/0024): the path passes every check before the first-open one,
+    # which stops the run, the row never seen opened on this body and no blank-cards statement given
+    for decisions in ((KEEP_BY_HAND,), ({**DECISION, "rows": ["Wi-Fi Connect"]},)):     # none, or not for this row
+        scope_file(*decisions)
+        r = drive("--network", "--path", "Bluetooth Function", "--press", "right")
+        assert r.returncode != 0 and "'Bluetooth Function' has not been seen opened on this body" in r.stderr \
+            and "nothing was sent" in r.stderr, r.stderr
 
 
 @pytest.mark.parametrize("named", ["Access Authen. Info", "Wi-Fi Direct Info.", "Display Serial Number", "WPS Push"])
@@ -2917,10 +2917,11 @@ def test_go_to_finds_a_row_by_any_of_its_readings_or_its_icon_glued_on(monkeypat
 
 
 def test_drive_refuses_the_glued_label_as_a_path_before_anything_connects(scope_file):
-    """(b): the decided label is the path; the glued reading as a --path label is refused before anything connects."""
+    """(b): the glued reading as a --path label of a look lap (docs/decisions/0024), never seen opened on this body, is
+    refused before anything connects where no blank-cards statement lets its first open go."""
     scope_file({**DECISION, "rows": ["Wired LAN Connect"]})
-    r = drive("--network", "--path", "LANWired LAN Connect")
-    assert r.returncode != 0 and "'LANWired LAN Connect'" in r.stderr and "no --allow opens it" in r.stderr, r.stderr
+    r = drive("--network", "--path", "LANWired LAN Connect", "--press", "right")
+    assert r.returncode != 0 and "'LANWired LAN Connect'" in r.stderr and "not been seen opened" in r.stderr, r.stderr
 
 
 def test_row_values_gather_every_reading_of_a_page_model_row(made_up_definition):

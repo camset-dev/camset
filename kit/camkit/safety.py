@@ -708,6 +708,63 @@ def never_open(label: str) -> str | None:
     return None
 
 
+def _label_form(text) -> str:
+    """A label as the guards compare labels: folded (fold), its icon cleaned off and its case lowered (clean_label)."""
+    return clean_label(fold(text))
+
+
+def _value_form(text) -> str:
+    """A value as row_judged compares it: folded (fold), spacing one space, case lowered; nothing cut off its start."""
+    return " ".join(fold(text).split()).lower()
+
+
+def row_judged(lit, values=None, labels=None) -> tuple:
+    """The texts an opening check judges for a lit bar read as `lit` (docs/decisions/0024): the row's label alone, where
+    the bar is exactly a row label the kit knows followed by exactly one of that row's values (`values`, {label:
+    [values]}: runner.row_values), the label compared as the guards compare labels (folded, its icon cleaned off:
+    _label_form), the value folded whole (_value_form), one space between; `lit` whole in every other case, and always
+    where the value holds an action's word (_action_value: reset, format, delete, initialize), so "File Number" + "Reset"
+    stays refused. Where `lit` read whole is itself a row label the kit knows (`labels`, runner.label_readings, a label
+    of `values`) or a whole name of the never-open list's actions (_ACTION_NAMES), in any reading the guards judge
+    (_pairs: slips undone, its words run together or split, compared with every space taken out), it is judged whole
+    too, beside any label it splits into, and a refusal of either wins: "Del ete" (read run together, "Delete") stays
+    refused where "Del" shows "ete", and "Camera Settings Reset" where "Camera Settings" shows a value. Where
+    more than one known label splits the bar so, each is judged. A Custom Key's function shown beside its row ("Voice
+    Memo") then judges the row, never the function; nothing but a whole known label followed by a whole known value of
+    it is taken off."""
+    text = str(lit or "")
+    seen = _label_form(text)
+    told = values if isinstance(values, dict) else {}
+    if not seen:
+        return (text,)
+    hits = [label for label, vs in told.items() if isinstance(label, str) and _label_form(label)
+            and any(seen == f"{_label_form(label)} {_value_form(v)}" for v in vs or ()
+                    if isinstance(v, str) and _value_form(v) and not _action_value(v))]
+    if not hits:
+        return (text,)
+    names = [x for x in (*(labels or ()), *told, *_ACTION_NAMES) if isinstance(x, str)]
+    known = {_squash(f) for x in names for f in (_label_form(x), deslip(_label_form(x)))} - {""}
+    if any(_squash(t) in known for pair in _pairs(text) for t in pair):
+        return tuple(dict.fromkeys((text, *hits)))      # read whole, a label the kit knows: judged whole too
+    return tuple(dict.fromkeys(hits))
+
+
+def _squash(text: str) -> str:
+    """A text with every space taken out, as row_judged compares a whole reading with the labels the kit knows."""
+    return re.sub(r"\s+", "", text)
+
+
+# a value that is itself an action's word never splits off a lit bar (row_judged): Sony names action rows "<row> Reset"
+# (Series Counter Reset, Forced File Number Reset, Camera Settings Reset), and a page model that missed one would open
+# it (2026-11-15, the maintainer: "File Number" + "Reset" and the Proxy value whose text holds "reset" stay refused)
+_ACTION_VALUE = re.compile(r"(?<![a-z])(?:reset|format|delete|initiali[sz]e)")
+
+
+def _action_value(value) -> bool:
+    """Whether a value's text holds an action's word (_ACTION_VALUE) in any reading the guards judge (readings)."""
+    return any(_ACTION_VALUE.search(r) for r in readings(value))
+
+
 def _literal(pattern: str) -> str:
     """A whole-label pattern of _ACTIONS as the name it matches written out in full ("reset network set\\.?" is "reset
     network set."): its optional characters kept, its escapes undone."""
@@ -1440,6 +1497,126 @@ def network_allowance(decided, options=None) -> str:
                      for row, day in decided.items())
 
 
+# The look lap (docs/decisions/0024): a run given --network (kit/crawl_run.py, kit/drive.py) may open every menu row to
+# look at, no decision naming it, but what OWNER_NEVER names, never (owner_never_listed: a firmware update and Version,
+# what loads, the sensor's, shutter's and lens's motion, Initialize; sound, light and the other motion rows it does open),
+# and the short destructive list (look_destructive: Format, Delete, any reset), whose first open on a body is the owner's
+# own run (kit/drive.py --owner with a dated decision): once this body's own records show the row seen opened
+# (camkit.first_open.Seen), a look lap opens it like any other row. Inside, it is looked at as a row a network decision
+# opened with no option named. Ordinary runs and the provers judge as before
+LOOK_OWNER_RUN = ("its first open on this body is the owner's own run (kit/drive.py --owner with a dated owner decision "
+                  "naming it); a look lap opens it once this body's records show it opened (docs/decisions/0024)")
+LOOK_ACTS = ("every opening of it acts (it sends, connects, pairs or writes), so it is opened only by the owner's own run "
+             "(kit/drive.py --owner with a dated owner decision naming it), each time (docs/decisions/0024)")
+# the Screen Reader keeps decision 3's own route (headphones in, its volume at the lowest, the owner's word each time): a
+# look lap never opens its row (2026-11-15, the maintainer)
+_SCREEN_READER_RE = _Rx([r"screen\s?reader", r"accessib"])
+# OCR reads an i or an l as a 1 ("In1tialize", "C1ean1ng Mode"): the look lap's predicate reads each 1 of a label on
+# its own as 1, i or l, every combination, for a label with at most this many 1s, and refuses one with more as not read
+# (2026-11-15, the maintainer); never_open and deslip are as they were for every other run
+LOOK_ONES = 5
+
+
+def _look_texts(label) -> list | None:
+    """The texts the look lap's predicate judges for `label`: each 1 in it read on its own as 1, i or l, every
+    combination (the label as read among them); each judge takes every reading of each (readings, _pairs). None where
+    the label holds more than LOOK_ONES 1s: it is not read."""
+    import itertools
+    text = str(label or "")
+    parts = text.split("1")
+    if len(parts) - 1 > LOOK_ONES:
+        return None
+    out = []
+    for picks in itertools.product("1il", repeat=len(parts) - 1):
+        out.append(parts[0] + "".join(p + rest for p, rest in zip(picks, parts[1:], strict=True)))
+    return list(dict.fromkeys(out))
+
+
+def look_destructive(label) -> str | None:
+    """The words that put `label` on the look lap's short destructive list, or None: a row never_open names (one main
+    never opens: "File Format" and "Delete confirm." are ordinary rows) whose name holds a format, a delete or a reset, in
+    any reading never_open judges (_pairs: as read, folded, slips undone, words run together or split, its icon cleaned
+    off or not, its breadcrumb's last part): Format or Delete at a word's start (_CARDS), the word "reset" as never_open's
+    action class matches it (_ACTION_WORD_RE: Setting Reset, Camera Settings Reset, Reset Network Set., SSID/PW Reset,
+    Forced File Number Reset...), or a whole label of the list's actions that names one, its words run together
+    ("resetnetworkset.")."""
+    if not never_open(label):
+        return None
+    for text, raw in _pairs(label):
+        last = clean_label(text.rsplit(">", 1)[-1])
+        for t in (text, raw, last):
+            m = re.search(_CARDS, t) or _ACTION_WORD_RE.search(t)
+            if m:
+                return m.group(0)
+            m = _ACTION_RE.search(t)
+            if m and re.search(r"reset|format|delete", m.group(m.lastindex or 0)):
+                return m.group(m.lastindex or 0)
+    return None
+
+
+def look_lap_refused(label, seen: bool) -> str | None:
+    """Why a look lap (a run given --network) may not open the row read as `label`, or None (docs/decisions/0024), in
+    this order: what OWNER_NEVER names (owner_never_listed: a firmware update or the Version screen, what loads a file or
+    settings, Cleaning Mode, Pixel Mapping, Anti-dust, Preset Focus/Zoom, Initialize), never, whatever never_open says of
+    the row, and the Screen Reader, which keeps decision 3's route; a row whose opening acts (acts_on_open: WPS, Pairing,
+    Access Point Set., Select on Cam & Send, the smartphone, cloud, streaming, tethering and FTP rows, Send, Create New
+    Folder, IP Address Setting), opened only by the owner's own run, each time, seen or not; a row of the short
+    destructive list (look_destructive) while this body's records have not shown it opened (`seen`:
+    camkit.first_open.Seen.seen), its first open being the owner's own run. Each judges every reading of the label and of
+    it with a 1 between letters read as an i (_look_texts), and a refusal in any of them wins. Every other row, whatever
+    class never_open puts it in, sound, light and motion among them, a look lap opens, to look at only, under the
+    first-open procedure where this body has not been seen to open it (camkit.first_open)."""
+    texts = _look_texts(label)
+    if texts is None:
+        return (f"it holds more than {LOOK_ONES} 1s, each of which may be an i or an l, so a look lap does not read it "
+                "(docs/decisions/0024)")
+    for t in texts:
+        why = owner_never_listed(t)
+        if why:
+            return why
+        m = _first(_SCREEN_READER_RE, t)
+        if m:
+            return (f"the Screen Reader ({m!r}) keeps its own route, headphones in and its volume at the lowest first, "
+                    "with the owner's word each time (docs/decisions/0003)")
+    for t in texts:
+        m = acts_on_open(t)
+        if m:
+            return f"a row whose opening acts ({m!r}): {LOOK_ACTS}"
+    if not seen:
+        for t in texts:
+            words = look_destructive(t)
+            if words:
+                return f"a format, a delete or a reset ({words!r}): {LOOK_OWNER_RUN}"
+    return None
+
+
+def look_blank(label) -> str | None:
+    """Why the row read as `label` is one whose frames a look lap saves black from its opening, as an --owner run saves
+    the rows it blanks, or None, whatever any decision says of values ("values": "logged" is an --owner run's alone): a
+    class the owner route blanks (BLANKED: credentials, the serial number screen, a closed identity row such as an SSID,
+    WPS or a pairing; owner_class), or credentials or what the owner route takes for a credentials, connection or pairing
+    screen (_CREDENTIALS, _SECRET_SCREEN) in any reading never_open judges."""
+    for t in _look_texts(label) or [str(label or "")]:
+        cls = owner_class(t)
+        if cls in BLANKED:
+            return cls
+        for text, raw in _pairs(t):
+            for rx in (_CREDENTIALS_RE, _SECRET_SCREEN_RE):
+                m = rx.search(text) or rx.search(raw)
+                if m:
+                    return m.group(0)
+    return None
+
+
+def look_class(label) -> str:
+    """The class a look lap opens the row read as `label` as, no decision naming it: a network decision's (lift_class),
+    else an owner decision's (owner_class: a serial number screen, an action or a card action, credentials, a closed
+    identity row), else sound, light or motion (MOTION) where owner_never names it, else a closed identity row
+    (LIFT_FIXED), the strictest. camkit.crawl writes it as the row's "network", so the tools that read its frames later
+    treat it as an identity row's unless it is a Wi-Fi or Bluetooth setting."""
+    return lift_class(label) or owner_class(label) or (MOTION if owner_never(label) else LIFT_FIXED)
+
+
 # Inside a row a network decision opened (its list, its panel, whatever it led to), the keys that read its options or
 # close it; every other key can choose or commit an option (Enter, a carousel's or a panel's Right, a dial)
 LOOK_KEYS = frozenset({"up", "down", "ms_up", "ms_down", "menu"})
@@ -1586,7 +1763,7 @@ def quoted_withheld(message) -> str:
     return _QUOTED_TEXT.sub("'(withheld)'", str(message))
 
 
-def inside_menu_only(cls: str, kind, text) -> str | None:
+def inside_menu_only(cls: str, kind, text, row: str = "") -> str | None:
     """Why only MENU may go out on a screen met inside a row a network decision opened from class `cls` (lift_class),
     or None, its kind and whole text as read: an address screen always; inside an identity, connection or region row,
     a screen of a kind whose text is not shown (SHOWN_KINDS: a keyboard, an address entry read as no known kind) or one
@@ -1595,11 +1772,15 @@ def inside_menu_only(cls: str, kind, text) -> str | None:
     reads as no known kind ("unknown": an information screen such as Display FTP Result's, a keyboard, a pairing list,
     or the row's own screen read as the shooting screen right after it opened, camkit.live and kit/drive.py), which no
     rule of the reader can say is the row's own list. Then no reader is asked either, and nothing of the text is kept
-    but its field names and whole row labels."""
+    but its field names and whole row labels. Inside a row a look lap opened of another class (look_class: an action,
+    credentials, the serial number, a closed identity row; `row` its label), what the owner route's check takes alone
+    (owner_menu_only) and a screen naming identity or credentials at all (docs/decisions/0024)."""
     if cls == LIFT_ADDRESS:
         return "an address screen"
     if kind == "unknown":
         return "a screen of no known kind inside the row (an information screen, a keyboard or an entry screen)"
+    if cls not in NARROW:
+        return owner_menu_only(cls, kind, text, row) or identity_screen(text)
     if cls == LIFT_IDENTITY:
         if kind not in SHOWN_KINDS:
             return f"a {kind!r} screen inside an identity row (a keyboard or an entry screen)"
@@ -2420,16 +2601,27 @@ _KEYBOARD_WORDS = frozenset({"space", "del", "delete", "bs", "back", "backspace"
                              "123", "a/a", "aa", "clear", "return", "symbol", "symbols", "next", "prev", "left", "right"})
 
 
-def owner_never(label) -> str | None:
-    """Why no decision ever names `label`, or None, any reading judged: a firmware update or the Version screen,
-    anything that loads a file or settings (decision 6), Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom
-    (OWNER_NEVER); and sound, light, motion and the Screen Reader (decisions 2 and 3), which keep their own routes (a
-    run's --allow, a dated approval, decision 3's preconditions) and which the owner did not name."""
+def owner_never_listed(label) -> str | None:
+    """Why `label` is a row OWNER_NEVER names, or None, any reading judged (readings: as read, folded, slips undone,
+    words run together or split): a firmware update or the Version screen, anything that loads a file or settings
+    (decision 6), Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom, Initialize. No decision names one, and a
+    look lap never opens one (look_lap_refused)."""
     for r in readings(label):
         for rx, why in _OWNER_NEVER_RES:
             m = rx.search(r)
             if m:
                 return f"{why} ({m.group(0)!r}): no decision opens it"
+    return None
+
+
+def owner_never(label) -> str | None:
+    """Why no decision ever names `label`, or None, any reading judged: a firmware update or the Version screen,
+    anything that loads a file or settings (decision 6), Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom
+    (OWNER_NEVER: owner_never_listed); and sound, light, motion and the Screen Reader (decisions 2 and 3), which keep their
+    own routes (a run's --allow, a dated approval, decision 3's preconditions) and which the owner did not name."""
+    why = owner_never_listed(label)
+    if why:
+        return why
     for text, raw in _pairs(label):
         for rx in (_OTHER_BY_HAND_RE, _MOTION_RE):
             m = rx.search(text) or rx.search(raw)

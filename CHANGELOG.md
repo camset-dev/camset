@@ -7,6 +7,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### Read first
 
+- **`--network` now makes `crawl_run.py` and `drive.py` a look lap**: it opens every menu row to look at with no owner
+  decision, but what never opens, a row whose opening acts, and a format, delete or reset not yet seen opened on the
+  body (decision 24); a decision now only names the options a run may choose.
 - **If you map a camera other than the a1 II and made a sample** (`editor/definitions/<model>_fw<fw>.DAT`), make it
   again: the older kit could leave the owner's own records in it, such as a registered lens list with each lens's
   serial number. List your camera's `personal_records` in its camera file first; `kit/tools/make_sample.py` and

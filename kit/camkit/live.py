@@ -196,7 +196,7 @@ def reader_label(path, timeout: float = READER_TIMEOUT) -> tuple[str, str]:
 
 
 def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: bool = False, values=None,
-                 readings=None, labels=None) -> str:
+                 readings=None, labels=None, look: bool = False, row=None) -> str:
     """Why a press may not open the lit row, or "": the row's text is never-open, and no name the run was given
     lifts it (drive.py --allow lifts what it may; never what safety.never_lifted names: the cards, Initialize, Reset
     Network Set., credentials, and the camera's identity, a connection or its region, decision 8). A Wi-Fi or Bluetooth
@@ -204,21 +204,76 @@ def open_refused(lit: str, may_open=frozenset(), network=frozenset(), screens: b
     owner decision naming the row (`network`, safety.network_decided's rows, for a run given --network:
     safety.network_lifted, its label, or a reading of it another reader read as the label (`readings`), followed by
     nothing or one of its `values`, an address screen only with `screens`; with no value known, a short tail that makes
-    of the bar no other label of `labels`, runner.label_readings), never by the substring match of `may_open`."""
-    why = safety.never_open(lit)
+    of the bar no other label of `labels`, runner.label_readings), never by the substring match of `may_open`. What is
+    judged is the row (safety.row_judged): a bar that is exactly a row label the kit knows followed by exactly one of
+    its known values (`values`) is judged by the label alone, so a value beside a row never refuses it.
+    On a look lap (`look`: a run given --network, docs/decisions/0024) a row safety.look_lap_refused refuses never opens,
+    whatever never_open says of it (look_refusal: OWNER_NEVER's rows and the Screen Reader, a row whose opening acts, a
+    format, delete or reset not seen opened); any other never-open row opens only where the bar is the row its caller
+    is about to open (`row`: bar_is_row) and that row is seen opened on this body or under its first open."""
+    judged = safety.row_judged(lit, values, labels)
+    seen, first = bar_is_row(judged, row) if look else (False, False)
+    said = look_refusal(lit, judged, seen) if look else None
+    if said:
+        return f"the lit row {lit.strip()!r} is not opened on a look lap ({said})"
+    why = next((w for w in map(safety.never_open, judged) if w), None)
     if not why:
         return ""
     if network and safety.network_lifted(lit, network, screens, values, readings, labels):
         return ""                       # a network decision names it: a Wi-Fi or Bluetooth setting, an identity row
-    if why.startswith(safety.NETWORK + ":"):
+    if look and (first or seen):
+        return ""                       # a look lap opens it, to look at only (docs/decisions/0024)
+    if why.startswith(safety.NETWORK + ":") and not look:
         return (f"the lit row {lit.strip()!r} is never opened ({why}; only a dated owner decision naming the row opens "
                 "it, with --network)")
     # a name and the reading compared as the guards fold them: "Pre-AF" names a "Pre‑AF" read with a no-break hyphen
-    seen = safety.clean_label(safety.fold(lit))
-    named = any(safety.clean_label(safety.fold(m)) and safety.clean_label(safety.fold(m)) in seen for m in may_open)
+    read = safety.clean_label(safety.fold(lit))
+    named = any(safety.clean_label(safety.fold(m)) and safety.clean_label(safety.fold(m)) in read for m in may_open)
     if named and not safety.never_lifted(lit) and not safety.network_words(lit):
         return ""
+    if look:
+        return (f"the lit row {lit.strip()!r} is not opened on a look lap ({why}): it is not the row the run is opening, "
+                "or that row is neither seen opened on this body nor under its first open (docs/decisions/0024)")
     return f"the lit row {lit.strip()!r} is never opened ({why})"
+
+
+def bar_is_row(judged, row=None) -> tuple:
+    """(seen, first) for a lit bar (`judged`: safety.row_judged's texts) on a look lap: the caller's word for the row it
+    is about to open (`row`: {"expected": the one name the caller asked Seen about for that row, "seen": whether
+    this body's records show that row's whole path opened, "first": whether that very path's first open is under way,
+    its RESTORE_BY_HAND on disk}) where every text judged is unchanged by safety.fold and, compared plain, one of
+    `expected`; else (False, False): a bar that is not that row, or a press with no row named, is unseen and under no
+    first open, whatever marker is on disk and whatever labels the records hold (docs/decisions/0024)."""
+    if not isinstance(row, dict):
+        return False, False
+    told = {safety.plain(x) for x in row.get("expected") or () if isinstance(x, str) and safety.plain(x)}
+    ok = bool(judged) and all(safety.fold(t).strip() == " ".join(str(t).split()) and safety.plain(t) in told
+                              for t in judged)
+    return (bool(row.get("seen")), bool(row.get("first"))) if ok else (False, False)
+
+
+def look_refusal(lit: str, judged, seen: bool = False) -> str | None:
+    """Why a look lap (a run given --network) never opens the lit row `lit`, or None (docs/decisions/0024):
+    safety.look_lap_refused of the bar read whole or of the row it names (`judged`, safety.row_judged), a refusal in any
+    of them winning, `seen` as bar_is_row gives it."""
+    return next((w for t in dict.fromkeys((lit, *judged)) for w in [safety.look_lap_refused(t, seen)] if w), None)
+
+
+def look_row(lit: str, values=None, labels=None, row=None) -> str | None:
+    """The row a look lap opens the lit bar `lit` as, no decision naming it, or None: where never_open names the row
+    (safety.row_judged's texts), look_refusal refuses nothing and the bar is the row its caller is opening, seen opened
+    here or under its first open (bar_is_row), the bar's text as read, which the page it was opened from shows again
+    once it is left (safety.bar_on_row); an ordinary row opens as ever, with no look lock."""
+    judged = safety.row_judged(lit, values, labels)
+    seen, first = bar_is_row(judged, row)
+    if not any(safety.never_open(t) for t in judged) or look_refusal(lit, judged, seen) or not (first or seen):
+        return None
+    return str(lit or "").strip() or None
+
+
+# what the camera's logs and messages name a row a look lap opened as, no decision naming it: a bar can carry the row's
+# value, the owner's (docs/decisions/0008); the bar as read is kept in memory alone, to tell when the row is left
+WITHHELD_ROW = "(withheld)"
 
 
 FOOTER_TOP = 415        # px: the footer band (camkit.screen's help glyph from y 415, the footer line at 424-429) starts here
@@ -359,7 +414,7 @@ def info_ok_hint(cam, row: str, frame: str, said: str, words: bool = True) -> st
     the text is, so the owner can still build the flag (proving.screens.pass_note, kit/drive.py, the crawl)."""
     run = getattr(cam, "run", None)
     if run is not None:
-        private = getattr(cam, "network", None) or getattr(cam, "owner", None)
+        private = getattr(cam, "network", None) or getattr(cam, "owner", None) or getattr(cam, "look", False)
         run.log("notice_not_passed", row=row, frame=frame, notice=safety.notice_kept(said) if private else said)
     if words:
         return f'check its text against {frame} and add --info-ok "{row or "ROW"}={said or "<its whole text>"}"'
@@ -417,8 +472,14 @@ def osd_kind(link, folder=None) -> str:
 
 class LiveCamera:
     def __init__(self, link, hdmi, run, may_open=(), network=(), screens: bool = False, options=None, values=None,
-                 readings=None, owner=None, labels=None):
+                 readings=None, owner=None, labels=None, look: bool = False):
         self.link, self.hdmi, self.run = link, hdmi, run
+        # a look lap (a run given --network: kit/crawl_run.py, kit/drive.py; docs/decisions/0024): a never-open row opens
+        # to look at, no decision naming it, but what safety.look_lap_refused refuses, and only where the lit bar is the
+        # row its caller names for the press (press's row: bar_is_row), seen opened or under its first open; it is then
+        # looked at as a row a network decision opened with no option named (look_row), and every screen's text is
+        # withheld as on a --network run
+        self.look = bool(look)
         log_to(run)                     # a reader that fails during the run is logged in its events.jsonl (camkit.vlm)
         self.may_open = frozenset(may_open)            # never-open rows this run was told it may open
         # the one row a dated owner decision opens for this run (kit/drive.py --owner, the last label of its --path):
@@ -487,14 +548,16 @@ class LiveCamera:
         self.refresh("stale")
 
     def press(self, key: str, allow=frozenset(), hold_ms=60, on_shooting=frozenset(), notice_ok: str = "",
-              require_notice: bool = False):
+              require_notice: bool = False, row=None):
         """One press, read once it settles. allow: the guarded buttons named (safety.GUARDED_INPUTS); on_shooting: the
         keys named for this press on the shooting screen, where a key does what the body makes of it (decision 21):
         a caller names a key there only where pressing it there is the point. notice_ok: the run's --info-ok for the
         notice on screen, which its caller judged (proving.screens.pass_named_notice): an Enter on that notice goes when
         it shows no question mark, its OK is plainly its only button and reads OK, and it reads as no confirmation
         (confirm_refused). require_notice: an Enter meant for the notice that has just refused MENU (leave_notice) and
-        nothing else: refused unless the screen is that notice."""
+        nothing else: refused unless the screen is that notice. row: on a look lap, the row the caller is about to
+        open ({"expected", "seen", "first"}: bar_is_row), its first open counted only while its RESTORE_BY_HAND is on
+        disk; None names none, and a never-open bar then opens on a look lap to no one's word."""
         exact = getattr(self, "may_open_exact", None)
         if exact is not None:
             self.may_open_exact = None      # one press only, whatever it is
@@ -521,11 +584,17 @@ class LiveCamera:
         values, opened, address, cls = getattr(self, "values", {}), None, False, None
         readings = getattr(self, "readings", {})
         owner, owner_row = getattr(self, "owner", None) or {}, None
+        look = getattr(self, "look", False)
+        if isinstance(row, dict):
+            # the caller's first open counts only while its marker is on disk (camkit.first_open, kit/drive.py)
+            row = {**row, "first": bool(row.get("first")) and self.first_open_under_way()}
+        looked = {}                 # a row a look lap opens with no decision naming it: its bar, and whether it is blanked
         if safety.canonical_input(key) in OPENS and self.screen.kind in ROW_SCREENS:
             lit = lit_text(self.frame.image, self.frame.path)
             if not lit.strip() and lit_box(self.frame.image) is not None:
                 lit = self.unread_row(key)          # a bar OCR read nothing in: the reader names it, or no press
-            why = open_refused(lit, self.may_open, network, screens, values, readings, getattr(self, "labels", None))
+            why = open_refused(lit, self.may_open, network, screens, values, readings, getattr(self, "labels", None),
+                               look, row)
             if why and owner and getattr(self, "network_open", None) is None:
                 # the row an owner decision opens for this run, of the very class it was lifted from: Right alone, once
                 owner_row = safety.owner_lifted_row(lit, owner, values)
@@ -540,10 +609,18 @@ class LiveCamera:
             if owner_row is not None:
                 opened, cls = owner_row, owner[owner_row].get("class")
                 address = cls == safety.LIFT_ADDRESS
-            elif network and getattr(self, "network_open", None) is None:
+            elif (network or look) and getattr(self, "network_open", None) is None:
                 opened = safety.network_lifted_row(lit, network, screens, values, readings,
-                                                   getattr(self, "labels", None))
+                                                   getattr(self, "labels", None)) if network else None
                 cls = safety.lift_class(lit) if opened else None
+                if opened is None and look:
+                    # a row a look lap opens, no decision naming it: looked at as a decided row with no option named
+                    bar = look_row(lit, values, getattr(self, "labels", None), row)
+                    if bar is not None:
+                        opened, cls = WITHHELD_ROW, safety.look_class(lit)
+                        looked = {"bar": bar, "look": True, "blank": bool(
+                            any(safety.look_blank(t) for t in (lit, *safety.row_judged(lit, values,
+                                                                                       getattr(self, "labels", None)))))}
                 address = cls == safety.LIFT_ADDRESS
         canon = safety.canonical_input(key)
         # the owner row lit on a screen read as no menu page: judged here too (owner_open_refused, whose screen check
@@ -604,17 +681,24 @@ class LiveCamera:
             if blank or address or cls == safety.LIFT_SERIAL:
                 self.identity_open = self.frame.path.name       # MENU alone from its opening
             if blank:
-                self.withhold(True)             # before the frame it opened is settled and saved
-                vlm.HELD = "a row whose values are withheld is open"
+                self.blank_row()                # before the frame it opened is settled and saved
             opened = None
         if opened is not None:
             # a row a network decision opens: from here, whatever its screen reads as, look only (inside_refused), and
             # on an address screen MENU alone, no reader asked, until a MENU (or an Enter on a named option) has gone
             # out and the page it was opened from, or the shooting screen, is back (_inside_after). "menus": the
-            # link's count of MENU presses now, so that a MENU sent past this camera (a cleanup press) counts too
+            # link's count of MENU presses now, so that a MENU sent past this camera (a cleanup press) counts too. A
+            # row a look lap opened with no decision naming it alike, with no option named ("look"; its bar as read,
+            # "bar", which ends the lock); what the owner route blanks blanked from its opening as there
+            # (safety.look_blank, docs/decisions/0024)
             self.network_open = {"row": opened, "address": address, "class": cls, "frame": self.frame.path.name,
-                                 "from": before, "closing": False, "menus": getattr(self.link, "menus", None)}
-            self.run.log("network_row_opened", key=key, frame=self.frame.path.name, row=opened, lifted_from=cls)
+                                 "from": before, "closing": False, "menus": getattr(self.link, "menus", None),
+                                 **looked}
+            self.run.log("network_row_opened", key=key, frame=self.frame.path.name, row=opened, lifted_from=cls,
+                         **({"look": True, "blank": looked["blank"]} if looked else {}))
+            if looked.get("blank"):
+                self.identity_open = self.frame.path.name       # MENU alone from its opening
+                self.blank_row()                # before the frame it opened is settled and saved
             if address:
                 self.address_open = self.frame.path.name
                 vlm.HELD = "an address screen is open"
@@ -649,6 +733,21 @@ class LiveCamera:
         self.run.log("press", key=key, frame=f.path.name, screen=self.screen.kind, moved=moved,
                      timing=self.hdmi.timing)
         self._inside_after()
+
+    def first_open_under_way(self) -> bool:
+        """Whether the camera's RESTORE_BY_HAND is on disk for this run's camera (camkit.runs.restore_pending_any;
+        camkit.first_open and kit/drive.py write it before a first open): with the caller's word for the very row (press's
+        row), that row's first open is under way; alone it says nothing of any row."""
+        from .runs import restore_pending_any
+        root = getattr(getattr(self, "run", None), "root", None)
+        return root is not None and restore_pending_any(root) is not None
+
+    def blank_row(self) -> None:
+        """A row whose values are withheld has just been opened (an owner row of safety.BLANKED, or such a row a look lap
+        opened: safety.look_blank): the eyes write every frame of it black from here (withhold) and no reader is asked (camkit.vlm.HELD),
+        until the row is left (_inside_after)."""
+        self.withhold(True)
+        vlm.HELD = "a row whose values are withheld is open"
 
     def withhold(self, on: bool) -> None:
         """While a row whose values are withheld is open (blank): the eyes save every frame black and poll the camera's
@@ -910,7 +1009,9 @@ class LiveCamera:
                 "(docs/decisions/0008)")
         else:
             lit = lit_text(self.frame.image, self.frame.path) if canon in ("enter", "ms_enter") else ""
-            why = safety.look_refused(key, lit, inside["row"], getattr(self, "options", {}).get(inside["row"]))
+            # a row a look lap opened with no decision naming it takes no option, whatever is named (docs/decisions/0024)
+            why = safety.look_refused(key, lit, inside["row"], None if inside.get("look") else
+                                      getattr(self, "options", {}).get(inside["row"]))
         if why:
             self.refuse(key, why)
 
@@ -920,7 +1021,7 @@ class LiveCamera:
         not the state the caller read, look_before). On a --network run (network given) the reason's quoted texts are
         withheld in both, since a row's bar can carry an identity value (a device's name, an SSID, an address):
         safety.quoted_withheld."""
-        said = safety.quoted_withheld(why) if getattr(self, "network", None) or getattr(self, "owner", None) else why
+        said = safety.quoted_withheld(why) if getattr(self, "network", None) or getattr(self, "owner", None) or getattr(self, "look", False) else why
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=said)
         kind = safety.ScreenChanged if changed else safety.RowRefused if row else safety.Refused
         raise kind(f"{key}: {said}")
@@ -964,7 +1065,8 @@ class LiveCamera:
         # the bar on the row itself: its label, or a reading of it with its page's icon glued on that opened it
         # (safety.bar_on_row: "LANIP Address Setting" still reads so after MENU), or that icon as the live bar shows it
         # where the run knows its labels (the icon read with a letter misread, glued on or set apart: icon_slip)
-        return safety.bar_on_row(lit, inside["row"], getattr(self, "readings", {}), getattr(self, "labels", None))
+        return safety.bar_on_row(lit, inside.get("bar") or inside["row"], getattr(self, "readings", {}),
+                                 getattr(self, "labels", None))
 
     def closing_seen(self, inside: dict) -> bool:
         """Whether a MENU, or an Enter on an option the decision names, has gone out since the screen was last judged
@@ -1023,7 +1125,7 @@ class LiveCamera:
             try:
                 why = (safety.owner_menu_only(inside.get("class"), kind, text_of(self), inside["row"],
                                               inside.get("blank", False)) if inside.get("owner") else
-                       safety.inside_menu_only(inside.get("class"), kind, text_of(self)))
+                       safety.inside_menu_only(inside.get("class"), kind, text_of(self), inside["row"]))
             except Exception:                   # a screen whose text cannot be read is no permission
                 why = "identity or credentials: the screen's text could not be read"
             if why:
@@ -1069,7 +1171,7 @@ class LiveCamera:
         if label:
             # on a --network run the label is not logged: a bar can carry an identity value after it
             self.run.log("lit_row_by_reader", key=key, frame=self.frame.path.name,
-                         label="(withheld)" if getattr(self, "network", None) or getattr(self, "owner", None) else label)
+                         label="(withheld)" if getattr(self, "network", None) or getattr(self, "owner", None) or getattr(self, "look", False) else label)
             return label
         self.run.log("press_refused", key=key, frame=self.frame.path.name, why=UNREAD, reader=why_not, by_hand=True)
         print(f"{key} refused on {self.frame.path.name}: {UNREAD} ({why_not}); if the row is one to open, open it on "
@@ -1199,7 +1301,7 @@ def withheld_on(cam, text) -> str:
     """`text` (an error's) as a print shows it on `cam`'s run: on a --network or --owner run (LiveCamera.network,
     LiveCamera.owner) its quoted texts withheld, as the run's first error line and LiveCamera.refuse withhold them: a
     command's quoted argument can be the OSD frame's full path, with the home folder in it (2026-11-14)."""
-    return safety.quoted_withheld(text) if getattr(cam, "network", None) or getattr(cam, "owner", None) else str(text)
+    return safety.quoted_withheld(text) if getattr(cam, "network", None) or getattr(cam, "owner", None) or getattr(cam, "look", False) else str(text)
 
 
 def close(cam, link):

@@ -1023,7 +1023,7 @@ def close_for_restore(cam, link, start: Path) -> None:
     EXIT_RESTORE_BY_HAND (2026-11-14, a review: it closed the link over the screen, exit EXIT_UNRESTORED). On a
     --network or --owner run every line it prints has an error's quoted texts withheld (camkit.live.withheld_on), as the
     run's first error line has."""
-    withhold = bool(getattr(cam, "network", None) or getattr(cam, "owner", None))
+    withhold = bool(getattr(cam, "network", None) or getattr(cam, "owner", None) or getattr(cam, "look", False))
     with restoring("closing the camera before its restore", withhold=withhold):
         try:
             close(cam, link)
@@ -1332,13 +1332,21 @@ def reviewed_scope() -> Path:
 
 
 def add_network_argument(ap) -> None:
-    """--network, as drive.py, crawl_run.py and prove_run.py take it: open the Wi-Fi and Bluetooth rows a dated owner
-    decision in the reviewed scope names ({"lifts": "network", ...}: network_decided_or_exit). Without it nothing
-    changes: every such row stays closed (docs/decisions/0008)."""
+    """--network, as drive.py, crawl_run.py and prove_run.py take it: for drive.py and crawl_run.py a look lap, which
+    opens every menu row to look at but what safety.look_lap_refused refuses (OWNER_NEVER's, a row whose opening acts,
+    a format, delete or reset not yet seen opened on this body)
+    (docs/decisions/0024); for all three, the options a dated owner decision in the reviewed scope names ({"lifts":
+    "network", ...}: network_decided_or_exit) may be chosen. Without it nothing changes (docs/decisions/0008)."""
     ap.add_argument("--network", action="store_true",
-                    help="open the Wi-Fi and Bluetooth rows a dated owner decision in the reviewed scope names "
-                         "(\"lifts\": \"network\"; docs/decisions/0008), to look only unless it names options; "
-                         "without it they stay closed")
+                    help="a look lap (drive.py, crawl_run.py): open every menu row to look at, local readers only and "
+                         "no screen's text kept, but what never opens and a format, delete or reset not yet seen "
+                         "opened here (docs/decisions/0024); choose only the options a dated owner decision in the "
+                         "reviewed scope names (\"lifts\": \"network\"; docs/decisions/0008)")
+
+
+LOOK_LAP = ("a look lap (--network, local readers only, no screen's text kept): every menu row opens to look at, but what "
+            "never opens and a format, delete or reset not yet seen opened on this body, whose first open is the owner's "
+            "own run (docs/decisions/0024)")
 
 
 def log_network_decided(run, rows: dict, options=None) -> None:
@@ -1351,25 +1359,31 @@ def log_network_decided(run, rows: dict, options=None) -> None:
     run.log("network_decided", rows=dict(rows), options=dict(options or {}), scope=str(reviewed_scope()))
 
 
-def network_decided_or_exit(run=None) -> tuple:
+def network_decided_or_exit(run=None, look: bool = False) -> tuple:
     """({row: the decision's date}, {row: [the options it lets the kit choose]}, the words a proof's allowance carries)
     of the dated owner decisions in the reviewed scope (reviewed_scope) that open Wi-Fi and Bluetooth rows
     (camkit.safety.network_decided, network_options), for a run given --network: stops, before anything connects and
     with nothing sent, when the camera has no reviewed scope (the template's decisions are no owner's), when the file
-    cannot be read, when any such decision, a row or an "options" it names is refused (credentials, identity, an action,
-    the serial number, a vague name, no valid date or no why), or when no decision opens a row. Sets camkit.vlm.LOCAL_ONLY
-    (a --network run asks local readers only), prints the dated rows (an address screen marked: only drive.py opens one;
-    a row with no option named: to look only) and, given the run, logs them (log_network_decided); a run that knows its
-    folder only later logs them itself."""
+    cannot be read, when any such decision, a row or an "options" it names is refused (credentials, identity, an
+    action, the serial number, a vague name, no valid date or no why), or, but on a look lap (`look`: drive.py,
+    crawl_run.py, which open every row to look at but what safety.look_lap_refused refuses, docs/decisions/0024, a
+    decision naming the options a run may choose), when no decision opens a row. Sets camkit.vlm.LOCAL_ONLY (a --network
+    run asks local readers
+    only), prints the dated rows (an address screen marked: only drive.py opens one; a row with no option named: to look
+    only) and, given the run, logs them (log_network_decided); a run that knows its folder only later logs them
+    itself."""
     from camkit import paths, vlm
     f = reviewed_scope()
     if not f.is_file():
-        sys.exit(f"--network opens only the rows a dated owner decision in the camera's reviewed scope names, and there "
-                 f"is no reviewed scope ({paths.shown(f)}): nothing was sent to the camera. Copy "
-                 "data/pass2_scope_template.json there, review it, and write the owner's decision under \"decisions\": "
-                 "{\"date\": \"YYYY-MM-DD\", \"lifts\": \"network\", \"rows\": [\"<row as the camera writes it>\"], "
-                 "\"why\": \"<the owner's words>\"}, and \"options\": {\"<row>\": [\"<option>\"]} for the options the "
-                 "kit may choose (docs/decisions/0008).")
+        # a --network run reads the owner's decisions and statements from the reviewed scope, and without one it does
+        # not start (2026-11-15, the maintainer)
+        sys.exit(f"--network reads the owner's decisions and statements from the camera's reviewed scope, and there is "
+                 f"no reviewed scope ({paths.shown(f)}): nothing was sent to the camera. The owner starts one at their "
+                 "own terminal with kit/tools/owner_statement.py cards (the blank-cards statement a look lap's first "
+                 "opens need); a dated owner decision under its \"decisions\", {\"date\": \"YYYY-MM-DD\", \"lifts\": "
+                 "\"network\", \"rows\": [\"<row as the camera writes it>\"], \"why\": \"<the owner's words>\", "
+                 "\"options\": {\"<row>\": [\"<option>\"]}}, names the options the kit may choose (docs/decisions/0008, "
+                 "0024).")
     scope = decisions_scope_or_exit(f, "--network")
     rows, refusals = safety.network_decided(scope)
     if refusals:
@@ -1377,13 +1391,14 @@ def network_decided_or_exit(run=None) -> tuple:
                  f"to the camera ({paths.shown(f)}):\n" + "\n".join(f"  {r}" for r in refusals)
                  + "\nTake those rows out of the decision (they stay by hand, docs/decisions/0008 and 0009), then run "
                    "again.")
-    if not rows:
+    if not rows and not look:
         sys.exit(f"--network: no dated owner decision in {paths.shown(f)} opens a row (\"lifts\": \"network\", \"date\", "
                  "\"rows\", \"why\"): nothing was sent to the camera")
     options = safety.network_options(scope)
     vlm.LOCAL_ONLY = True
-    print("the owner decided that the kit may open these Wi-Fi and Bluetooth rows remotely (--network; local readers "
-          "only):", flush=True)
+    if rows:
+        print("the owner decided that the kit may open these Wi-Fi and Bluetooth rows remotely (--network; local "
+              "readers only):", flush=True)
     for row, day in rows.items():
         how = ("an address screen: only drive.py opens it, field names only" if safety.address_screen(row) else
                f"may choose {', '.join(options[row])}" if options.get(row) else "to look only")

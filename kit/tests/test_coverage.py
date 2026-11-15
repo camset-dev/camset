@@ -40,7 +40,7 @@ MENU = [("Shooting", "G1", "Alpha"), ("Shooting", "G1", "Bravo"), ("Shooting", "
         ("Shooting", "G1", "Delta"), ("Shooting", "G1", "Echo"), ("Shooting", "G1", "Foxtrot"),
         ("Shooting", "G1", "Golf"), ("Shooting", "G1", "Hotel"), ("Shooting", "G1", "India"),
         ("Shooting", "G1", "Juliet"), ("Shooting", "G1", "Kilo"), ("Shooting", "G3", "Alpha"),
-        ("Network", "G4", "Display Wi-Fi Info."), ("Setup", "G2", "Setting Reset"), ("Setup", "G2", "Language"),
+        ("Network", "G4", "Display Wi-Fi Info."), ("Setup", "G2", "Setting Reset"), ("Setup", "G2", "IP Address Setting"),
         ("Setup", "G2", "Display Serial Number"), ("Setup", "G2", "Version")]
 SETTINGS = [
     setting("global:0x0100", "Alpha", ["Alpha"], ((0, "Off"), (1, "On"), (2, "Auto")), in_sets=True,
@@ -178,7 +178,7 @@ def test_the_made_up_camera_gives_each_status(camera):
             ("Delta",): "not in the settings file (Sony)", ("Echo",): "information screen",
             ("Foxtrot",): "tested, no record changes", ("Golf",): "needs equipment", ("Hotel",): "no proof possible",
             ("India",): "greyed in state", ("Juliet",): "kit cannot read", ("Kilo",): "not yet tried",
-            ("Setting Reset",): "action, nothing to map", ("Language",): "closed by rule",
+            ("Setting Reset",): "action, nothing to map", ("IP Address Setting",): "closed by rule",
             ("Display Wi-Fi Info.",): "information screen", ("Mike",): "proved", ("Add Item",): "proved"}
     for path, status in want.items():
         assert row(led, *path)["status"] == status, path
@@ -194,7 +194,7 @@ def test_the_made_up_camera_gives_each_status(camera):
     assert row(led, "Display Wi-Fi Info.")["inferred"] == "class"
     assert row(led, "Golf")["equipment"] == "a RAW recorder"
     assert row(led, "India")["blocker"] == {"row": "Alpha"}
-    lang = row(led, "Language")
+    lang = row(led, "IP Address Setting")
     assert lang["rule"] == "identity/by hand" and lang["opener"]
     alpha = {o["key"]: o for o in led.options}["global:0x0100"]["values"]
     assert alpha == {0: "proved", 1: "proved", 2: "not offered"}
@@ -1111,8 +1111,8 @@ def test_todo_lists_what_is_left_by_need_and_yield(camera):
     assert ("Charlie",) in paths_left                       # sampled, one value still to try
     assert {x["needs"] for x in items} <= set(coverage.NEEDS)
     assert [x["entry"]["path"] for x in coverage.todo(led, needs="kit")] == [["Juliet"]]
-    # no option of Language is ever chosen remotely, whatever a decision says: the owner's hand
-    assert [x["entry"]["path"] for x in coverage.todo(led, needs="hand")] == [["Language"]]
+    # no option of IP Address Setting is ever chosen remotely, whatever a decision says: the owner's hand
+    assert [x["entry"]["path"] for x in coverage.todo(led, needs="hand")] == [["IP Address Setting"]]
     assert all(x["entry"]["tab"] == "Setup" for x in coverage.todo(led, tab="Setup"))
     ys = [x["yield"] for x in items]
     assert ys == sorted(ys, reverse=True)
@@ -1206,7 +1206,7 @@ def test_settled_says_what_is_settled(camera, monkeypatch):
     v = coverage.settled(["Echo"], camera=CAM, ledger=led)
     assert v.skip and "information screen (2026-11-14 drive)" in v.reason
     assert not coverage.settled(["Kilo"], camera=CAM, ledger=led).skip
-    v = coverage.settled(["Language"], camera=CAM, ledger=led)
+    v = coverage.settled(["IP Address Setting"], camera=CAM, ledger=led)
     assert not v.skip and "closed by rule" in v.reason and "--owner" in v.reason
     # an action or an information screen by its class alone: no look yet, so a run allowed to open it is not stopped
     for path in (["Setting Reset"], ["Display Wi-Fi Info."]):

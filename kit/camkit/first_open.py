@@ -15,9 +15,11 @@ row seen with the rows above it, told by its labels from the top-level row compa
 any tab and mode. The row's latest open look overrides them: "changed" or "acted" (a first open that failed: ACTED) and
 a first open not yet checked, or one a page's check could not clear (not_reached with PENDING or PAGE), leave it unseen.
 A crawl skips a row whose first open failed (only kit/drive.py --press right opens it again) and opens a row a page's
-check could not clear alone. A row the records hold greyed whose Right brings up a notice again costs no download of
-its own: the link is asked, the marker stays, and the next check or the run's end download clears it with the rest
-(a record that then differs makes each such row one a page's check could not clear).
+check could not clear alone, asking under its label and the name a look lap keeps of it; a failure under a placeholder
+(placeholder()), a name rows share, stands until retracted, whatever look follows it. A row the records hold greyed
+whose Right brings up a notice again costs no download of its own: the link is asked, the marker stays, and the next
+check or the run's end download clears it with the rest (a record that then differs makes each such row one a page's
+check could not clear).
 """
 import time
 from pathlib import Path
@@ -48,8 +50,8 @@ def _with_parents(k: tuple) -> set:
 class Seen:
     """The rows seen opened on one camera (seen_record): seen(path) and unseen(path) (the path's prefixes that are not,
     a row above first); acting, the rows whose first open failed; alone, the rows a page's check could not clear;
-    greyed, the rows the records hold greyed. A path with a label read as nothing (a page model row no vote named) is
-    never seen: one such row's clean first open would else stand for every other."""
+    greyed, the rows the records hold greyed. A path with a label read as nothing (a page model row no vote named) or a
+    placeholder is never seen: one such row's clean first open would else stand for every other."""
 
     def __init__(self, opened=(), acting=(), unchecked=(), alone=(), greyed=()):
         self.opened, self.acting, self.unchecked = set(opened), set(acting), set(unchecked)
@@ -57,7 +59,8 @@ class Seen:
 
     def seen(self, path) -> bool:
         k = key(path)
-        return bool(k) and all(k) and k in self.opened and k not in self.acting and k not in self.unchecked
+        return (bool(k) and all(k) and not placeholder(k) and k in self.opened and k not in self.acting
+                and k not in self.unchecked)
 
     def unseen(self, path) -> list:
         return [tuple(path[:i]) for i in range(1, len(path or ()) + 1) if not self.seen(path[:i])]
@@ -77,6 +80,14 @@ class Seen:
         names |= {k[-1] for k in self.opened if len(k) == len(here) + 1 and k[:-1] == here}
         hits = [n for n in names if n and seen.startswith(n) and not seen[len(n):len(n) + 1].isalnum()]
         return (*parent, max(hits, key=len)) if hits else None
+
+
+def placeholder(k) -> bool:
+    """Whether a path (labels) holds a placeholder a withholding run writes for a label it does not keep ("(withheld)":
+    kit/crawl_run.py kept_label): such a path is never seen, so a clean first open runs again on the next lap; one
+    that failed, or that a page's check could not clear, stands for every row written under it until retracted
+    (seen_record)."""
+    return any(str(x).startswith("(") for x in k or ())
 
 
 def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
@@ -103,8 +114,20 @@ def seen_record(camera: str | None = None) -> Seen:
     looks = coverage.read_looks(camera)
     gone = set(coverage.retracted(looks))
     opened, greyed, latest = set(), set(), {}
+    stuck = {"acting": set(), "alone": set()}
     for _line, lk in looks:
         k, did, res = key(lk.get("path")), lk.get("did"), lk.get("result")
+        if k and placeholder(k):
+            # a name rows share (placeholder()): never seen or greyed; a first open that failed under it, or that a
+            # page's check could not clear, stands whatever look follows, until a retraction (read in the file's order)
+            if did == "open" and res == "retract":
+                stuck["acting"].discard(k)
+                stuck["alone"].discard(k)
+            elif did == "open" and res in ACTED:
+                stuck["acting"].add(k)
+            elif did == "open" and res == "not_reached" and lk.get("note") == PAGE:
+                stuck["alone"].add(k)
+            continue
         if not k or (k, did) in gone:
             continue
         if res in SEEN_RESULTS.get(did, ()):
@@ -123,9 +146,9 @@ def seen_record(camera: str | None = None) -> Seen:
         for proof in jsonl.read(run / "proofs.jsonl", bad="skip"):
             if isinstance(proof.get("path"), list) and key(proof["path"]):
                 opened |= _with_parents(key(proof["path"]))
-    return Seen(opened, {k for k, lk in latest.items() if lk.get("result") in ACTED},
+    return Seen(opened, {k for k, lk in latest.items() if lk.get("result") in ACTED} | stuck["acting"],
                 {k for k, lk in latest.items() if lk.get("result") == "not_reached"},
-                {k for k, lk in latest.items() if lk.get("note") == PAGE}, greyed)
+                {k for k, lk in latest.items() if lk.get("note") == PAGE} | stuck["alone"], greyed)
 
 
 IDENTITY = ("ModelName", "SoftwareVersion")       # the SDK's properties a camera's key is made of (kit/tools/identify.py)
@@ -183,7 +206,7 @@ class FirstOpens:
     download (proving.base.LOCK_S); `wait`: camkit.session.wait_for."""
 
     def __init__(self, link, eyes, run, start: Path, seen: Seen, skip_why: str, lock: float, wait=None,
-                 private: bool = False, per: str = "row"):
+                 private: bool = False, per: str = "row", name=None):
         from .session import wait_for
         self.link, self.eyes, self.run, self.start = link, eyes, run, Path(start)
         self.seen, self.skip_why, self.lock, self.private, self.per = seen, skip_why, lock, private, per
@@ -191,14 +214,25 @@ class FirstOpens:
         self.marker, self.pending, self.deferred, self.notices = None, [], [], set()
         self.failure, self.failed = "", []         # why a check failed, and the rows it was for: the marker stays
         self.held = []                              # rows greyed again: checked by the next download, or the run's end
+        # what a look lap writes of a label (kit/crawl_run.py kept_label: the label it knows, or its placeholder) in
+        # events.jsonl, the looks file, RESTORE_BY_HAND and the console; the label as read stays in memory (pending)
+        self.name = name
+
+    def kept(self, path) -> list:
+        """The path as this run writes it: each label as `name` keeps it (a look lap's), else as given."""
+        return [self.name(str(x)) if self.name else str(x) for x in path]
+
+    def _failed_before(self, path) -> bool:
+        """Whether the records hold a failed first open of the row at `path`, under its label or the name kept of it."""
+        return key(path) in self.seen.acting or key(self.kept(path)) in self.seen.acting
 
     def _look(self, path, result, **kw) -> bool:
-        return failed_look(self.run.root.name, self.run.dir.name, path, result, private=self.private, **kw)
+        return failed_look(self.run.root.name, self.run.dir.name, self.kept(path), result, private=self.private, **kw)
 
     def skips(self, path) -> bool:
-        """Whether opening(path) refuses the row with nothing written (Seen.skips), asked before it (camkit.crawl's
-        left_unopened: the coverage gate's line then never says the row is opened)."""
-        return self.seen.skips(path, self.skip_why)
+        """Whether opening(path) refuses the row with nothing written (Seen.skips, the name kept of it asked too), asked
+        before it (camkit.crawl's left_unopened: the coverage gate's line then never says the row is opened)."""
+        return self.seen.skips(path, self.skip_why) or (not self.seen.seen(path) and self._failed_before(path))
 
     def opening(self, path) -> str | None:
         """Before Right on the row at `path` (labels from the top-level row): None to open it, the row then pending
@@ -207,7 +241,10 @@ class FirstOpens:
         a marker or a look not written."""
         if self.seen.seen(path):
             return None
-        if key(path) in self.seen.acting:
+        if self._failed_before(path):
+            if self.kept(path) != [str(x) for x in path]:      # a name withheld: no label as read in what is written
+                return (f"{UNSEEN} (a first open under the name kept of it, which rows share, changed a record or lost "
+                        "the link: kit/drive.py --path with the row's own name and --press right opens it again)")
             return (f"{UNSEEN} (its first open changed a record or lost the link: kit/drive.py --path "
                     f"{' --path '.join(map(repr, path))} --press right opens it again)")
         if self.skip_why:
@@ -215,8 +252,8 @@ class FirstOpens:
         if self.marker is None:
             try:
                 self.marker = mark_restore_by_hand(self.run.root, self.run.dir.name, self.start,
-                                                   f"the first open of {' > '.join(path)!r} on this body may drop the "
-                                                   "link or act")
+                                                   f"the first open of {' > '.join(self.kept(path))!r} on this body "
+                                                   "may drop the link or act")
             except Exception as e:      # noqa: BLE001 (any place unwritten: nothing is pressed, what was written goes)
                 clear_restore_by_hand(self.run.root)
                 return f"{UNSEEN} (RESTORE_BY_HAND could not be written: {type(e).__name__}: {e})"
@@ -226,7 +263,7 @@ class FirstOpens:
                 self.marker = None
             return f"{UNSEEN} (its pending look could not be recorded)"
         self.pending.append(tuple(path))
-        self.run.log("first_open", path=list(path), marker=str(self.marker))
+        self.run.log("first_open", path=self.kept(path), marker=str(self.marker))
         return None
 
     def not_opened(self, path) -> None:
@@ -255,7 +292,7 @@ class FirstOpens:
         could not clear."""
         if self.per != "page" or nxt is None or nxt.get("page") != pos.get("page"):
             return True
-        return any(key(p) in self.seen.alone for p in self.pending)
+        return any(key(p) in self.seen.alone or key(self.kept(p)) in self.seen.alone for p in self.pending)
 
     def settle(self, cam) -> None:
         """The pending first opens checked, the crawl back on its row's page. Where every pending row brought up its
@@ -277,7 +314,7 @@ class FirstOpens:
                 for lk in self.deferred:
                     coverage.append_look(self.run.root.name, lk, private=self.private)
                 self.held += rows
-                self.run.log("first_open_held", paths=[list(p) for p in rows], how="greyed again")
+                self.run.log("first_open_held", paths=[self.kept(p) for p in rows], how="greyed again")
                 self.pending, self.deferred = [], []
                 return
         try:
@@ -303,9 +340,15 @@ class FirstOpens:
     def _clean(self, rows, how: str) -> None:
         for lk in self.deferred:
             coverage.append_look(self.run.root.name, lk, private=self.private)
+        # a pending row the coverage gate wrote no look for (its label withheld on a look lap, kit/crawl_run.py
+        # kept_row: docs/decisions/0024) gets its clean look here, by the path opening() recorded its pending look under
+        told = {key(lk.get("path")) for lk in self.deferred}
+        for p in rows:
+            if key(self.kept(p)) not in told and key(p) not in self.notices:
+                self._look(p, "looked", note="first open checked")
         clear_restore_by_hand(self.run.root)
-        self.run.log("first_open_checked", paths=[list(p) for p in self.held + rows], how=how)
-        self.seen.opened |= {key(p) for p in rows if key(p) not in self.notices}
+        self.run.log("first_open_checked", paths=[self.kept(p) for p in self.held + rows], how=how)
+        self.seen.opened |= {key(p) for p in rows if key(p) not in self.notices and not placeholder(self.kept(p))}
         self.marker, self.pending, self.deferred, self.notices, self.held = None, [], [], set(), []
 
     def _fail(self, rows, keys) -> None:
@@ -332,7 +375,8 @@ class FirstOpens:
                 self._look(p, "acted", note="the link went during its first open")
             else:
                 self._look(p, "not_reached", note=PAGE)
-        print(owner_words(rows or ["(a row)"], why, self.marker, self.start, self.run), flush=True)
+        print(owner_words([self.kept(p) for p in rows] or ["(a row)"], why, self.marker, self.start, self.run),
+              flush=True)
 
     def ended(self, restored: bool, ending) -> bool:
         """At the run's end, while the marker is still there: after a failed check (settle) it stays; with first opens
@@ -344,7 +388,8 @@ class FirstOpens:
         changes = [c.key for c in getattr(ending, "changes", None) or []]
         back = "the start file is back and checked" if restored else "the start file was not put back and checked"
         if self.failure:
-            print(owner_words(self.failed, f"{self.failure}; {back}", self.marker, self.start, self.run), flush=True)
+            print(owner_words([self.kept(p) for p in self.failed], f"{self.failure}; {back}", self.marker, self.start,
+                              self.run), flush=True)
             return True
         rows = list(self.pending)
         if restored and getattr(ending, "after", None) is not None and not changes:
@@ -353,7 +398,8 @@ class FirstOpens:
         self._fail(rows, changes)
         rows = self.failed
         why = f"{len(changes)} records differed from the start file at the run's end; {back}" if changes else back
-        print(owner_words(rows or ["(a row)"], why, self.marker, self.start, self.run), flush=True)
+        print(owner_words([self.kept(p) for p in rows] or ["(a row)"], why, self.marker, self.start, self.run),
+              flush=True)
         return True
 
 

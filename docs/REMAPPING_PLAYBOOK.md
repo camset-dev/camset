@@ -56,7 +56,8 @@ and the default is no.
    - reset or initialize, cleaning, pixel mapping, firmware update;
    - memory registration, Recall Custom registration;
    - FTP transfer, send.
-   `kit/camkit/safety.py` holds the never-open list; extend it for the new body's names. Card
+   `kit/camkit/safety.py` holds the never-open list, a second check on a body nobody has seen beside the first-open
+   procedure, the Enter check and the blank cards; add the new body's names to it. Card
    actions are allowed only on the test cards the owner names. The owner runs resets and
    Initialize by hand. A prover or tool that runs one of these opens its row only when the run names it with
    `--allow "ROW"`, your owner's word, and refuses to start without it or with any other `--allow`; the proof lines
@@ -72,22 +73,27 @@ and the default is no.
 3. **By hand only:** network identity and connection settings (Wired LAN, Wi-Fi, Bluetooth, access
    authentication, FTP server), USB connection mode, language, NTSC/PAL, area and date, and Auto
    Power OFF Temp. (Decision 8. The a1 II's owner allowed Auto Power OFF Temp. remotely from 2026-11-02; ask yours.)
-   The screen that shows the body's serial number (Display Serial Number on the a1 II) is never opened either, since
-   every frame is kept as evidence.
+   The screen that shows the body's serial number (Display Serial Number on the a1 II) opens only on a look lap or the
+   owner route, which save its frames black, since every frame is kept as evidence.
    No `--allow` opens the camera's identity, its connections or its region, whatever the owner said: `drive.py`,
    `card_actions.py` and every prover refuse such a label before anything connects (`safety.allow_refused`), and the
    checks on the camera refuse the row however a run named it (`safety.never_lifted`).
-   The default is no, by hand, and stays so unless your owner decides otherwise for a named row; ask yours. A dated
-   owner decision in the reviewed scope, `{"date": "YYYY-MM-DD", "lifts": "network", "rows": ["<the row as the camera
-   writes it>"], "why": "<their words>"}`, used by a run given `--network` (`drive.py`, `crawl_run.py`, `prove_run.py`
-   with `--rows`), may open a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency Band, Bluetooth
-   Function, Bluetooth Rmt Ctrl, Airplane Mode), a screen that shows the camera's network addresses (Display Wi-Fi
-   Info., Display Wired LAN Info., Disp Device Address: `drive.py` only, as the last label of `--path`), or an identity
-   or connection row that has been seen to open and close over the link without harm (decision 8 lists them, and
-   `safety.py` says beside each when it was seen). A row is liftable only once so seen: IP Address Setting dropped the
-   wired LAN link when opened and left with MENU (2026-11-14), and USB Connection Mode, USB LUN Setting, USB Power
-   Supply, Language, NTSC/PAL and Area/Date/Time have not been seen opened over the link, so all stay by hand. No
-   `--allow` opens any of them. A row so named is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
+   Changing one is by hand, and stays so unless your owner decides otherwise for a named row; ask yours. A run given
+   `--network` (`drive.py`, `crawl_run.py`) is a look lap (decision 24): it may open any row to look at, no decision
+   naming it, but what never opens (a firmware update, what loads, the sensor's, shutter's or lens's motion,
+   Initialize, the Screen Reader), a row whose opening acts (IP Address Setting, WPS, Pairing, Access Point Set., the
+   smartphone, cloud, streaming, tethering and FTP rows, Send, Create New Folder: the owner's own run, each time) and a
+   format, delete or reset this body has not been seen to open (the owner's own run first), a row not yet seen opened
+   under the first-open procedure. A dated owner decision in the reviewed scope, `{"date": "YYYY-MM-DD", "lifts":
+   "network", "rows": ["<the row as the camera writes it>"], "why": "<their words>"}`, names the options such a run, or
+   `prove_run.py` with `--rows`, may choose in a Wi-Fi or Bluetooth setting (on the a1 II, Wi-Fi Connect, Wi-Fi Frequency
+   Band, Bluetooth Function, Bluetooth Rmt Ctrl, Airplane Mode), a screen that shows the camera's network addresses
+   (Display Wi-Fi Info., Display Wired LAN Info., Disp Device Address), or an identity or connection row that has been
+   seen to open and close over the link without harm (decision 8 lists them, and `safety.py` says beside each when it
+   was seen). A decision names a row only once so seen: IP Address Setting dropped the wired LAN link when opened and
+   left with MENU (2026-11-14), and USB Connection Mode, USB LUN Setting, USB Power Supply, Language, NTSC/PAL and
+   Area/Date/Time have not been seen opened over the link, so no decision names them. No `--allow` opens any of them.
+   A row a look lap opens is looked at only: up, down and MENU, no Enter, Right, Left or dial inside it, until the screen
    read right after a MENU (or an Enter on a named option) is the shooting screen, or the page it was opened from with
    its lit bar on the row itself; never on what kind of screen the camera seems to show alone, nor on a later read.
    Where the row's own screen read as the shooting screen before any MENU, it is taken as a screen of no known kind
@@ -107,7 +113,7 @@ and the default is no.
    is yours alone on macOS and Linux. IP Address Setting and the USB and region rows above, credentials, the SSID, WPS,
    access point and pairing rows, Display Serial Number, every reset, the rows whose opening may itself start or end a
    connection (Smartphone Connection, the cloud, streaming and tethering rows, FTP Function: nobody has yet seen what
-   Right does there), Server Setting and Edit Device Name stay by hand whatever a network decision says, and one naming
+   Right does there), Server Setting and Edit Device Name are named by no network decision, and one naming
    one, or saying `"confirm"`, `"link_loss"` or `"values"`, stops the run before anything connects. A dated owner
    decision, `{"date", "lifts": "owner", "rows", "why"}`, may name them and the rest of the never-open list for
    `drive.py --owner` alone, the last label of `--path`, one row per run (decisions 4, 5, 8 and 9 say how), never a
@@ -125,7 +131,8 @@ and the default is no.
    etc".)
 4. **Credentials:**
    - Never type, read, OCR, screenshot or store a password. That includes the camera's own Access
-     Authen. Info screen: never navigate the kit there, because every frame is kept as evidence. (The a1 II's owner
+     Authen. Info screen: only a look lap opens it, saving its frames black and pressing MENU alone there, because every
+     frame is kept as evidence (decision 24). (The a1 II's owner
      decided on 2026-11-13 that a dated owner decision may open their camera's credentials screens for `drive.py
      --owner`, nothing ever typed, their frames saved black unless it says `"values": "logged"`, which keeps the text
      in the run's `drive.jsonl` alone, never in the console (decision 9). Ask yours: the default is never.)
