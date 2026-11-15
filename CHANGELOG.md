@@ -57,7 +57,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **The a1 II definition names twelve more records** (Expert mode): the spot size and the Custom area as the camera
   writes them when an AF area is registered. The notes of Exposure Comp.'s two copies now say what the camera's
-  files show: copy 1 always equals it, and copy 2 can keep a slider position that MENU cancelled.
+  files and one test on the camera show: copy 1 always equals it, and copy 2 keeps the slider's position when MENU
+  cancels the screen.
 - **Playback's Image Index showed its two values the wrong way round** on the a1 II: 0 is 9 Images and 3 is
   30 Images. A firmware cross-check reported in issue 1 found it, and the frames kept from the day the row was
   changed by hand confirm it.

@@ -31278,7 +31278,7 @@
      "+5.0 EV"
     ]
    ],
-   "note": "Follows Exposure Comp. when a value is set. It also kept a slider position that MENU then cancelled (seen in Movie mode), so it can differ from Exposure Comp.",
+   "note": "Follows Exposure Comp. when a value is set. It also keeps the slider's position when MENU cancels the screen, so it can differ from Exposure Comp.",
    "in_sets": false,
    "scalar": true,
    "size": 1,

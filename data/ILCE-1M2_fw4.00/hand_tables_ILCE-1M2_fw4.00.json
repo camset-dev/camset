@@ -38,7 +38,7 @@
     },
     "global:0x13d6": {
       "name": "Exposure Comp. (copy 2)",
-      "note": "Follows Exposure Comp. when a value is set. It also kept a slider position that MENU then cancelled (seen in Movie mode), so it can differ from Exposure Comp."
+      "note": "Follows Exposure Comp. when a value is set. It also keeps the slider's position when MENU cancels the screen, so it can differ from Exposure Comp."
     },
     "global:0x0e04": {
       "name": "ISO AUTO Max (movie)",
