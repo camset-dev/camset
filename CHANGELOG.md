@@ -55,6 +55,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **Playback's Image Index showed its two values the wrong way round** on the a1 II: 0 is 9 Images and 3 is
+  30 Images. A firmware cross-check reported in issue 1 found it, and the frames kept from the day the row was
+  changed by hand confirm it.
 - **The a1 II's Different Set for Still/Mv is read and edited:** its seven boxes (Aperture, Shutter Speed, ISO,
   Exposure Comp., Metering Mode, White Balance, Picture Profile) are settings on the Setup tab, each proved on the
   camera. What the White Balance and Picture Profile boxes do to the stills and movie copies is proved too, in the

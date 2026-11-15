@@ -930,7 +930,7 @@ enums:
         settings on it proved on the camera.'
     0x03cb:
       id: image_index
-      doc: 'Image Index [Playback > Playback Option]: 0 30 Images, 3 9 Images. live settings; 1 of 1 settings on
+      doc: 'Image Index [Playback > Playback Option]: 0 9 Images, 3 30 Images. live settings; 1 of 1 settings on
         it proved on the camera.'
     0x03cc:
       id: display_as_group

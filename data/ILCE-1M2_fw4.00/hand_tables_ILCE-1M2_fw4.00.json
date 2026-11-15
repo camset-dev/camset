@@ -1417,7 +1417,7 @@
       "note": "Enlarge Screen. Setting it On also assigns Enlarge Menu Scrn to a custom key: on the body mapped, Custom Button 2 (0x0410 and 0x042a, 2547); whether the camera always takes that button, or the first free key, is not known. It also puts the monitor on Monitor(Manual) (0x047a 7).",
       "values": [[0, "Off"], [2, "On (assigns a custom key; Custom Btn 2 on the camera tried)"]]
     },
-    "global:0x03cb": {"note": "Playback's Image Index.", "values": [[0, "30 Images"], [3, "9 Images"]]},
+    "global:0x03cb": {"note": "Playback's Image Index.", "values": [[0, "9 Images"], [3, "30 Images"]]},
     "global:0x03c7": {
       "note": "Playback > Edit > JPEG/HEIF Switch (the shooting menu's is 0x01d8).",
       "values": [[0, "JPEG"], [1, "HEIF(4:2:0)"], [2, "HEIF(4:2:2)"]]
