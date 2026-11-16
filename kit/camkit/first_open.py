@@ -14,6 +14,9 @@ rows.jsonl (an outcome whose screen opened and was left, OPENED) and its proofs.
 row seen with the rows above it, told by its labels from the top-level row compared as safety.plain compares them, in
 any tab and mode. The row's latest open look overrides them: "changed" or "acted" (a first open that failed: ACTED) and
 a first open not yet checked, or one a page's check could not clear (not_reached with PENDING or PAGE), leave it unseen.
+A look's did is "open" only where nothing but up, down and MENU followed the opening press (kit/drive.py's look:
+camkit.coverage.drive_look); a run that pressed anything else inside the row chose, and a record a choice changed leaves
+the row seen (2026-11-15: a slider moved and cancelled on a row seen opened many times made it unseen).
 A crawl skips a row whose first open failed (only kit/drive.py --press right opens it again) and opens a row a page's
 check could not clear alone, asking under its label and the name a look lap keeps of it; a failure under a placeholder
 (placeholder()), a name rows share, stands until retracted, whatever look follows it. A row the records hold greyed

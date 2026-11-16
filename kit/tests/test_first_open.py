@@ -722,7 +722,7 @@ def drive_run(tmp_path, monkeypatch, path=("Drive Mode",), presses=("right",), c
                         ("go_to", lambda *a, **k: at), ("enter_any", lambda cam, path, i: None),
                         ("screen_text", lambda cam, grip: "Drive Mode  Single Shooting"),
                         ("highlighted", lambda image, p: now()[1]), ("time", SimpleNamespace(sleep=lambda s: None)),
-                        ("after_armed", lambda cam, grip: ("list", "Single Shooting", "")),
+                        ("after_armed", lambda cam, grip, kinds=None: ("list", "Single Shooting", "")),
                         ("close_for_restore", lambda cam, link, start: None),
                         ("session", SimpleNamespace(ended=lambda link, before, **k: ending,
                                                     put_back=lambda link, e, before: e)),
@@ -791,6 +791,51 @@ def test_drive_keeps_the_marker_when_the_link_goes_at_the_first_open(tmp_path, m
     code, pressed, line, said = drive_run(tmp_path, monkeypatch, fail=LinkError("camera link exited"))
     assert code == EXIT_RESTORE_BY_HAND and restore_pending(tmp_path) and line["restore"] == "by hand"
     assert pressed[-1] == ("right", True)
+
+
+def latest_look(camera, path):
+    got = [lk for _, lk in coverage.read_looks(camera) if lk.get("path") == list(path)]
+    return got[-1] if got else None
+
+
+def test_a_seen_rows_run_that_pressed_inside_and_changed_a_record_keeps_it_seen(tmp_path, monkeypatch, scope):
+    """kit2_a1fin_expcomp_cancel2 (2026-11-15): a row seen opened many times, its slider opened, moved two steps and
+    cancelled with MENU; one record differed (the slider's second copy) and the start file came back. The run's look
+    is a choice that changed a record: the row stays seen, and the next run on it goes as any run does. A look-only
+    run (the opening press, then looking keys alone) whose download differs still leaves the row unseen, as before."""
+    import camkit
+    import drive
+    from camkit import paths
+    monkeypatch.setattr(first_open, "other_body", lambda link, camera: "")
+    root = paths.runs_top() / TEST_CAMERA            # the run where drive.py's coverage gate reads its drive.jsonl
+    monkeypatch.setattr(camkit, "RUNS", paths.runs_top())     # a marker in the test's own runs/ alone, never the clone's
+    looks_of(TEST_CAMERA, look(["Drive Mode"], by="drive"))
+    slider = [("menu", "Drive Mode"), ("slider", ""), ("slider", ""), ("slider", ""), ("menu", "Drive Mode")]
+    code, pressed, line, said = drive_run(tmp_path, monkeypatch, presses=["right", "left", "left", "menu"],
+                                          changes=["global:0x0357"], root=root, states=slider)
+    assert code in (0, None) and [k for k, _ in pressed] == ["menu", "right", "left", "left", "menu"], said
+    assert "first_open" not in line and not any(m for _, m in pressed)
+    lk = latest_look(TEST_CAMERA, ["Drive Mode"])
+    assert lk["did"] == "choose" and lk["result"] == "changed" and lk["records_changed"] == ["global:0x0357"], lk
+    seen = first_open.seen_record()
+    assert seen.seen(["Drive Mode"]) and ("drive mode",) not in seen.acting
+    assert drive.first_open_or_exit(SimpleNamespace(path=["Drive Mode"], press=["right", "left"], owner=False)) is None
+    # the next run on it, pressing inside again: not refused as unseen, no first open
+    code, pressed, line, said = drive_run(tmp_path, monkeypatch, presses=["right", "left", "menu"], root=root,
+                                          states=slider)
+    assert code in (0, None) and [k for k, _ in pressed] == ["menu", "right", "left", "menu"], said
+    assert "not been seen opened" not in said and "first_open" not in line
+    # a look-only run whose download differs: the row's latest open look says changed, and the row is unseen
+    code, pressed, line, said = drive_run(tmp_path, monkeypatch, presses=["right", "down", "up", "menu"],
+                                          changes=["global:0x0357"], root=root, states=slider)
+    assert code in (0, None) and [k for k, _ in pressed] == ["menu", "right", "down", "up", "menu"], said
+    lk = latest_look(TEST_CAMERA, ["Drive Mode"])
+    assert lk["did"] == "open" and lk["result"] == "changed", lk
+    seen = first_open.seen_record()
+    assert not seen.seen(["Drive Mode"]) and ("drive mode",) in seen.acting
+    with pytest.raises(SystemExit) as e:
+        drive.first_open_or_exit(SimpleNamespace(path=["Drive Mode"], press=["right", "left"], owner=False))
+    assert "its first open is a look" in str(e.value)
 
 
 def test_drive_refuses_the_first_open_on_another_lit_row(tmp_path, monkeypatch, scope):
@@ -1075,6 +1120,33 @@ def test_the_refused_frame_of_exposure_comp_is_tied_to_its_row_by_its_icons_read
     if not drive.reads_row(lit, "Exposure Comp."):      # the bar read with the icon's letter, as on 2026-11-15
         assert drive.icon_reading(lit, "Exposure Comp.", row, {*known, *gone_to[1]}) == "s exposure comp.", lit
         assert NOT_SEEN in drive.lit_refused(lit, [], ["Exposure Comp."], seen, known, None, values)[0]
+
+
+def test_the_slider_exposure_comps_first_open_met_is_a_screen_a_first_open_reads():
+    """Opt-in (skipped without the a1 II's kit2_a1fin_expcomp_look in this clone): the frame of that run's Right, the
+    first open of Exposure Comp. (2026-11-15), read as the kit reads it, is a slider: no kind safety.SHOWN_KINDS holds,
+    so the run kept RESTORE_BY_HAND and left the slider open; one safety.FIRST_OPEN_KINDS holds, so a first open now
+    goes on over it (drive.after_armed given that set: no refusal where its text reads; the owner route's own set
+    still refuses it)."""
+    import drive
+    from camkit import jsonl, live, ocr, paths, screen
+    from camkit.frames import load
+    run = paths.a1ii_root() / "kit2_a1fin_expcomp_look"
+    if not (run / "events.jsonl").is_file():
+        pytest.skip("the a1 II's kit2_a1fin_expcomp_look is not in this clone")
+    right = [e for e in jsonl.read(run / "events.jsonl", bad="skip") if e.get("kind") == "press"
+             and e.get("key") == "right"]
+    assert right and right[-1]["screen"] == "slider", right
+    frame = load(run / "shots" / right[-1]["frame"])
+    kind = screen.read(frame).kind
+    assert kind == "slider" and not live.black(frame)
+    assert kind in safety.FIRST_OPEN_KINDS and kind not in safety.SHOWN_KINDS
+    if ocr.engine() not in ocr.available():
+        return                       # the text check after_armed makes needs this computer's OCR
+    cam = SimpleNamespace(frame=frame, refresh=lambda tag: screen.read(frame))
+    got = drive.after_armed(cam, None, safety.FIRST_OPEN_KINDS)
+    assert got[0] == "slider" and got[2] == "", got
+    assert "reads as 'slider', no kind the kit reads" in drive.after_armed(cam, None)[2]
 
 
 def test_held_rows_are_kept_through_a_failed_check_and_a_lost_link(tmp_path):

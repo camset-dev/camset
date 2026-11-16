@@ -1465,6 +1465,24 @@ def test_drive_presses_nothing_after_an_armed_press_whose_screen_cannot_be_judge
     assert extra["refreshes"] == ["after-armed"]                      # read once, and nothing after it
 
 
+@pytest.mark.parametrize("kind", ["slider", "fields", "table"])
+def test_an_armed_press_that_lands_on_an_option_screen_is_still_one_the_kit_does_not_read(tmp_path, monkeypatch,
+                                                                                         scope_file, kind):
+    """(d) unchanged by a first open's wider set (2026-11-15, safety.FIRST_OPEN_KINDS): the owner route's armed press
+    is judged by safety.SHOWN_KINDS alone, so a slider, number fields or a table after it is no kind the kit reads:
+    nothing more is pressed, the marker stays, exit 5."""
+    from exit_status import EXIT_RESTORE_BY_HAND
+    states = {**RESET_ASKS, "question": (kind, "Reset Network Set. -3 0 +3", "")}
+    extra = {}
+    pressed, line, _, code, restore, out, _ = drive_run(tmp_path, monkeypatch, scope_file, ["right"],
+                                                        ["Reset Network Set."], RESET_DECISION, states,
+                                                        ASKS_AND_CANCELS, more=["--confirm"], extra=extra)
+    said = f"reads as {kind!r}, no kind the kit reads"
+    assert pressed == ["menu", "right"] and code == EXIT_RESTORE_BY_HAND and restore == [], (kind, pressed)
+    assert restore_pending(tmp_path) and said in line["outcome"] and said in out
+    assert extra["refreshes"] == ["after-armed"]
+
+
 def test_drive_restores_over_a_link_that_answered_and_takes_the_marker_away_only_once_it_checks(tmp_path, monkeypatch,
                                                                                                scope_file):
     """(f): another screen than the question: the MENU-only close and the remote restore; the marker taken away only

@@ -149,8 +149,13 @@ local readers only, and its folder is marked so no batch tool asks any reader ab
 A run (never an --owner one) that opens a --path's last row this camera has not been seen to open (camkit.first_open)
 makes that row's first open: only with the owner's blank-cards statement (camkit.statements), only with --press right
 alone and every row above it seen, and its Right goes as an armed press that may drop the link does (RESTORE_BY_HAND
-first, one read after it, MENU and the remote restore); the marker goes only when the start file comes back checked
-with no record differing, else the run exits EXIT_RESTORE_BY_HAND (first_open_or_exit). The lit bar an opening press
+first, one read after it, MENU and the remote restore); the screen that read finds is one the kit reads where its kind
+is one of safety.FIRST_OPEN_KINDS, the armed press's kinds and the other option screens MENU leaves (a slider, number
+fields, a table...), for a first open alone (a screen of no known kind, a black frame or no text still keeps the marker,
+exit 5); the marker goes only when the start file comes back checked with no record differing, else the run exits
+EXIT_RESTORE_BY_HAND (first_open_or_exit). The run's look (camkit.coverage.drive_look) is an open only where nothing but
+up, down and MENU followed the opening press: a run that pressed anything else inside a seen row is a choice, which a
+record it changed leaves seen. The lit bar an opening press
 meets is judged by lit_refused: on the first press after the page scan went to a one-label --path's row, a bar read
 with the row's icon as a letter or two before its label ("S Exposure Comp. +0.0"), or its label ending in a stop
 before a value ("Exposure Comp. +0.0"), is that row where the page model keeps that very reading of it and the value
@@ -396,7 +401,8 @@ def press_refused(key: str, lit: str, text: str, kind: str, confirm: bool = Fals
     named = kind == "shooting" and key in on_shooting      # no row on the shooting screen: the naming judges it
     if key in ENTERS and not named:
         if not lit and not vouched:
-            return "nothing lit can be read, so the button under the cursor is unknown"
+            return ("nothing lit can be read, so the button under the cursor is unknown: where you know what Enter does "
+                    "on this screen, --press 'enter!:REGEX' vouches for it")
         if not lit and kind in VOUCH_REFUSED:
             return f"nothing lit can be read on a {kind!r} screen, where Enter opens a row nobody read: no vouching there"
         if not lit and not re.search(r"\w", text or ""):
@@ -855,11 +861,13 @@ def intend_by_hand(run, before: Path, label: str, entry: str, why: str = "") -> 
         raise RuntimeError(f"RESTORE_BY_HAND could not be written ({type(e).__name__}: {e}): nothing was pressed") from e
 
 
-def after_armed(cam, grip: str | None) -> tuple:
+def after_armed(cam, grip: str | None, kinds=safety.SHOWN_KINDS) -> tuple:
     """(the screen's kind, its text, why it cannot be judged or "") read once right after the run's armed press that may
     drop the link (camkit.live.LiveCamera.refresh, guarded): a read that fails, a frame that is black (camkit.live.black)
-    or of no kind the kit shows (safety.SHOWN_KINDS: an unknown screen among them), or a text that cannot be read, is
-    not judged, and then the restore-by-hand marker stays and nothing more is pressed (docs/decisions/0005)."""
+    or of no kind of `kinds`, or a text that cannot be read, is not judged, and then the restore-by-hand marker stays and
+    nothing more is pressed (docs/decisions/0005). `kinds`: safety.SHOWN_KINDS for the owner route's armed presses (an
+    unknown screen, a slider among the kinds it does not read); safety.FIRST_OPEN_KINDS for a row's first open alone,
+    which also reads the option screens MENU leaves (a slider, number fields, a table...), never an unknown screen."""
     try:
         kind = getattr(cam.refresh("after-armed"), "kind", None)
         text, dark = screen_text(cam, grip), black(cam.frame)
@@ -867,7 +875,7 @@ def after_armed(cam, grip: str | None) -> tuple:
         return None, "", f"the screen after it could not be read ({type(e).__name__}: {e})"
     if dark:
         return kind, text, "the frame after it is black"
-    if kind not in safety.SHOWN_KINDS:
+    if kind not in kinds:
         return kind, text, f"the screen after it reads as {kind!r}, no kind the kit reads"
     if not (text or "").strip():
         return kind, text, "no text could be read on the screen after it"
@@ -1677,7 +1685,10 @@ def main():
                         if inside:
                             inside["done"] = owner_what     # the run's one armed press went: MENU alone from here
                         if may_lose:
-                            kind_after, t, why_not = after_armed(cam, a.grip)
+                            # a row's first open reads the option screens MENU leaves too; the owner route's armed
+                            # press, SHOWN_KINDS alone
+                            kind_after, t, why_not = after_armed(cam, a.grip, safety.FIRST_OPEN_KINDS
+                                                                 if first_now and not armed else safety.SHOWN_KINDS)
                             frame_now = getattr(getattr(cam.frame, "path", None), "name", None)
                             entry = {"after": p, "frame": frame_now, "kind": kind_after,
                                      **({"armed": owner_what} if armed else {}),

@@ -404,11 +404,12 @@ def crawl_lap(tmp_path, monkeypatch, rows, argv=(), seen=()):
                local=local, eyes=eyes, root=root)
 
 
-def drive_run(tmp_path, monkeypatch, rows, path, presses, extra=(), seen=()):
+def drive_run(tmp_path, monkeypatch, rows, path, presses, extra=(), seen=(), root=None):
     """kit/drive.py's main() over the simulated camera, its --path and --press as given (and `extra` arguments, such as
-    --network); `seen` the labels the camera's records show opened cleanly (TEST_CAMERA's, which drive.py reads)."""
+    --network); `seen` the labels the camera's records show opened cleanly (TEST_CAMERA's, which drive.py reads);
+    `root` the run root (by default one no coverage gate reads; TEST_CAMERA's own under runs_top for one that does)."""
     import drive as D
-    root = tmp_path / "cam"
+    root = root or tmp_path / "cam"
     root.mkdir(parents=True, exist_ok=True)
     run = Run("kit2_drive", root=root)
     sim = Sim(rows, root)
@@ -620,6 +621,62 @@ def test_drive_look_lap_opens_an_unseen_row_with_the_marker_first(tmp_path, monk
     assert d.code in (0, None), d.out[-1500:]
     assert d.sim.opened(1) and d.sim.marked_at_open(1) is True, (label, d.out[-1500:])
     assert not (d.root / RESTORE_BY_HAND).exists()
+
+
+# drive.py's first open over an option screen MENU leaves that SHOWN_KINDS does not hold (2026-11-15: Exposure Comp.'s
+# slider, kit2_a1fin_expcomp_look, kept RESTORE_BY_HAND and was left open on the camera): safety.FIRST_OPEN_KINDS
+FIRST_OPEN_READ = {
+    "slider": srow("Lima Slider", "+0.0", kind="slider", options=(), lines=("-3", "0", "+3")),
+    "fields": srow("Mike Fields", "10:30", kind="fields", options=(), lines=("10", ":", "30")),
+    "table": srow("November Table", "", kind="table", options=("Alpha", "Bravo")),
+}
+
+
+@pytest.mark.parametrize("kind", list(FIRST_OPEN_READ))
+def test_drive_first_open_goes_on_over_an_option_screen_menu_leaves(tmp_path, monkeypatch, scope, kind):
+    """kit/drive.py, an ordinary run: an unseen row's Right (RESTORE_BY_HAND there) that shows a slider, number fields
+    or a table is a screen the first open reads: MENU alone inside, the check clean, the marker gone, the row seen
+    opened from then on, exit 0."""
+    import camkit
+    from camkit import first_open, paths
+    scope(BLANK)
+    monkeypatch.setattr(first_open, "other_body", lambda link, camera: "")
+    target = FIRST_OPEN_READ[kind]
+    root = paths.runs_top() / TEST_CAMERA              # where drive.py's coverage gate reads the run's drive.jsonl
+    monkeypatch.setattr(camkit, "RUNS", paths.runs_top())     # its marker in the test's own runs/ alone, never the clone's
+    assert not first_open.seen_record().seen([target["label"]])
+    d = drive_run(tmp_path, monkeypatch, [DRIVE_MODE, target, ISO], [target["label"]], ["right"], root=root)
+    assert d.code in (0, None), (kind, d.out[-1500:])
+    assert d.sim.opened(1) and d.sim.marked_at_open(1) is True, (kind, d.out[-1500:])
+    assert d.sim.inside(1) == ["menu"] and not d.sim.chosen and not d.sim.answered, d.sim.inside(1)
+    assert not (root / RESTORE_BY_HAND).exists()
+    assert d.line["first_open"] is True and d.line["screens"][0]["kind"] == kind, d.line
+    assert "opens as any row from now on" in d.out, d.out[-1500:]
+    assert first_open.seen_record().seen([target["label"]])
+
+
+@pytest.mark.parametrize("case", ["unknown", "guide", "helppop", "black", "no text"])
+def test_drive_first_open_still_stops_over_a_screen_it_cannot_read(tmp_path, monkeypatch, scope, case):
+    """kit/drive.py, an ordinary run: an unseen row's Right that shows a screen of no kind safety.FIRST_OPEN_KINDS holds
+    (unknown, a guide, a help popup), a black frame or no text keeps RESTORE_BY_HAND, presses nothing more and exits 5."""
+    import drive as D
+    from exit_status import EXIT_RESTORE_BY_HAND
+    from camkit import first_open
+    scope(BLANK)
+    kind = case if case in ("unknown", "guide", "helppop") else "slider"
+    target = srow("Oscar Row", "", kind=kind, options=(), lines=("Some", "Words"))
+    real_black, real_text = D.black, D.screen_text
+    if case == "black":             # the slider's frame black, every other as it is
+        monkeypatch.setattr(D, "black", lambda frame: screen.read(frame).kind == "slider" or real_black(frame))
+    if case == "no text":           # nothing read on the slider, every other screen read as it is
+        monkeypatch.setattr(D, "screen_text", lambda cam, grip: "" if cam.read().kind == "slider"
+                            else real_text(cam, grip))
+    d = drive_run(tmp_path, monkeypatch, [DRIVE_MODE, target, ISO], ["Oscar Row"], ["right"])
+    assert d.code == EXIT_RESTORE_BY_HAND, (case, d.code, d.out[-1500:])
+    assert d.sim.opened(1) and d.sim.marked_at_open(1) is True and d.sim.inside(1) == [], (case, d.sim.trace)
+    assert d.keys[-1] == "right" and (d.root / RESTORE_BY_HAND).exists()
+    assert d.line["restore"] == "by hand" and "kit/tools/upload_check.py" in d.out
+    assert not first_open.seen_record().seen(["Oscar Row"])
 
 
 # =========================================================================== D1: what the look lap still refuses

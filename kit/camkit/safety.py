@@ -1672,6 +1672,13 @@ _SECRET_SCREEN_RE = _Rx(_SECRET_SCREEN + _CREDENTIALS)
 # the kinds of screen whose text may be shown inside such a row when it holds no such word: the row's own list or
 # carousel, a notice, and the menu pages around it; any other kind (unknown above all) is shown as its field names
 SHOWN_KINDS = frozenset({"list", "dialog", "sidelist", "checklist", "notice", "menu", "submenu", "tiles", "shooting"})
+# the kinds of screen a row's first open on a body (kit/drive.py, the opening Right alone, then its own MENU and the
+# settings check) reads as one it can judge after the Right: SHOWN_KINDS, and the other option screens camkit.screen
+# names that MENU leaves (a slider, number fields, a check grid, a picker, a table, a keyset, the Fn menu, the white
+# balance grid, a look panel). Only there: the owner route's armed presses keep SHOWN_KINDS, and a screen of no known
+# kind, a guide or a help popup stays one no first open reads
+FIRST_OPEN_KINDS = SHOWN_KINDS | frozenset({"slider", "fields", "checkgrid", "picker", "table", "keyset", "fnmenu",
+                                            "wbgrid", "look"})
 
 
 def identity_screen(text) -> str | None:

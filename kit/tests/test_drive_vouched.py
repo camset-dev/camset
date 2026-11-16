@@ -24,6 +24,15 @@ def test_plain_enter_is_refused_when_nothing_lit_can_be_read():
     assert "nothing lit" in why and not vouched
 
 
+def test_the_refusal_of_an_unreadable_lit_text_says_how_the_person_vouches():
+    """Its words say what the person does (2026-11-15, an Enter on Exposure Comp.'s slider refused): where they know
+    what Enter does on that screen, --press 'enter!:REGEX' vouches for it. The check itself is unchanged."""
+    for kind in ("slider", "unknown", "list"):
+        why = drive.press_refused("enter", "", "Exposure Comp. -3 0 +3", kind)
+        assert why.startswith("nothing lit can be read, so the button under the cursor is unknown"), why
+        assert "--press 'enter!:REGEX' vouches for it" in why and not why.endswith("."), why
+
+
 def test_vouched_enter_goes_ahead_where_nothing_lit_can_be_read_and_says_so():
     """Since 2026-11-14 the MR Memory slots, read as no known kind, take no Enter by their shape (safety.enter_refused):
     a vouch lifts the unreadable lit text alone, and the Enter goes with --confirm, the owner's word, or a prover's

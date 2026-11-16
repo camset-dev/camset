@@ -189,6 +189,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   ("S Exposure Comp. +0.0"), or where the label ends in a stop before its value ("Exposure Comp. +0.0"): on the first
   press after the page scan went to that row, the bar is the row where the page scan read it so too and the value is
   one the kit knows.
+- A `drive.py` run that presses anything but up, down or MENU inside a row is now recorded as a choice, so a record it
+  changes no longer makes a row the camera has opened before count as never opened. A row's first open now goes on
+  over a slider, number fields, a table or another option screen MENU leaves, and Enter refused for want of a readable
+  cursor says that `--press 'enter!:REGEX'` vouches for it.
 
 ### The docs
 

@@ -2578,7 +2578,6 @@ def _sha(p) -> str | None:
 
 
 OPENING_KEYS = ("right", "ms_right", "enter", "ms_enter")
-ENTER_KEYS = ("enter", "ms_enter")
 
 
 def press_key(p) -> str:
@@ -2589,10 +2588,14 @@ def press_key(p) -> str:
 
 
 def drive_look(line: dict, camera: str, mode: str | None, run: str) -> dict:
-    """The look a drive.jsonl result line makes: what was done (did "choose" only for an Enter after the press that
-    opened the row, never the Enter that opened it: "enter:<row>" opens), the screen the opening showed, its field
-    names (only what the run kept: safety.kept_screen's on a private run, the known labels and field names of a plain
-    screen's text), the result (a notice: greyed with its blocker as a rule, unless it shows the camera's own address
+    """The look a drive.jsonl result line makes: what was done (did "open" only where every press after the one that
+    opened the row is a looking key, safety.LOOK_KEYS: up, down and MENU, what a look lap sends inside a row, each key
+    judged as drive.py sends it, look-alike letters folded; or where none follows it, or nothing opened the row; the
+    Enter that opens it, "enter:<row>", is the opening press. Any other press after it, left, right, a dial, Enter, a
+    named key or C4, makes it "choose": on 2026-11-15 a slider moved and cancelled with MENU that changed a record was
+    written as an open, which camkit.first_open took for a first open that failed), the screen the opening showed, its
+    field names (only what the run kept: safety.kept_screen's on a private run, the known labels and field names of a
+    plain screen's text), the result (a notice: greyed with its blocker as a rule, unless it shows the camera's own address
     fields and no refusal, an information screen's notice; records differing: changed; the presses cut short by a
     deterministic failure: kit_failed; the run unfinished or cut short otherwise: not_reached) and the records changed
     by key."""
@@ -2602,7 +2605,8 @@ def drive_look(line: dict, camera: str, mode: str | None, run: str) -> dict:
     tab, group = (place[0], place[1]) if len(place) >= 3 else _place(camera, path)
     presses = [press_key(p) for p in line.get("presses") or []]
     opened_at = next((i for i, p in enumerate(presses) if p in OPENING_KEYS), None)
-    did = "choose" if opened_at is not None and any(p in ENTER_KEYS for p in presses[opened_at + 1:]) else "open"
+    did = ("choose" if opened_at is not None
+           and any(safety.canonical_input(p) not in safety.LOOK_KEYS for p in presses[opened_at + 1:]) else "open")
     screens = [s for s in line.get("screens") or [] if isinstance(s, dict)]
     opened = next((s for s in screens if press_key(s.get("after", "")) in OPENING_KEYS), screens[0] if screens else {})
     kind = opened.get("kind")

@@ -888,6 +888,28 @@ def test_the_enter_that_opens_a_row_is_no_choice(camera):
     assert coverage.press_key("enter!:x") == "enter" and coverage.press_key(" Down@3") == "down"
 
 
+def test_a_drive_run_that_presses_inside_the_row_is_a_choice(camera):
+    """What a drive.py run did (drive_look, 2026-11-15): "open" only where every press after the opening one is a
+    looking key (safety.LOOK_KEYS: up, down, MENU), or none follows it; any other press after it (left, right, a dial,
+    Enter, C4) makes it "choose". kit2_a1fin_expcomp_cancel2: Right, Left, Left, MENU on a seen Exposure Comp. changed
+    a record and was written as an open, which made the row unseen."""
+    line = {"path": ["Kilo"], "completed": True, "screens": [{"after": "right", "kind": "slider"}],
+            "before": "a.DAT", "after": "b.DAT", "changes": [{"key": "global:0x0100", "before": 0, "after": 1}]}
+
+    def did(presses):
+        return coverage.drive_look(dict(line, presses=presses), CAM, None, "r")["did"]
+    for presses in (["right"], ["right", "menu"], ["right", "down", "up", "menu"], ["enter:Kilo"], ["enter!:Kilo"],
+                    ["down@3", "right", "ms_down", "ms_up", "menu"], ["right", "down@367:Kilo", "menu"],
+                    # a look-alike letter is the key drive.py sends (canonical_key): Down, a looking key
+                    ["right", "dоwn", "menu"], [], ["menu"]):
+        assert did(presses) == "open", presses
+    for presses in (["right", "left", "left", "menu"], ["right", "dial.front.1"], ["right", "dial.wheel.-2:Kilo"],
+                    ["right", "enter:On"], ["enter:Kilo", "left"], ["right", "right"], ["right", "ms_left"],
+                    ["right", "help"], ["right", "c4set"], ["right", "down", "enter!:x"], ["enter:Kilo", "menu", "up",
+                                                                                         "ms_right"]):
+        assert did(presses) == "choose", presses
+
+
 def test_the_latest_look_wins_and_a_retraction_leaves_nothing(camera, monkeypatch, capsys):
     """Echo's information screen holds until a later look of the same row and kind says otherwise, or until the owner
     retracts it (kit/tools/coverage.py --record --result retract), which the private and public forms then follow."""
