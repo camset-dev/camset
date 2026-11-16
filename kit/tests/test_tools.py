@@ -504,8 +504,8 @@ def test_the_afreg_proof_says_when_the_strips_lit_cell_read_the_area():
 # ---------------------------------------------------------------- afreg_run standing level, each orientation its own
 
 AFREG_LEVEL = "Switch V/H AF Area = AF Point + AF Area, camera level"
-SPOT_COPY = {"key": "global:0x0600", "name": "Made-up spot size at AF Area Registration (copy 1)",
-             "values": [[0, "XS"], [1, "S"]]}            # a copy the definition ties to no orientation (made up)
+SPOT_COPY = {"key": "global:0x0600", "name": "Made-up spot size at AF Area Registration (horizontal, copy)",
+             "values": [[0, "XS"], [1, "S"]]}            # a copy the plan does not expect (made up)
 
 
 def test_the_afreg_list_with_grip_level_plans_the_horizontal_records(capsys, monkeypatch):
@@ -676,8 +676,8 @@ def test_an_afreg_level_grip_run_reads_every_screen_level_and_names_every_record
     assert line["side_effects"] == ["global:0x0020", "global:0x0030", "global:0x0600", "global:0x0700"]
     assert ("  Spot: L (code 12): registered; wrote global:0x0000 -> 12, global:0x0010 -> 2; 4 side effects, no code of "
             "the area (global:0x0020, global:0x0030, global:0x0600, global:0x0700); level writes: Registered AF area: "
-            "area (horizontal); Registered AF area: kind (horizontal); Made-up spot size at AF Area Registration (copy "
-            "1); global:0x0700\n") in said
+            "area (horizontal); Registered AF area: kind (horizontal); Made-up spot size at AF Area Registration "
+            "(horizontal, copy); global:0x0700\n") in said
     assert said.count("writes:") == 1 and "grip level" not in said
 
 
@@ -706,7 +706,7 @@ def test_each_afreg_grip_names_what_its_holds_write_in_its_own_words():
     index = {s["key"]: s for s in [*afreg_doc()["settings"], SPOT_COPY, {"key": "set:0x0b10", "name": "Made-up set"}]}
     ch = [{"key": "global:0x0600", "before": 0, "after": 1}, {"key": "set1:0x0b10", "before": 0, "after": 1},
           {"key": "global:0x0700", "before": 0, "after": 3}]
-    assert A.names_written(ch, index) == "Made-up spot size at AF Area Registration (copy 1); Made-up set; global:0x0700"
+    assert A.names_written(ch, index) == "Made-up spot size at AF Area Registration (horizontal, copy); Made-up set; global:0x0700"
     assert A.names_written([], index) == "nothing"
     assert [A.held_words(g) for g in ("level", "down", "up")] == ["level", "grip down", "grip up"]
     assert [A.turned_of(g) for g in (None, "level", "down", "up")] == [None, None, "down", "up"]

@@ -68,9 +68,10 @@ Not tried on the camera: whether the setup's lists stay level as the menu pages 
 level, dialogs turn); a list read turned fails the setup and the run restores. Each area's line ends "grip down writes:
 <names>" (2026-11-16): every record the hold changed, from the diff of the downloads before and after it, by the
 definition's name (one it does not name by its key), the diff whole, never filtered to the records the plan expects:
-the copies the definition ties to no orientation (the a1 II's "Spot size at AF Area Registration (copy 1-3)", the same
-in the alternate numbering, "Custom area at AF Area Registration (copy 1-6)") are what it is for. Nothing is judged of
-them: they are listed (names_written).
+the copies the plan does not expect are what it is for (the a1 II's "Spot size at AF Area Registration (vertical, grip
+down, copy)", the same in the alternate numbering, "Custom area at AF Area Registration (vertical, grip down, copy 1)"
+and "(…, copy 2)" were named so from these lines, 2026-11-16). Nothing is judged of them: they are listed
+(names_written).
 
 Held vertically, Vertical Display decides what the screens look like (2026-11-16): it is read from the start download
 by the record the definition proves its row writes (vertical_display; the a1 II's global:0x18a6), never set. Off keeps

@@ -3225,5 +3225,5 @@
     "S&Q mode \\((?:Time-lapse|S&Q Motion)\\)": "S&Q mode",
     "Switch V/H AF Area Off, (?:Spot size|Custom slot) last left: [^\\]]*": "Switch V/H AF Area Off"
   },
-  "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)\\]$"
+  "ORIENTED": "\\[Switch V/H AF Area = [^,\\]]+, camera (level|grip down|grip up)(?:, Vertical Display (?:On|Off))?\\]$"
 }

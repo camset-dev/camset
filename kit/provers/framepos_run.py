@@ -78,7 +78,7 @@ kit2_frame's notes do not say which), then Right, Right, Down, Left, Left, Down,
 download (zone-<place name>) at each, the place read from the download and checked against the route (a place that
 reads otherwise stops the sweep); the frame put back where it started and registered once more (zone-back), which must
 match zone-start. One line a place in zone_grid.jsonl: {"place" (code), "name", "expected", "confirmed", "download",
-"records" (every set1 record that changed to the code), "groups" (horizontal, vertical A, vertical B)}; one proof line
+"records" (every set1 record that changed to the code), "groups" (them by orientation: zone_group)}; one proof line
 a (record, code) in proofs.jsonl for the current record and the six vertical copies (kind "registration mirror", as
 memreg_run.py), written only once the place reads as routed (a place that reads otherwise writes its zone_grid.jsonl
 line and no proof line), applied when the record changed to the code from the download before (one that holds the
@@ -114,13 +114,9 @@ is the above, the portrait shooting screen the SDK's picture draws then read as 
 alone, proved directly rather than by elimination from the two vertical holds; every screen is read, and the frame
 moved and put back, as a level run does, and failed areas end the run as a level run's do (three in a row). Its lines
 carry the context "Switch V/H AF Area = AF Point + AF Area, camera level" and "grip": "level" (no "upright"), and each
-area's summary ends "level writes: <names>". With any grip, before anything is pressed, the start download's camera
-position record (the one record the definition says the camera sets from how it is held, level or vertical:
-position_record; the a1 II's global:0x04e2) is checked against the grip: level must hold the code its values label
-level, or failing that no vertical one; down and up the grip's own code, or failing that not the level one
-(position_wants). A value that contradicts the grip stops the run, nothing pressed; where the values label no such code
-(the a1 II's record has a note and no values) nothing is stopped and the run prints what the download holds beside the
-definition's note. --list says which check the run will make.
+area's summary ends "level writes: <names>". No record of the a1 II says how the camera is held (0x04e2, once taken
+for one, held the same level and vertical, 2026-11-16): what a registration wrote, which the summary names, is how a
+run shows the camera was held as the grip says.
 
 --edges (2026-11-16): how far each movable frame can travel, for an editor that offers the places a frame can take.
 Every movable area but the zones (their places are the nine --zone-grid proves; named in --areas they are refused), or
@@ -213,14 +209,11 @@ PLACES = {"centre": (0, 0), "center": (0, 0), "up": (0, -1), "right": (1, 0), "l
 SWEEP_STEPS = (None, "ms_right", "ms_right", "ms_down", "ms_left", "ms_left", "ms_down", "ms_right", "ms_right")
 ZONE_CURRENT = "set1:0x019a"                    # the Zone place in the current set: names the place in each download
 PROOF_KIND = "registration mirror"              # the kind memreg_run.py gives a registration's proof lines
-GROUPS = ("horizontal", "vertical A", "vertical B")
+GROUPS = afreg_run.GROUPS         # a zone record's orientation, as its name says: horizontal, vertical, grip down or up
 # --grip: level stands the camera level with each orientation kept apart; down and up hold it vertically, where the
 # shooting screen and the dialogs turn (TURNED: read upright as afreg_run reads them)
 GRIPS, TURNED = ("level", "down", "up"), ("down", "up")
 VH_OPTION = {None: afreg_run.VH[None], "level": afreg_run.VH["down"], "down": afreg_run.VH["down"], "up": afreg_run.VH["up"]}
-# a record the camera sets from how it is held, by its note or its unproved reason (the a1 II's global:0x04e2: "The
-# camera sets it from how it is held, level or vertical, whatever a settings file says")
-HELD_FROM = re.compile(r"\bfrom how it is held\b", re.I)
 # --edges: Circ. of Focus Point (a frame at an edge jumping to the far one) put on its option that stops it, as the
 # definition's values name them (the a1 II's global:0x03a1: Does Not Circulate 0, Circulate 1)
 CIRC_ROW, CIRC_OFF = "Circ. of Focus Point", "Does Not Circulate"
@@ -377,94 +370,6 @@ def turned_of(grip: str | None, vertical: str | None = None) -> str | None:
 def held_words(grip: str) -> str:
     """How a grip holds the camera, as its summary says it: "level", "grip down", "grip up"."""
     return "level" if grip == "level" else f"grip {grip}"
-
-
-# ---------------------------------------------------------------- the camera's position, checked against the grip
-
-def position_record(index: dict) -> dict | None:
-    """The one record of the definition (`index`: its settings by key) that the camera sets from how it is held, level
-    or vertical, as its note or its unproved reason says (HELD_FROM: the a1 II's global:0x04e2); None when no record,
-    or more than one, says so."""
-    hits = [s for s in index.values()
-            if HELD_FROM.search(f"{s.get('note') or ''} {(s.get('unproved_reason') or {}).get('why') or ''}")]
-    return hits[0] if len(hits) == 1 else None
-
-
-def position_codes(setting: dict) -> dict:
-    """{"level", "down", "up"}: the codes the record's values label for each way the camera stands: a label naming grip
-    down or grip up is that grip's, one saying vertical alone both grips', one saying level (or horizontal) level's."""
-    out = {"level": set(), "down": set(), "up": set()}
-    for v, lab in setting.get("values") or []:
-        t = " ".join(str(lab).lower().split())
-        if "grip down" in t or "grip up" in t:
-            out["down" if "grip down" in t else "up"].add(v)
-        elif "vertical" in t:
-            out["down"].add(v)
-            out["up"].add(v)
-        elif re.search(r"\b(level|horizontal)\b", t):
-            out["level"].add(v)
-    return out
-
-
-def position_wants(grip: str, setting: dict) -> tuple:
-    """(the codes the record must hold for the grip, the codes it must not): level, its level codes, or, the values
-    naming none, not a vertical one; down or up, the grip's own codes (vertical ones count for both), or, the values
-    naming none, not the level ones nor the other grip's. Both empty: the values do not tell, and nothing is stopped."""
-    c = position_codes(setting)
-    if grip == "level":
-        return c["level"], (set() if c["level"] else c["down"] | c["up"])
-    other = c["up" if grip == "down" else "down"] - c[grip]
-    return c[grip], (set() if c[grip] else c["level"] | other)
-
-
-def want_words(grip: str) -> str:
-    return "the camera standing level" if grip == "level" else f"the camera held vertically, {held_words(grip)}"
-
-
-def said_codes(codes: set, setting: dict) -> str:
-    """Codes with their labels: "1 (level)", "8 (vertical) or 9 (vertical, grip up)"."""
-    labels = {v: lab for v, lab in setting.get("values") or []}
-    return " or ".join(f"{v} ({labels[v]})" for v in sorted(codes))
-
-
-def position_plan(grip: str, index: dict) -> str:
-    """The check position_check will make, for --list: what the start download's record must hold, or that its values
-    say too little to stop anything, or that the definition names no such record."""
-    s = position_record(index)
-    if s is None:
-        return "the definition names no record the camera sets from how it is held: not checked"
-    must, must_not = position_wants(grip, s)
-    head = f"before any press, the start download's {s['key']} ({s['name']}), which the camera sets from how it is held, "
-    if must or must_not:
-        return head + (f"must hold {said_codes(must, s)}" if must else f"must not hold {said_codes(must_not, s)}")
-    return head + f"is printed: its values name no code for {want_words(grip)}, so it stops nothing"
-
-
-def position_check(grip: str, index: dict, cs) -> tuple:
-    """(stop, what to say): the start download's camera position record (position_record) against the grip
-    (position_wants). Stop only where what it holds contradicts the grip: outside the codes it must hold, or among
-    those it must not. Where the values label no such code (the a1 II's global:0x04e2 has a note and no values), what
-    the download holds is said beside the definition's note, the kit expecting no code. A camera state, not a setting
-    of the owner's: its code may be said."""
-    from prove_run import held_value
-    s = position_record(index)
-    if s is None:
-        return False, "the camera's position not checked: the definition names no record the camera sets from how it is held"
-    held = held_value(cs, s["key"])
-    if held is None:
-        return False, f"the camera's position not checked: the start download holds no {s['key']}"
-    must, must_not = position_wants(grip, s)
-    if (must and held not in must) or held in must_not:
-        expect = said_codes(must, s) if must else f"not {said_codes(must_not, s)}"
-        return True, (f"the camera is not {'standing level' if grip == 'level' else f'held vertically, {held_words(grip)}'}"
-                      f": the start download's {s['key']} ({s['name']}), which the camera sets from how it is held, "
-                      f"holds {held}, where --grip {grip} wants {expect}; nothing was pressed")
-    if must or must_not:
-        label = {v: lab for v, lab in s.get("values") or []}.get(held, held)
-        return False, f"the camera's position checked: {s['key']} holds {label}, as --grip {grip} wants"
-    return False, (f"the camera's position not checked: the start download's {s['key']} ({s['name']}) holds {held}, "
-                   f"and its values name no code for {want_words(grip)}, so the kit expects no code and stops nothing "
-                   f"(the definition's note: {s.get('note') or 'none'})")
 
 
 def sweep_words() -> str:
@@ -737,10 +642,11 @@ def sweep_route() -> list:
 
 
 def zone_group(name) -> str:
-    """The orientation group of a zone record by the definition's name: vertical A, vertical B, else horizontal (the
-    current record and the level memories)."""
+    """The orientation group of a zone record by the definition's name (GROUPS): "vertical, grip down" or "vertical,
+    grip up" where the name says the grip ("Zone position memory (vertical, grip down, grid index, copy 1)"), else
+    horizontal (the current record and the level memories)."""
     n = name or ""
-    return "vertical A" if "vertical A" in n else "vertical B" if "vertical B" in n else "horizontal"
+    return GROUPS[1] if "grip down" in n else GROUPS[2] if "grip up" in n else GROUPS[0]
 
 
 def holders(changes: list, code) -> list:
@@ -1531,9 +1437,8 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
 
 def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focus, drive, out, tag, lines, amt=None,
           zone_tag=None):
-    """The session's body: slot 1 checked filled in the start file, with a grip the camera's position in it checked
-    against the grip (position_check: a contradiction stops the run before any press), the setup, then every area of
-    the plan (one_area), each area's line written and summed up as it comes; three areas failing in a row end it, and
+    """The session's body: slot 1 checked filled in the start file, the setup, then every area of the plan (one_area),
+    each area's line written and summed up as it comes; three areas failing in a row end it, and
     held vertically (a.grip down or up) one does, its frame put back first: the owner is holding the camera. Held
     vertically, Vertical Display is read from the start download (afreg_run.screens_held, kept as a.vertical): Off reads
     every screen level, drops "upright" from the lines and ends their context's grip with "Vertical Display Off". A
@@ -1549,11 +1454,6 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     if not slot_filled(start):
         raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good (no settings "
                      "file empties it); this run registers a filled slot only")
-    if grip:
-        stop, said = position_check(grip, index, start)
-        print(f"  {said}", flush=True)
-        if stop:
-            raise Failed(said)
     turned, a.vertical, said = afreg_run.screens_held(grip, index, start)
     if said:
         print(f"  {said}", flush=True)
@@ -1763,8 +1663,6 @@ def main(argv=None) -> int:
     if amt and not a.grip and not a.edges:  # with a grip no delta is judged against the presses' directions
         print(f"the step per press is to be read from the deltas of the point and box areas (Spot, Expand Spot, Custom): "
               f"{step_words(moves or MOVES)} (a Zone moves one press each way over its 3 x 3 grid: no step)", flush=True)
-    if a.grip:
-        print(position_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}), flush=True)
     if afreg_run.vertical_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}):
         print(afreg_run.vertical_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}), flush=True)
     if a.edges:

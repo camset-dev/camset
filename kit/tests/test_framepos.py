@@ -767,11 +767,13 @@ def test_a_zone_in_a_session_under_moves_carries_the_context_of_a_run_without_th
 # ---------------------------------------------------------------- the zone grid sweep
 
 def zone_index() -> dict:
-    """A made-up definition: the current record, a level memory, and vertical copies A and B (names as the real one's)."""
+    """A made-up definition: the current record, a level memory and its horizontal copy, and the grip down and grip up
+    copies (names as the real one's)."""
     return {k: {"key": k, "name": n, "values": GRID} for k, n in [
         ("set:0x0b00", "Zone position (current; grid index)"), ("set:0x0b02", "Zone position memory (grid index)"),
-        ("set:0x0b10", "Zone position memory (vertical A, grid index, copy 1)"),
-        ("set:0x0b12", "Zone position memory (vertical B, grid index, copy 1)"),
+        ("set:0x0b04", "Zone position memory (horizontal, grid index, copy 1)"),
+        ("set:0x0b10", "Zone position memory (vertical, grip down, grid index, copy 1)"),
+        ("set:0x0b12", "Zone position memory (vertical, grip up, grid index, copy 1)"),
         ("set:0x0b20", "Point X (current)")]}
 
 
@@ -803,15 +805,16 @@ def test_places_are_read_from_the_codes_and_labelled_with_the_zone_names():
 
 def test_a_place_line_names_the_records_that_changed_to_its_code_in_three_groups():
     changes = [{"key": "set1:0x0b00", "before": 1, "after": 8}, {"key": "set1:0x0b02", "before": 1, "after": 8},
+               {"key": "set1:0x0b04", "before": 1, "after": 8},
                {"key": "set1:0x0b10", "before": 1, "after": 8}, {"key": "set1:0x0b12", "before": 1, "after": 8},
                {"key": "set1:0x0b20", "before": 1, "after": 4}, {"key": "set1:0x0c00", "before": 1, "after": 8},
                {"key": "set2:0x0b00", "before": 1, "after": 8}, {"key": "set1:0x0d00", "before": [1, 8], "after": [8, 8]}]
     line = F.sweep_line(2, (1, -1), 8, changes, "5_zone-upper-right.DAT", zone_index())
     assert (line["n"], line["place"], line["name"], line["expected"], line["confirmed"]) == \
         (3, 8, "Upper right", "Upper right", True)
-    assert line["records"] == ["set1:0x0b00", "set1:0x0b02", "set1:0x0b10", "set1:0x0b12", "set1:0x0c00"]
-    assert line["groups"] == {"horizontal": ["set1:0x0b00", "set1:0x0b02", "set1:0x0c00"],
-                              "vertical A": ["set1:0x0b10"], "vertical B": ["set1:0x0b12"]}
+    assert line["records"] == ["set1:0x0b00", "set1:0x0b02", "set1:0x0b04", "set1:0x0b10", "set1:0x0b12", "set1:0x0c00"]
+    assert line["groups"] == {"horizontal": ["set1:0x0b00", "set1:0x0b02", "set1:0x0b04", "set1:0x0c00"],
+                              "vertical, grip down": ["set1:0x0b10"], "vertical, grip up": ["set1:0x0b12"]}
     off = F.sweep_line(2, (1, -1), 7, changes, "x.DAT", zone_index())
     assert off["confirmed"] is False and off["name"] == "Upper left" and off["expected"] == "Upper right"
     assert F.sweep_line(0, (-1, -1), None, [], "x.DAT", zone_index())["confirmed"] is False
@@ -924,12 +927,12 @@ CAROUSEL_AXES = {"Spot": {"values": ["Spot: XS", "Spot: S", "Spot: M", "Spot: L"
 # slot 1's place records of a made-up definition, named as the real one names them: the Zone's level memory and its
 # two vertical copies, Custom 1's box X and Y in two copies (keys made up)
 PLACE_RECORDS = [("set:0x0b40", "Zone position memory (grid index)", GRID),
-                 ("set:0x0b42", "Zone position memory (vertical A, grid index, copy 1)", GRID),
-                 ("set:0x0b44", "Zone position memory (vertical B, grid index, copy 1)", GRID),
-                 ("set:0x0c20", "Custom 1 box position: X (copy 1)", []),
-                 ("set:0x0c22", "Custom 1 box position: X (copy 2)", []),
-                 ("set:0x0c24", "Custom 1 box position: Y (copy 1)", []),
-                 ("set:0x0c26", "Custom 1 box position: Y (copy 2)", [])]
+                 ("set:0x0b42", "Zone position memory (vertical, grip up, grid index, copy 1)", GRID),
+                 ("set:0x0b44", "Zone position memory (vertical, grip down, grid index, copy 1)", GRID),
+                 ("set:0x0c20", "Custom 1 box position: X (horizontal)", []),
+                 ("set:0x0c22", "Custom 1 box position: X (vertical, grip down)", []),
+                 ("set:0x0c24", "Custom 1 box position: Y (horizontal)", []),
+                 ("set:0x0c26", "Custom 1 box position: Y (vertical, grip down)", [])]
 
 
 def grip_index() -> dict:
@@ -1019,10 +1022,10 @@ def test_a_grip_registration_across_orientation_groups_is_reported_as_it_is():
     assert line["verdict"] == "4 records changed"
     text = "\n".join(F.summary_of(dict(line, context=GRIP_CONTEXT)))
     assert text.startswith(f"Zone (code 101; {GRIP_CONTEXT}), Left 1, Up 1 asked, Left 1, Up 1 taken: 4 records changed")
-    assert "    set:0x0b44  Zone position memory (vertical B, grid index, copy 1): grid -1 column(s), +1 row(s)" in text
+    assert "    set:0x0b44  Zone position memory (vertical, grip down, grid index, copy 1): grid -1 column(s), +1 row(s)" in text
     assert "    set1:0x0d10" not in text and "    set:0x0d10  (not in the definition): +2" in text
-    assert ("    grip down writes: Zone position memory (grid index); Zone position memory (vertical A, grid index, "
-            "copy 1); Zone position memory (vertical B, grid index, copy 1); set:0x0d10") in text
+    assert ("    grip down writes: Zone position memory (grid index); Zone position memory (vertical, grip up, grid index, "
+            "copy 1); Zone position memory (vertical, grip down, grid index, copy 1); set:0x0d10") in text
     assert "the way the presses went" not in text and "a press)" not in text and "[the other way]" not in text
     assert "put back: Down 1, Right 1; the registration after it matched the first" in text
     assert "4100" not in text and "4102" not in text, "a delta only, never a value a record held"
@@ -1050,25 +1053,22 @@ class Turned:
     only on the frame turned upright) and the Focus Area dialog turned (read as no known kind, its title and option only
     upright); the menu pages, the slot screen and its "Registered." level (kit2_vertical, held grip up). On the shooting
     screen the multi-selector moves the chosen area's frame in directions the run does not assume; registering slot 1
-    copies the frame's place into the records this orientation keeps (the Zone's vertical B copy, Custom 1's copy 2)."""
+    copies the frame's place into the records this orientation keeps (the Zone's and Custom 1's grip down copies)."""
     MOVE = {"ms_left": (0, 1), "ms_up": (-1, 0), "ms_right": (0, -1), "ms_down": (1, 0)}
     LEVEL_MOVE = {"ms_left": (-1, 0), "ms_up": (0, -1), "ms_right": (1, 0), "ms_down": (0, 1)}
     CODES = {(0, 0): 0, (0, -1): 1, (1, 0): 2, (-1, 0): 3, (0, 1): 4, (1, 1): 5, (-1, 1): 6, (-1, -1): 7, (1, -1): 8}
 
-    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW", level=False, position=None, extra=None,
-                 writes=None):
+    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW", level=False, extra=None, writes=None):
         """level: the camera stands level (with Switch V/H AF Area = AF Point + AF Area: --grip level), every screen
-        level and a registration writing the level copies; position: what it holds in the made-up camera position
-        record (POSITION_KEY), none when not given; extra: more records its downloads hold; writes: "vertical" for a
-        registration writing the vertical copies whatever the screens (held vertically with Vertical Display Off)."""
+        level and a registration writing the level copies; extra: more records its downloads hold; writes: "vertical"
+        for a registration writing the vertical copies whatever the screens (held vertically with Vertical Display
+        Off)."""
         self.run, self.upright_shooting, self.level, self.writes = run, upright_shooting, level, writes
         self.n, self.pressed, self.named, self.chosen, self.logged = 0, [], [], [], []
         self.run.log = lambda kind, **f: self.logged.append((kind, f))
         self.opt, self.val, self.area, self.places = 0, 0, None, {}
         self.slot = {"set1:0x023c": 4, "set1:0x0b40": 0, "set1:0x0b42": 0, "set1:0x0b44": 0, "set1:0x0c20": 320,
                      "set1:0x0c22": 320, "set1:0x0c24": 240, "set1:0x0c26": 240, **(extra or {})}
-        if position is not None:
-            self.slot[POSITION_KEY] = position
         self.show("shooting")
         CAMS.append(self)
 
@@ -1255,10 +1255,10 @@ def test_a_grip_down_run_reads_the_turned_screens_and_says_what_the_orientation_
     assert any(p.name.endswith("_upright.png") for p in (run.dir / "upright").iterdir())
     said = capsys.readouterr().out
     for text in (said, "\n".join(F.summary_lines(F.jsonl.read(out)))):
-        assert "    grip down writes: Zone position memory (vertical B, grid index, copy 1)" in text
-        assert "    grip down writes: Custom 1 box position: X (copy 2); Custom 1 box position: Y (copy 2)" in text
-        assert "    set:0x0c22  Custom 1 box position: X (copy 2): -26" in text
-        assert "    set:0x0c26  Custom 1 box position: Y (copy 2): +39" in text
+        assert "    grip down writes: Zone position memory (vertical, grip down, grid index, copy 1)" in text
+        assert "    grip down writes: Custom 1 box position: X (vertical, grip down); Custom 1 box position: Y (vertical, grip down)" in text
+        assert "    set:0x0c22  Custom 1 box position: X (vertical, grip down): -26" in text
+        assert "    set:0x0c26  Custom 1 box position: Y (vertical, grip down): +39" in text
         assert "the way the presses went" not in text and "320" not in text and "240" not in text
 
 
@@ -1295,30 +1295,17 @@ def test_held_vertically_a_screen_not_read_as_the_shooting_screen_gets_no_press(
 # ---------------------------------------------------------------- standing level, each orientation its own (--grip level)
 
 LEVEL_CONTEXT = "Switch V/H AF Area = AF Point + AF Area, camera level"
-POSITION_KEY = "global:0x0e20"
-POSITION_WHY = "The camera sets it from how it is held, level or vertical, whatever a settings file says."
 
 
-def position_setting(values) -> dict:
-    """A made-up record the camera sets from how it is held (as the a1 II's global:0x04e2 is described: its unproved
-    reason says so), with `values` (codes made up)."""
-    return {"key": POSITION_KEY, "name": "Made-up camera position state (not a setting)", "values": values,
-            "note": "Made-up: the camera keeps it.", "unproved_reason": {"kind": "state", "why": POSITION_WHY}}
-
-
-def position_index(values=([1, "level"], [8, "vertical"])) -> dict:
-    return grip_index() | {POSITION_KEY: position_setting([list(v) for v in values])}
-
-
-def test_list_with_grip_level_prints_the_context_the_plan_and_the_position_check(capsys, monkeypatch):
+def test_list_with_grip_level_prints_the_context_and_the_plan(capsys, monkeypatch):
     """--list --grip level: the context "Switch V/H AF Area = AF Point + AF Area, camera level", the setup putting the
-    row on AF Point + AF Area, the level plan, and what the start download's camera position record must hold (or that
-    its values say too little to stop anything); no camera."""
+    row on AF Point + AF Area and the level plan; no camera. No record is checked for how the camera is held, with any
+    grip: the a1 II has none (0x04e2, once taken for one, held the same however the camera was held)."""
     import pass3_run
 
     def no_map(path):
         raise SystemExit("no pass 1 map")
-    doc = {"settings": list(position_index().values())}
+    doc = {"settings": list(grip_index().values())}
     monkeypatch.setattr(F, "read_json", lambda path: doc)
     monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
     monkeypatch.setattr(pass3_run, "labels_of", no_map)
@@ -1328,19 +1315,10 @@ def test_list_with_grip_level_prints_the_context_the_plan_and_the_position_check
     assert out.startswith(f"2 areas ({LEVEL_CONTEXT!r}; run kit2_framepos):")
     assert "set through the menu first: Switch V/H AF Area = AF Point + AF Area;" in out
     assert "Custom 1 (code 109): no route in pass 1's map and the axis walk; moved Left 3, Up 2, put back Down 2, Right 3" in out
-    assert (f"before any press, the start download's {POSITION_KEY} (Made-up camera position state (not a setting)), "
-            "which the camera sets from how it is held, must hold 1 (level)") in out
-    F.main(["--list", "--areas", "Zone", "--grip", "down"])
-    assert "must hold 8 (vertical)" in capsys.readouterr().out
-    doc["settings"] = list(position_index(values=()).values())          # the a1 II's: no values, a note only
-    F.main(["--list", "--areas", "Zone", "--grip", "level"])
-    out = capsys.readouterr().out
-    assert "its values name no code for the camera standing level, so it stops nothing" in out
-    doc["settings"] = made_up_doc()["settings"]
-    F.main(["--list", "--areas", "Zone", "--grip", "up"])
-    assert "the definition names no record the camera sets from how it is held: not checked" in capsys.readouterr().out
-    F.main(["--list", "--areas", "Zone"])
-    assert "from how it is held" not in capsys.readouterr().out, "no --grip: nothing new"
+    assert "how it is held" not in out
+    for grip in ("down", "up"):
+        F.main(["--list", "--areas", "Zone", "--grip", grip])
+        assert "how it is held" not in capsys.readouterr().out
 
 
 def test_a_level_grip_sets_the_row_like_a_vertical_one_and_says_level(monkeypatch, tmp_path):
@@ -1375,10 +1353,9 @@ def test_a_level_grip_sets_the_row_like_a_vertical_one_and_says_level(monkeypatc
 
 
 def test_a_level_grip_run_reads_every_screen_level_and_says_what_level_writes(turned, monkeypatch, capsys):
-    """--grip level on a camera standing level: the start download's position record holds the level code, so the
-    run goes on; each area chosen on the level dialog (afreg_run's level path), the shooting screen read as it is, no
-    frame turned upright; the lines carry "grip": "level" and no "upright", and each area's summary ends "level
-    writes:" with the definition's names of the level copies."""
+    """--grip level on a camera standing level: each area chosen on the level dialog (afreg_run's level path), the
+    shooting screen read as it is, no frame turned upright; the lines carry "grip": "level" and no "upright", and each
+    area's summary ends "level writes:" with the definition's names of the level copies."""
     import afreg_run
 
     def choose_level(cam, cycle, model, labels, axes, i, o, v):
@@ -1389,8 +1366,8 @@ def test_a_level_grip_run_reads_every_screen_level_and_says_what_level_writes(tu
         return {}
     monkeypatch.setattr(afreg_run, "choose_level", choose_level)
     run, session = turned
-    cam, s = session(level=True, position=1)
-    out, lines = grip_areas(run, s, "Zone, Custom 1", "level", position_index())
+    cam, s = session(level=True)
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "level")
     assert cam.chosen == ["Zone", "Custom 1"]
     assert run.upright_reads == [] and not list((run.dir / "upright").iterdir())
     got = {ln["area"]: ln for ln in F.jsonl.read(out)}
@@ -1399,55 +1376,12 @@ def test_a_level_grip_run_reads_every_screen_level_and_says_what_level_writes(tu
     assert all(ln["grip"] == "level" and "upright" not in ln and ln["context"] == LEVEL_CONTEXT and ln["back"]["same"]
                for ln in got.values())
     said = capsys.readouterr().out
-    assert f"the camera's position checked: {POSITION_KEY} holds level, as --grip level wants" in said
     for text in (said, "\n".join(F.summary_lines(F.jsonl.read(out)))):
         assert "    level writes: Zone position memory (grid index)" in text
-        assert "    level writes: Custom 1 box position: X (copy 1); Custom 1 box position: Y (copy 1)" in text
-        assert "    set:0x0c20  Custom 1 box position: X (copy 1): -39" in text
+        assert "    level writes: Custom 1 box position: X (horizontal); Custom 1 box position: Y (horizontal)" in text
+        assert "    set:0x0c20  Custom 1 box position: X (horizontal): -39" in text
         assert "camera grip level" not in text and "grip level writes" not in text
         assert "the way the presses went" not in text
-
-
-@pytest.mark.parametrize("grip,level,position,words", [
-    ("level", True, 8, "the camera is not standing level"),
-    ("down", False, 1, "the camera is not held vertically, grip down")])
-def test_a_start_download_whose_position_contradicts_the_grip_stops_the_run_before_any_press(
-        turned, grip, level, position, words):
-    """The start download's camera position record holding a vertical code stops --grip level, and one holding the
-    level code stops --grip down, before anything is pressed or chosen, with a plain message naming the record, what it
-    holds and what the grip wants."""
-    from prove_run import Failed
-    run, session = turned
-    cam, s = session(level=level, position=position)
-    with pytest.raises(Failed, match=words) as got:
-        grip_areas(run, s, "Zone, Custom 1", grip, position_index())
-    assert f"{POSITION_KEY} (Made-up camera position state (not a setting))" in str(got.value)
-    assert f"holds {position}" in str(got.value) and "nothing was pressed" in str(got.value)
-    assert cam.pressed == [] and cam.chosen == []
-
-
-def test_the_position_check_stops_only_where_the_values_contradict_the_grip():
-    """position_check: a record whose values label the level code and a vertical one decides each grip; one whose
-    values tell grip down from grip up holds each grip to its own; one whose values name none (the a1 II's
-    global:0x04e2, described in a note alone) stops nothing and says what the download holds and that the kit expects
-    no code; a download without the record, or a definition without one, is not checked."""
-    def check(grip, held, values=([1, "level"], [8, "vertical"])):
-        cs = Download({POSITION_KEY: held} if held is not None else {})
-        return F.position_check(grip, position_index(values), cs)
-    assert check("level", 1)[0] is False and check("level", 8)[0] is True and check("level", 5)[0] is True
-    assert check("down", 8)[0] is False and check("up", 8)[0] is False and check("down", 1)[0] is True
-    apart = ([1, "Level"], [8, "Vertical, grip down"], [9, "Vertical, grip up"])
-    assert [check("down", v, apart)[0] for v in (8, 9, 1)] == [False, True, True]
-    assert [check("up", v, apart)[0] for v in (9, 8)] == [False, True]
-    only_level = ([1, "level"],)
-    assert [check("down", v, only_level)[0] for v in (8, 5, 1)] == [False, False, True], "at least not the level code"
-    stop, said = check("level", 8, ())
-    assert stop is False and f"{POSITION_KEY} (Made-up camera position state (not a setting)) holds 8" in said
-    assert "the kit expects no code" in said and "Made-up: the camera keeps it." in said
-    assert check("level", None) == (False, f"the camera's position not checked: the start download holds no {POSITION_KEY}")
-    stop, said = F.position_check("level", grip_index(), Download({}))
-    assert stop is False and said == ("the camera's position not checked: the definition names no record the camera "
-                                      "sets from how it is held")
 
 
 # ---------------------------------------------------------------- held vertically, Vertical Display Off or On
@@ -1508,6 +1442,23 @@ def test_held_vertically_the_display_decides_how_screens_are_read_and_the_contex
     assert F.turned_of("up", "Off") is None and F.turned_of("up") == "up" and F.turned_of("level", "On") is None
 
 
+def test_a_grip_proof_counts_for_the_orientation_it_names_whatever_vertical_display_was():
+    """The report's row for a grip run's proof (pass2_report.row_name: the path, then the context in brackets) is read
+    by the hand tables' ORIENTED pattern (kit/schema_update.py's notes on which orientation writes a record) as the
+    grip it names, with Vertical Display Off in the context as without it; a run with no grip names none."""
+    import afreg_run
+    from pass2_report import row_name
+    oriented = hand_tables.load(paths.A1II, evidence=False).ORIENTED
+    for grip, words in (("level", "level"), ("down", "grip down"), ("up", "grip up")):
+        for vertical in (None, "On", "Off"):
+            for context in (afreg_run.context_of(grip, None, vertical), F.context_of(None, None, None, grip, vertical)):
+                row = row_name({"path": [afreg_run.MENU], "kind": "list", "context": context})
+                assert oriented.search(row)[1] == words, (grip, vertical, row)
+    assert "Vertical Display Off" in afreg_run.context_of("down", None, "Off")
+    assert oriented.search(row_name({"path": [afreg_run.MENU], "kind": "list",
+                                     "context": afreg_run.context_of(None, None)})) is None
+
+
 def test_held_grip_down_with_vertical_display_off_reads_every_screen_level_and_says_so(turned, monkeypatch, capsys):
     """Held grip down with Vertical Display Off in the start download: each area chosen on the level dialog
     (afreg_run's level path), the shooting screen read as it is, no frame turned upright; the registrations write grip
@@ -1529,9 +1480,9 @@ def test_held_grip_down_with_vertical_display_off_reads_every_screen_level_and_s
     assert f"Vertical Display Off in the start download ({VD_KEY})" in said
     for text in (said, "\n".join(F.summary_lines(F.jsonl.read(out)))):
         assert f"Custom 1 (code 109; {VD_OFF_CONTEXT})" in text
-        assert "    grip down writes: Zone position memory (vertical B, grid index, copy 1)" in text
-        assert "    grip down writes: Custom 1 box position: X (copy 2); Custom 1 box position: Y (copy 2)" in text
-        assert "    set:0x0c22  Custom 1 box position: X (copy 2): -39" in text
+        assert "    grip down writes: Zone position memory (vertical, grip down, grid index, copy 1)" in text
+        assert "    grip down writes: Custom 1 box position: X (vertical, grip down); Custom 1 box position: Y (vertical, grip down)" in text
+        assert "    set:0x0c22  Custom 1 box position: X (vertical, grip down): -39" in text
         assert "level writes" not in text and "the way the presses went" not in text
 
 
@@ -1599,7 +1550,7 @@ def test_an_afreg_proof_line_is_marked_upright_only_where_its_screens_were_read_
 
 # ---------------------------------------------------------------- --edges: how far each frame can travel
 
-X, Y = "set1:0x0c20", "set1:0x0c24"                 # Custom 1's box X and Y (copy 1) in the made-up definition
+X, Y = "set1:0x0c20", "set1:0x0c24"                 # Custom 1's box X and Y (horizontal) in the made-up definition
 CIRC_KEY = "global:0x0c10"
 
 
@@ -1763,9 +1714,9 @@ def test_edges_measure_each_area_in_seven_registrations_and_put_its_frame_back_e
     said = capsys.readouterr().out
     summary = (run.dir / "edges_summary.txt").read_text(encoding="utf-8")
     for text in (said, summary):
-        assert ("    Left/Right  set:0x0c20  Custom 1 box position: X (copy 1): 26 to 614, a press 28 (Right raises it), "
+        assert ("    Left/Right  set:0x0c20  Custom 1 box position: X (horizontal): 26 to 614, a press 28 (Right raises it), "
                 "the first press off 26 moves 14") in text
-        assert "    Up/Down  set:0x0c24  Custom 1 box position: Y (copy 1): 33 to 447, a press 19 (Down raises it)" in text
+        assert "    Up/Down  set:0x0c24  Custom 1 box position: Y (horizontal): 33 to 447, a press 19 (Down raises it)" in text
         assert "    put back: the registration after it matched the first" in text
     assert "376" not in summary and "183" not in summary and "Left 9" not in said
 

@@ -83,6 +83,8 @@ def test_the_a1_iis_tables_are_in_the_shapes_the_writer_reads():
     assert T.NOT_OFFERED[0]["table"] == ("Custom Key/Dial Set.", "Dial/Wheel")
     assert T.PICKER_LISTS["Fn Menu (Playback)"]["table"] == ("Fn Menu Settings (playback)", None)
     assert T.ORIENTED.search("Focus Area [Switch V/H AF Area = AF Point + AF Area, camera grip up]")[1] == "grip up"
+    assert T.ORIENTED.search("Focus Area [Switch V/H AF Area = AF Point + AF Area, camera grip down, Vertical Display "
+                             "Off]")[1] == "grip down"
     assert all(T.NEW_RECORDS[k] is e for k, e in T.FILTER_FLAGS.items())
     assert list(T.NEW_RECORDS)[:len(T.FILTER_FLAGS)] == list(T.FILTER_FLAGS)
     assert set(vars(T)) == set(hand_tables.TABLES) | {"HAND_EVIDENCE"}

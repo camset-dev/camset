@@ -208,8 +208,7 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   a focus frame writes: with the owner holding the camera that way, it sets Switch V/H AF Area to AF Point + AF Area,
   reads the turned screens upright and ends each area's summary with "grip down writes:" and the records' names, and
   `--grip level` does the same for the camera standing level ("level writes:"). Held vertically it judges no press's
-  direction, stops at the first area that fails, and refuses `--zone-grid`; with any grip a start file whose camera
-  position record contradicts the grip stops the run before any press; and `kit/provers/afreg_run.py` takes
+  direction, stops at the first area that fails, and refuses `--zone-grid`; and `kit/provers/afreg_run.py` takes
   `--grip level` too, each grip's hold line naming every record the hold changed.
 - With `--grip down` or `up`, `framepos_run.py` and `afreg_run.py` read Vertical Display from the start file: Off reads
   every screen level and says so in each line's context ("camera grip down, Vertical Display Off"), and On now finds
