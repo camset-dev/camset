@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import fake_camlink  # noqa: E402
-from camkit import camset, coverage, first_open, safety, statements  # noqa: E402
+from camkit import camset, coverage, first_open, jsonl, paths, safety, statements  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
 from camkit.runs import RESTORE_BY_HAND, Run, restore_pending  # noqa: E402
 from conftest import TEST_CAMERA  # noqa: E402
@@ -220,7 +220,8 @@ def lap(root, first, refuse=(), astray=False, cycle=CYCLE):
     return cam, crawl(cam, cycle, MODEL, labels=cam.labels, first=first)
 
 
-def first_opens(tmp_path, seen=None, skip_why="", download=None, gone="", per="row", ping=True):
+def first_opens(tmp_path, seen=None, skip_why="", download=None, gone="", per="row", ping=True, name=None, root=None,
+                run_name="kit2_crawl"):
     start = tmp_path / "start.DAT"
     shutil.copy(fake_camlink.SAMPLE, start)
     sent = []
@@ -234,9 +235,9 @@ def first_opens(tmp_path, seen=None, skip_why="", download=None, gone="", per="r
         return out
     link = SimpleNamespace(download=fetch, gone=lambda: gone,
                            call=lambda cmd, timeout=None: sent.append(cmd) or {"ok": ping, "connected": ping})
-    run = Run("kit2_crawl", root=tmp_path)
+    run = Run(run_name, root=root or tmp_path)
     fo = first_open.FirstOpens(link, None, run, start, seen or first_open.Seen(), skip_why, 0,
-                               wait=lambda *a, **k: None, per=per)
+                               wait=lambda *a, **k: None, per=per, name=name)
     return fo, sent, run
 
 
@@ -502,6 +503,206 @@ def test_the_per_row_cost_over_the_link_is_three_commands(tmp_path, monkeypatch,
         print(f"\nfirst open, per row over the stand-in camlink: {len(sent) // 5} commands, "
               f"{1000 * sorted(times)[2]:.0f} ms median, besides the camera's own time and the menu's lock after the "
               "download (proving.base.LOCK_S)")
+
+
+# ---------------------------------------- a first open checked clean, whatever screen its Right showed (2026-11-15)
+
+PLAYBACK_ROW = ("Cont. Play for Interval",)
+
+
+def crawl_look(path, outcome, kind):
+    """The look the coverage gate makes of a crawl's row (camkit.coverage.crawl_looks), the one FirstOpens.takes holds."""
+    got = coverage.crawl_looks({"label": path[-1], "outcome": outcome, "kind": kind}, ["Playback", "Test"], None,
+                               "kit2_crawl", TEST_CAMERA, tuple(path[:-1]))
+    assert len(got) == 1, got
+    return got[0]
+
+
+def open_looks(camera, path) -> list:
+    """(result, note, screen) of each open look the camera's looks file holds of the row at `path`, in order."""
+    return [(lk["result"], lk.get("note"), lk.get("screen")) for _, lk in coverage.read_looks(camera)
+            if lk.get("did") == "open" and lk.get("path") == list(path)]
+
+
+def checked_clean(tmp_path, held, path=PLAYBACK_ROW, **kw):
+    """The first open of the row at `path`, the crawl's look `held` held back (None: none), its check clean."""
+    fo, sent, run = first_opens(tmp_path, **kw)
+    assert fo.opening(path) is None
+    if held is not None:
+        assert fo.takes(held)
+    fo.settle(SimpleNamespace(press=lambda key: None))
+    assert sent == ["first-open"] and not restore_pending(tmp_path) and fo.marker is None
+    return fo
+
+
+@pytest.mark.parametrize("kind", ["playback", "unknown"])
+def test_a_first_open_checked_clean_counts_as_seen_whatever_screen_its_right_showed(tmp_path, kind):
+    """A Right that left the row's page for a screen of its own the crawl could make nothing of (an unknown screen: the
+    a1 II's Cont. Play for Interval showed the playback view, 2026-11-15) and a check that came out clean: the clean
+    look goes before the held one, so the row is seen and the next lap opens it plainly, no marker at its Right."""
+    held = crawl_look(PLAYBACK_ROW, "unknown screen", kind)
+    assert (held["result"], held["screen"]) == ("kit_failed", kind)
+    checked_clean(tmp_path, held)
+    assert open_looks(tmp_path.name, PLAYBACK_ROW) == [("not_reached", first_open.PENDING, None),
+                                                       ("looked", "first open checked", None),
+                                                       ("kit_failed", None, kind)]
+    seen = first_open.seen_record(tmp_path.name)
+    assert seen.seen(PLAYBACK_ROW) and not seen.unchecked and not seen.acting
+    fo, sent, _ = first_opens(tmp_path, seen)
+    assert fo.opening(PLAYBACK_ROW) is None and fo.pending == [] and fo.marker is None and not restore_pending(tmp_path)
+
+
+def test_the_same_rule_serves_a_first_open_left_for_the_runs_end(tmp_path):
+    """A crawl stopped before the check: the run's end, clean, writes the same clean look before the held one; a Right
+    that did nothing stays unseen there too."""
+    fo, _sent, _ = first_opens(tmp_path)
+    fo.opening(PLAYBACK_ROW)
+    assert fo.takes(crawl_look(PLAYBACK_ROW, "unknown screen", "playback"))
+    assert not fo.ended(True, SimpleNamespace(after=tmp_path / "e.DAT", changes=[])) and not restore_pending(tmp_path)
+    assert open_looks(tmp_path.name, PLAYBACK_ROW)[-2:] == [("looked", "first open checked", None),
+                                                           ("kit_failed", None, "playback")]
+    assert first_open.seen_record(tmp_path.name).seen(PLAYBACK_ROW)
+    other = tmp_path / "nothing"
+    other.mkdir()
+    fo, _sent, _ = first_opens(other)
+    fo.opening(PLAYBACK_ROW)
+    assert fo.takes(crawl_look(PLAYBACK_ROW, "no response to Right", "menu"))
+    assert not fo.ended(True, SimpleNamespace(after=other / "e.DAT", changes=[]))
+    assert [r for r, _n, _s in open_looks(other.name, PLAYBACK_ROW)] == ["not_reached", "kit_failed"]
+    assert not first_open.seen_record(other.name).seen(PLAYBACK_ROW)
+
+
+def test_the_same_row_whose_check_finds_a_record_changed_is_acting(tmp_path, monkeypatch):
+    from camkit import session
+    monkeypatch.setattr(session, "compared", lambda a, b, say=None: [SimpleNamespace(key="global:0x0357")])
+    fo, _sent, _ = first_opens(tmp_path)
+    fo.opening(PLAYBACK_ROW)
+    assert fo.takes(crawl_look(PLAYBACK_ROW, "unknown screen", "playback"))
+    with pytest.raises(first_open.FirstOpenFailed):
+        fo.settle(SimpleNamespace(press=lambda key: None))
+    assert [r for r, _n, _s in open_looks(tmp_path.name, PLAYBACK_ROW)] == ["not_reached", "changed"]
+    seen = first_open.seen_record(tmp_path.name)
+    assert first_open.key(PLAYBACK_ROW) in seen.acting and not seen.seen(PLAYBACK_ROW) and restore_pending(tmp_path)
+    # at the run's end alike: a record that differs there leaves it acting
+    end = tmp_path / "end"
+    end.mkdir()
+    monkeypatch.setattr(session, "compared", lambda a, b, say=None: [])
+    fo, _sent, _ = first_opens(end)
+    fo.opening(PLAYBACK_ROW)
+    fo.takes(crawl_look(PLAYBACK_ROW, "unknown screen", "playback"))
+    with contextlib.redirect_stdout(io.StringIO()):
+        assert fo.ended(True, SimpleNamespace(after=end / "e.DAT", changes=[SimpleNamespace(key="global:0x0001")]))
+    assert [r for r, _n, _s in open_looks(end.name, PLAYBACK_ROW)] == ["not_reached", "changed"]
+    assert first_open.key(PLAYBACK_ROW) in first_open.seen_record(end.name).acting
+
+
+def test_a_row_whose_right_brought_a_notice_is_still_not_seen_after_a_clean_check(tmp_path):
+    """A notice the records did not hold: its check downloads and comes out clean, and the row stays unseen; one the
+    records hold greyed, greyed again: held, cleared at the run's end, unseen as ever."""
+    row = ("Protect",)
+    held = crawl_look(row, "notice", "notice")
+    assert (held["result"], held["screen"]) == ("greyed", "notice")
+    checked_clean(tmp_path, held, row)
+    assert [r for r, _n, _s in open_looks(tmp_path.name, row)] == ["not_reached", "greyed"]
+    seen = first_open.seen_record(tmp_path.name)
+    assert not seen.seen(row) and first_open.key(row) in seen.unchecked
+    again = tmp_path / "again"
+    again.mkdir()
+    fo, sent, _ = first_opens(again, first_open.Seen(greyed={first_open.key(row)}))
+    fo.opening(row)
+    assert fo.takes(crawl_look(row, "notice", "notice")) and fo.notices == {first_open.key(row)}
+    fo.settle(SimpleNamespace(press=lambda key: None))
+    assert sent == ["ping"] and fo.held == [row]
+    assert not fo.ended(True, SimpleNamespace(after=again / "e.DAT", changes=[])) and not restore_pending(again)
+    assert [r for r, _n, _s in open_looks(again.name, row)] == ["not_reached", "greyed"]
+    assert not first_open.seen_record(again.name).seen(row)
+
+
+@pytest.mark.parametrize("outcome,kind", [("no response to Right", "menu"), ("no response to Right", "submenu"),
+                                          ("unknown screen", "menu"), ("unknown screen", None)])
+def test_a_right_that_left_no_screen_of_the_rows_own_is_still_not_seen(tmp_path, outcome, kind):
+    """A Right that did nothing (the screen still the row's page) or a look with no screen kind proves nothing about
+    opening the row later: no clean look of its own, the row unseen."""
+    checked_clean(tmp_path, crawl_look(PLAYBACK_ROW, outcome, kind))
+    assert [r for r, _n, _s in open_looks(tmp_path.name, PLAYBACK_ROW)] == ["not_reached", "kit_failed"]
+    seen = first_open.seen_record(tmp_path.name)
+    assert not seen.seen(PLAYBACK_ROW) and first_open.key(PLAYBACK_ROW) in seen.unchecked
+
+
+@pytest.mark.parametrize("outcome,kind", [("incomplete: KeyError", "list"), ("lost", "unknown")])
+def test_a_look_that_did_not_reach_the_row_leaves_it_unseen_whatever_its_screen(tmp_path, outcome, kind):
+    """The more refusing reading: a held look that did not reach the row (not_reached: a walk cut short, a lost row,
+    which camkit.coverage says nothing of the row and OPENED leaves out) leaves it unseen, whatever screen it named."""
+    held = crawl_look(PLAYBACK_ROW, outcome, kind)
+    assert (held["result"], held["screen"]) == ("not_reached", kind)
+    checked_clean(tmp_path, held)
+    assert [r for r, _n, _s in open_looks(tmp_path.name, PLAYBACK_ROW)] == ["not_reached", "not_reached"]
+    assert not first_open.seen_record(tmp_path.name).seen(PLAYBACK_ROW)
+
+
+def test_a_rows_own_look_that_says_looked_gets_no_second_clean_look(tmp_path):
+    row = ("Drive Mode",)
+    checked_clean(tmp_path, crawl_look(row, "walked", "list"), row)
+    assert open_looks(tmp_path.name, row) == [("not_reached", first_open.PENDING, None), ("looked", None, "list")]
+    assert first_open.seen_record(tmp_path.name).seen(row)
+
+
+def test_a_withheld_rows_clean_first_open_on_an_unknown_screen_is_never_seen(tmp_path):
+    """A look lap that withholds the row's label holds no look of it (crawl_looks writes none under a placeholder): the
+    clean look goes under the placeholder alone, as before, and neither path is seen."""
+    assert coverage.crawl_looks({"label": "(withheld)", "outcome": "unknown screen", "kind": "playback"}, ["Playback"],
+                                None, "kit2_crawl", TEST_CAMERA) == []
+    fo = checked_clean(tmp_path, None, name=lambda label: "(withheld)")
+    assert open_looks(tmp_path.name, ["(withheld)"]) == [("not_reached", first_open.PENDING, None),
+                                                         ("looked", "first open checked", None)]
+    assert open_looks(tmp_path.name, PLAYBACK_ROW) == [] and not fo.seen.seen(PLAYBACK_ROW)
+    seen = first_open.seen_record(tmp_path.name)
+    assert not seen.seen(PLAYBACK_ROW) and not seen.seen(["(withheld)"])
+
+
+REAL_RUN = "kit2_a1fin_look_playback3"
+
+
+def test_the_a1_iis_cont_play_for_interval_replayed_through_the_rule_is_seen(tmp_path, own_runs):
+    """Opt-in (skipped without the a1 II's run): kit2_a1fin_look_playback3's first open of Cont. Play for Interval, its
+    Right on the playback view (rows.jsonl: an unknown screen) and its check clean (events.jsonl). The looks it wrote,
+    the pending one and the crawl's held one, left the row unchecked; replayed through the rule they get the clean look
+    before the held one, and seen_record built from a copy of those looks plus it says seen."""
+    real = paths.a1ii_root() / REAL_RUN
+    if not ((real / "rows.jsonl").is_file() and (real / "events.jsonl").is_file()):
+        pytest.skip("the a1 II's kit2_a1fin_look_playback3 run is not in this clone")
+    row = next(r for r in jsonl.read(real / "rows.jsonl", bad="skip") if r.get("label") == PLAYBACK_ROW[0])
+    events = jsonl.read(real / "events.jsonl", bad="skip")
+    assert [e.get("path") for e in events if e.get("kind") == "first_open"].count(list(PLAYBACK_ROW)) == 1
+    assert any(e.get("kind") == "first_open_checked" and list(PLAYBACK_ROW) in (e.get("paths") or [])
+               for e in events)
+    held = coverage.crawl_looks(row, ["Playback", ""], None, REAL_RUN, TEST_CAMERA)
+    assert [(lk["result"], lk["screen"]) for lk in held] == [("kit_failed", "playback")]
+
+    def records(camera):
+        """The camera's records holding a copy of the run's rows.jsonl (seen_record reads every run's)."""
+        copy = own_runs / camera / REAL_RUN
+        copy.mkdir(parents=True)
+        shutil.copy(real / "rows.jsonl", copy / "rows.jsonl")
+    # the looks as the run left them: its pending look, then the crawl's held one, written after the clean check
+    left = f"{tmp_path.name}-as-left"
+    records(left)
+    assert first_open.failed_look(left, REAL_RUN, PLAYBACK_ROW, "not_reached", note=first_open.PENDING)
+    assert coverage.append_look(left, dict(held[0]))
+    s = first_open.seen_record(left)
+    assert not s.seen(PLAYBACK_ROW) and first_open.key(PLAYBACK_ROW) in s.unchecked
+    # replayed through the rule: the clean look comes before the held one
+    records(tmp_path.name)
+    fo, _sent, _ = first_opens(tmp_path)
+    assert fo.opening(PLAYBACK_ROW) is None and fo.takes(dict(held[0]))
+    fo.settle(SimpleNamespace(press=lambda key: None))
+    mine = [lk for _, lk in coverage.read_looks(tmp_path.name) if lk.get("path") == list(PLAYBACK_ROW)]
+    assert [(lk["result"], lk.get("note"), lk.get("screen")) for lk in mine] == [
+        ("not_reached", first_open.PENDING, None), ("looked", "first open checked", None),
+        ("kit_failed", None, "playback")]
+    assert first_open.seen_record(tmp_path.name).seen(PLAYBACK_ROW)
+    assert coverage.append_look(left, mine[1])                  # the run's own looks plus the clean one
+    assert first_open.seen_record(left).seen(PLAYBACK_ROW)
 
 
 # ---------------------------------------------------------------------------------------------- crawl_run, pass 1

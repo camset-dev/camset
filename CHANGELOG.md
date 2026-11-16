@@ -195,6 +195,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   changes no longer makes a row the camera has opened before count as never opened. A row's first open now goes on
   over a slider, number fields, a table or another option screen MENU leaves, and Enter refused for want of a readable
   cursor says that `--press 'enter!:REGEX'` vouches for it.
+- A row whose first open showed a screen of its own that the kit cannot read, such as the playback view of the a1 II's
+  Cont. Play for Interval, now counts as opened once its check comes out clean, so later laps open it normally. A row
+  that only showed a notice, or did not respond, still has its next open checked.
 
 ### The docs
 

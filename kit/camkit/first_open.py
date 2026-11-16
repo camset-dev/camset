@@ -14,6 +14,11 @@ rows.jsonl (an outcome whose screen opened and was left, OPENED) and its proofs.
 row seen with the rows above it, told by its labels from the top-level row compared as safety.plain compares them, in
 any tab and mode. The row's latest open look overrides them: "changed" or "acted" (a first open that failed: ACTED) and
 a first open not yet checked, or one a page's check could not clear (not_reached with PENDING or PAGE), leave it unseen.
+A clean check writes its clean look before the crawl's look of the row where that one does not say the opening was seen
+but shows the Right left the row's page for a screen of its own (own_screen), whatever the kit made of it: on
+2026-11-15 the a1 II's Cont. Play for Interval showed its playback view, an unknown screen, and came under the
+procedure on every lap. The crawl's look stays the ledger's latest (kit cannot read), and seen_record reads the clean
+one. A notice, a Right that did nothing or a look that did not reach the row leaves it unseen.
 A look's did is "open" only where nothing but up, down and MENU followed the opening press (kit/drive.py's look:
 camkit.coverage.drive_look); a run that pressed anything else inside the row chose, and a record a choice changed leaves
 the row seen (2026-11-15: a slider moved and cancelled on a row seen opened many times made it unseen).
@@ -91,6 +96,15 @@ def placeholder(k) -> bool:
     that failed, or that a page's check could not clear, stands for every row written under it until retracted
     (seen_record)."""
     return any(str(x).startswith("(") for x in k or ())
+
+
+def own_screen(look: dict) -> bool:
+    """Whether a pending row's look the coverage gate held (FirstOpens.takes) shows its Right left the row's page for a
+    screen of the row's own: a screen kind recorded that is no row page (safety.ROW_PAGES: a Right that did nothing
+    proves nothing of opening the row later), the result neither a notice's (greyed) nor one that did not reach the
+    row (not_reached: a walk cut short, a lost row, of which the looks file says nothing)."""
+    kind = look.get("screen")
+    return bool(kind) and kind not in safety.ROW_PAGES and look.get("result") not in ("greyed", "not_reached")
 
 
 def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
@@ -358,18 +372,30 @@ class FirstOpens:
         return bool(leave(self.link, self.eyes))
 
     def _clean(self, rows, how: str) -> None:
+        """The check of `rows` (the pending rows) came out clean, at settle or at the run's end (ended): each row's clean
+        look ("looked", note "first open checked", under the path opening() recorded its pending look by) written where
+        _seen_now says so, then the held looks after them, and the marker taken away. The clean look goes first so that
+        the ledger's latest look of the row stays the crawl's (camkit.coverage.latest_looks: an unknown screen stays
+        "kit cannot read"), while seen_record reads the clean one (a kit_failed look says nothing of the opening)."""
+        for p in rows:
+            if self._seen_now(p):
+                self._look(p, "looked", note="first open checked")
         for lk in self.deferred:
             coverage.append_look(self.run.root.name, lk, private=self.private)
-        # a pending row the coverage gate wrote no look for (its label withheld on a look lap, kit/crawl_run.py
-        # kept_row: docs/decisions/0024) gets its clean look here, by the path opening() recorded its pending look under
-        told = {key(lk.get("path")) for lk in self.deferred}
-        for p in rows:
-            if key(self.kept(p)) not in told and key(p) not in self.notices:
-                self._look(p, "looked", note="first open checked")
         clear_restore_by_hand(self.run.root)
         self.run.log("first_open_checked", paths=[self.kept(p) for p in self.held + rows], how=how)
         self.seen.opened |= {key(p) for p in rows if key(p) not in self.notices and not placeholder(self.kept(p))}
         self.marker, self.pending, self.deferred, self.notices, self.held = None, [], [], set(), []
+
+    def _seen_now(self, p) -> bool:
+        """Whether a clean check writes the pending row `p` its own clean look: never a row whose Right brought up a
+        notice the records hold (notices); else where the coverage gate held no look of it (its label withheld on a look
+        lap, kit/crawl_run.py kept_row: docs/decisions/0024), or none of its held looks says the opening was seen and
+        each shows a screen of the row's own (own_screen): an unknown screen counts, whatever the kit made of it."""
+        if key(p) in self.notices:
+            return False
+        held = [lk for lk in self.deferred if key(lk.get("path")) == key(self.kept(p))]
+        return not any(lk.get("result") in SEEN_RESULTS["open"] for lk in held) and all(map(own_screen, held))
 
     def _fail(self, rows, keys) -> None:
         """The looks of rows whose check found `keys` differing: "changed" where they are one top-level row's (its

@@ -1013,6 +1013,28 @@ def test_only_a_failure_that_comes_again_holds_a_row_back(camera, monkeypatch):
     assert coverage.drive_look(dict(unfinished, outcome="unknown screen"), CAM, None, "r")["result"] == "kit_failed"
 
 
+def test_a_first_open_checked_clean_keeps_the_rows_kit_failure(camera, tmp_path, monkeypatch):
+    """camkit.first_open writes a row's clean look ("first open checked") before the crawl's held look of it: Juliet,
+    which a crawl found on an unknown screen, is seen opened after its clean first open, and the ledger's latest look of
+    it stays the crawl's kit failure, which is true (after it, the ledger would set the failure aside)."""
+    import camkit
+    from camkit import first_open
+    from camkit.runs import restore_pending
+    from test_first_open import crawl_look, first_opens, open_looks
+    monkeypatch.setattr(camkit, "RUNS", paths.runs_top())     # a marker in the test's own runs/ alone, never the clone's
+    juliet = ("Juliet",)
+    assert row(ledger(), *juliet)["status"] == "kit cannot read"
+    fo, _sent, _ = first_opens(tmp_path, root=camera.runs, run_name="kit2_first")
+    assert fo.run.root.name == CAM and fo.opening(juliet) is None
+    assert fo.takes(crawl_look(juliet, "unknown screen", "unknown"))
+    fo.settle(SimpleNamespace(press=lambda key: None))
+    assert not restore_pending(camera.runs)
+    assert open_looks(CAM, juliet) == [("not_reached", first_open.PENDING, None),
+                                       ("looked", "first open checked", None), ("kit_failed", None, "unknown")]
+    assert first_open.seen_record(CAM).seen(juliet)
+    assert row(ledger(), *juliet)["status"] == "kit cannot read"
+
+
 def test_kit_newer_cannot_tell_on_a_changed_tree(monkeypatch):
     """An uncommitted change under kit/ may mend the failure: kit_newer says it cannot tell (None: tried again), and a
     look made on a changed tree names its commit "+dirty"."""
