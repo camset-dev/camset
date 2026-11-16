@@ -200,8 +200,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   that only showed a notice, or did not respond, still has its next open checked.
 - `kit/provers/framepos_run.py --grip down` (or `up`) shows which records one vertical orientation's registration of
   a focus frame writes: with the owner holding the camera that way, it sets Switch V/H AF Area to AF Point + AF Area,
-  reads the turned screens upright and ends each area's summary with "grip down writes:" and the records' names. Held
-  vertically it judges no press's direction, stops at the first area that fails, and refuses `--zone-grid`.
+  reads the turned screens upright and ends each area's summary with "grip down writes:" and the records' names, and
+  `--grip level` does the same for the camera standing level ("level writes:"). Held vertically it judges no press's
+  direction, stops at the first area that fails, and refuses `--zone-grid`; with any grip a start file whose camera
+  position record contradicts the grip stops the run before any press.
 
 ### The docs
 

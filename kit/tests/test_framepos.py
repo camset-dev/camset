@@ -1052,21 +1052,30 @@ class Turned:
     screen the multi-selector moves the chosen area's frame in directions the run does not assume; registering slot 1
     copies the frame's place into the records this orientation keeps (the Zone's vertical B copy, Custom 1's copy 2)."""
     MOVE = {"ms_left": (0, 1), "ms_up": (-1, 0), "ms_right": (0, -1), "ms_down": (1, 0)}
+    LEVEL_MOVE = {"ms_left": (-1, 0), "ms_up": (0, -1), "ms_right": (1, 0), "ms_down": (0, 1)}
     CODES = {(0, 0): 0, (0, -1): 1, (1, 0): 2, (-1, 0): 3, (0, 1): 4, (1, 1): 5, (-1, 1): 6, (-1, -1): 7, (1, -1): 8}
 
-    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW"):
-        self.run, self.upright_shooting = run, upright_shooting
+    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW", level=False, position=None):
+        """level: the camera stands level (with Switch V/H AF Area = AF Point + AF Area: --grip level), every screen
+        level and a registration writing the level copies; position: what it holds in the made-up camera position
+        record (POSITION_KEY), none when not given."""
+        self.run, self.upright_shooting, self.level = run, upright_shooting, level
         self.n, self.pressed, self.named, self.chosen, self.logged = 0, [], [], [], []
         self.run.log = lambda kind, **f: self.logged.append((kind, f))
         self.opt, self.val, self.area, self.places = 0, 0, None, {}
         self.slot = {"set1:0x023c": 4, "set1:0x0b40": 0, "set1:0x0b42": 0, "set1:0x0b44": 0, "set1:0x0c20": 320,
                      "set1:0x0c22": 320, "set1:0x0c24": 240, "set1:0x0c26": 240}
+        if position is not None:
+            self.slot[POSITION_KEY] = position
         self.show("shooting")
         CAMS.append(self)
 
     def show(self, what):
         from camkit.ocr import Line
-        if what == "shooting":
+        if what == "shooting" and self.level:
+            words = "F5.0 ISO AUTO 1/250 RAW"
+            self.now = {"kind": "shooting", "text": words, "lines": [Line(words, 1.0, 10, 440, 300, 20)]}
+        elif what == "shooting":
             ups = [Line(self.upright_shooting, 1.0, 10, 600, 300, 20)] if self.upright_shooting else []
             self.now = {"kind": "shooting", "text": "", "upright": ups}
         elif what == "menu":
@@ -1075,6 +1084,10 @@ class Turned:
             lab = CAROUSEL[self.opt]
             o = next((o for o in CAROUSEL_AXES if lab == o or lab.startswith(f"{o}:")), None)
             shown = CAROUSEL_AXES[o]["values"][self.val] if o else lab
+            if self.level:
+                self.now = {"kind": "dialog", "text": f"Focus Area {shown}", "shown": shown,
+                            "lines": [Line("Focus Area", 1.0, 10, 10, 200, 30), Line(shown, 1.0, 120, 70, 200, 30)]}
+                return
             self.now = {"kind": "unknown", "text": "", "shown": shown,
                         "upright": [Line("Focus Area", 1.0, 10, 10, 200, 30), Line(shown, 1.0, 5, 60, 200, 30)]}
         elif what == "slots":
@@ -1104,7 +1117,7 @@ class Turned:
         if kind == "shooting":
             assert key in self.MOVE and kw.get("on_shooting") == key, (key, kw)
             x, y = self.places.get(self.area, (0, 0))
-            dx, dy = self.MOVE[key]
+            dx, dy = (self.LEVEL_MOVE if self.level else self.MOVE)[key]
             self.places[self.area] = (x + dx, y + dy)
         elif kind == "menu" and key == "right":
             self.show("dialog")
@@ -1122,10 +1135,12 @@ class Turned:
             self.show("shooting")
         elif self.now.get("text") == SLOTS and key == "enter":
             x, y = self.places.get(self.area, (0, 0))
+            zone, box = ("set1:0x0b40", ("set1:0x0c20", "set1:0x0c24")) if self.level else \
+                ("set1:0x0b44", ("set1:0x0c22", "set1:0x0c26"))
             if self.area == "Zone":
-                self.slot["set1:0x0b44"] = self.CODES[(x, y)]
+                self.slot[zone] = self.CODES[(x, y)]
             else:
-                self.slot.update({"set1:0x0c22": 320 + 13 * x, "set1:0x0c26": 240 + 13 * y})
+                self.slot.update({box[0]: 320 + 13 * x, box[1]: 240 + 13 * y})
             self.show("registered")
         else:
             raise AssertionError(f"made-up camera: {key} on {self.now}")
@@ -1163,8 +1178,14 @@ def turned(monkeypatch, quick, tmp_path):
     monkeypatch.setattr(proving.screens, "vlm_option", lambda cam: "")
     monkeypatch.setattr(prove_run, "to_shooting", lambda link, hdmi, why: None)
     monkeypatch.setattr(runner, "close_screen", lambda cam, link: cam.show("shooting"))
-    monkeypatch.setattr(ocr, "read", lambda paths: {p: (CAMS[-1].now.get("upright", []) if "_upright" in Path(p).name
-                                                        else []) for p in paths})
+    run.upright_reads = []
+
+    def read(paths):
+        """A frame turned upright reads as the screen's upright lines (each such read kept), a frame as it is as its
+        level lines."""
+        run.upright_reads += [Path(p).name for p in paths if "_upright" in Path(p).name]
+        return {p: CAMS[-1].now.get("upright" if "_upright" in Path(p).name else "lines", []) for p in paths}
+    monkeypatch.setattr(ocr, "read", read)
     monkeypatch.setattr(camset, "read", lambda path: files[Path(path).name])
     monkeypatch.setattr(camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a.get(k), after=b.get(k))
                                                       for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)])
@@ -1176,23 +1197,36 @@ def turned(monkeypatch, quick, tmp_path):
 
         def download(tag):
             p = tmp_path / f"{cam.n:05d}_{tag}.DAT"
-            files[p.name] = dict(cam.slot)
+            files[p.name] = Download(cam.slot)
             return p
-        files["00000_start.DAT"] = dict(cam.slot)
+        files["00000_start.DAT"] = Download(cam.slot)
         return cam, SimpleNamespace(cam=cam, link=SimpleNamespace(download=download), start=tmp_path / "00000_start.DAT")
     return run, session
 
 
-def grip_areas(run, s, labels: str):
-    """F.areas over the plan's `labels`, held grip down, routed by CAROUSEL; (framepos.jsonl, the lines)."""
+class Download(dict):
+    """A made-up download: its records by key, and each record as camset's get(section, id) gives it, so
+    prove_run.held_value reads it as it reads a settings file."""
+    def get(self, *args):
+        if len(args) == 2 and isinstance(args[0], int):
+            section, rid = args
+            key = f"global:0x{rid:04x}" if section == 0 else f"set{section}:0x{rid:04x}"
+            return SimpleNamespace(value=lambda: self[key]) if key in self else None
+        return super().get(*args)
+
+
+def grip_areas(run, s, labels: str, grip: str = "down", index: dict | None = None):
+    """F.areas over the plan's `labels`, held as `grip` says (grip down unless told), routed by CAROUSEL; (framepos.jsonl,
+    the lines)."""
     import afreg_run
     todo = F.plan(made_up_doc(), labels)
-    a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip="down")
-    tag = {"context": GRIP_CONTEXT, "allowance": "a", "grip": "down", "upright": True}
+    a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=grip)
+    tag = {"context": F.context_of(None, None, None, grip), "allowance": "a", "grip": grip,
+           **({"upright": True} if grip != "level" else {})}
     routes = {t["label"]: afreg_run.route(t["label"], CAROUSEL, CAROUSEL_AXES) for t in todo}
     out, lines = run.dir / "framepos.jsonl", []
-    F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, grip_index(), False, False, out, tag,
-            lines, None, tag)
+    F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, index or grip_index(), False, False,
+            out, tag, lines, None, tag)
     return out, lines
 
 
@@ -1254,3 +1288,161 @@ def test_held_vertically_a_screen_not_read_as_the_shooting_screen_gets_no_press(
     with pytest.raises(Failed) as level:
         F.press_moves(Cam({"kind": "unknown"}, []), LEFT_UP, [], [])
     assert "held vertically" not in str(level.value)
+
+
+# ---------------------------------------------------------------- standing level, each orientation its own (--grip level)
+
+LEVEL_CONTEXT = "Switch V/H AF Area = AF Point + AF Area, camera level"
+POSITION_KEY = "global:0x0e20"
+POSITION_WHY = "The camera sets it from how it is held, level or vertical, whatever a settings file says."
+
+
+def position_setting(values) -> dict:
+    """A made-up record the camera sets from how it is held (as the a1 II's global:0x04e2 is described: its unproved
+    reason says so), with `values` (codes made up)."""
+    return {"key": POSITION_KEY, "name": "Made-up camera position state (not a setting)", "values": values,
+            "note": "Made-up: the camera keeps it.", "unproved_reason": {"kind": "state", "why": POSITION_WHY}}
+
+
+def position_index(values=([1, "level"], [8, "vertical"])) -> dict:
+    return grip_index() | {POSITION_KEY: position_setting([list(v) for v in values])}
+
+
+def test_list_with_grip_level_prints_the_context_the_plan_and_the_position_check(capsys, monkeypatch):
+    """--list --grip level: the context "Switch V/H AF Area = AF Point + AF Area, camera level", the setup putting the
+    row on AF Point + AF Area, the level plan, and what the start download's camera position record must hold (or that
+    its values say too little to stop anything); no camera."""
+    import pass3_run
+
+    def no_map(path):
+        raise SystemExit("no pass 1 map")
+    doc = {"settings": list(position_index().values())}
+    monkeypatch.setattr(F, "read_json", lambda path: doc)
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(pass3_run, "labels_of", no_map)
+    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("no camera in a test"))
+    assert F.main(["--list", "--areas", "Zone,Custom 1", "--grip", "level"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"2 areas ({LEVEL_CONTEXT!r}; run kit2_framepos):")
+    assert "set through the menu first: Switch V/H AF Area = AF Point + AF Area;" in out
+    assert "Custom 1 (code 109): no route in pass 1's map and the axis walk; moved Left 3, Up 2, put back Down 2, Right 3" in out
+    assert (f"before any press, the start download's {POSITION_KEY} (Made-up camera position state (not a setting)), "
+            "which the camera sets from how it is held, must hold 1 (level)") in out
+    F.main(["--list", "--areas", "Zone", "--grip", "down"])
+    assert "must hold 8 (vertical)" in capsys.readouterr().out
+    doc["settings"] = list(position_index(values=()).values())          # the a1 II's: no values, a note only
+    F.main(["--list", "--areas", "Zone", "--grip", "level"])
+    out = capsys.readouterr().out
+    assert "its values name no code for the camera standing level, so it stops nothing" in out
+    doc["settings"] = made_up_doc()["settings"]
+    F.main(["--list", "--areas", "Zone", "--grip", "up"])
+    assert "the definition names no record the camera sets from how it is held: not checked" in capsys.readouterr().out
+    F.main(["--list", "--areas", "Zone"])
+    assert "from how it is held" not in capsys.readouterr().out, "no --grip: nothing new"
+
+
+def test_a_level_grip_sets_the_row_like_a_vertical_one_and_says_level(monkeypatch, tmp_path):
+    """--grip level puts Switch V/H AF Area on AF Point + AF Area as down and up do; its context says the camera is
+    level, in the words the hand tables' ORIENTED pattern reads; down's and up's stay afreg_run's."""
+    import afreg_run
+    assert ("row", "Switch V/H AF Area = AF Point + AF Area") in F.setup_steps(True, True, "Large", "level")
+    assert F.setup_rows(None, "level")["Switch V/H AF Area = AF Point + AF Area"] == (["Switch V/H AF Area"],
+                                                                                     "AF Point + AF Area")
+    assert F.context_of(None, None, None, "level") == LEVEL_CONTEXT
+    assert F.context_of("x", None, None, "level") == f"{LEVEL_CONTEXT}, x"
+    assert [F.context_of(None, None, None, g) for g in ("down", "up")] == [afreg_run.context_of(g, None) for g in
+                                                                           ("down", "up")]
+    oriented = hand_tables.load(paths.A1II, evidence=False).ORIENTED
+    assert oriented.search(f"Focus Area [{LEVEL_CONTEXT}]")[1] == "level"
+    import mode_switch
+    import prove_run
+    import runner
+    from camkit import camset
+    calls = []
+    monkeypatch.setattr(F.time, "sleep", lambda s: None)
+    monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
+    monkeypatch.setattr(afreg_run, "set_setup_row", lambda cam, cycle, model, path, option: calls.append((path, option)))
+    monkeypatch.setattr(runner, "close_screen", lambda cam, link: None)
+    monkeypatch.setattr(prove_run, "to_shooting", lambda link, hdmi, why: None)
+    monkeypatch.setattr(camset, "read", lambda path: None)
+    monkeypatch.setattr(camset, "diff", lambda a, b: [])
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"00002_{tag}.DAT")
+    F.prepare(None, link, None, SimpleNamespace(dir=tmp_path), None, None, False, False, tmp_path / "00001_start.DAT",
+              None, index(), grip="level")
+    assert calls == [(["Switch V/H AF Area"], "AF Point + AF Area")]
+
+
+def test_a_level_grip_run_reads_every_screen_level_and_says_what_level_writes(turned, monkeypatch, capsys):
+    """--grip level on a camera standing level: the start download's position record holds the level code, so the
+    run goes on; each area chosen on the level dialog (afreg_run's level path), the shooting screen read as it is, no
+    frame turned upright; the lines carry "grip": "level" and no "upright", and each area's summary ends "level
+    writes:" with the definition's names of the level copies."""
+    import afreg_run
+
+    def choose_level(cam, cycle, model, labels, axes, i, o, v):
+        cam.show("menu")
+        cam.press("right")                          # Focus Area, Right: its carousel, level
+        cam.opt, cam.val = i, v or 0
+        cam.show("dialog")
+        return {}
+    monkeypatch.setattr(afreg_run, "choose_level", choose_level)
+    run, session = turned
+    cam, s = session(level=True, position=1)
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "level", position_index())
+    assert cam.chosen == ["Zone", "Custom 1"]
+    assert run.upright_reads == [] and not list((run.dir / "upright").iterdir())
+    got = {ln["area"]: ln for ln in F.jsonl.read(out)}
+    assert [c["key"] for c in got["Zone"]["changed"]] == ["set1:0x0b40"]
+    assert [c["key"] for c in got["Custom 1"]["changed"]] == ["set1:0x0c20", "set1:0x0c24"]
+    assert all(ln["grip"] == "level" and "upright" not in ln and ln["context"] == LEVEL_CONTEXT and ln["back"]["same"]
+               for ln in got.values())
+    said = capsys.readouterr().out
+    assert f"the camera's position checked: {POSITION_KEY} holds level, as --grip level wants" in said
+    for text in (said, "\n".join(F.summary_lines(F.jsonl.read(out)))):
+        assert "    level writes: Zone position memory (grid index)" in text
+        assert "    level writes: Custom 1 box position: X (copy 1); Custom 1 box position: Y (copy 1)" in text
+        assert "    set:0x0c20  Custom 1 box position: X (copy 1): -39" in text
+        assert "camera grip level" not in text and "grip level writes" not in text
+        assert "the way the presses went" not in text
+
+
+@pytest.mark.parametrize("grip,level,position,words", [
+    ("level", True, 8, "the camera is not standing level"),
+    ("down", False, 1, "the camera is not held vertically, grip down")])
+def test_a_start_download_whose_position_contradicts_the_grip_stops_the_run_before_any_press(
+        turned, grip, level, position, words):
+    """The start download's camera position record holding a vertical code stops --grip level, and one holding the
+    level code stops --grip down, before anything is pressed or chosen, with a plain message naming the record, what it
+    holds and what the grip wants."""
+    from prove_run import Failed
+    run, session = turned
+    cam, s = session(level=level, position=position)
+    with pytest.raises(Failed, match=words) as got:
+        grip_areas(run, s, "Zone, Custom 1", grip, position_index())
+    assert f"{POSITION_KEY} (Made-up camera position state (not a setting))" in str(got.value)
+    assert f"holds {position}" in str(got.value) and "nothing was pressed" in str(got.value)
+    assert cam.pressed == [] and cam.chosen == []
+
+
+def test_the_position_check_stops_only_where_the_values_contradict_the_grip():
+    """position_check: a record whose values label the level code and a vertical one decides each grip; one whose
+    values tell grip down from grip up holds each grip to its own; one whose values name none (the a1 II's
+    global:0x04e2, described in a note alone) stops nothing and says what the download holds and that the kit expects
+    no code; a download without the record, or a definition without one, is not checked."""
+    def check(grip, held, values=([1, "level"], [8, "vertical"])):
+        cs = Download({POSITION_KEY: held} if held is not None else {})
+        return F.position_check(grip, position_index(values), cs)
+    assert check("level", 1)[0] is False and check("level", 8)[0] is True and check("level", 5)[0] is True
+    assert check("down", 8)[0] is False and check("up", 8)[0] is False and check("down", 1)[0] is True
+    apart = ([1, "Level"], [8, "Vertical, grip down"], [9, "Vertical, grip up"])
+    assert [check("down", v, apart)[0] for v in (8, 9, 1)] == [False, True, True]
+    assert [check("up", v, apart)[0] for v in (9, 8)] == [False, True]
+    only_level = ([1, "level"],)
+    assert [check("down", v, only_level)[0] for v in (8, 5, 1)] == [False, False, True], "at least not the level code"
+    stop, said = check("level", 8, ())
+    assert stop is False and f"{POSITION_KEY} (Made-up camera position state (not a setting)) holds 8" in said
+    assert "the kit expects no code" in said and "Made-up: the camera keeps it." in said
+    assert check("level", None) == (False, f"the camera's position not checked: the start download holds no {POSITION_KEY}")
+    stop, said = F.position_check("level", grip_index(), Download({}))
+    assert stop is False and said == ("the camera's position not checked: the definition names no record the camera "
+                                      "sets from how it is held")
