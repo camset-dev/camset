@@ -1675,10 +1675,11 @@ SHOWN_KINDS = frozenset({"list", "dialog", "sidelist", "checklist", "notice", "m
 # the kinds of screen a row's first open on a body (kit/drive.py, the opening Right alone, then its own MENU and the
 # settings check) reads as one it can judge after the Right: SHOWN_KINDS, and the other option screens camkit.screen
 # names that MENU leaves (a slider, number fields, a check grid, a picker, a table, a keyset, the Fn menu, the white
-# balance grid, a look panel). Only there: the owner route's armed presses keep SHOWN_KINDS, and a screen of no known
-# kind, a guide or a help popup stays one no first open reads
+# balance grid, a look panel, boxed options alone: "buttons", 2026-11-16, which takes no Enter by its kind, ENTER_KINDS).
+# Only there: the owner route's armed presses keep SHOWN_KINDS, and a screen of no known kind, a guide or a help popup
+# stays one no first open reads
 FIRST_OPEN_KINDS = SHOWN_KINDS | frozenset({"slider", "fields", "checkgrid", "picker", "table", "keyset", "fnmenu",
-                                            "wbgrid", "look"})
+                                            "wbgrid", "look", "buttons"})
 
 
 def identity_screen(text) -> str | None:
@@ -1786,13 +1787,14 @@ def inside_menu_only(cls: str, kind, text, row: str = "") -> str | None:
     setting, a screen naming identity or credentials at all (identity_screen); and inside any of them a screen that
     reads as no known kind ("unknown": an information screen such as Display FTP Result's, a keyboard, a pairing list,
     or the row's own screen read as the shooting screen right after it opened, camkit.live and kit/drive.py), which no
-    rule of the reader can say is the row's own list. Then no reader is asked either, and nothing of the text is kept
-    but its field names and whole row labels. Inside a row a look lap opened of another class (look_class: an action,
+    rule of the reader can say is the row's own list; boxed options alone ("buttons", 2026-11-16: until then read as no
+    known kind) too. Then no reader is asked either, and nothing of the text is kept but its field names and whole row
+    labels. Inside a row a look lap opened of another class (look_class: an action,
     credentials, the serial number, a closed identity row; `row` its label), what the owner route's check takes alone
     (owner_menu_only) and a screen naming identity or credentials at all (docs/decisions/0024)."""
     if cls == LIFT_ADDRESS:
         return "an address screen"
-    if kind == "unknown":
+    if kind in ("unknown", "buttons"):
         return "a screen of no known kind inside the row (an information screen, a keyboard or an entry screen)"
     if cls not in NARROW:
         return owner_menu_only(cls, kind, text, row) or identity_screen(text)

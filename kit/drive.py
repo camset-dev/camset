@@ -236,8 +236,9 @@ NEVER_ENTER = safety.LINK_WIPING_ENTER
 # the one reset decision 5 allows, which shares its screen with Initialize (Setting Reset's two rows)
 CAMERA_SETTINGS_RESET = safety.CAMERA_SETTINGS_RESET
 ENTERS, RIGHTS = ("enter", "ms_enter"), ("right", "ms_right")
-# screens where Right opens the lit row: there the row must be read before it is opened
-ROW_KINDS = ("menu", "submenu", "tiles", "shooting", "unknown")
+# screens where Right opens the lit row: there the row must be read before it is opened; boxed options alone
+# ("buttons", read as no known kind until 2026-11-16) as an unknown screen
+ROW_KINDS = ("menu", "submenu", "tiles", "shooting", "unknown", "buttons")
 # screens where no Enter is vouched for (enter!:regex): Enter opens their lit row, which must be read. An unknown screen
 # is not among them, for the MR Memory slots read as one (kit2_small_1109); there the regex and the whole screen's text
 # (safety.screen_refused) are the guard

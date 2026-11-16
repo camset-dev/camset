@@ -209,6 +209,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
   prints nothing it read.
+- The kit now reads a screen of boxed options alone, such as the a1 II's Image Index, where a row's first open stopped
+  with `RESTORE_BY_HAND`: it looks at it and leaves it with MENU. Enter on it stays refused unless `--confirm` names
+  the screen, since a question can be drawn the same way.
 
 ### The docs
 

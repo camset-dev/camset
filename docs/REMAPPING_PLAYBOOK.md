@@ -99,8 +99,8 @@ on their own camera. Those allowances are not yours to assume: ask your owner, a
 8. **A press happens only on a screen the reader recognises.**
    - Fail closed: an unknown screen gets MENU (cancel), never Enter.
    - Enter only on a screen that asks nothing, whatever its words or language: never on a notice, a screen of no known
-     kind or no readable text, one with a question mark, or a carousel that asks. The camera checks every Enter and
-     trash press on a frame grabbed just before it.
+     kind or no readable text, boxed options alone (a question can be drawn so), one with a question mark, or a
+     carousel that asks. The camera checks every Enter and trash press on a frame grabbed just before it.
    - **What this check cannot see:** a question drawn with no question mark, a list where choosing is the act (a slot
      in Format, an item in Delete), button words in another language, Right and the dials. `kit/camkit/live.py`'s
      docstring has the whole list, and the few named ways past the check.

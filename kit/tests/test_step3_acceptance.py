@@ -1702,6 +1702,55 @@ def test_v2_panels_with_network_is_refused_before_connecting(tmp_path, monkeypat
     assert lap.keys == [] and lap.code not in (0, None), (lap.code, lap.keys)
 
 
+# ============================================================== boxed options alone ("buttons", 2026-11-16)
+
+# camkit.screen's "buttons" (the a1 II's Image Index: a title, two to four boxed options, one lit), read as no known kind
+# until 2026-11-16, when its first open stopped with RESTORE_BY_HAND and left the screen open
+BOXES = srow("Papa Boxes", "", kind="buttons", options=("Nine Tiles", "Thirty Tiles"))
+
+
+def test_drive_first_open_goes_on_over_boxed_options(tmp_path, monkeypatch, scope):
+    """kit/drive.py, an ordinary run: an unseen row's Right (RESTORE_BY_HAND there) that shows boxed options alone is a
+    screen the first open reads: MENU alone inside, nothing chosen or answered, the check clean, the marker gone, the
+    row seen opened from then on, exit 0."""
+    import camkit
+    from camkit import first_open, paths
+    scope(BLANK)
+    monkeypatch.setattr(first_open, "other_body", lambda link, camera: "")
+    root = paths.runs_top() / TEST_CAMERA
+    monkeypatch.setattr(camkit, "RUNS", paths.runs_top())
+    assert not first_open.seen_record().seen([BOXES["label"]])
+    d = drive_run(tmp_path, monkeypatch, [DRIVE_MODE, BOXES, ISO], [BOXES["label"]], ["right"], root=root)
+    assert d.code in (0, None), d.out[-1500:]
+    assert d.sim.opened(1) and d.sim.marked_at_open(1) is True, d.out[-1500:]
+    assert d.sim.inside(1) == ["menu"] and not d.sim.chosen and not d.sim.answered, d.sim.inside(1)
+    assert not (root / RESTORE_BY_HAND).exists()
+    assert d.line["first_open"] is True and d.line["screens"][0]["kind"] == "buttons", d.line
+    assert first_open.seen_record().seen([BOXES["label"]])
+
+
+@pytest.mark.parametrize("press", ["enter:Tiles", "enter!:Tiles"])
+@pytest.mark.parametrize("lit", [True, False], ids=["lit-read", "nothing-lit"])
+def test_drive_sends_no_enter_on_boxed_options_plain_or_vouched(tmp_path, monkeypatch, scope, press, lit):
+    """A seen row whose Right shows boxed options alone: Enter never reaches the camera, plain or vouched, its lit box
+    read or not (a vouch lifts an unreadable lit text alone, never the shape check: a question can be drawn so), on an
+    ordinary run as on a screen of no known kind."""
+    scope(UNRELATED)
+    row = BOXES if lit else {**BOXES, "options": []}
+    d = drive_run(tmp_path, monkeypatch, [DRIVE_MODE, row, ISO], [row["label"]], ["right", press], seen=[row["label"]])
+    assert d.sim.opened(1), d.out[-1500:]
+    assert "enter" not in d.keys and not d.sim.answered and not d.sim.chosen, d.keys
+
+
+def test_drive_sends_enter_on_boxed_options_only_where_confirm_names_the_screen(tmp_path, monkeypatch, scope):
+    """The one way past for an ordinary run, as on a screen of no known kind: --confirm giving the screen's whole text
+    lets one Enter go on it."""
+    scope(UNRELATED)
+    d = drive_run(tmp_path, monkeypatch, [DRIVE_MODE, BOXES, ISO], [BOXES["label"]], ["right", "enter:Tiles"],
+                  extra=["--confirm", "Papa Boxes Nine Tiles Thirty Tiles"], seen=[BOXES["label"]])
+    assert d.keys.count("enter") == 1 and d.sim.answered == [("Papa Boxes", "Nine Tiles")], (d.keys, d.out[-1500:])
+
+
 if __name__ == "__main__":
     make_ordinary_expected()
     print(f"wrote {EXPECTED}")

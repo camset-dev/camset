@@ -77,6 +77,13 @@ Screen types:
             ("Connected to Remote Shooting. Cannot be executed.")
   shooting  the shooting screen: the battery icon at top right (the readouts along the bottom vary
             with the display mode and the source; the OSD leaves shutter/aperture/ISO out)
+  buttons   boxed options alone (Playback Option > Image Index: 9 Images, 30 Images): a title at the top left over its
+            rule, no tab or group column and no rows, two to four wide boxes (300-600 px, 40-70 tall) centred and
+            stacked on an otherwise black screen, every one outlined and exactly one filled orange, and the menu
+            footer with the help button (_option_boxes). rows: each box's (top, bottom); row: the lit one. Read last,
+            only where every rule above reads unknown (classify). A question can be drawn so, with no question mark,
+            so by its kind no Enter goes there (safety.ENTER_KINDS): a row's first open reads it and leaves it with MENU
+            (safety.FIRST_OPEN_KINDS), and a crawl looks at it and leaves it with MENU, walking nothing
   unknown   anything else: the walker backs out and flags it (fail closed)
 
 Outlines: the boxes round the controls are touch targets, and with Touch Operation Off the camera leaves
@@ -161,6 +168,12 @@ PICK_TAB_TOP, PICK_TAB_PITCH = 46, 52  # its tabs
 KEY_TAB_TOP, KEY_TAB_PITCH = 46, 63    # Custom Key/Dial Set.: page tabs (icons at x 0-54)
 KEY_ROW_TOP, KEY_ROW_PITCH = 110, 52   # its key rows
 FN_TILE_DX, FN_TILE_ROWS = 107, [110, 171, 298, 359]  # Fn Menu Settings tiles: Still upper/lower, Movie upper/lower
+# boxed options alone (Playback Option > Image Index: two boxes x 96-543, 58 px tall, 72 px pitch from y 178): each box's
+# width and height, how far its middle may lie from x 320, how many stack, and the band between the title's rule
+# (y 53) and the footer's (y 426) that holds nothing else
+OPTION_W, OPTION_H, OPTION_MID = (300, 600), (40, 70), 8
+OPTION_COUNT = (2, 4)
+OPTION_BODY = (58, 422)
 
 
 @dataclass
@@ -170,12 +183,12 @@ class Screen:
     glyphs: dict = field(default_factory=dict)      # dialog: name -> present
     slots: list = field(default_factory=list)       # dialog: per carousel slot, "empty" | "icon" | "selected"
     bar: tuple | None = None                        # menu: (y0, y1) of the orange row bar
-    row: int | None = None                          # menu: row slot of the bar on its page
+    row: int | None = None                          # menu: row slot of the bar on its page; buttons: the lit box
     group: int | None = None                        # menu: visible slot of the current group
     focus: str | None = None                        # menu: "rows" | "groups"
     field: int | None = None                        # fields/look: index of the active field or cell
     pitch: int | None = None                        # menu/submenu: row height (53, or 61 on some submenus)
-    rows: list = dataclasses.field(default_factory=list)   # menu/submenu: (top, bottom) of each row
+    rows: list = dataclasses.field(default_factory=list)   # menu/submenu: (top, bottom) of each row; buttons: of each box
     boxes: list = dataclasses.field(default_factory=list)  # fields: (x0, x1) of each field
     marker: int | None = None                       # look: y of the value marker; slider: its x
     ticks: int | None = None                        # look: the scale's tick marks counted (_look_ticks)
@@ -379,7 +392,7 @@ def features(a: np.ndarray) -> dict:
     slider_boxed = _slider_boxes(g) is not None
     back = _back_box(g)
     wb = _wb_found(g)
-    return {
+    f = {
         "divider": round(divider, 3),
         "tab_sat": round(float(sat[45:425, 0:47].mean()), 1),
         # 0.93+ on every shooting screen in the corpus and on HDMI, at most 0.48 on anything else
@@ -441,6 +454,76 @@ def features(a: np.ndarray) -> dict:
         "cell_box": cell,
         "cell_grid": _grid_column(g, cell),
     }
+    # boxed options alone ("buttons"): looked for only under a title's rule and over a footer's, with no tab column
+    f["option_boxes"] = (_option_boxes(a, g, o) if f["title_line"] > 0.9 and f["footer_line"] > 0.9 and f["tab_sat"] < 8
+                         else None)
+    return f
+
+
+def _option_boxes(a, g, o) -> tuple | None:
+    """A "buttons" screen's boxes (module docstring), or None: ((x0, x1), ((top, bottom), ...), the lit box's index),
+    the boxes top to bottom. The lit box is an orange-filled rectangle OPTION_W wide and OPTION_H tall, its middle within
+    OPTION_MID of x 320; every box has its edges at the lit box's x0 and x1 (an outline, grey 40-200 and neutral, or
+    orange) down a run as tall as it, give or take 4 px, and its top and bottom edges across 90 % of it. Two to four
+    boxes, as tall as one another (3 px), stacked with even gaps (3 px, at least 4) and each holding text (white on its
+    fill or on black); exactly one filled orange (its inside 60 % orange), the others not at all (under 2 %); and
+    nothing else lit (grey > 60, or orange) between the title's rule and the footer's, the boxes and 2 px round them
+    left out, but 20 px; a title at the top left; the footer's help button (help_glyph). Any of it missing, and the
+    screen is no "buttons" screen: a box drawn without its outline included (see "Outlines")."""
+    import cv2
+    y0, y1 = OPTION_BODY
+    _, _, st, _ = cv2.connectedComponentsWithStats(o[y0:y1].astype(np.uint8), connectivity=8)
+    fills = [(int(x), int(w), int(h)) for x, y, w, h, area in st[1:]
+             if OPTION_W[0] <= w <= OPTION_W[1] and OPTION_H[0] <= h <= OPTION_H[1] and area > 0.6 * w * h]
+    if not fills:
+        return None
+    x0, w, h = max(fills, key=lambda r: r[1] * r[2])
+    x1 = x0 + w - 1
+    if abs((x0 + x1) / 2 - 320) > OPTION_MID:
+        return None
+    edge = ((g > 40) & (g < 200) & (_sat(a) < 40)) | o
+    sides = edge[:, x0:x0 + 3].any(axis=1) & edge[:, x1 - 2:x1 + 1].any(axis=1)
+
+    def across(ys) -> bool:
+        return any(float(edge[y, x0:x1 + 1].mean()) >= 0.9 for y in ys)
+    boxes, y = [], y0
+    while y < y1:
+        if not sides[y]:
+            y += 1
+            continue
+        top = y
+        while y < y1 and sides[y]:
+            y += 1
+        bottom = y - 1
+        if abs(bottom - top + 1 - h) <= 4 and across(range(top, top + 3)) and across(range(bottom - 2, bottom + 1)):
+            boxes.append((top, bottom))
+    if not OPTION_COUNT[0] <= len(boxes) <= OPTION_COUNT[1]:
+        return None
+    heights = [b - t + 1 for t, b in boxes]
+    gaps = [b[0] - a_[1] for a_, b in zip(boxes, boxes[1:])]   # noqa: B905 (each box with the next)
+    if max(heights) - min(heights) > 3 or min(gaps) < 4 or max(gaps) - min(gaps) > 3:
+        return None
+    lit = []
+    for i, (t, b) in enumerate(boxes):
+        inside = (slice(t + 4, b - 3), slice(x0 + 4, x1 - 3))
+        share = float(o[inside].mean())
+        if share > 0.6:
+            lit.append(i)
+        elif share >= 0.02:
+            return None
+        if int(((g[inside] > 150) & ~o[inside]).sum()) < 30:
+            return None                                       # a box with no text in it
+    if len(lit) != 1:
+        return None
+    rest = (g[y0:y1] > 60) | o[y0:y1]
+    for t, b in boxes:
+        rest[max(0, t - 2 - y0):b + 3 - y0, max(0, x0 - 2):x1 + 3] = False
+    if int(rest.sum()) > 20:
+        return None
+    title = np.nonzero((g[5:46] > 150).any(axis=0))[0]
+    if not len(title) or title[0] > 60 or help_glyph(a) is None:
+        return None
+    return (x0, x1), tuple(boxes), lit[0]
 
 
 def _pick_panel(g, o) -> bool:
@@ -826,13 +909,16 @@ def classify(f: dict) -> str:
     checked before, because a side list's bar on the bottom row is button-sized; without outlines the side
     list's ↩ is only found alone (PP1 > Black Level at -10, 2026-11-08). Real tables read by their buttons (My
     Dial's and Image Quality Settings' OK, Rec. Media Settings, Mode Dial Control Set's Set All) can become
-    nothing else."""
+    nothing else. Last of all, a screen both readings leave unknown is a "buttons" screen where its boxed options are
+    found (_option_boxes): that reading never takes a screen any rule above places (2026-11-16)."""
     boxed = {**f, **{k: f[b] for k, b in _ALONE_KEYS.items() if b in f}, "cell_grid": False}
     kind = _classify(boxed)
     if kind == "unknown":
-        return _classify(f)
-    if kind == "table" and _table_focus(boxed) == "button" and _classify(f) == "sidelist":
-        return "sidelist"
+        kind = _classify(f)
+    elif kind == "table" and _table_focus(boxed) == "button" and _classify(f) == "sidelist":
+        kind = "sidelist"
+    if kind == "unknown" and f.get("option_boxes"):
+        kind = "buttons"
     return kind
 
 
@@ -1317,6 +1403,19 @@ def _fnmenu(a, s: Screen):
                         _binarize_small(lit, (0, 105, 640, 424), (120, 60), 150))       # every tile's icon
 
 
+def _buttons(a, s: Screen):
+    """Boxed options alone: rows, each box's (top, bottom), top to bottom; row, the lit one, also the bar; boxes, each
+    box's (x0, x1); count."""
+    (x0, x1), boxes, lit = s.features["option_boxes"]
+    s.rows, s.row, s.count = list(boxes), lit, len(boxes)
+    s.bar, s.boxes = boxes[lit], [(x0, x1)] * len(boxes)
+    g = _grey(a)
+    _sig(s, b"buttons", np.array([s.row, s.count]),
+                        _binarize_small(g, (0, 0, 640, 52), (80, 6)),                    # title
+                        # every box's text, white on its fill or on black
+                        _binarize_small(g, (x0, boxes[0][0], x1 + 1, boxes[-1][1] + 1), (64, 6 * len(boxes)), 150))
+
+
 def _helppop(a, s: Screen):
     g = _grey(a)
     o = _orange(a)
@@ -1573,6 +1672,8 @@ def read(frame: Frame) -> Screen:
         _fnmenu(a, s)
     elif s.kind == "menu":
         _menu(a, s)
+    elif s.kind == "buttons":
+        _buttons(a, s)
     else:
         # orange counts as ink: on a question notice the orange moves between OK and Cancel
         lit = np.where(_orange(a), 255, _grey(a))
