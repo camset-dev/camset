@@ -5,6 +5,7 @@ which registers it ("Registered the focus area.") into the Registered AF area re
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing [--limit N]
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas "Spot: S,Tracking: Custom 2"
     .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing --grip down
+    .venv/bin/python -u kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing --grip level
     .venv/bin/python -u kit/provers/afreg_run.py --proved                           (the codes the run's lines proved)
 
 --allow "Fn hold on the shooting screen" (FN_HOLD) is the owner's word for the hold: held on the shooting screen with
@@ -55,15 +56,29 @@ changed them or not, so the report never credits what they held to the area (pas
 record the hold changed that the plan does not expect. At the end the start
 file goes back on and is checked (exit EXIT_UNRESTORED when it did not take), which also puts the setup back.
 
-Nothing the start file holds is printed (decision 16): the plan, each area registered and the codes it wrote, and the
-count of records that differ at the end. One trace: when the registration already holds the plan's first area, that
-area is registered last (its hold could show no change first), or, alone, after one other area.
+Nothing the start file holds is printed (decision 16): the plan, each area registered and the codes it wrote (with a
+grip the names of the records its hold changed), and the count of records that differ at the end. One trace: when the
+registration already holds the plan's first area, that area is registered last (its hold could show no change first),
+or, alone, after one other area.
 
 --grip down|up: the owner holds the camera vertically for the whole run (orient_run.py's plumbing): Switch V/H AF Area
 = AF Point + AF Area, so a hold writes that orientation's copies alone; the turned Focus Area dialog is read upright
 (orient_run.open_row and step_to), the context says the grip, and "missing" reads that orientation's area record.
 Not tried on the camera: whether the setup's lists stay level as the menu pages do (orient_run's note: menus stay
-level, dialogs turn); a list read turned fails the setup and the run restores.
+level, dialogs turn); a list read turned fails the setup and the run restores. Each area's line ends "grip down writes:
+<names>" (2026-11-16): every record the hold changed, from the diff of the downloads before and after it, by the
+definition's name (one it does not name by its key), the diff whole, never filtered to the records the plan expects:
+the copies the definition ties to no orientation (the a1 II's "Spot size at AF Area Registration (copy 1-3)", the same
+in the alternate numbering, "Custom area at AF Area Registration (copy 1-6)") are what it is for. Nothing is judged of
+them: they are listed (names_written).
+
+--grip level (2026-11-16): the same setup with the camera standing level, so a hold writes the level copies alone,
+proved directly rather than by elimination from the two vertical holds, as kit/provers/framepos_run.py's --grip level
+does for the frame positions; every screen is read as a level run reads it (no frame turned upright), and "missing"
+and the plan read the horizontal records, as a level run's own area record. Its lines carry the context "Switch V/H AF
+Area = AF Point + AF Area, camera level" and "grip": "level" (no "upright"), and each area's line ends "level writes:
+<names>". A hold that wrote another orientation's copy instead (the camera held otherwise) is not applied: judge names
+the area record that moved.
 """
 import argparse
 import json
@@ -86,8 +101,13 @@ FOCUS_DIAL, BY_MENU, CONTINUOUS = "Focus Mode Dial", "Set with Menu", "Continuou
 DRIVE_ROW, DRIVE_DIAL, SINGLE = "Drive Mode", "Drive Mode Dial", "Single Shooting"
 HOLD_MS = 1500
 MESSAGE_S = 2.5          # "Registered the focus area." is gone 1.5-3 s after the hold (kit2_afreg 00029-00031)
-ORIENTATIONS = {None: "horizontal", "down": "vertical, grip down", "up": "vertical, grip up"}
-VH = {None: "Off", "down": "AF Point + AF Area", "up": "AF Point + AF Area"}
+# --grip: the orientation whose records a hold writes and "missing" reads (no grip, Switch V/H AF Area Off: all three,
+# the horizontal area record read); level stands the camera level with each orientation kept apart; down and up hold it
+# vertically, where the shooting screen and the dialogs turn (TURNED: read upright, orient_run's plumbing)
+ORIENTATIONS = {None: "horizontal", "level": "horizontal", "down": "vertical, grip down", "up": "vertical, grip up"}
+GROUPS = tuple(dict.fromkeys(ORIENTATIONS.values()))         # the three orientations, each once
+TURNED = ("down", "up")
+VH = {None: "Off", "level": "AF Point + AF Area", "down": "AF Point + AF Area", "up": "AF Point + AF Area"}
 PARTS = ("area", "kind", "Tracking start area", "Tracking start area, alt numbering")
 NAME = "Registered AF area: {part} ({orientation})"            # their names in the hand tables (RECORD_FIXES, NEW_RECORDS)
 # the owner's word for the hold, given per run as --allow: Fn held on the shooting screen with AF Area Registration On
@@ -140,10 +160,10 @@ def plan(doc: dict, areas: str, grip: str | None = None) -> list:
     """[{"label", "code", "expected": {key: code}, "copied", "own_key", "other_area_keys"}] for the areas asked for, in the area
     record's order: "missing", its values not in its proved.values; "all"; else the labels given. Level (no grip), with
     Switch V/H AF Area Off, a hold writes all three orientations, so each one's records are expected; with a grip, that
-    orientation's alone. copied: a non-Tracking area's Tracking start area records of those orientations, which its
-    hold copies from the live start area (the camera's own setting): side effects, whatever they hold after. own_key is
-    the area record of the orientation the plan reads ("missing" too); other_area_keys the area records of the
-    orientations not expected (judge names one that moved instead)."""
+    orientation's alone (--grip level: the horizontal ones). copied: a non-Tracking area's Tracking start area records
+    of those orientations, which its hold copies from the live start area (the camera's own setting): side effects,
+    whatever they hold after. own_key is the area record of the orientation the plan reads ("missing" too);
+    other_area_keys the area records of the orientations not expected (judge names one that moved instead)."""
     orientation = ORIENTATIONS[grip]
     own = records(doc, orientation)["area"]
     values = [(v, lab) for v, lab in own.get("values") or []]
@@ -158,9 +178,9 @@ def plan(doc: dict, areas: str, grip: str | None = None) -> list:
         if unknown or not asked:
             sys.exit(f"afreg_run: --areas {areas!r}: {unknown or 'nothing'} not among {[lab for _, lab in values]}")
         chosen = [x for x in values if any(bare(x[1]) == bare(a) for a in asked)]
-    every = {o: records(doc, o) for o in ([orientation] if grip else ORIENTATIONS.values())}
+    every = {o: records(doc, o) for o in ([orientation] if grip else GROUPS)}
     names = {s["name"]: s["key"] for s in doc.get("settings") or []}
-    others = [k for o in ORIENTATIONS.values() if o not in every
+    others = [k for o in GROUPS if o not in every
               and (k := names.get(NAME.format(part="area", orientation=o)))]
     out = []
     for code, label in chosen:
@@ -217,8 +237,29 @@ def judge(t: dict, changes: list, after: dict) -> tuple:
 
 
 def context_of(grip: str | None, extra: str | None) -> str:
-    base = f"Switch V/H AF Area = AF Point + AF Area, camera grip {grip}" if grip else "Switch V/H AF Area Off"
+    """The state the holds are made in, which every proof line carries: Switch V/H AF Area Off, or with a grip AF Point
+    + AF Area and how the camera stands ("camera grip down"; "camera level", as the hand tables' ORIENTED reads it),
+    then --context."""
+    base = f"{VH_ROW} = {VH[grip]}, camera {held_words(grip)}" if grip else f"{VH_ROW} {VH[None]}"
     return f"{base}, {extra}" if extra else base
+
+
+def turned_of(grip: str | None) -> str | None:
+    """The grip whose screens turn (down, up), as the upright readers take it; None level, with --grip level too."""
+    return grip if grip in TURNED else None
+
+
+def held_words(grip: str) -> str:
+    """How a grip holds the camera, as the context and an area's line say it: "level", "grip down", "grip up"."""
+    return "level" if grip == "level" else f"grip {grip}"
+
+
+def names_written(changes: list, index: dict) -> str:
+    """Every record a hold changed (the diff of the download before it and the one after), by the definition's name
+    (`index`: its settings by key; a set's record found by its set key, "set1:0x0b10" as "set:0x0b10"), one it does not
+    name by its key as the diff gives it; "nothing" when none changed. Nothing is judged of them: they are listed."""
+    return "; ".join((index.get(re.sub(r"^set\d+:", "set:", c["key"])) or {}).get("name") or c["key"]
+                     for c in changes) or "nothing"
 
 
 def setup_rows(grip: str | None, focus: bool) -> list:
@@ -253,7 +294,7 @@ def proof_line(t: dict, got: dict, hold: dict, base: Path, dat: Path, changes: l
             "hold_frames": hold["frames"], "said": hold["said"], "dat": dat.name, "base": base.name,
             "expected": [{"key": k, "value": v} for k, v in t["expected"].items()], "changes": credited,
             "side_effects": side, "applied": applied, **({"not_applied": why} if why else {}), "setup": setup,
-            **({"upright": True, "grip": grip} if grip else {})}
+            **({"upright": True} if turned_of(grip) else {}), **({"grip": grip} if grip else {})}
 
 
 def proved_codes(lines: list) -> dict:
@@ -371,8 +412,9 @@ def choose_level(cam, cycle, model, labels, axes, i, o, v) -> dict:
 
 
 def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None) -> dict:
-    """The area under the carousel's cursor (level, or turned and read upright with a grip: orient_run's open_row and
-    step_to), checked for a confirmation, read by the second reader, OK. The menu closes on OK (kit2_afreg 00024)."""
+    """The area under the carousel's cursor (level, or turned and read upright with a grip down or up, which callers
+    pass by turned_of: orient_run's open_row and step_to), checked for a confirmation, read by the second reader, OK.
+    The menu closes on OK (kit2_afreg 00024)."""
     from camkit import ocr
     from prove_run import Failed
     from proving.screens import carousel_text, vlm_option
@@ -667,13 +709,16 @@ class PutOff(Exception):
 
 
 def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, grip, setup: list, out,
-             allowed: bool = False) -> dict:
+             allowed: bool = False, index: dict | None = None) -> dict:
     """One area: chosen, a download, Fn held (allowed: the owner's word for the hold, hold_fn), a download, the diff,
-    one proof line. Returns the line."""
+    one proof line. Held vertically (grip down or up) the dialog and the hold's message are read upright; --grip level
+    reads them as level. With any grip the area's line ends "<grip> writes:" and every record the diff holds, by the
+    definition's names (`index`: its settings by key; names_written). Returns the line."""
     from camkit import camset
     from prove_run import LOCK_S, held_value, to_shooting
     from runner import changes_of
-    got = choose_area(cam, run, cycle, model, labels, axes, r, grip)
+    turned = turned_of(grip)
+    got = choose_area(cam, run, cycle, model, labels, axes, r, turned)
     to_shooting(link, hdmi, "the download before the hold")
     time.sleep(1)
     base = link.download(f"before-{slug(t['label'])}")
@@ -681,7 +726,7 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
         time.sleep(LOCK_S)                      # the menu lock after a download, before the next area's MENU
         raise PutOff(t["label"])
     ready_to_hold(cam, time.monotonic())
-    hold = hold_fn(cam, run, grip, allowed)
+    hold = hold_fn(cam, run, turned, allowed)
     time.sleep(MESSAGE_S)
     to_shooting(link, hdmi, "the download after the hold")
     time.sleep(1)
@@ -696,8 +741,9 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     other = f"; {len(line['side_effects'])} side effects, no code of the area ({', '.join(line['side_effects'])})" \
         if line["side_effects"] else ""
     verdict = "registered" if line["applied"] else f"NOT applied ({line['not_applied']})"
+    held = f"; {held_words(grip)} writes: {names_written(changes, index or {})}" if grip else ""
     print(f"  {t['label']} (code {t['code']}): {verdict}; wrote {wrote}{other}"
-          f"{'' if hold['said'] else '; no message read'}", flush=True)
+          f"{'' if hold['said'] else '; no message read'}{held}", flush=True)
     time.sleep(LOCK_S)
     return line
 
@@ -724,9 +770,10 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
     cycle, model = load_scan(a.scan)
     run = Run(a.run)
     mark_proof_run(run.dir, "kit/provers/afreg_run.py")       # the report reads its proofs beside the main run's
-    if a.grip:
-        (run.dir / "upright").mkdir(exist_ok=True)
+    if turned_of(a.grip):
+        (run.dir / "upright").mkdir(exist_ok=True)          # the turned frames read upright (orient_run.upright)
     hdmi = eyes_from_config(run)
+    index = {s["key"]: s for s in doc.get("settings") or []}
     lines = []
     with proofs_file(run, context, {"allowance": allowance} if allowance else None) as out, \
             prover_session(run, hdmi, may_open=MAY_OPEN if focus or drive else (), show=0,
@@ -741,7 +788,7 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
                 continue
             try:
                 lines.append(register(cam, link, hdmi, run, cycle, model, labels, axes, t, routes[t["label"]],
-                                      a.grip, setup, out, hold_allowed(a.allow)))
+                                      a.grip, setup, out, hold_allowed(a.allow), index))
                 in_a_row = 0
             except PutOff:
                 if t["label"] not in retried:
@@ -769,9 +816,10 @@ def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--areas", default="missing",
                     help="missing (default), all, or the definition's labels, comma-separated ('Spot: S,Tracking: Custom 2')")
-    ap.add_argument("--grip", choices=("down", "up"), default=None,
-                    help="the owner holds the camera vertically: Switch V/H AF Area = AF Point + AF Area, that "
-                         "orientation's copies, the turned dialog read upright")
+    ap.add_argument("--grip", choices=[g for g in ORIENTATIONS if g], default=None,
+                    help="down or up: the owner holds the camera vertically: Switch V/H AF Area = AF Point + AF Area, "
+                         "that orientation's copies, the turned dialog read upright; level: the same setting with the "
+                         "camera standing level, the level copies, every screen read level")
     ap.add_argument("--focus-mode", choices=("auto", "menu", "leave"), default="auto",
                     help="auto: set Focus Mode = Continuous AF through the menu (its dial set with the menu) when the "
                          "plan holds a Tracking area; menu: always; leave: as the camera has it")

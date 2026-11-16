@@ -204,7 +204,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   reads the turned screens upright and ends each area's summary with "grip down writes:" and the records' names, and
   `--grip level` does the same for the camera standing level ("level writes:"). Held vertically it judges no press's
   direction, stops at the first area that fails, and refuses `--zone-grid`; with any grip a start file whose camera
-  position record contradicts the grip stops the run before any press.
+  position record contradicts the grip stops the run before any press; and `kit/provers/afreg_run.py` takes
+  `--grip level` too, each grip's hold line naming every record the hold changed.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and

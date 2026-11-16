@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -498,6 +499,226 @@ def test_the_afreg_proof_says_when_the_strips_lit_cell_read_the_area():
     assert (line["shown"], line["vlm"]) == ("Customß 7", ""), "the title's and the vision model's readings kept beside it"
     plain = A.proof_line(t, {k: got[k] for k in ("shown", "vlm", "chosen_frame", "row_frame")}, *args)
     assert "read_by" not in plain and "cell_readings" not in plain
+
+
+# ---------------------------------------------------------------- afreg_run standing level, each orientation its own
+
+AFREG_LEVEL = "Switch V/H AF Area = AF Point + AF Area, camera level"
+SPOT_COPY = {"key": "global:0x0600", "name": "Made-up spot size at AF Area Registration (copy 1)",
+             "values": [[0, "XS"], [1, "S"]]}            # a copy the definition ties to no orientation (made up)
+
+
+def test_the_afreg_list_with_grip_level_plans_the_horizontal_records(capsys, monkeypatch):
+    """--list --grip level: the camera standing level with Switch V/H AF Area = AF Point + AF Area, where a hold writes
+    the level copies alone: the context says so, the plan and "missing" read the horizontal records (no vertical copy
+    expected; the vertical area records are the ones judge names if they move instead), and the setup puts the row on
+    AF Point + AF Area. No --grip stays as it was: Off, every orientation expected. No camera."""
+    import pass3_run
+    A = afreg_module()
+
+    def no_map(path):
+        raise SystemExit("no pass 1 map")
+    monkeypatch.setattr(A, "read_json", lambda path: afreg_doc())
+    monkeypatch.setattr(A.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(pass3_run, "labels_of", no_map)
+    monkeypatch.setattr(A, "prove", lambda *a, **k: pytest.fail("no camera in a test"))
+    assert A.main(["--list", "--areas", "Zone,Spot: L", "--grip", "level"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"2 areas to register (horizontal; context {AFREG_LEVEL!r}; run kit2_afreg2):\n")
+    assert ("  Spot: L (code 12): no route in pass 1's map and the axis walk; expects global:0x0000=12, "
+            "global:0x0010=2\n") in out
+    assert "set through the menu first: AF Area Registration = On; Switch V/H AF Area = AF Point + AF Area; the" in out
+    assert "global:0x01" not in out and "global:0x02" not in out, "no vertical copy expected"
+    doc = afreg_doc()
+    level = A.plan(doc, "missing", "level")
+    assert [t["label"] for t in level] == [t["label"] for t in A.plan(doc, "missing")], "the level area record's proofs"
+    assert all(t["own_key"] == "global:0x0000" and t["other_area_keys"] == ["global:0x0100", "global:0x0200"]
+               and {k[:11] for k in [*t["expected"], *t["copied"]]} == {"global:0x00"} for t in level)
+    assert A.main(["--list", "--areas", "Zone,Spot: L"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("2 areas to register (horizontal; context 'Switch V/H AF Area Off'; run kit2_afreg2):\n")
+    assert "Switch V/H AF Area = Off; the" in out and "global:0x0100=12" in out and "global:0x0200=12" in out
+
+
+class AfregCam:
+    """A made-up camera standing level for afreg_run: OK on Focus Area's carousel closes the menu onto the shooting
+    screen, and Fn held there writes `on_hold` into its records and says "Registered the focus area."."""
+    def __init__(self, records: dict, on_hold: dict):
+        self.records, self.on_hold = dict(records), on_hold
+        self.kind, self.text, self.n, self.pressed = "shooting", "F5.0 ISO AUTO 1/250 RAW", 0, []
+
+    @property
+    def frame(self):
+        return SimpleNamespace(path=Path(f"{self.n:05d}_frame.png"), image=None)
+
+    def read(self):
+        return SimpleNamespace(kind=self.kind)
+
+    def refresh(self, tag):
+        self.n += 1
+        return self.read()
+
+    def press(self, key, **kw):
+        self.pressed.append((key, kw))
+        self.n += 1
+        if key == "enter" and self.kind == "dialog":
+            self.kind = "shooting"
+        elif key == "fn" and self.kind == "shooting":
+            self.records.update(self.on_hold)
+            self.text = "Registered the focus area."
+        else:
+            raise AssertionError(f"made-up camera: {key} on {self.kind}")
+
+
+class HeldRecords(dict):
+    """A made-up download: its records by key, each as camset's get(section, id) gives it (prove_run.held_value)."""
+    def get(self, *args):
+        if len(args) == 2 and isinstance(args[0], int):
+            key = f"global:0x{args[1]:04x}" if args[0] == 0 else f"set{args[0]}:0x{args[1]:04x}"
+            return SimpleNamespace(value=lambda: self[key]) if key in self else None
+        return super().get(*args)
+
+
+def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold: dict) -> tuple:
+    """afreg_run.prove over `areas` held as `grip` says, on the made-up level camera (AfregCam), the setup's rows kept
+    rather than set, its session and downloads made up; a frame turned upright fails the test. Returns (the camera, the
+    rows the setup set, the run's proof lines); what it printed is the caller's capsys."""
+    import contextlib
+
+    import camkit.frames
+    import camkit.live
+    import camkit.ocr
+    import camkit.runs
+    import mode_switch
+    import orient_run
+    import pass3_run
+    import prove_run
+    import proving.screens
+    import runner
+    from camkit import camset
+    labels = [lab for _, lab in afreg_doc()["settings"][0]["values"]]
+    cam = AfregCam({k: 0 for k in on_hold} | {"global:0x0000": 10, "global:0x0100": 10, "global:0x0200": 10}, on_hold)
+    files, rows, clock = {}, [], [1000.0]
+
+    def download(tag):
+        p = tmp_path / f"{cam.n:05d}_{tag}.DAT"
+        files[p.name] = HeldRecords(cam.records)
+        return p
+    link = SimpleNamespace(download=download)
+    start = download("start")
+
+    def tick():
+        clock[0] += 5.0
+        return clock[0]
+
+    def no_upright(*a, **k):
+        pytest.fail("a frame turned upright: the camera stands level")
+
+    def choose_level(cam, cycle, model, labels, axes, i, o, v):
+        cam.kind = "dialog"                     # Focus Area's carousel on the area, level
+        return {}
+
+    @contextlib.contextmanager
+    def session(run, eyes, **kw):
+        yield SimpleNamespace(cam=cam, link=link, start=start)
+    run = SimpleNamespace(dir=tmp_path)
+    monkeypatch.setattr(A.time, "sleep", lambda s: None)
+    monkeypatch.setattr(A.time, "monotonic", tick)
+    monkeypatch.setattr(A, "read_json", lambda path: {})                     # the axis walk: no axis
+    monkeypatch.setattr(A, "choose_level", choose_level)
+    monkeypatch.setattr(A, "set_setup_row", lambda cam, cycle, model, path, option: rows.append((path, option)))
+    monkeypatch.setattr(pass3_run, "labels_of", lambda path: (labels, "dialog"))
+    monkeypatch.setattr(runner, "load_scan", lambda scan: (None, None))
+    monkeypatch.setattr(runner, "prover_session", session)
+    monkeypatch.setattr(runner, "close_screen", lambda cam, link: None)
+    monkeypatch.setattr(camkit.runs, "Run", lambda name: run)
+    monkeypatch.setattr(camkit.runs, "mark_proof_run", lambda *a: None)
+    monkeypatch.setattr(camkit.frames, "eyes_from_config", lambda run: None)
+    monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
+    monkeypatch.setattr(prove_run, "to_shooting", lambda link, hdmi, why: None)
+    monkeypatch.setattr(proving.screens, "carousel_text", lambda cam: "Spot: L")
+    monkeypatch.setattr(proving.screens, "vlm_option", lambda cam: "Spot: L")
+    monkeypatch.setattr(camkit.ocr, "read", lambda paths: {p: [] for p in paths})
+    monkeypatch.setattr(camkit.ocr, "text_in", lambda lines, box: "Focus Area Spot: L")
+    monkeypatch.setattr(camkit.live, "text_of", lambda c: c.text)
+    for name in ("upright", "open_row", "step_to", "reading"):
+        monkeypatch.setattr(orient_run, name, no_upright)
+    monkeypatch.setattr(camset, "read", lambda path: files[Path(path).name])
+    monkeypatch.setattr(camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a.get(k), after=b.get(k))
+                                                      for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)])
+    a = SimpleNamespace(grip=grip, scan=None, run="kit2_afreg_made_up", allow=[A.FN_HOLD])
+    assert A.prove(a, doc, A.plan(doc, areas, grip), False, False, A.context_of(grip, None), "allowed") == 0
+    lines = [json.loads(x) for x in (tmp_path / "proofs.jsonl").read_text(encoding="utf-8").splitlines()]
+    return cam, rows, lines
+
+
+def test_an_afreg_level_grip_run_reads_every_screen_level_and_names_every_record_each_hold_writes(
+        monkeypatch, tmp_path, capsys):
+    """--grip level on a made-up camera standing level: the setup puts Switch V/H AF Area on AF Point + AF Area; the
+    area is chosen on the level carousel and Fn held as a level run holds it (named for the shooting screen, on the
+    owner's word); no frame is turned upright and no upright folder made. The proof line expects the horizontal records
+    alone and carries the level context, "grip": "level" and no "upright"; the area's line ends "level writes:" with
+    every record the hold changed by the definition's names, the copy the plan does not name among them (it is listed,
+    nothing judged of it), and a record the definition has no name for by its key."""
+    A = afreg_module()
+    doc = afreg_doc()
+    doc["settings"].append(SPOT_COPY)
+    hold = {"global:0x0000": 12, "global:0x0010": 2, "global:0x0600": 1, "global:0x0700": 3}
+    cam, rows, lines = afreg_run_on(monkeypatch, tmp_path, A, doc, "Spot: L", "level", hold)
+    said = capsys.readouterr().out
+    assert rows == [(["AF Area Registration"], "On"), (["Switch V/H AF Area"], "AF Point + AF Area")]
+    assert [k for k, _ in cam.pressed] == ["enter", "fn"]
+    assert cam.pressed[1][1] == {"allow": frozenset({"fn"}), "hold_ms": A.HOLD_MS, "on_shooting": frozenset({"fn"})}
+    assert not (tmp_path / "upright").exists()
+    (line,) = lines
+    assert line["grip"] == "level" and "upright" not in line and line["context"] == AFREG_LEVEL and line["applied"]
+    assert line["expected"] == [{"key": "global:0x0000", "value": 12}, {"key": "global:0x0010", "value": 2}]
+    assert line["side_effects"] == ["global:0x0020", "global:0x0030", "global:0x0600", "global:0x0700"]
+    assert ("  Spot: L (code 12): registered; wrote global:0x0000 -> 12, global:0x0010 -> 2; 4 side effects, no code of "
+            "the area (global:0x0020, global:0x0030, global:0x0600, global:0x0700); level writes: Registered AF area: "
+            "area (horizontal); Registered AF area: kind (horizontal); Made-up spot size at AF Area Registration (copy "
+            "1); global:0x0700\n") in said
+    assert said.count("writes:") == 1 and "grip level" not in said
+
+
+def test_an_afreg_run_with_no_grip_is_as_it_was(monkeypatch, tmp_path, capsys):
+    """No --grip, as before --grip level: Switch V/H AF Area Off, one hold writes every orientation's copies and each
+    is expected; the proof line carries no "grip" nor "upright", and the area's line names no records ("writes:")."""
+    A = afreg_module()
+    doc = afreg_doc()
+    doc["settings"].append(SPOT_COPY)
+    hold = {f"global:0x0{n}{m}0": code for n in range(3) for m, code in ((0, 12), (1, 2))} | {"global:0x0600": 1}
+    cam, rows, lines = afreg_run_on(monkeypatch, tmp_path, A, doc, "Spot: L", None, hold)
+    said = capsys.readouterr().out
+    assert rows[-1] == (["Switch V/H AF Area"], "Off")
+    (line,) = lines
+    assert line["applied"] and "grip" not in line and "upright" not in line
+    assert line["context"] == "Switch V/H AF Area Off" and len(line["expected"]) == 6
+    assert "registered; wrote global:0x0000 -> 12" in said and "writes:" not in said
+
+
+def test_each_afreg_grip_names_what_its_holds_write_in_its_own_words():
+    """The records a hold changed, by the definition's names (a set's record found by its set key, one the definition
+    has no name for by its key as the diff gives it), said as each grip says it: "level writes:", "grip down writes:",
+    "grip up writes:". A grip down or up proof line still says it was read upright, level's does not; the context and
+    the setup row of --grip level."""
+    A = afreg_module()
+    index = {s["key"]: s for s in [*afreg_doc()["settings"], SPOT_COPY, {"key": "set:0x0b10", "name": "Made-up set"}]}
+    ch = [{"key": "global:0x0600", "before": 0, "after": 1}, {"key": "set1:0x0b10", "before": 0, "after": 1},
+          {"key": "global:0x0700", "before": 0, "after": 3}]
+    assert A.names_written(ch, index) == "Made-up spot size at AF Area Registration (copy 1); Made-up set; global:0x0700"
+    assert A.names_written([], index) == "nothing"
+    assert [A.held_words(g) for g in ("level", "down", "up")] == ["level", "grip down", "grip up"]
+    assert [A.turned_of(g) for g in (None, "level", "down", "up")] == [None, None, "down", "up"]
+    got = {"shown": "Spot: L", "vlm": "Spot: L", "chosen_frame": "1.png", "row_frame": "2.png"}
+    hold = {"frames": ["3.png", "4.png"], "said": "Registered the focus area."}
+    for grip, upright in (("down", True), ("up", True), ("level", None)):
+        t = A.plan(afreg_doc(), "Spot: L", grip)[0]
+        line = A.proof_line(t, got, hold, Path("5_before.DAT"), Path("6_after.DAT"), [], {}, grip, [])
+        assert line["grip"] == grip and line.get("upright") is upright
+    assert A.context_of("level", "x") == f"{AFREG_LEVEL}, x"
+    assert A.context_of("down", None) == "Switch V/H AF Area = AF Point + AF Area, camera grip down"
+    assert A.setup_rows("level", False)[-1] == (["Switch V/H AF Area"], "AF Point + AF Area")
 
 
 def test_the_carousel_option_is_known_from_a_title_the_frames_corner_overdrew():
