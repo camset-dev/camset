@@ -13002,6 +13002,15 @@
      3
     ]
    },
+   "not_offered": [
+    {
+     "value": 3,
+     "label": "9M 4:2:0 10bit (the reset value; no menu choice writes it)",
+     "why": "No menu choice writes this value: a Camera Settings Reset or Initialize does. The menu writes 0 and 1.",
+     "menu": "Proxy Settings > Px Proxy Rec. Settings",
+     "held": true
+    }
+   ],
    "help": "The bit rate of the proxy copies."
   },
   {

@@ -2709,6 +2709,14 @@
       "walk": "^Custom Key Setting / Fn\\b[^@/]* @",
       "why": "The Fn Button's list leaves it out, though the other playback keys offer it.",
       "menu": "Custom Key Setting"
+    },
+    {
+      "key": "global:0x0284",
+      "values": [3],
+      "walk": "^Proxy Settings > Px Proxy Rec\\. Settings \\[Movie mode, Proxy Recording On, Proxy File Format XAVC HS HD[\\] ]",
+      "held": true,
+      "why": "No menu choice writes this value: a Camera Settings Reset or Initialize does. The menu writes 0 and 1.",
+      "menu": "Proxy Settings > Px Proxy Rec. Settings"
     }
   ],
   "VIDEO_SYSTEM_VALUES": {
