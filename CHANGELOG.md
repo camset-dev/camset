@@ -55,6 +55,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Zone and Custom box position copies, and the spot size and Custom area AF Area Registration writes,
+  say which way the camera was held** (horizontal, grip down, grip up or current, as the spot's do), from
+  registrations made level, grip down and grip up; the Custom boxes' now show outside Expert mode, like the spot's.
+  Record 0x04e2 is no longer called the camera's position, which it is not, and the Registered AF area notes say what
+  Del. Regist. AF Area writes.
 - **The a1 II's Proxy Rec. Settings names its third value as Sony does:** the code a Camera Settings Reset or
   Initialize leaves is 6M 4:2:0 8bit, XAVC S HD's setting; it is marked as one the menu does not offer, and its note
   says how the camera shows it under each proxy format.

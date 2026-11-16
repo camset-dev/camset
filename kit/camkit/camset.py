@@ -33,9 +33,9 @@ from typing import NamedTuple
 
 from camkit import ROOT
 
-# Records that change on every save without any setting changing, and 0x04e2, which follows the
-# camera's position (1 level, 8 held vertically either way, 2026-10-30): a file that holds 1,
-# uploaded with the camera held vertically, downloads as 8.
+# Records that change on every save without any setting changing, and 0x04e2, a value the camera keeps for
+# itself: a loaded file does not always keep it (one holding 1 downloaded as 8, 2026-10-30). It is not the camera's
+# position, as once thought: it held 8 level and held either way vertically (2026-11-16).
 # The ids are in each camera's data/<model>_fw<fw>/camera_<model>_fw<fw>.json (volatile_records), which the editor reads through
 # its definition; 2026-11-04. They are kept per model: a diff ignores only its own body's (one body's record id can be
 # another's setting, 2026-11-05). A new body's are written into its camera file before Phase 1 (the playbook's

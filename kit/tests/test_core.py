@@ -3372,7 +3372,8 @@ def test_camera_json_matches_the_schema_copy():
 
 def test_volatile_records_have_one_source():
     """camset.VOLATILE and the volatile_records of every data/<model>_fw<fw>/camera_<model>_fw<fw>.json (which the editor reads through the schema)
-    are the same set: the editor lacked 0x04e2, the camera-position record, while the kit ignored it (2026-11-04)."""
+    are the same set: the editor lacked 0x04e2, a state record the camera keeps for itself, while the kit ignored it
+    (2026-11-04)."""
     from camkit import camset
     ids = set()
     for f in camset.CAMERA_FILES:

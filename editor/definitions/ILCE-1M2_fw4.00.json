@@ -112234,7 +112234,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Held vertically, with Switch V/H AF Area on AF Point + AF Area, a registration writes the current X and Y and that grip's copies and leaves the horizontal ones. Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112260,7 +112260,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Held vertically, with Switch V/H AF Area on AF Point + AF Area, a registration writes the current X and Y and that grip's copies and leaves the horizontal ones. Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112286,7 +112286,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The spot's X with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The spot's X with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112312,7 +112312,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The spot's X with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The spot's X with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112338,7 +112338,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Held vertically, with Switch V/H AF Area on AF Point + AF Area, a registration writes the current X and Y and that grip's copies and leaves the horizontal ones. Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112364,7 +112364,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Held vertically, with Switch V/H AF Area on AF Point + AF Area, a registration writes the current X and Y and that grip's copies and leaves the horizontal ones. Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112390,7 +112390,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The spot's Y with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The spot's Y with the camera held grip down. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -112416,7 +112416,7 @@
    "group": "Focus Area",
    "order": 9000,
    "values": [],
-   "note": "The spot's Y with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Tracking: Spot M and Tracking: Expand Spot the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
+   "note": "The spot's Y with the camera held grip up. Written when a memory slot is registered: with the camera held that way and Focus Area on Spot, a Left press of the multi-selector lowered the orientation's X and an Up press its Y. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -113061,7 +113061,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -113128,7 +113128,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -113153,7 +113153,7 @@
    "key": "set:0x0f32",
    "area": "set",
    "id": 3890,
-   "name": "Zone position memory (vertical A, grid index, copy 1)",
+   "name": "Zone position memory (vertical, grip down, grid index, copy 1)",
    "tab": "Focus",
    "group": "Focus Area",
    "order": 9000,
@@ -113195,7 +113195,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
@@ -113221,7 +113221,7 @@
    "key": "set:0x0f34",
    "area": "set",
    "id": 3892,
-   "name": "Zone position memory (vertical A, grid index, copy 2)",
+   "name": "Zone position memory (vertical, grip down, grid index, copy 2)",
    "tab": "Focus",
    "group": "Focus Area",
    "order": 9000,
@@ -113263,7 +113263,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
@@ -113289,7 +113289,7 @@
    "key": "set:0x0f36",
    "area": "set",
    "id": 3894,
-   "name": "Zone position memory (vertical A, grid index, copy 3)",
+   "name": "Zone position memory (vertical, grip down, grid index, copy 3)",
    "tab": "Focus",
    "group": "Focus Area",
    "order": 9000,
@@ -113331,7 +113331,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
@@ -113399,7 +113399,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
@@ -115489,7 +115489,7 @@
      "Tracking"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -115545,7 +115545,7 @@
      "Tracking"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -115601,7 +115601,7 @@
      "Tracking"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -115838,7 +115838,7 @@
      ]
     }
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -116092,7 +116092,7 @@
      ]
     }
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -116346,7 +116346,7 @@
      ]
     }
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -121274,12 +121274,12 @@
    "key": "global:0x04e2",
    "area": "global",
    "id": 1250,
-   "name": "Camera position state (not a setting)",
+   "name": "Unknown camera state (8 after a reset)",
    "tab": "Setup",
    "group": "Setting",
    "order": 217,
    "values": [],
-   "note": "Set by the camera, not by a loaded file: 1 with the camera level, 8 held vertically (grip down and grip up alike); a file holding 1, uploaded with the camera held vertically, downloads as 8.",
+   "note": "Not how the camera is held: it held the same with the camera level, grip down and grip up. Camera Settings Reset and Initialize set 8, and an uploaded file does not always keep its value. No menu row is its own; what writes it is not known.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -121292,7 +121292,7 @@
    "modes": "",
    "unproved_reason": {
     "kind": "state",
-    "why": "The camera sets it from how it is held, level or vertical, whatever a settings file says: a working value, not a menu setting."
+    "why": "A value the camera keeps for itself: no menu row is its own, a reset sets 8 and a loaded file does not always keep its value. It does not follow how the camera is held."
    }
   },
   {
@@ -213807,7 +213807,7 @@
    "modes": "",
    "key": "set:0x0f2c",
    "id": 3884,
-   "name": "Zone position memory (grid index, copy 5)",
+   "name": "Zone position memory (horizontal, grid index, copy 1)",
    "values": [
     [
      0,
@@ -213846,7 +213846,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -213874,7 +213874,7 @@
    "modes": "",
    "key": "set:0x0f2e",
    "id": 3886,
-   "name": "Zone position memory (grid index, copy 6)",
+   "name": "Zone position memory (horizontal, grid index, copy 2)",
    "values": [
     [
      0,
@@ -213913,7 +213913,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -213941,7 +213941,7 @@
    "modes": "",
    "key": "set:0x0f30",
    "id": 3888,
-   "name": "Zone position memory (grid index, copy 7)",
+   "name": "Zone position memory (horizontal, grid index, copy 3)",
    "values": [
     [
      0,
@@ -213980,7 +213980,7 @@
      "Upper right"
     ]
    ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area Off a registration writes the place into these six records and the six vertical copies alike, and a Tracking zone keeps its place here too.",
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -214447,7 +214447,7 @@
    "modes": "",
    "key": "set:0x0f38",
    "id": 3896,
-   "name": "Zone position memory (vertical B, grid index, copy 1)",
+   "name": "Zone position memory (vertical, grip up, grid index, copy 1)",
    "values": [
     [
      0,
@@ -214486,7 +214486,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -214514,7 +214514,7 @@
    "modes": "",
    "key": "set:0x0f3a",
    "id": 3898,
-   "name": "Zone position memory (vertical B, grid index, copy 2)",
+   "name": "Zone position memory (vertical, grip up, grid index, copy 2)",
    "values": [
     [
      0,
@@ -214553,7 +214553,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -214581,7 +214581,7 @@
    "modes": "",
    "key": "set:0x0f3c",
    "id": 3900,
-   "name": "Zone position memory (vertical B, grid index, copy 3)",
+   "name": "Zone position memory (vertical, grip up, grid index, copy 3)",
    "values": [
     [
      0,
@@ -214620,7 +214620,7 @@
      "Upper right"
     ]
    ],
-   "note": "A vertical orientation's Zone place on its 3 x 3 grid (numbered as the level zone's 0x0f2c), written only when a memory slot is registered. With Switch V/H AF Area on, a registration with the camera level leaves it; with it Off, a registration writes the Zone's place into these six and the six level records alike, and Tracking: Zone writes them as Zone does. Which triple is grip down was not tested; by the order of the other orientation records, A (0x0f32-0x0f36).",
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -214699,7 +214699,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "size": 1,
    "count": 1,
@@ -214780,7 +214780,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "size": 1,
    "count": 1,
@@ -214861,7 +214861,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "size": 1,
    "count": 1,
@@ -214942,7 +214942,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -215024,7 +215024,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -215106,7 +215106,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the orientation's live Focus Area memories here (the camera: \"Registered the focus area\"); with Switch V/H AF Area Off one hold writes all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -216209,7 +216209,7 @@
    "id": 4903,
    "name": "Custom box position in use: X",
    "values": [],
-   "note": "The X of the Custom box in use, whichever of the three, as 0x019c is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "The X of the Custom box in use, whichever of the three, as 0x019c is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "expert": true,
    "size": 4,
@@ -216231,7 +216231,7 @@
    "id": 4905,
    "name": "Custom box position in use: Y",
    "values": [],
-   "note": "The Y of the Custom box in use, whichever of the three, as 0x019e is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "The Y of the Custom box in use, whichever of the three, as 0x019e is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "expert": true,
    "size": 4,
@@ -216251,11 +216251,10 @@
    "modes": "",
    "key": "set:0x1333",
    "id": 4915,
-   "name": "Custom 1 box position: X (copy 1)",
+   "name": "Custom 1 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216273,11 +216272,10 @@
    "modes": "",
    "key": "set:0x1335",
    "id": 4917,
-   "name": "Custom 1 box position: X (copy 2)",
+   "name": "Custom 1 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216295,11 +216293,10 @@
    "modes": "",
    "key": "set:0x1337",
    "id": 4919,
-   "name": "Custom 1 box position: X (copy 3)",
+   "name": "Custom 1 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 1's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216317,11 +216314,10 @@
    "modes": "",
    "key": "set:0x139f",
    "id": 5023,
-   "name": "Custom 1 box position: X (copy 4)",
+   "name": "Custom 1 box position: X (current)",
    "values": [],
-   "note": "Custom 1's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216339,11 +216335,10 @@
    "modes": "",
    "key": "set:0x1339",
    "id": 4921,
-   "name": "Custom 1 box position: Y (copy 1)",
+   "name": "Custom 1 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216361,11 +216356,10 @@
    "modes": "",
    "key": "set:0x133b",
    "id": 4923,
-   "name": "Custom 1 box position: Y (copy 2)",
+   "name": "Custom 1 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216383,11 +216377,10 @@
    "modes": "",
    "key": "set:0x133d",
    "id": 4925,
-   "name": "Custom 1 box position: Y (copy 3)",
+   "name": "Custom 1 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 1's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216405,11 +216398,10 @@
    "modes": "",
    "key": "set:0x13a1",
    "id": 5025,
-   "name": "Custom 1 box position: Y (copy 4)",
+   "name": "Custom 1 box position: Y (current)",
    "values": [],
-   "note": "Custom 1's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216427,11 +216419,10 @@
    "modes": "",
    "key": "set:0x133f",
    "id": 4927,
-   "name": "Custom 2 box position: X (copy 1)",
+   "name": "Custom 2 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216449,11 +216440,10 @@
    "modes": "",
    "key": "set:0x1341",
    "id": 4929,
-   "name": "Custom 2 box position: X (copy 2)",
+   "name": "Custom 2 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216471,11 +216461,10 @@
    "modes": "",
    "key": "set:0x1343",
    "id": 4931,
-   "name": "Custom 2 box position: X (copy 3)",
+   "name": "Custom 2 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 2's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216493,11 +216482,10 @@
    "modes": "",
    "key": "set:0x13a3",
    "id": 5027,
-   "name": "Custom 2 box position: X (copy 4)",
+   "name": "Custom 2 box position: X (current)",
    "values": [],
-   "note": "Custom 2's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216515,11 +216503,10 @@
    "modes": "",
    "key": "set:0x1345",
    "id": 4933,
-   "name": "Custom 2 box position: Y (copy 1)",
+   "name": "Custom 2 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216537,11 +216524,10 @@
    "modes": "",
    "key": "set:0x1347",
    "id": 4935,
-   "name": "Custom 2 box position: Y (copy 2)",
+   "name": "Custom 2 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216559,11 +216545,10 @@
    "modes": "",
    "key": "set:0x1349",
    "id": 4937,
-   "name": "Custom 2 box position: Y (copy 3)",
+   "name": "Custom 2 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 2's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216581,11 +216566,10 @@
    "modes": "",
    "key": "set:0x13a5",
    "id": 5029,
-   "name": "Custom 2 box position: Y (copy 4)",
+   "name": "Custom 2 box position: Y (current)",
    "values": [],
-   "note": "Custom 2's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216603,11 +216587,10 @@
    "modes": "",
    "key": "set:0x134b",
    "id": 4939,
-   "name": "Custom 3 box position: X (copy 1)",
+   "name": "Custom 3 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216625,11 +216608,10 @@
    "modes": "",
    "key": "set:0x134d",
    "id": 4941,
-   "name": "Custom 3 box position: X (copy 2)",
+   "name": "Custom 3 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216647,11 +216629,10 @@
    "modes": "",
    "key": "set:0x134f",
    "id": 4943,
-   "name": "Custom 3 box position: X (copy 3)",
+   "name": "Custom 3 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 3's X, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216669,11 +216650,10 @@
    "modes": "",
    "key": "set:0x13a7",
    "id": 5031,
-   "name": "Custom 3 box position: X (copy 4)",
+   "name": "Custom 3 box position: X (current)",
    "values": [],
-   "note": "Custom 3's X, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216691,11 +216671,10 @@
    "modes": "",
    "key": "set:0x1351",
    "id": 4945,
-   "name": "Custom 3 box position: Y (copy 1)",
+   "name": "Custom 3 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216713,11 +216692,10 @@
    "modes": "",
    "key": "set:0x1353",
    "id": 4947,
-   "name": "Custom 3 box position: Y (copy 2)",
+   "name": "Custom 3 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216735,11 +216713,10 @@
    "modes": "",
    "key": "set:0x1355",
    "id": 4949,
-   "name": "Custom 3 box position: Y (copy 3)",
+   "name": "Custom 3 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 3's Y, one of three copies. Each box's three X and three Y records are laid out as the spot's level, grip-down and grip-up copies (0x01be-0x01c8); with Switch V/H AF Area Off they moved alike, so which orientation each keeps is not told. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -216757,11 +216734,10 @@
    "modes": "",
    "key": "set:0x13a9",
    "id": 5033,
-   "name": "Custom 3 box position: Y (copy 4)",
+   "name": "Custom 3 box position: Y (current)",
    "values": [],
-   "note": "Custom 3's Y, a fourth copy beside the three laid out as the spot's orientation copies; it moved with them. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area Off, Left and Up presses under each Custom box lower its X and Y records and the two the boxes share, the records moving with the presses, and leave the spot's point records as they are. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1 the same presses moved Custom 1's records and the shared two the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
-   "expert": true,
    "size": 4,
    "count": 1,
    "proved": {
@@ -217063,7 +217039,7 @@
    "modes": "",
    "key": "global:0x0e6e",
    "id": 3694,
-   "name": "Spot size at AF Area Registration (copy 1)",
+   "name": "Spot size at AF Area Registration (horizontal, copy)",
    "values": [
     [
      0,
@@ -217086,7 +217062,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217101,7 +217077,7 @@
    "modes": "",
    "key": "global:0x0e70",
    "id": 3696,
-   "name": "Spot size at AF Area Registration (copy 2)",
+   "name": "Spot size at AF Area Registration (vertical, grip down, copy)",
    "values": [
     [
      0,
@@ -217124,7 +217100,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217139,7 +217115,7 @@
    "modes": "",
    "key": "global:0x0e72",
    "id": 3698,
-   "name": "Spot size at AF Area Registration (copy 3)",
+   "name": "Spot size at AF Area Registration (vertical, grip up, copy)",
    "values": [
     [
      0,
@@ -217162,7 +217138,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217177,7 +217153,7 @@
    "modes": "",
    "key": "global:0x0f86",
    "id": 3974,
-   "name": "Spot size at AF Area Registration (alt numbering, copy 1)",
+   "name": "Spot size at AF Area Registration (horizontal, alt numbering, copy)",
    "values": [
     [
      0,
@@ -217200,7 +217176,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217215,7 +217191,7 @@
    "modes": "",
    "key": "global:0x0f88",
    "id": 3976,
-   "name": "Spot size at AF Area Registration (alt numbering, copy 2)",
+   "name": "Spot size at AF Area Registration (vertical, grip down, alt numbering, copy)",
    "values": [
     [
      0,
@@ -217238,7 +217214,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217253,7 +217229,7 @@
    "modes": "",
    "key": "global:0x0f8a",
    "id": 3978,
-   "name": "Spot size at AF Area Registration (alt numbering, copy 3)",
+   "name": "Spot size at AF Area Registration (vertical, grip up, alt numbering, copy)",
    "values": [
     [
      0,
@@ -217276,7 +217252,7 @@
      "XS"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. The three were equal in every file seen; which is the level camera's and which each vertical grip's is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Spot size memory then held. With Switch V/H AF Area on AF Point + AF Area a hold writes the one of the way the camera is held, in both numberings; with it Off, all three.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217291,7 +217267,7 @@
    "modes": "",
    "key": "global:0x132d",
    "id": 4909,
-   "name": "Custom area at AF Area Registration (copy 1)",
+   "name": "Custom area at AF Area Registration (horizontal, copy 1)",
    "values": [
     [
      0,
@@ -217306,7 +217282,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217321,7 +217297,7 @@
    "modes": "",
    "key": "global:0x132f",
    "id": 4911,
-   "name": "Custom area at AF Area Registration (copy 2)",
+   "name": "Custom area at AF Area Registration (vertical, grip down, copy 1)",
    "values": [
     [
      0,
@@ -217336,7 +217312,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217351,7 +217327,7 @@
    "modes": "",
    "key": "global:0x1331",
    "id": 4913,
-   "name": "Custom area at AF Area Registration (copy 3)",
+   "name": "Custom area at AF Area Registration (vertical, grip up, copy 1)",
    "values": [
     [
      0,
@@ -217366,7 +217342,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217381,7 +217357,7 @@
    "modes": "",
    "key": "global:0x1399",
    "id": 5017,
-   "name": "Custom area at AF Area Registration (copy 4)",
+   "name": "Custom area at AF Area Registration (horizontal, copy 2)",
    "values": [
     [
      0,
@@ -217396,7 +217372,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217411,7 +217387,7 @@
    "modes": "",
    "key": "global:0x139b",
    "id": 5019,
-   "name": "Custom area at AF Area Registration (copy 5)",
+   "name": "Custom area at AF Area Registration (vertical, grip down, copy 2)",
    "values": [
     [
      0,
@@ -217426,7 +217402,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,
@@ -217441,7 +217417,7 @@
    "modes": "",
    "key": "global:0x139d",
    "id": 5021,
-   "name": "Custom area at AF Area Registration (copy 6)",
+   "name": "Custom area at AF Area Registration (vertical, grip up, copy 2)",
    "values": [
     [
      0,
@@ -217456,7 +217432,7 @@
      "Custom 3"
     ]
    ],
-   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. The six were equal in every file seen; what tells them apart is not known.",
+   "note": "Written when an AF area is registered (AF Area Registration On, Fn held on the shooting screen): the Custom area then remembered. With Switch V/H AF Area on AF Point + AF Area a hold writes the two of the way the camera is held, with it Off all six. Each way's two were written together and held the same code in every file seen: what tells them apart is not known.",
    "in_sets": true,
    "expert": true,
    "size": 1,

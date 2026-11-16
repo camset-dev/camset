@@ -1157,13 +1157,14 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     # + 4 copies written together with their main record (JPEG/HEIF Quality and Image Size, Slot 1 and 2), 2026-11-07
     # + 1 the second copy of the Playback Filter Condition's ★OFF rating box (0x16c2, "(copy)" in its name, on no
     #   camera row; the ★-★★★★★ copies sit on Rating Set(Custom Key)'s row as its boxes), 2026-11-07
-    # + 26 the Custom boxes' place records in the memory sets (kit2_framepos, 2026-11-09): derived copies, and the box in
-    #   use, on no camera row, as the Zone's copies are
+    # + 2 the Custom box in use's place records in the memory sets (kit2_framepos, 2026-11-09), on no camera row; each
+    #   box's own 24, named for the way the camera is held since 2026-11-16 as the spot's point records are, show as
+    #   those do
     # + 12 the spot size and the Custom area as written at AF Area Registration (the camera's own downloads compared,
-    #   2026-11-15): copies on no camera row
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 26 + 12
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 26 + 12   # + the live copy
-    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 26 + 12
+    #   2026-11-15): copies on no camera row, named for the way the camera is held since 2026-11-16
+    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12   # + the live copy
+    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
     one = next(s for s in DOC["settings"] if s.get("expert"))
@@ -3524,7 +3525,7 @@ def test_the_base_look_copies_say_one_note_and_take_their_names_from_the_look_in
 
 def test_the_published_definition_carries_every_record_fix_and_no_reason_the_tables_do_not_give():
     """What the a1 II's hand tables say of a record is what its published definition says: every RECORD_FIXES field but
-    the note (a note's evidence apart) word for word (the camera position record's range among them), and every reason
+    the note (a note's evidence apart) word for word (0x04e2's range among them), and every reason
     no proof can reach a setting is an UNPROVED entry's or the PP7-PP9 rule's, the one its own pass still applies by
     group."""
     T = hand_tables.load(A1, evidence=False)
@@ -3540,7 +3541,7 @@ def test_the_published_definition_carries_every_record_fix_and_no_reason_the_tab
 @pytest.fixture(scope="module")
 def altered_a1_run(tmp_path_factory):
     """The a1 II's full pass (main, --write --force) on a made-up run whose definition was changed where the hand
-    tables must put it right: the Base Look copies' value names, the camera position record's range back at [0, 255],
+    tables must put it right: the Base Look copies' value names, 0x04e2's range back at [0, 255],
     and a day on one reason and on one memory set's reason in the definition's evidence, which the hand tables
     (UNPROVED, every day taken away) no longer give. The public definition alone otherwise, whatever this computer
     holds. Returns (what it printed, the definition written, its evidence file)."""
@@ -3600,7 +3601,7 @@ def test_the_a1_pass_puts_its_tables_on_the_look_copies_and_the_record_fixes(alt
     assert len(looks) == 36 and all(by[k]["values"] == by["global:0x0cbe[10]"]["values"] for k in looks)
     assert all(by[k]["note"] == fp[k]["note"] for k in looks)
     assert by["global:0x04e2"]["range"] == [0, 127]
-    assert "name: 'Camera position state (not a setting)' -> 'Camera position state (not a setting)'" not in said
+    assert "name: 'Unknown camera state (8 after a reset)' -> 'Unknown camera state (8 after a reset)'" not in said
 
 
 def test_the_a1_pass_stops_on_a_hand_proof_without_its_run_day_or_row(monkeypatch):

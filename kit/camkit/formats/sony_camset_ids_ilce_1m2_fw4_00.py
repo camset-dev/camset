@@ -382,7 +382,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         metering_spot_metering_size = 1236
         d_range_optimizer_04d6 = 1238
         spot_size_when_spot_was_last_left = 1248
-        camera_position_state = 1250
+        unknown_camera_state = 1250
         disp_mode = 1253
         finder_disp_mode = 1254
         black_level_array = 1257
@@ -770,7 +770,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         recording_self_timer_count_time = 4349
         recording_self_timer_continuous = 4351
         recog_trgt_select_auto_array = 4361
-        unknown_camera_state = 4390
+        unknown_camera_state_1126 = 4390
         movie_interval_rec_frame_rate_setting = 4407
         movie_interval_rec_interval_time = 4415
         movie_interval_rec_recording_setting = 4421

@@ -530,7 +530,7 @@
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["Switch V/H AF Area"], "status": "proved"},
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["Focus Area Color"], "status": "proved"},
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["AF Area Registration"], "status": "proved"},
-  {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["Del. Regist. AF Area"], "status": "action, nothing to map", "rule": "action", "opener": ["--network", "--owner", "--allow"], "inferred": "class"},
+  {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["Del. Regist. AF Area"], "status": "proved by hand", "rule": "action", "opener": ["--network", "--owner", "--allow"]},
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["AF Area Auto Clear"], "status": "proved"},
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["Area Disp. dur Tracking"], "status": "proved"},
   {"mode": "Stills", "tab": "Focus", "group": "Focus Area", "path": ["AF-C Area Display"], "status": "proved"},
