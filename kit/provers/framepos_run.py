@@ -104,7 +104,10 @@ no delta is judged against them (the verdict counts the records that changed), a
 changed record by its definition key and the definition's name with its delta, then one line "grip down writes:
 <names>": the diff whole, never filtered to one orientation's copies. The lines carry the context ("Switch V/H AF Area
 = AF Point + AF Area, camera grip down"), "grip" and "upright": true. --zone-grid is refused with a grip before
-anything connects: its route and its proofs are made level.
+anything connects: its route and its proofs are made level. Vertical Display, read from the start download
+(afreg_run.screens_held, 2026-11-16), decides what turns: Off keeps every screen level, so each is read as a level run
+reads it, the lines carry no "upright" and the context ends "camera grip down, Vertical Display Off"; On, or not read,
+is the above, the portrait shooting screen the SDK's picture draws then read as it is (camkit.screen.portrait_battery).
 
 --grip level (2026-11-15): the same setup with the camera standing level, so a registration writes the level copies
 alone, proved directly rather than by elimination from the two vertical holds; every screen is read, and the frame
@@ -140,8 +143,8 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(1, str(Path(__file__).resolve().parent))
 import afreg_run  # noqa: E402
-from afreg_run import bare, slug  # noqa: E402
-from camkit import definitions, jsonl, match, paths, safety  # noqa: E402
+from afreg_run import bare, setting_code, slug  # noqa: E402,F401 (setting_code: this module's name for it too)
+from camkit import definitions, jsonl, paths, safety  # noqa: E402
 from runner import (LATEST_SCAN, add_allow_argument, add_info_ok_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
                     notes_named_or_exit, read_json)
 from writer import hand_tables  # noqa: E402
@@ -300,31 +303,6 @@ def setup_rows(amt: str | None = None, grip: str | None = None) -> dict:
     return rows | ({f"{AMT_ROW} = {amt}": ([AMT_ROW], amt)} if amt else {})
 
 
-def setting_code(index: dict, path: list, option: str) -> tuple | None:
-    """(key, code): the live record a menu row writes, in the definition (`index`: its settings by key), and the code
-    its values give `option`; None rather than a guess. The record is the one global setting with a proof of the row
-    itself, made in no state the run cannot vouch for: the row's path with no suffix, or with "[by hand]", which says
-    how the proof was made, not a state ("Viewfinder Bright. > Brightness Setup [by hand]"); a proof only "[Movie mode]"
-    or under any other state names no record here, and neither does a setting's name alone. The option's code: the one
-    label written exactly as the option is given; with none, the one label camkit.match.index_of names, the kit's rule
-    for naming an option from a reading (match.norm, which keeps a decimal point between digits and compares digits
-    exactly: "F1.1" is not "F11", 2.5" not 25"; else the only label match.same takes). None when no label, or more than
-    one, is named at the step that decides: never the first of several."""
-    row = " > ".join(path)
-
-    def vouched(menu: str) -> bool:
-        m = re.fullmatch(r"(.*?)(?: \[([^\]]*)\])?", menu)
-        return m.group(1) == row and m.group(2) in (None, "by hand")
-    hits = [s for k, s in index.items() if k.startswith("global:")
-            and any(vouched(m) for m in (s.get("proved") or {}).get("menu") or [])]
-    if len(hits) != 1:
-        return None
-    values = [(v, lab) for v, lab in hits[0].get("values") or []]
-    exact = [i for i, (_, lab) in enumerate(values) if str(lab).strip() == str(option).strip()]
-    i = (exact[0] if len(exact) == 1 else None) if exact else match.index_of([lab for _, lab in values], option)
-    return None if i is None else (hits[0]["key"], values[i][0])
-
-
 def amt_code(index: dict, amt: str) -> tuple | None:
     """(key, code): AF Frame Move Amt's live record in the definition and the code its values give the option `amt`
     (setting_code: the a1 II's global:0x03a3, Standard 0 and Large 1, proved by the menu in pass 2, kit2_pass2); None
@@ -332,21 +310,24 @@ def amt_code(index: dict, amt: str) -> tuple | None:
     return setting_code(index, [AMT_ROW], amt)
 
 
-def context_of(extra: str | None, amt: str | None = None, moves: list | None = None, grip: str | None = None) -> str:
+def context_of(extra: str | None, amt: str | None = None, moves: list | None = None, grip: str | None = None,
+               vertical: str | None = None) -> str:
     """The state the registrations are made in, which every line carries and the summary keeps apart: the camera level
     with Switch V/H AF Area Off, or with a grip AF Point + AF Area and how the camera stands (held vertically in
-    afreg_run's words, afreg_run.context_of: "Switch V/H AF Area = AF Point + AF Area, camera grip down"; level, "...,
-    camera level", as the hand tables' ORIENTED reads it), AF Frame Move Amt when the run sets it, the moves when
-    --moves gave them ("moved Right 1"), then --context."""
-    held = (f"{VH_ROW} = {VH_OPTION[grip]}, camera level" if grip == "level" else afreg_run.context_of(grip, None)
-            if grip else f"{VH_ROW} {OFF}, camera level")
+    afreg_run's words, afreg_run.context_of: "Switch V/H AF Area = AF Point + AF Area, camera grip down", and ",
+    Vertical Display Off" when the start download holds it Off, `vertical`; level, "..., camera level", as the hand
+    tables' ORIENTED reads it), AF Frame Move Amt when the run sets it, the moves when --moves gave them ("moved Right
+    1"), then --context."""
+    held = (f"{VH_ROW} = {VH_OPTION[grip]}, camera level" if grip == "level" else
+            afreg_run.context_of(grip, None, vertical) if grip else f"{VH_ROW} {OFF}, camera level")
     base = held + (f", {AMT_ROW} {amt}" if amt else "") + (f", moved {say_moves(moves)}" if moves else "")
     return f"{base}, {extra}" if extra else base
 
 
-def turned_of(grip: str | None) -> str | None:
-    """The grip whose screens turn (down, up), as afreg_run's readers take it; None level, with --grip level too."""
-    return grip if grip in TURNED else None
+def turned_of(grip: str | None, vertical: str | None = None) -> str | None:
+    """The grip whose screens turn (down, up), as afreg_run's readers take it; None level, with --grip level too, and
+    held vertically with Vertical Display Off (`vertical`), which keeps every screen level (afreg_run.turned_of)."""
+    return afreg_run.turned_of(grip, vertical)
 
 
 def held_words(grip: str) -> str:
@@ -574,16 +555,18 @@ def verdict(items: list, done: list, grip: str | None = None) -> str:
 
 
 def area_line(t: dict, changes: list, index: dict, sent: list, done: list, put_back: list, frames: dict, files: dict,
-              back_changes: list | None = None, grip: str | None = None) -> dict:
+              back_changes: list | None = None, grip: str | None = None, upright: bool | None = None) -> dict:
     """The area's line for framepos.jsonl: the changes as the diff gives them (before and after: the run's own evidence,
     kept in runs/ alone), how each is judged and the verdict; "back" says whether the registration after the put-back
     matched the first (None without --check-back). With a grip each change is judged against no press (its delta only)
-    and the line carries "grip", and "upright" when the screens turned (down, up), as afreg_run's proof lines do."""
+    and the line carries "grip", and "upright" when the screens were read turned (`upright`; by default as the grip
+    turns them: down, up), as afreg_run's proof lines do."""
     items = judged(changes, index, [] if grip else done)
+    upright = bool(turned_of(grip)) if upright is None else upright
     line = {"t": round(time.time(), 3), "area": t["label"], "code": t["code"], "moves": t["moves"], "sent": sent,
             "taken": done, "put_back": put_back, "changed": changes, "judged": items,
             "verdict": verdict(items, done, grip), "frames": frames, "files": files,
-            **({"upright": True} if turned_of(grip) else {}), **({"grip": grip} if grip else {})}
+            **({"upright": True} if upright else {}), **({"grip": grip} if grip else {})}
     if back_changes is not None:
         line["back"] = {"same": not back_changes, "off": judged(back_changes, index, [])}
     return line
@@ -986,13 +969,14 @@ def one_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     """One area: chosen, slot 1 registered, a download; the frame moved, registered, a download; the diff; the frame put
     back (and, with --check-back, registered and downloaded once more). `owed` holds the presses that would put the
     frame back while it is moved, for the caller to send if the area fails. Held vertically (a.grip down or up) the
-    dialog and the shooting screen are read as afreg_run reads them turned; --grip level reads them as level. With any
-    grip the line judges no direction. Returns the area's line."""
+    dialog and the shooting screen are read as afreg_run reads them turned, unless Vertical Display is Off in the start
+    download (a.vertical, which areas sets: every screen level); --grip level reads them as level. With any grip the line
+    judges no direction. Returns the area's line."""
     from camkit import camset
     from prove_run import to_shooting
     from runner import changes_of
     grip = getattr(a, "grip", None)
-    turned = turned_of(grip)
+    turned = turned_of(grip, getattr(a, "vertical", None))
     got = afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, turned)
     to_shooting(link, hdmi, "the shooting screen with the area chosen")
     frames = {"chosen": got["chosen_frame"], "after_ok": got["row_frame"]}
@@ -1024,7 +1008,7 @@ def one_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
         back_changes = changes_of(camset.diff(camset.read(base), camset.read(again)))
         afreg_run.ready_to_hold(cam, at, run, turned)   # the menu lock passed before the next area's MENU
     line = area_line(t, changes, index, sent + [dict(x, put_back=True) for x in back_sent], done, back_done, frames,
-                     files, back_changes, grip)
+                     files, back_changes, grip, upright=bool(turned))
     if owed:
         line["put_back_short"] = list(owed)
     return line
@@ -1157,8 +1141,10 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     """The session's body: slot 1 checked filled in the start file, with a grip the camera's position in it checked
     against the grip (position_check: a contradiction stops the run before any press), the setup, then every area of
     the plan (one_area), each area's line written and summed up as it comes; three areas failing in a row end it, and
-    held vertically (a.grip down or up) one does, its frame put back first: the owner is holding the camera. A zone's
-    line, and the sweep's, carry `zone_tag` (the context without --moves, which a zone never takes) in place of
+    held vertically (a.grip down or up) one does, its frame put back first: the owner is holding the camera. Held
+    vertically, Vertical Display is read from the start download (afreg_run.screens_held, kept as a.vertical): Off reads
+    every screen level, drops "upright" from the lines and ends their context's grip with "Vertical Display Off". A
+    zone's line, and the sweep's, carry `zone_tag` (the context without --moves, which a zone never takes) in place of
     `tag`."""
     zone_tag = zone_tag or tag
     from camkit import camset
@@ -1166,7 +1152,6 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     from runner import close_screen
     cam, link = s.cam, s.link
     grip = getattr(a, "grip", None)
-    turned = turned_of(grip)
     start = camset.read(s.start)
     if not slot_filled(start):
         raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good (no settings "
@@ -1176,6 +1161,14 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
         print(f"  {said}", flush=True)
         if stop:
             raise Failed(said)
+    turned, a.vertical, said = afreg_run.screens_held(grip, index, start)
+    if said:
+        print(f"  {said}", flush=True)
+    if a.vertical == afreg_run.VD_OFF:
+        moves = parse_moves(a.moves) if getattr(a, "moves", None) else None
+        for tg, mv in ((tag, moves), (zone_tag, None)):
+            tg["context"] = context_of(getattr(a, "context", None), amt, mv, grip, a.vertical)
+            tg.pop("upright", None)
     setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip)
     if a.zone_grid:
         zone_grid(s, a, run, hdmi, cycle, model, labels, axes, routes, index, out, zone_tag, lines, setup)
@@ -1210,8 +1203,8 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
         jsonl.append(out, line)
         lines.append(line)
         print("\n".join(summary_of(line)), flush=True)
-        if failed and turned:
-            print(f"held vertically (grip {turned}), a failed area ends the run: stopping", flush=True)
+        if failed and grip in TURNED:
+            print(f"held vertically (grip {grip}), a failed area ends the run: stopping", flush=True)
             break
         if in_a_row == 3:
             print("three areas in a row failed: stopping", flush=True)
@@ -1346,6 +1339,8 @@ def main(argv=None) -> int:
               f"{step_words(moves or MOVES)} (a Zone moves one press each way over its 3 x 3 grid: no step)", flush=True)
     if a.grip:
         print(position_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}), flush=True)
+    if afreg_run.vertical_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}):
+        print(afreg_run.vertical_plan(a.grip, {s["key"]: s for s in doc.get("settings") or []}), flush=True)
     print(f"each area: slot 1 registered ({MEMORY_ROW}) before and after the moves"
           + (", and after the put-back, to check it" if a.check_back else "")
           + f"; registering writes {', '.join(EXPECTED_LEFT)}, which no settings file sets back: the restore check names "

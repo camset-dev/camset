@@ -211,6 +211,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   direction, stops at the first area that fails, and refuses `--zone-grid`; with any grip a start file whose camera
   position record contradicts the grip stops the run before any press; and `kit/provers/afreg_run.py` takes
   `--grip level` too, each grip's hold line naming every record the hold changed.
+- With `--grip down` or `up`, `framepos_run.py` and `afreg_run.py` read Vertical Display from the start file: Off reads
+  every screen level and says so in each line's context ("camera grip down, Vertical Display Off"), and On now finds
+  the portrait shooting screen the camera's own picture shows, where a run waited five minutes at its start and gave
+  up. A Focus Area dialog drawn in a way the kit does not know stops the area, saying what the frame shows.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and

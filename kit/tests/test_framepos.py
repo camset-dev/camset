@@ -1055,16 +1055,18 @@ class Turned:
     LEVEL_MOVE = {"ms_left": (-1, 0), "ms_up": (0, -1), "ms_right": (1, 0), "ms_down": (0, 1)}
     CODES = {(0, 0): 0, (0, -1): 1, (1, 0): 2, (-1, 0): 3, (0, 1): 4, (1, 1): 5, (-1, 1): 6, (-1, -1): 7, (1, -1): 8}
 
-    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW", level=False, position=None):
+    def __init__(self, run, upright_shooting="F5.0 ISO AUTO 1/250 RAW", level=False, position=None, extra=None,
+                 writes=None):
         """level: the camera stands level (with Switch V/H AF Area = AF Point + AF Area: --grip level), every screen
         level and a registration writing the level copies; position: what it holds in the made-up camera position
-        record (POSITION_KEY), none when not given."""
-        self.run, self.upright_shooting, self.level = run, upright_shooting, level
+        record (POSITION_KEY), none when not given; extra: more records its downloads hold; writes: "vertical" for a
+        registration writing the vertical copies whatever the screens (held vertically with Vertical Display Off)."""
+        self.run, self.upright_shooting, self.level, self.writes = run, upright_shooting, level, writes
         self.n, self.pressed, self.named, self.chosen, self.logged = 0, [], [], [], []
         self.run.log = lambda kind, **f: self.logged.append((kind, f))
         self.opt, self.val, self.area, self.places = 0, 0, None, {}
         self.slot = {"set1:0x023c": 4, "set1:0x0b40": 0, "set1:0x0b42": 0, "set1:0x0b44": 0, "set1:0x0c20": 320,
-                     "set1:0x0c22": 320, "set1:0x0c24": 240, "set1:0x0c26": 240}
+                     "set1:0x0c22": 320, "set1:0x0c24": 240, "set1:0x0c26": 240, **(extra or {})}
         if position is not None:
             self.slot[POSITION_KEY] = position
         self.show("shooting")
@@ -1084,7 +1086,7 @@ class Turned:
             lab = CAROUSEL[self.opt]
             o = next((o for o in CAROUSEL_AXES if lab == o or lab.startswith(f"{o}:")), None)
             shown = CAROUSEL_AXES[o]["values"][self.val] if o else lab
-            if self.level:
+            if self.level or getattr(self, "dialog_level", False):
                 self.now = {"kind": "dialog", "text": f"Focus Area {shown}", "shown": shown,
                             "lines": [Line("Focus Area", 1.0, 10, 10, 200, 30), Line(shown, 1.0, 120, 70, 200, 30)]}
                 return
@@ -1135,8 +1137,8 @@ class Turned:
             self.show("shooting")
         elif self.now.get("text") == SLOTS and key == "enter":
             x, y = self.places.get(self.area, (0, 0))
-            zone, box = ("set1:0x0b40", ("set1:0x0c20", "set1:0x0c24")) if self.level else \
-                ("set1:0x0b44", ("set1:0x0c22", "set1:0x0c26"))
+            zone, box = ("set1:0x0b40", ("set1:0x0c20", "set1:0x0c24")) if self.level and self.writes != "vertical" \
+                else ("set1:0x0b44", ("set1:0x0c22", "set1:0x0c26"))
             if self.area == "Zone":
                 self.slot[zone] = self.CODES[(x, y)]
             else:
@@ -1446,3 +1448,150 @@ def test_the_position_check_stops_only_where_the_values_contradict_the_grip():
     stop, said = F.position_check("level", grip_index(), Download({}))
     assert stop is False and said == ("the camera's position not checked: the definition names no record the camera "
                                       "sets from how it is held")
+
+
+# ---------------------------------------------------------------- held vertically, Vertical Display Off or On
+
+VD_KEY = "global:0x0e30"
+VD_OFF_CONTEXT = f"{GRIP_CONTEXT}, Vertical Display Off"
+
+
+def vd_index(values=([0, "On"], [1, "Off"])) -> dict:
+    """grip_index with a made-up Vertical Display record, proved by the menu row as the a1 II's is (codes made up)."""
+    return grip_index() | {VD_KEY: {"key": VD_KEY, "name": "Made-up display turning", "values": [list(v) for v in values],
+                                    "proved": {"menu": ["Vertical Display", "Vertical Display [Movie mode]"]}}}
+
+
+def choose_level(cam, cycle, model, labels, axes, i, o, v):
+    """afreg_run.choose_level on the made-up camera: Focus Area, Right, its level carousel on the option."""
+    cam.show("menu")
+    cam.press("right")
+    cam.opt, cam.val = i, v or 0
+    cam.show("dialog")
+    return {}
+
+
+def test_vertical_display_is_read_by_its_rows_record_and_codes_never_guessed():
+    """afreg_run.vertical_display: On or Off as the start download holds the record the definition proves the Vertical
+    Display row writes, by the codes its values give On and Off (framepos_run.setting_code's rule); a definition
+    without the record, a download without it, or a code its values name neither reads as not read, which keeps the
+    turned reading a grip run had before (the camera's own default is On), and says why; no code is said."""
+    import afreg_run
+    assert afreg_run.vertical_display(vd_index(), Download({VD_KEY: 1}))[0] == "Off"
+    assert afreg_run.vertical_display(vd_index(), Download({VD_KEY: 0}))[0] == "On"
+    for index, held, why in ((grip_index(), {VD_KEY: 1}, "the definition names no record"),
+                             (vd_index(), {}, "the start download holds no"),
+                             (vd_index(), {VD_KEY: 5}, "a code its values name neither On nor Off")):
+        state, said = afreg_run.vertical_display(index, Download(held))
+        assert state is None and why in said and "turned" in said and "5" not in said, said
+
+
+def test_held_vertically_the_display_decides_how_screens_are_read_and_the_context_says_it():
+    """Held vertically (down, up) with Vertical Display Off every screen stays level (turned None) and the context ends
+    "Vertical Display Off" before --context; On, or not read, the screens turn as before and the context is as it was;
+    standing level, or with no grip, Vertical Display is not read and changes nothing."""
+    import afreg_run
+    off, on = Download({VD_KEY: 1}), Download({VD_KEY: 0})
+    assert afreg_run.screens_held("down", vd_index(), off)[:2] == (None, "Off")
+    assert afreg_run.screens_held("up", vd_index(), on)[:2] == ("up", "On")
+    assert afreg_run.screens_held("down", grip_index(), off)[:2] == ("down", None)
+    assert afreg_run.screens_held("level", vd_index(), off) == (None, None, "")
+    assert afreg_run.screens_held(None, vd_index(), off) == (None, None, "")
+    assert afreg_run.context_of("down", None, "Off") == VD_OFF_CONTEXT
+    assert afreg_run.context_of("up", "x", "Off") == ("Switch V/H AF Area = AF Point + AF Area, camera grip up, Vertical "
+                                                      "Display Off, x")
+    assert afreg_run.context_of("down", None, "On") == afreg_run.context_of("down", None) == GRIP_CONTEXT
+    assert afreg_run.context_of("level", None, "Off") == LEVEL_CONTEXT
+    assert F.context_of("x", "Standard", None, "down", "Off") == f"{VD_OFF_CONTEXT}, AF Frame Move Amt Standard, x"
+    assert F.context_of(None, None, None, "down", "On") == GRIP_CONTEXT
+    assert afreg_run.turned_of("down", "Off") is None and afreg_run.turned_of("down", "On") == "down"
+    assert F.turned_of("up", "Off") is None and F.turned_of("up") == "up" and F.turned_of("level", "On") is None
+
+
+def test_held_grip_down_with_vertical_display_off_reads_every_screen_level_and_says_so(turned, monkeypatch, capsys):
+    """Held grip down with Vertical Display Off in the start download: each area chosen on the level dialog
+    (afreg_run's level path), the shooting screen read as it is, no frame turned upright; the registrations write grip
+    down's own copies; the lines carry "grip": "down", no "upright" and the context "..., camera grip down, Vertical
+    Display Off", and each area's summary ends "grip down writes:" (the workaround run of 2026-11-16 said "level")."""
+    import afreg_run
+    monkeypatch.setattr(afreg_run, "choose_level", choose_level)
+    run, session = turned
+    cam, s = session(level=True, writes="vertical", extra={VD_KEY: 1})
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "down", vd_index())
+    assert cam.chosen == ["Zone", "Custom 1"]
+    assert run.upright_reads == [] and not list((run.dir / "upright").iterdir())
+    got = {ln["area"]: ln for ln in F.jsonl.read(out)}
+    assert [c["key"] for c in got["Zone"]["changed"]] == ["set1:0x0b44"]
+    assert [c["key"] for c in got["Custom 1"]["changed"]] == ["set1:0x0c22", "set1:0x0c26"]
+    assert all(ln["grip"] == "down" and "upright" not in ln and ln["context"] == VD_OFF_CONTEXT and ln["back"]["same"]
+               for ln in got.values())
+    said = capsys.readouterr().out
+    assert f"Vertical Display Off in the start download ({VD_KEY})" in said
+    for text in (said, "\n".join(F.summary_lines(F.jsonl.read(out)))):
+        assert f"Custom 1 (code 109; {VD_OFF_CONTEXT})" in text
+        assert "    grip down writes: Zone position memory (vertical B, grid index, copy 1)" in text
+        assert "    grip down writes: Custom 1 box position: X (copy 2); Custom 1 box position: Y (copy 2)" in text
+        assert "    set:0x0c22  Custom 1 box position: X (copy 2): -39" in text
+        assert "level writes" not in text and "the way the presses went" not in text
+
+
+def test_held_grip_down_with_vertical_display_on_reads_the_turned_screens_as_before(turned, capsys):
+    """Vertical Display On in the start download: the turned screens read upright as a grip run read them before, the
+    lines marked "upright", the context as it was, and the run says it read Vertical Display On."""
+    run, session = turned
+    cam, s = session(extra={VD_KEY: 0})
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "down", vd_index())
+    assert cam.chosen == ["Zone", "Custom 1"] and run.upright_reads
+    assert all(ln["upright"] is True and ln["context"] == GRIP_CONTEXT and ln["back"]["same"]
+               for ln in F.jsonl.read(out))
+    assert f"Vertical Display On in the start download ({VD_KEY})" in capsys.readouterr().out
+
+
+def test_held_vertically_with_the_display_on_a_dialog_drawn_level_stops_the_run_saying_what_it_saw(turned, capsys):
+    """Vertical Display On, where Focus Area's dialog turns on HDMI: a dialog these eyes draw level is not guessed at.
+    The area fails before any press, saying the turned reading found no title, what the frame read as it is shows
+    (Focus Area's title, read level) and that the camera's own screen must be looked at; held vertically, the run
+    stops there."""
+    run, session = turned
+    cam, s = session(extra={VD_KEY: 0})
+    cam.dialog_level = True
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "down", vd_index())
+    assert cam.chosen == [] and not [k for k in cam.pressed if k.startswith("ms_")]
+    (line,) = F.jsonl.read(out)
+    assert "did not open its dialog" in line["failed"]
+    assert "read as it is, the frame shows Focus Area's title" in line["failed"]
+    assert "look at the camera's own screen" in line["failed"]
+    assert "a failed area ends the run: stopping" in capsys.readouterr().out
+
+
+def test_held_vertically_the_portrait_shooting_screen_is_read_as_it_is(quick, tmp_path, monkeypatch):
+    """afreg_run.shooting_words held vertically: the portrait shooting screen (screen.portrait_battery: Vertical
+    Display On through the SDK's picture) is drawn upright, so its words are read as they are; any other frame is
+    turned upright as before (HDMI turns it)."""
+    import afreg_run
+    from PIL import Image
+    from camkit import ocr, screen
+    icon = np.asarray(Image.open(Path(screen.__file__).parent / "glyphs" / "battery_portrait.png").convert("L"))
+    portrait = np.zeros((480, 640, 3), np.uint8)
+    portrait[3:3 + icon.shape[0], 551:551 + icon.shape[1]] = icon[..., None]
+    turned_reads = []
+    monkeypatch.setattr(ocr, "read", lambda paths: turned_reads.extend(paths) or {p: [] for p in paths})
+    (tmp_path / "upright").mkdir()
+    run = SimpleNamespace(dir=tmp_path)
+    cam = Cam({"kind": "shooting", "text": "6991 J-FINE 50M", "image": portrait}, [])
+    assert afreg_run.shooting_words(cam, run, "down") == "6991 J-FINE 50M" and turned_reads == []
+    assert afreg_run.shooting_words(Cam({"kind": "shooting", "text": "level words"}, []), run, "down") == ""
+    assert [Path(p).name for p in turned_reads] == ["00000_frame_upright.png"]
+
+
+def test_an_afreg_proof_line_is_marked_upright_only_where_its_screens_were_read_turned():
+    """afreg_run.proof_line: "upright" where the screens were read turned (a grip down or up, Vertical Display On or
+    not read), none where they stayed level (Vertical Display Off); "grip" either way."""
+    import afreg_run
+    t = {"label": "Spot: S", "code": 6, "expected": {}, "own_key": "global:0x0a00", "copied": [], "other_area_keys": []}
+    got = {"shown": "Spot: S", "vlm": "", "chosen_frame": "00001_a.png", "row_frame": "00002_b.png"}
+    hold = {"frames": [], "said": ""}
+    args = (t, got, hold, Path("00003_before.DAT"), Path("00004_after.DAT"), [], {})
+    assert afreg_run.proof_line(*args, "down", [])["upright"] is True
+    level = afreg_run.proof_line(*args, "down", [], upright=False)
+    assert level["grip"] == "down" and "upright" not in level

@@ -384,3 +384,53 @@ def test_the_viewfinders_shooting_screen_on_the_cameras_own_frames(path):
     from (2026-11-11, the battery at 100, the Level gauge drawn) and an older one with a lower battery, whose
     percentage starts where a wider cut ended, and no gauge."""
     assert read(path).kind == "shooting"
+
+
+# the one frame of the portrait shooting screen (OSD eyes, the camera held grip down with Vertical Display On,
+# 2026-11-16): no other frame of that run is ever read, as several hold network names
+PORTRAIT = A1 / "kit2_hdmi_watch" / "shots" / "09511_start.png"
+PORTRAIT_AT = (551, 3)              # where the portrait battery's left end, the template, sits on it
+
+
+def portrait_frame(x0: int, y0: int, glyph: str = "battery_portrait") -> np.ndarray:
+    from PIL import Image
+    icon = np.asarray(Image.open(Path(screen.__file__).parent / "glyphs" / f"{glyph}.png").convert("L"))
+    a = np.zeros((480, 640, 3), np.uint8)
+    a[y0:y0 + icon.shape[0], x0:x0 + icon.shape[1]] = icon[..., None]
+    return a
+
+
+def test_the_portrait_shooting_screen_is_the_shooting_screen():
+    """Held vertically with Vertical Display On, the camera's own picture through the SDK draws the shooting screen in a
+    portrait layout, upright in the frame, its battery smaller and further left than the level screen's: with that
+    icon where it draws it (or a percentage's width either side) a frame reads as the shooting screen and as the
+    portrait layout (screen.portrait_battery); a black frame does not, and neither does the level battery."""
+    black = np.zeros((480, 640, 3), np.uint8)
+    assert screen.classify(screen.features(black)) != "shooting" and not screen.portrait_battery(black)
+    for dx in (0, -14, 14):
+        a = portrait_frame(PORTRAIT_AT[0] + dx, PORTRAIT_AT[1])
+        f = screen.features(a)
+        assert f["battery_v"] > 0.85 and screen.classify(f) == "shooting", dx
+        assert screen.portrait_battery(a), dx
+    level = portrait_frame(574, 4, "battery")                   # the level screen's battery where it draws it
+    assert screen.classify(screen.features(level)) == "shooting" and not screen.portrait_battery(level)
+
+
+def test_the_portrait_shooting_screen_on_the_cameras_own_frame():
+    """The frame the template was cut from (skipped without runs/): the shooting screen, in its portrait layout."""
+    f = load(need(PORTRAIT))
+    assert screen.read(f).kind == "shooting" and screen.portrait_battery(f.image)
+
+
+def test_the_start_download_finds_the_portrait_shooting_screen_with_no_menu_pressed():
+    """proving.nav.to_shooting, which every run's start download waits on (runner.prover_session): on the portrait
+    shooting screen it returns at once, nothing pressed. Run kit2_a1fin_framepos_gripdown read that screen as no known
+    kind, pressed MENU twenty times over it and gave up after five minutes (skipped without runs/)."""
+    from types import SimpleNamespace
+
+    from proving.nav import to_shooting
+    f = load(need(PORTRAIT))
+    pressed = []
+    link = SimpleNamespace(press=lambda key, **kw: pressed.append(key), in_playback=lambda: False)
+    to_shooting(link, SimpleNamespace(grab=lambda save=True: f), "the start download")
+    assert pressed == []

@@ -138,8 +138,15 @@ BATTERY = (556, 0, 640, 40)            # shooting screen: battery icon (template
 # gauge, always with the USB power plug drawn beside the battery; never seen in Histogram, in No Disp. Info (which may
 # draw no battery and read "unknown"), with a Viewfinder Magnifi. other than Standard, or on battery power without the
 # plug. It is read with the turned ones, as a battery in another place
+# Held vertically with Vertical Display On, the SDK's display image draws the shooting screen in a portrait layout of its
+# own, upright in the 640 x 480 frame (wider letters, the exposure readouts left out, the icons nearer the top), with a
+# smaller battery further left; its template is that icon's left end, before the percentage, cut from the camera's own
+# frame (kit2_hdmi_watch 09511_start.png, OSD eyes, held grip down, 2026-11-16: the only frame of it, the battery at 99
+# with the USB plug drawn, the cut at x 551, y 3). Its place allows a digit's width or the plug's either way, never seen.
+# Measured 2026-11-16: 120,000 random saved frames of every run (the two holding network names left out) and all
+# 11,174 of that day's runs score 0.691 at most (portrait_battery tells this layout from the others)
 BATTERY_V = {"battery_gripdown": (5, 56, 33, 66), "battery_gripup": (607, 414, 635, 424),
-             "battery_finder": (588, 0, 596, 26)}
+             "battery_finder": (588, 0, 596, 26), "battery_portrait": (535, 0, 583, 30)}
 LIST_ROW_TOP, LIST_ROW_PITCH, LIST_ROWS = 95, 50, 6   # list popup rows (orange bar 48 px tall)
 LIST_RADIO_X = 102                     # radio circle centre x; centre y = row top + 23
 LIST_SCROLL = (563, 568, 95, 394)      # scrollbar x0, x1, track y0, y1: thumb grey ~221 on track ~102
@@ -285,6 +292,12 @@ def _glyph(g, name, box, pad=6) -> float:
     if sub.shape[0] < t.shape[0] or sub.shape[1] < t.shape[1] or sub.std() < 1:
         return 0.0
     return float(cv2.matchTemplate(sub, t, cv2.TM_CCOEFF_NORMED).max())
+
+
+def portrait_battery(image) -> bool:
+    """Whether the frame is the portrait shooting screen (BATTERY_V's battery_portrait: held vertically with Vertical
+    Display On, the SDK's display image), which is drawn upright, so its words read as they are, never turned."""
+    return _glyph(_grey(np.asarray(image)), "battery_portrait", BATTERY_V["battery_portrait"], pad=4) > 0.85
 
 
 def help_glyph(image) -> str | None:
