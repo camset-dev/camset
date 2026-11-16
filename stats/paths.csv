@@ -29,3 +29,13 @@ date,path,count,uniques
 2026-11-15,/camset-dev/camset/tree/main,6,1
 2026-11-15,/camset-dev/camset/tree/main/data/ILCE-1M2_fw4.00,5,2
 2026-11-15,/camset-dev/camset/tree/main/docs/models,5,1
+2026-11-16,/camset-dev/camset,63,14
+2026-11-16,/camset-dev/camset/actions/workflows/editor-ci.yml,16,1
+2026-11-16,/camset-dev/camset/actions,15,1
+2026-11-16,/camset-dev/camset/tree/main/docs,9,3
+2026-11-16,/camset-dev/camset/releases/tag/v0.1.0,8,2
+2026-11-16,/camset-dev/camset/actions/metrics/usage,6,1
+2026-11-16,/camset-dev/camset/actions/workflows/editor-release.yml,6,1
+2026-11-16,/camset-dev/camset/tree/main,6,1
+2026-11-16,/camset-dev/camset/tree/main/data/ILCE-1M2_fw4.00,5,2
+2026-11-16,/camset-dev/camset/tree/main/docs/models,5,1
