@@ -377,9 +377,9 @@ enums:
         on it proved on the camera.'
     0x0284:
       id: proxy_rec_settings
-      doc: 'Proxy Rec. Settings [Shooting > Image Quality/Rec]: 0 16M 4:2:0 10bit, 1 9M 4:2:0 10bit (XAVC HS HD),
-        3 9M 4:2:0 10bit (the reset value; no menu choice writes it). live settings; 1 of 1 settings on it proved
-        on the camera.'
+      doc: 'Proxy Rec. Settings [Shooting > Image Quality/Rec]: 0 16M 4:2:0 10bit, 1 9M 4:2:0 10bit, 3 6M 4:2:0
+        8bit (XAVC S HD''s setting; only a reset writes it). live settings; 1 of 1 settings on it proved on the
+        camera.'
     0x0286:
       id: aps_c_super_35mm
       doc: 'APS-C/Super 35mm [Shooting > Image Quality/Rec]: 0 On, 1 Auto, 2 Off. live settings; 1 of 1 settings

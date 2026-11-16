@@ -55,8 +55,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
-- **The a1 II's Proxy Rec. Settings says which value no menu choice writes:** the code a Camera Settings Reset or
-  Initialize leaves is marked as one the menu does not offer, and the editor keeps it where a file holds it.
+- **The a1 II's Proxy Rec. Settings names its third value as Sony does:** the code a Camera Settings Reset or
+  Initialize leaves is 6M 4:2:0 8bit, XAVC S HD's setting; it is marked as one the menu does not offer, and its note
+  says how the camera shows it under each proxy format.
 - **The a1 II definition names twelve more records** (Expert mode): the spot size and the Custom area as the camera
   writes them when an AF area is registered. The notes of Exposure Comp.'s two copies now say what the camera's
   files and one test on the camera show: copy 1 always equals it, and copy 2 keeps the slider's position when MENU

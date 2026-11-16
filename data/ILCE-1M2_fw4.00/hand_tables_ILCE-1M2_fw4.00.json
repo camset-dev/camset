@@ -118,7 +118,7 @@
     },
     "global:0x0284": {
       "name": "Proxy Rec. Settings",
-      "note": "Movie menu only. Under Proxy File Format XAVC HS HD the list offers 16M 4:2:0 10bit (0) and 9M 4:2:0 10bit (1). Under Proxy File Format XAVC S HD the row is greyed (its notice names Px Proxy File Format, XAVC S HD) and shows 6M 4:2:0 8bit, whatever the record holds. Changing the Proxy File Format does not rewrite the record. Code 3 is what Initialize and Camera Settings Reset write, and no menu choice writes it; under XAVC HS HD a record holding 3 shows as 9M 4:2:0 10bit."
+      "note": "Movie menu only. Under Proxy File Format XAVC HS HD the list offers 16M 4:2:0 10bit (0) and 9M 4:2:0 10bit (1). Under XAVC S HD the row is greyed and shows 6M 4:2:0 8bit whatever the record holds. Changing the Proxy File Format does not rewrite the record. Code 3 is what Initialize and Camera Settings Reset write, and no menu choice writes it; under XAVC HS HD a record holding 3 shows as 9M 4:2:0 10bit."
     },
     "global:0x01dc": {"name": "RAW File Type (one slot)"},
     "global:0x01da": {"name": "File Format (one slot)"},
@@ -2273,7 +2273,8 @@
     ["global:0x13d4", 11, "White Balance Bracket"],
     ["global:0x13d4", 7, "Self-timer(Cont.)"],
     ["global:0x13bb", 1, "1 / 2 This Image"],
-    ["global:0x0284", 3, "9M 4:2:0 10bit (the reset value; no menu choice writes it)"]
+    ["global:0x0284", 1, "9M 4:2:0 10bit"],
+    ["global:0x0284", 3, "6M 4:2:0 8bit (XAVC S HD's setting; only a reset writes it)"]
   ],
   "PP7_VALUES": [
     ["global:0x052b[6]", 15, "S-Log2 (the first a1's PP7; not offered on this body)"],
