@@ -678,7 +678,7 @@
   {"mode": "Stills", "tab": "Setup", "group": "Area/Date", "path": ["Language"], "status": "not in the settings file (Sony)", "rule": "identity/by hand", "opener": ["--network", "--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Setup", "group": "Area/Date", "path": ["Area/Date/Time Setting"], "status": "not in the settings file (Sony)", "rule": "identity/by hand", "opener": ["--network", "--owner"], "never_choose": true},
   {"mode": "Stills", "tab": "Setup", "group": "Area/Date", "path": ["NTSC/PAL Selector"], "status": "not in the settings file (Sony)", "rule": "identity/by hand", "opener": ["--network", "--owner"], "never_choose": true, "header": true},
-  {"mode": "Stills", "tab": "Setup", "group": "Reset/Save Settings", "path": ["Setting Reset"], "status": "action, nothing to map", "rule": "action", "opener": ["--owner", "--allow"], "inferred": "class"},
+  {"mode": "Stills", "tab": "Setup", "group": "Reset/Save Settings", "path": ["Setting Reset"], "status": "proved by hand", "rule": "action", "opener": ["--owner", "--allow"]},
   {"mode": "Stills", "tab": "Setup", "group": "Reset/Save Settings", "path": ["Save/Load Settings"], "status": "action, nothing to map", "rule": "action", "opener": ["--network", "--owner", "--allow"], "inferred": "class"},
   {"mode": "Stills", "tab": "Setup", "group": "Operation Customize", "path": ["Custom Key/Dial Set."], "status": "sampled"},
   {"mode": "Stills", "tab": "Setup", "group": "Operation Customize", "path": ["Custom Key/Dial Set.", "Dial/Wheel"], "status": "proved"},

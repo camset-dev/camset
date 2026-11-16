@@ -5,6 +5,7 @@
  "model": "ILCE-1M2",
  "firmware": "4.00",
  "facts": [
-  {"kind": "info", "mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Disp Device Address"], "fields": ["Device Address"]}
+  {"kind": "info", "mode": "Stills", "tab": "Network", "group": "Bluetooth", "path": ["Disp Device Address"], "fields": ["Device Address"]},
+  {"kind": "hand_changed", "mode": "Stills", "tab": "Setup", "group": "Reset/Save Settings", "path": ["Setting Reset"]}
  ]
 }
