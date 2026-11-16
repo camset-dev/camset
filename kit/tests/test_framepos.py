@@ -1194,8 +1194,8 @@ def turned(monkeypatch, quick, tmp_path):
     monkeypatch.setattr(F, "slot_filled", lambda cs: True)
     monkeypatch.setattr(F, "prepare", lambda *a, **k: ["Switch V/H AF Area = AF Point + AF Area"])
 
-    def session(**kw):
-        cam = Turned(run, **kw)
+    def session(cls=None, **kw):
+        cam = (cls or Turned)(run, **kw)
 
         def download(tag):
             p = tmp_path / f"{cam.n:05d}_{tag}.DAT"
@@ -1595,3 +1595,332 @@ def test_an_afreg_proof_line_is_marked_upright_only_where_its_screens_were_read_
     assert afreg_run.proof_line(*args, "down", [])["upright"] is True
     level = afreg_run.proof_line(*args, "down", [], upright=False)
     assert level["grip"] == "down" and "upright" not in level
+
+
+# ---------------------------------------------------------------- --edges: how far each frame can travel
+
+X, Y = "set1:0x0c20", "set1:0x0c24"                 # Custom 1's box X and Y (copy 1) in the made-up definition
+CIRC_KEY = "global:0x0c10"
+
+
+def regs_of(*places, keys=(X, Y)) -> dict:
+    """The six registrations of an edge measure (EDGE_TAGS: base, low, snap-h, step-h, step-v, high), each a place."""
+    return {tag: dict(zip(keys, p, strict=True)) for tag, p in zip(F.EDGE_TAGS, places, strict=True)}
+
+
+# a frame on a grid anchored at 320, 240, 28 a press in X and 19 in Y, its edges 26 and 614, 33 and 447 off the grid
+# (as the a1 II's Custom 1 box behaved: kit2_framepos_amt_one, 28 a press; kit2_framepos_amt, Left 3 from 73 short of
+# the edge moved 73 and Right 3 put it back): base, the low corner, Right 1 (to the first grid place), Right 1 and
+# Down 1, Down 1 and Right 40 (the far edge), Down 40
+GRID_REGS = regs_of((376, 183), (26, 33), (40, 33), (68, 50), (614, 69), (614, 447))
+
+
+def test_an_edge_measure_tells_each_keys_records_their_edges_and_step_from_the_registrations():
+    """Which records the horizontal keys move is what changed when Right alone was pressed off the low corner, and the
+    vertical keys' what changed when Down joined it, less those: measured, never taken from a record's name or from how
+    the view turns. Each record's step is the second press off the low edge (the first may stop short at the grid), its
+    edges the two corners, and a push of n presses that moved n presses' worth may have stopped short of the edge."""
+    assert F.edge_groups(GRID_REGS) == {"h": [X], "v": [Y]}
+    m = F.edge_measure(GRID_REGS, 40)
+    assert (m["h"]["step"][X], m["h"]["first"][X], m["h"]["low"][X], m["h"]["high"][X]) == (28, 14, 26, 614)
+    assert (m["v"]["step"][Y], m["v"]["first"][Y], m["v"]["low"][Y], m["v"]["high"][Y]) == (19, 17, 33, 447)
+    assert m["h"]["short"] == [] and m["v"]["short"] == [] and m["odd"] == []
+    # a view whose keys turn: Right moves Y, Down moves X; the groups and steps follow what moved
+    turned = regs_of((376, 183), (26, 33), (26, 50), (40, 69), (68, 447), (614, 447))
+    assert F.edge_groups(turned) == {"h": [Y], "v": [X]}
+    m2 = F.edge_measure(turned, 40)
+    assert m2["h"]["step"][Y] == 19 and m2["v"]["step"][X] == 28
+    assert F.edge_way_back(turned["high"], turned["base"], m2, first=True) == ([["ms_left", 14], ["ms_up", 9]], {})
+    # eight presses a push: none reached the left edge, nor the far ones
+    short = regs_of((376, 183), (152, 33), (180, 33), (208, 50), (432, 69), (432, 221))
+    m3 = F.edge_measure(short, 8)
+    assert len(m3["h"]["short"]) == 2 and len(m3["v"]["short"]) == 1 and "--edge-presses" in m3["h"]["short"][0]
+
+
+def test_the_way_back_from_an_edge_snaps_to_the_grid_and_an_unreachable_start_is_never_guessed():
+    """From an edge the way back takes ceil(distance / step) presses (the first lands on the grid); from a grid place the
+    distance must be whole steps, else the start lies where no press goes, which is said by record and difference
+    (the frame's distance from its start), no press planned."""
+    m = F.edge_measure(GRID_REGS, 40)
+    base = GRID_REGS["base"]
+    assert F.edge_way_back(GRID_REGS["high"], base, m, first=True) == ([["ms_left", 9], ["ms_up", 14]], {})
+    assert F.edge_way_back(GRID_REGS["low"], base, m, first=True) == ([["ms_right", 13], ["ms_down", 8]], {})
+    assert F.edge_way_back({X: 404, Y: 183}, base, m, first=False) == ([["ms_left", 1]], {})
+    assert F.edge_way_back(base, base, m, first=False) == ([], {})
+    assert F.edge_way_back({X: 376, Y: 183}, {X: 377, Y: 183}, m, first=False) == ([], {X: -1})
+
+
+class EdgeCam(Turned):
+    """A made-up camera whose focus frames move on a grid and stop at its edges (GRID_REGS'): a press moves a frame a
+    step along the grid, one that would pass an edge stops at the edge, one off an edge goes to the first grid place
+    inward. The multi-selector's presses come through the link (a push) or through the camera (a single press) alike;
+    `drop` lists the link presses that are lost, by number; `turn` swaps the keys' axes; `fail_regs` the slot
+    registrations, by number, that bring no "Registered."; a registration writes Custom boxes into X and Y, any other
+    area into the made-up point records."""
+    GRID = {"x": (26, 614, 320, 28), "y": (33, 447, 240, 19)}       # low edge, high edge, anchor, step
+    POINT = ("set1:0x0b10", "set1:0x0b12")
+
+    def __init__(self, run, start=None, drop=(), turn=False, fail_regs=(), **kw):
+        super().__init__(run, level=True, **kw)
+        self.slot.update({self.POINT[0]: 300, self.POINT[1]: 200})
+        self.pos = dict(start or {"Custom 1": (376, 183), "Expand Spot": (320, 240)})
+        self.drop, self.turn, self.fail_regs = set(drop), turn, set(fail_regs)
+        self.link_presses, self.regs, self.pushed = 0, 0, []
+        self.hdmi = SimpleNamespace(grab=lambda save=True: self.frame)
+        self.link = SimpleNamespace(press=self.link_press)
+
+    def reading(self, f):
+        return SimpleNamespace(kind=self.now["kind"])
+
+    def move(self, key):
+        axis, d = {"ms_right": ("x", 1), "ms_left": ("x", -1), "ms_down": ("y", 1), "ms_up": ("y", -1)}[key]
+        if self.turn:
+            axis = "y" if axis == "x" else "x"
+        lo, hi, g0, s = self.GRID[axis]
+        x, y = self.pos[self.area]
+        v = x if axis == "x" else y
+        if (v - g0) % s:
+            v = g0 + (-(-(v - g0) // s) if d > 0 else (v - g0) // s) * s
+        else:
+            v += d * s
+        v = min(max(v, lo), hi)
+        self.pos[self.area] = (v, y) if axis == "x" else (x, v)
+
+    def link_press(self, key, *args, on_shooting=frozenset(), screen=None, **kw):
+        assert getattr(screen, "kind", screen) == "shooting" and key in on_shooting, (key, on_shooting, screen)
+        self.link_presses += 1
+        self.pushed.append(key)
+        if self.link_presses not in self.drop:
+            self.move(key)
+
+    def press(self, key, **kw):
+        if self.now.get("text") == SLOTS and key == "enter":
+            self.pressed.append(key)
+            self.answer_once, self.n, self.regs = None, self.n + 1, self.regs + 1
+            if self.regs in self.fail_regs:
+                self.now = {"kind": "menu", "text": "Shooting Mode MR Camera Set. Memory"}
+                return
+            x, y = self.pos[self.area]
+            keys = (X, Y) if self.area.startswith("Custom") else self.POINT
+            self.slot.update({keys[0]: x, keys[1]: y})
+            self.show("registered")
+            return
+        if self.now["kind"] == "shooting":
+            assert key in self.MOVE and kw.get("on_shooting") == key, (key, kw)
+            self.pressed.append(key)
+            self.named.append((key, kw.get("on_shooting")))
+            self.n += 1
+            self.move(key)
+            return
+        super().press(key, **kw)
+
+
+def edge_index() -> dict:
+    """vd_index with Circ. of Focus Point's record, proved by its menu row (codes made up)."""
+    return vd_index() | {CIRC_KEY: {"key": CIRC_KEY, "name": "Circ. of Focus Point",
+                                      "values": [[0, "Does Not Circulate"], [1, "Circulate"]],
+                                      "proved": {"menu": ["Circ. of Focus Point"]}}}
+
+
+@pytest.fixture
+def edges(turned, monkeypatch):
+    """The turned fixture's session on EdgeCam, every area chosen on the level dialog; run(cam, s, labels) runs F.areas
+    with --edges over them and returns the edges file's lines."""
+    import afreg_run
+    monkeypatch.setattr(afreg_run, "choose_level", choose_level)
+    run, session = turned
+
+    def go(s, labels: str, grip=None, n=40):
+        todo = F.edge_plan(made_up_doc(), labels)
+        a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=grip,
+                            edges=True, edge_presses=n)
+        tag = {"context": F.context_of(None, "Standard", None, grip), "allowance": "a",
+               **({"grip": grip} if grip else {})}
+        routes = {t["label"]: afreg_run.route(t["label"], CAROUSEL, CAROUSEL_AXES) for t in todo}
+        lines = []
+        F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, edge_index(), False, False,
+                run.dir / "framepos.jsonl", tag, lines, "Standard", tag)
+        return F.jsonl.read(run.dir / "edges.jsonl") if (run.dir / "edges.jsonl").exists() else []
+    return run, (lambda **kw: session(cls=EdgeCam, **kw)), go
+
+
+def test_edges_measure_each_area_in_seven_registrations_and_put_its_frame_back_exactly(edges, capsys):
+    """--edges on two areas: each chosen, its start registered, pushed to the low corner, one press off it on each axis,
+    pushed to the far corner, brought back by computed presses and registered once more, which matches the first: seven
+    registrations an area. The pushes go through the link, each named for the shooting screen; the summary gives each
+    record's edges, step and first press off the low edge, and never the start nor the presses that told it."""
+    run, session, go = edges
+    cam, s = session()
+    lines = go(s, "Custom 1, Expand Spot")
+    assert cam.chosen == ["Custom 1", "Expand Spot"] and cam.regs == 14
+    assert cam.pos == {"Custom 1": (376, 183), "Expand Spot": (320, 240)}
+    got = {ln["area"]: ln for ln in lines}
+    assert all(ln["back"]["same"] and not ln.get("failed") for ln in got.values())
+    rec = {r["key"]: r for r in got["Custom 1"]["edges"]}
+    assert (rec[X]["low"], rec[X]["high"], rec[X]["step"], rec[X]["first"], rec[X]["keys"]) == (26, 614, 28, 14, "Left/Right")
+    assert (rec[Y]["low"], rec[Y]["high"], rec[Y]["step"], rec[Y]["first"], rec[Y]["keys"]) == (33, 447, 19, 17, "Up/Down")
+    assert got["Custom 1"]["values"]["base"] == {X: 376, Y: 183}, "the start kept in the run's own file"
+    said = capsys.readouterr().out
+    summary = (run.dir / "edges_summary.txt").read_text(encoding="utf-8")
+    for text in (said, summary):
+        assert ("    Left/Right  set:0x0c20  Custom 1 box position: X (copy 1): 26 to 614, a press 28 (Right raises it), "
+                "the first press off 26 moves 14") in text
+        assert "    Up/Down  set:0x0c24  Custom 1 box position: Y (copy 1): 33 to 447, a press 19 (Down raises it)" in text
+        assert "    put back: the registration after it matched the first" in text
+    assert "376" not in summary and "183" not in summary and "Left 9" not in said
+
+
+def test_a_press_lost_on_the_way_back_is_found_by_the_check_and_made_good(edges):
+    """A push's press the camera lost on the way back leaves the frame a step short: the check registration shows it,
+    the run presses the difference in whole steps and checks again, which matches."""
+    run, session, go = edges
+    cam, s = session(drop={165})                    # a Left of Custom 1's way back (80 + 40 + 40 presses before it)
+    (line,) = go(s, "Custom 1")
+    assert cam.regs == 8 and line["back"]["same"] and line["back"]["tries"] == 2 and cam.pos["Custom 1"] == (376, 183)
+
+
+def test_a_start_no_press_can_reach_stops_the_run_saying_the_difference(edges, capsys):
+    """A start between two places a press reaches (set by touch, say): the way back lands a unit off, which is no whole
+    step, so nothing more is pressed; the area fails saying the record and the difference, and the run stops there."""
+    run, session, go = edges
+    cam, s = session(start={"Custom 1": (377, 183), "Expand Spot": (320, 240)})
+    lines = go(s, "Custom 1, Expand Spot")
+    assert cam.chosen == ["Custom 1"] and len(lines) == 1
+    assert lines[0]["back"]["same"] is False and lines[0]["back"]["off"] == [{"key": X, "delta": -1}]
+    said = capsys.readouterr().out
+    assert "NOT PUT BACK: set:0x0c20 -1" in said and "move it back by hand" in said and "stopping" in said
+
+
+@pytest.mark.parametrize("fail,regs,tags", [
+    (5, 10, ["again-low", "again-snap-h", "again-step-h", "again-step-v", "back1"]),     # steps not all known
+    (6, 8, ["again-low", "back1"]),                                                       # every step known
+    (7, 9, ["again-low", "back1"])])                                                      # the way back's check
+def test_a_registration_that_fails_mid_area_brings_the_frame_back_from_the_low_corner(edges, capsys, fail, regs, tags):
+    """A registration failing once the frame has moved: the screen closed, the frame pushed to the low corner, the steps
+    not yet known measured there again, then brought back by computed presses and checked. The area is failed (its
+    edges not measured), its frame back where it began, and the run goes on to the next area."""
+    run, session, go = edges
+    cam, s = session(fail_regs={fail})
+    lines = go(s, "Custom 1, Expand Spot")
+    assert cam.chosen == ["Custom 1", "Expand Spot"] and cam.pos["Custom 1"] == (376, 183)
+    first = lines[0]
+    assert first["failed"] and first["back"]["same"] and list(first["files"])[-len(tags):] == tags
+    assert cam.regs - 7 == regs, "Expand Spot's seven after Custom 1's own"
+    assert lines[1]["back"]["same"] and not lines[1].get("failed")
+
+
+def test_edges_held_vertically_with_turned_keys_measure_what_each_key_moves(edges):
+    """Held grip down (Vertical Display Off, the screens level), a view whose keys turn (Right moves Y): the groups
+    follow what moved, the way back presses the keys that move each record, and the frame ends where it began."""
+    run, session, go = edges
+    cam, s = session(turn=True, extra={VD_KEY: 1})
+    (line,) = go(s, "Custom 1", grip="down")
+    assert line["back"]["same"] and cam.pos["Custom 1"] == (376, 183)
+    rec = {r["key"]: r for r in line["edges"]}
+    assert rec[Y]["keys"] == "Left/Right" and rec[X]["keys"] == "Up/Down" and rec[X]["step"] == 28
+
+
+def test_a_push_names_each_press_for_the_shooting_screen_and_stops_where_the_screen_is_not_it(quick, tmp_path):
+    """F.push: each press named for the shooting screen and judged at the link on a fresh frame read as the shooting
+    screen (decision 21), none waited on to settle; a screen not read as it before a press stops the push, nothing
+    pressed there."""
+    from prove_run import Failed
+    cam = EdgeCam(SimpleNamespace(dir=tmp_path))
+    cam.area = "Custom 1"
+    assert F.push(cam, [["ms_left", 40], ["ms_up", 2]]) == [["ms_left", 40], ["ms_up", 2]]
+    assert cam.pos["Custom 1"] == (26, 145) and cam.pushed == ["ms_left"] * 40 + ["ms_up"] * 2
+    cam.now = {"kind": "notice", "text": "Made-up notice"}
+    with pytest.raises(Failed, match="not on the shooting screen before Right"):
+        F.push(cam, [["ms_right", 3]])
+    assert len(cam.pushed) == 42
+
+
+def edges_doc(circ=True) -> dict:
+    doc = made_up_doc()
+    doc["settings"] += [v for k, v in edge_index().items() if k not in index() and (circ or k != CIRC_KEY)]
+    return doc
+
+
+def test_list_with_edges_plans_every_movable_area_but_the_zones_and_sets_the_frame_to_stop_at_its_edges(
+        capsys, monkeypatch):
+    """--list --edges: every movable area but Zone and Tracking: Zone (their places are the nine --zone-grid proved),
+    Circ. of Focus Point set to Does Not Circulate and AF Frame Move Amt to Standard through the menu first, both
+    checked in the download after the setup, the registrations an area and how long the sweep should take; its own run
+    folder. No camera."""
+    import pass3_run
+
+    def no_map(path):
+        raise SystemExit("no pass 1 map")
+    monkeypatch.setattr(F, "read_json", lambda path: edges_doc())
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(pass3_run, "labels_of", no_map)
+    called = []
+    monkeypatch.setattr(F, "prove", lambda *a, **k: called.append((a, k)) or 0)
+    assert F.main(["--list", "--edges"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("18 areas' edges ('Switch V/H AF Area Off, camera level, AF Frame Move Amt Standard'; run "
+                          "kit2_framepos_edges):")
+    assert "  Zone " not in out and "Tracking: Zone" not in out and "  Custom 1 (code 109)" in out
+    assert ("; Switch V/H AF Area = Off; Circ. of Focus Point = Does Not Circulate; AF Frame Move Amt = Standard; the "
+            "start file") in out
+    assert f"must hold Does Not Circulate's code 0 in {CIRC_KEY}" in out
+    assert "7 registrations an area" in out and "minutes" in out
+    F.main(["--list", "--edges", "--frame-move-amt", "Large", "--edge-presses", "30"])
+    out = capsys.readouterr().out
+    assert "AF Frame Move Amt Large" in out and "30 presses a push" in out
+    assert not called
+    assert F.main(["--edges", "--areas", "Custom 1", "--allow", "Camera Set. Memory"]) == 0
+    (args, kw), = called
+    assert args[0].edges and args[0].run == "kit2_framepos_edges" and kw["amt"] == "Standard"
+
+
+@pytest.mark.parametrize("argv,words", [
+    (["--edges", "--zone-grid"], "--edges with --zone-grid"),
+    (["--edges", "--moves", "Right 1"], "--edges with --moves"),
+    (["--edges", "--no-check-back"], "--edges with --no-check-back"),
+    (["--edges", "--areas", "Zone,Custom 1"], "the nine named places"),
+    (["--edges", "--edge-presses", "3"], "--edge-presses 3")])
+def test_edges_refuse_what_they_cannot_measure_before_anything_connects(monkeypatch, argv, words):
+    monkeypatch.setattr(F, "read_json", lambda path: edges_doc())
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("connected"))
+    with pytest.raises(SystemExit, match=re.escape(words)):
+        F.main(argv + ["--allow", "Camera Set. Memory"])
+
+
+def test_edges_need_circ_of_focus_point_in_the_definition_to_check_the_frame_stops(monkeypatch):
+    """Without Circ. of Focus Point's record (proved by its row, its values naming Does Not Circulate) nothing could
+    check that a frame stops at its edge rather than wrapping round: refused before anything connects."""
+    monkeypatch.setattr(F, "read_json", lambda path: edges_doc(circ=False))
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("connected"))
+    with pytest.raises(SystemExit, match="Circ. of Focus Point"):
+        F.main(["--edges", "--allow", "Camera Set. Memory"])
+
+
+def test_the_setup_sets_circ_of_focus_point_and_stops_when_it_did_not_take(monkeypatch, tmp_path):
+    """With --edges the setup puts Circ. of Focus Point on Does Not Circulate before AF Frame Move Amt, and the download
+    after it must hold that code, or the run stops before any area (the restore puts it back)."""
+    import mode_switch
+    import prove_run
+    import runner
+    from camkit import camset
+    assert F.setup_steps(False, False, "Standard", None, circ=True)[-2:] == [
+        ("row", "Circ. of Focus Point = Does Not Circulate"), ("row", "AF Frame Move Amt = Standard")]
+    assert F.setup_rows("Standard", None, circ=True)["Circ. of Focus Point = Does Not Circulate"] == (
+        ["Circ. of Focus Point"], "Does Not Circulate")
+    held = {"global:0x0c00": 4, CIRC_KEY: 1}
+    monkeypatch.setattr(F.time, "sleep", lambda s: None)
+    monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
+    monkeypatch.setattr(F.afreg_run, "set_setup_row", lambda cam, cycle, model, path, option: None)
+    monkeypatch.setattr(runner, "close_screen", lambda cam, link: None)
+    monkeypatch.setattr(prove_run, "to_shooting", lambda link, hdmi, why: None)
+    monkeypatch.setattr(camset, "read", lambda path: Download(held))
+    monkeypatch.setattr(camset, "diff", lambda a, b: [])
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"00002_{tag}.DAT")
+    args = (None, link, None, SimpleNamespace(dir=tmp_path), None, None, False, False, tmp_path / "00001_start.DAT",
+            "Standard", edge_index())
+    with pytest.raises(prove_run.Failed, match="Circ. of Focus Point did not take Does Not Circulate"):
+        F.prepare(*args, circ=True)
+    held[CIRC_KEY] = 0
+    assert F.prepare(*args, circ=True)[-2:] == ["Circ. of Focus Point = Does Not Circulate", "AF Frame Move Amt = Standard"]

@@ -215,6 +215,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   every screen level and says so in each line's context ("camera grip down, Vertical Display Off"), and On now finds
   the portrait shooting screen the camera's own picture shows, where a run waited five minutes at its start and gave
   up. A Focus Area dialog drawn in a way the kit does not know stops the area, saying what the frame shows.
+- `framepos_run.py --edges` measures how far each movable focus frame can travel: pushed to its edges and brought back
+  exactly, each record's edges and step per press read from slot 1's registrations, with Circ. of Focus Point set to
+  Does Not Circulate and AF Frame Move Amt to Standard first. A frame whose start no press reaches is said with the
+  difference and the run stops.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
