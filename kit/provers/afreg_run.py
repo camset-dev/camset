@@ -606,18 +606,41 @@ def prepare(cam, link, hdmi, run, cycle, model, grip, focus: bool, drive: bool, 
     return ref, steps
 
 
-def ready_to_hold(cam, done_at: float):
+def shooting_words(cam, run, grip: str | None) -> str:
+    """The words on the shooting screen: as it is, level; held vertically (grip), read on the frame turned upright
+    (orient_run.upright, saved in the run's upright folder), as the turned shooting screen draws them."""
+    from camkit import ocr
+    from camkit.live import text_of
+    if not grip:
+        return text_of(cam)
+    from orient_run import GRIPS, upright
+    return ocr.text_in(upright(cam, GRIPS[grip], run.dir / "upright"), (0, 0, 480, 640))
+
+
+def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
     """After a download the camera says "Saving to the connected device..." and locks the menu a moment (proving.nav
-    .after_download waits so before a MENU): the same wait before the hold, then the shooting screen with no message."""
+    .after_download waits so before a MENU): the same wait before the hold, then the shooting screen with no message.
+    Held vertically (grip, which kit/provers/framepos_run.py's --grip passes) the message is looked for on the frame
+    turned upright too (shooting_words), and a turned shooting screen whose upright reading holds no text cannot show it
+    gone: it is waited on, and after 25 s the run stops saying so."""
     from camkit.live import text_of
     from prove_run import LOCK_S, Failed
     time.sleep(1.0)
     while True:
         s = cam.refresh("before-hold")
         waited = time.monotonic() - done_at
-        if waited > LOCK_S and s.kind == "shooting" and not re.search(r"saving", text_of(cam), re.I):
-            return
+        unread = False
+        if waited > LOCK_S and s.kind == "shooting":
+            up = shooting_words(cam, run, grip) if grip else ""
+            unread = bool(grip) and not up.strip()
+            if not unread and not re.search(r"saving", f"{text_of(cam)} {up}", re.I):
+                return
         if waited > 25:
+            if unread:
+                raise Failed(f"held vertically (grip {grip}), the shooting screen turned upright reads no text "
+                             f"({cam.frame.path.name}): whether the download's message (\"Saving to the connected "
+                             f"device...\") has gone cannot be judged on it, so no press goes out; is the camera held "
+                             f"grip {grip}?")
             raise Failed(f"before the hold the camera stayed on a {s.kind} screen ({cam.frame.path.name})")
         time.sleep(0.4)
 
@@ -625,9 +648,8 @@ def ready_to_hold(cam, done_at: float):
 def hold_fn(cam, run, grip: str | None, allowed: bool = False) -> dict:
     """Fn held HOLD_MS on the shooting screen, allowed by name (safety.GUARDED_INPUTS; Link.press marks it so for
     camlink) and named for the shooting screen (on_shooting, decision 21), only when the run was given the owner's word
-    for it (allowed: --allow FN_HOLD); the frame after it and the camera's message, read upright with a grip."""
-    from camkit import ocr
-    from camkit.live import text_of
+    for it (allowed: --allow FN_HOLD); the frame after it and the camera's message, read upright with a grip
+    (shooting_words)."""
     from prove_run import Failed
     if not allowed:
         raise Failed(f"Fn is held on the shooting screen only with the owner's word: --allow {FN_HOLD!r}")
@@ -635,11 +657,7 @@ def hold_fn(cam, run, grip: str | None, allowed: bool = False) -> dict:
         raise Failed(f"not on the shooting screen before the hold ({cam.read().kind}, {cam.frame.path.name})")
     first = cam.frame.path.name
     cam.press("fn", allow=frozenset({"fn"}), hold_ms=HOLD_MS, on_shooting=frozenset({"fn"}))
-    if grip:
-        from orient_run import GRIPS, upright
-        said = ocr.text_in(upright(cam, GRIPS[grip], run.dir / "upright"), (0, 0, 480, 640))
-    else:
-        said = text_of(cam)
+    said = shooting_words(cam, run, grip)
     m = re.search(r"registered[^.\n]*\.?", said, re.I)
     return {"frames": [first, cam.frame.path.name], "said": m.group(0).strip() if m else "", "screen": cam.read().kind}
 
