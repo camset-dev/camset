@@ -95,7 +95,7 @@ from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import lit_text, LiveCamera, submenu_labels, text_of  # noqa: E402
+from camkit.live import lit_text, LiveCamera, reader_label, submenu_labels, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
@@ -215,7 +215,15 @@ def go_to(cam, cycle, model, j, label, place=None):
     """Step from cycle position j to the row labelled `label` (target_of), the short way round, checking every
     screen against the scan. Returns the new position, or None if a screen was not the expected one. place: (tab,
     group) the row must be in (kit/drive.py --owner: the owner decision's), its page's breadcrumb read so in the scan;
-    none there, None."""
+    none there, None. A row found by another reading (target_of's fallback) is reached only where its lit bar, as OCR
+    reads it there, is the row (safety.bar_on_row), or, where it is not, where the vision reader, asked once about that
+    very frame what the lit row's label is (camkit.live.reader_label: the "second" reader through camkit.vlm.ask_role,
+    so a --network or --owner run asks a local reader only and a run with no reader asks none), reads it as `label`
+    exactly once plain (safety.plain: nothing before it, nothing after it; the owner, 2026-11-06: the reader is right
+    where OCR garbles short text or an icon, the a1 II's S&Q Settings in S&Q mode, 2026-11-16). That question is logged
+    in the run's events.jsonl ("bar_by_reader": the frame, the row, the reader's label, withheld where said withholds,
+    whether it took the row, and why the reader gave none); any other answer, none or a failure refuses as before, what
+    the reader read said after the refusal, and on a --network or --owner run nothing read off the screen is printed."""
     target, fallback, why = target_of(cycle, model, label, place)
     if target is None:
         print(why, flush=True)
@@ -226,14 +234,24 @@ def go_to(cam, cycle, model, j, label, place=None):
     if fallback:
         # a row found by another reading: its lit bar, read now, must be the row (safety.bar_on_row: its label, or the
         # reading with its page's icon glued on where another reader read the row exactly, or that icon as the live bar
-        # shows it, a letter misread, glued on or set apart, forming no other label the kit knows), else nothing more
+        # shows it, a letter misread, glued on or set apart, forming no other label the kit knows), else the reader's
+        # reading of that frame's lit row, the row exactly, else nothing more
         row = model[cycle[j]["page"]]["rows"][cycle[j]["row"]]
         entry = {"group": page_group(model[cycle[j]["page"]]), "readings": [row.get("label") or "", *row_readings(row)]}
-        lit = lit_text(cam.frame.image, cam.frame.path)
+        frame = cam.frame
+        lit = lit_text(frame.image, frame.path)
         if not safety.bar_on_row(lit, label, {label: [entry]}, label_readings(model)):
-            print(f"the row the page model reads as {label!r} is lit, but its bar does not read it: "
-                  f"{said(cam, lit)}", flush=True)
-            return None
+            answer, why_not = reader_label(frame.path)
+            taken = bool(safety.plain(label)) and safety.plain(answer) == safety.plain(label)
+            if getattr(cam, "run", None) is not None:
+                withheld = said(cam, answer) == TEXT_WITHHELD and answer
+                cam.run.log("bar_by_reader", frame=Path(frame.path).name, row=label,
+                            label=WITHHELD_LABEL if withheld else answer, taken=taken, reader=why_not)
+            if not taken:
+                print(f"the row the page model reads as {label!r} is lit, but its bar does not read it: "
+                      f"{said(cam, lit)}{f'; the reader read it as {said(cam, answer)}' if answer else ''}", flush=True)
+                return None
+            print(f"the lit bar read by the reader as {said(cam, answer)}", flush=True)
     return j
 
 

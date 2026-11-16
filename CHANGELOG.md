@@ -205,6 +205,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   `--grip level` does the same for the camera standing level ("level writes:"). Held vertically it judges no press's
   direction, stops at the first area that fails, and refuses `--zone-grid`; with any grip a start file whose camera
   position record contradicts the grip stops the run before any press.
+- Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
+  S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
+  row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
+  prints nothing it read.
 
 ### The docs
 

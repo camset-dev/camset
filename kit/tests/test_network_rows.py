@@ -2916,6 +2916,172 @@ def test_go_to_finds_a_row_by_any_of_its_readings_or_its_icon_glued_on(monkeypat
     assert crawl_run.row_named(both, "Wired LAN Connect", "") and not crawl_run.row_named(ocr_only, "Wired LAN Connect", "")
 
 
+# ------------------------------------- a row found by a reading whose bar OCR garbles: the reader asked once (2026-11-16)
+
+SQ = "S&Q Settings"
+# the a1 II's S&Q Settings row in the S&Q mode scan (kit2_page_scan_sq_osd4, page 4/59): no label, the readers apart
+SQ_ROW = {"label": None, "readings": {"label": {"ocr": "Sad S&Q Settings", "ocr2": "S&Q S&Q Settings", "vllm": SQ}}}
+SQ_BAR = "Fi S&a S&Q Settings"          # its lit bar as OCR read it live (kit2_a1chk_sq_keep 00089_down.png)
+SQ_REFUSED = f"the row the page model reads as {SQ!r} is lit, but its bar does not read it: {SQ_BAR!r}"
+
+
+class LitRowReader:
+    """The "second" reader as camkit.vlm.ask_role asks it (test_guards' Reader): answers the menu question with the row
+    `label` lit, or raises `fails`; keeps each question."""
+    def __init__(self, label=None, fails=None):
+        self.label, self.fails, self.asked = label, fails, []
+
+    def __call__(self, name, image, prompt, timeout):
+        assert name == "second"
+        self.asked.append(prompt)
+        if self.fails:
+            raise self.fails
+        return {"rows": [{"label": "Movie Settings", "highlighted": False}, {"label": self.label, "highlighted": True}]}
+
+
+def sq_columns(monkeypatch, tmp_path, row=SQ_ROW, bar=SQ_BAR):
+    """A ColumnCamera whose second page holds `row` second (the S&Q stop's by default), its lit bar reading `bar` on that
+    row, its frame a file, its run keeping its events: (camera, cycle, model, events)."""
+    cam, cycle, model = columns(monkeypatch, ["Movie", "Image Quality/Rec"], ["Movie", "Image Quality/Rec"])
+    cam.focus = "rows"
+    model["p1"]["rows"][1] = row
+    real = cam.lit
+    cam.lit = lambda: bar if (cam.focus, cam.group, cam.row) == ("rows", 1, 1) else real()
+    cam.frame = SimpleNamespace(image=None, path=tmp_path / "00089_down.png")
+    cam.frame.path.write_bytes(b"a frame")
+    events = []
+    cam.run = SimpleNamespace(log=lambda kind, **kw: events.append({"kind": kind, **kw}))
+    return cam, cycle, model, events
+
+
+@pytest.mark.parametrize("answer", [SQ, "s&q SETTINGS", "S&Q   Settings"])
+def test_go_to_takes_a_row_found_by_a_reading_where_the_reader_reads_its_bar_as_the_row(monkeypatch, tmp_path, capsys,
+                                                                                       answer):
+    """crawl_run.go_to: the S&Q stop (2026-11-16), a row found by a reading whose lit bar OCR garbles ("Fi S&a S&Q
+    Settings", bar_on_row no): the reader is asked once, the menu question on the frame the check was made on
+    (camkit.live.reader_label), and its reading of the row exactly, once plain, takes the row; said and logged."""
+    import crawl_run
+    reader = LitRowReader(answer)
+    monkeypatch.setattr(live, "ask_role", reader)
+    cam, cycle, model, events = sq_columns(monkeypatch, tmp_path)
+    assert crawl_run.go_to(cam, cycle, model, 0, SQ) == 3
+    assert reader.asked == [live.PROMPTS["menu"]]
+    out = capsys.readouterr().out
+    assert f"the lit bar read by the reader as {answer!r}" in out and "does not read it" not in out
+    assert events == [{"kind": "bar_by_reader", "frame": "00089_down.png", "row": SQ, "label": answer, "taken": True,
+                       "reader": ""}]
+
+
+@pytest.mark.parametrize("reader", [
+    LitRowReader("Movie S&Q Settings"),                 # a word before it
+    LitRowReader("S&Q Settings Off"),                   # a word after it
+    LitRowReader("Sad S&Q Settings"),                   # an icon read as a word, glued on
+    LitRowReader("Movie Settings"),                     # another row's label
+    LitRowReader(""),                                   # no label
+    LitRowReader(fails=OSError("connection refused")),  # the reader failed
+], ids=["before", "after", "glued", "another row", "empty", "raises"])
+def test_go_to_refuses_a_row_found_by_a_reading_where_the_reader_reads_its_bar_as_anything_else(monkeypatch, tmp_path,
+                                                                                               capsys, reader):
+    """Any other answer than the row exactly, none, or a failure: go_to's refusal as before, in its words, and what the
+    reader read where it read something."""
+    import crawl_run
+    monkeypatch.setattr(live, "ask_role", reader)
+    cam, cycle, model, events = sq_columns(monkeypatch, tmp_path)
+    assert crawl_run.go_to(cam, cycle, model, 0, SQ) is None
+    assert len(reader.asked) == 1
+    out = capsys.readouterr().out
+    said = f"; the reader read it as {reader.label!r}" if reader.label else ""
+    assert f"{SQ_REFUSED}{said}\n" in out and "read by the reader as" not in out
+    assert [(e["kind"], e["taken"]) for e in events] == [("bar_by_reader", False)]
+
+
+def test_go_to_asks_no_reader_where_the_bar_reads_the_row_or_the_row_is_found_by_its_label(monkeypatch, tmp_path):
+    """The reader is asked only on the failure: not where bar_on_row takes the bar, nor for a row found by its own
+    label (no check of the bar on arrival, as ever)."""
+    import crawl_run
+    reader = LitRowReader(fails=AssertionError("the reader was asked"))
+    monkeypatch.setattr(live, "ask_role", reader)
+    cam, cycle, model, events = sq_columns(monkeypatch, tmp_path, bar=f"{SQ}  On")
+    assert crawl_run.go_to(cam, cycle, model, 0, SQ) == 3
+    cam, cycle, model, events2 = sq_columns(monkeypatch, tmp_path, row={"label": SQ})
+    assert crawl_run.go_to(cam, cycle, model, 0, SQ) == 3
+    assert reader.asked == [] and events == events2 == []
+
+
+def test_go_to_on_a_network_run_asks_a_local_reader_only_and_prints_nothing_read(monkeypatch, tmp_path, capsys):
+    """A --network run (camkit.vlm.LOCAL_ONLY): the second reader is asked only where it is a local one; one that is not
+    is never built, and the row is refused; nothing read off the screen is printed or logged, the bar's text or the
+    reader's."""
+    import crawl_run
+    from camkit import vlm
+    made = []
+
+    class Fake:
+        def __init__(self, cfg, **override):
+            made.append(cfg["name"])
+
+        def ask(self, image, prompt):
+            return {"rows": [{"label": "s&q SETTINGS", "highlighted": True}]}
+    monkeypatch.setattr(vlm, "make_reader", Fake)
+    monkeypatch.setattr(vlm, "LOCAL_ONLY", True)
+    hosted = NOT_LOCAL[1]
+    for second, taken in (("hosted", False), ("local", True)):
+        made.clear()
+        monkeypatch.setattr(vlm, "config", lambda second=second: {"readers": [hosted, LOCAL], "roles": {"second": second}})
+        cam, cycle, model, events = sq_columns(monkeypatch, tmp_path)
+        cam.network = {"Bluetooth Function": DAY}
+        got = crawl_run.go_to(cam, cycle, model, 0, SQ)
+        out = capsys.readouterr().out
+        assert (got == 3) is taken and made == ([second] if taken else []), (second, made)
+        assert ("the lit bar read by the reader as (the text read withheld)" in out) is taken
+        assert ("does not read it: (the text read withheld)\n" in out) is not taken
+        nowhere((out, json.dumps(events)), "Fi S&a", "s&q SETTINGS")
+        assert events[0]["label"] == ("(withheld)" if taken else "") and events[0]["taken"] is taken
+
+
+def test_go_to_with_no_reader_configured_asks_none_and_refuses_as_before(monkeypatch, tmp_path, capsys):
+    import crawl_run
+    from camkit import vlm
+    monkeypatch.setattr(vlm, "config", lambda *a, **k: {})
+    monkeypatch.setattr(vlm, "make_reader", lambda *a, **k: pytest.fail("a reader was built"))
+    cam, cycle, model, events = sq_columns(monkeypatch, tmp_path)
+    assert crawl_run.go_to(cam, cycle, model, 0, SQ) is None
+    out = capsys.readouterr().out
+    assert f"{SQ_REFUSED}\n" in out and "reader" not in out
+    assert events[0]["taken"] is False and "lists no reader" in events[0]["reader"]
+
+
+def test_the_s_and_q_stop_is_taken_where_the_reader_reads_its_bar_as_the_row(monkeypatch, capsys):
+    """Opt-in (skipped without the a1 II's kit2_a1chk_sq_keep and kit2_page_scan_sq_osd4 in this clone, or this
+    computer's OCR): the frame mode_switch.py stopped on (2026-11-16), the S&Q scan's row go_to went to: its lit bar as
+    OCR reads it is not the row for bar_on_row, as on that day, and the reader's "S&Q Settings" takes it."""
+    import crawl_run
+    import runner
+    from camkit import ocr, paths, screen
+    from camkit.frames import load
+    run, scan = paths.a1ii_root() / "kit2_a1chk_sq_keep", paths.a1ii_root() / "kit2_page_scan_sq_osd4"
+    shot = run / "shots" / "00089_down.png"
+    if not shot.is_file() or not (scan / "model.json").is_file():
+        pytest.skip("the a1 II's kit2_a1chk_sq_keep and kit2_page_scan_sq_osd4 are not in this clone")
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    cycle, model = runner.load_scan(scan)
+    target, fallback, why = crawl_run.target_of(cycle, model, SQ)
+    assert fallback and why == "" and model[cycle[target]["page"]]["page"] == "4/59", (target, why)
+    frame = load(shot)
+    assert screen.same_position(screen.read(frame), cycle[target]["screen"])      # the frame is the scan's position
+    row = model[cycle[target]["page"]]["rows"][cycle[target]["row"]]
+    entry = {"group": crawl_run.page_group(model[cycle[target]["page"]]), "readings": ["", *runner.row_readings(row)]}
+    lit = crawl_run.lit_text(frame.image, frame.path)
+    assert not safety.bar_on_row(lit, SQ, {SQ: [entry]}, runner.label_readings(model)), lit
+    reader = LitRowReader(SQ)
+    monkeypatch.setattr(live, "ask_role", reader)
+    cam = SimpleNamespace(frame=frame, read=lambda: pytest.fail("a screen read"),
+                          press=lambda key: pytest.fail(f"{key} pressed"))
+    assert crawl_run.go_to(cam, cycle, model, target, SQ) == target and len(reader.asked) == 1
+    assert f"the lit bar read by the reader as {SQ!r}" in capsys.readouterr().out
+
+
 def test_drive_refuses_the_glued_label_as_a_path_before_anything_connects(scope_file):
     """(b): the glued reading as a --path label of a look lap (docs/decisions/0024), never seen opened on this body, is
     refused before anything connects where no blank-cards statement lets its first open go."""
