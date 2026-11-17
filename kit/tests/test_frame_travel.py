@@ -93,8 +93,9 @@ def test_an_entry_that_cannot_take_effect_is_said_and_left_out_whole(capsys, tab
 
 def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
     """The a1 II's public definition: each record of each FRAME_TRAVEL place carries the frame the table gives it
-    (writer/frames.placed), every other setting none, so the grip-up copies, whose way of holding the camera was not
-    tried, carry none; each limit within its record's range where it has one; every Focus Area option the spot's and
+    (writer/frames.placed), every other setting none: the spot's four places (current, level, grip down, grip up),
+    each Custom box's four and the box in use; each limit within its record's range where it has one; every Focus Area
+    option the spot's and
     the boxes' limits name is a value of the definition's Focus Area records; and each Custom box's default size, as
     the sample (written after Initialize) holds it, is one the rule was tried at, and gives, by the rule, limits within
     the bounds."""
@@ -107,9 +108,9 @@ def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
             want[kx] = {"axis": "x", "with": ky, "limits": lims["x"]}
             want[ky] = {"axis": "y", "with": kx, "limits": lims["y"]}
     assert {k: s["frame"] for k, s in by.items() if "frame" in s} == want
-    assert len(want) == 6 + 2 * 3 * 3 + 2
-    assert not {"set:0x01c2", "set:0x01c8", "set:0x1337", "set:0x133d", "set:0x1343", "set:0x1349", "set:0x134f",
-                "set:0x1355"} & set(want)
+    assert len(want) == 2 * 4 + 2 * 4 * 3 + 2
+    assert {"set:0x01c2", "set:0x01c8", "set:0x1337", "set:0x133d", "set:0x1343", "set:0x1349", "set:0x134f",
+            "set:0x1355"} <= set(want)
     for k, f in want.items():
         lo, hi = by[k].get("range") or (None, None)
         for lim in f["limits"]:

@@ -3282,8 +3282,9 @@ def test_a_registrations_proof_of_the_memory_copy_sits_after_in_sets():
 
 FRAMEPOS = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e", "set:0x0f30", "set:0x019c",
             "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
-# what a Custom box's step is not known to be: the same at every size (one box, at one size, measured it)
-BOX_STEP_SIZE = "A Custom area's step may depend on that area's size: it was measured at one size, on the body mapped."
+# what a Custom box's step is not known to be: the same at every size (each box measured at its default size only)
+BOX_STEP_SIZE = ("A Custom area's step may depend on that area's size: under Standard the three boxes moved alike, "
+                 "each at its default size, the only size tried.")
 
 
 def step_facts(steps: dict) -> dict:
@@ -3319,8 +3320,11 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     notes, AF Frame Move Amt's, the model page's row and the changelog's entry, and nowhere else a number does: no
     position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where a frame stood. Every
     hand note that gives a Custom box's step, and the model page's row, says in one sentence (BOX_STEP_SIZE) that it
-    may depend on the box's size and was measured at one. AF Frame Move Amt's hand entry is a note only, its proof the report's; the Custom
-    boxes' place records are 26 new memory set records laid out like the spot's."""
+    may depend on the box's size and was measured at each box's default size only. The table holds Standard's step for
+    every movable area, and the notes' claims stand on its rows: Spot S, L and XL and Expand Spot step as Spot M, Spot
+    XS less across, the three boxes alike, each Tracking area as its plain area. AF Frame Move Amt's hand entry is a note
+    only, its proof the report's; the Custom boxes' place records are 26 new memory set records laid out like the
+    spot's."""
     import schema_update as S
     T = hand_tables.load(A1, evidence=False)
     facts, notes = step_facts(T.FRAME_STEPS), frame_notes(T)
@@ -3329,6 +3333,11 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     assert T.FRAME_STEPS[("Large", "Custom 1")] == tuple(2 * v for v in T.FRAME_STEPS[("Standard", "Custom 1")])
     for phrase in facts.values():
         assert set(re.findall(r"\d+", phrase.replace("Custom 1", ""))) <= steps, phrase
+    std = {area: xy for (option, area), xy in T.FRAME_STEPS.items() if option == "Standard"}
+    assert all(std[a] == std["Spot M"] for a in ("Spot S", "Spot L", "Spot XL", "Expand Spot"))
+    assert std["Spot XS"][0] < std["Spot M"][0] and std["Custom 2"] == std["Custom 3"] == std["Custom 1"]
+    plain = [a for a in std if not a.startswith("Tracking: ")]
+    assert len(plain) == 9 and len(std) == 18 and all(std[f"Tracking: {a}"] == std[a] for a in plain)
     boxes = [k for k in S.NEW_RECORDS if k.startswith("set:0x13") and "box position" in S.NEW_RECORDS[k]["name"]]
     assert len(boxes) == 26 and all(S.NEW_RECORDS[k]["like"] == "set:0x019c" for k in boxes)
     amt_note = PUB_BY["global:0x03a3"]["note"]
@@ -3346,7 +3355,7 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     for k in FRAMEPOS[6:] + boxes:                     # and as the hand tables say them
         want = "box" if k in boxes else "point"
         assert facts[want] in T.FRAME_PROOFS[k]["note"], k
-    # a Custom box's step was measured at one size of one box: each note that gives it says so, in the same words
+    # each Custom box's step was measured at its default size only: each note that gives it says so, in the same words
     for k in boxes + ["global:0x03a3"]:
         assert BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"], k
     assert not [k for k in FRAMEPOS if BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"]]

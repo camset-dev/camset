@@ -117,7 +117,7 @@
   },
   "FRAME_STEPS": {
    "type": "array",
-   "description": "How far one press moved a focus frame under each AF Frame Move Amt option, [option, area, x, y]; the notes that give the steps say the same numbers (a test keeps them in step). No pass of the writer reads it: the plain pass, every other camera's, refuses a file that fills it.",
+   "description": "How far one press moved a focus frame under each AF Frame Move Amt option, [option, area, x, y]; the notes that give the steps say the same numbers, and the areas they say move alike have the same rows (a test keeps them in step). No pass of the writer reads it: the plain pass, every other camera's, refuses a file that fills it.",
    "items": {
     "type": "array",
     "minItems": 4,

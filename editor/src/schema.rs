@@ -1958,8 +1958,8 @@ mod tests {
     /// The a1 II's definition carries how far each focus frame travels, as the kit writes it: the spot's places with
     /// their limits by area (Spot M's X from 80 to 560), each Custom box's places with the bounds the box stays inside,
     /// its size setting and the sizes the rule was tried at, the in-use box with every Custom area; each coordinate
-    /// names its other one. The grip-up copies, whose way of holding was not tried, carry none, nor does any other
-    /// setting but the frames' places. Without the field, a setting holds no frame.
+    /// names its other one. Every place carries it, the grip-up copies among them (the spot's four places, each box's
+    /// four and the box in use), and no other setting does. Without the field, a setting holds no frame.
     #[test]
     fn the_a1_ii_definition_says_how_far_each_focus_frame_travels() {
         let s = embedded();
@@ -1977,8 +1977,11 @@ mod tests {
             inside: Some((46, 594)), size: Some("set:0x14b6".into()), sizes_tried: vec![168, 402] }]);
         let in_use = by("set:0x1329").frame.as_ref().expect("the box in use's Y");
         assert_eq!((in_use.axis.as_str(), in_use.limits[0].size.as_deref(), in_use.limits[0].areas.len()), ("y", Some("set:0x1488"), 6));
-        assert!(["set:0x01c2", "set:0x01c8", "set:0x1337", "set:0x133d"].iter().all(|k| by(k).frame.is_none()));
-        assert_eq!(s.settings.iter().filter(|x| x.frame.is_some()).count(), 26);
+        let up = by("set:0x01c2").frame.as_ref().expect("the spot's grip-up X");
+        assert_eq!((up.with.as_str(), up.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap().range), ("set:0x01c8", Some((80, 560))));
+        let up_box = by("set:0x133d").frame.as_ref().expect("Custom 1's grip-up Y");
+        assert_eq!((up_box.with.as_str(), up_box.limits[0].inside, up_box.limits[0].size.as_deref()), ("set:0x1337", Some((42, 438)), Some("set:0x14b4")));
+        assert_eq!(s.settings.iter().filter(|x| x.frame.is_some()).count(), 34);
         assert!(made(serde_json::json!({})).frame.is_none());
     }
 
