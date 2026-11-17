@@ -304,6 +304,19 @@ def row_record(index: dict, path: list) -> dict | None:
     return hits[0] if len(hits) == 1 else None
 
 
+# a shooting mode as a definition's "modes" names it ("still image, movie, S&Q")
+MODE_WORDS = {"Stills": "still image", "Movie": "movie", "S&Q": "S&Q"}
+
+
+def row_in_mode(index: dict, path: list, mode: str) -> bool | None:
+    """Whether the menu row `path` is offered in shooting mode `mode`, as the definition's record it writes says
+    (row_record's "modes": "still image, movie, S&Q"); None where the definition names no such record or its modes say
+    nothing."""
+    s = row_record(index, path)
+    said = [m.strip() for m in str((s or {}).get("modes") or "").split(",") if m.strip()]
+    return None if not said else MODE_WORDS.get(mode, mode) in said
+
+
 # how the screens are read held vertically with Vertical Display On, either eyes: after "are read" or "reads <screens>"
 PORTRAIT_WORDS = ("in their portrait arrangement, made upright as 480 x 640 (orient_run.upright): turned a quarter "
                   "over HDMI, which shows it turned, resized through the SDK's picture, which squeezes it unturned into "

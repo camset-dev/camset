@@ -2,6 +2,7 @@
 put it back, how a diff of two registrations is judged and summed up (deltas only, never a value a record held), the
 slot screen's lit tab measured, the slot registration's guards on a made-up camera, and the slot records the restore
 check leaves out. Every definition, record and value here is made up; nothing talks to a camera."""
+import json
 import re
 import sys
 from pathlib import Path
@@ -734,7 +735,7 @@ def test_a_zone_in_a_session_under_moves_carries_the_context_of_a_run_without_th
     tag, zone_tag = {"context": moved, "allowance": "a"}, {"context": plain, "allowance": "a"}
     todo = F.plan(made_up_doc(), "Zone, Custom 1, Tracking: Zone", [["ms_right", 1]])
     monkeypatch.setattr(camset, "read", lambda path: None)
-    monkeypatch.setattr(F, "slot_filled", lambda cs: True)
+    monkeypatch.setattr(F, "slot_filled", lambda cs, n=1: True)
     monkeypatch.setattr(F, "prepare", lambda *a, **k: ["setup"])
 
     def one_area(cam, link, hdmi, run, cycle, model, labels, axes, t, r, a, index, owed):
@@ -815,8 +816,9 @@ def test_a_place_line_names_the_records_that_changed_to_its_code_in_three_groups
     assert (line["n"], line["place"], line["name"], line["expected"], line["confirmed"]) == \
         (3, 8, "Upper right", "Upper right", True)
     assert line["records"] == ["set1:0x0b00", "set1:0x0b02", "set1:0x0b04", "set1:0x0b10", "set1:0x0b12", "set1:0x0c00"]
-    assert line["groups"] == {"horizontal": ["set1:0x0b00", "set1:0x0b02", "set1:0x0b04", "set1:0x0c00"],
-                              "vertical, grip down": ["set1:0x0b10"], "vertical, grip up": ["set1:0x0b12"]}
+    assert line["groups"] == {"every orientation": ["set1:0x0b00", "set1:0x0b02"], "horizontal": ["set1:0x0b04"],
+                              "vertical, grip down": ["set1:0x0b10"], "vertical, grip up": ["set1:0x0b12"],
+                              "not in the definition": ["set1:0x0c00"]}
     off = F.sweep_line(2, (1, -1), 7, changes, "x.DAT", zone_index())
     assert off["confirmed"] is False and off["name"] == "Upper left" and off["expected"] == "Upper right"
     assert F.sweep_line(0, (-1, -1), None, [], "x.DAT", zone_index())["confirmed"] is False
@@ -1214,7 +1216,7 @@ def turned(monkeypatch, quick, tmp_path):
     monkeypatch.setattr(camset, "read", lambda path: files[Path(path).name])
     monkeypatch.setattr(camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a.get(k), after=b.get(k))
                                                       for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)])
-    monkeypatch.setattr(F, "slot_filled", lambda cs: True)
+    monkeypatch.setattr(F, "slot_filled", lambda cs, n=1: True)
     monkeypatch.setattr(F, "prepare", lambda *a, **k: ["Switch V/H AF Area = AF Point + AF Area"])
 
     def session(cls=None, **kw):
@@ -1941,10 +1943,11 @@ class EdgeCam(Turned):
                 "Expand Spot": ((65, 61), (575, 419), {"Standard": (30, 20), "Large": (60, 38)}),
                 "Spot: XL": ((125, 106), (515, 374), {"Standard": (30, 20), "Large": (90, 74)})}
     POINT = ("set1:0x0b10", "set1:0x0b12")
+    BOX, COPY = (X, Y), AMT_COPY            # Custom 1's box and AF Frame Move Amt's copy in the slot's memory set
 
     def __init__(self, run, start=None, drop=(), turn=False, fail_regs=(), flip=False, amt="Standard", **kw):
         super().__init__(run, level=True, **kw)
-        self.slot.update({self.POINT[0]: 300, self.POINT[1]: 200, AMT_LIVE: AMT_CODES[amt], AMT_COPY: AMT_CODES[amt]})
+        self.slot.update({self.POINT[0]: 300, self.POINT[1]: 200, AMT_LIVE: AMT_CODES[amt], self.COPY: AMT_CODES[amt]})
         self.pos = dict(start or {"Custom 1": (376, 183), "Expand Spot": (320, 240)})
         self.drop, self.turn, self.fail_regs, self.flip, self.amt = set(drop), turn, set(fail_regs), flip, amt
         self.link_presses, self.regs, self.pushed, self.amt_rows = 0, 0, [], []
@@ -1986,8 +1989,8 @@ class EdgeCam(Turned):
                 self.now = {"kind": "menu", "text": "Shooting Mode MR Camera Set. Memory"}
                 return
             x, y = self.pos[self.area]
-            keys = (X, Y) if self.area.startswith("Custom") else self.POINT
-            self.slot.update({keys[0]: x, keys[1]: y, AMT_COPY: AMT_CODES[self.amt]})
+            keys = self.BOX if self.area.startswith("Custom") else self.POINT
+            self.slot.update({keys[0]: x, keys[1]: y, self.COPY: AMT_CODES[self.amt]})
             self.show("registered")
             return
         if self.now["kind"] == "shooting":
@@ -2021,14 +2024,17 @@ def edges(turned, monkeypatch):
     monkeypatch.setattr(afreg_run, "set_setup_row", row_set)
     run, session = turned
 
-    def go(s, labels: str, grip=None, n=40, amt="Standard", put_back=None, index=None):
+    def go(s, labels: str, grip=None, n=40, amt="Standard", put_back=None, index=None, mode="Stills", memory_set=1):
         todo = F.edge_plan(made_up_doc(), labels)
         idx = index or edge_index()
         a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=grip,
-                            edges=not put_back, edge_presses=n, put_back="kit2_made_up" if put_back else None)
+                            edges=not put_back, edge_presses=n, put_back="kit2_made_up" if put_back else None,
+                            mode=mode, memory_set=memory_set, memory_sets=MEMORY_SETS, expected=set())
+        go.a = a
         if put_back:
             a.put_back_lines = {put_back["area"]: (put_back, F.put_back_plan(put_back, index=idx)[0])}
-        tag = {"context": F.context_of(None, amt, None, grip), "allowance": "a", **({"grip": grip} if grip else {})}
+        tag = {"context": F.context_of(None, amt, None, grip, mode=mode), "allowance": "a",
+               **({"grip": grip} if grip else {}), **({"mode": mode} if mode != "Stills" else {})}
         routes = {t["label"]: afreg_run.route(t["label"], CAROUSEL, CAROUSEL_AXES) for t in todo}
         lines = []
         F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, idx, False, False,
@@ -2405,7 +2411,8 @@ def test_a_vertical_sweeps_proof_lines_cover_every_orientations_records_and_that
     changes = [{"key": k, "before": 0, "after": 7} for k in EVERY + ["set1:0x0f32"]] + \
         [{"key": "set1:0x0f34", "before": 0, "after": 6}]
     line = F.sweep_line(0, (-1, -1), 7, changes, "4_zone-upper-left.DAT", idx)
-    assert line["groups"] == {"horizontal": EVERY, "vertical, grip down": ["set1:0x0f32"], "vertical, grip up": []}
+    assert line["groups"] == {"every orientation": EVERY, "horizontal": [], "vertical, grip down": ["set1:0x0f32"],
+                              "vertical, grip up": []}
     assert line["other"] == {"set1:0x0f34": 6}
     held = {k.replace("set1:", "set:"): 7 for k in EVERY + ["set1:0x0f32"]} | {"set:0x0f34": 6}
     got = F.sweep_proofs(line, held, "3_zone-start.DAT", changes, idx, {"context": "c"}, "down")
@@ -2511,16 +2518,16 @@ def test_a_sweep_held_vertically_walks_the_nine_places_and_says_what_each_wrote_
     own = "vertical, grip down" if grip == "down" else "vertical, grip up"
     assert [x["name"] for x in grid] == ["Upper left", "Up", "Upper right", "Right", "Centre", "Left", "Lower left",
                                          "Down", "Lower right"]
-    assert all(x["groups"]["horizontal"] == EVERY and x["groups"][own] == OWN[grip] and x["groups"][other] == []
-               and x["other"] == {} for x in grid)
+    assert all(x["groups"]["every orientation"] == EVERY and x["groups"][own] == OWN[grip] and x["groups"][other] == []
+               and x["groups"]["horizontal"] == [] and x["other"] == {} for x in grid)
     context = f"Switch V/H AF Area = AF Point + AF Area, camera grip {grip}, Vertical Display Off"
     assert all(x["context"] == context and x["grip"] == grip and "upright" not in x for x in grid + proofs)
     applied = [p for p in proofs if p["applied"]]
     assert {p["key"] for p in applied} == set(EVERY + OWN[grip]) and len(applied) == 9 * len(EVERY + OWN[grip])
     assert all(p["kind"] == "registration mirror" and f"camera held grip {grip}" in p["via"] for p in proofs)
     said = capsys.readouterr().out
-    assert (f"  zone sweep 1/9: Upper left -> code 7 (Upper left), confirmed; records: horizontal {', '.join(EVERY)}; "
-            f"{own} {', '.join(OWN[grip])}") in said
+    assert (f"  zone sweep 1/9: Upper left -> code 7 (Upper left), confirmed; records: every orientation "
+            f"{', '.join(EVERY)}; {own} {', '.join(OWN[grip])}") in said
     assert "the registration after the put-back matched the start's" in said and "Right (" not in said.split("1/9")[0]
 
 
@@ -2738,3 +2745,332 @@ def test_put_back_of_a_start_off_the_centre_needs_the_ratio_it_was_measured_in(e
         assert "measured under Aspect Ratio 16:9, the camera is on 3:2" in put["refused"]
         assert cam.chosen == [] and cam.pushed == [] and cam.regs == 0 and cam.pos["Custom 1"] == (54, 33)
         assert "NOT PUT BACK, nothing pressed" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- Movie and S&Q (2026-11-17)
+
+SLOT_FILLED = F.slot_filled                 # the real one: the turned fixture stubs it
+MOVIE_CAROUSEL = ["Wide", "Zone", "Center Fix", "Spot: M", "Expand Spot", "Custom 1"]      # Movie's Focus Area: no Tracking
+MOVIE_LIMIT = [lab for lab in LABELS if not lab.startswith("Tracking")]                    # its Focus Area Limit grid
+TRACKING_LEFT = ["Tracking: Spot XL", "Tracking: Spot L", "Tracking: Spot M", "Tracking: Spot S", "Tracking: Spot XS",
+                 "Tracking: Expand Spot", "Tracking: Custom 1", "Tracking: Custom 2", "Tracking: Custom 3"]
+MEMORY_SETS = {"modes": {"Stills": [1, 2, 3], "Movie": [4, 5, 6], "S&Q": [7, 8, 9], "Time-lapse": [10, 11, 12]},
+               "names": {"1": "Memory 1", "4": "Movie Memory 1", "7": "S&Q Memory 1", "10": "Time-lapse Memory 1"}}
+FAMILY_KEY, VH_KEY = "global:0x0d00", "global:0x0d10"
+MOVIE_SLOT = ("set4:0x023c", "set4:0x11ab", "set4:0x11ad")
+
+
+def mode_doc() -> dict:
+    """edges_doc with the camera section's memory sets (numbered as the a1 II's), S&Q's family record, Switch V/H AF
+    Area's record proved by its row, and the setup rows' modes as a definition gives them (keys and codes made up)."""
+    doc = edges_doc()
+    doc["camera"] = {"memory_sets": MEMORY_SETS}
+    doc["settings"] += [
+        {"key": FAMILY_KEY, "name": "Made-up S&Q family", "values": [[0, "S&Q Motion"], [1, "Time-lapse"]]},
+        {"key": VH_KEY, "name": "Switch V/H AF Area", "values": [[0, "Off"], [1, "AF Point Only"], [2, "AF Point + AF Area"]],
+         "proved": {"menu": ["Switch V/H AF Area"]}, "modes": "still image"}]
+    for s in doc["settings"]:
+        if s["key"] in (CIRC_KEY, AMT_LIVE):
+            s["modes"] = "still image, movie, S&Q"
+    return doc
+
+
+def mode_index() -> dict:
+    return {s["key"]: s for s in mode_doc()["settings"]}
+
+
+def mode_rows(rows) -> dict:
+    """A crawl's map holding `rows` ([path, kind, labels]), a grid's options indexed by [row, column] as the a1 II's
+    Focus Area Limit is."""
+    return {"rows": [{"path": path, "kind": kind,
+                      "options": [{"index": [i // 6, i % 6] if kind == "checkgrid" else i, "label": lab}
+                                  for i, lab in enumerate(labels)]} for path, kind, labels in rows]}
+
+
+MOVIE_MAP = mode_rows([(["Focus Area"], "dialog", MOVIE_CAROUSEL), (["Focus Area Limit"], "checkgrid", MOVIE_LIMIT)])
+
+
+def mode_root(tmp_path, monkeypatch, mode="Movie", word="movie", focus=True) -> Path:
+    """The camera's runs as a test's, where paths.run_root finds them: a page scan made in `mode`
+    (kit2_page_scan_<word>, its rows without Switch V/H AF Area or Drive Mode, as the a1 II's Movie and S&Q scans read)
+    and that mode's crawl (kit2_crawl_<word>), whose map has Movie's Focus Area and Focus Area Limit or, without `focus`,
+    another row alone (as kit2_crawl_sq's); the definition mode_doc. Returns the scan's folder."""
+    monkeypatch.setattr(F.paths, "run_root", lambda *a, **k: tmp_path)
+    scan = tmp_path / f"kit2_page_scan_{word}"
+    scan.mkdir()
+    (scan / "scan_mode.json").write_text(json.dumps({"mode": mode}), encoding="utf-8")
+    pages = [{"key": "p1", "breadcrumb": "Focus > AF Area",
+              "rows": [{"label": x} for x in ("Focus Area", "Focus Area Limit", "Circ. of Focus Point", "AF Frame Move Amt")]},
+             {"key": "p2", "breadcrumb": "Shooting > Shooting Mode", "rows": [{"label": "MR Camera Set. Memory"}]},
+             {"key": "p3", "breadcrumb": "Focus > AF/MF", "rows": [{"label": "Focus Mode"}]}]
+    (scan / "model.json").write_text(json.dumps(pages), encoding="utf-8")
+    crawl = tmp_path / f"kit2_crawl_{word}"
+    crawl.mkdir()
+    got = MOVIE_MAP if focus else mode_rows([(["S&Q Shoot Mode"], "dialog", ["S&Q Motion", "Time-lapse"])])
+    (crawl / "map.json").write_text(json.dumps(got), encoding="utf-8")
+    monkeypatch.setattr(F, "read_json", lambda path: mode_doc())
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    return scan
+
+
+def test_the_memory_set_registered_is_the_modes_first_and_s_and_q_s_by_its_family():
+    """The set a run registers is its mode's first memory slot, as the camera section's memory_sets numbers them (the a1
+    II's Stills 1, Movie 4, S&Q 7, Time-lapse 10); its registration records and filled mark are that set's. S&Q's switch
+    position holds two families with memories of their own: which one the camera is in is the start download's record
+    whose values are S&Q Motion and Time-lapse, never guessed."""
+    doc = mode_doc()
+    assert [F.memory_set(doc, m) for m in ("Stills", "Movie", "S&Q", "Time-lapse", "Playback")] == [1, 4, 7, 10, None]
+    assert F.memory_set(made_up_doc(), "Movie") is None
+    assert F.memory_name(doc, 4) == "Movie Memory 1" and F.memory_name(doc, 5) == "memory set 5"
+    assert F.slot_records(4) == MOVIE_SLOT and F.slot_records() == F.EXPECTED_LEFT
+    held = Download({"set1:0x023c": 4, "set4:0x023c": 2, "set10:0x023c": 4})
+    assert SLOT_FILLED(held) and not SLOT_FILLED(held, 4) and SLOT_FILLED(held, 10) and not SLOT_FILLED(held, 7)
+    idx = mode_index()
+    assert F.sq_family(idx, Download({FAMILY_KEY: 0})) == "S&Q"
+    assert F.sq_family(idx, Download({FAMILY_KEY: 1})) == "Time-lapse"
+    assert F.sq_family(idx, Download({})) is None and F.sq_family(index(), Download({FAMILY_KEY: 1})) is None
+    a = SimpleNamespace(mode="S&Q", memory_set=None, memory_sets=MEMORY_SETS)
+    assert F.run_set(a, idx, Download({FAMILY_KEY: 1})) == 10 and F.run_set(a, idx, Download({FAMILY_KEY: 0})) == 7
+    assert F.run_set(SimpleNamespace(mode="Movie", memory_set=4), idx, Download({})) == 4
+    assert F.run_set(SimpleNamespace(), idx, Download({})) == 1
+    from prove_run import Failed
+    with pytest.raises(Failed, match="which S&Q family"):
+        F.run_set(a, idx, Download({}))
+
+
+def test_a_movie_run_stops_before_any_press_where_movie_memory_1_is_empty(turned, monkeypatch):
+    """Movie Memory 1 (memory set 4) empty in the start file, slot 1 of Stills filled: the run stops before the setup,
+    nothing pressed, its filled mark never set for good."""
+    from prove_run import Failed
+    run, session = turned
+    monkeypatch.setattr(F, "slot_filled", SLOT_FILLED)
+    cam, s = session(extra={"set4:0x023c": 2})
+    a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=None,
+                        mode="Movie", memory_set=4, memory_sets=MEMORY_SETS, expected=set())
+    with pytest.raises(Failed, match=r"Movie Memory 1 \(memory set 4\) is empty in the start file"):
+        F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, [], {}, mode_index(), False, False,
+                run.dir / "framepos.jsonl", {}, [], None, None)
+    assert cam.pressed == []
+
+
+def test_an_s_and_q_run_takes_its_set_from_the_start_download_and_the_restore_check_its_records(turned, monkeypatch):
+    """In S&Q the set is known only once the start download says the family: Time-lapse there, Time-lapse Memory 1
+    (memory set 10) is the slot checked filled, its records are the ones the restore check leaves out, and the lines
+    carry the set."""
+    run, session = turned
+    monkeypatch.setattr(F, "slot_filled", SLOT_FILLED)
+    cam, s = session(extra={FAMILY_KEY: 1, "set10:0x023c": 4})
+    a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=None,
+                        mode="S&Q", memory_set=None, memory_sets=MEMORY_SETS, expected=set(), edges=True,
+                        edge_presses=40)
+    tag = {"context": F.context_of(None, "Standard", mode="S&Q"), "mode": "S&Q"}
+    F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, [], {}, mode_index(), False, False,
+            run.dir / "framepos.jsonl", tag, [], "Standard", dict(tag))
+    assert a.memory_set == 10 and a.expected == set(F.slot_records(10)) and tag["memory_set"] == 10
+
+
+class MovieEdgeCam(EdgeCam):
+    """EdgeCam in Movie mode: a registration goes to Movie Memory 1, memory set 4 (Custom 1's box, the point records and
+    AF Frame Move Amt's copy there); set 1 is never written."""
+    POINT = ("set4:0x0b10", "set4:0x0b12")
+    BOX, COPY = ("set4:0x0c20", "set4:0x0c24"), "set4:0x0c00"
+
+    def __init__(self, run, **kw):
+        super().__init__(run, **kw)
+        self.slot.update({"set4:0x023c": 4, "set4:0x0c20": 320, "set4:0x0c24": 240})
+
+
+@pytest.mark.parametrize("amt", ["Standard", "Large"])
+def test_edges_in_movie_measure_movie_memory_1s_records_and_check_the_way_back_on_them(edges, capsys, amt):
+    """--edges in Movie mode: every registration goes to Movie Memory 1 (memory set 4), so the edges are measured on set
+    4's records, the summary names them by the definition's keys and names (set:0x0c20), and the way back is checked on
+    them, AF Frame Move Amt's own copy in set 4 left out (under Large it is Large at the start and Standard on the way
+    back): the frame ends where it began. Set 4's registration records are the restore check's; the lines carry the
+    mode and the set, their context the mode."""
+    run, session, go = edges
+    cam, s = session(cls=MovieEdgeCam, amt=amt)
+    (line,) = go(s, "Custom 1", amt=amt, mode="Movie", memory_set=4)
+    assert line["back"]["same"] and not line.get("failed") and cam.pos["Custom 1"] == (376, 183)
+    assert {r["key"] for r in line["edges"]} == {"set4:0x0c20", "set4:0x0c24"} and line["values"]["base"] == \
+        {"set4:0x0c20": 376, "set4:0x0c24": 183}
+    assert (line["mode"], line["memory_set"]) == ("Movie", 4)
+    assert line["context"] == f"Movie mode, camera level, AF Frame Move Amt {amt}"
+    assert go.a.expected == set(MOVIE_SLOT)
+    said = capsys.readouterr().out
+    assert "    Left/Right  set:0x0c20  Custom 1 box position: X (horizontal): 26 to 614" in said
+    assert "set4:" not in said and "set1:" not in said
+
+
+def test_prove_leaves_the_registered_sets_records_out_of_the_restore_check(monkeypatch, tmp_path):
+    """prove hands prover_session the registration records of the set the run registers: Movie Memory 1's in Movie,
+    slot 1's in Stills as before; it plans from the mode's map (its own read of it)."""
+    import contextlib
+
+    import camkit.frames
+    import camkit.runs
+    import pass3_run
+    import runner
+    seen, maps = [], []
+
+    @contextlib.contextmanager
+    def session(run, hdmi, **kw):
+        seen.append(kw["expected"])
+        yield SimpleNamespace()
+    monkeypatch.setattr(runner, "prover_session", session)
+    monkeypatch.setattr(runner, "load_scan", lambda scan: (None, None))
+    monkeypatch.setattr(camkit.runs, "Run", lambda name: SimpleNamespace(dir=tmp_path))
+    monkeypatch.setattr(camkit.frames, "eyes_from_config", lambda run: None)
+    monkeypatch.setattr(pass3_run, "labels_of", lambda path, mp=None: maps.append(mp) or (MOVIE_CAROUSEL, "dialog"))
+    monkeypatch.setattr(F, "read_json", lambda path: {"Focus Area": CAROUSEL_AXES})
+    monkeypatch.setattr(F, "areas", lambda *x, **k: None)
+    todo = F.edge_plan(mode_doc(), "Custom 1")
+    for mode, n, mp, want in (("Movie", 4, "/made/up/kit2_crawl_movie/map.json", set(MOVIE_SLOT)),
+                              ("Stills", 1, None, set(F.EXPECTED_LEFT))):
+        a = SimpleNamespace(scan="kit2_made_up", run="kit2_made_up", grip=None, zone_grid=False, context=None,
+                            allow=["Camera Set. Memory"], edges=True, put_back=None, mode=mode, memory_set=n, map=mp)
+        F.prove(a, mode_doc(), todo, False, False, "made-up context", "allowance", amt="Standard")
+        assert set(seen[-1]) == want and maps[-1] == mp
+
+
+def test_list_in_movie_plans_from_movies_map_and_registers_movie_memory_1(capsys, monkeypatch, tmp_path):
+    """--list --edges --scan <a Movie page scan>: the run works in Movie mode, the scan's own. Its plan is the areas
+    Movie's map offers (kit2_crawl_movie's Focus Area Limit: no Tracking area), the others said and left out; the setup
+    leaves out Switch V/H AF Area, which Movie does not offer (the definition's modes: still image; the scan has no such
+    row), and says so; the context names the mode (a --context saying only that is not said twice); the slot registered
+    is Movie Memory 1, memory set 4, whose registration records the restore check leaves out. A run hands prove the
+    mode, the set, the setup and the map."""
+    scan = mode_root(tmp_path, monkeypatch)
+    called = []
+    monkeypatch.setattr(F, "prove", lambda *a, **k: called.append((a, k)) or 0)
+    assert F.main(["--list", "--edges", "--scan", scan.name, "--context", "Movie mode"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("9 areas' edges ('Movie mode, camera level, AF Frame Move Amt Standard'; run "
+                          "kit2_framepos_edges):")
+    assert f"  left out: {', '.join(TRACKING_LEFT)}: Movie mode does not offer them" in out
+    assert "  Custom 1 (code 109): carousel 'Custom 1'" in out and "  Tracking: Custom 1 (code" not in out
+    assert ("set through the menu first: Circ. of Focus Point = Does Not Circulate; AF Frame Move Amt = Standard; the "
+            "start file") in out
+    assert "Switch V/H AF Area left as the camera has it: Movie mode does not offer it" in out
+    assert "Movie Memory 1 (memory set 4)" in out and ", ".join(MOVIE_SLOT) in out and "set1:" not in out
+    assert F.main(["--edges", "--areas", "Custom 1", "--scan", scan.name, "--allow", "Camera Set. Memory"]) == 0
+    (args, kw), = called
+    a = args[0]
+    assert (a.mode, a.memory_set, a.vh, a.scan.mode) == ("Movie", 4, False, "Movie")
+    assert Path(a.map) == tmp_path / "kit2_crawl_movie" / "map.json"
+    assert args[5] == "Movie mode, camera level, AF Frame Move Amt Standard" and kw["amt"] == "Standard"
+
+
+@pytest.mark.parametrize("argv,words", [
+    (["--grip", "down"], "--grip in Movie mode"),
+    (["--zone-grid"], "--zone-grid in Movie mode"),
+    (["--drive-mode", "menu"], "Drive Mode"),
+    (["--edges", "--areas", "Tracking: Spot M"], "Movie mode offers none of them")])
+def test_a_movie_run_refuses_what_movie_does_not_offer(monkeypatch, tmp_path, argv, words):
+    scan = mode_root(tmp_path, monkeypatch)
+    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("no camera in a test"))
+    with pytest.raises(SystemExit, match=re.escape(words)):
+        F.main(["--list", "--scan", scan.name, *argv])
+
+
+def test_s_and_q_with_no_focus_area_in_its_map_stops_until_a_map_is_named(capsys, monkeypatch, tmp_path):
+    """S&Q's crawl maps no Focus Area (as kit2_crawl_sq): the run stops before anything connects, saying how to map it
+    and that --map names a map; with --map the plan is that map's, the context S&Q's and the slot S&Q Memory 1 or
+    Time-lapse Memory 1, as the start download's family says."""
+    scan = mode_root(tmp_path, monkeypatch, mode="S&Q", word="sq", focus=False)
+    with pytest.raises(SystemExit, match=r"map it in S&Q mode first[\s\S]*--map"):
+        F.main(["--list", "--edges", "--scan", scan.name])
+    (tmp_path / "kit2_sq_focus").mkdir()
+    (tmp_path / "kit2_sq_focus" / "map.json").write_text(json.dumps(MOVIE_MAP), encoding="utf-8")
+    assert F.main(["--list", "--edges", "--scan", scan.name, "--map", "kit2_sq_focus/map.json"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("9 areas' edges ('S&Q mode, camera level, AF Frame Move Amt Standard'")
+    assert ("S&Q Memory 1 (memory set 7; Time-lapse Memory 1, memory set 10, where the start download has S&Q Shoot "
+            "Mode on Time-lapse)") in out
+
+
+def test_a_stills_run_stops_on_a_camera_kept_in_movie_and_a_movie_run_goes_on(monkeypatch, tmp_path):
+    """mode_switch.py --keep left the camera in Movie: a Stills run (the latest scan, a Stills scan named, or one that
+    records no mode) stops when its scan is taken, nothing sent; a run on a Movie page scan works in Movie and goes
+    on."""
+    import runner
+    scan = mode_root(tmp_path, monkeypatch)
+    still = tmp_path / "kit2_page_scan_still"
+    still.mkdir()
+    (still / "scan_mode.json").write_text(json.dumps({"mode": "Stills"}), encoding="utf-8")
+    (tmp_path / "kit2_switch").mkdir()
+    (tmp_path / "kit2_switch" / runner.SWITCH_KEPT).write_text(json.dumps({"to": "Movie", "scan_mode": "Movie"}),
+                                                                encoding="utf-8")
+    for given in (runner.LATEST_SCAN, str(still), str(tmp_path / "kit2_page_scan_none")):
+        with pytest.raises(SystemExit, match="this run works in Stills mode"):
+            runner.scan_dir(F.scan_for(given))
+    got = F.scan_for(str(scan))
+    assert got.mode == "Movie" and runner.scan_dir(got) == scan
+    assert F.scan_for(runner.LATEST_SCAN).mode == "Stills"
+
+
+def test_a_modes_map_is_its_plainest_crawl_that_maps_focus_area(tmp_path):
+    """Another mode's map is a crawl of it (kit2_crawl* whose name names the mode, as proof_viewer reads them), the
+    plainest name first among those whose map has Focus Area; Stills plans from pass 1's map (None here)."""
+    for name, got in (("kit2_crawl_movie_extra", MOVIE_MAP), ("kit2_crawl_movie", MOVIE_MAP),
+                      ("kit2_crawl_sq", mode_rows([(["S&Q Shoot Mode"], "dialog", ["S&Q Motion"])])),
+                      ("kit2_crawl", MOVIE_MAP)):
+        (tmp_path / name).mkdir()
+        (tmp_path / name / "map.json").write_text(json.dumps(got), encoding="utf-8")
+    (tmp_path / "kit2_crawl_movie_osd").mkdir()
+    assert Path(F.mode_map("Movie", tmp_path)) == tmp_path / "kit2_crawl_movie" / "map.json"
+    assert F.mode_map("S&Q", tmp_path) is None and F.mode_map("Stills", tmp_path) is None
+    assert F.map_labels(tmp_path / "kit2_crawl_movie" / "map.json", ["Focus Area Limit"]) == MOVIE_LIMIT
+
+
+def test_a_mode_leaves_out_the_setup_rows_it_does_not_offer():
+    """absent_rows: a setup row the definition's record for it gives other modes, or the mode's page scan does not hold,
+    each with why; Stills checks none (its setup as before). setup_steps without Switch V/H AF Area (vh False)."""
+    rows = [({"label": x}, "") for x in ("Focus Area", "Circ. of Focus Point", "AF Frame Move Amt", "Focus Mode")]
+    got = F.absent_rows("Movie", mode_index(), rows, ["Switch V/H AF Area", "Circ. of Focus Point", "AF Frame Move Amt",
+                                                      "Drive Mode"])
+    assert set(got) == {"Switch V/H AF Area", "Drive Mode"}
+    assert "still image" in got["Switch V/H AF Area"] and "page scan" in got["Drive Mode"]
+    assert F.absent_rows("Stills", mode_index(), [], ["Switch V/H AF Area"]) == {}
+    assert F.setup_steps(False, False, "Standard", None, True, vh=False) == [
+        ("row", "Circ. of Focus Point = Does Not Circulate"), ("row", "AF Frame Move Amt = Standard")]
+    assert F.context_of("movie mode", "Standard", mode="Movie") == "Movie mode, camera level, AF Frame Move Amt Standard"
+    assert F.context_of("x", mode="S&Q") == "S&Q mode, camera level, x"
+
+
+def test_put_back_runs_in_the_mode_its_edges_run_was_made_in(capsys, monkeypatch, tmp_path):
+    """--put-back of a Movie edges run's frame: refused on a Stills scan (its records are Movie Memory 1's, its frames
+    Movie's), planned on a Movie page scan in Movie's context."""
+    scan = mode_root(tmp_path, monkeypatch)
+    line = dict(spot_xl_line(keys=("set4:0x019c", "set4:0x019e")), grip=None, mode="Movie", memory_set=4,
+                context="Movie mode, camera level, AF Frame Move Amt Large")
+    (tmp_path / "kit2_made_up").mkdir()
+    F.jsonl.append(tmp_path / "kit2_made_up" / "edges.jsonl", line)
+    with pytest.raises(SystemExit, match="made in Movie mode"):
+        F.main(["--list", "--put-back", "kit2_made_up"])
+    assert F.main(["--list", "--put-back", "kit2_made_up", "--scan", scan.name]) == 0
+    assert "('Movie mode, camera level, AF Frame Move Amt Standard'; run kit2_framepos_put_back)" in \
+        capsys.readouterr().out
+
+
+MEMMIRROR = paths.a1ii_root() / "kit2_memmirror" / "shots"
+
+
+@pytest.mark.parametrize("frame,slot", [("00245_right.png", "1"), ("00255_right.png", "2"), ("00320_right.png", "1"),
+                                        ("00330_right.png", "2")])
+def test_the_slot_screens_lit_tab_measures_alike_in_movie_and_s_and_q(frame, slot):
+    """kit2_memmirror (2026-11-02) opened Camera Set. Memory in Movie mode (00245 slot 1 lit, 00255 slot 2) and in S&Q
+    (00320, 00330): its tabs stand where Stills' do, and the lit one measures as on Stills' screen."""
+    from camkit.frames import load
+    p = MEMMIRROR / frame
+    if not p.exists():
+        pytest.skip(f"{p} not present")
+    assert F.lit_slot(load(p).image) == slot
+
+
+@pytest.mark.parametrize("said", [
+    "MR Memory 1 2 3 M1 M2 MЗ M4 M 1/500 F8.0 ISO 500 XAVC S 4K 60p :200: 4:2:2 10bit A-B: 0 G-M: 0 MENU • OK",
+    "MR Memory 1 2 3 M1 M2 MЗ M4 S&Q M 1/500 F8.0 ISO 500 XAVC S 4K 30p :140: 4:2:2 10bit 120fps MENU •OK"])
+def test_the_slot_screens_words_in_movie_and_s_and_q_read_as_the_slot_screen(said):
+    """The words kit2_memmirror's drive.jsonl read off the Movie and S&Q slot screens (00245, 00320): "MR Memory", the
+    tabs, that mode's settings below (M3 read with a Cyrillic letter, as there)."""
+    assert F.SLOT_SCREEN.search(said)

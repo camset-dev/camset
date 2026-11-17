@@ -195,6 +195,16 @@ that changed, X or Y by name, Right and Down raising them level, Standard's step
 stretched over the recorded picture, so a start off the centre (320, 240) is put back only where the camera's start
 download reads the Aspect Ratio its own start download did (ratio_refusal), else refused, nothing pressed.
 
+Movie and S&Q (2026-11-17): a run works in the mode its --scan was made in (scan_for; Stills for the default, the
+latest Stills scan), so a Stills run stops on a camera kit/provers/mode_switch.py --keep left in Movie, and a run on a
+Movie page scan goes on there. Such a run plans Focus Area from that mode's crawl (mode_map: kit2_crawl_movie; --map
+names another), leaving out and saying the areas the mode does not offer (Movie and S&Q: no Tracking area); it registers
+slot 1 of that mode's memory, the camera section's memory_sets (the a1 II's Movie Memory 1, memory set 4; in S&Q, S&Q
+Memory 1 or Time-lapse Memory 1, set 7 or 10, as the start download's S&Q Shoot Mode says), which must be filled in the
+start file, its records the restore check leaves out; the setup leaves out, and says, a row the mode does not offer
+(Switch V/H AF Area), and stops where it needs one (Drive Mode). The context begins "Movie mode, camera level", and the
+lines carry "mode" and "memory_set". --grip and --zone-grid stay Stills' (both rest on Switch V/H AF Area).
+
 Registering: MENU, Camera Set. Memory by the page scan, its lit row read as that row, Enter; the slot screen (its tabs 1
 2 3 M1-M4, slot 1 lit by default, its footer OK) must read as one (SLOT_SCREEN), and its lit tab must be slot 1,
 measured on the frame (lit_slot: kit2_small_1109's 00021_enter.png and kit2_frame_reg's 00079-00081, slots 1-3, 60 px
@@ -263,7 +273,10 @@ PLACES = {"centre": (0, 0), "center": (0, 0), "up": (0, -1), "right": (1, 0), "l
 SWEEP_STEPS = (None, "ms_right", "ms_right", "ms_down", "ms_left", "ms_left", "ms_down", "ms_right", "ms_right")
 ZONE_CURRENT = "set1:0x019a"                    # the Zone place in the current set: names the place in each download
 PROOF_KIND = "registration mirror"              # the kind memreg_run.py gives a registration's proof lines
-GROUPS = afreg_run.GROUPS         # a zone record's orientation, as its name says: horizontal, vertical, grip down or up
+MAP_WORDS = "pass 1's map"                      # the Stills map a plan routes by (kit2_pass1/map_all.json)
+# a zone record's orientation, as its name says: written in every orientation (no orientation in its name: the current
+# record and the level memories), horizontal, vertical grip down or grip up
+GROUPS = ("every orientation", *afreg_run.GROUPS)
 # --grip: level stands the camera level with each orientation kept apart; down and up hold it vertically, where the
 # shooting screen and the dialogs turn (TURNED: read upright as afreg_run reads them)
 GRIPS, TURNED = ("level", "down", "up"), ("down", "up")
@@ -378,16 +391,185 @@ def plan(doc: dict, areas: str = "default", moves: list | None = None) -> list:
             for code, lab in chosen]
 
 
-def setup_steps(focus: bool, drive: bool, amt: str | None = None, grip: str | None = None, circ: bool = False) -> list:
+# ---------------------------------------------------------------- the shooting mode (no camera)
+
+def run_mode(scan) -> str:
+    """The shooting mode a run works in: the one its page scan records (runner.recorded_mode: a Movie scan's run works
+    in Movie), Stills for the latest scan (--scan's default is Stills') and for a scan that records none (made before
+    scans recorded it, all Stills')."""
+    from runner import recorded_mode
+    return "Stills" if str(scan) == LATEST_SCAN else recorded_mode(Path(str(scan))) or "Stills"
+
+
+def scan_for(scan):
+    """--scan's value with the mode the run works in (run_mode), as prove_run, pass3 and scale_run take a mode from
+    their scan; runner.scan_dir then refuses a run while the kit's record says the camera was left in another mode (a
+    Stills run on a camera mode_switch.py --keep left in Movie), and a Movie run goes on there."""
+    from runner import in_mode
+    return in_mode(scan, run_mode(scan))
+
+
+def mode_map(mode: str, root: Path | None = None) -> str | None:
+    """The map a run in `mode` plans Focus Area from: None for Stills (pass 1's, kit2_pass1/map_all.json); for another
+    mode a crawl of it, kit2_crawl*/map.json whose name names the mode (kit2_crawl_movie, kit2_crawl_sq; as
+    kit/tools/proof_viewer.py's walk_frames and menu_tree.py --mode read them), the plainest name first among those whose
+    map has the row; None where none has it."""
+    import json
+    if mode == "Stills":
+        return None
+    root = Path(root) if root is not None else paths.run_root(required=False)
+    if root is None or not root.is_dir():
+        return None
+    word = re.sub(r"[^a-z0-9]+", "", mode.lower())
+    crawls = sorted((p.parent for p in root.glob("kit2_crawl*/map.json")
+                     if word in [w for w in p.parent.name[len("kit2_crawl"):].split("_") if w]),
+                    key=lambda c: (len(c.name), c.name))
+    for crawl in crawls:
+        try:
+            rows = json.loads((crawl / "map.json").read_text(encoding="utf-8")).get("rows") or []
+        except (OSError, ValueError, AttributeError):
+            continue
+        if any(r.get("path") == [ROW] for r in rows):
+            return str(crawl / "map.json")
+    return None
+
+
+def map_labels(mp, path: list) -> list | None:
+    """The labels of the row `path` in the map `mp`, in its options' order, each once (a grid's options indexed by [row,
+    column], as Focus Area Limit's are); None where the map has no such row or cannot be read."""
+    import json
+    try:
+        rows = json.loads(Path(mp).read_text(encoding="utf-8")).get("rows") or []
+    except (OSError, ValueError, AttributeError):
+        return None
+    row = next((r for r in rows if r.get("path") == path), None)
+    if row is None:
+        return None
+    out = []
+    for o in row.get("options") or []:
+        if o.get("label") not in out:
+            out.append(o.get("label"))
+    return out
+
+
+def offered(todo: list, labels: list, axes: dict, limit: list | None) -> tuple:
+    """(kept, left out) of a plan for a mode whose map is not Stills': an area the mode offers is one its map's Focus
+    Area Limit grid names (`limit`: every area the mode has, Movie's no Tracking area), or, without that row, one the
+    map's carousel and the axis walk route (afreg_run.route)."""
+    if limit is not None:
+        names = {bare(x) for x in limit}
+        keep = [t for t in todo if bare(t["label"]) in names]
+    else:
+        keep = [t for t in todo if afreg_run.route(t["label"], labels, axes or {}) is not None]
+    return keep, [t for t in todo if t not in keep]
+
+
+def scan_rows(scan) -> list:
+    """[(row, its page's group)] of a page scan's page model (model.json), each row as it keeps its readings; [] where it
+    cannot be read."""
+    import json
+
+    from crawl_run import page_group
+    try:
+        pages = json.loads((Path(str(scan)) / "model.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    return [(r, page_group(p)) for p in pages if isinstance(p, dict) for r in p.get("rows") or [] if isinstance(r, dict)]
+
+
+def absent_rows(mode: str, index: dict, rows: list, wanted: list) -> dict:
+    """{row: why} of the setup rows `wanted` that shooting mode `mode` does not offer: the definition's record the row
+    writes gives other modes (afreg_run.row_in_mode: Switch V/H AF Area's "still image"), or the mode's page scan
+    (`rows`, scan_rows) holds no row of that name (crawl_run's go_to finds a row so: page_model.same_text, or
+    crawl_run.row_named). Stills: none, its setup as it always was."""
+    if mode == "Stills":
+        return {}
+    from crawl_run import row_named
+    from page_model import same_text
+    out = {}
+    for row in wanted:
+        modes = (afreg_run.row_record(index, [row]) or {}).get("modes")
+        if afreg_run.row_in_mode(index, [row], mode) is False:
+            out[row] = f"the definition gives it {modes} only"
+        elif not any(same_text(r.get("label") or "", row) or row_named(r, row, g) for r, g in rows):
+            out[row] = f"{mode} mode's page scan has no such row"
+    return out
+
+
+def run_set(a, index: dict, start) -> int:
+    """The memory set this run registers: a.memory_set (main: the mode's first, memory_set; slot 1's set 1 for a run
+    that names none); in S&Q, whose switch position holds S&Q Motion and Time-lapse with memories of their own, the one
+    the start download's family names (sq_family): S&Q Memory 1, or Time-lapse Memory 1. Failed where the family cannot
+    be read or the definition numbers no set for it."""
+    from prove_run import Failed
+    if getattr(a, "mode", "Stills") != "S&Q":
+        return getattr(a, "memory_set", None) or 1
+    family = sq_family(index, start)
+    n = memory_set({"camera": {"memory_sets": getattr(a, "memory_sets", None) or {}}}, family) if family else None
+    if n is None:
+        raise Failed("which S&Q family the camera is in (S&Q Motion or Time-lapse, whose memories differ) could not be "
+                     "read from the start download, or the definition numbers no memory set for it: nothing registered")
+    return n
+
+
+def slot_words(doc: dict, mode: str, n: int | None) -> tuple:
+    """(the slot in words, its registration records' keys in words) for the plan: Stills' "slot 1" and EXPECTED_LEFT;
+    another mode's by the camera section's names ("Movie Memory 1 (memory set 4)"); S&Q's two families both, the start
+    download deciding."""
+    if mode == "Stills":
+        return "slot 1", ", ".join(slot_records(n or 1))
+    if n is None:
+        sq, tl = memory_set(doc, "S&Q"), memory_set(doc, "Time-lapse")
+        if not tl:
+            return f"{memory_name(doc, sq)} (memory set {sq})", ", ".join(slot_records(sq))
+        return (f"{memory_name(doc, sq)} (memory set {sq}; {memory_name(doc, tl)}, memory set {tl}, where the start "
+                "download has S&Q Shoot Mode on Time-lapse)",
+                f"{', '.join(slot_records(sq))} ({memory_name(doc, tl)}'s: {', '.join(slot_records(tl))})")
+    return f"{memory_name(doc, n)} (memory set {n})", ", ".join(slot_records(n))
+
+
+def memory_set(doc: dict, mode: str) -> int | None:
+    """The settings file section of shooting mode `mode`'s first memory slot, which the run registers: the camera
+    section's memory_sets.modes (the a1 II's Stills 1, Movie 4, S&Q 7, Time-lapse 10); None where it names none."""
+    got = (((doc.get("camera") or {}).get("memory_sets") or {}).get("modes") or {}).get(mode)
+    return got[0] if got else None
+
+
+def memory_name(doc: dict, n: int) -> str:
+    """A memory set by the camera section's name for it ("Movie Memory 1"), else "memory set <n>"."""
+    return (((doc.get("camera") or {}).get("memory_sets") or {}).get("names") or {}).get(str(n)) or f"memory set {n}"
+
+
+def sq_family(index: dict, cs) -> str | None:
+    """Which family S&Q is in, as the settings file `cs` (the start download) holds it, by the definition's one record
+    whose values are S&Q Motion and Time-lapse (the a1 II's global:0x118b): "S&Q" or "Time-lapse", whose memories
+    differ (memory_sets.modes); None where no record, or several, says it, or the file holds neither."""
+    from prove_run import held_value
+    hits = [s for k, s in index.items() if k.startswith("global:")
+            and {str(lab) for _, lab in s.get("values") or []} == {"S&Q Motion", "Time-lapse"}]
+    if len(hits) != 1:
+        return None
+    label = {v: lab for v, lab in hits[0]["values"]}.get(held_value(cs, hits[0]["key"]))
+    return {"S&Q Motion": "S&Q", "Time-lapse": "Time-lapse"}.get(label)
+
+
+def slot_records(n: int = 1) -> tuple:
+    """Memory set `n`'s registration records, which no settings file sets back (EXPECTED_LEFT is Stills' set 1)."""
+    return tuple(f"set{n}:{k.split(':', 1)[1]}" for k in EXPECTED_LEFT)
+
+
+def setup_steps(focus: bool, drive: bool, amt: str | None = None, grip: str | None = None, circ: bool = False,
+                vh: bool = True) -> list:
     """[(kind, text)] the setup in order, as afreg_run.setup_steps names them: "dial" (a Mode Dial Control Set cell put
     on Set with Menu), "drive" (Drive Mode = Single Shooting), "row" (a list row: "path = option"); Switch V/H AF Area
-    Off, or AF Point + AF Area with any grip, level too (VH_OPTION); Circ. of Focus Point = Does Not Circulate with circ
-    (--edges); AF Frame Move Amt last, when amt names its option."""
+    Off, or AF Point + AF Area with any grip, level too (VH_OPTION), unless `vh` is False (Movie and S&Q, whose menus
+    offer no such row); Circ. of Focus Point = Does Not Circulate with circ (--edges); AF Frame Move Amt last, when amt
+    names its option."""
     steps = [("dial", afreg_run.DRIVE_DIAL), ("drive", f"{afreg_run.DRIVE_ROW} = {afreg_run.SINGLE}")] if drive else []
     if focus:
         steps += [("dial", afreg_run.FOCUS_DIAL), ("row", f"{afreg_run.FOCUS_ROW} = {afreg_run.CONTINUOUS}")]
-    return (steps + [("row", f"{VH_ROW} = {VH_OPTION[grip]}")] + ([("row", f"{CIRC_ROW} = {CIRC_OFF}")] if circ else [])
-            + ([("row", f"{AMT_ROW} = {amt}")] if amt else []))
+    return (steps + ([("row", f"{VH_ROW} = {VH_OPTION[grip]}")] if vh else [])
+            + ([("row", f"{CIRC_ROW} = {CIRC_OFF}")] if circ else []) + ([("row", f"{AMT_ROW} = {amt}")] if amt else []))
 
 
 def setup_rows(amt: str | None = None, grip: str | None = None, circ: bool = False) -> dict:
@@ -407,15 +589,20 @@ def amt_code(index: dict, amt: str) -> tuple | None:
 
 
 def context_of(extra: str | None, amt: str | None = None, moves: list | None = None, grip: str | None = None,
-               vertical: str | None = None) -> str:
+               vertical: str | None = None, mode: str = "Stills") -> str:
     """The state the registrations are made in, which every line carries and the summary keeps apart: the camera level
     with Switch V/H AF Area Off, or with a grip AF Point + AF Area and how the camera stands (held vertically in
     afreg_run's words, afreg_run.context_of: "Switch V/H AF Area = AF Point + AF Area, camera grip down", and ",
     Vertical Display Off" or ", Vertical Display On" as the start download holds it, `vertical`; level, "..., camera
     level", as the hand tables' ORIENTED reads it), AF Frame Move Amt when the run sets it, the moves when --moves gave
-    them ("moved Right 1"), then --context."""
-    held = (f"{VH_ROW} = {VH_OPTION[grip]}, camera level" if grip == "level" else
-            afreg_run.context_of(grip, None, vertical) if grip else f"{VH_ROW} {OFF}, camera level")
+    them ("moved Right 1"), then --context. In Movie or S&Q (`mode`), whose menus offer no Switch V/H AF Area, "Movie
+    mode, camera level" in its place, a --context saying no more than that mode left out."""
+    if mode != "Stills":
+        held = f"{mode} mode, camera level"
+        extra = None if extra and extra.strip().lower() == f"{mode} mode".lower() else extra
+    else:
+        held = (f"{VH_ROW} = {VH_OPTION[grip]}, camera level" if grip == "level" else
+                afreg_run.context_of(grip, None, vertical) if grip else f"{VH_ROW} {OFF}, camera level")
     base = held + (f", {AMT_ROW} {amt}" if amt else "") + (f", moved {say_moves(moves)}" if moves else "")
     return f"{base}, {extra}" if extra else base
 
@@ -592,10 +779,10 @@ def said_delta(item: dict) -> str:
     return f"{item['delta']:+d}{per}"
 
 
-def shown_key(key: str) -> str:
-    """A changed key as a grip run's summary names it: a slot 1 record by its definition key (def_key), any other as
-    the diff gives it."""
-    return def_key(key) if key.startswith("set1:") else key
+def shown_key(key: str, n: int = 1) -> str:
+    """A changed key as a grip run's summary names it: a record of the memory set the run registers (`n`: slot 1's set
+    1, Movie Memory 1's set 4) by its definition key (def_key), any other as the diff gives it."""
+    return def_key(key) if key.startswith(f"set{n}:") else key
 
 
 def summary_of(line: dict) -> list:
@@ -605,14 +792,14 @@ def summary_of(line: dict) -> list:
     head = f"{line['area']} (code {line.get('code')}" + (f"; {line['context']})" if line.get("context") else ")")
     if line.get("failed"):
         return [f"{head}: failed: {line['failed']}"]
-    grip = line.get("grip")
+    grip, n = line.get("grip"), line.get("memory_set", 1)
     out = [f"{head}, {say_moves(line['moves'])} asked, {say_moves(line.get('taken') or [])} taken: {line['verdict']}"]
     for i in line.get("judged") or []:
         mark = "  [the other way]" if i["with_presses"] is False else ""
-        key = shown_key(i["key"]) if grip else i["key"]
+        key = shown_key(i["key"], n) if grip else i["key"]
         out.append(f"    {key}  {i['name'] or '(not in the definition)'}: {said_delta(i)}{mark}")
     if grip:
-        names = [i["name"] or shown_key(i["key"]) for i in line.get("judged") or []]
+        names = [i["name"] or shown_key(i["key"], n) for i in line.get("judged") or []]
         out.append(f"    {held_words(grip)} writes: {'; '.join(names) or 'nothing'}")
     notes = [f"{'put back, ' if x.get('put_back') else ''}{WORDS.get(x['key'], x['key'])} "
              + (f"refused ({x['refused'][:60]})" if x.get("refused") else f"answered by a notice ({x['frame']})")
@@ -646,12 +833,12 @@ def summary_lines(lines: list) -> list:
     return [s for ln in last.values() for s in summary_of(ln)]
 
 
-def slot_filled(cs) -> bool:
-    """Slot 1 registered already in a settings file (its filled mark, FILLED): registering an empty one would mark it
-    filled for good, since no settings file empties it."""
+def slot_filled(cs, n: int = 1) -> bool:
+    """Slot 1 registered already in a settings file (its filled mark, FILLED, in memory set `n`: Stills' 1, Movie's 4 on
+    the a1 II): registering an empty one would mark it filled for good, since no settings file empties it."""
     from prove_run import held_value
     key, code = FILLED
-    return held_value(cs, key) == code
+    return held_value(cs, f"set{n}:{key.split(':', 1)[1]}") == code
 
 
 # ---------------------------------------------------------------- the zone grid sweep (no camera)
@@ -702,10 +889,12 @@ def sweep_route() -> list:
 
 def zone_group(name) -> str:
     """The orientation group of a zone record by the definition's name (GROUPS): "vertical, grip down" or "vertical,
-    grip up" where the name says the grip ("Zone position memory (vertical, grip down, grid index, copy 1)"), else
-    horizontal (the current record and the level memories)."""
+    grip up" where the name says the grip ("Zone position memory (vertical, grip down, grid index, copy 1)"),
+    "horizontal" where it says horizontal, else "every orientation" (the current record and the level memories, which
+    a registration writes however the camera is held)."""
     n = name or ""
-    return GROUPS[1] if "grip down" in n else GROUPS[2] if "grip up" in n else GROUPS[0]
+    return GROUPS[2] if "grip down" in n else GROUPS[3] if "grip up" in n else GROUPS[1] if "horizontal" in n \
+        else GROUPS[0]
 
 
 def holders(changes: list, code) -> list:
@@ -715,10 +904,12 @@ def holders(changes: list, code) -> list:
 
 
 def groups_of(keys: list, index: dict) -> dict:
-    """{group: [keys]} of the records, by the definition's names (def_key); the three groups always present."""
+    """{group: [keys]} of the records, by the definition's names (def_key); the four groups always present, and "not in
+    the definition" for a record it does not name."""
     out = {g: [] for g in GROUPS}
     for k in keys:
-        out[zone_group((index.get(def_key(k)) or {}).get("name"))].append(k)
+        name = (index.get(def_key(k)) or {}).get("name")
+        out.setdefault(zone_group(name) if name else "not in the definition", []).append(k)
     return out
 
 
@@ -736,10 +927,9 @@ def sweep_records(index: dict, grip: str | None = None) -> list:
     the horizontal copies, which its registrations do not write."""
     if grip not in TURNED:
         return zone_records(index)
-    own = GROUPS[1] if grip == "down" else GROUPS[2]
+    own = GROUPS[2] if grip == "down" else GROUPS[3]
     return sorted(k for k, s in index.items() if k.startswith("set:") and "Zone position" in (s.get("name") or "")
-                  and "grid index" in s["name"] and "horizontal" not in s["name"]
-                  and zone_group(s["name"]) in (GROUPS[0], own))
+                  and "grid index" in s["name"] and zone_group(s["name"]) in (GROUPS[0], own))
 
 
 # how the multi-selector's keys may move the zone on its grid held vertically: each of the eight turns and mirrors of
@@ -1010,17 +1200,19 @@ def edge_records(m: dict, index: dict) -> list:
 
 def edge_summary_of(line: dict) -> list:
     """An edges line in the summary: each record's edges, step and first press off the corner by key and name, whether
-    the frame went back where it began (the difference by key where it did not), never the start nor the presses."""
+    the frame went back where it began (the difference by key where it did not), never the start nor the presses. Keys
+    of the memory set the run registered (the line's "memory_set", slot 1's set 1 unless it says) by the definition's."""
     head = f"{line['area']} (code {line.get('code')}" + (f"; {line['context']})" if line.get("context") else ")")
+    n = line.get("memory_set", 1)
     out = [f"{head}: edges, {line.get('edge_presses')} presses a push, {len(line.get('files') or {})} registrations"
            if line.get("edges") else f"{head}: edges not measured"]
     for r in line.get("edges") or []:
         raises = f" ({r['raises']} raises it)" if r["raises"] else ""
-        out.append(f"    {r['keys']}  {shown_key(r['key'])}  {r['name'] or '(not in the definition)'}: {r['low']} to "
+        out.append(f"    {r['keys']}  {shown_key(r['key'], n)}  {r['name'] or '(not in the definition)'}: {r['low']} to "
                    f"{r['high']}, a press {r['step']}{raises}, the first press off {r['corner']} moves {r['first']}"
                    + ("  [may have stopped short of an edge: give --edge-presses more]" if r["short"] else ""))
     if line.get("odd"):
-        out.append(f"    moved with neither key, or with the other: {', '.join(shown_key(k) for k in line['odd'])}")
+        out.append(f"    moved with neither key, or with the other: {', '.join(shown_key(k, n) for k in line['odd'])}")
     if line.get("failed"):
         out.append(f"    failed: {line['failed']}")
     if line.get("stopped"):
@@ -1036,8 +1228,8 @@ def edge_summary_of(line: dict) -> list:
                    + (" from the far corner after the failure" if "again-high" in (line.get("files") or {}) else "")
                    + ": the registration after it matched the first")
     else:
-        off = "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" if isinstance(x.get("delta"), int)
-                        else shown_key(x["key"]) for x in back.get("off") or []) or "its place unknown"
+        off = "; ".join(f"{shown_key(x['key'], n)} {x['delta']:+d}" if isinstance(x.get("delta"), int)
+                        else shown_key(x["key"], n) for x in back.get("off") or []) or "its place unknown"
         out.append(f"    NOT PUT BACK: {off} off: on the shooting screen with {ROW} = {line['area']}, move it back by "
                    "hand")
     return out
@@ -1216,9 +1408,10 @@ def press_moves(cam, moves: list, sent: list, done: list, grip: str | None = Non
 
 
 def prepare(cam, link, hdmi, run, cycle, model, focus: bool, drive: bool, start: Path, amt: str | None = None,
-            index: dict | None = None, grip: str | None = None, circ: bool = False) -> list:
+            index: dict | None = None, grip: str | None = None, circ: bool = False, vh: bool = True) -> list:
     """The setup through the menu (setup_steps, each as afreg_run.prepare takes it; Switch V/H AF Area as the grip has
-    it), then a download kept in setup.jsonl with the keys it changed; returns the steps. The count only is printed.
+    it, none where vh is False: Movie and S&Q offer no such row), then a download kept in setup.jsonl with the keys it
+    changed; returns the steps. The count only is printed.
     With amt, the download must hold the code the definition (`index`, its settings by key) gives that option in AF
     Frame Move Amt's record (amt_code), and with circ (--edges) Circ. of Focus Point's Does Not Circulate's
     (setting_code): a menu that did not take either fails the run before any area, the value found never said (the
@@ -1237,7 +1430,7 @@ def prepare(cam, link, hdmi, run, cycle, model, focus: bool, drive: bool, start:
                      "camera took it")
     rows = setup_rows(amt, grip, circ)
     steps = []
-    for kind, what in setup_steps(focus, drive, amt, grip, circ):
+    for kind, what in setup_steps(focus, drive, amt, grip, circ, vh):
         open_menu(cam)
         if kind == "dial":
             afreg_run.focus_dial_by_menu(cam, cycle, model, what)
@@ -1555,11 +1748,11 @@ class Walk:
                                    + (": no press reaches its start" if off else ""))
 
 
-def amt_keys(index: dict) -> set:
-    """AF Frame Move Amt's live record and its slot 1 copy (a registration writes it): a run that sets the row leaves
-    them out of its checks that a frame is back."""
+def amt_keys(index: dict, n: int = 1) -> set:
+    """AF Frame Move Amt's live record and its copy in memory set `n` (the slot registered: a registration writes it):
+    a run that sets the row leaves them out of its checks that a frame is back."""
     got = amt_code(index, "Standard") or amt_code(index, "Large")
-    return {got[0], got[0].replace("global:", "set1:", 1)} if got else set()
+    return {got[0], got[0].replace("global:", f"set{n}:", 1)} if got else set()
 
 
 def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, a, index: dict,
@@ -1589,7 +1782,7 @@ def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tupl
     w.line["edge_presses"] = n
     if held is not None:
         held["walk"] = w
-    skip = amt_keys(index)
+    skip = amt_keys(index, getattr(a, "memory_set", None) or 1)
     xy = standard_step(t["label"]) if large else None
 
     def check(tag):
@@ -1766,7 +1959,7 @@ def put_back_plan(line: dict, table=None, index: dict | None = None) -> tuple:
     _, off = edge_way_back(far, line["values"]["base"], m) if far else ({}, {})
     if off:
         return None, ("no press reaches its start from the far corner ("
-                      + "; ".join(f"{shown_key(k)} {d:+d}" for k, d in off.items()) + ")")
+                      + "; ".join(f"{shown_key(k, line.get('memory_set', 1))} {d:+d}" for k, d in off.items()) + ")")
     return m, ""
 
 
@@ -1843,7 +2036,7 @@ def files_lines(run_dir: Path, lines: list, doc: dict) -> tuple:
         end = min(after) if after else None
         regs = [(x[1], name) for x, name in found if x[2] == label and x[0] >= n0 and (end is None or x[0] < end)]
         before = [ln for ln in lines if ln.get("area") and edge_number(ln) is not None and edge_number(ln) < n0]
-        state = ({**{k: before[-1][k] for k in ("context", "grip") if before[-1].get(k)},
+        state = ({**{k: before[-1][k] for k in ("context", "grip", "mode", "memory_set") if before[-1].get(k)},
                   "state_from": f"the run's line before it ({before[-1]['area']})"} if before else
                  setup_state(run_dir, n0))
         if state is None:
@@ -1964,13 +2157,14 @@ def put_back_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: 
 def put_back_summary_of(line: dict) -> list:
     """A --put-back line in words: put back or not, the difference by key where not; never a place."""
     head = f"{line['area']} (code {line.get('code')}" + (f"; {line['context']})" if line.get("context") else ")")
+    n = line.get("memory_set", 1)
     src = line.get("source") or {}
     out = [f"{head}: to its start in {src.get('run')} ({src.get('start')})"]
     if line.get("refused"):
         return out + [f"    NOT PUT BACK, nothing pressed: {line['refused']}"]
     if line.get("far_off"):
         out.append("    the far corner read otherwise than the edges run's: "
-                   + "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" for x in line["far_off"]))
+                   + "; ".join(f"{shown_key(x['key'], n)} {x['delta']:+d}" for x in line["far_off"]))
     if line.get("failed"):
         out.append(f"    failed: {line['failed']}")
     back = line.get("back")
@@ -1978,7 +2172,7 @@ def put_back_summary_of(line: dict) -> list:
         out.append("    already where it began: nothing pressed" if back.get("already") else
                    "    put back under Standard: the registration after it matched the start's on the measured records")
     elif back:
-        off = "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" for x in back.get("off") or []) or "its place unknown"
+        off = "; ".join(f"{shown_key(x['key'], n)} {x['delta']:+d}" for x in back.get("off") or []) or "its place unknown"
         out.append(f"    NOT PUT BACK: {off} off: on the shooting screen with {ROW} = {line['area']}, move it back by "
                    "hand")
     elif line.get("moved"):
@@ -2026,14 +2220,16 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
     from pass3_run import labels_of
     from prove_run import AXES
     from runner import load_scan, prover_session, write_text
-    labels, kind = labels_of([ROW])
+    mode, mp = getattr(a, "mode", "Stills"), getattr(a, "map", None)
+    where = paths.shown(Path(mp)) if mp else "pass 1's map"         # another mode's map: main's (mode_map, --map)
+    labels, kind = labels_of([ROW], mp) if mp else labels_of([ROW])
     if kind != "dialog":
-        sys.exit(f"{ROW} is a {kind} in pass 1's map, not a carousel")
+        sys.exit(f"{ROW} is a {kind} in {where}, not a carousel")
     axes = {o: info for o, info in read_json(AXES).get(ROW, {}).items() if len(info["values"]) > 1}
     routes = {t["label"]: afreg_run.route(t["label"], labels, axes) for t in todo + ([a.zone_target] if a.zone_grid else [])}
     lost = [lab for lab, r in routes.items() if r is None]
     if lost:
-        sys.exit(f"pass 1's map and the axis walk ({AXES}) do not name {lost} once: walk the axes first "
+        sys.exit(f"{where} and the axis walk ({AXES}) do not name {lost} once: walk the axes first "
                  "(kit/axis_walk.py --rows 'Focus Area')")
     index = {s["key"]: s for s in doc.get("settings") or []}
     cycle, model = load_scan(a.scan)
@@ -2043,14 +2239,19 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
     hdmi = eyes_from_config(run)
     out = run.dir / "framepos.jsonl"
     tag = {"context": context, **({"allowance": allowance} if allowance else {}),
-           **({"grip": a.grip} if a.grip else {}), **({"upright": True} if turned_of(a.grip) else {})}
+           **({"grip": a.grip} if a.grip else {}), **({"upright": True} if turned_of(a.grip) else {}),
+           **({"mode": mode} if mode != "Stills" else {})}
     # a zone moves by its own one-step moves (the sweep by its route), never by --moves: its lines carry the context a
     # run without --moves gives, so they match a default run's
-    zone_tag = dict(tag, context=context_of(a.context, amt, None, a.grip))
+    zone_tag = dict(tag, context=context_of(a.context, amt, None, a.grip, mode=mode))
     lines = []
     may_open = set(a.allow) | (set(MAY_OPEN) if focus or drive else set())
+    # the registration records of the set registered, which no settings file sets back (slot 1's EXPECTED_LEFT in
+    # Stills, Movie Memory 1's in Movie); S&Q's once the start download names its family (areas: run_set)
+    n = getattr(a, "memory_set", 1)
+    a.expected = set(slot_records(n)) if n else set()
     try:
-        with prover_session(run, hdmi, may_open=may_open, show=0, expected=frozenset(EXPECTED_LEFT),
+        with prover_session(run, hdmi, may_open=may_open, show=0, expected=a.expected,
                             end_why="the settings download after the frames") as s:
             areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focus, drive, out, tag, lines, amt,
                   zone_tag)
@@ -2088,18 +2289,34 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     vertically, Vertical Display is read from the start download (afreg_run.screens_held, kept as a.vertical): Off reads
     every screen level and drops "upright" from the lines; On or Off ends their context's grip with "Vertical Display
     On" or "Vertical Display Off". A zone's line, and the sweep's, carry `zone_tag` (the context without --moves, which
-    a zone never takes) in place of `tag`."""
+    a zone never takes) in place of `tag`. In Movie or S&Q (a.mode) the slot is that mode's (run_set: Movie Memory 1,
+    memory set 4 on the a1 II; S&Q's by the start download's family), checked filled, its records added to the restore
+    check's (a.expected) and the set to every line ("memory_set"); a --put-back's source lines must name the same set."""
     zone_tag = zone_tag or tag
     from camkit import camset
     from prove_run import Failed
     from runner import close_screen
     cam, link = s.cam, s.link
-    grip = getattr(a, "grip", None)
+    grip, mode = getattr(a, "grip", None), getattr(a, "mode", "Stills")
     start = camset.read(s.start)
-    if not slot_filled(start):
-        raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good (no settings "
-                     "file empties it); this run registers a filled slot only")
+    n = a.memory_set = run_set(a, index, start)
+    if not slot_filled(start, n):
+        if mode == "Stills" and n == 1:
+            raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good (no settings "
+                         "file empties it); this run registers a filled slot only")
+        name = memory_name({"camera": {"memory_sets": getattr(a, "memory_sets", None) or {}}}, n)
+        raise Failed(f"{name} (memory set {n}) is empty in the start file: registering it would mark it filled for good "
+                     "(no settings file empties it); this run registers a filled slot only. Filling it is the owner's "
+                     f"choice: registered once by hand ({MEMORY_ROW}, slot 1, in {mode} mode), a run can go")
+    if getattr(a, "expected", None) is not None:
+        a.expected.update(slot_records(n))
+    if mode != "Stills":
+        tag["memory_set"] = zone_tag["memory_set"] = n
     if getattr(a, "put_back", None):
+        other = sorted({ln.get("memory_set", 1) for ln, _ in (getattr(a, "put_back_lines", None) or {}).values()} - {n})
+        if other:
+            raise Failed(f"{a.put_back}'s lines registered memory set {other[0]}, this run memory set {n}: a frame is put "
+                         "back in the mode and family it was measured in")
         a.ratio_now = ratio_of(index, start)        # the Aspect Ratio a start off the centre is put back under
     turned, a.vertical, said = afreg_run.screens_held(grip, index, start)
     if said:
@@ -2107,13 +2324,13 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     if a.vertical:                                  # On or Off, as the start download holds it
         moves = parse_moves(a.moves) if getattr(a, "moves", None) else None
         for tg, mv in ((tag, moves), (zone_tag, None)):
-            tg["context"] = context_of(getattr(a, "context", None), amt, mv, grip, a.vertical)
+            tg["context"] = context_of(getattr(a, "context", None), amt, mv, grip, a.vertical, mode)
             if not turned:                          # Off: every screen read level
                 tg.pop("upright", None)
     edges, putting = getattr(a, "edges", False), bool(getattr(a, "put_back", None))
     upright_sweep = bool(getattr(a, "zone_grid", False)) and grip in TURNED      # the zone held vertically: edges stop it
     setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip,
-                    circ=edges or putting or upright_sweep)
+                    circ=edges or putting or upright_sweep, vh=getattr(a, "vh", True))
     if putting:
         put_back_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned)
         return
@@ -2194,6 +2411,75 @@ def zone_grid(s, a, run, hdmi, cycle, model, labels, axes, routes, index, out, t
     lines.append(line)
 
 
+def mode_setup(a, doc: dict, index: dict) -> None:
+    """What a run needs of its shooting mode (a.mode, the --scan's: scan_for) before anything connects, kept on `a`: the
+    memory set it registers (a.memory_set: the mode's first, memory_set; None in S&Q until the start download names the
+    family, run_set; slot 1's set 1 in Stills, as always), the map it plans Focus Area from (a.map: --map, else
+    mode_map; pass 1's in Stills), and the setup rows the mode does not offer (a.absent, absent_rows), Switch V/H AF Area
+    among them where the mode has none (a.vh). Stops where the definition numbers no memory set for the mode, or no
+    crawl of the mode maps Focus Area and --map names none."""
+    a.memory_sets = (doc.get("camera") or {}).get("memory_sets") or {}
+    a.absent, a.vh = {}, True
+    if a.mode == "Stills":
+        a.memory_set = memory_set(doc, "Stills") or 1
+        return
+    a.memory_set = None if a.mode == "S&Q" else memory_set(doc, a.mode)
+    if memory_set(doc, a.mode) is None:
+        sys.exit(f"framepos_run: the definition numbers no memory set for {a.mode} mode (its camera section's "
+                 f"memory_sets), so the run could not tell which slot a registration in {a.mode} mode writes: nothing "
+                 "was sent to the camera")
+    a.map = a.map or mode_map(a.mode)
+    if not a.map:
+        sys.exit(f"framepos_run: no crawl of {a.mode} mode maps {ROW} (a kit2_crawl* run named for the mode, whose map.json "
+                 f"has the row), and a run in {a.mode} mode plans from that mode's own map: map it in {a.mode} mode first "
+                 f"(kit/crawl_run.py --start-label '{ROW}' --limit 1 with this mode's page scan, then kit/pass1_labels.py, "
+                 "kit/tiebreak.py and kit/pass1_map.py --own, as kit/prove_run.py's notes say), or name a map that has it "
+                 "with --map <run>/map.json. Nothing was sent to the camera.")
+    a.absent = absent_rows(a.mode, index, scan_rows(a.scan),
+                           [VH_ROW, CIRC_ROW, AMT_ROW, afreg_run.FOCUS_ROW, afreg_run.DRIVE_ROW])
+    a.vh = VH_ROW not in a.absent
+
+
+def plan_map(a) -> tuple:
+    """(the carousel's labels, the second axes) Focus Area is planned from: the run's map (a.map: mode_setup's; pass 1's
+    in Stills unless --map names one) and the axis walk's axes (kit2_axes, walked in Stills: each axis step is read on
+    the camera as it is taken, so an axis another mode draws otherwise fails there, never chooses another area). In
+    Stills (None, None) where either cannot be read, the plan printed without its routes (prove stops on them); in
+    another mode its map must have the row, and no axis walk leaves the axes empty."""
+    from pass3_run import labels_of
+    from prove_run import AXES
+    if a.mode == "Stills":
+        try:
+            labels, _ = labels_of([ROW], a.map) if a.map else labels_of([ROW])
+            return labels, {o: info for o, info in read_json(AXES).get(ROW, {}).items() if len(info["values"]) > 1}
+        except (SystemExit, OSError, ValueError):
+            return None, None
+    try:
+        labels, _ = labels_of([ROW], a.map)
+    except (SystemExit, OSError, ValueError, TypeError):
+        sys.exit(f"framepos_run: {paths.shown(Path(a.map))} has no {ROW} row this run can plan from. Nothing was sent to "
+                 "the camera.")
+    try:
+        axes = {o: info for o, info in read_json(AXES).get(ROW, {}).items() if len(info["values"]) > 1}
+    except (SystemExit, OSError, ValueError):
+        axes = {}
+    return labels, axes
+
+
+def refuse_absent(a, needed: list) -> None:
+    """Stops, before anything connects, a run whose setup sets a row its mode does not offer (a.absent)."""
+    lost = [r for r in needed if r in getattr(a, "absent", {})]
+    if lost:
+        sys.exit(f"framepos_run: {lost[0]} is not on {a.mode} mode's menu ({a.absent[lost[0]]}), and this run sets it: "
+                 f"not in {a.mode} mode as asked. Nothing was sent to the camera.")
+
+
+def mode_said(a) -> list:
+    """The plan's lines on the mode's setup: Switch V/H AF Area left as it is where the mode does not offer it."""
+    why = getattr(a, "absent", {}).get(VH_ROW)
+    return [f"  {VH_ROW} left as the camera has it: {a.mode} mode does not offer it ({why})"] if why else []
+
+
 def put_back_main(a) -> int:
     """--put-back RUN: the frames RUN's edges.jsonl leaves out of place (left_behind), each with what its line gives to
     bring it back (put_back_plan; an area it cannot is said and left out), held as RUN held the camera (its lines'
@@ -2229,6 +2515,12 @@ def put_back_main(a) -> int:
         sys.exit(f"framepos_run: --put-back {a.put_back}: its lines were made held {sorted(map(str, grips))}"
                  + (f", not --grip {a.grip}" if a.grip else "") + ": one way at a time, the run's own")
     a.grip = grips.pop()
+    modes = sorted({ln.get("mode", "Stills") for ln in src})
+    if modes != [a.mode]:
+        sys.exit(f"framepos_run: --put-back {a.put_back}: its lines were made in {' and '.join(modes)} mode, and this "
+                 f"run works in {a.mode} mode (its --scan's): a frame is put back in the mode it was measured in, with "
+                 f"--scan naming a page scan of that mode")
+    mode_setup(a, doc, index)
     todo, a.put_back_lines = [], {}
     for ln in src:
         m, why = put_back_plan(ln, index=index)
@@ -2247,7 +2539,7 @@ def put_back_main(a) -> int:
     if want is None or stops is None:
         sys.exit(f"framepos_run: --put-back: the definition gives no code for {AMT_ROW} = Standard or {CIRC_ROW} = "
                  f"{CIRC_OFF}, so the run could not check the camera took them")
-    context = context_of(a.context, "Standard", None, a.grip)
+    context = context_of(a.context, "Standard", None, a.grip, mode=a.mode)
     print(f"{len(todo)} frames {a.put_back} left out of place, to be put back ({context!r}; run {a.run}):", flush=True)
     for t in todo:
         ln = a.put_back_lines[t["label"]][0]
@@ -2266,9 +2558,12 @@ def put_back_main(a) -> int:
     tracking = any(t["tracking"] for t in todo)
     focus = a.focus_mode == "menu" or (a.focus_mode == "auto" and tracking)
     drive = a.drive_mode == "menu" or (a.drive_mode == "auto" and tracking)
-    sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, "Standard", a.grip, True)]
+    refuse_absent(a, [CIRC_ROW, AMT_ROW] + ([afreg_run.FOCUS_ROW] if focus else []) + ([afreg_run.DRIVE_ROW] if drive else []))
+    sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, "Standard", a.grip, True, a.vh)]
     print(f"set through the menu first: {'; '.join(sets)}; the start file put back at the end puts them back (a "
           "frame's place is in no settings file: the restore leaves it where it is put)", flush=True)
+    for said in mode_said(a):
+        print(said, flush=True)
     print(f"the download after the setup must hold Standard's code {want[1]} in {want[0]} and {CIRC_OFF}'s code "
           f"{stops[1]} in {stops[0]}, or the run stops before any area", flush=True)
     if afreg_run.vertical_plan(a.grip, index):
@@ -2334,6 +2629,9 @@ def main(argv=None) -> int:
                          "that orientation's copies, the turned dialog read upright; level: the same setting with the "
                          "camera standing level, the level copies, every screen read level")
     add_scan_argument(ap, default=LATEST_SCAN, mode="Stills")
+    ap.add_argument("--map", default=None, type=paths.run_arg,
+                    help="the map Focus Area is planned from (a run's map.json in the camera's runs): by default pass 1's "
+                         "in Stills, and in Movie or S&Q (a --scan made in that mode) the mode's own crawl's")
     ap.add_argument("--run", default=None, help="the run's folder (default kit2_framepos; with --edges kit2_framepos_edges)")
     ap.add_argument("--context", default=None, help="more of the state these registrations are made in")
     ap.add_argument("--limit", type=int, default=0, help="the first N areas of the plan only")
@@ -2358,6 +2656,14 @@ def main(argv=None) -> int:
     if a.edges and a.frame_move_amt == "leave":
         sys.exit("framepos_run: --edges with --frame-move-amt leave: the way back is made under Standard, and the run "
                  "must know which it measures under: Standard or Large")
+    a.scan = scan_for(a.scan)           # the mode the run works in is its page scan's: Stills' latest by default
+    a.mode = a.scan.mode
+    if a.mode != "Stills":
+        for flag, given, why in (("--grip", a.grip, f"the grip runs set {VH_ROW}, which {a.mode} mode does not offer"),
+                                 ("--zone-grid", a.zone_grid, f"the sweep is made with {VH_ROW} Off, which {a.mode} mode "
+                                  "does not offer, and reads slot 1's records in set 1: not made for another mode yet")):
+            if given:
+                sys.exit(f"framepos_run: {flag} in {a.mode} mode: {why}. Nothing was sent to the camera.")
     if a.put_back:
         return put_back_main(a)
     if a.zone_grid and a.grip == "level":
@@ -2373,6 +2679,15 @@ def main(argv=None) -> int:
     todo = edge_plan(doc, a.areas) if a.edges else \
         plan(doc, a.areas or "default", moves) if a.areas or not a.zone_grid else []
     a.zone_target = plan(doc, "Zone")[0] if a.zone_grid else None
+    mode_setup(a, doc, index)
+    labels, axes = plan_map(a)
+    left = []
+    if a.mode != "Stills":
+        todo, left = offered(todo, labels, axes, map_labels(a.map, ["Focus Area Limit"]))
+        if left and not todo:
+            sys.exit(f"framepos_run: --areas {a.areas or 'all'}: {a.mode} mode offers none of them "
+                     f"({', '.join(t['label'] for t in left)}; {paths.shown(Path(a.map))}). Nothing was sent to the "
+                     "camera.")
     if a.limit:
         todo = todo[:a.limit]
     if moves and all(gridded(t["label"]) for t in todo):
@@ -2403,19 +2718,17 @@ def main(argv=None) -> int:
             sys.exit(f"framepos_run: --edges under Large makes each way back under Standard, counted in Standard's step: "
                      f"the hand tables' FRAME_STEPS give none for {lacking}" if lacking else
                      f"framepos_run: --edges under Large: the definition gives no code for {AMT_ROW} = Standard")
-    context = context_of(a.context, amt, moves, a.grip)
+    refuse_absent(a, ([CIRC_ROW] if needs_circ else []) + ([AMT_ROW] if amt else [])
+                  + ([afreg_run.FOCUS_ROW] if focus else []) + ([afreg_run.DRIVE_ROW] if drive else []))
+    context = context_of(a.context, amt, moves, a.grip, mode=a.mode)
     if a.edges:
         print(f"{len(todo)} areas' edges ({context!r}; run {a.run}):", flush=True)
     else:
         print(f"{len(todo)} areas{' and the zone grid sweep' if a.zone_grid else ''} ({context!r}; run {a.run}):",
               flush=True)
-    try:
-        from pass3_run import labels_of
-        from prove_run import AXES
-        labels, _ = labels_of([ROW])
-        axes = {o: info for o, info in read_json(AXES).get(ROW, {}).items() if len(info["values"]) > 1}
-    except (SystemExit, OSError, ValueError):
-        labels, axes = None, None
+    if left:
+        print(f"  left out: {', '.join(t['label'] for t in left)}: {a.mode} mode does not offer them "
+              f"({paths.shown(Path(a.map))})", flush=True)
     if a.zone_grid:
         print("  zone grid sweep: " + sweep_words(), flush=True)
         if a.grip in TURNED:
@@ -2426,13 +2739,15 @@ def main(argv=None) -> int:
     for t in todo:
         r = afreg_run.route(t["label"], labels, axes) if labels else None
         way = (f"carousel {labels[r[0]]!r}" + (f", axis {axes[r[1]]['values'][r[2]]!r}" if r[1] else "")) if r \
-            else "no route in pass 1's map and the axis walk"
+            else f"no route in {paths.shown(Path(a.map)) if a.map else MAP_WORDS} and the axis walk"
         print(f"  {t['label']} (code {t['code']}): {way}; " + ("its edges" if a.edges else
               f"moved {say_moves(t['moves'])}, put back {say_moves(back_of(t['moves']))}"), flush=True)
     sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, amt, a.grip,
-                                                               a.edges or (a.zone_grid and a.grip in TURNED))]
+                                                               a.edges or (a.zone_grid and a.grip in TURNED), a.vh)]
     print(f"set through the menu first: {'; '.join(sets)}; the start file put back at the end puts them back",
           flush=True)
+    for said in mode_said(a):
+        print(said, flush=True)
     if amt:
         print(f"the download after the setup must hold {amt}'s code {want[1]} in {want[0]} ({AMT_ROW}, as the "
               "definition codes it), or the run stops before any area", flush=True)
@@ -2459,11 +2774,12 @@ def main(argv=None) -> int:
             print(f"under Large each way back is made under Standard: {AMT_ROW} = Standard through its row once the far "
                   "corner is registered, the presses counted in Standard's step (the hand tables' FRAME_STEPS), and "
                   "Large again before the next area, whose start must read Large", flush=True)
-    print(f"each area: slot 1 registered ({MEMORY_ROW}) "
+    slot, keys = slot_words(doc, a.mode, a.memory_set)
+    print(f"each area: slot 1 registered ({MEMORY_ROW}{'' if a.mode == 'Stills' else f'; in {a.mode} mode {slot}'}) "
           + ("at each step above" if a.edges else "before and after the moves"
              + (", and after the put-back, to check it" if a.check_back else ""))
-          + f"; registering writes {', '.join(EXPECTED_LEFT)}, which no settings file sets back: the restore check names "
-            "them and leaves them out; slot 1 must be filled in the start file already", flush=True)
+          + f"; registering writes {keys}, which no settings file sets back: the restore check names "
+            f"them and leaves them out; {slot} must be filled in the start file already", flush=True)
     if moves and not a.check_back:
         print("--moves with --no-check-back: without the check-back nothing tells whether the moves kept the frame clear "
               "of the limit of its travel", flush=True)
