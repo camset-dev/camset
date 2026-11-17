@@ -42,7 +42,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, safety  # noqa: E402
+from camkit import camset, match, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
@@ -220,6 +220,27 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
     return got
 
 
+def list_labels(path: list) -> list | None:
+    """A list row's options as pass 1's map names them (pass3_run.labels_of), or None where the map holds no list at
+    `path` (or no map is there): set_row then compares the bar with the option alone."""
+    from pass3_run import labels_of
+    try:
+        labels, kind = labels_of(list(path))
+    except (SystemExit, OSError, ValueError, KeyError):
+        return None
+    return labels if kind == "list" else None
+
+
+def bar_names(reading, option: str, labels: list | None) -> bool:
+    """Whether the lit bar's `reading` names `option`: as read, the radio ring left out (camkit.match.clean); else, where
+    pass 1's map gives the row's options (`labels`) and names `option` among them once, by the one option
+    camkit.match.icon_named names in the reading, an icon read as text before the label ("16:9 16:9", Aspect Ratio)."""
+    if option_key(clean(reading)) == option_key(option):
+        return True
+    want = match.index_of(labels, option) if labels else None
+    return want is not None and match.icon_named(labels, reading) == want
+
+
 def set_row(cam, cycle, model, path: list, option: str, say):
     """A list row (a top-level row, or a submenu's: "Proxy Settings > Px Proxy Recording") put on `option` and left
     there: to the row by the scan, Right, Down through the list to the option (by the bar's text), OK; an
@@ -227,7 +248,8 @@ def set_row(cam, cycle, model, path: list, option: str, say):
     Type), and where it reads as no known kind left with MENU, its OK only where the camera refuses MENU and OK is its
     only button (proving.screens.info_notice_ok, 2026-11-14); a notice closed with MENU. For the state a prove run needs; the switch's --restore puts the start file back over it. The bar is read
     without the radio ring OCR can put before the saved option ("o Set with Dial", kit2_tables 08452_enter.png), so a
-    row already on `option` is found there too (camkit.match.clean). A row inside a panel ("Viewfinder Bright. >
+    row already on `option` is found there too (camkit.match.clean), and, by pass 1's labels for the row, with an icon
+    OCR reads as text before the label (bar_names: Aspect Ratio's "16:9 16:9"). A row inside a panel ("Viewfinder Bright. >
     Brightness Setup"): OK brings the panel back, its title the panel's own, with its slider lit (an OK in its footer,
     kit2_hdmi_watch 02362 -> 02363), which is the choice made, no information to take. What a screen after the choice
     reads is never said nor put in a failure (it can show the owner's values: a panel's number, a notice): the frame is
@@ -238,8 +260,9 @@ def set_row(cam, cycle, model, path: list, option: str, say):
     cam.press("right")
     if cam.read().kind != "list":
         raise Failed(f"Right on {' > '.join(path)!r} opened {cam.read().kind}, not a list ({cam.frame.path.name})")
+    labels = list_labels(path)
     for _ in range(24):
-        if option_key(clean(bar_text(cam))) == option_key(option):
+        if bar_names(bar_text(cam), option, labels):
             break
         cam.press("down")
     else:

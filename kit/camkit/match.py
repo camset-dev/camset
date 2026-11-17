@@ -91,6 +91,24 @@ def index_of(options: list, reading) -> int | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def icon_named(options: list, reading) -> int | None:
+    """The one option a list row's reading names where the row may draw an icon OCR reads as text before its label:
+    the reading as index_of names it, its radio mark left out (clean); else, where it names none whole, the reading cut
+    at each space, every part before or after a cut that names an option (index_of) naming the same one, which it then
+    names, else none. The a1 II's Aspect Ratio list draws a boxed ratio before each ratio, its bar read "3:2 3:2"
+    (kit2_a1fin_probe_keep 00082_down.png, 2026-11-17). Digits are compared exactly as index_of compares them: "16:9"
+    is never "1:1" nor "6:9"; a reading whose parts name two options names none (fail closed), and one that names an
+    option whole is never cut ("Auto Manual" is that option, not Manual)."""
+    t = clean(reading)
+    i = index_of(options, t)
+    if i is not None:
+        return i
+    words = t.split()
+    hits = {index_of(options, " ".join(part)) for k in range(1, len(words)) for part in (words[:k], words[k:])}
+    hits.discard(None)
+    return hits.pop() if len(hits) == 1 else None
+
+
 def table_row_label(labels) -> str:
     """A setting table's row label as the cells of the row read it (kit/table_walk.py reads it for each cell from the
     screen's left edge to the cell, so a cell further right reads the values of the cells before it glued on: "File
