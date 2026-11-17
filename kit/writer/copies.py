@@ -2,9 +2,10 @@
 ("copies" on the live setting, "copy_of" on each copy; docs/DATA_CONTRACTS.md, "A value kept in more than one record").
 The camera's hand table names the families (COPIES in its hand tables file, writer/hand_tables.py: the Picture
 Profile parameters in use and the profile in use, each with its Stills and Movie copy, and the other settings Different Set for Still/Mv keeps
-per mode); the rule an editor leans on, that in a file the camera wrote the live value equals at least one of its
-copies, is checked here on the camera's own downloads at every write, and a download that contradicts a family stops the
-write. The switches of the camera's own that keep a family's copies apart (KEEPS_APART: the a1 II's Different Set for
+per mode; a memory set's own record the camera writes alike in others, the Zone's place for each way of holding the
+camera, its family checked in every memory set); the rule an editor leans on, that in a file the camera wrote the live
+value equals at least one of its copies, is checked here on the camera's own downloads at every write, and a download
+that contradicts a family stops the write. The switches of the camera's own that keep a family's copies apart (KEEPS_APART: the a1 II's Different Set for
 Still/Mv boxes whose effect on the copies was proved) go on each switch as "keeps_apart" (with_keeps_apart), checked
 against the copies written here. Keys only, never a value (docs/decisions/0016)."""
 import json
@@ -12,7 +13,7 @@ import re
 import sys
 from pathlib import Path
 
-KEY = re.compile(r"global:0x([0-9a-f]{4})(?:\[(\d+)\])?")
+KEY = re.compile(r"(global|set):0x([0-9a-f]{4})(?:\[(\d+)\])?")
 # how many of the camera's downloads (runs/<model>_fw<fw>/downloads.jsonl) a write reads, spread evenly over the list:
 # the full check over every download was made once by hand, and a write reads a sample of it again
 SAMPLE = 200
@@ -31,15 +32,18 @@ def downloads(run_root: Path, most: int = SAMPLE) -> list:
 
 def value_of(cs, key: str, section: int = 0):
     """A setting's value in a read file's section, the live settings by default (an array's element by its index);
-    None when the section lacks it."""
+    None when the section lacks it, and for a memory set's own record ("set:...") in the live settings, whose record of
+    that number is another."""
     m = KEY.fullmatch(key)
-    rec = cs.get(section, int(m[1], 16)) if m and section < len(cs.sections) else None
+    if not m or section >= len(cs.sections) or (m[1] == "set" and section == 0):
+        return None
+    rec = cs.get(section, int(m[2], 16))
     if rec is None:
         return None
     v = rec.value()
-    if m[2] is None:
+    if m[3] is None:
         return v
-    return v[int(m[2])] if isinstance(v, list) and int(m[2]) < len(v) else None
+    return v[int(m[3])] if isinstance(v, list) and int(m[3]) < len(v) else None
 
 
 def section_mode(cs, section: int, camera: dict) -> str | None:
@@ -67,8 +71,8 @@ def row_mode(row: str) -> str:
 
 def contradictions(files: list, table: dict, camera: dict | None = None, modes: list | None = None,
                    unknown: frozenset = frozenset()) -> tuple:
-    """({live key: [the files where its value equals none of its copies']}, how many files read, how many could not be
-    read, how many sections were checked against the mode rule, how many live sections camera.live_mode did not name
+    """({live key: [the files where its value equals none of its copies', in the live settings or, for a family of a
+    memory set's own records, in any memory set]}, how many files read, how many could not be read, how many sections were checked against the mode rule, how many live sections camera.live_mode did not name
     the mode of, the first section where a setting is not the copy for its section's mode or None). A file lacking a
     record counts as one that contradicts; a file the reader cannot frame is skipped and counted, for it says nothing of
     the rule. With `camera` and `modes` (modes[i]: the modes whose value each family's i-th copy is) every section of
@@ -87,9 +91,12 @@ def contradictions(files: list, table: dict, camera: dict | None = None, modes: 
             continue
         read += 1
         for live, copies in table.items():
-            v = value_of(cs, live)
-            if v is None or not any(value_of(cs, c) == v for c in copies):
-                bad.setdefault(live, []).append(f)
+            # a live family in the live settings; a family of a memory set's own records ("set:...") in every memory set
+            for section in range(1, len(cs.sections)) if live.startswith("set:") else (0,):
+                v = value_of(cs, live, section)
+                if v is None or not any(value_of(cs, c, section) == v for c in copies):
+                    bad.setdefault(live, []).append(f)
+                    break
         if camera is None or not modes:
             continue
         for section in range(len(cs.sections)):

@@ -114609,6 +114609,77 @@
    "key": "set:0x0f32",
    "area": "set",
    "id": 3890,
+   "name": "Zone position memory (vertical, grip down, grid index)",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 9000,
+   "values": [
+    [
+     0,
+     "Centre"
+    ],
+    [
+     1,
+     "Up"
+    ],
+    [
+     2,
+     "Right"
+    ],
+    [
+     3,
+     "Left"
+    ],
+    [
+     4,
+     "Down"
+    ],
+    [
+     5,
+     "Lower right"
+    ],
+    [
+     6,
+     "Lower left"
+    ],
+    [
+     7,
+     "Upper left"
+    ],
+    [
+     8,
+     "Upper right"
+    ]
+   ],
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
+   "in_sets": true,
+   "scalar": true,
+   "size": 1,
+   "count": 1,
+   "unit": "",
+   "modes": "",
+   "proved": {
+    "values": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "copies": [
+    "set:0x0f34",
+    "set:0x0f36"
+   ]
+  },
+  {
+   "key": "set:0x0f34",
+   "area": "set",
+   "id": 3892,
    "name": "Zone position memory (vertical, grip down, grid index, copy 1)",
    "tab": "Focus",
    "group": "Focus Area",
@@ -114671,12 +114742,13 @@
      7,
      8
     ]
-   }
+   },
+   "copy_of": "set:0x0f32"
   },
   {
-   "key": "set:0x0f34",
+   "key": "set:0x0f36",
    "area": "set",
-   "id": 3892,
+   "id": 3894,
    "name": "Zone position memory (vertical, grip down, grid index, copy 2)",
    "tab": "Focus",
    "group": "Focus Area",
@@ -114739,75 +114811,8 @@
      7,
      8
     ]
-   }
-  },
-  {
-   "key": "set:0x0f36",
-   "area": "set",
-   "id": 3894,
-   "name": "Zone position memory (vertical, grip down, grid index, copy 3)",
-   "tab": "Focus",
-   "group": "Focus Area",
-   "order": 9000,
-   "values": [
-    [
-     0,
-     "Centre"
-    ],
-    [
-     1,
-     "Up"
-    ],
-    [
-     2,
-     "Right"
-    ],
-    [
-     3,
-     "Left"
-    ],
-    [
-     4,
-     "Down"
-    ],
-    [
-     5,
-     "Lower right"
-    ],
-    [
-     6,
-     "Lower left"
-    ],
-    [
-     7,
-     "Upper left"
-    ],
-    [
-     8,
-     "Upper right"
-    ]
-   ],
-   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
-   "in_sets": true,
-   "expert": true,
-   "scalar": true,
-   "size": 1,
-   "count": 1,
-   "unit": "",
-   "modes": "",
-   "proved": {
-    "values": [
-     0,
-     1,
-     2,
-     3,
-     4,
-     5,
-     6,
-     7,
-     8
-    ]
-   }
+   },
+   "copy_of": "set:0x0f32"
   },
   {
    "key": "set:0x0f0d",
@@ -215263,6 +215268,76 @@
    "modes": "",
    "key": "set:0x0f2c",
    "id": 3884,
+   "name": "Zone position memory (horizontal, grid index)",
+   "values": [
+    [
+     0,
+     "Centre"
+    ],
+    [
+     1,
+     "Up"
+    ],
+    [
+     2,
+     "Right"
+    ],
+    [
+     3,
+     "Left"
+    ],
+    [
+     4,
+     "Down"
+    ],
+    [
+     5,
+     "Lower right"
+    ],
+    [
+     6,
+     "Lower left"
+    ],
+    [
+     7,
+     "Upper left"
+    ],
+    [
+     8,
+     "Upper right"
+    ]
+   ],
+   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "copies": [
+    "set:0x0f2e",
+    "set:0x0f30"
+   ]
+  },
+  {
+   "area": "set",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 9000,
+   "scalar": true,
+   "modes": "",
+   "key": "set:0x0f2e",
+   "id": 3886,
    "name": "Zone position memory (horizontal, grid index, copy 1)",
    "values": [
     [
@@ -215319,7 +215394,8 @@
      7,
      8
     ]
-   }
+   },
+   "copy_of": "set:0x0f2c"
   },
   {
    "area": "set",
@@ -215328,8 +215404,8 @@
    "order": 9000,
    "scalar": true,
    "modes": "",
-   "key": "set:0x0f2e",
-   "id": 3886,
+   "key": "set:0x0f30",
+   "id": 3888,
    "name": "Zone position memory (horizontal, grid index, copy 2)",
    "values": [
     [
@@ -215386,74 +215462,8 @@
      7,
      8
     ]
-   }
-  },
-  {
-   "area": "set",
-   "tab": "Focus",
-   "group": "Focus Area",
-   "order": 9000,
-   "scalar": true,
-   "modes": "",
-   "key": "set:0x0f30",
-   "id": 3888,
-   "name": "Zone position memory (horizontal, grid index, copy 3)",
-   "values": [
-    [
-     0,
-     "Centre"
-    ],
-    [
-     1,
-     "Up"
-    ],
-    [
-     2,
-     "Right"
-    ],
-    [
-     3,
-     "Left"
-    ],
-    [
-     4,
-     "Down"
-    ],
-    [
-     5,
-     "Lower right"
-    ],
-    [
-     6,
-     "Lower left"
-    ],
-    [
-     7,
-     "Upper left"
-    ],
-    [
-     8,
-     "Upper right"
-    ]
-   ],
-   "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
-   "in_sets": true,
-   "expert": true,
-   "size": 1,
-   "count": 1,
-   "proved": {
-    "values": [
-     0,
-     1,
-     2,
-     3,
-     4,
-     5,
-     6,
-     7,
-     8
-    ]
-   }
+   },
+   "copy_of": "set:0x0f2c"
   },
   {
    "area": "global",
@@ -215903,6 +215913,76 @@
    "modes": "",
    "key": "set:0x0f38",
    "id": 3896,
+   "name": "Zone position memory (vertical, grip up, grid index)",
+   "values": [
+    [
+     0,
+     "Centre"
+    ],
+    [
+     1,
+     "Up"
+    ],
+    [
+     2,
+     "Right"
+    ],
+    [
+     3,
+     "Left"
+    ],
+    [
+     4,
+     "Down"
+    ],
+    [
+     5,
+     "Lower right"
+    ],
+    [
+     6,
+     "Lower left"
+    ],
+    [
+     7,
+     "Upper left"
+    ],
+    [
+     8,
+     "Upper right"
+    ]
+   ],
+   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "copies": [
+    "set:0x0f3a",
+    "set:0x0f3c"
+   ]
+  },
+  {
+   "area": "set",
+   "tab": "Focus",
+   "group": "Focus Area",
+   "order": 9000,
+   "scalar": true,
+   "modes": "",
+   "key": "set:0x0f3a",
+   "id": 3898,
    "name": "Zone position memory (vertical, grip up, grid index, copy 1)",
    "values": [
     [
@@ -215959,7 +216039,8 @@
      7,
      8
     ]
-   }
+   },
+   "copy_of": "set:0x0f38"
   },
   {
    "area": "set",
@@ -215968,8 +216049,8 @@
    "order": 9000,
    "scalar": true,
    "modes": "",
-   "key": "set:0x0f3a",
-   "id": 3898,
+   "key": "set:0x0f3c",
+   "id": 3900,
    "name": "Zone position memory (vertical, grip up, grid index, copy 2)",
    "values": [
     [
@@ -216026,74 +216107,8 @@
      7,
      8
     ]
-   }
-  },
-  {
-   "area": "set",
-   "tab": "Focus",
-   "group": "Focus Area",
-   "order": 9000,
-   "scalar": true,
-   "modes": "",
-   "key": "set:0x0f3c",
-   "id": 3900,
-   "name": "Zone position memory (vertical, grip up, grid index, copy 3)",
-   "values": [
-    [
-     0,
-     "Centre"
-    ],
-    [
-     1,
-     "Up"
-    ],
-    [
-     2,
-     "Right"
-    ],
-    [
-     3,
-     "Left"
-    ],
-    [
-     4,
-     "Down"
-    ],
-    [
-     5,
-     "Lower right"
-    ],
-    [
-     6,
-     "Lower left"
-    ],
-    [
-     7,
-     "Upper left"
-    ],
-    [
-     8,
-     "Upper right"
-    ]
-   ],
-   "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
-   "in_sets": true,
-   "expert": true,
-   "size": 1,
-   "count": 1,
-   "proved": {
-    "values": [
-     0,
-     1,
-     2,
-     3,
-     4,
-     5,
-     6,
-     7,
-     8
-    ]
-   }
+   },
+   "copy_of": "set:0x0f38"
   },
   {
    "area": "global",

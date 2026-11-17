@@ -2492,39 +2492,39 @@ enums:
       doc: 'AF point copy 2: Y [Focus > Other settings]. live settings; 0 of 1 settings on it proved on the camera.'
     0x0f2c:
       id: zone_position_memory_0f2c
-      doc: Zone position memory (horizontal, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of 1 settings
-        on it proved on the camera.
+      doc: Zone position memory (horizontal, grid index) [Focus > Focus Area]. memory sets; 1 of 1 settings on it
+        proved on the camera.
     0x0f2e:
       id: zone_position_memory_0f2e
-      doc: Zone position memory (horizontal, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of 1 settings
+      doc: Zone position memory (horizontal, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of 1 settings
         on it proved on the camera.
     0x0f30:
       id: zone_position_memory_0f30
-      doc: Zone position memory (horizontal, grid index, copy 3) [Focus > Focus Area]. memory sets; 1 of 1 settings
+      doc: Zone position memory (horizontal, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of 1 settings
         on it proved on the camera.
     0x0f32:
       id: zone_position_memory_0f32
-      doc: Zone position memory (vertical, grip down, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of
-        1 settings on it proved on the camera.
+      doc: Zone position memory (vertical, grip down, grid index) [Focus > Focus Area]. memory sets; 1 of 1 settings
+        on it proved on the camera.
     0x0f34:
       id: zone_position_memory_0f34
-      doc: Zone position memory (vertical, grip down, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of
+      doc: Zone position memory (vertical, grip down, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of
         1 settings on it proved on the camera.
     0x0f36:
       id: zone_position_memory_0f36
-      doc: Zone position memory (vertical, grip down, grid index, copy 3) [Focus > Focus Area]. memory sets; 1 of
+      doc: Zone position memory (vertical, grip down, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of
         1 settings on it proved on the camera.
     0x0f38:
       id: zone_position_memory_0f38
-      doc: Zone position memory (vertical, grip up, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of
-        1 settings on it proved on the camera.
+      doc: Zone position memory (vertical, grip up, grid index) [Focus > Focus Area]. memory sets; 1 of 1 settings
+        on it proved on the camera.
     0x0f3a:
       id: zone_position_memory_0f3a
-      doc: Zone position memory (vertical, grip up, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of
+      doc: Zone position memory (vertical, grip up, grid index, copy 1) [Focus > Focus Area]. memory sets; 1 of
         1 settings on it proved on the camera.
     0x0f3c:
       id: zone_position_memory_0f3c
-      doc: Zone position memory (vertical, grip up, grid index, copy 3) [Focus > Focus Area]. memory sets; 1 of
+      doc: Zone position memory (vertical, grip up, grid index, copy 2) [Focus > Focus Area]. memory sets; 1 of
         1 settings on it proved on the camera.
     0x0f46:
       id: focus_area_memory

@@ -124,7 +124,8 @@ is never this: such refusals (`menu_blocked`) depend on the camera's state and s
 ### A value kept in more than one record (`copies`, `copy_of`, `copy_for`, `keeps_apart`, `camera.live_mode`)
 
 The camera keeps some values in a live record and per-mode copies beside it (each Picture Profile parameter in use, the
-profile in use, the settings Different Set for Still/Mv keeps per mode). The one rule every file the camera writes
+profile in use, the settings Different Set for Still/Mv keeps per mode), and some in memory set records it writes alike
+(the a1 II's Zone place for each way of holding the camera, its copies no shooting mode's). The one rule every file the camera writes
 keeps: in each section the setting equals the copy for that section's mode (`copy_for`; the live settings' mode by
 `camera.live_mode`, a memory set's by `camera.memory_sets.modes`), and where the mode or the copies' modes are not
 known, it equals at least one of its copies. What follows an edit is the copies rule (`copies`, `copy_of`);

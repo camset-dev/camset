@@ -957,6 +957,41 @@ def test_the_shipped_copies_are_the_hand_tables_and_each_copy_names_its_setting(
     assert copy_of == {c: live for live, cs in got.items() for c in cs}
 
 
+def test_each_holds_zone_place_shows_once_and_its_two_other_records_are_its_copies():
+    """The Zone's place for each way of holding the camera (level, grip down, grip up) is three memory set records a
+    registration writes alike: the first shows outside Expert mode, named for its hold, and lists the other two as its
+    copies, which stay in Expert mode, say whose copies they are, carry no mode (no shooting mode's), and are named as
+    the copies of a family whose modes are not known (", copy 1)", ", copy 2)")."""
+    trios = {"set:0x0f2c": "horizontal", "set:0x0f32": "vertical, grip down", "set:0x0f38": "vertical, grip up"}
+    for main, hold in trios.items():
+        s = PUB_BY[main]
+        assert s["name"] == f"Zone position memory ({hold}, grid index)" and not s.get("expert")
+        assert len(s["copies"]) == 2 and "copy_of" not in s
+        for i, c in enumerate(s["copies"], 1):
+            copy = PUB_BY[c]
+            assert copy["name"] == f"Zone position memory ({hold}, grid index, copy {i})", copy["name"]
+            assert copy["copy_of"] == main and copy["expert"] and "copy_for" not in copy
+            assert copy["proved"] == s["proved"] and copy["values"] == s["values"]
+
+
+def test_a_family_of_memory_set_records_is_checked_in_every_memory_set(tmp_path):
+    """A family of a memory set's own records ("set:..."): value_of never reads one in the live settings, where a record
+    of that number is another; contradictions checks it in every memory set, so a file whose one memory set holds the
+    record off both copies contradicts it. A file made from the sample (a value neither copy holds computed, not
+    written down)."""
+    from writer.copies import contradictions, value_of
+    cs = camset.read(SAMPLE)
+    table = {"set:0x0f2c": ["set:0x0f2e", "set:0x0f30"]}
+    assert value_of(cs, "set:0x0f2c", 0) is None and value_of(cs, "set:0x0f2c", 1) is not None
+    assert contradictions([SAMPLE], table)[0] == {}
+    rec = cs.get(5, 0x0f2c)
+    off = max(value_of(cs, "set:0x0f2e", 5), value_of(cs, "set:0x0f30", 5)) + 1
+    bad = tmp_path / "off.DAT"
+    bad.write_bytes(camset.with_values(cs, {(5, 0x0f2c): off.to_bytes(rec.size, "little")}))
+    assert contradictions([bad], table)[0] == {"set:0x0f2c": [bad]}
+    assert contradictions([bad], table, {}, [["Stills"], ["Movie"]], frozenset(table))[5][2] == 5
+
+
 def test_video_system_values_come_from_the_rows_walked_under_each_system(tmp_path, capsys):
     """with_video_systems (kit/writer/offered.py): a value proved only in rows whose downloads say NTSC is NTSC's, one
     proved only under PAL PAL's, one proved under both or never under neither; the system is each row's downloads'
@@ -1162,9 +1197,11 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     #   those do
     # + 12 the spot size and the Custom area as written at AF Area Registration (the camera's own downloads compared,
     #   2026-11-15): copies on no camera row, named for the way the camera is held since 2026-11-16
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12   # + the live copy
-    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12
+    # - 3 the Zone's place for each way of holding the camera: of each three records a registration writes alike, the
+    #   first named for its hold and shown, the other two its copies (COPIES), 2026-11-17
+    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3   # + the live copy
+    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
     one = next(s for s in DOC["settings"] if s.get("expert"))

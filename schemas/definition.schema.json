@@ -665,7 +665,7 @@
      },
      "minItems": 1,
      "uniqueItems": true,
-     "description": "The other records the camera keeps at this setting's value, each a setting of its own that names this one in copy_of: a Picture Profile parameter in use and its Stills and Movie copies, the profile in use and its two copies, and the other settings Different Set for Still/Mv keeps per mode. In a file the camera wrote, this setting's value equals at least one of its copies'. An editor writes every copy that held this setting's old value with the new one, in the same step, and flags a file where the value equals none of them. Written by kit/schema_update.py (kit/writer/copies.py) from the camera's hand table, only while the camera's downloads bear the rule out (docs/DATA_CONTRACTS.md, \"A value kept in more than one record\")."
+     "description": "The other records the camera keeps at this setting's value, each a setting of its own that names this one in copy_of: a Picture Profile parameter in use and its Stills and Movie copies, the profile in use and its two copies, the other settings Different Set for Still/Mv keeps per mode, and a memory set's record the camera writes alike in others (the a1 II's Zone place for each way of holding the camera, its copies kept in Expert mode). In a file the camera wrote, this setting's value equals at least one of its copies'. An editor writes every copy that held this setting's old value with the new one, in the same step, and flags a file where the value equals none of them. Written by kit/schema_update.py (kit/writer/copies.py) from the camera's hand table, only while the camera's downloads bear the rule out (docs/DATA_CONTRACTS.md, \"A value kept in more than one record\")."
     },
     "copy_of": {
      "type": "string",

@@ -49,9 +49,9 @@
       "name": "Picture Profile",
       "note": "No 7-9: PP7-PP9 are not on this body's menu (see their records). 12-15, offered in Movie mode only, are the Help Guide's PPLUT1-PPLUT4: profiles that apply an imported user LUT, shown as User1-User4."
     },
-    "set:0x0f32": {"name": "Zone position memory (vertical, grip down, grid index, copy 1)"},
-    "set:0x0f34": {"name": "Zone position memory (vertical, grip down, grid index, copy 2)"},
-    "set:0x0f36": {"name": "Zone position memory (vertical, grip down, grid index, copy 3)"},
+    "set:0x0f32": {"name": "Zone position memory (vertical, grip down, grid index)"},
+    "set:0x0f34": {"name": "Zone position memory (vertical, grip down, grid index, copy 1)"},
+    "set:0x0f36": {"name": "Zone position memory (vertical, grip down, grid index, copy 2)"},
     "global:0x13d4": {
       "name": "Drive Mode (menu choice)",
       "note": "Takes the same codes as Drive Mode 0x02b5 when the drive mode is chosen from the menu, on a body Camera Settings Reset has set 0x1126 to 7 on, which a file cannot set back: a body never reset may not keep this record in step. A settings file sets it."
@@ -635,9 +635,9 @@
       "values": [],
       "note": "4 slots, as 0x0e80. Registering Single Bracket in a hold copies the live Single Bracket setting (0x04c8) here, numbered by its place in the live list from 0, as 0x0e80 is: the live code less one, and less one more for each code the live list skips below it."
     },
-    "set:0x0f2c": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index, copy 1)", "values": [], "note": ""},
-    "set:0x0f2e": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index, copy 2)", "values": [], "note": ""},
-    "set:0x0f30": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index, copy 3)", "values": [], "note": ""},
+    "set:0x0f2c": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index)", "values": [], "note": ""},
+    "set:0x0f2e": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index, copy 1)", "values": [], "note": ""},
+    "set:0x0f30": {"like": "set:0x0f0b", "name": "Zone position memory (horizontal, grid index, copy 2)", "values": [], "note": ""},
     "global:0x0c09": {
       "like": "global:0x04e5",
       "name": "Recall Custom hold: registration stamp",
@@ -769,19 +769,19 @@
     "set:0x13a9": {"like": "set:0x019c", "name": "Custom 3 box position: Y (current)", "values": [], "note": ""},
     "set:0x0f38": {
       "like": "set:0x0f0b",
-      "name": "Zone position memory (vertical, grip up, grid index, copy 1)",
+      "name": "Zone position memory (vertical, grip up, grid index)",
       "values": [],
       "note": ""
     },
     "set:0x0f3a": {
       "like": "set:0x0f0b",
-      "name": "Zone position memory (vertical, grip up, grid index, copy 2)",
+      "name": "Zone position memory (vertical, grip up, grid index, copy 1)",
       "values": [],
       "note": ""
     },
     "set:0x0f3c": {
       "like": "set:0x0f0b",
-      "name": "Zone position memory (vertical, grip up, grid index, copy 3)",
+      "name": "Zone position memory (vertical, grip up, grid index, copy 2)",
       "values": [],
       "note": ""
     },
@@ -3128,10 +3128,13 @@
     "global:0x0c79": ["global:0x0eed", "global:0x0eef"],
     "global:0x0c7b": ["global:0x0ef1", "global:0x0ef3"],
     "global:0x0c7f": ["global:0x0ef5", "global:0x0ef7"],
-    "global:0x0c81": ["global:0x0ef9", "global:0x0efb"]
+    "global:0x0c81": ["global:0x0ef9", "global:0x0efb"],
+    "set:0x0f2c": ["set:0x0f2e", "set:0x0f30"],
+    "set:0x0f32": ["set:0x0f34", "set:0x0f36"],
+    "set:0x0f38": ["set:0x0f3a", "set:0x0f3c"]
   },
   "COPY_MODES": [["Stills"], ["Movie", "S&Q", "Time-lapse"]],
-  "COPY_MODES_UNKNOWN": ["global:0x0340"],
+  "COPY_MODES_UNKNOWN": ["global:0x0340", "set:0x0f2c", "set:0x0f32", "set:0x0f38"],
   "KEEPS_APART": {
     "global:0x0187": [{"setting": "global:0x0367", "apart": [1], "untick_sets": 0}],
     "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}]

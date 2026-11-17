@@ -334,7 +334,7 @@
   },
   "COPIES": {
    "type": "object",
-   "description": "The values the camera keeps in more than one record, by the live setting's key: its Stills copy and its Movie copy, in that order.",
+   "description": "The values the camera keeps in more than one record, by the live setting's key: its Stills copy and its Movie copy, in that order. A memory set's own record (\"set:...\") the camera writes alike in others (the a1 II's Zone place for each way of holding the camera) is a family too, its copies' modes not known (COPY_MODES_UNKNOWN), checked in every memory set of the camera's downloads.",
    "propertyNames": {
     "$ref": "#/$defs/key"
    },

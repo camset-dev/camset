@@ -55,6 +55,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Zone place for each way of holding the camera shows outside Expert mode,** one row per hold in each
+  memory set. Its two other records, which the camera writes alike, are its copies in Expert mode and change with it.
 - **The a1 II definition says how far each focus frame can travel** (`frame` on the records of each place: each spot
   size's limits at each Aspect Ratio, each Custom box's bounds, size records and each ratio's picture), measured level
   at all four aspect ratios and grip down and grip up at 3:2; the editor does not use it yet. A new hand table,
