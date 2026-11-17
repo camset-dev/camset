@@ -74,6 +74,10 @@ pub struct Setting {
     /// Allowed increment within the range (e.g. 250 for Knee Point); values are snapped to it.
     #[serde(default)]
     pub step: Option<i64>,
+    /// This setting holds one coordinate of a movable focus frame's centre, and how far the frame travels there where
+    /// it was measured (`Frame`). None: no frame's coordinate, or its travel is not known.
+    #[serde(default)]
+    pub frame: Option<Frame>,
     /// How a number is shown, when not as stored: the stored number divided by `divide`, with `decimals` decimals,
     /// before `unit` (7500 with divide 100 is "75 %"). Editing takes the shown number and stores it multiplied back.
     #[serde(default)]
@@ -178,6 +182,33 @@ pub struct KeepsApart {
     pub apart: Vec<i64>,
     #[serde(default)]
     pub untick_sets: Option<i64>,
+}
+
+/// One coordinate of a focus frame's centre (`Setting::frame`): which (`axis`, "x" across or "y" down), the setting that
+/// holds the other one in the same place (`with`, whose own frame names this one back), and where the centre stops on
+/// this axis, by area (`limits`).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct Frame {
+    pub axis: String,
+    pub with: String,
+    pub limits: Vec<FrameLimit>,
+}
+
+/// Where a frame's centre stops on one axis for some areas (`areas`, Focus Area options as the definition's values name
+/// them): a frame measured area by area stops within `range`; a box whose size the file holds stays whole inside
+/// `inside`, so its centre stops half the size its `size` setting holds (in the same section) inside those bounds, the
+/// rule proved at the sizes `sizes_tried` (empty: not said).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct FrameLimit {
+    pub areas: Vec<String>,
+    #[serde(default)]
+    pub range: Option<(i64, i64)>,
+    #[serde(default)]
+    pub inside: Option<(i64, i64)>,
+    #[serde(default)]
+    pub size: Option<String>,
+    #[serde(default)]
+    pub sizes_tried: Vec<i64>,
 }
 
 /// One main option of a setting's `option_tree`: as the camera names it, and either one stored value or the choices on
@@ -1585,7 +1616,50 @@ impl Schema {
         if let Some(f) = &self.camera.file {
             f.check().map_err(|e| format!("its file block does not hold together: {e}"))?;
         }
-        self.check_keeps_apart()
+        self.check_keeps_apart()?;
+        self.check_frames()
+    }
+
+    /// A focus frame's coordinate (`frame`) as the kit writes it: an axis, x or y; the other one a setting of the
+    /// definition whose frame is the other axis, names this one back and has limits for the same areas; each limit
+    /// for some areas, either a range (lowest not above highest, within the setting's own range where it has one) or
+    /// the bounds a box stays inside with the setting of its size, which the definition holds, and never both. A
+    /// definition that says otherwise is refused, saying which, so the editor never places a frame from it.
+    fn check_frames(&self) -> Result<(), String> {
+        let by_key: std::collections::HashMap<&str, &Setting> = self.settings.iter().map(|s| (s.key.as_str(), s)).collect();
+        fn areas(f: &Frame) -> Vec<&str> {
+            let mut a: Vec<&str> = f.limits.iter().flat_map(|l| l.areas.iter().map(String::as_str)).collect();
+            a.sort_unstable();
+            a
+        }
+        for s in &self.settings {
+            let Some(f) = &s.frame else { continue };
+            let why = |w: String| Err(format!("{} holds a focus frame's coordinate, but {w}", s.name));
+            let other_axis = match f.axis.as_str() { "x" => "y", "y" => "x", a => return why(format!("its axis is {a:?}, not x or y")) };
+            if f.limits.is_empty() {
+                return why("it gives no limits".into());
+            }
+            for l in &f.limits {
+                if l.areas.is_empty() || l.areas.iter().any(|a| a.trim().is_empty()) {
+                    return why("a limit names no area".into());
+                }
+                match (l.range, l.inside, &l.size) {
+                    (Some((lo, hi)), None, None) if lo <= hi && l.sizes_tried.is_empty() && s.range.is_none_or(|(a, b)| a <= lo && hi <= b) => {}
+                    (None, Some((lo, hi)), Some(k)) if lo <= hi => {
+                        if !by_key.contains_key(k.as_str()) {
+                            return why(format!("the definition holds no {k}, its box's size"));
+                        }
+                    }
+                    _ => return why(format!("its limit for {} is neither a range within its own nor a box's bounds with its size", l.areas.join(", "))),
+                }
+            }
+            let Some(o) = by_key.get(f.with.as_str()) else { return why(format!("the definition holds no {}", f.with)) };
+            match &o.frame {
+                Some(of) if of.axis == other_axis && of.with == s.key && areas(of) == areas(f) => {}
+                _ => return why(format!("{} is not its other coordinate, with limits for the same areas", o.name)),
+            }
+        }
+        Ok(())
     }
 
     /// A switch that keeps copies apart (`keeps_apart`) as the kit writes it: some of the switch's own values, not all
@@ -1879,6 +1953,63 @@ mod tests {
             KeepsApart { setting: "global:0x0020".into(), apart: vec![1, 2], untick_sets: None },
         ]);
         assert!(made(serde_json::json!({})).keeps_apart.is_empty());
+    }
+
+    /// The a1 II's definition carries how far each focus frame travels, as the kit writes it: the spot's places with
+    /// their limits by area (Spot M's X from 80 to 560), each Custom box's places with the bounds the box stays inside,
+    /// its size setting and the sizes the rule was tried at, the in-use box with every Custom area; each coordinate
+    /// names its other one. The grip-up copies, whose way of holding was not tried, carry none, nor does any other
+    /// setting but the frames' places. Without the field, a setting holds no frame.
+    #[test]
+    fn the_a1_ii_definition_says_how_far_each_focus_frame_travels() {
+        let s = embedded();
+        let by = |k: &str| s.settings.iter().find(|x| x.key == k).unwrap_or_else(|| panic!("{k}"));
+        let spot = by("set:0x01be").frame.as_ref().expect("the spot's level X");
+        assert_eq!((spot.axis.as_str(), spot.with.as_str()), ("x", "set:0x01c4"));
+        let m = spot.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap();
+        assert_eq!((m.range, m.inside, m.size.as_deref()), (Some((80, 560)), None, None));
+        assert!(m.areas.contains(&"Tracking: Spot M".to_string()));
+        let y = by("set:0x01c4").frame.as_ref().unwrap();
+        assert_eq!((y.axis.as_str(), y.with.as_str()), ("y", "set:0x01be"));
+        assert_eq!(y.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap().range, Some((72, 408)));
+        let boxed = by("set:0x1333").frame.as_ref().expect("Custom 1's level X");
+        assert_eq!(boxed.limits, vec![FrameLimit { areas: vec!["Custom 1".into(), "Tracking: Custom 1".into()], range: None,
+            inside: Some((46, 594)), size: Some("set:0x14b6".into()), sizes_tried: vec![168, 402] }]);
+        let in_use = by("set:0x1329").frame.as_ref().expect("the box in use's Y");
+        assert_eq!((in_use.axis.as_str(), in_use.limits[0].size.as_deref(), in_use.limits[0].areas.len()), ("y", Some("set:0x1488"), 6));
+        assert!(["set:0x01c2", "set:0x01c8", "set:0x1337", "set:0x133d"].iter().all(|k| by(k).frame.is_none()));
+        assert_eq!(s.settings.iter().filter(|x| x.frame.is_some()).count(), 26);
+        assert!(made(serde_json::json!({})).frame.is_none());
+    }
+
+    /// A focus frame's coordinate that does not hold together refuses the whole definition, saying why: an axis not x
+    /// or y, another coordinate the definition lacks or that does not name it back, a limit that is neither a range
+    /// within the setting's own nor a box's bounds with its size, a size setting the definition lacks. The a1 II's,
+    /// as the kit writes it, is taken.
+    #[test]
+    fn a_frame_that_does_not_hold_together_refuses_the_definition() {
+        let with = |key: &'static str, f: serde_json::Value| a1_with(move |v| {
+            for s in v["settings"].as_array_mut().unwrap() {
+                if s["key"] == key { s["frame"] = f.clone(); }
+            }
+        });
+        let spot = |limits: serde_json::Value| serde_json::json!({ "axis": "x", "with": "set:0x01c4", "limits": limits });
+        let m = serde_json::json!([{ "areas": ["Spot: M"], "range": [80, 560] }]);
+        assert!(Schema::from_text(&a1_text()).is_ok());
+        for (key, f, words) in [
+            ("set:0x01be", serde_json::json!({ "axis": "z", "with": "set:0x01c4", "limits": m }), "not x or y"),
+            ("set:0x01be", serde_json::json!({ "axis": "x", "with": "set:0x7ffe", "limits": m }), "holds no set:0x7ffe"),
+            ("set:0x01be", serde_json::json!({ "axis": "x", "with": "set:0x01c6", "limits": m }), "is not its other coordinate"),
+            ("set:0x01be", spot(serde_json::json!([{ "areas": ["Spot: M"], "range": [80, 900] }])), "neither a range within its own"),
+            ("set:0x01be", spot(serde_json::json!([{ "areas": ["Spot: M"], "range": [560, 80] }])), "neither a range within its own"),
+            ("set:0x01be", spot(serde_json::json!([{ "areas": ["Spot: M"], "range": [80, 560], "inside": [46, 594], "size": "set:0x14b6" }])), "neither a range"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46, 594] }] }), "neither a range"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46, 594], "size": "set:0x7ffe" }] }), "holds no set:0x7ffe, its box's size"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": [], "inside": [46, 594], "size": "set:0x14b6" }] }), "names no area"),
+        ] {
+            let e = Schema::from_text(&with(key, f.clone())).unwrap_err();
+            assert!(e.contains("holds a focus frame's coordinate, but") && e.contains(words), "{f}: {e}");
+        }
     }
 
     /// A proof as the lean definition says it: the values it checked, or a scale sampled and whether on one line; the
