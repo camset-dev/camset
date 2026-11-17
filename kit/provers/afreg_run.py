@@ -282,6 +282,18 @@ def setting_code(index: dict, path: list, option: str) -> tuple | None:
     for naming an option from a reading (match.norm, which keeps a decimal point between digits and compares digits
     exactly: "F1.1" is not "F11", 2.5" not 25"; else the only label match.same takes). None when no label, or more than
     one, is named at the step that decides: never the first of several."""
+    hit = row_record(index, path)
+    if hit is None:
+        return None
+    values = [(v, lab) for v, lab in hit.get("values") or []]
+    exact = [i for i, (_, lab) in enumerate(values) if str(lab).strip() == str(option).strip()]
+    i = (exact[0] if len(exact) == 1 else None) if exact else match.index_of([lab for _, lab in values], option)
+    return None if i is None else (hit["key"], values[i][0])
+
+
+def row_record(index: dict, path: list) -> dict | None:
+    """The one global setting of the definition (`index`) with a proof of the menu row `path` itself, made in no state a
+    run cannot vouch for (the row's path with no suffix, or "[by hand]"); None when none, or several, has one."""
     row = " > ".join(path)
 
     def vouched(menu: str) -> bool:
@@ -289,12 +301,7 @@ def setting_code(index: dict, path: list, option: str) -> tuple | None:
         return m.group(1) == row and m.group(2) in (None, "by hand")
     hits = [s for k, s in index.items() if k.startswith("global:")
             and any(vouched(m) for m in (s.get("proved") or {}).get("menu") or [])]
-    if len(hits) != 1:
-        return None
-    values = [(v, lab) for v, lab in hits[0].get("values") or []]
-    exact = [i for i, (_, lab) in enumerate(values) if str(lab).strip() == str(option).strip()]
-    i = (exact[0] if len(exact) == 1 else None) if exact else match.index_of([lab for _, lab in values], option)
-    return None if i is None else (hits[0]["key"], values[i][0])
+    return hits[0] if len(hits) == 1 else None
 
 
 # how the screens are read held vertically with Vertical Display On, either eyes: after "are read" or "reads <screens>"

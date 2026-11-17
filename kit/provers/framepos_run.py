@@ -187,7 +187,13 @@ at its start already, nothing pressed; else pushed Right and Down to the far cor
 there as an edges run's way back is, in Standard's step (FRAME_STEPS), each landing registered and checked on the
 measured records alone (the start's file holds the edges run's AF Frame Move Amt). A start no press reaches is said
 with the difference and the run stops; a failure leaves the frame where it is, and a run again starts from wherever that
-is. Lines in put_back.jsonl; the same consent as --edges.
+is. Lines in put_back.jsonl; the same consent as --edges. An area a STOP ended once its frame moved has its line
+written all the same (stopped_line: "stopped", no "back", its registrations so far); one a run stopped in before
+2026-11-17, which wrote none, is found from the run's files (files_lines: its edge-base download no line names, its
+state the line before it or setup.jsonl). Such an area is planned from its registrations alone (files_m: the records
+that changed, X or Y by name, Right and Down raising them level, Standard's step, the grid's centre). The place grid is
+stretched over the recorded picture, so a start off the centre (320, 240) is put back only where the camera's start
+download reads the Aspect Ratio its own start download did (ratio_refusal), else refused, nothing pressed.
 
 Registering: MENU, Camera Set. Memory by the page scan, its lit row read as that row, Enter; the slot screen (its tabs 1
 2 3 M1-M4, slot 1 lit by default, its footer OK) must read as one (SLOT_SCREEN), and its lit tab must be slot 1,
@@ -203,6 +209,7 @@ EXIT_UNRESTORED). For the same reason a run whose start file has slot 1 empty st
 it would mark it filled for good.
 """
 import argparse
+import contextlib
 import re
 import sys
 import time
@@ -264,6 +271,11 @@ VH_OPTION = {None: afreg_run.VH[None], "level": afreg_run.VH["down"], "down": af
 # --edges: Circ. of Focus Point (a frame at an edge jumping to the far one) put on its option that stops it, as the
 # definition's values name them (the a1 II's global:0x03a1: Does Not Circulate 0, Circulate 1)
 CIRC_ROW, CIRC_OFF = "Circ. of Focus Point", "Does Not Circulate"
+# the 640 x 480 grid's centre, X and Y by the records' names: every frame's edges lie either side of it alike, at every
+# Aspect Ratio (the grid is stretched over the recorded picture, so a place off it has other numbers at another ratio:
+# Custom 3's Y 194-286 at 16:9, 201-279 at 3:2, 2026-11-17)
+GRID_CENTRE = {"X": 320, "Y": 240}
+RATIO_ROW = "Aspect Ratio"
 EDGE_PRESSES = 40           # a push's presses: past the widest travel the smallest step crosses (Spot XS: 32 across 640)
 EDGE_TRIES = 3              # registrations after the first way back that may make good a press the camera lost
 PUSH_GAP = 0.35             # s between a push's presses, none waited on to settle (not yet timed on the camera)
@@ -1011,11 +1023,13 @@ def edge_summary_of(line: dict) -> list:
         out.append(f"    moved with neither key, or with the other: {', '.join(shown_key(k) for k in line['odd'])}")
     if line.get("failed"):
         out.append(f"    failed: {line['failed']}")
+    if line.get("stopped"):
+        out.append(f"    stopped: {line['stopped']}")
     back = line.get("back")
     if back is None:
         out.append("    its frame was not moved" if not line.get("moved") else
                    f"    ITS FRAME MAY BE MOVED: on the shooting screen with {ROW} = {line['area']}, check its place by "
-                   "hand")
+                   "hand" + (", or bring it back with --put-back RUN" if line.get("stopped") else ""))
     elif back["same"]:
         large = f"{AMT_ROW} Large" in (line.get("context") or "")
         out.append("    put back" + (" under Standard" if large else "")
@@ -1549,7 +1563,8 @@ def amt_keys(index: dict) -> set:
 
 
 def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, a, index: dict,
-              turned: str | None = None, amt: str | None = "Standard", amt_state: dict | None = None) -> dict:
+              turned: str | None = None, amt: str | None = "Standard", amt_state: dict | None = None,
+              held: dict | None = None) -> dict:
     """One area's edges (--edges), measured under AF Frame Move Amt `amt`: chosen; slot 1 registered at its start
     (base); pushed a.edge_presses Left and Up to the low corner (low); Right 1 (snap-h: what Right moves), Right 1 and
     Down 1 (step-h: Right's step, what Down moves), Down 1 and Right pushed (step-v: Down's step, the far horizontal
@@ -1561,7 +1576,10 @@ def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tupl
     out); a press the camera lost is made good and checked again, EDGE_TRIES times at most; a start no press reaches is
     said, nothing more pressed. A failure once the frame has moved closes the screen, measures again on the low side what
     is not yet known, pushes the frame to the far corner and brings it back from there under Standard as above. Returns
-    the area's line, which says whether the frame is back ("back") or may be elsewhere ("moved" with no "back")."""
+    the area's line, which says whether the frame is back ("back") or may be elsewhere ("moved" with no "back"). A STOP
+    (camkit.link.StopRequested), or anything else that is not the area's own failure, here or in the recovery, goes up
+    to the caller with nothing more pressed: `held` keeps the area's Walk ("walk") from the start, so edge_loop writes
+    its line all the same (stopped_line)."""
     from camkit import camset
     from prove_run import Failed, held_value, to_shooting
     from runner import changes_of, close_screen
@@ -1569,6 +1587,8 @@ def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tupl
     amt_state = amt_state if amt_state is not None else {"now": amt}
     w = Walk(cam, link, hdmi, run, cycle, model, a, turned, t, "edge", amt_state)
     w.line["edge_presses"] = n
+    if held is not None:
+        held["walk"] = w
     skip = amt_keys(index)
     xy = standard_step(t["label"]) if large else None
 
@@ -1648,20 +1668,45 @@ def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tupl
     return w.line
 
 
+def stopped_line(w, e) -> dict | None:
+    """The line of an area a STOP (or anything that is not its own failure) ended, `w` its Walk: None where its frame
+    never moved (nothing to bring back); else its line as far as it went, "moved", no "back", "stopped" (what ended
+    it) and "values" (each registration's place records, those that changed between them: the start among them) where
+    two registrations or more were made. Nothing is pressed here."""
+    if w is None or not w.line.get("moved"):
+        return None
+    w.line["stopped"] = f"{type(e).__name__}: {e}"[:300]
+    if len(w.cs) > 1 and "values" not in w.line:
+        with contextlib.suppress(Exception):    # a download that cannot be read: its files still name it
+            w.line["values"] = w.values(list(w.cs))
+    return w.line
+
+
 def edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned, amt=None):
     """--edges's session body after the setup: each area of the plan (edge_area), its line written to edges.jsonl and
     summed up as it comes. An area whose frame is not known to be back ends the run; a failed area whose frame never
     moved, or came back, ends it as an area does in a framepos run (held vertically at once, else three in a row).
     edges_summary.txt is written again after each area. AF Frame Move Amt is the setup's `amt` at the start, followed
-    from area to area (a Large run's way back is made under Standard)."""
+    from area to area (a Large run's way back is made under Standard). An area a STOP, or anything else that is not its
+    own failure, ends once its frame has moved has its line written all the same (stopped_line: moved, no "back", its
+    registrations so far), nothing more pressed, so --put-back finds the frame."""
     from runner import write_text
     grip = getattr(a, "grip", None)
     in_a_row, amt_state = 0, {"now": amt}
     for t in todo:
+        held = {}
         try:
             line = edge_area(s.cam, s.link, hdmi, run, cycle, model, labels, axes, t, routes[t["label"]], a, index,
-                             turned, amt, amt_state)
-        except BaseException:
+                             turned, amt, amt_state, held)
+        except BaseException as e:
+            line = stopped_line(held.get("walk"), e)
+            if line is not None:
+                line.update(tag, setup=setup)
+                jsonl.append(run.dir / "edges.jsonl", line)
+                lines.append(line)
+                write_text(run.dir / "edges_summary.txt",
+                           "\n".join(edge_summary_lines(jsonl.read(run.dir / "edges.jsonl"))) + "\n")
+                print("\n".join(edge_summary_of(line)), flush=True)
             print(f"  {t['label']}: stopped with its frame perhaps moved: on the shooting screen with {ROW} = "
                   f"{t['label']}, check its place by hand, or bring it back with --put-back {run.dir.name}", flush=True)
             raise
@@ -1696,15 +1741,24 @@ def left_behind(lines: list) -> list:
     return [ln for ln in last.values() if ln.get("moved") and not (ln.get("back") or {}).get("same")]
 
 
-def put_back_plan(line: dict, table=None) -> tuple:
+def put_back_plan(line: dict, table=None, index: dict | None = None) -> tuple:
     """(Standard's measure for the way back, why not): what --put-back needs of an edges line to bring its frame back:
     the start's registration of the measured records ("values" "base", "edges") and Standard's step for its area
-    (standard_step, standard_m). The way back's presses are counted from the far corner once it is registered."""
-    if not line.get("edges") or not (line.get("values") or {}).get("base"):
+    (standard_step, standard_m). The way back's presses are counted from the far corner once it is registered. A line
+    with no edges (an area stopped before they were measured: stopped_line, files_lines) is planned from its
+    registrations alone (files_m, by the definition `index`'s names)."""
+    stopped = not line.get("edges") and (line.get("stopped") or line.get("from_files"))
+    if stopped:
+        if len(line.get("values") or {}) < 2 or not line["values"].get("base"):
+            return None, ("no registration was made after its start, so which records hold its place is not known "
+                          f"(its start: {(line.get('files') or {}).get('base')})")
+    elif not line.get("edges") or not (line.get("values") or {}).get("base"):
         return None, "the run measured no edges for it, so which records hold its place is not known"
     xy = standard_step(line["area"], table)
     if xy is None:
         return None, f"the hand tables' FRAME_STEPS give no Standard step for {line['area']}"
+    if stopped:
+        return files_m(line, xy, index or {})
     m = standard_m(line["edges"], xy)
     if m is None:
         return None, "a measured record's name gives no X or Y, so Standard's step cannot be put on it"
@@ -1714,6 +1768,155 @@ def put_back_plan(line: dict, table=None) -> tuple:
         return None, ("no press reaches its start from the far corner ("
                       + "; ".join(f"{shown_key(k)} {d:+d}" for k, d in off.items()) + ")")
     return m, ""
+
+
+def files_m(line: dict, xy: tuple, index: dict) -> tuple:
+    """(Standard's measure for the way back, why not) of an area stopped before its edges were measured, from its
+    registrations alone: its place records are those that changed between them (the line's "values": the start and the
+    low corner, say), each record's axis its definition name's X or Y (`index`), its step Standard's (`xy`, FRAME_STEPS),
+    Right raising X and Down raising Y as the camera level moves them (held vertically the keys may turn, and nothing
+    measured says how: refused), its centre the grid's (GRID_CENTRE: where every frame's edges lie either side alike,
+    at any Aspect Ratio), its low edge the low corner's registration where there is one ("low", the push having reached
+    it) and its high edge that mirrored over the centre."""
+    if line.get("grip") not in (None, "level"):
+        return None, (f"held {held_words(line['grip'])} the keys may move the frame otherwise than level, and the run "
+                      "measured nothing that says how: move it back by hand")
+    vals = line["values"]
+    base, low = vals["base"], vals.get("low") or {}
+    out = {axis: {"keys": [], "step": {}, "first": {}, "corner": {}, "low": {}, "high": {}, "centre": {}, "short": []}
+           for axis in ("h", "v")}
+    out["odd"] = []
+    for k in base:
+        ax = axis_of((index.get(def_key(k)) or {}).get("name"))
+        if ax is None:
+            return None, f"{shown_key(k)}'s name in the definition gives no X or Y, so Standard's step cannot be put on it"
+        a, c = out["h" if ax == "X" else "v"], GRID_CENTRE[ax]
+        a["keys"].append(k)
+        a["step"][k] = a["first"][k] = xy[0] if ax == "X" else xy[1]
+        a["centre"][k], a["corner"][k] = c, low.get(k)
+        a["low"][k], a["high"][k] = (low[k], 2 * c - low[k]) if low.get(k) is not None else (None, None)
+    if not out["h"]["keys"] and not out["v"]["keys"]:
+        return None, "no record changed between its registrations, so which records hold its place is not known"
+    return out, ""
+
+
+EDGE_FILE = re.compile(r"^(\d+)_edge-(.+)\.DAT$")
+EDGE_TAG = re.compile(r"^(?:again-)?(?:base|low|snap-h|step-h|step-v|high)$|^back\d+$")
+
+
+def edge_file(name: str, slugs: dict) -> tuple | None:
+    """(number, tag, area) of an edges run's download named as Walk.reg names it ("01063_edge-base-custom-1.DAT": its
+    tag, then the area's slug), the area by `slugs` ({slug: label}), the tag one EDGE_TAG names (so "spot-m" is never
+    read off "tracking-spot-m"); None for any other file."""
+    m = EDGE_FILE.match(name)
+    if not m:
+        return None
+    for s, label in slugs.items():
+        if m.group(2).endswith(f"-{s}") and EDGE_TAG.match(m.group(2)[:-len(s) - 1]):
+            return int(m.group(1)), m.group(2)[:-len(s) - 1], label
+    return None
+
+
+def files_lines(run_dir: Path, lines: list, doc: dict) -> tuple:
+    """([line], [said]) for the areas an --edges run stopped in before it wrote their line (a STOP before 2026-11-17
+    wrote none): each edge-base download in its dat/ that no line's files name. Its registrations are that area's
+    downloads after it, up to the next area's start; "values" each one's place records (those that changed between
+    them, the start among them, as Walk.values reads them); its state the run's last line before it (context, grip),
+    else its setup.jsonl's last setup before it where that put Switch V/H AF Area = Off (the camera level, its AF Frame
+    Move Amt from its steps); "from_files": True. An area with two such starts, or whose state the files do not tell,
+    is said and left out."""
+    from camkit import camset
+    from prove_run import held_value
+    slugs = {slug(t["label"]): t["label"] for t in plan(doc, "all")}
+    named = {f for ln in lines for f in (ln.get("files") or {}).values() if isinstance(f, str)}
+    found = sorted((x, p.name) for p in (run_dir / "dat").glob("*.DAT") if (x := edge_file(p.name, slugs)))
+    starts = [(x, name) for x, name in found if x[1] == "base" and name not in named]
+    out, said = [], []
+    for label in dict.fromkeys(x[2] for x, _ in starts):
+        mine = [(x, name) for x, name in starts if x[2] == label]
+        if len(mine) > 1:
+            said.append(f"{label}: {len(mine)} starts no line names ({', '.join(n for _, n in mine)}): which one is the "
+                        "owner's is not known; check its place by hand")
+            continue
+        (n0, _, _), base_name = mine[0]
+        after = [x[0] for x, _ in found if x[1] == "base" and x[0] > n0]
+        end = min(after) if after else None
+        regs = [(x[1], name) for x, name in found if x[2] == label and x[0] >= n0 and (end is None or x[0] < end)]
+        before = [ln for ln in lines if ln.get("area") and edge_number(ln) is not None and edge_number(ln) < n0]
+        state = ({**{k: before[-1][k] for k in ("context", "grip") if before[-1].get(k)},
+                  "state_from": f"the run's line before it ({before[-1]['area']})"} if before else
+                 setup_state(run_dir, n0))
+        if state is None:
+            said.append(f"{label}: stopped at its start {base_name}, and the run's files do not say how the camera was "
+                        "set (no line before it, no setup with Switch V/H AF Area = Off): check its place by hand")
+            continue
+        cs = {tag: camset.read(run_dir / "dat" / name) for tag, name in regs}
+        tags = list(cs)
+        keys = []
+        for x, y in zip(tags, tags[1:], strict=False):
+            keys += [c.key for c in camset.diff(cs[x], cs[y]) if c.key not in keys
+                     and not isinstance(c.before, list) and not isinstance(c.after, list)]
+        code = next(t["code"] for t in plan(doc, "all") if t["label"] == label)
+        out.append({"area": label, "code": code, "moved": True, "from_files": True, "files": dict(regs),
+                    "values": {tag: {k: held_value(cs[tag], k) for k in keys} for tag in tags}, **state})
+    return out, said
+
+
+def edge_number(line: dict) -> int | None:
+    """The number of an edges line's start download (its files' "base"), None where it names none."""
+    m = EDGE_FILE.match(str((line.get("files") or {}).get("base") or ""))
+    return int(m.group(1)) if m else None
+
+
+def setup_state(run_dir: Path, n0: int) -> dict | None:
+    """The state an edges run's setup.jsonl says it worked in before download number `n0`: its last setup whose
+    download came before it, where that put Switch V/H AF Area = Off ({"context": "Switch V/H AF Area Off, camera
+    level" and its AF Frame Move Amt}); None otherwise (a grip's setup does not say how the camera was held)."""
+    def number(name):
+        m = re.match(r"^(\d+)_", str(name or ""))
+        return int(m.group(1)) if m else None
+    rows = [r for r in jsonl.read(run_dir / "setup.jsonl") if (number(r.get("after")) or 0) < n0] \
+        if (run_dir / "setup.jsonl").exists() else []
+    if not rows or f"{VH_ROW} = {OFF}" not in (rows[-1].get("steps") or []):
+        return None
+    amt = next((s.split(" = ", 1)[1] for s in rows[-1]["steps"] if s.startswith(f"{AMT_ROW} = ")), None)
+    return {"context": context_of(None, amt), "state_from": "the run's setup.jsonl (no line before it)"}
+
+
+def ratio_of(index: dict, cs) -> str | None:
+    """The Aspect Ratio a settings file holds, by the definition's label for its code (the record the row's proof names,
+    afreg_run.row_record: the a1 II's global:0x01fe); None where the definition or the file does not say it."""
+    from prove_run import held_value
+    rec = afreg_run.row_record(index, [RATIO_ROW])
+    if rec is None or cs is None:
+        return None
+    return {v: str(lab) for v, lab in rec.get("values") or []}.get(held_value(cs, rec["key"]))
+
+
+def at_centre(base: dict, index: dict) -> bool:
+    """Whether a start holds the grid's centre in every place record (GRID_CENTRE by its name's X or Y): the centre at
+    any Aspect Ratio."""
+    for k, v in base.items():
+        ax = axis_of((index.get(def_key(k)) or {}).get("name"))
+        if ax is None or v != GRID_CENTRE[ax]:
+            return False
+    return bool(base)
+
+
+def ratio_refusal(measured: str | None, now: str | None, base: dict, index: dict) -> str | None:
+    """Why a put-back of a start `base` measured under Aspect Ratio `measured` is refused on a camera now on `now`
+    (the run's start download); None when it may go. The place grid is stretched over the recorded picture, so a place
+    off the centre has other numbers at another ratio: such a start is put back only under the ratio it was measured
+    in, both read; a start at the centre (at_centre) is the centre at any ratio."""
+    if at_centre(base, index):
+        return None
+    if measured is None or now is None:
+        return (f"its start is off the centre and the {RATIO_ROW} it was measured under, or the camera's now, could not "
+                "be read: a place off the centre has other numbers at another ratio")
+    if measured != now:
+        return (f"its start is off the centre and was measured under {RATIO_ROW} {measured}, the camera is on {now}: a "
+                f"place off the centre has other numbers at another ratio; put it back with {RATIO_ROW} {measured}")
+    return None
 
 
 def put_back_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, a, index: dict, turned,
@@ -1727,9 +1930,10 @@ def put_back_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: 
     from prove_run import Failed, to_shooting
     from runner import close_screen
     w = Walk(cam, link, hdmi, run, cycle, model, a, turned, t, "put", {"now": "Standard"})
-    keys = [rec["key"] for rec in src["edges"]]
+    keys = [rec["key"] for rec in src["edges"]] if src.get("edges") else m["h"]["keys"] + m["v"]["keys"]
     base = {k: src["values"]["base"][k] for k in keys}
-    w.line.update(source={"run": a.put_back, "start": src["files"].get("base"), "context": src.get("context")})
+    w.line.update(source={"run": a.put_back, "start": src["files"].get("base"), "context": src.get("context"),
+                          **({"from_files": True} if src.get("from_files") else {})})
 
     def check(tag):
         return [{"key": k, "delta": v - base[k]} for k, v in w.held(tag, keys).items() if v != base[k]]
@@ -1762,6 +1966,8 @@ def put_back_summary_of(line: dict) -> list:
     head = f"{line['area']} (code {line.get('code')}" + (f"; {line['context']})" if line.get("context") else ")")
     src = line.get("source") or {}
     out = [f"{head}: to its start in {src.get('run')} ({src.get('start')})"]
+    if line.get("refused"):
+        return out + [f"    NOT PUT BACK, nothing pressed: {line['refused']}"]
     if line.get("far_off"):
         out.append("    the far corner read otherwise than the edges run's: "
                    + "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" for x in line["far_off"]))
@@ -1784,9 +1990,20 @@ def put_back_summary_of(line: dict) -> list:
 
 def put_back_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned):
     """--put-back's session body after the setup: each area put back (put_back_area), its line written to
-    put_back.jsonl and said; an area not put back ends the run."""
+    put_back.jsonl and said; an area not put back ends the run. An area whose start is off the centre and was measured
+    under another Aspect Ratio than the camera's now (ratio_refusal: the source's "start_ratio", this run's start
+    download's, a.ratio_now) is refused before it is chosen, nothing pressed, said, and the run goes on."""
     for t in todo:
         src, m = a.put_back_lines[t["label"]]
+        why = ratio_refusal(src.get("start_ratio"), getattr(a, "ratio_now", None), src["values"]["base"], index)
+        if why:
+            line = {"t": round(time.time(), 3), "area": t["label"], "code": t["code"], "refused": why,
+                    "source": {"run": a.put_back, "start": src["files"].get("base"), "context": src.get("context")},
+                    **tag, "setup": setup}
+            jsonl.append(run.dir / "put_back.jsonl", line)
+            lines.append(line)
+            print("\n".join(put_back_summary_of(line)), flush=True)
+            continue
         try:
             line = put_back_area(s.cam, s.link, hdmi, run, cycle, model, labels, axes, t, routes[t["label"]], a,
                                  index, turned, src, m)
@@ -1882,6 +2099,8 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     if not slot_filled(start):
         raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good (no settings "
                      "file empties it); this run registers a filled slot only")
+    if getattr(a, "put_back", None):
+        a.ratio_now = ratio_of(index, start)        # the Aspect Ratio a start off the centre is put back under
     turned, a.vertical, said = afreg_run.screens_held(grip, index, start)
     if said:
         print(f"  {said}", flush=True)
@@ -1986,7 +2205,22 @@ def put_back_main(a) -> int:
             sys.exit(f"framepos_run: --put-back with {flag}: a put-back brings back the frames {a.put_back}'s lines name")
     if a.frame_move_amt not in (None, "Standard"):
         sys.exit(f"framepos_run: --put-back is made under {AMT_ROW} Standard, where the way back is proved")
-    src = left_behind(jsonl.read(paths.run_root() / a.put_back / "edges.jsonl"))
+    from camkit import camset
+    run_dir = paths.run_root() / a.put_back
+    lines = jsonl.read(run_dir / "edges.jsonl")
+    doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
+    index = {s["key"]: s for s in doc.get("settings") or []}
+    on_disk, said = files_lines(run_dir, lines, doc) if (run_dir / "dat").is_dir() else ([], [])
+    for x in said:
+        print(f"  {x}", flush=True)
+    src, twice = [], {ln["area"] for ln in on_disk} & {ln["area"] for ln in left_behind(lines)}
+    for ln in left_behind(lines) + on_disk:
+        if ln["area"] in twice:
+            if ln.get("from_files"):
+                print(f"  {ln['area']}: a line not back and a start no line names: which start is the owner's is not "
+                      "known; check its place by hand", flush=True)
+            continue
+        src.append(ln)
     if not src:
         print(f"no frame of {a.put_back} is left out of place: its edges.jsonl says each came back, or names none")
         return 0
@@ -1995,14 +2229,17 @@ def put_back_main(a) -> int:
         sys.exit(f"framepos_run: --put-back {a.put_back}: its lines were made held {sorted(map(str, grips))}"
                  + (f", not --grip {a.grip}" if a.grip else "") + ": one way at a time, the run's own")
     a.grip = grips.pop()
-    doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
-    index = {s["key"]: s for s in doc.get("settings") or []}
     todo, a.put_back_lines = [], {}
     for ln in src:
-        m, why = put_back_plan(ln)
+        m, why = put_back_plan(ln, index=index)
         if m is None:
             print(f"  {ln['area']}: not put back: {why}; move it back by hand", flush=True)
             continue
+        base = run_dir / "dat" / str((ln.get("files") or {}).get("base"))
+        try:
+            ln["start_ratio"] = ratio_of(index, camset.read(base)) if base.is_file() else None
+        except Exception:                   # a download that cannot be read: the ratio is not known
+            ln["start_ratio"] = None
         t = plan(doc, ln["area"])[0]
         todo.append(t)
         a.put_back_lines[t["label"]] = (ln, m)
@@ -2016,6 +2253,16 @@ def put_back_main(a) -> int:
         ln = a.put_back_lines[t["label"]][0]
         print(f"  {t['label']} (code {t['code']}): to its start registration in {a.put_back} "
               f"({ln['files'].get('base')}), measured under {ln.get('context')!r}", flush=True)
+        if ln.get("from_files"):
+            print(f"    taken from the run's files: it stopped before writing this area's line; its place records are "
+                  f"those that changed between {', '.join(ln['files'].values())}, its state {ln.get('state_from')}",
+                  flush=True)
+        centre = at_centre(ln["values"]["base"], index)
+        if ln.get("start_ratio") or not centre:
+            print(f"    measured under {RATIO_ROW} {ln.get('start_ratio') or '(not read)'} (its start download): "
+                  + ("its start is the centre, the centre at any ratio" if centre else
+                     "its start is off the centre, so it is put back only where the camera's start download reads "
+                     "that ratio, else refused, nothing pressed"), flush=True)
     tracking = any(t["tracking"] for t in todo)
     focus = a.focus_mode == "menu" or (a.focus_mode == "auto" and tracking)
     drive = a.drive_mode == "menu" or (a.drive_mode == "auto" and tracking)

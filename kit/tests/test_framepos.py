@@ -2021,20 +2021,21 @@ def edges(turned, monkeypatch):
     monkeypatch.setattr(afreg_run, "set_setup_row", row_set)
     run, session = turned
 
-    def go(s, labels: str, grip=None, n=40, amt="Standard", put_back=None):
+    def go(s, labels: str, grip=None, n=40, amt="Standard", put_back=None, index=None):
         todo = F.edge_plan(made_up_doc(), labels)
+        idx = index or edge_index()
         a = SimpleNamespace(zone_grid=False, context=None, allow=["Camera Set. Memory"], check_back=True, grip=grip,
                             edges=not put_back, edge_presses=n, put_back="kit2_made_up" if put_back else None)
         if put_back:
-            a.put_back_lines = {put_back["area"]: (put_back, F.put_back_plan(put_back)[0])}
+            a.put_back_lines = {put_back["area"]: (put_back, F.put_back_plan(put_back, index=idx)[0])}
         tag = {"context": F.context_of(None, amt, None, grip), "allowance": "a", **({"grip": grip} if grip else {})}
         routes = {t["label"]: afreg_run.route(t["label"], CAROUSEL, CAROUSEL_AXES) for t in todo}
         lines = []
-        F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, edge_index(), False, False,
+        F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, todo, routes, idx, False, False,
                 run.dir / "framepos.jsonl", tag, lines, amt, tag)
         out = run.dir / ("put_back.jsonl" if put_back else "edges.jsonl")
         return F.jsonl.read(out) if out.exists() else []
-    return run, (lambda **kw: session(cls=EdgeCam, **kw)), go
+    return run, (lambda cls=EdgeCam, **kw: session(cls=cls, **kw)), go
 
 
 def test_edges_measure_each_area_in_seven_registrations_and_put_its_frame_back_exactly(edges, capsys):
@@ -2574,3 +2575,166 @@ def test_a_press_lost_on_the_way_back_is_made_good_under_the_level_keys(zones, c
     assert sweep["confirmed"] == 9 and sweep["back_same"] and cam.zone == (0, 0)
     assert sweep["files"]["back"].endswith("zone-back2.DAT")
     assert "the registration after the put-back matched the start's" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- a STOP mid-area, and the Aspect Ratio (2026-11-17)
+
+RATIO_KEY = "global:0x0c30"
+RATIO_CODES = {"3:2": 0, "4:3": 1, "16:9": 2, "1:1": 3}
+EDGES_CONTEXT = "Switch V/H AF Area Off, camera level, AF Frame Move Amt Standard"
+
+
+def ratio_index() -> dict:
+    """edge_index with a made-up Aspect Ratio record, proved by its row as the a1 II's global:0x01fe is."""
+    return edge_index() | {RATIO_KEY: {"key": RATIO_KEY, "name": "Aspect Ratio",
+                                       "values": [[v, k] for k, v in RATIO_CODES.items()],
+                                       "proved": {"menu": ["Aspect Ratio"]}}}
+
+
+class StopCam(EdgeCam):
+    """EdgeCam whose STOP file is put down once its second registration (the low corner) is made and one more Right has
+    gone out, as kit2_a1fin_framepos_edges_ar169_all stopped in Custom 1: the next press the run sends raises
+    StopRequested, as the link does for every press after a STOP."""
+    def press(self, key, **kw):
+        from camkit.link import StopRequested
+        if self.regs >= 2 and getattr(self, "went", False):
+            raise StopRequested("STOP file in the run's folder")
+        if self.regs >= 2 and key == "ms_right":
+            self.went = True
+        super().press(key, **kw)
+
+
+def files_line(base=(320, 240), **kw) -> dict:
+    """Custom 1's line as files_lines makes it from a stopped run's downloads: its start and its low corner."""
+    return {"area": "Custom 1", "code": 109, "moved": True, "from_files": True, "context": EDGES_CONTEXT,
+            "files": {"base": "01063_edge-base-custom-1.DAT", "low": "01081_edge-low-custom-1.DAT"},
+            "values": {"base": {X: base[0], Y: base[1]}, "low": {X: 26, Y: 33}}, **kw}
+
+
+def test_an_area_a_stop_ends_writes_its_line_and_put_back_brings_its_frame_back(edges, capsys):
+    """A STOP once Custom 1's frame has moved (its start and low corner registered, one more Right gone out): nothing
+    more is pressed, and the area's line is written all the same, moved, no "back", its registrations so far (files and
+    values) and what stopped it, so left_behind finds it and --put-back plans it from them: the records that changed,
+    each one's axis by its name, Standard's step, the grid's centre. Brought back from where it was left, it lands on its
+    start."""
+    from camkit.link import StopRequested
+    run, session, go = edges
+    cam, s = session(cls=StopCam, start={"Custom 1": (320, 240), "Expand Spot": (320, 240)})
+    with pytest.raises(StopRequested):
+        go(s, "Custom 1, Expand Spot")
+    (line,) = F.jsonl.read(run.dir / "edges.jsonl")
+    assert line["area"] == "Custom 1" and line["moved"] and "back" not in line and "edges" not in line
+    assert line["stopped"].startswith("StopRequested") and list(line["files"]) == ["base", "low"]
+    assert line["values"] == {"base": {X: 320, Y: 240}, "low": {X: 26, Y: 33}} and line["context"] == EDGES_CONTEXT
+    assert cam.chosen == ["Custom 1"] and cam.pos["Custom 1"] == (54, 33), "the Right that went out, nothing after"
+    said = capsys.readouterr().out
+    assert "    stopped: StopRequested" in said and "bring it back with --put-back" in said
+    assert F.left_behind([line]) == [line]
+    m, why = F.put_back_plan(line, index=edge_index())
+    assert why == "" and (m["h"]["keys"], m["v"]["keys"]) == ([X], [Y])
+    assert (m["h"]["centre"][X], m["v"]["centre"][Y], m["h"]["step"][X], m["v"]["step"][Y]) == (320, 240, 28, 19)
+    back, s2 = session(start={"Custom 1": (54, 33)})
+    (put,) = go(s2, "Custom 1", put_back=line)
+    assert put["back"]["same"] and back.pos["Custom 1"] == (320, 240)
+    assert put["source"] == {"run": "kit2_made_up", "start": line["files"]["base"], "context": EDGES_CONTEXT}
+
+
+def test_a_stopped_line_with_no_registration_after_its_start_is_not_planned():
+    """A line stopped after its start alone (or held vertically, the keys perhaps turned) gives no plan: said why."""
+    one = files_line()
+    one["values"] = {"base": one["values"]["base"]}
+    assert "no registration was made after its start" in F.put_back_plan(one, index=edge_index())[1]
+    assert "otherwise than level" in F.put_back_plan(files_line(grip="down"), index=edge_index())[1]
+    assert "gives no X or Y" in F.put_back_plan(files_line(), index={})[1]
+
+
+def stopped_run(tmp_path, monkeypatch, held: dict, lines=(), setup=None) -> Path:
+    """A made-up edges run where paths.run_root finds it (put_back_run): its edges.jsonl holding `lines`, its dat/ the
+    downloads `held` names ({file: records}, read back by camset.read), its setup.jsonl `setup` ([steps, after])."""
+    from camkit import camset
+    run = tmp_path / put_back_run(tmp_path, monkeypatch, *lines)
+    (run / "dat").mkdir()
+    for name in held:
+        (run / "dat" / name).write_bytes(b"")
+    if setup:
+        F.jsonl.append(run / "setup.jsonl", {"steps": setup[0], "start": "00001_before.DAT", "after": setup[1]})
+    monkeypatch.setattr(camset, "read", lambda p: Download(held[Path(p).name]))
+    monkeypatch.setattr(camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a.get(k), after=b.get(k))
+                                                      for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)])
+    return run
+
+
+DISK = {"00001_before.DAT": {RATIO_KEY: 2}, "00909_edge-base-expand-spot.DAT": {RATIO_KEY: 2},
+        "01063_edge-base-custom-1.DAT": {X: 320, Y: 240, RATIO_KEY: 2},
+        "01081_edge-low-custom-1.DAT": {X: 26, Y: 33, RATIO_KEY: 2}, "01095_restored.DAT": {RATIO_KEY: 2}}
+
+
+def test_put_back_finds_an_area_a_run_stopped_in_from_its_files_alone(capsys, monkeypatch, tmp_path):
+    """kit2_a1fin_framepos_edges_ar169_all's case: stopped in Custom 1 before its line was written (by a kit older than
+    the stopped line), edges.jsonl holding the finished areas alone. The edge-base download no line names is Custom 1's
+    start, its registrations its downloads up to the run's end, its place records those that changed between them, its
+    state the run's line before it (context, Aspect Ratio 16:9 said there); --put-back plans it from them and says so,
+    and that its start is the centre, put back at any ratio."""
+    before = dict(point_line(), area="Expand Spot", code=108, grip=None, context=f"{EDGES_CONTEXT}, Aspect Ratio 16:9",
+                  back={"same": True}, files={"base": "00909_edge-base-expand-spot.DAT"})
+    run = stopped_run(tmp_path, monkeypatch, DISK, [before])
+    monkeypatch.setattr(F, "read_json", lambda path: {**edges_doc(), "settings": list(ratio_index().values())})
+    (line,), said = F.files_lines(run, [before], {"settings": list(ratio_index().values())})
+    assert said == [] and line["from_files"] and line["area"] == "Custom 1" and line["code"] == 109
+    assert line["files"] == {"base": "01063_edge-base-custom-1.DAT", "low": "01081_edge-low-custom-1.DAT"}
+    assert line["values"] == {"base": {X: 320, Y: 240}, "low": {X: 26, Y: 33}}
+    assert (line["context"], line["state_from"]) == (before["context"], "the run's line before it (Expand Spot)")
+    assert F.main(["--list", "--put-back", run.name]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith(f"1 frames {run.name} left out of place, to be put back")
+    assert "  Custom 1 (code 109): to its start registration in kit2_made_up (01063_edge-base-custom-1.DAT)" in out
+    assert "taken from the run's files" in out and "its state the run's line before it (Expand Spot)" in out
+    assert "measured under Aspect Ratio 16:9 (its start download): its start is the centre, the centre at any ratio" in out
+
+
+def test_a_stopped_areas_state_comes_from_the_setup_where_no_line_came_before(monkeypatch, tmp_path):
+    """Stopped in the run's first area: its state is the setup's (Switch V/H AF Area = Off: the camera level, its AF
+    Frame Move Amt); a setup that does not say the camera level, or an area with two starts no line names, is said and
+    left out."""
+    disk = {k: v for k, v in DISK.items() if "expand" not in k}
+    steps = ["Switch V/H AF Area = Off", "Circ. of Focus Point = Does Not Circulate", "AF Frame Move Amt = Standard"]
+    run = stopped_run(tmp_path, monkeypatch, disk, setup=(steps, "00109_after-setup.DAT"))
+    (line,), said = F.files_lines(run, [], {"settings": list(ratio_index().values())})
+    assert line["context"] == EDGES_CONTEXT and "setup.jsonl" in line["state_from"] and "grip" not in line
+    (run / "setup.jsonl").unlink()
+    F.jsonl.append(run / "setup.jsonl", {"steps": ["Switch V/H AF Area = AF Point + AF Area"], "after": "00109_x.DAT"})
+    lines, said = F.files_lines(run, [], {"settings": list(ratio_index().values())})
+    assert lines == [] and "do not say how the camera was set" in said[0]
+    (run / "dat" / "01200_edge-base-custom-1.DAT").write_bytes(b"")
+    lines, said = F.files_lines(run, [], {"settings": list(ratio_index().values())})
+    assert lines == [] and "2 starts no line names" in said[0]
+
+
+def test_a_start_off_the_centre_is_put_back_only_under_the_ratio_it_was_measured_in():
+    """The place grid is stretched over the recorded picture: a start at the centre is put back at any Aspect Ratio; one
+    off it only where the ratio it was measured under (its start download's) is the camera's now, both read by the
+    definition's labels."""
+    idx = ratio_index()
+    assert F.ratio_of(idx, Download({RATIO_KEY: 2})) == "16:9" and F.ratio_of(idx, Download({})) is None
+    assert F.ratio_of(edge_index(), Download({RATIO_KEY: 2})) is None
+    centre, off = {X: 320, Y: 240}, {X: 376, Y: 183}
+    assert F.at_centre(centre, idx) and not F.at_centre(off, idx) and not F.at_centre({"set1:0x0b30": 320}, idx)
+    assert F.ratio_refusal("16:9", "3:2", centre, idx) is None and F.ratio_refusal(None, None, centre, idx) is None
+    assert F.ratio_refusal("16:9", "16:9", off, idx) is None
+    assert "measured under Aspect Ratio 16:9, the camera is on 3:2" in F.ratio_refusal("16:9", "3:2", off, idx)
+    assert "could not be read" in F.ratio_refusal(None, "3:2", off, idx)
+
+
+@pytest.mark.parametrize("now,goes", [("3:2", False), ("16:9", True)])
+def test_put_back_of_a_start_off_the_centre_needs_the_ratio_it_was_measured_in(edges, capsys, now, goes):
+    """Custom 1 stopped at a start off the centre measured under 16:9: on a camera at 3:2 it is refused before it is
+    chosen, nothing pressed, its line saying why; at 16:9 it is put back and lands on its start."""
+    run, session, go = edges
+    cam, s = session(start={"Custom 1": (54, 33)}, extra={RATIO_KEY: RATIO_CODES[now]})
+    (put,) = go(s, "Custom 1", put_back=files_line(base=(376, 183), start_ratio="16:9"), index=ratio_index())
+    if goes:
+        assert put["back"]["same"] and cam.pos["Custom 1"] == (376, 183)
+    else:
+        assert "measured under Aspect Ratio 16:9, the camera is on 3:2" in put["refused"]
+        assert cam.chosen == [] and cam.pushed == [] and cam.regs == 0 and cam.pos["Custom 1"] == (54, 33)
+        assert "NOT PUT BACK, nothing pressed" in capsys.readouterr().out

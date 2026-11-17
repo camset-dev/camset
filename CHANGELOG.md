@@ -230,6 +230,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - `framepos_run.py --zone-grid` now takes `--grip down` or `up`: the nine Zone places walked with the camera held that
   way, each place saying which orientation's records its registration wrote, and keys that move the zone turned said
   as a finding before the zone is put back and checked.
+- An `--edges` area stopped by its STOP file once its frame moved now writes its line, and `--put-back` also finds an
+  area an older run stopped in from its downloads, so the frame can be brought back. A start off the centre is put back
+  only under the Aspect Ratio it was measured in, the place grid being stretched over the picture.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
