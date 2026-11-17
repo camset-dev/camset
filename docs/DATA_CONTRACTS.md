@@ -141,13 +141,19 @@ Each Focus Area option's frame stops at limits of its own, and several options k
 records, so a record's `range` cannot hold them: each record of a frame's place carries `frame`, its axis, the place's
 other record and the limits by area, from the camera's `FRAME_TRAVEL` hand table (`kit/writer/frames.py`). A box whose
 size the file holds has one rule instead: the bounds it stays inside and its size records, read in the same section. A
-place not measured yet carries none.
+place not measured yet carries none. Where the limits change with another setting (the a1 II's Aspect Ratio), the
+frame names it (`by`), read in the same section, and each limit the values it is for; a box's rule then gives each
+value's picture.
 
 {{ schema_fields("definition", "$defs/setting/properties/frame") }}
 
 Each of its `limits`:
 
 {{ schema_fields("definition", "$defs/setting/properties/frame/properties/limits/items") }}
+
+Each of a box limit's `pictures`:
+
+{{ schema_fields("definition", "$defs/setting/properties/frame/properties/limits/items/properties/pictures/items") }}
 
 ## `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`: the camera's own facts
 
@@ -238,13 +244,15 @@ A `KEEPS_APART` entry:
 
 {{ schema_fields("hand-tables", "$defs/keeps_apart") }}
 
-A `FRAME_TRAVEL` entry, and each of its `limits` and its `boxes`:
+A `FRAME_TRAVEL` entry, and each of its `limits`, its `boxes` and its `pictures`:
 
 {{ schema_fields("hand-tables", "$defs/frame_travel") }}
 
 {{ schema_fields("hand-tables", "$defs/frame_limit") }}
 
 {{ schema_fields("hand-tables", "$defs/frame_box") }}
+
+{{ schema_fields("hand-tables", "$defs/frame_picture") }}
 
 ## The hand evidence file: how each hand fact was proved
 

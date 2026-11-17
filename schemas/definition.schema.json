@@ -389,6 +389,11 @@
        "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
        "description": "The setting that holds the frame's other coordinate in the same place; its own frame names this one back."
       },
+      "by": {
+       "type": "string",
+       "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+       "description": "The setting whose value, read in the same section, picks the limits (the a1 II's Aspect Ratio): each limit says the values it is for (when, or its pictures'). Absent where the limits hold whatever the camera's settings."
+      },
       "limits": {
        "type": "array",
        "minItems": 1,
@@ -409,6 +414,15 @@
           },
           "description": "The Focus Area options these limits are for, each named as a setting of the definition names it among its values."
          },
+         "when": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+           "type": "integer"
+          },
+          "description": "With the frame's by and a range: the values of that setting the range is for."
+         },
          "range": {
           "type": "array",
           "items": {
@@ -421,11 +435,11 @@
          "inside": {
           "type": "array",
           "items": {
-           "type": "integer"
+           "type": "number"
           },
           "minItems": 2,
           "maxItems": 2,
-          "description": "A box whose size the file holds: the bounds the whole box stays inside on this axis, so its centre stops half its size inside them (the lowest at the first plus half the size, the highest at the second minus half)."
+          "description": "A box whose size the file holds: the bounds the whole box stays inside on this axis, on the grid's whole span (fractions allowed), so its centre stops half its size inside them, each end rounded to the nearest whole number, a half toward the centre."
          },
          "size": {
           "type": "string",
@@ -439,7 +453,55 @@
           "items": {
            "type": "integer"
           },
-          "description": "With inside: the sizes the rule was proved at; at any other size it is not tried. Absent where that is not known."
+          "description": "With inside and no pictures: the sizes the rule was proved at; at any other size it is not tried. Absent where that is not known."
+         },
+         "grid": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "With pictures: the grid's span on this axis (640 across, 480 down on the a1 II); its centre is half of it."
+         },
+         "pictures": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+           "type": "object",
+           "additionalProperties": false,
+           "required": [
+            "when",
+            "fraction"
+           ],
+           "properties": {
+            "when": {
+             "type": "array",
+             "minItems": 1,
+             "uniqueItems": true,
+             "items": {
+              "type": "integer"
+             },
+             "description": "The values of the frame's by this picture is for."
+            },
+            "fraction": {
+             "type": "array",
+             "minItems": 2,
+             "maxItems": 2,
+             "items": {
+              "type": "integer",
+              "minimum": 1
+             },
+             "description": "[numerator, denominator]: the part of the grid's span the recorded picture covers on this axis, centred."
+            },
+            "sizes_tried": {
+             "type": "array",
+             "minItems": 1,
+             "uniqueItems": true,
+             "items": {
+              "type": "integer"
+             },
+             "description": "The sizes the rule was proved at for these values; at any other size it is not tried."
+            }
+           }
+          },
+          "description": "With the frame's by and inside: for each of its values, the picture. The grid is stretched over the picture, while inside and the size stay measured on the whole span: the box's centre stays where the whole box is inside both inside and the picture, mapped onto the stretched grid (a centre c on the whole span is c' = g/2 + (c - g/2) / fraction, g the grid), each end rounded to the nearest whole number, a half toward the centre."
          }
         },
         "oneOf": [
@@ -459,7 +521,7 @@
        "description": "Where the frame's centre stops on this axis, by area: an editor that places the frame keeps it within the entry for the area in use."
       }
      },
-     "description": "This setting holds one coordinate of a movable focus frame's centre on the camera's grid (the a1 II's 640 x 480), and how far the frame can travel there, where it was measured on the camera: by area, the lowest and highest the centre stops at, or, for a box whose size the file holds, the bounds the whole box stays inside and the setting that holds its size. A press that would take the frame past a limit stops it there. An editor reads it to place the frame within those limits; a frame setting without it is one whose travel is not known (a place not measured yet, such as a way of holding the camera not tried). Written by kit/schema_update.py (kit/writer/frames.py) from the camera's hand table (FRAME_TRAVEL), where the mapper's hand evidence shows what measured it; keys, areas and limits only."
+     "description": "This setting holds one coordinate of a movable focus frame's centre on the camera's grid (the a1 II's 640 x 480), and how far the frame can travel there, where it was measured on the camera: by area, the lowest and highest the centre stops at, or, for a box whose size the file holds, the bounds the whole box stays inside and the setting that holds its size. Where the limits change with a setting of the camera's (by, the a1 II's Aspect Ratio), each limit says the values it is for. A press that would take the frame past a limit stops it there. An editor reads it to place the frame within those limits; a frame setting without it is one whose travel is not known (a place not measured yet, such as a way of holding the camera not tried). Written by kit/schema_update.py (kit/writer/frames.py) from the camera's hand table (FRAME_TRAVEL), where the mapper's hand evidence shows what measured it; keys, areas and limits only."
     },
     "text": {
      "type": "object",

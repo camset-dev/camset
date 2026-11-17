@@ -94,35 +94,110 @@ def test_an_entry_that_cannot_take_effect_is_said_and_left_out_whole(capsys, tab
 def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
     """The a1 II's public definition: each record of each FRAME_TRAVEL place carries the frame the table gives it
     (writer/frames.placed), every other setting none: the spot's four places (current, level, grip down, grip up),
-    each Custom box's four and the box in use; each limit within its record's range where it has one; every Focus Area
-    option the spot's and
-    the boxes' limits name is a value of the definition's Focus Area records; and each Custom box's default size, as
-    the sample (written after Initialize) holds it, is one the rule was tried at, and gives, by the rule, limits within
-    the bounds."""
+    each Custom box's four and the box in use, each frame's limits picked by Aspect Ratio (global:0x01fe, kept in the
+    memory sets as in the live settings); each limit within its record's range where it has one; every Focus Area
+    option the spot's and the boxes' limits name is a value of the definition's Focus Area records; at each ratio one
+    limit for each area; and each Custom box's default size, as the sample (written after Initialize) holds it, is one
+    the rule was tried at for every ratio."""
     pub = definitions.load_public(A1)
     by = {s["key"]: s for s in pub["settings"]}
     table = hand_tables.load(A1, evidence=False).FRAME_TRAVEL
     want = {}
     for e in table.values():
         for kx, ky, lims in frames.placed(e):
-            want[kx] = {"axis": "x", "with": ky, "limits": lims["x"]}
-            want[ky] = {"axis": "y", "with": kx, "limits": lims["y"]}
+            want[kx] = {"axis": "x", "with": ky, "by": e["by"], "limits": lims["x"]}
+            want[ky] = {"axis": "y", "with": kx, "by": e["by"], "limits": lims["y"]}
     assert {k: s["frame"] for k, s in by.items() if "frame" in s} == want
     assert len(want) == 2 * 4 + 2 * 4 * 3 + 2
-    assert {"set:0x01c2", "set:0x01c8", "set:0x1337", "set:0x133d", "set:0x1343", "set:0x1349", "set:0x134f",
-            "set:0x1355"} <= set(want)
+    ratio = by["global:0x01fe"]
+    assert ratio["name"] == "Aspect Ratio" and ratio["in_sets"]
+    assert ratio["values"] == [[0, "3:2"], [1, "4:3"], [2, "16:9"], [3, "1:1"]]
     for k, f in want.items():
         lo, hi = by[k].get("range") or (None, None)
         for lim in f["limits"]:
             span = lim.get("range") or lim["inside"]
             assert lo is None or lo <= span[0] <= span[1] <= hi, (k, lim)
+        every = {a for lim in f["limits"] for a in lim["areas"]}
+        for code in range(4):                      # one limit for each area at each ratio
+            got = [a for lim in f["limits"] for a in lim["areas"]
+                   if code in lim.get("when", []) or any(code in p["when"] for p in lim.get("pictures", []))]
+            assert len(got) == len(set(got)) and set(got) == every, (k, code)
     names = {lab for k in ("global:0x0f46", "global:0x0f4c", "global:0x0f52") for _, lab in by[k]["values"]}
     assert {a for f in want.values() for lim in f["limits"] for a in lim["areas"]} <= names
     cs = camset.read(definitions.sample(pub))
-    boxes = table["Custom"]
-    for box in boxes["boxes"]:
+    for box in table["Custom"]["boxes"]:
         size = [int.from_bytes(cs.get(1, int(k.split(":")[1], 16)).raw[:4], "little") for k in box["size"]]
         for axis, n in zip(("x", "y"), size, strict=True):
-            assert n in boxes["sizes_tried"][axis], (box["areas"], axis, n)
-            lo, hi = boxes["inside"][axis]
-            assert lo + n / 2 <= hi - n / 2, (box["areas"], axis, n)
+            assert all(n in pic["sizes_tried"][axis] for pic in table["Custom"]["pictures"]), (box["areas"], axis, n)
+
+
+# every Custom box limit measured at the three default sizes (Custom 1 402 x 182, Custom 2 402 x 132, Custom 3 168 x
+# 318), by Aspect Ratio's code: (X lowest, X highest, Y lowest, Y highest)
+MEASURED = {
+    0: {"Custom 1": (247, 393, 133, 347), "Custom 2": (247, 393, 108, 372), "Custom 3": (130, 510, 201, 279)},
+    1: {"Custom 1": (238, 402, 133, 347), "Custom 2": (238, 402, 108, 372), "Custom 3": (107, 533, 201, 279)},
+    2: {"Custom 1": (247, 393, 113, 367), "Custom 2": (247, 393, 83, 397), "Custom 3": (130, 510, 194, 286)},
+    3: {"Custom 1": (302, 338, 133, 347), "Custom 2": (302, 338, 108, 372), "Custom 3": (126, 514, 201, 279)},
+}
+
+
+def test_the_custom_box_rule_gives_every_measured_limit_at_every_aspect_ratio():
+    """The a1 II's Custom box rule, as its definition writes it (the bounds on the grid's whole span, each ratio's
+    picture, a half rounded toward the centre: writer/frames.box_limits), gives exactly every limit the boxes were
+    measured at, at their default sizes, at all four aspect ratios, for each box's records and the box in use's; the
+    bounds alone (no pictures) give 3:2's only."""
+    by = {s["key"]: s for s in definitions.load_public(A1)["settings"]}
+    sizes = {"Custom 1": (402, 182), "Custom 2": (402, 132), "Custom 3": (168, 318)}
+    first = {"Custom 1": ("set:0x1333", "set:0x1339"), "Custom 2": ("set:0x133f", "set:0x1345"),
+             "Custom 3": ("set:0x134b", "set:0x1351")}
+    limit = lambda k: by[k]["frame"]["limits"][0]
+    for code, boxes in MEASURED.items():
+        for area, want in boxes.items():
+            (kx, ky), (w, h) = first[area], sizes[area]
+            assert frames.box_limits(limit(kx), w, code) + frames.box_limits(limit(ky), h, code) == want, (code, area)
+            assert frames.box_limits(limit("set:0x1327"), w, code) + frames.box_limits(limit("set:0x1329"), h, code) == want
+    plain = {k: v for k, v in limit("set:0x1333").items() if k not in ("pictures", "grid")}
+    assert frames.box_limits(plain, 402) == MEASURED[0]["Custom 1"][:2] != MEASURED[3]["Custom 1"][:2]
+
+
+def test_box_limits_round_a_half_toward_the_centre_and_need_a_picture_for_the_value():
+    """box_limits: the bounds on the whole span and the box's size, the picture for the value (none: None), the grid
+    stretched over it and the box kept inside the picture too, each end to the nearest whole number, a half toward the
+    centre."""
+    lim = {"inside": [46.25, 593.75], "grid": 640, "pictures": [{"when": [0], "fraction": [1, 1]}, {"when": [3], "fraction": [2, 3]}]}
+    assert frames.box_limits(lim, 402, 3) == (302, 338)             # 301.5 and 338.5, a half toward 320 each
+    assert frames.box_limits(lim, 168, 3) == (126, 514)             # the picture, not the bounds, keeps it
+    assert frames.box_limits(lim, 402, 0) == (247, 393)             # 247.25 and 392.75
+    assert frames.box_limits(lim, 402, 1) is None
+
+
+def test_limits_by_a_setting_merge_their_values_and_are_checked_against_it(capsys):
+    """An entry whose limits depend on a setting ("by"): each limit for some of its values ("when"), those alike on an
+    axis merged into one, "by" on the frame; a box's pictures likewise; refused, said and left out: a setting the
+    definition lacks, a value it does not list, a record two entries place with limits by different settings."""
+    doc = made_up()
+    doc["settings"].append(setting("global:0x0040", values=[[0, "3:2"], [1, "16:9"]]))
+    spot = {"places": SPOT["places"], "by": "global:0x0040", "limits": [
+        {"areas": ["Spot: M"], "when": [0], "x": [80, 560], "y": [72, 408]},
+        {"areas": ["Spot: M"], "when": [1], "x": [80, 560], "y": [41, 439]}]}
+    boxes = {**{k: v for k, v in BOXES.items() if k != "sizes_tried"}, "by": "global:0x0040", "grid": {"x": 640, "y": 480},
+             "pictures": [{"when": [0], "x": [1, 1], "y": [1, 1], "sizes_tried": {"x": [402], "y": [182]}},
+                          {"when": [1], "x": [1, 1], "y": [27, 32], "sizes_tried": {"x": [402], "y": [182]}}]}
+    assert frames.with_frames(doc, {"Spot": spot, "Custom": boxes}, SAID) == 4
+    by = {s["key"]: s for s in doc["settings"]}
+    assert by["set:0x0001"]["frame"] == {"axis": "x", "with": "set:0x0002", "by": "global:0x0040",
+                                         "limits": [{"areas": ["Spot: M"], "when": [0, 1], "range": [80, 560]}]}
+    assert by["set:0x0002"]["frame"]["limits"] == [{"areas": ["Spot: M"], "when": [0], "range": [72, 408]},
+                                                   {"areas": ["Spot: M"], "when": [1], "range": [41, 439]}]
+    assert by["set:0x0004"]["frame"]["limits"] == [{"areas": ["Custom 1"], "inside": [42, 438], "size": "set:0x0010", "grid": 480,
+                                                    "pictures": [{"when": [0], "fraction": [1, 1], "sizes_tried": [182]},
+                                                                 {"when": [1], "fraction": [27, 32], "sizes_tried": [182]}]}]
+    assert by["set:0x0003"]["frame"]["limits"][0]["pictures"] == [{"when": [0, 1], "fraction": [1, 1], "sizes_tried": [402]}]
+    for table, words in (({"Spot": {**spot, "by": "global:0x0099"}}, "the definition lacks global:0x0099"),
+                         ({"Spot": {**spot, "limits": [{**spot["limits"][0], "when": [7]}]}}, "global:0x0040 has no value 7"),
+                         ({"Spot": spot, "Again": {**SPOT, "limits": [{**SPOT["limits"][1]}]}}, "its limits depending once on")):
+        doc = made_up()
+        doc["settings"].append(setting("global:0x0040", values=[[0, "3:2"], [1, "16:9"]]))
+        frames.with_frames(doc, table, {**SAID, "Again": SAID["Spot"]})
+        out = capsys.readouterr().out
+        assert words in out and "not applied" in out, out

@@ -277,12 +277,31 @@ def _areas(x, where: str) -> list:
     return x
 
 
-def _span(x, where: str) -> list:
-    """[lowest, highest], two whole numbers, the second not below the first."""
-    _row(x, (int, int), where, "[lowest, highest] (two whole numbers)")
+def _span(x, where: str, kind=int) -> list:
+    """[lowest, highest], two whole numbers (or numbers of `kind`), the second not below the first."""
+    _row(x, (kind, kind), where, "[lowest, highest] (two whole numbers)" if kind is int else "[lowest, highest] (two numbers)")
     if x[1] < x[0]:
         raise _Shape(f"{where} is {x!r}: its highest is below its lowest")
     return x
+
+
+def _when(x: dict, needed: bool, where: str) -> None:
+    """A limit's or a picture's "when": the values of its entry's "by" it is for, some whole numbers, each once; there
+    exactly when the entry has a "by" (`needed`)."""
+    if ("when" in x) != needed:
+        raise _Shape(f"{where} {'has no' if needed else 'has a'} 'when', and its entry {'has a' if needed else 'has no'} 'by'")
+    if needed:
+        for j, v in enumerate(_listed(x["when"], f"{where}'s when")):
+            _need(v, int, f"{where}'s when[{j}]")
+        _unique(x["when"])
+
+
+def _sizes(x, where: str) -> None:
+    """Sizes tried, {"x": [...], "y": [...]}, whole numbers."""
+    _fields(x, ("x", "y"), where)
+    for f in ("x", "y"):
+        for j, v in enumerate(_listed(x[f], f"{where}'s {f}")):
+            _need(v, int, f"{where}'s {f}[{j}]")
 
 
 def _pair(p, where: str, words: str = "[X record, Y record] (two keys)") -> list:
@@ -440,29 +459,52 @@ def _shaped(name: str, kind: str, raw):
         return raw
     if kind == "frame_travel":
         # a kind of focus frame, by a name: measured area by area ({places, limits}) or boxes one rule bounds ({inside,
-        # boxes[, sizes_tried]}), the fields writer/frames.py reads, each area in one limit of its entry at most
+        # boxes[, sizes_tried]}), the fields writer/frames.py reads; with "by" (the setting whose value picks the limits)
+        # every limit names the values it is for ("when"), and boxes give each value's picture ("pictures", with the
+        # grid); each area, and each area at each value, in one limit of its entry at most
         for name, e in _need(raw, dict, "the table").items():
             if not name.strip():
                 raise _Shape("an entry has no name")
             where = repr(name)
             has = set(_need(e, dict, where))
-            if {"places", "limits"} <= has and not {"inside", "boxes", "sizes_tried"} & has:
+            if "by" in has:
+                _need(e["by"], str, f"{where}'s by")
+            if {"places", "limits"} <= has and not {"inside", "boxes", "sizes_tried", "pictures", "grid"} & has:
                 _pairs(e["places"], f"{where}'s places")
                 for i, lim in enumerate(_listed(e["limits"], f"{where}'s limits")):
                     _fields(lim, ("areas", "x", "y"), f"{where}'s limits[{i}]")
                     _areas(lim["areas"], f"{where}'s limits[{i}]'s areas")
                     for f in ("x", "y"):
                         _span(lim[f], f"{where}'s limits[{i}]'s {f}")
-                _unique(a for lim in e["limits"] for a in lim["areas"])
+                    _when(lim, "by" in has, f"{where}'s limits[{i}]")
+                _unique(a if v is None else (a, v) for lim in e["limits"] for a in lim["areas"] for v in lim.get("when") or [None])
             elif {"inside", "boxes"} <= has and not {"places", "limits"} & has:
                 _fields(e["inside"], ("x", "y"), f"{where}'s inside")
                 for f in ("x", "y"):
-                    _span(e["inside"][f], f"{where}'s inside's {f}")
+                    _span(e["inside"][f], f"{where}'s inside's {f}", (int, float))
                 if "sizes_tried" in e:
-                    _fields(e["sizes_tried"], ("x", "y"), f"{where}'s sizes_tried")
+                    if "pictures" in e:
+                        raise _Shape(f"{where} has sizes_tried beside pictures, which hold each picture's own")
+                    _sizes(e["sizes_tried"], f"{where}'s sizes_tried")
+                if ("pictures" in e) != ("by" in e) or ("pictures" in e) != ("grid" in e):
+                    raise _Shape(f"{where} has {'pictures' if 'pictures' in e else 'by or grid'} without "
+                                 f"{'by and grid' if 'pictures' in e else 'pictures'}: the three go together")
+                if "pictures" in e:
+                    _fields(e["grid"], ("x", "y"), f"{where}'s grid")
                     for f in ("x", "y"):
-                        for j, v in enumerate(_listed(e["sizes_tried"][f], f"{where}'s sizes_tried's {f}")):
-                            _need(v, int, f"{where}'s sizes_tried's {f}[{j}]")
+                        if not _need(e["grid"][f], int, f"{where}'s grid's {f}") > 0 or not \
+                                0 <= e["inside"][f][0] <= e["inside"][f][1] <= e["grid"][f]:
+                            raise _Shape(f"{where}'s inside's {f} is not within its grid, 0 to {e['grid'][f]}")
+                    for i, pic in enumerate(_listed(e["pictures"], f"{where}'s pictures")):
+                        _fields(pic, ("when", "x", "y"), f"{where}'s pictures[{i}]")
+                        _when(pic, True, f"{where}'s pictures[{i}]")
+                        for f in ("x", "y"):
+                            frac = _row(pic[f], (int, int), f"{where}'s pictures[{i}]'s {f}", "[numerator, denominator]")
+                            if not 0 < frac[0] <= frac[1]:
+                                raise _Shape(f"{where}'s pictures[{i}]'s {f} is {frac!r}: no part of the grid's span")
+                        if "sizes_tried" in pic:
+                            _sizes(pic["sizes_tried"], f"{where}'s pictures[{i}]'s sizes_tried")
+                    _unique(v for pic in e["pictures"] for v in pic["when"])
                 for i, box in enumerate(_listed(e["boxes"], f"{where}'s boxes")):
                     _fields(box, ("areas", "size", "places"), f"{where}'s boxes[{i}]")
                     _areas(box["areas"], f"{where}'s boxes[{i}]'s areas")

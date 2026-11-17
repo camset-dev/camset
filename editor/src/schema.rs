@@ -185,28 +185,50 @@ pub struct KeepsApart {
 }
 
 /// One coordinate of a focus frame's centre (`Setting::frame`): which (`axis`, "x" across or "y" down), the setting that
-/// holds the other one in the same place (`with`, whose own frame names this one back), and where the centre stops on
-/// this axis, by area (`limits`).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+/// holds the other one in the same place (`with`, whose own frame names this one back), the setting whose value in the
+/// same section picks the limits where they change with it (`by`; None: they hold whatever the camera's settings), and
+/// where the centre stops on this axis, by area (`limits`).
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Frame {
     pub axis: String,
     pub with: String,
+    #[serde(default)]
+    pub by: Option<String>,
     pub limits: Vec<FrameLimit>,
 }
 
 /// Where a frame's centre stops on one axis for some areas (`areas`, Focus Area options as the definition's values name
-/// them): a frame measured area by area stops within `range`; a box whose size the file holds stays whole inside
-/// `inside`, so its centre stops half the size its `size` setting holds (in the same section) inside those bounds, the
-/// rule proved at the sizes `sizes_tried` (empty: not said).
-#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+/// them): a frame measured area by area stops within `range`, for the values of the frame's `by` in `when`; a box whose
+/// size the file holds stays whole inside `inside`, so its centre stops half the size its `size` setting holds (in the
+/// same section) inside those bounds, the rule proved at the sizes `sizes_tried` (empty: not said), or, with
+/// `pictures`, also inside the picture each value of `by` records on the grid's span `grid` (`FramePicture`), each end
+/// rounded to the nearest whole number, a half toward the centre.
+#[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct FrameLimit {
     pub areas: Vec<String>,
     #[serde(default)]
+    pub when: Vec<i64>,
+    #[serde(default)]
     pub range: Option<(i64, i64)>,
     #[serde(default)]
-    pub inside: Option<(i64, i64)>,
+    pub inside: Option<(f64, f64)>,
     #[serde(default)]
     pub size: Option<String>,
+    #[serde(default)]
+    pub sizes_tried: Vec<i64>,
+    #[serde(default)]
+    pub grid: Option<i64>,
+    #[serde(default)]
+    pub pictures: Vec<FramePicture>,
+}
+
+/// The picture a box's rule uses for some values of the frame's `by` (`when`): the part of the grid's span it covers on
+/// the limit's axis, centred (`fraction`, [numerator, denominator]), the grid stretched over it, and the sizes the rule
+/// was proved at for those values (`sizes_tried`, empty: not said).
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct FramePicture {
+    pub when: Vec<i64>,
+    pub fraction: (i64, i64),
     #[serde(default)]
     pub sizes_tried: Vec<i64>,
 }
@@ -1623,13 +1645,17 @@ impl Schema {
     /// A focus frame's coordinate (`frame`) as the kit writes it: an axis, x or y; the other one a setting of the
     /// definition whose frame is the other axis, names this one back and has limits for the same areas; each limit
     /// for some areas, either a range (lowest not above highest, within the setting's own range where it has one) or
-    /// the bounds a box stays inside with the setting of its size, which the definition holds, and never both. A
-    /// definition that says otherwise is refused, saying which, so the editor never places a frame from it.
+    /// the bounds a box stays inside with the setting of its size, which the definition holds, and never both; where
+    /// the limits change with a setting (`by`), one the definition holds, every range naming some of its values
+    /// (`when`) and every box giving pictures for some of them, each a part of the grid's span and the bounds within the
+    /// grid, and without `by` neither. A definition that says otherwise is refused, saying which, so the editor never
+    /// places a frame from it.
     fn check_frames(&self) -> Result<(), String> {
         let by_key: std::collections::HashMap<&str, &Setting> = self.settings.iter().map(|s| (s.key.as_str(), s)).collect();
         fn areas(f: &Frame) -> Vec<&str> {
             let mut a: Vec<&str> = f.limits.iter().flat_map(|l| l.areas.iter().map(String::as_str)).collect();
             a.sort_unstable();
+            a.dedup();
             a
         }
         for s in &self.settings {
@@ -1639,24 +1665,50 @@ impl Schema {
             if f.limits.is_empty() {
                 return why("it gives no limits".into());
             }
+            let codes: Option<Vec<i64>> = match &f.by {
+                Some(k) => match by_key.get(k.as_str()) {
+                    Some(b) => Some(b.values.iter().map(|(v, _)| *v).collect()),
+                    None => return why(format!("the definition holds no {k}, the setting its limits depend on")),
+                },
+                None => None,
+            };
+            let named = |when: &[i64]| match &codes {
+                Some(c) => !when.is_empty() && when.iter().all(|v| c.contains(v)),
+                None => when.is_empty(),
+            };
             for l in &f.limits {
                 if l.areas.is_empty() || l.areas.iter().any(|a| a.trim().is_empty()) {
                     return why("a limit names no area".into());
                 }
                 match (l.range, l.inside, &l.size) {
-                    (Some((lo, hi)), None, None) if lo <= hi && l.sizes_tried.is_empty() && s.range.is_none_or(|(a, b)| a <= lo && hi <= b) => {}
-                    (None, Some((lo, hi)), Some(k)) if lo <= hi => {
+                    (Some((lo, hi)), None, None) if lo <= hi && l.sizes_tried.is_empty() && l.grid.is_none() && l.pictures.is_empty()
+                        && s.range.is_none_or(|(a, b)| a <= lo && hi <= b) => {}
+                    (None, Some((lo, hi)), Some(k)) if lo <= hi && l.when.is_empty() => {
                         if !by_key.contains_key(k.as_str()) {
                             return why(format!("the definition holds no {k}, its box's size"));
                         }
                     }
                     _ => return why(format!("its limit for {} is neither a range within its own nor a box's bounds with its size", l.areas.join(", "))),
                 }
+                if l.range.is_some() && !named(&l.when) {
+                    return why(format!("its limit for {} does not name values of {} as its frame says", l.areas.join(", "), f.by.as_deref().unwrap_or("no setting")));
+                }
+                if let Some((lo, hi)) = l.inside {
+                    let pictures_fit = match (&codes, l.grid) {
+                        (Some(_), Some(g)) => g > 0 && !l.pictures.is_empty() && l.sizes_tried.is_empty() && 0.0 <= lo && hi <= g as f64
+                            && l.pictures.iter().all(|p| named(&p.when) && 0 < p.fraction.0 && p.fraction.0 <= p.fraction.1),
+                        (None, None) => l.pictures.is_empty(),
+                        _ => false,
+                    };
+                    if !pictures_fit {
+                        return why(format!("its box's pictures for {} do not fit its grid and the values of {}", l.areas.join(", "), f.by.as_deref().unwrap_or("no setting")));
+                    }
+                }
             }
             let Some(o) = by_key.get(f.with.as_str()) else { return why(format!("the definition holds no {}", f.with)) };
             match &o.frame {
-                Some(of) if of.axis == other_axis && of.with == s.key && areas(of) == areas(f) => {}
-                _ => return why(format!("{} is not its other coordinate, with limits for the same areas", o.name)),
+                Some(of) if of.axis == other_axis && of.with == s.key && of.by == f.by && areas(of) == areas(f) => {}
+                _ => return why(format!("{} is not its other coordinate, with limits for the same areas by the same setting", o.name)),
             }
         }
         Ok(())
@@ -1956,31 +2008,35 @@ mod tests {
     }
 
     /// The a1 II's definition carries how far each focus frame travels, as the kit writes it: the spot's places with
-    /// their limits by area (Spot M's X from 80 to 560), each Custom box's places with the bounds the box stays inside,
-    /// its size setting and the sizes the rule was tried at, the in-use box with every Custom area; each coordinate
-    /// names its other one. Every place carries it, the grip-up copies among them (the spot's four places, each box's
+    /// their limits by area and Aspect Ratio (Spot M's X from 80 to 560 at 3:2 and 16:9, 50 to 590 at 4:3), each Custom
+    /// box's places with the bounds the box stays inside, its size setting and each ratio's picture with the sizes the
+    /// rule was tried at, the in-use box with every Custom area; each coordinate names its other one and Aspect Ratio. Every place carries it, the grip-up copies among them (the spot's four places, each box's
     /// four and the box in use), and no other setting does. Without the field, a setting holds no frame.
     #[test]
     fn the_a1_ii_definition_says_how_far_each_focus_frame_travels() {
         let s = embedded();
         let by = |k: &str| s.settings.iter().find(|x| x.key == k).unwrap_or_else(|| panic!("{k}"));
         let spot = by("set:0x01be").frame.as_ref().expect("the spot's level X");
-        assert_eq!((spot.axis.as_str(), spot.with.as_str()), ("x", "set:0x01c4"));
-        let m = spot.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap();
-        assert_eq!((m.range, m.inside, m.size.as_deref()), (Some((80, 560)), None, None));
-        assert!(m.areas.contains(&"Tracking: Spot M".to_string()));
+        assert_eq!((spot.axis.as_str(), spot.with.as_str(), spot.by.as_deref()), ("x", "set:0x01c4", Some("global:0x01fe")));
+        // Spot M across: the same at 3:2 and 16:9, wider at 4:3 and 1:1 (Aspect Ratio's codes 0 3:2, 1 4:3, 2 16:9, 3 1:1)
+        let m = |f: &Frame, code: i64| f.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M") && l.when.contains(&code)).unwrap().range;
+        assert_eq!([0, 1, 2, 3].map(|c| m(spot, c)), [Some((80, 560)), Some((50, 590)), Some((80, 560)), Some((51, 589))]);
         let y = by("set:0x01c4").frame.as_ref().unwrap();
         assert_eq!((y.axis.as_str(), y.with.as_str()), ("y", "set:0x01be"));
-        assert_eq!(y.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap().range, Some((72, 408)));
+        assert_eq!([0, 1, 2, 3].map(|c| m(y, c)), [Some((72, 408)), Some((72, 408)), Some((41, 439)), Some((72, 408))]);
+        assert!(spot.limits.iter().all(|l| l.areas.contains(&"Spot: M".to_string()) == l.areas.contains(&"Tracking: Spot M".to_string())));
         let boxed = by("set:0x1333").frame.as_ref().expect("Custom 1's level X");
-        assert_eq!(boxed.limits, vec![FrameLimit { areas: vec!["Custom 1".into(), "Tracking: Custom 1".into()], range: None,
-            inside: Some((46, 594)), size: Some("set:0x14b6".into()), sizes_tried: vec![168, 402] }]);
+        let pic = |when: Vec<i64>, fraction: (i64, i64)| FramePicture { when, fraction, sizes_tried: vec![168, 402] };
+        assert_eq!(boxed.limits, vec![FrameLimit { areas: vec!["Custom 1".into(), "Tracking: Custom 1".into()], when: vec![], range: None,
+            inside: Some((46.25, 593.75)), size: Some("set:0x14b6".into()), sizes_tried: vec![], grid: Some(640),
+            pictures: vec![pic(vec![0, 2], (1, 1)), pic(vec![1], (8, 9)), pic(vec![3], (2, 3))] }]);
         let in_use = by("set:0x1329").frame.as_ref().expect("the box in use's Y");
         assert_eq!((in_use.axis.as_str(), in_use.limits[0].size.as_deref(), in_use.limits[0].areas.len()), ("y", Some("set:0x1488"), 6));
+        assert_eq!(in_use.limits[0].pictures.iter().map(|p| (p.when.clone(), p.fraction)).collect::<Vec<_>>(), vec![(vec![0, 1, 3], (1, 1)), (vec![2], (27, 32))]);
         let up = by("set:0x01c2").frame.as_ref().expect("the spot's grip-up X");
-        assert_eq!((up.with.as_str(), up.limits.iter().find(|l| l.areas.iter().any(|a| a == "Spot: M")).unwrap().range), ("set:0x01c8", Some((80, 560))));
+        assert_eq!((up.with.as_str(), m(up, 0)), ("set:0x01c8", Some((80, 560))));
         let up_box = by("set:0x133d").frame.as_ref().expect("Custom 1's grip-up Y");
-        assert_eq!((up_box.with.as_str(), up_box.limits[0].inside, up_box.limits[0].size.as_deref()), ("set:0x1337", Some((42, 438)), Some("set:0x14b4")));
+        assert_eq!((up_box.with.as_str(), up_box.limits[0].inside, up_box.limits[0].size.as_deref()), ("set:0x1337", Some((41.875, 438.125)), Some("set:0x14b4")));
         assert_eq!(s.settings.iter().filter(|x| x.frame.is_some()).count(), 34);
         assert!(made(serde_json::json!({})).frame.is_none());
     }
@@ -2009,6 +2065,13 @@ mod tests {
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46, 594] }] }), "neither a range"),
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46, 594], "size": "set:0x7ffe" }] }), "holds no set:0x7ffe, its box's size"),
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": [], "inside": [46, 594], "size": "set:0x14b6" }] }), "names no area"),
+            ("set:0x01be", serde_json::json!({ "axis": "x", "with": "set:0x01c4", "by": "global:0x01fe", "limits": m }), "does not name values of global:0x01fe"),
+            ("set:0x01be", serde_json::json!({ "axis": "x", "with": "set:0x01c4", "by": "global:0x01fe", "limits": [{ "areas": ["Spot: M"], "when": [9], "range": [80, 560] }] }), "does not name values of global:0x01fe"),
+            ("set:0x01be", serde_json::json!({ "axis": "x", "with": "set:0x01c4", "by": "global:0x7ffe", "limits": m }), "holds no global:0x7ffe, the setting its limits depend on"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "by": "global:0x01fe", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 593.75], "size": "set:0x14b6" }] }), "do not fit its grid"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "by": "global:0x01fe", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 700], "size": "set:0x14b6", "grid": 640, "pictures": [{ "when": [0], "fraction": [1, 1] }] }] }), "do not fit its grid"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "by": "global:0x01fe", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 593.75], "size": "set:0x14b6", "grid": 640, "pictures": [{ "when": [0], "fraction": [3, 2] }] }] }), "do not fit its grid"),
+            ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 593.75], "size": "set:0x14b6" }] }), "by the same setting"),
         ] {
             let e = Schema::from_text(&with(key, f.clone())).unwrap_err();
             assert!(e.contains("holds a focus frame's coordinate, but") && e.contains(words), "{f}: {e}");

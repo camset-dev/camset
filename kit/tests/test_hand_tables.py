@@ -120,6 +120,12 @@ APART = {"setting": "global:0x0002", "apart": [1], "untick_sets": 0}
 SPOT = {"places": [["set:0x0001", "set:0x0002"]], "limits": [{"areas": ["Spot: M"], "x": [80, 560], "y": [72, 408]}]}
 BOXES = {"inside": {"x": [46, 594], "y": [42, 438]}, "sizes_tried": {"x": [402], "y": [182]},
          "boxes": [{"areas": ["Custom 1"], "size": ["set:0x0011", "set:0x0010"], "places": [["set:0x0003", "set:0x0004"]]}]}
+# the same, their limits picked by a setting ("by"): each limit's values ("when"), each value's picture with the grid
+BY_SPOT = {"places": SPOT["places"], "by": "global:0x0040", "limits": [
+    {"areas": ["Spot: M"], "when": [0], "x": [80, 560], "y": [72, 408]}, {"areas": ["Spot: M"], "when": [1], "x": [80, 560], "y": [41, 439]}]}
+BY_BOXES = {"by": "global:0x0040", "grid": {"x": 640, "y": 480}, "inside": {"x": [46.25, 593.75], "y": [41.875, 438.125]},
+            "pictures": [{"when": [0], "x": [1, 1], "y": [1, 1], "sizes_tried": {"x": [402], "y": [182]}},
+                         {"when": [1], "x": [1, 1], "y": [27, 32]}], "boxes": BOXES["boxes"]}
 DEEP = 100000                      # deeper than Python's parser follows
 
 
@@ -212,6 +218,20 @@ DEEP = 100000                      # deeper than Python's parser follows
      "'Custom''s boxes[0]'s size is ['set:0x0011'], not [width record, height record]"),
     (j(FRAME_TRAVEL={"Custom": {**BOXES, "boxes": [{k: v for k, v in BOXES["boxes"][0].items() if k != "places"}]}}),
      "'Custom''s boxes[0] has no 'places'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "by": 40}}), "'Spot''s by is a whole number, not a string"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [SPOT["limits"][0]]}}), "'Spot''s limits[0] has no 'when', and its entry has a 'by'"),
+    (j(FRAME_TRAVEL={"Spot": {k: v for k, v in BY_SPOT.items() if k != "by"}}), "'Spot''s limits[0] has a 'when', and its entry has no 'by'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [BY_SPOT["limits"][0], {**BY_SPOT["limits"][1], "when": [0]}]}}),
+     "FRAME_TRAVEL holds ('Spot: M', 0) twice"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [{**BY_SPOT["limits"][0], "when": []}]}}), "'Spot''s limits[0]'s when lists nothing"),
+    (j(FRAME_TRAVEL={"Custom": {k: v for k, v in BY_BOXES.items() if k != "grid"}}), "'Custom' has pictures without by and grid"),
+    (j(FRAME_TRAVEL={"Custom": {k: v for k, v in BY_BOXES.items() if k != "pictures"}}), "'Custom' has by or grid without pictures"),
+    (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "sizes_tried": {"x": [402], "y": [182]}}}), "'Custom' has sizes_tried beside pictures"),
+    (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "inside": {"x": [46.25, 700], "y": [41.875, 438.125]}}}), "'Custom''s inside's x is not within its grid"),
+    (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "pictures": [{"when": [0], "x": [3, 2], "y": [1, 1]}]}}),
+     "'Custom''s pictures[0]'s x is [3, 2]: no part of the grid's span"),
+    (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "pictures": [BY_BOXES["pictures"][0], {**BY_BOXES["pictures"][1], "when": [0]}]}}),
+     "FRAME_TRAVEL holds 0 twice"),
     (j(LABEL_FIXES={"Slip": 1}), "LABEL_FIXES is not in its shape: 'Slip' is a whole number, not a string"),
     (j(MY_MENU_EMPTY={"label": "(empty)"}), "MY_MENU_EMPTY is not in its shape: it has no 'line'"),
     # the patterns the writer runs, each compiled (and each replacement tried) as the file is read
@@ -265,13 +285,13 @@ def test_a_frame_travel_table_reads_as_the_file_has_it_and_its_evidence_lands_on
     """FRAME_TRAVEL, both shapes, read as the file has it; its hand evidence, by the entry's name, put back onto that
     entry ("evidence"), refused for a name the table lacks; the plain pass's check takes a part with "evidence" only and
     says the same of a name the table lacks. Made-up keys."""
-    a_camera(monkeypatch, tmp_path, {"FRAME_TRAVEL": {"Spot": SPOT, "Custom": BOXES}})
-    assert hand_tables.load(CAM).FRAME_TRAVEL == {"Spot": SPOT, "Custom": BOXES}
+    a_camera(monkeypatch, tmp_path, {"FRAME_TRAVEL": {"Spot": SPOT, "Custom": BOXES, "By spot": BY_SPOT, "By boxes": BY_BOXES}})
+    assert hand_tables.load(CAM).FRAME_TRAVEL == {"Spot": SPOT, "Custom": BOXES, "By spot": BY_SPOT, "By boxes": BY_BOXES}
     doc = lambda part: {"hand_format": hand_evidence.FORMAT, "camera": CAM, "tables": {"FRAME_TRAVEL": part}}
     write = lambda part: hand_evidence.path(CAM).write_text(json.dumps(doc(part)), encoding="utf-8")
     write({"Custom": {"evidence": "runs kit2_x, 2026-01-02"}})
     got = hand_tables.load(CAM).FRAME_TRAVEL
-    assert got == {"Spot": SPOT, "Custom": {**BOXES, "evidence": "runs kit2_x, 2026-01-02"}}
+    assert got == {"Spot": SPOT, "Custom": {**BOXES, "evidence": "runs kit2_x, 2026-01-02"}, "By spot": BY_SPOT, "By boxes": BY_BOXES}
     public = vars(hand_tables.load(CAM, evidence=False))
     assert hand_evidence.plain_problems(doc({"Spot": {"evidence": "x"}}), CAM, public) == []
     assert hand_evidence.plain_problems(doc({"Zone": {"evidence": "x"}}), CAM, public) == [

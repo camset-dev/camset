@@ -719,9 +719,13 @@
      },
      "description": "With places: where the frame's centre stops, by area, each Focus Area option in one entry at most (areas whose limits are the same share one)."
     },
+    "by": {
+     "$ref": "#/$defs/key",
+     "description": "The setting whose value, read in the same section as the place, picks the limits (the a1 II's Aspect Ratio, where the limits change): with it every limit says the values it is for (when), and boxes give each value's picture (pictures). Left out where the limits hold whatever the camera's settings."
+    },
     "inside": {
      "$ref": "#/$defs/frame_bounds",
-     "description": "Boxes whose size the file holds: the camera keeps the whole box, centred on its place, inside these bounds, so its centre stops half the box's width (height) inside them."
+     "description": "Boxes whose size the file holds: the camera keeps the whole box, centred on its place, inside these bounds on the grid's whole span (fractions allowed, as the rule that reproduces every measured limit needs them), so its centre stops half the box's width (height) inside them, each end rounded to the nearest whole number, a half toward the centre."
     },
     "sizes_tried": {
      "type": "object",
@@ -738,7 +742,34 @@
        "$ref": "#/$defs/frame_sizes"
       }
      },
-     "description": "With inside: the widths (x) and heights (y) the boxes stood at when the rule was proved; at any other size it is not tried. Left out where that is not known."
+     "description": "With inside and no pictures: the widths (x) and heights (y) the boxes stood at when the rule was proved; at any other size it is not tried. Left out where that is not known; with pictures each picture holds its own."
+    },
+    "grid": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "x",
+      "y"
+     ],
+     "properties": {
+      "x": {
+       "type": "integer",
+       "minimum": 1
+      },
+      "y": {
+       "type": "integer",
+       "minimum": 1
+      }
+     },
+     "description": "With pictures: the span of the grid the positions are on, {\"x\": 640, \"y\": 480} for the a1 II; its centre is half of it."
+    },
+    "pictures": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_picture"
+     },
+     "description": "With by: for each of its values, the part of the grid's span the recorded picture covers on each axis, centred. The grid is stretched over the picture, while inside and the boxes' sizes stay measured on the whole span; so a box's centre stays where the whole box is inside both inside and the picture, mapped onto the stretched grid, each end rounded to the nearest whole number, a half toward the centre. Each value in one picture at most."
     },
     "boxes": {
      "type": "array",
@@ -771,6 +802,16 @@
         "required": [
          "boxes"
         ]
+       },
+       {
+        "required": [
+         "grid"
+        ]
+       },
+       {
+        "required": [
+         "pictures"
+        ]
        }
       ]
      }
@@ -796,7 +837,7 @@
      }
     }
    ],
-   "description": "One kind of focus frame, in one of two shapes: a frame whose limits were measured area by area (places and limits: the a1 II's spot sizes and Expand Spot, whose size no record holds), or boxes whose size the file holds, which one rule bounds (inside, boxes and, where known, sizes_tried: the a1 II's Custom boxes). A position is the frame's centre on the camera's grid (the a1 II's 640 x 480), as its records hold it; a press that would take the frame past a limit stops it there."
+   "description": "One kind of focus frame, in one of two shapes: a frame whose limits were measured area by area (places and limits: the a1 II's spot sizes and Expand Spot, whose size no record holds), or boxes whose size the file holds, which one rule bounds (inside, boxes and, where known, sizes_tried: the a1 II's Custom boxes). Where the limits change with a setting of the camera's (by), each limit or picture names the values it is for. A position is the frame's centre on the camera's grid (the a1 II's 640 x 480), as its records hold it; a press that would take the frame past a limit stops it there."
   },
   "frame_pair": {
    "type": "array",
@@ -830,10 +871,10 @@
    ],
    "properties": {
     "x": {
-     "$ref": "#/$defs/frame_span"
+     "$ref": "#/$defs/frame_number_span"
     },
     "y": {
-     "$ref": "#/$defs/frame_span"
+     "$ref": "#/$defs/frame_number_span"
     }
    },
    "description": "{\"x\": [left, right], \"y\": [top, bottom]} on the camera's grid."
@@ -877,6 +918,15 @@
     "y": {
      "$ref": "#/$defs/frame_span",
      "description": "The Y the centre stops at, [top, bottom]."
+    },
+    "when": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "integer"
+     },
+     "description": "With its entry's by: the values of that setting these limits are for."
     }
    },
    "description": "Where a measured frame's centre stops, for some areas."
@@ -908,6 +958,71 @@
     }
    },
    "description": "A box the rule bounds: its areas, its size records and the records of its places."
+  },
+  "frame_number_span": {
+   "type": "array",
+   "minItems": 2,
+   "maxItems": 2,
+   "items": {
+    "type": "number"
+   },
+   "description": "[lowest, highest], numbers."
+  },
+  "frame_picture": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "when",
+    "x",
+    "y"
+   ],
+   "properties": {
+    "when": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "integer"
+     },
+     "description": "The values of the entry's by this picture is for."
+    },
+    "x": {
+     "$ref": "#/$defs/frame_fraction",
+     "description": "The part of the grid's width the picture covers."
+    },
+    "y": {
+     "$ref": "#/$defs/frame_fraction",
+     "description": "The part of the grid's height the picture covers."
+    },
+    "sizes_tried": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "x",
+      "y"
+     ],
+     "properties": {
+      "x": {
+       "$ref": "#/$defs/frame_sizes"
+      },
+      "y": {
+       "$ref": "#/$defs/frame_sizes"
+      }
+     },
+     "description": "The widths (x) and heights (y) the boxes stood at when the rule was proved for these values; at any other size it is not tried."
+    }
+   },
+   "description": "The picture for some values of the entry's by."
+  },
+  "frame_fraction": {
+   "type": "array",
+   "minItems": 2,
+   "maxItems": 2,
+   "items": {
+    "type": "integer",
+    "minimum": 1
+   },
+   "description": "[numerator, denominator], the numerator not above the denominator."
   }
  }
 }

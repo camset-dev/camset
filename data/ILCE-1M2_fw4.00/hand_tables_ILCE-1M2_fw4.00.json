@@ -1019,17 +1019,40 @@
         ["set:0x01c0", "set:0x01c6"],
         ["set:0x01c2", "set:0x01c8"]
       ],
+      "by": "global:0x01fe",
       "limits": [
-        {"areas": ["Spot: XL", "Tracking: Spot XL"], "x": [125, 515], "y": [106, 374]},
-        {"areas": ["Spot: L", "Tracking: Spot L"], "x": [95, 545], "y": [83, 397]},
-        {"areas": ["Spot: M", "Tracking: Spot M"], "x": [80, 560], "y": [72, 408]},
-        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "x": [65, 575], "y": [61, 419]},
-        {"areas": ["Spot: XS", "Tracking: Spot XS"], "x": [60, 580], "y": [58, 422]}
+        {"areas": ["Spot: XL", "Tracking: Spot XL"], "when": [0], "x": [125, 515], "y": [106, 374]},
+        {"areas": ["Spot: XL", "Tracking: Spot XL"], "when": [1], "x": [101, 539], "y": [106, 374]},
+        {"areas": ["Spot: XL", "Tracking: Spot XL"], "when": [2], "x": [125, 515], "y": [81, 399]},
+        {"areas": ["Spot: XL", "Tracking: Spot XL"], "when": [3], "x": [119, 521], "y": [106, 374]},
+        {"areas": ["Spot: L", "Tracking: Spot L"], "when": [0], "x": [95, 545], "y": [83, 397]},
+        {"areas": ["Spot: L", "Tracking: Spot L"], "when": [1], "x": [67, 573], "y": [83, 397]},
+        {"areas": ["Spot: L", "Tracking: Spot L"], "when": [2], "x": [95, 545], "y": [54, 426]},
+        {"areas": ["Spot: L", "Tracking: Spot L"], "when": [3], "x": [74, 566], "y": [83, 397]},
+        {"areas": ["Spot: M", "Tracking: Spot M"], "when": [0], "x": [80, 560], "y": [72, 408]},
+        {"areas": ["Spot: M", "Tracking: Spot M"], "when": [1], "x": [50, 590], "y": [72, 408]},
+        {"areas": ["Spot: M", "Tracking: Spot M"], "when": [2], "x": [80, 560], "y": [41, 439]},
+        {"areas": ["Spot: M", "Tracking: Spot M"], "when": [3], "x": [51, 589], "y": [72, 408]},
+        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "when": [0], "x": [65, 575], "y": [61, 419]},
+        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "when": [1], "x": [33, 607], "y": [61, 419]},
+        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "when": [2], "x": [65, 575], "y": [28, 452]},
+        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "when": [3], "x": [29, 611], "y": [61, 419]},
+        {"areas": ["Spot: XS", "Tracking: Spot XS"], "when": [0], "x": [60, 580], "y": [58, 422]},
+        {"areas": ["Spot: XS", "Tracking: Spot XS"], "when": [1], "x": [28, 612], "y": [58, 422]},
+        {"areas": ["Spot: XS", "Tracking: Spot XS"], "when": [2], "x": [60, 580], "y": [24, 456]},
+        {"areas": ["Spot: XS", "Tracking: Spot XS"], "when": [3], "x": [21, 619], "y": [58, 422]}
       ]
     },
     "Custom": {
-      "inside": {"x": [46, 594], "y": [42, 438]},
-      "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]},
+      "by": "global:0x01fe",
+      "grid": {"x": 640, "y": 480},
+      "inside": {"x": [46.25, 593.75], "y": [41.875, 438.125]},
+      "pictures": [
+        {"when": [0], "x": [1, 1], "y": [1, 1], "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]}},
+        {"when": [1], "x": [8, 9], "y": [1, 1], "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]}},
+        {"when": [2], "x": [1, 1], "y": [27, 32], "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]}},
+        {"when": [3], "x": [2, 3], "y": [1, 1], "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]}}
+      ],
       "boxes": [
         {
           "areas": ["Custom 1", "Tracking: Custom 1"],
