@@ -56,8 +56,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The editor
 
 - **The a1 II definition says how far each focus frame can travel** (`frame` on the records of each place: each spot
-  size's limits, each Custom box's bounds and size records), measured level and grip up for every area and grip down
-  for two; the editor does not use it yet. A new hand table, `FRAME_TRAVEL`, records the same for any camera
+  size's limits, each Custom box's bounds and size records), measured level, grip down and grip up for every area;
+  the editor does not use it yet. A new hand table, `FRAME_TRAVEL`, records the same for any camera
   (docs/DATA_CONTRACTS.md); `FRAME_STEPS` holds every area's step under Standard and Large, and AF Frame Move Amt's
   note no longer calls Large's step twice Standard's.
 - **The a1 II's Zone and Custom box position copies, and the spot size and Custom area AF Area Registration writes,

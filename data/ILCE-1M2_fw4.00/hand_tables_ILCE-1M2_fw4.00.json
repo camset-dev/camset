@@ -1070,7 +1070,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x0f0b": {
       "values": [
@@ -1084,7 +1084,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x0f0d": {
       "values": [
@@ -1098,7 +1098,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x0f2c": {
       "values": [
@@ -1112,7 +1112,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x0f2e": {
       "values": [
@@ -1126,7 +1126,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x0f30": {
       "values": [
@@ -1140,7 +1140,7 @@
         [7, "Upper left"],
         [8, "Upper right"]
       ],
-      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. A Tracking zone keeps its place in these same records."
+      "note": "The Zone focus area's place on its 3 x 3 grid, written only when a memory slot is registered: moving the zone on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes 0x019a, 0x0f0b and 0x0f0d whichever way the camera is held, the horizontal copies 0x0f2c-0x0f30 only with it level, and each grip's vertical copies only with it held that way; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records."
     },
     "set:0x019c": {
       "note": "The Spot focus point on the 640 x 480 grid (320, 240 = centre), written only when a memory slot is registered: moving the point on the shooting screen changes no live record. With Focus Area on Spot, a Left press lowered X and an Up press lowered Y (the vertical copies kept theirs). Held vertically, with Switch V/H AF Area on AF Point + AF Area, a registration writes the current X and Y and that grip's copies and leaves the horizontal ones. Expand Spot keeps its point in the same records. With Switch V/H AF Area Off, Left and Up presses under Spot S, M, L, XL and XS and under Expand Spot moved all eight point records together, the current X and Y and the level, grip-down and grip-up copies: each press moves the point by a step AF Frame Move Amt sets, under Standard the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS, Left lowering X and Up lowering Y. Under AF Frame Move Amt Standard a press moved Spot M's point 30 in X and 20 in Y and Spot XS's 20 and 20; under Large Spot M's point 60 in X and 38 in Y and Spot XS's 36 and 32. Under Large the step grows with the spot, Spot S stepping as Spot XS and Expand Spot as Spot M. With Vertical Display Off, the camera held either way vertically, the same presses moved the point by the same amounts as level. Under Tracking: Spot M and Tracking: Expand Spot, and held vertically under every Tracking spot area, the same presses moved the same records the same way: a Tracking area keeps its frame's place in its plain area's records."
@@ -1789,7 +1789,7 @@
       "note": "The ISO the camera is using (ISO AUTO result); recomputed on load from the ISO settings. It holds the ISO's own codes. View only."
     },
     "set:0x0f32": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
@@ -1803,7 +1803,7 @@
       ]
     },
     "set:0x0f34": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
@@ -1817,7 +1817,7 @@
       ]
     },
     "set:0x0f36": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
@@ -1831,7 +1831,7 @@
       ]
     },
     "set:0x0f38": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
@@ -1845,7 +1845,7 @@
       ]
     },
     "set:0x0f3a": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
@@ -1859,7 +1859,7 @@
       ]
     },
     "set:0x0f3c": {
-      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. A Tracking zone keeps its place in these same records.",
+      "note": "The Zone's place on its 3 x 3 grid (numbered as the level zone's 0x0f2c) with the camera held vertically, written only when a memory slot is registered: with Switch V/H AF Area on AF Point + AF Area, 0x0f32-0x0f36 with it held grip down and 0x0f38-0x0f3c with it held grip up, beside 0x019a, 0x0f0b and 0x0f0d, a registration leaving the other grip's copies and the horizontal ones; with it Off, all twelve alike. All nine places were walked held grip down and held grip up (Vertical Display On): the keys moved the zone as they do level, and each place was stored under its level code. A Tracking zone keeps its place in these same records.",
       "values": [
         [0, "Centre"],
         [1, "Up"],
