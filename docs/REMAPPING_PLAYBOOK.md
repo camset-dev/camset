@@ -122,8 +122,9 @@ on their own camera. Those allowances are not yours to assume: ask your owner, a
     shooting screen it does whatever the body assigns to it. Send it only as guarded Help, on a menu or option screen
     whose footer draws the help button. Where the body lists its operating mode, C4 also needs the camera to give one
     that is not Playback (decision 7; `Link.c4_refused` says how). The a1 II's owner also allowed Focus Area's SET and
-    a Creative Look panel's Reset, each only when the run names it (`drive.py --c4-press`); ask yours. C1-C3 and C5-C7
-    are never sent.
+    a Creative Look panel's Reset (`drive.py --c4-press`), and a Custom box editor's Reset (2026-11-17,
+    `kit/provers/boxsize_run.py --allow "Custom box Reset"`), each only when the run names it; ask yours. C1-C3 and
+    C5-C7 are never sent.
 14. **On the shooting screen, no key but MENU.** There a key does what the body makes of it (a Custom Key, the focus
     frame, a dial's change to the live exposure, which no file puts back). No key but MENU goes there unless the run
     names that key for the press (`drive.py --on-shooting KEY`, your owner's word; decision 21), and none but MENU

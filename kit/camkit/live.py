@@ -329,6 +329,21 @@ class BoxEditor:
     box: str            # the box whose editor it is ("Custom 1"): the editor's title must be that box's
 
 
+@dataclass(frozen=True)
+class BoxReset:
+    """A prover's consent for one C4 on a Custom focus box's own size editor, its Reset, which puts that box back to
+    Sony's default size and nothing else (kit2_freesize 00563 -> 00564, the editor left open on the default box): the
+    a1 II's owner's word of 2026-11-17 (decision 7). Given through answer_once by kit/provers/boxsize_run.py alone,
+    under its --allow "Custom box Reset", only where the box's start size is its default records' (so a Reset restores
+    exactly what the run found), once it has read the screen as that box's editor; judged here (confirm_refused:
+    reset_passed) on the frame judged, by the editor's own shape as BoxEditor's OK is (box_editor_refused) and by the
+    confirmation words above its footer; then, for that one C4 alone, the link is handed decision 7's size editor kind
+    (safety.C4_BOX_EDITOR), which its C4 guard names, where it would be handed this screen's own (no known kind, which
+    it refuses). It answers no other key nor any other kind of screen, and is spent by its press."""
+    name: str           # the consent's words, logged with the press
+    box: str            # the box whose editor it is ("Custom 1"): the editor's title must be that box's
+
+
 # the size editor's title, top left above the box (kit2_freesize's 00394_c4.png); its footer's words, a key's word cut
 # short or an icon's glyph run onto it aside (box_editor_refused)
 EDITOR_TITLE = (0, 0, 400, 60)
@@ -739,12 +754,17 @@ class LiveCamera:
             self.wiping_refused(key, arming)    # Initialize's kin: this camera's own check, beside drive.py's
         confirming = canon in safety.ENTER_KEYS | safety.TRASH_KEYS
         judged_at = None
+        self.box_reset_judged = False       # set by reset_passed for this one C4 alone
         if confirming:
             # what the screen asks, by its shape, on the screen on show now: this camera's own check, which nothing
             # pressing through it bypasses; judged_at, the link's count of moving commands when it looked
             judged_at = self.confirm_refused(key, permit, confirmed, answer=answer, notice_ok=notice_ok,
                                              menu_refused=menu_refused, require_notice=require_notice)
         judged = self.judged_screen(key)
+        if self.box_reset_judged and canon == "c4":
+            # a Custom box's size editor judged under its Reset consent (BoxReset): the link is handed the kind decision 7
+            # names for it, for this C4 alone, where this screen's own (no known kind) is refused there
+            judged, self.box_reset_judged = safety.C4_BOX_EDITOR, False
         t = time.monotonic()
         before = self.screen
         if arming:
@@ -943,7 +963,8 @@ class LiveCamera:
           nothing, the word list still refuses a confirmation; an UprightDialog, for an Enter on a screen of no known
           kind alone: that one Enter judged as a level dialog's on the frame read upright (upright_passed), and on any
           other screen or key it answers nothing; a BoxEditor likewise, that one Enter (a Custom box's size editor's
-          OK) judged on the editor's own shape and the words above its footer (editor_passed);
+          OK) judged on the editor's own shape and the words above its footer (editor_passed); a BoxReset, that one C4
+          (the editor's Reset) judged so, the link then handed decision 7's size editor kind (reset_passed);
         - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
           `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
           only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
@@ -980,6 +1001,10 @@ class LiveCamera:
             if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:
                 passed_by = self.upright_passed if isinstance(consent, UprightDialog) else self.editor_passed
                 return passed_by(key, consent, judged_at)
+        if isinstance(answer, BoxReset):
+            consent, answer = answer, None      # a size editor's Reset consent answers its C4 alone
+            if kind == "unknown" and canon == "c4" and not require_notice:
+                return self.reset_passed(key, consent, judged_at)
         if kind == "notice" and canon in safety.ENTER_KEYS:
             if notice_ok:
                 passed = f"--info-ok {notice_ok}"
@@ -1031,7 +1056,15 @@ class LiveCamera:
         self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
         return judged_at
 
-    def editor_passed(self, key: str, consent: BoxEditor, judged_at: int) -> int:
+    def reset_passed(self, key: str, consent: BoxReset, judged_at: int) -> int:
+        """A C4 on a screen of no known kind under a size editor's Reset consent (BoxReset): judged as editor_passed
+        judges the editor's OK (its own shape, then the confirmation words above its footer); passed, the press hands
+        the link decision 7's size editor kind for this C4 alone (box_reset_judged). Returns judged_at."""
+        self.editor_passed(key, consent, judged_at)
+        self.box_reset_judged = True
+        return judged_at
+
+    def editor_passed(self, key: str, consent: BoxEditor | BoxReset, judged_at: int) -> int:
         """An Enter on a screen of no known kind under a size editor's consent (BoxEditor): the frame judged
         (look_before's) read as the editor (editor_texts) and judged by its own shape (box_editor_refused), then by the
         confirmation words on what stands above its footer, which every consent keeps (the footer's Reset is the editor's

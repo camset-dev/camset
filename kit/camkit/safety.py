@@ -107,7 +107,8 @@ MENU_INPUTS = {
 # C4 is the trash button: on a menu or option screen whose footer draws the help button it opens the
 # In-Camera Guide (the SDK's Delete key does nothing there, 2026-11-01); callers check screen.help_glyph first
 # (drive.py help_refused). Since 2026-11-02 also Focus Area's SET with a Custom box lit, which opens the box's size
-# editor (drive.py c4set_refused), and since 2026-11-03 a Creative Look panel's Reset (c4reset_refused).
+# editor (drive.py c4set_refused), since 2026-11-03 a Creative Look panel's Reset (c4reset_refused), and since 2026-11-17
+# the size editor's Reset, from kit/provers/boxsize_run.py alone (C4_BOX_EDITOR).
 GUARDED_INPUTS = {"fn", "playback", "delete", "display", "back", "c4"}
 # C4's guard is the screen (decision 7, 2026-11-06). In Playback, or wherever a picture is displayed, C4 is the trash
 # button and deletes it; on the shooting screen it does whatever the body assigns to it, a change the kit must not
@@ -115,7 +116,12 @@ GUARDED_INPUTS = {"fn", "playback", "delete", "display", "back", "c4"}
 # the help button (C4_HELP_SCREENS), Focus Area's SET (a dialog) or a Creative Look panel's Reset ("look"); drive.py
 # checks the footer itself. Link.press refuses C4 on any other screen, and while the camera says it is in Playback.
 C4_HELP_SCREENS = frozenset({"menu", "submenu", "dialog", "list", "sidelist", "checklist", "picker", "fields"})
-C4_SCREENS = C4_HELP_SCREENS | {"look"}
+# A Custom box's size editor, whose footer draws Reset on the trash button: camkit.screen reads it as no known kind, so
+# no reading gives this kind; camkit.live.LiveCamera hands it to the link for one C4 alone, once it has judged the screen
+# that box's own editor under kit/provers/boxsize_run.py's Reset consent (camkit.live.BoxReset): the a1 II's owner's
+# word, 2026-11-17 ("yes kit can hit reset for custom box editor")
+C4_BOX_EDITOR = "boxeditor"
+C4_SCREENS = C4_HELP_SCREENS | {"look", C4_BOX_EDITOR}
 # Never sent: Movie records (tally lamp), AF-On drives the lens, C1-C3/C5-C7/AEL do whatever they are
 # assigned to, Mode/Home/Thumbnail leave the menu system in ways the walker does not model.
 NEVER_INPUTS = {"movie", "af_on", "ael", "mode", "home", "thumbnail", "c1", "c2", "c3", "c5", "c6", "c7"}

@@ -47,8 +47,8 @@ footer draws the help button; Enter on its popup only on "In-Camera Guide", neve
 the menu pages stay level, so each screen is read both as it is and turned upright (as kit/provers/orient_run.py
 does), and a press's regex may match either.
 "c4set" presses C4 on Focus Area's screen with Custom 1-3 lit, where the button reads SET and opens the
-custom box's size editor (and, in the editor, puts the default size back). Nowhere else, never on the shooting screen
-or in Playback, where C4 deletes.
+custom box's size editor. Nowhere else, never on the shooting screen or in Playback, where C4 deletes; in the editor
+itself, a screen of no known kind, the link refuses it (its Reset goes from kit/provers/boxsize_run.py alone, decision 7).
 "c4reset" presses C4 on a Creative Look's panel whose footer reads Reset.
 Both are go-aheads an owner gives for their own body (the a1 II's owner gave them on 2026-11-02 and 2026-11-03), never a
 default: a run sends one only when --c4-press names it (--c4-press c4set, --c4-press c4reset), the owner's word for this

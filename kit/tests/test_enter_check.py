@@ -1403,3 +1403,90 @@ def test_a_size_editors_consent_answers_no_other_screen_nor_key(tmp_path, monkey
     with pytest.raises(safety.Refused, match="reads as 'unknown'"):
         cam.press("c4", allow=frozenset({"c4"}))
 
+
+# ---------------------------------------------------------------- a Custom box's size editor, its Reset (2026-11-17)
+
+RESET_NAME = "Custom 1's size editor: Reset puts the default size back (Custom box Reset, the owner's word, 2026-11-17)"
+
+
+def reset_camera(tmp_path, monkeypatch, kind="unknown", texts=EDITOR_TEXTS, box="Custom 1"):
+    """editor_camera, its C4 carrying the size editor's Reset consent for `box` (BoxReset)."""
+    cam = editor_camera(tmp_path, monkeypatch, kind, texts, box)
+    cam.answer_once = live.BoxReset(RESET_NAME, box)
+    return cam
+
+
+def test_the_size_editors_reset_goes_only_under_its_consent_on_that_editor(tmp_path, monkeypatch):
+    """C4 on a Custom box's size editor (no known kind) is refused, as decision 7 has it: the link takes C4 on menu,
+    option and panel screens alone. Under boxsize_run's Reset consent (BoxReset), the screen judged as that box's own
+    editor (box_editor_refused: its title, its footer's three buttons, no question mark, nothing above the footer but the
+    title), the camera hands the link the size editor's own kind for that one press (safety.C4_BOX_EDITOR, which decision
+    7's list names), logged with the consent's words; the consent is spent by it."""
+    cam = editor_camera(tmp_path, monkeypatch)
+    cam.answer_once = None
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("c4", allow=frozenset({"c4"}))
+    cam = reset_camera(tmp_path, monkeypatch)
+    with pytest.raises(Sent) as sent:
+        cam.press("c4", allow=frozenset({"c4"}))
+    assert sent.value.args[0]["screen"] == safety.C4_BOX_EDITOR == "boxeditor"
+    assert safety.c4_refused(safety.C4_BOX_EDITOR) == "" and safety.c4_refused("unknown")
+    assert [e["by"] for e in events(cam) if e["kind"] == "enter_passed"] == [RESET_NAME]
+    assert cam.answer_once is None
+
+
+@pytest.mark.parametrize("texts,why", [
+    (("Custom 2", "Custom 2", "Reset MENU Cancel OK"), "is not Custom 1's"),
+    (("Custom 1", "Custom 1 Clear the box?", "Reset MENU Cancel OK"), "question mark"),
+    (("Custom 1", "Custom 1 Format the memory card", "Reset MENU Cancel OK"), "more than its title"),
+    (("Custom 1", "Custom 1", "MENU Cancel OK"), "lacks the editor's 'reset'"),
+    (("Custom 1", "Custom 1", "Delete MENU Cancel OK"), "'delete'")])
+def test_the_size_editors_reset_is_refused_on_any_screen_not_shaped_as_that_boxs_editor(tmp_path, monkeypatch, texts,
+                                                                                       why):
+    """Another box's editor, a question mark, words above the footer besides the title, a footer without Reset or with
+    another button's word (a Delete on the trash button): no C4."""
+    cam = reset_camera(tmp_path, monkeypatch, texts=texts)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("c4", allow=frozenset({"c4"}))
+
+
+def test_the_size_editors_reset_consent_lifts_nothing_anywhere_else(tmp_path, monkeypatch):
+    """The Reset consent answers C4 alone, on a screen of no known kind alone: on a dialog or a list the press is judged
+    as it would be without it (the link gets that screen's own kind, never the editor's), on a notice it is refused as
+    ever, and neither Enter nor the Delete key on the editor goes by it; the editor's texts are read for none of them."""
+    read = []
+    for kind, text in (("dialog", "Focus Area Custom 1 SET C1 C2 C3"), ("list", "Drive Mode Single Shooting")):
+        cam = camera(tmp_path, monkeypatch, kind, text, "")
+        monkeypatch.setattr(live, "editor_texts", lambda c: read.append(1) or EDITOR_TEXTS)
+        cam.answer_once = live.BoxReset(RESET_NAME, "Custom 1")
+        with pytest.raises(Sent) as sent:
+            cam.press("c4", allow=frozenset({"c4"}))
+        assert sent.value.args[0]["screen"].kind == kind
+    cam = camera(tmp_path, monkeypatch, "notice", NOT_AVAILABLE, "OK")
+    monkeypatch.setattr(live, "editor_texts", lambda c: read.append(1) or EDITOR_TEXTS)
+    cam.answer_once = live.BoxReset(RESET_NAME, "Custom 1")
+    with pytest.raises(safety.Refused, match="notice"):
+        cam.press("c4", allow=frozenset({"c4"}))
+    for key in ("enter", "delete"):
+        cam = reset_camera(tmp_path, monkeypatch)
+        monkeypatch.setattr(live, "editor_texts", lambda c: read.append(1) or EDITOR_TEXTS)
+        with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+            cam.press(key, allow=frozenset({"delete"}))
+    assert read == []
+
+
+def test_only_boxsize_run_gives_the_reset_consent_and_only_the_camera_names_the_editors_kind():
+    """The size editor's Reset is boxsize_run's alone: no other program of the kit builds the consent, and no module
+    but camkit.safety (its list) and camkit.live (which hands it to the link under the consent) names the editor's kind."""
+    import re
+    kit = Path(__file__).resolve().parents[1]
+    for f in sorted(kit.rglob("*.py")):
+        if "tests" in f.parts:
+            continue
+        text = f.read_text(encoding="utf-8")
+        rel = f.relative_to(kit).as_posix()
+        if re.search(r"\bBoxReset\(", text):
+            assert rel in ("camkit/live.py", "provers/boxsize_run.py"), rel
+        if re.search(r"C4_BOX_EDITOR|[\"']boxeditor[\"']", text):
+            assert rel in ("camkit/safety.py", "camkit/live.py"), rel
+

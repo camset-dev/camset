@@ -4,22 +4,27 @@ travel limits measured at chosen sizes against the rule (2026-11-17).
 
     .venv/bin/python -u kit/provers/boxsize_run.py --box "Custom 1" --list
     .venv/bin/python -u kit/provers/boxsize_run.py --allow "Camera Set. Memory" --allow "Focus Area's SET" --box "Custom 1" --probe rear_l
-    .venv/bin/python -u kit/provers/boxsize_run.py --allow "Camera Set. Memory" --allow "Focus Area's SET" --box "Custom 1"
-    .venv/bin/python -u kit/provers/boxsize_run.py --allow "Camera Set. Memory" --allow "Focus Area's SET" --put-back RUN
+    .venv/bin/python -u kit/provers/boxsize_run.py --allow "Camera Set. Memory" --allow "Focus Area's SET" --allow "Custom box Reset" --box "Custom 1"
+    .venv/bin/python -u kit/provers/boxsize_run.py --allow "Camera Set. Memory" --allow "Focus Area's SET" --allow "Custom box Reset" --put-back RUN
 
-The camera (the a1 II; runs/<model>_fw<fw>/kit2_freesize, 2026-11-02, by kit/drive.py): on Focus Area's chooser with a
-Custom box lit, the trash button reads SET, and SET (C4) opens the box's size editor, a screen of no known kind: its
-title ("Custom 1"), the box drawn in orange, the three dials' icons, its footer Reset (the trash button), MENU Cancel and
-OK. There the front dial sets the height (+3 clicks: 182 to 194) and the rear dial L the width (+3 clicks: 402 to 418);
-OK keeps the size and leaves for the shooting screen, MENU cancels it. Only those +3 turns were ever made: the step of
-each click, and both dials' ends, are what this run measures. The sizes (the hand tables' FRAME_TRAVEL "Custom" boxes:
+The camera (the a1 II; runs/<model>_fw<fw>/kit2_freesize, 2026-11-02, by kit/drive.py; kit2_boxsize_c1_probe_w3,
+_probe_h3 and _width, 2026-11-17): on Focus Area's chooser with a Custom box lit, the trash button reads SET, and SET
+(C4) opens the box's size editor, a screen of no known kind: its title ("Custom 1"), the box drawn in orange, the three
+dials' icons, its footer Reset (the trash button), MENU Cancel and OK. There the front dial sets the height, 12 a click,
+and the rear dial L the width, 16 a click, from 28 to 548 for Custom 1; each click steps from the size the box has and
+stops at an end, so Sony's default (402) lies on neither end's ladder. One dial command moves one click, whatever its
+steps ("dial rear_l -10" moved 16): each click is its own command (turn). Reset puts the box back to its default size,
+both dimensions, the editor left open on it (kit2_freesize 00563 -> 00564; the registration after it moved the size
+records alone); OK keeps the size and leaves for the shooting screen, MENU cancels it. The sizes (the hand tables'
+FRAME_TRAVEL "Custom" boxes:
 Custom 1 set:0x14b6/0x14b4, Custom 2 0x14ba/0x14b8, Custom 3 0x14be/0x14bc, the box in use 0x148a/0x1488, the defaults
 by the definition's names) reach the file only when a Camera Set. Memory slot is registered, as the places do, and a
 file put back does not put a live box's size back: every size here is read from slot 1 registered after it
 (framepos_run.register_slot, through framepos_run.Walk), and the run puts the size back itself.
 
 A run is bracketed as every run is (decision 15; runner.prover_session): the start download (slot 1 must be filled in
-it, and its Aspect Ratio 3:2, the rule's, else the run stops before its first press), the setup through the menu as
+it, and its Aspect Ratio one the rule has a picture for, else the run stops before its first press), the setup through
+the menu as
 framepos_run.py --edges has it (Switch V/H AF Area Off, the camera level; Circ. of Focus Point = Does Not Circulate; AF
 Frame Move Amt = Standard), the box chosen and registered (the start: its size and place), then:
   --probe DIAL (the smallest try): --clicks single clicks up, each kept and registered, then as many down, each
@@ -33,25 +38,31 @@ Frame Move Amt = Standard), the box chosen and registered (the start: its size a
 Each size is set the same way (Sizes.point_turns): MENU, Focus Area by the scan, Right, the box under the carousel's
 cursor (afreg_run.choose_level), the chooser read as Focus Area's with that box lit and SET on its trash button
 (chooser_refused), SET (C4, allowed on that dialog: camkit.safety's C4 rules), the editor read as that box's own
-(editor_refused); each dial turned in chunks of CHUNK clicks, each chunk only once the screen read just before it is
-that editor (turn: never the shooting screen, where a dial changes the live exposure, which the link refuses there
-besides); OK with the camera's consent for that one press on that editor (camkit.live.BoxEditor: the editor reads as no
+(editor_refused); each click of a dial its own command, each only once the screen read just before it is that editor
+(turn: never the shooting screen, where a dial changes the live exposure, which the link refuses there besides); OK
+with the camera's consent for that one press on that editor (camkit.live.BoxEditor: the editor reads as no
 known kind and its footer's Reset is a confirmation's word, so no other way past answers it), the shooting screen; slot
 1 registered and downloaded; the size and place read. A registration's place against the one before it says whether the
 size moved the box (a finding, by delta). The editor's box, measured in orange on the frame before OK, is kept beside
 each size ("screen_box", pixels): the registration is the judge.
 The edges at a size are framepos_run.edge_area's (as --edges measures them, the frame brought back to where that measure
 began), written to the run's edges.jsonl with the size, so framepos_run.py --put-back RUN can read them; each record of
-the box's place is then judged against the rule (predicted: its centre inside FRAME_TRAVEL's "inside", X 46-594, Y
-42-438 at 3:2, less half the size, each limit rounded inward): match, or each limit's difference.
+the box's place is then judged against the rule (predicted: kit/writer/frames.box_limits on FRAME_TRAVEL's rule for
+the box, rule_of, at the Aspect Ratio the start download holds): match, or each limit's difference.
 
-The size put back: by counted clicks from the steps measured (seek), each landing kept and registered, never guessed: a
-start the clicks walk past (two widths a click apart either side of it) or beyond an end is said with the difference
-and what to do by hand. The editor's Reset is never pressed: the link's C4 guard refuses C4 on a screen of no known
-kind (decision 7). At the end slot 1 is registered once more and its size and place judged against the start's; a place
+The size put back: by counted clicks from the steps measured (seek), each landing kept and registered, never guessed;
+where no click lands on the start (two sizes a click apart either side of it) or an end lies before it, by the editor's
+Reset (reset_back) when the start size is the default records' and the run has the owner's word for it, --allow "Custom
+box Reset" (the a1 II's owner, 2026-11-17: decision 7): the editor opened, C4 with the camera's consent for that press
+on that editor (camkit.live.BoxReset, which hands the link the size editor kind decision 7 names), the
+screen read again as that editor (a question or any other screen stops the run there, nothing answered), OK kept,
+slot 1 registered, the size judged against the default records and the start's. Else, or where a Reset does not give
+the defaults, the difference is said with what to do by hand. At the end slot 1 is registered once more and its size
+and place judged against the start's; a place
 off is brought back as --put-back brings a frame (framepos_run.put_back_area, from the edges measured at the start
 size). A run that stops leaves what it says: --put-back RUN brings the box back to RUN's start size (its boxsize.jsonl's
-start line), then its place (RUN's edges at the start size), each registered and checked.
+start line), by clicks or by Reset as above, then its place (RUN's edges at the start size), each registered and
+checked.
 
 Lines in the run's boxsize.jsonl, each with the context (camera level, Switch V/H AF Area Off, AF Frame Move Amt, the
 Aspect Ratio read from the start download): the start ("default": whether the start size is the defaults'), each size
@@ -68,7 +79,6 @@ plain box's size (--tracking: at the odd size, Tracking: Custom chosen and regis
 box's own).
 """
 import argparse
-import math
 import re
 import sys
 import time
@@ -81,16 +91,19 @@ import framepos_run as F  # noqa: E402
 from afreg_run import bare, slug  # noqa: E402
 from camkit import definitions, jsonl, paths, safety  # noqa: E402
 from runner import LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json  # noqa: E402
-from writer import hand_tables  # noqa: E402
+from writer import frames, hand_tables  # noqa: E402
 
 PROG = "kit/provers/boxsize_run.py"
 BOXES = ("Custom 1", "Custom 2", "Custom 3")
 DIALS = {"rear_l": "width", "front": "height"}          # the editor's dials and what each sets (kit2_freesize)
 DIAL_WORDS = {"rear_l": "the rear dial L", "front": "the front dial"}
 SET_WORD = "Focus Area's SET"                            # the owner's word for SET (drive.py's c4set), given per run
-BLOCK, CONFIRM, PATTERN, CHUNK = 40, 2, 6, 10            # a turn toward an end; the clicks that check it; single clicks
+# the owner's word for the size editor's Reset, given per run as drive.py takes each C4 go-ahead apart (its c4set and
+# c4reset): the a1 II's owner's of 2026-11-17 (decision 7)
+RESET_WORD = "Custom box Reset"
+BLOCK, CONFIRM, PATTERN = 40, 2, 6                       # a turn toward an end; the clicks that check it; single clicks
 ENDS_TRIES, SEEK_TRIES = 8, 8                            # turns toward an end; landings on the way back
-UNIT = {"rear_l": 16 / 3, "front": 4.0}                  # a click's size before one is measured (the definition's notes)
+UNIT = {"rear_l": 16.0, "front": 12.0}                   # a click's size before one is measured (kit2_boxsize_c1_probe_*)
 ODD = (("rear_l", 7), ("front", -5))                     # the odd size, in clicks from the start
 PROBE_CLICKS = 3
 OUT = "boxsize.jsonl"
@@ -153,20 +166,27 @@ def place_of(cs, recs: dict) -> dict:
     return {k: held_value(cs, k) for pair in recs["places"] for k in pair}
 
 
-def predicted(span, size) -> list | None:
-    """[low, high] the box's centre may take on one axis by the rule: inside `span` (FRAME_TRAVEL's "inside") less half
-    the box's `size` either side, each limit rounded inward; None where the box does not fit."""
+def rule_of(entry: dict) -> dict:
+    """{"x": limit, "y": limit}: FRAME_TRAVEL's rule for a Custom box on each axis as the definition writes it
+    (kit/writer/frames.placed: the bounds, the grid and each Aspect Ratio's picture), the same for every box's place."""
+    _, _, lims = frames.placed(entry)[0]
+    return {a: lims[a][0] for a in frames.AXES}
+
+
+def predicted(lim: dict, size, value) -> list | None:
+    """[low, high] the box's centre may take on one axis by the rule (`lim`: rule_of's, for that axis) at the box's
+    `size` and the Aspect Ratio `value`: kit/writer/frames.box_limits, the one implementation; None where the rule has
+    no picture for `value`, or the box does not fit."""
     if size is None:
         return None
-    half = math.ceil(size / 2)
-    low, high = span[0] + half, span[1] - half
-    return [low, high] if low <= high else None
+    got = frames.box_limits(lim, size, value)
+    return list(got) if got is not None and got[0] <= got[1] else None
 
 
-def travel_check(edges: list, recs: dict, inside: dict, size: dict) -> list:
-    """Each measured record of the box's place (edges: edge_records' {"key", "low", "high"}) against the rule at `size`:
-    {"key", "axis", "measured", "predicted", "match", "diff"} (diff: measured less predicted, low and high); a measured
-    record that is no place of the box is left out."""
+def travel_check(edges: list, recs: dict, rule: dict, size: dict, value) -> list:
+    """Each measured record of the box's place (edges: edge_records' {"key", "low", "high"}) against the rule (`rule`:
+    rule_of's) at `size` and the Aspect Ratio `value`: {"key", "axis", "measured", "predicted", "match", "diff"} (diff:
+    measured less predicted, low and high); a measured record that is no place of the box is left out."""
     axes = {}
     for kx, ky in recs["places"]:
         axes[kx], axes[ky] = "x", "y"
@@ -175,7 +195,7 @@ def travel_check(edges: list, recs: dict, inside: dict, size: dict) -> list:
         ax = axes.get(e["key"])
         if ax is None:
             continue
-        p = predicted(inside[ax], size.get("width" if ax == "x" else "height"))
+        p = predicted(rule[ax], size.get("width" if ax == "x" else "height"), value)
         m = [e["low"], e["high"]]
         out.append({"key": e["key"], "axis": ax, "measured": m, "predicted": p, "match": p == m,
                     "diff": [m[0] - p[0], m[1] - p[1]] if p else None})
@@ -231,13 +251,13 @@ def unreachable(seen: dict, target: int) -> bool:
     return any(b - a == 1 and min(seen[a], seen[b]) < target < max(seen[a], seen[b]) for a, b in zip(pos, pos[1:], strict=False))
 
 
-def aspect_of(index: dict, cs) -> str | None:
-    """The Aspect Ratio the settings file `cs` holds, by the label the definition gives its code; None not read."""
+def aspect_of(index: dict, cs) -> tuple:
+    """(code, label) of the Aspect Ratio the settings file `cs` holds, the label the definition gives the code (None
+    where it names none); (None, None) not read."""
     from prove_run import held_value
     s = next((s for s in index.values() if s.get("name") == "Aspect Ratio" and s.get("values")), None)
-    if s is None:
-        return None
-    return dict((v, lab) for v, lab in s["values"]).get(held_value(cs, s["key"]))
+    code = held_value(cs, s["key"]) if s else None
+    return (None, None) if code is None else (code, dict((v, lab) for v, lab in s["values"]).get(code))
 
 
 def context_of(aspect: str | None, amt: str | None = "Standard") -> str:
@@ -287,9 +307,18 @@ def memory_allowed(allow) -> bool:
     return F.memory_allowed(allow)
 
 
-def set_allowed(allow) -> bool:
-    want = safety.clean_label(safety.fold(SET_WORD))
+def named_in(word: str, allow) -> bool:
+    want = safety.clean_label(safety.fold(word))
     return any(safety.clean_label(safety.fold(x)) == want for x in allow or ())
+
+
+def set_allowed(allow) -> bool:
+    return named_in(SET_WORD, allow)
+
+
+def reset_allowed(allow) -> bool:
+    """Whether the run has the owner's word for the size editor's Reset (RESET_WORD)."""
+    return named_in(RESET_WORD, allow)
 
 
 def setup_words(probe: bool, tracking: bool) -> list:
@@ -320,37 +349,65 @@ def plan_lines(a, recs: dict) -> list:
                        f"{a.pattern} down from it; then back to the start {DIALS[dial]} by counted clicks")
         odd = ", ".join(f"{d} {n:+d}" for d, n in ODD)
         out.append(f"edges measured at the start size, at each dial's smallest and largest, and at one odd size ({odd} "
-                   "clicks), as framepos_run.py --edges measures them, each against the rule: the box's centre inside "
-                   "FRAME_TRAVEL's bounds less half its size, each limit rounded inward")
+                   "clicks), as framepos_run.py --edges measures them, each against the rule (kit/writer/frames.box_limits "
+                   "on FRAME_TRAVEL's rule, at the Aspect Ratio the start download holds)")
         if a.tracking:
             out.append("at the odd size, Tracking: Custom chosen and registered: does the box in use read the box's size")
         n = len(a.dials) * (2 * 2 * 2 + 2 * a.pattern + 2) + 4 + len(F.EDGE_TAGS + ("back",)) * (2 * len(a.dials) + 2)
     out.append(f"about {n} registrations, {round(n * (F.REG_S + F.CHOOSE_S) / 60)} minutes at most")
-    out.append("the size is put back by counted clicks, each landing registered; the editor's Reset is never pressed (the "
-               "link's C4 guard refuses C4 on the editor, a screen of no known kind); a start size the clicks cannot "
-               "land on again is said, never guessed: --put-back RUN tries again, or set it by hand in the editor")
+    if getattr(a, "reset", False):
+        back = ("then the editor's Reset (the trash button) where the clicks cannot land on a start size that is the "
+                f"default records' ({RESET_WORD}, the owner's word, 2026-11-17)")
+    else:
+        back = (f"a default start size the clicks cannot land on again is put back by the editor's Reset only with "
+                f"--allow {RESET_WORD!r}")
+    out.append(f"the size is put back by counted clicks, each landing registered; {back}; a start size neither brings "
+               "back is said, never guessed: --put-back RUN tries again, or set it by hand in the editor")
     return out
 
 
 # ---------------------------------------------------------------- the camera
 
 def turn(cam, box: str, dial: str, clicks: int) -> None:
-    """`dial` turned `clicks` (signed) on `box`'s size editor, in chunks of CHUNK clicks at most, each only once the
-    screen read just before it is that editor (editor_refused): never the shooting screen, where a dial changes the
-    live exposure (the link refuses a dial there besides), nor any other screen. Failed, nothing more turned, else."""
+    """`dial` turned `clicks` (signed) on `box`'s size editor, one command a click, a step of one: the a1 II moves the
+    box one click a command, whatever its steps (kit2_boxsize_c1_width: "dial rear_l -10" moved 16 units, a click).
+    Each click goes only once the screen read just before it (the first read here, the others after the click before:
+    LiveCamera.dial reads it) is that editor (editor_refused): never the shooting screen, where a dial changes the live
+    exposure (the link refuses a dial there besides), nor any other screen. Failed, nothing more turned, else."""
     from camkit.live import text_of
     from prove_run import Failed
     if dial not in DIALS:
         raise Failed(f"{dial!r} is no dial of the size editor (rear_l: the width, front: the height): no dial turned")
-    left = int(clicks)
-    while left:
-        n = max(-CHUNK, min(CHUNK, left))
-        s = cam.refresh("before-dial")
+    step = 1 if clicks > 0 else -1
+    s = cam.refresh("before-dial") if clicks else None
+    for _ in range(abs(int(clicks))):
         why = editor_refused(s.kind, text_of(cam), box)
         if why:
             raise Failed(f"{why}: no dial turned ({cam.frame.path.name})")
-        cam.dial(dial, n)
-        left -= n
+        s = cam.dial(dial, step)
+
+
+def press_reset(cam, box: str) -> None:
+    """The size editor's Reset: C4, allowed by name, on `box`'s editor read just before (editor_refused), with the
+    camera's consent for that one press on that editor (camkit.live.BoxReset: the editor judged by its own shape, and the
+    link handed the size editor kind decision 7 names for it). The screen after it must read as the same
+    editor, the box redrawn at its default size (kit2_freesize 00563 -> 00564); a question or any other screen stops the
+    walk there, nothing pressed after the C4 here (the session's close leaves it with MENU, as every run's), what showed
+    kept in the run's events. The callers judge the size by the registration after OK (Sizes.reset_back)."""
+    from camkit.live import BoxReset, text_of
+    from prove_run import Failed
+    why = editor_refused(cam.read().kind, text_of(cam), box)
+    if why:
+        raise Failed(f"{why}: no Reset ({cam.frame.path.name})")
+    cam.answer_once = BoxReset(f"{box}'s size editor: Reset puts the default size back ({RESET_WORD}, the owner's word, "
+                               "2026-11-17)", box)
+    cam.press("c4", allow=frozenset({"c4"}))
+    kind = cam.read().kind
+    why = editor_refused(kind, text_of(cam), box)
+    if why:
+        name = afreg_run.kept_notice(cam, f"Reset in {box}'s size editor", None, "reset_screen")
+        raise Failed(f"Reset in {box}'s size editor brought {kind!r}, not the editor ({name}): nothing answered; what it "
+                     "showed is in the run's events.jsonl")
 
 
 def keep_size(cam, box: str) -> None:
@@ -402,19 +459,20 @@ def open_editor(sw) -> None:
 
 class Sizes:
     """One box's size walk: each size set in its editor and kept (point_turns), slot 1 registered and read (register,
-    through framepos_run.Walk), the ends (to_end), the steps (pattern), the way back (seek), the edges at a size
-    (travel), the probe, the odd size, the put-back and the finish. `tag`: the context and allowance every line
-    carries."""
+    through framepos_run.Walk), the ends (to_end), the steps (pattern), the way back (seek, and the editor's Reset:
+    back_to_start), the edges at a size (travel), the probe, the odd size, the put-back and the finish. `rule`: rule_of's,
+    judged at the Aspect Ratio `aspect` (its code); `tag`: the context and allowance every line carries; a.reset: whether
+    the run has the owner's word for the editor's Reset."""
 
-    def __init__(self, cam, link, hdmi, run, cycle, model, a, t: dict, r: tuple, labels, axes, recs: dict, inside: dict,
-                 tag: dict, index: dict | None = None):
+    def __init__(self, cam, link, hdmi, run, cycle, model, a, t: dict, r: tuple, labels, axes, recs: dict, rule: dict,
+                 tag: dict, index: dict | None = None, aspect=0):
         self.cam, self.link, self.hdmi, self.run, self.cycle, self.model, self.a = cam, link, hdmi, run, cycle, model, a
-        self.t, self.r, self.labels, self.axes, self.recs, self.inside, self.tag = t, r, labels, axes, recs, inside, tag
-        self.index, self.box = index or {}, t["label"]
+        self.t, self.r, self.labels, self.axes, self.recs, self.rule, self.tag = t, r, labels, axes, recs, rule, tag
+        self.index, self.box, self.aspect = index or {}, t["label"], aspect
         self.amt_state = {"now": "Standard"}
         self.walk = F.Walk(cam, link, hdmi, run, cycle, model, a, None, t, "size", self.amt_state)
         self.out = run.dir / OUT
-        self.n, self.units, self.start_travel = 0, {}, None
+        self.n, self.units, self.start_travel, self.missed, self.reset_failed = 0, {}, None, {}, False
         self.start_size = self.size = self.start_place = self.place = None
         self.default = True
 
@@ -508,7 +566,7 @@ class Sizes:
     def seek(self, dial: str, target) -> bool:
         """The dial's size brought to `target` (the start's) by counted clicks (seek_clicks at the steps measured, else
         UNIT), each landing kept and registered, SEEK_TRIES at most; stops where no click lands on it (unreachable) or a
-        turn changed nothing (an end lies before it), saying the difference and what to do by hand."""
+        turn changed nothing (an end lies before it), keeping why (missed) for back_to_start to say or make good."""
         dim = DIALS[dial]
         cur, seen, pos, stuck = self.size[dim], {}, 0, False
         seen[0] = cur
@@ -525,19 +583,75 @@ class Sizes:
         if cur == target:
             print(f"  {self.box}'s {dim} back at its start size (registered)", flush=True)
             return True
-        why = ("no click lands on it from here" if unreachable(seen, target) else
-               "a turn changed nothing: an end of the dial lies before it" if stuck else
-               f"not reached in {SEEK_TRIES} landings")
-        self.write({"what": "not put back", "dial": dial, "off": cur - target, "why": why})
-        print(f"  NOT PUT BACK: {self.box}'s {dim} is {cur - target:+d} off its start, {why}: on the camera, Focus Area, "
-              f"{self.box}, SET (the trash button), turn {DIAL_WORDS[dial]} and OK"
-              + ("; there its Reset (the trash button) puts back the default size, which it began at" if self.default
-                 else "") + f"; or run {PROG} --put-back {self.run.dir.name}", flush=True)
+        self.missed[dial] = ("no click lands on it from here" if unreachable(seen, target) else
+                             "a turn changed nothing: an end of the dial lies before it" if stuck else
+                             f"not reached in {SEEK_TRIES} landings")
         return False
 
-    def back_to_start(self) -> bool:
-        """Every dimension off its start brought back (seek), each tried whatever the other did."""
-        return all([self.seek(d, self.start_size[dim]) for d, dim in DIALS.items() if self.size[dim] != self.start_size[dim]])
+    def can_reset(self) -> bool:
+        """Whether the editor's Reset may put the box back: the start size the default records' (a Reset restores
+        exactly what the run found), the owner's word given (--allow RESET_WORD), and no Reset of the run's gone wrong."""
+        return bool(self.default and getattr(self.a, "reset", False) and not self.reset_failed)
+
+    def reset_back(self) -> bool:
+        """The box put back by its editor's Reset (can_reset): the editor opened, Reset (press_reset: a screen other than
+        the editor stops the walk, nothing answered, and no Reset is tried again), OK kept, slot 1 registered, the size
+        judged against the default records and the start's; a Reset that does not give both is said, and not tried
+        again."""
+        from prove_run import Failed
+        open_editor(self)
+        try:
+            press_reset(self.cam, self.box)
+        except Failed:
+            self.reset_failed = True
+            raise
+        keep_size(self.cam, self.box)
+        tag, size, place = self.register("reset")
+        dims = ("width", "height")
+        back = all(size[d] == size[f"default_{d}"] == self.start_size[d] for d in dims)
+        self.write({"what": "reset", "file": self.walk.files[tag], "size": size, "place": place, "back": back})
+        self.size, self.place = size, place
+        if back:
+            print(f"  {self.box} put back by its editor's Reset: {self.say(size)}, the default records' and the start's",
+                  flush=True)
+            return True
+        self.reset_failed = True
+        print("  the editor's Reset did not put it back: "
+              + ", ".join(f"{d} {size[d] - self.start_size[d]:+d}" for d in dims if size[d] != self.start_size[d])
+              + f" off its start, the default records reading {size['default_width']} x {size['default_height']}",
+              flush=True)
+        return False
+
+    def not_put_back(self, dial: str, why: str) -> None:
+        """A dimension the walk could not bring back, said with what to do by hand (and, from a default start, the word
+        that lets the editor's Reset do it), written."""
+        dim = DIALS[dial]
+        off = self.size[dim] - self.start_size[dim]
+        self.write({"what": "not put back", "dial": dial, "off": off, "why": why})
+        hint = ""
+        if self.default and not getattr(self.a, "reset", False):
+            hint = f"; with --allow {RESET_WORD!r} the editor's Reset puts back the default size, which it began at"
+        elif self.default:
+            hint = "; there its Reset (the trash button) puts back the default size, which it began at"
+        print(f"  NOT PUT BACK: {self.box}'s {dim} is {off:+d} off its start, {why}: on the camera, Focus Area, {self.box}, "
+              f"SET (the trash button), turn {DIAL_WORDS[dial]} and OK{hint}; or run {PROG} --put-back "
+              f"{self.run.dir.name}", flush=True)
+
+    def back_to_start(self, dials=None) -> bool:
+        """Every dimension of `dials` (all) off its start brought back by counted clicks (seek), each tried whatever the
+        other did; what the clicks cannot reach, by the editor's Reset where it may (can_reset, reset_back); what neither
+        brings back said (not_put_back)."""
+        off = [d for d in (dials or DIALS) if self.size[DIALS[d]] != self.start_size[DIALS[d]]]
+        if not off:
+            print(f"  {self.box} back at its start size (registered)", flush=True)
+            return True
+        missed = [d for d in off if not self.seek(d, self.start_size[DIALS[d]])]
+        if missed and self.can_reset() and self.reset_back():
+            return True
+        for d in missed:
+            if self.size[DIALS[d]] != self.start_size[DIALS[d]]:
+                self.not_put_back(d, self.missed.get(d) or "")
+        return not missed
 
     def probe(self, dial: str, n: int) -> bool:
         """--probe: `n` single clicks up, each registered, then `n` down: the steps said, the size back at its start (seek
@@ -556,7 +670,7 @@ class Sizes:
         moved = [abs(x) for x in up + down if x]
         if moved:
             self.units[dial] = sum(moved) / len(moved)
-        return self.seek(dial, self.start_size[dim])
+        return self.back_to_start([dial])
 
     def measure_travel(self, what: str) -> dict:
         """The edges at the size the box has (framepos_run.edge_area, under Standard, the frame brought back to where
@@ -577,7 +691,7 @@ class Sizes:
         from prove_run import Failed
         line = self.measure_travel(what)
         size = line.get("size") or self.size
-        check = travel_check(line.get("edges") or [], self.recs, self.inside, size)
+        check = travel_check(line.get("edges") or [], self.recs, self.rule, size, self.aspect)
         end = what.endswith(("smallest", "largest"))            # a dial's end: a camera fact, said by value
         values = self.default or end
         self.write({"what": "travel", "at": what, "size": size, "check": check,
@@ -593,15 +707,14 @@ class Sizes:
 
     def measure_dial(self, dial: str) -> bool:
         """One dial: its smallest (to_end), the edges there, the steps up from it, its largest, the edges there, the
-        steps down from it, then back to the start (seek)."""
-        dim = DIALS[dial]
+        steps down from it, then back to the start (back_to_start: clicks, else the editor's Reset where it may)."""
         for sign, word, step in ((-1, "smallest", "up"), (1, "largest", "down")):
             self.to_end(dial, sign)
             self.travel(f"{dial} {word}")
             steps = self.pattern(dial, -sign, self.a.pattern)
             self.write({"what": "pattern", "dial": dial, "from": word, "steps": steps})
             print(f"  {dial} {step} from the {word}: {pattern_words(steps)}", flush=True)
-        return self.seek(dial, self.start_size[dim])
+        return self.back_to_start([dial])
 
     def tracking(self, tr: tuple) -> dict:
         """Tracking: <box> chosen (route `tr`) and registered: does the box in use read the box's own size."""
@@ -627,7 +740,8 @@ class Sizes:
 
     def put_back(self, start_line: dict) -> bool:
         """--put-back: the box registered where it is now, and brought back to `start_line`'s size (a run's start) by
-        counted clicks (seek), each landing registered; already there, nothing turned."""
+        counted clicks, else by the editor's Reset where it may (back_to_start), each landing registered; already there,
+        nothing turned."""
         self.start_size, self.start_place = start_line["size"], start_line.get("place") or {}
         self.default = bool(start_line.get("default"))
         tag, size, place = self.register("now")
@@ -679,10 +793,23 @@ class Sizes:
         return {x["key"]: x["delta"] for x in (line.get("back") or {}).get("off") or []} or moved
 
 
-def body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, inside, t, r, tr, tag) -> bool:
-    """The session's body: slot 1 filled and Aspect Ratio 3:2 in the start file (else nothing pressed), the setup, the
-    box chosen and its start registered, then the probe or every dial and the odd size; a walk that stops brings the size
-    back first; the finish judges size and place."""
+def aspect_known(index: dict, cs, rule: dict) -> tuple:
+    """(code, label) of the Aspect Ratio the start download `cs` holds, the rule having a picture for it on both axes;
+    Failed, nothing pressed, where it reads none or the rule has no picture for it."""
+    from prove_run import Failed
+    code, label = aspect_of(index, cs)
+    if code is None:
+        raise Failed("the start download's Aspect Ratio reads nothing: the rule needs it; nothing was pressed")
+    if any(predicted(rule[a], 0, code) is None for a in frames.AXES):
+        raise Failed(f"the start download's Aspect Ratio reads {label or code}: the rule (FRAME_TRAVEL's pictures) has no "
+                     "picture for it; nothing was pressed")
+    return code, label
+
+
+def body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, rule, t, r, tr, tag) -> bool:
+    """The session's body: slot 1 filled in the start file and its Aspect Ratio one the rule has a picture for (else
+    nothing pressed), the setup, the box chosen and its start registered, then the probe or every dial and the odd size;
+    a walk that stops brings the size back first; the finish judges size and place."""
     from camkit import camset
     from prove_run import Failed, to_shooting
     from runner import close_screen
@@ -691,14 +818,11 @@ def body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, inside, t, r,
     if not F.slot_filled(start):
         raise Failed("slot 1 is empty in the start file: registering it would mark it filled for good; this run "
                      "registers a filled slot only")
-    aspect = aspect_of(index, start)
-    if aspect != "3:2":
-        raise Failed(f"the start download's Aspect Ratio reads {aspect or 'nothing'}: the rule is for 3:2; nothing was "
-                     "pressed")
-    tag["context"] = context_of(aspect, None if a.probe else "Standard")
+    code, label = aspect_known(index, start, rule)
+    tag["context"] = context_of(label, None if a.probe else "Standard")
     tag["setup"] = F.prepare(cam, link, hdmi, run, cycle, model, a.tracking, a.tracking, s.start,
                              None if a.probe else "Standard", index, None, circ=not a.probe)
-    sw = Sizes(cam, link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, inside, tag, index)
+    sw = Sizes(cam, link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, rule, tag, index, code)
     try:
         afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, None)
         to_shooting(link, hdmi, "the shooting screen with the box chosen")
@@ -722,7 +846,7 @@ def body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, inside, t, r,
         return sw.finish() and ok
     except BaseException:
         print(f"  {recs['box']} may be left at another size or place: run {PROG} --allow {F.MEMORY_ROW!r} --allow "
-              f"{SET_WORD!r} --put-back {run.dir.name}", flush=True)
+              f"{SET_WORD!r}{f' --allow {RESET_WORD!r}' if sw.default else ''} --put-back {run.dir.name}", flush=True)
         raise
 
 
@@ -757,7 +881,7 @@ def prove(a, doc: dict, recs: dict, table: dict, allowance: str) -> int:
     ok = False
     with prover_session(run, hdmi, may_open={F.MEMORY_ROW} | (set(MAY_OPEN) if a.tracking else set()), show=0,
                         expected=frozenset(F.EXPECTED_LEFT), end_why="the settings download after the sizes") as s:
-        ok = body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, table["inside"], t, r, tr, tag)
+        ok = body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, rule_of(table), t, r, tr, tag)
     print(f"{recs['box']}: {'measured and put back' if ok else 'NOT all measured or put back'} "
           f"({paths.shown(run.dir / OUT)})", flush=True)
     return 0 if ok else 1
@@ -790,9 +914,11 @@ def put_back_main(a) -> int:
     print(f"{box}: back to the start size and place of {a.put_back}", flush=True)
     with prover_session(run, hdmi, may_open={F.MEMORY_ROW}, show=0, expected=frozenset(F.EXPECTED_LEFT),
                         end_why="the settings download after the put-back") as s:
+        from camkit import camset
+        code, _ = aspect_of(index, camset.read(s.start))
         tag["setup"] = F.prepare(s.cam, s.link, hdmi, run, cycle, model, False, False, s.start, "Standard", index, None,
                                  circ=True)
-        sw = Sizes(s.cam, s.link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, table["inside"], tag, index)
+        sw = Sizes(s.cam, s.link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, rule_of(table), tag, index, code)
         sw.start_travel = edges[0] if edges else None
         afreg_run.choose_area(s.cam, run, cycle, model, labels, axes, r, None)
         to_shooting(s.link, hdmi, "the shooting screen with the box chosen")
@@ -833,10 +959,13 @@ def main(argv=None) -> int:
     words = memory_allowed(a.allow) and set_allowed(a.allow)
     if not a.list and not words:
         sys.exit(f"boxsize_run: a camera run needs the owner's two words: --allow {F.MEMORY_ROW!r} (slot 1 registered "
-                 f"at each size) and --allow {SET_WORD!r} (SET opens the box's editor, and OK in it keeps the size)")
-    others = [x for x in a.allow if not memory_allowed([x]) and not set_allowed([x])]
+                 f"at each size) and --allow {SET_WORD!r} (SET opens the box's editor, and OK in it keeps the size); "
+                 f"--allow {RESET_WORD!r} besides lets the editor's Reset put back a default size the clicks cannot")
+    others = [x for x in a.allow if not memory_allowed([x]) and not set_allowed([x]) and not reset_allowed([x])]
     if others:
-        sys.exit(f"boxsize_run: --allow names {others}: this run is allowed nothing but {F.MEMORY_ROW!r} and {SET_WORD!r}")
+        sys.exit(f"boxsize_run: --allow names {others}: this run is allowed nothing but {F.MEMORY_ROW!r}, {SET_WORD!r} "
+                 f"and {RESET_WORD!r}")
+    a.reset = reset_allowed(a.allow)
     if a.put_back:
         allowed_or_exit(a.allow)
         return put_back_main(a)
