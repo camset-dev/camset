@@ -1332,3 +1332,74 @@ def test_a_named_notices_other_lines_name_the_new_button_words_whole():
     for prose in ("the file was returned", "recording stopped", "a lateral move", "resumed earlier"):
         assert not NOT_BESIDE_OK.search(prose), prose
 
+
+# ---------------------------------------------------------------- a Custom box's size editor, its OK (2026-11-17)
+
+# Custom 1's size editor as OCR reads it (kit2_freesize's 00225_c4.png and 00394_c4.png, HDMI): its title, nothing else
+# above the footer but the dials' icons, and the footer's three buttons, Reset on the trash button
+EDITOR_TEXTS = ("Custom 1", "Custom 1", "iReset MENU Cancel OK")
+EDITOR_NAME = "Custom 1's size editor: OK keeps its size (Focus Area's SET, the owner's word)"
+
+
+def editor_camera(tmp_path, monkeypatch, kind="unknown", texts=EDITOR_TEXTS, box="Custom 1"):
+    """A camera on Custom 1's size editor (a screen of no known kind) whose title, text above the footer and footer read
+    `texts`, its Enter carrying the size editor's consent for `box`."""
+    cam = camera(tmp_path, monkeypatch, kind, " ".join(texts[1:]), "")
+    monkeypatch.setattr(live, "editor_texts", lambda c: texts)
+    cam.answer_once = live.BoxEditor(EDITOR_NAME, box)
+    return cam
+
+
+def test_a_size_editors_ok_goes_by_its_consent_judged_on_the_editors_own_shape(tmp_path, monkeypatch):
+    """A Custom box's size editor reads as no known kind, and its footer's Reset is a confirmation's word, so neither the
+    shape check nor a named consent lets its OK go: the editor's consent (BoxEditor) judges it on the editor's own shape,
+    its title the box's, nothing above the footer but the title, the footer the editor's three buttons, and the
+    confirmation words on what stands above the footer; logged with the consent's words, spent by its press."""
+    cam = camera(tmp_path, monkeypatch, "unknown", "Custom 1 iReset MENU Cancel OK", "")
+    cam.answer_once = "--allow \"Focus Area's SET\""
+    with pytest.raises(safety.Refused, match="reads as a confirmation"):
+        cam.press("enter")                                  # a named consent keeps the word list: Reset refuses
+    cam = editor_camera(tmp_path, monkeypatch)
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert [e["by"] for e in events(cam) if e["kind"] == "enter_passed"] == [EDITOR_NAME]
+    assert cam.answer_once is None
+    for texts in (("Custom 1", "Custom 1 L", "Reset MEN Cancel •OK"), ("S Custom 1", "S Custom 1", "Reset MENU Cancel OK")):
+        cam = editor_camera(tmp_path, monkeypatch, texts=texts)
+        with pytest.raises(Sent):
+            cam.press("enter")                              # an icon's glyph, a key's word cut short: still the editor
+
+
+@pytest.mark.parametrize("texts,why", [
+    (("Custom 2", "Custom 2", "Reset MENU Cancel OK"), "is not Custom 1's"),
+    (("", "", "Reset MENU Cancel OK"), "is not Custom 1's"),
+    (("Custom 1", "Custom 1 Clear the box?", "Reset MENU Cancel OK"), "question mark"),
+    (("Custom 1", "Custom 1 Format the memory card", "Reset MENU Cancel OK"), "more than its title"),
+    (("Custom 1", "Custom 1", "MENU Cancel OK"), "lacks the editor's 'reset'"),
+    (("Custom 1", "Custom 1", "Reset MENU OK"), "lacks the editor's 'cancel'"),
+    (("Custom 1", "Custom 1", "Reset MENU Cancel Execute OK"), "'execute'")])
+def test_a_size_editors_consent_refuses_any_screen_not_shaped_as_that_boxs_editor(tmp_path, monkeypatch, texts, why):
+    """Another box's editor, a title that cannot be read, a question mark, words above the footer besides the title, a
+    footer short of Reset, Cancel or OK or holding any other button's word: no OK."""
+    cam = editor_camera(tmp_path, monkeypatch, texts=texts)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("enter")
+
+
+def test_a_size_editors_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
+    """On a notice, a dialog or a list the editor's consent lifts nothing and the editor's texts are never read; the
+    trash button (the editor's Reset) meets the shape check as ever, and the link's C4 guard besides."""
+    read = []
+    for kind, text, lit, why in (("notice", NOT_AVAILABLE, "OK", "is a notice"),
+                                 ("dialog", "Delete this image? OK Cancel", "OK", "question mark"),
+                                 ("list", "", "", "nothing on the list screen")):
+        cam = camera(tmp_path, monkeypatch, kind, text, lit)
+        monkeypatch.setattr(live, "editor_texts", lambda c: read.append(1) or EDITOR_TEXTS)
+        cam.answer_once = live.BoxEditor(EDITOR_NAME, "Custom 1")
+        with pytest.raises(safety.Refused, match=why):
+            cam.press("enter")
+    assert read == []
+    cam = editor_camera(tmp_path, monkeypatch)
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("c4", allow=frozenset({"c4"}))
+

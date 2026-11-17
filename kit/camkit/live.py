@@ -76,6 +76,7 @@ screens alone: on a menu page a lit row is always a bar, and its orange texts ar
 import atexit
 import contextlib
 import os
+import re
 import shutil
 import tempfile
 import time
@@ -310,6 +311,61 @@ class UprightDialog:
     name: str           # the consent's words, logged with the press: "<row>'s own dialog, read upright, held vertically"
     row: str            # the row whose own dialog it is: its title read upright must be that row's (safety.clean_label)
     read: Callable      # the camera -> (title, lit option, whole text, text above the footer) of its frame read upright
+
+
+@dataclass(frozen=True)
+class BoxEditor:
+    """A prover's consent for one Enter on a Custom focus box's own size editor, the OK that keeps the size its dials
+    set: Focus Area's SET (C4) with the box lit opens it (the owner's go-ahead, 2026-11-02: kit2_freesize), and it reads
+    as no known kind, whose Enter the shape check refuses, while its footer's Reset (the trash button) is a confirmation's
+    word, which a named consent's word list refuses (2026-11-17). Given through answer_once by kit/provers/boxsize_run.py
+    alone, under its --allow "Focus Area's SET", once it has read the screen as that box's editor; judged here
+    (confirm_refused: editor_passed) on the frame judged, by the editor's own shape (box_editor_refused): its title the
+    box's own, nothing above its footer but that title (the dials' icons read as a glyph or none), its footer the
+    editor's three buttons (Reset, MENU Cancel, OK) and no other word, no question mark; then the confirmation words on
+    what stands above the footer, which every consent keeps. It answers no other kind of screen, nor the trash button
+    (the link's C4 guard refuses C4 there besides), and is spent by its press."""
+    name: str           # the consent's words, logged with the press
+    box: str            # the box whose editor it is ("Custom 1"): the editor's title must be that box's
+
+
+# the size editor's title, top left above the box (kit2_freesize's 00394_c4.png); its footer's words, a key's word cut
+# short or an icon's glyph run onto it aside (box_editor_refused)
+EDITOR_TITLE = (0, 0, 400, 60)
+EDITOR_KEYS = ("reset", "menu", "cancel", "ok")
+
+
+def editor_texts(cam) -> tuple:
+    """(title, text above the footer band, footer) of a Custom box's size editor on the frame judged (BoxEditor)."""
+    f = cam.frame
+    lines = ocr.read([f.path])[f.path]
+    return (ocr.text_in(lines, EDITOR_TITLE).strip(), ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)).strip(),
+            ocr.text_in(lines, (0, FOOTER_TOP, 640, 480)).strip())
+
+
+def box_editor_refused(box: str, title, body, footer) -> str:
+    """Why a screen read as `title`, `body` (above the footer band) and `footer` is not `box`'s own size editor, shaped
+    as the editor is (BoxEditor), or "" when it is: its title the box's (safety.clean_label, an icon's glyph before it
+    left out); no question mark; above the footer nothing but the title, the dials' icons read as a single letter or
+    none; in the footer Reset, Cancel and OK, and no word besides MENU or a piece of it ("MEN": the key's glyph cut
+    short) or one glyph run onto a button's word ("iReset": the trash icon). Fail closed: an editor OCR reads otherwise
+    stops the walk before its OK."""
+    if not safety.clean_label(title) or safety.clean_label(title) != safety.clean_label(box):
+        return f"its title ({str(title or '').strip()[:40]!r}) is not {box}'s"
+    if safety.question_mark(f"{body} {footer}"):
+        return "it holds a question mark"
+    rest = safety.fold(str(body or "")).lower().replace(safety.clean_label(box), " ", 1)
+    extra = re.findall(r"[a-z]{2,}", rest)
+    if extra:
+        return f"above its footer it shows more than its title ({extra[0]!r})"
+    words = []
+    for w in re.findall(r"[a-z]+", safety.fold(str(footer or "")).lower()):
+        words.append(w if w in EDITOR_KEYS or w[1:] not in EDITOR_KEYS else w[1:])
+    others = [w for w in words if w not in EDITOR_KEYS and len(w) > 1 and w not in "menu"]
+    if others:
+        return f"its footer reads {others[0]!r}, none of the editor's buttons"
+    missing = [w for w in ("reset", "cancel", "ok") if w not in words]
+    return f"its footer lacks the editor's {missing[0]!r}" if missing else ""
 
 
 def body_of(cam) -> str:
@@ -886,7 +942,8 @@ class LiveCamera:
           row's screen; drive.py's and card_actions.py's --confirm with the screen's whole text): the shape refuses
           nothing, the word list still refuses a confirmation; an UprightDialog, for an Enter on a screen of no known
           kind alone: that one Enter judged as a level dialog's on the frame read upright (upright_passed), and on any
-          other screen or key it answers nothing;
+          other screen or key it answers nothing; a BoxEditor likewise, that one Enter (a Custom box's size editor's
+          OK) judged on the editor's own shape and the words above its footer (editor_passed);
         - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
           `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
           only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
@@ -918,10 +975,11 @@ class LiveCamera:
         passed, lone = "", None
         if safety.first_time_screen(kind, text):
             kind = "notice"         # a first-time screen (no notice's frame lines, a "Don't show this again." box)
-        if isinstance(answer, UprightDialog):
-            upright, answer = answer, None      # a portrait dialog's consent answers that dialog alone
+        if isinstance(answer, UprightDialog | BoxEditor):
+            consent, answer = answer, None      # a portrait dialog's, or a size editor's, consent answers it alone
             if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:
-                return self.upright_passed(key, upright, judged_at)
+                passed_by = self.upright_passed if isinstance(consent, UprightDialog) else self.editor_passed
+                return passed_by(key, consent, judged_at)
         if kind == "notice" and canon in safety.ENTER_KEYS:
             if notice_ok:
                 passed = f"--info-ok {notice_ok}"
@@ -970,6 +1028,24 @@ class LiveCamera:
         said = "" if why else safety.confirmation_refused(text)
         if why or said:
             self.refuse(key, f"{consent.name}, read upright: {why or f'it reads as a confirmation ({said})'}: no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
+        return judged_at
+
+    def editor_passed(self, key: str, consent: BoxEditor, judged_at: int) -> int:
+        """An Enter on a screen of no known kind under a size editor's consent (BoxEditor): the frame judged
+        (look_before's) read as the editor (editor_texts) and judged by its own shape (box_editor_refused), then by the
+        confirmation words on what stands above its footer, which every consent keeps (the footer's Reset is the editor's
+        own button). Refused, logged, on any of them, or where the reading fails; passed, logged with the consent's
+        words. Returns judged_at."""
+        try:
+            title, body, footer = editor_texts(self)
+        except Exception as e:
+            self.refuse(key, f"{consent.name}: the screen cannot be read ({type(e).__name__}), so whether it asks cannot "
+                             "be told")
+        why = box_editor_refused(consent.box, title, body, footer)
+        said = "" if why else safety.confirmation_refused(body)
+        if why or said:
+            self.refuse(key, f"{consent.name}: {why or f'it reads as a confirmation ({said})'}: no Enter")
         self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
         return judged_at
 
