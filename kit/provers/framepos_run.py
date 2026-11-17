@@ -9,6 +9,7 @@ moved with the multi-selector on the shooting screen, slot 1 registered again, t
     .venv/bin/python -u kit/provers/framepos_run.py --summary            (the run's lines, deltas only; no camera)
     .venv/bin/python -u kit/provers/framepos_run.py --zone-grid --allow "Camera Set. Memory"     (the sweep only)
     .venv/bin/python -u kit/provers/framepos_run.py --allow "Camera Set. Memory" --edges [--areas "Spot: M"] [--grip down]
+    .venv/bin/python -u kit/provers/framepos_run.py --allow "Camera Set. Memory" --put-back RUN    (a frame RUN left out)
 
 The camera (the a1 II, firmware 4.00): moving a focus frame on the shooting screen changes no live record; registering
 a memory slot copies its place into that slot's memory set (its hand tables,
@@ -130,14 +131,23 @@ Left and Up to the low corner (low); Right 1 (snap-h: the records Right moves ar
 1 (step-h: Right's step; the records Down moves); Down 1 and Right pushed (step-v: Down's step, the far horizontal
 edge); Down pushed (high, the far corner). Which key moves which record is measured, never taken from a name, so a view
 that turns the keys is no guess. The single presses are read once they settle (press_moves); the pushes are sent
-quickly, each judged at the link on a fresh frame read as the shooting screen (push). The first press off an edge can
-stop short at the grid the frame steps on (kit2_framepos_amt's Custom 1: 28 a press, yet Left 3 from 73 short of the
-edge moved 73, and Right 3 put it back), so the step is the second press. The way back (edge_way_back): from the far
-corner ceil(distance / step) presses, registered and checked against the start's registration record by record; a
-press the camera lost is made good in whole steps and checked again, EDGE_TRIES times at most; a start no press reaches
-is said with the difference, nothing more pressed, and the run stops. A failure once the frame has moved closes the
-screen, pushes the frame to the low corner, measures there what is not yet known and brings it back the same way. A
-push that moved its whole length may have stopped short of the edge: said, the frame brought back all the same. Seven
+quickly, each judged at the link on a fresh frame read as the shooting screen (push). What the registrations of
+2026-11-16 show (axis_way): a press moves a whole step, the first off an edge too, under Standard and Large alike, and
+stops at an edge; under Standard a press that would cross the centre between a record's edges stops on it (each way back
+from the far corner to a start at the centre landed on it, where whole steps would have passed it by up to a step;
+kit2_framepos_amt's Custom 1 too: Left 3 from the centre met the edge, Right 3 came back to the centre); under Large none
+did (kit2_a1fin_framepos_edges_gripup_large_plain crossed it three times). All those starts were the centre, and every
+crossing seen went Left or Up. So the way back is made under Standard (edge_way_back): from the far corner, whole steps
+where it does not cross the centre, as many presses as reach the centre or an edge, across the centre to it and on in
+whole steps; registered and checked against the start's registration record by record (AF Frame Move Amt's own records
+left out); a landing still off is planned again from there, EDGE_TRIES times at most; a start no press reaches is said
+with the difference, nothing more pressed, and the run stops. Under --frame-move-amt Large the measure is Large's and
+the way back Standard's: AF Frame Move Amt = Standard through its row once the far corner is registered, the presses
+counted in Standard's step (the hand tables' FRAME_STEPS, refused before anything connects where they give none), Large
+again before the next area, whose start must read Large. A failure once the frame has moved closes the screen, measures
+again on the low side what is not yet known, pushes the frame to the far corner and brings it back from there under
+Standard. A push that moved its whole length may have stopped short of the edge: said, the frame brought back all the
+same. Seven
 registrations an area: about five minutes, an hour and a half for the 18 areas (edge_minutes; the pushed presses not
 yet timed). One line an area in edges.jsonl ({"area", "code", "edge_presses", "files", "frames", "values" (each
 registration's place records: the run's own evidence, the start among them), "edges" (edge_records), "odd", "back":
@@ -148,6 +158,16 @@ the runs go into the hand evidence, and kit/writer/frames.py puts the table on t
 not proofs.jsonl, which holds the values a record was proved to take; and they are an area's, where the definition's
 range and step are a record's, which areas of several sizes share (the Spot sizes). A Custom box's edges are those of
 the size its owner set (a setting of theirs), never a camera fact as they stand.
+
+--put-back RUN (2026-11-16): each frame an --edges run left out of place (left_behind: its last line says it moved and
+is not back) brought back to that run's start registration, held as that run held the camera (its lines' grip;
+Vertical Display read from this run's start download), the setup putting Switch V/H AF Area as the grip has it, Circ. of
+Focus Point and AF Frame Move Amt Standard. Per area (put_back_area): chosen; slot 1 registered where the frame is now;
+at its start already, nothing pressed; else pushed Right and Down to the far corner, registered, brought back from
+there as an edges run's way back is, in Standard's step (FRAME_STEPS), each landing registered and checked on the
+measured records alone (the start's file holds the edges run's AF Frame Move Amt). A start no press reaches is said
+with the difference and the run stops; a failure leaves the frame where it is, and a run again starts from wherever that
+is. Lines in put_back.jsonl; the same consent as --edges.
 
 Registering: MENU, Camera Set. Memory by the page scan, its lit row read as that row, Enter; the slot screen (its tabs 1
 2 3 M1-M4, slot 1 lit by default, its footer OK) must read as one (SLOT_SCREEN), and its lit tab must be slot 1,
@@ -180,6 +200,9 @@ from writer import hand_tables  # noqa: E402
 # the Zone grid's places, [code, name], of the camera the kit works on (its hand tables' ZONE, writer/hand_tables.py:
 # the public table alone); empty for a camera whose tables name none, where --zone-grid stops before the camera
 ZONE = hand_tables.active().ZONE
+# each area's step a press under AF Frame Move Amt Standard and Large, {(option, area): (x, y)}, of the camera the kit
+# works on (its hand tables' FRAME_STEPS): a Large edge measure's way back counts in Standard's (standard_step)
+FRAME_STEPS = hand_tables.active().FRAME_STEPS
 ROW = "Focus Area"
 MEMORY_ROW = "Camera Set. Memory"
 VH_ROW, OFF = "Switch V/H AF Area", "Off"
@@ -751,22 +774,30 @@ def edge_groups(regs: dict) -> dict:
     return {"h": h, "v": v}
 
 
+def centre_of(low, high) -> int | None:
+    """The middle of a record's two edges, where a Standard press that would cross it stops (every frame's edges lie
+    either side of it alike: kit2_a1fin_framepos_edges_level, 2026-11-16); None where it falls between two values."""
+    return None if low is None or high is None or (low + high) % 2 else (low + high) // 2
+
+
 def edge_measure(regs: dict, n: int) -> dict:
     """{"h": axis, "v": axis, "odd": keys} of an edge measure's registrations (`regs`, EDGE_TAGS; `n`: a push's
     presses). Each axis: "keys" (edge_groups), "step" (by key: the second press off the low edge, signed for Right or
-    Down; the first may stop short at the grid the frame steps on), "first" (the first press off it, signed), "corner"
-    (the edge Left and Up reach), "low" and "high" (the two edges by value) and "short": a push of n presses that moved
-    n presses' worth may have stopped short of the edge. "odd": records that moved with neither key, or a horizontal
-    one that moved with Down alone."""
+    Down), "first" (the first press off it, signed: a whole step in every run, Standard and Large alike, kept to show
+    it), "corner" (the edge Left and Up reach), "low" and "high" (the two edges by value), "centre" (centre_of) and
+    "short": a push of n presses that moved n presses' worth may have stopped short of the edge. "odd": records that
+    moved with neither key, or a horizontal one that moved with Down alone."""
     g = edge_groups(regs)
     out = {}
     for axis, (s0, s1), (f0, f1), (far0, far1) in (("h", ("snap-h", "step-h"), ("low", "snap-h"), ("step-h", "step-v")),
                                                    ("v", ("step-h", "step-v"), ("snap-h", "step-h"), ("step-v", "high"))):
-        a = out[axis] = {"keys": g[axis], "step": {}, "first": {}, "corner": {}, "low": {}, "high": {}, "short": []}
+        a = out[axis] = {"keys": g[axis], "step": {}, "first": {}, "corner": {}, "low": {}, "high": {}, "centre": {},
+                         "short": []}
         for k in g[axis]:
             s = regs[s1][k] - regs[s0][k]
             a["step"][k], a["first"][k], a["corner"][k] = s, regs[f1][k] - regs[f0][k], regs["low"][k]
             a["low"][k], a["high"][k] = sorted((regs["low"][k], regs["high"][k]))
+            a["centre"][k] = centre_of(a["low"][k], a["high"][k])
             for what, moved in (("the low corner", regs["low"][k] - regs["base"][k]),
                                 ("the far corner", regs[far1][k] - regs[far0][k])):
                 if s and abs(moved) >= n * abs(s):
@@ -778,26 +809,88 @@ def edge_measure(regs: dict, n: int) -> dict:
     return out
 
 
-def edge_way_back(cur: dict, base: dict, m: dict, first: bool) -> tuple:
-    """([[key, presses]], {}) that bring a frame from `cur` to `base` (registrations' values), the horizontal keys
-    first, by each axis's first record that moves (edge_measure `m`): from an edge (`first`) ceil(distance / step)
-    presses, as the first press off an edge lands on the grid the frame steps on; from a grid place, whole steps only,
-    or as many as reach the edge where the start is at one. ([], {key: how far the frame is from its start}) where the
-    start lies where no press goes (set by touch, say): nothing is guessed."""
+def axis_way(cur: int, base: int, s: int, centre: int | None = None, low: int | None = None,
+             high: int | None = None) -> list | None:
+    """[[direction, presses]] that bring one record from `cur` to `base` under AF Frame Move Amt Standard, the direction
+    +1 where the presses raise it; None where no press reaches `base`. `s`: Standard's step (no sign). What the
+    registrations show of Standard (kit2_a1fin_framepos_edges_level and the grip runs, 2026-11-16): a press moves a whole
+    step, the first off an edge too, and stops at an edge; a press that would cross the centre between the edges stops on
+    it (every way back from the far corner landed on a start at the centre where whole steps would have passed it by up
+    to a step). So: whole steps where the way does not cross the centre; to the centre itself, or to an edge, as many
+    presses as reach it; across the centre, to it and on in whole steps from it; a start off this record's grid from
+    `cur` but on the centre's, by the centre and back. Under Large no press stopped at the centre: not for Large."""
     import math
+    if cur == base:
+        return []
+    d = 1 if base > cur else -1
+
+    def straight(a, b):
+        if abs(b - a) % s == 0:
+            return abs(b - a) // s
+        return math.ceil(abs(b - a) / s) if b in (low, high, centre) else None
+    if centre is None or not min(cur, base) < centre < max(cur, base):
+        k = straight(cur, base)
+        if k is not None:
+            return [[d, k]]
+        if centre is None or cur == centre or (base - centre) % s:
+            return None
+        toward = 1 if centre > cur else -1
+        return [[toward, math.ceil(abs(centre - cur) / s)], [-toward, abs(base - centre) // s]]
+    rest = straight(centre, base)
+    return None if rest is None else [[d, math.ceil(abs(centre - cur) / s) + rest]]
+
+
+def edge_way_back(cur: dict, base: dict, m: dict) -> tuple:
+    """([[key, presses]], {}) that bring a frame from `cur` to `base` (registrations' values) under Standard, the
+    horizontal keys first, each axis by its first record that moves (`m`: edge_measure's, or standard_m's for a Large
+    run), axis_way's way turned into the keys whose press moves that record so. ([], {key: how far the frame is from
+    its start}) where no press reaches the start (set by touch, say, or under Large): nothing is guessed."""
     presses, off = [], {}
     for axis, plus, minus in (("h", "ms_right", "ms_left"), ("v", "ms_down", "ms_up")):
         keys = [k for k in m[axis]["keys"] if m[axis]["step"][k] or m[axis]["first"][k]]
         if not keys or cur.get(keys[0]) == base.get(keys[0]):
             continue
         k = keys[0]
-        step, delta = m[axis]["step"][k] or m[axis]["first"][k], base[k] - cur[k]
-        at_edge = base[k] in (m[axis]["low"].get(k), m[axis]["high"].get(k))
-        if not first and abs(delta) % abs(step) and not at_edge:
+        step = m[axis]["step"][k] or m[axis]["first"][k]
+        way = axis_way(cur[k], base[k], abs(step), m[axis].get("centre", {}).get(k), m[axis]["low"].get(k),
+                       m[axis]["high"].get(k))
+        if way is None:
             off[k] = cur[k] - base[k]
             continue
-        presses.append([plus if delta * step > 0 else minus, math.ceil(abs(delta) / abs(step))])
+        presses += [[plus if d * step > 0 else minus, n] for d, n in way if n]
     return ([], off) if off else (presses, {})
+
+
+def standard_step(label: str, table=None) -> tuple | None:
+    """(x, y): AF Frame Move Amt Standard's step for an area, from the hand tables' FRAME_STEPS of the camera the kit
+    works on (`table` in its place), its label as the plan has it ("Spot: XL" is the table's "Spot XL"); None where the
+    table has none."""
+    for (option, area), xy in (FRAME_STEPS if table is None else table).items():
+        if option == "Standard" and bare(area) == bare(label):
+            return tuple(xy)
+    return None
+
+
+def standard_m(records: list, xy: tuple) -> dict | None:
+    """An edge measure for the way back under Standard, from records as edge_records gives them (an edges line's
+    "edges" too, a Large run's among them): each record's group, edges and centre as measured, its step Standard's from
+    `xy` (FRAME_STEPS' x for a record whose name says X, y for Y), signed as the measured step raised it; None where a
+    record's name gives no axis or its step had no sense."""
+    out = {axis: {"keys": [], "step": {}, "first": {}, "corner": {}, "low": {}, "high": {}, "centre": {}, "short": []}
+           for axis in ("h", "v")}
+    out["odd"] = []
+    for r in records:
+        axis, plus = ("h", "Right") if r["keys"] == "Left/Right" else ("v", "Down")
+        ax = axis_of(r.get("name"))
+        if ax is None or not r.get("raises"):
+            return None
+        s = xy[0] if ax == "X" else xy[1]
+        a, k = out[axis], r["key"]
+        a["keys"].append(k)
+        a["step"][k] = a["first"][k] = s if r["raises"] == plus else -s
+        a["low"][k], a["high"][k], a["corner"][k] = r["low"], r["high"], r.get("corner")
+        a["centre"][k] = centre_of(r["low"], r["high"])
+    return out
 
 
 def edge_records(m: dict, index: dict) -> list:
@@ -836,8 +929,10 @@ def edge_summary_of(line: dict) -> list:
                    f"    ITS FRAME MAY BE MOVED: on the shooting screen with {ROW} = {line['area']}, check its place by "
                    "hand")
     elif back["same"]:
-        out.append("    put back" + (" from the low corner after the failure" if "again-low" in (line.get("files") or {})
-                                     else "") + ": the registration after it matched the first")
+        large = f"{AMT_ROW} Large" in (line.get("context") or "")
+        out.append("    put back" + (" under Standard" if large else "")
+                   + (" from the far corner after the failure" if "again-high" in (line.get("files") or {}) else "")
+                   + ": the registration after it matched the first")
     else:
         off = "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" if isinstance(x.get("delta"), int)
                         else shown_key(x["key"]) for x in back.get("off") or []) or "its place unknown"
@@ -1225,144 +1320,221 @@ def push(cam, moves: list, turned: str | None = None, gap: float = PUSH_GAP) -> 
     return sent
 
 
+class Walk:
+    """One area's registrations and presses for --edges and --put-back: each registration of slot 1 downloaded and kept
+    by its tag (reg: "files", "frames", the settings file read), the pushes (push) and the single presses read once they
+    settle (press_moves), AF Frame Move Amt set through its menu row (set_amt), and the way back to a start, checked
+    (way_back). `line` is the area's line as it grows; `amt` {"now": the option the camera is on} is the run's, shared
+    by its areas."""
+
+    def __init__(self, cam, link, hdmi, run, cycle, model, a, turned, t: dict, prefix: str, amt: dict | None = None):
+        self.cam, self.link, self.hdmi, self.run, self.cycle, self.model, self.a = cam, link, hdmi, run, cycle, model, a
+        self.turned, self.t, self.prefix, self.amt = turned, t, prefix, amt if amt is not None else {"now": None}
+        self.cs, self.files, self.frames = {}, {}, {}
+        self.line = {"t": round(time.time(), 3), "area": t["label"], "code": t["code"], "files": self.files,
+                     "frames": self.frames, "moved": False}
+
+    def reg(self, tag: str):
+        from camkit import camset
+        self.frames[tag] = register_slot(self.cam, self.cycle, self.model, self.a.allow)["frames"]
+        path, at = download(self.cam, self.link, self.hdmi, f"{self.prefix}-{tag}-{slug(self.t['label'])}")
+        self.files[tag] = path.name
+        afreg_run.ready_to_hold(self.cam, at, self.run, self.turned)
+        self.cs[tag] = camset.read(path)
+
+    def held(self, tag: str, keys) -> dict:
+        from prove_run import held_value
+        return {k: held_value(self.cs[tag], k) for k in keys}
+
+    def pushed(self, moves: list):
+        self.line["moved"] = True
+        self.frames.setdefault("pushes", []).append(push(self.cam, moves, self.turned))
+
+    def single(self, moves: list):
+        from prove_run import Failed
+        self.line["moved"] = True
+        sent, done = [], []
+        press_moves(self.cam, moves, sent, done, self.turned, self.run)
+        if done != [list(x) for x in moves]:
+            raise Failed(f"{say_moves(moves)} off the edge went out as {say_moves(done)}: the step cannot be read")
+
+    def values(self, tags: list, names: list | None = None) -> dict:
+        """{tag: {key: value}} of every scalar record two of `tags` in a row differ in (`names`: the tags they stand
+        for in edge_measure)."""
+        from camkit import camset
+        keys = []
+        for x, y in zip(tags, tags[1:], strict=False):
+            keys += [c.key for c in camset.diff(self.cs[x], self.cs[y]) if c.key not in keys
+                     and not isinstance(c.before, list) and not isinstance(c.after, list)]
+        return {(names or tags)[i]: self.held(tag, keys) for i, tag in enumerate(tags)}
+
+    def set_amt(self, option: str):
+        """AF Frame Move Amt put on `option` through its menu row, as the setup puts it, and the shooting screen back."""
+        from mode_switch import open_menu
+        from prove_run import to_shooting
+        from runner import close_screen
+        open_menu(self.cam)
+        afreg_run.set_setup_row(self.cam, self.cycle, self.model, [AMT_ROW], option)
+        close_screen(self.cam, self.link)
+        to_shooting(self.link, self.hdmi, f"the shooting screen with {AMT_ROW} = {option}")
+        self.amt["now"] = option
+
+    def way_back(self, cur: dict, base: dict, m: dict, check, keys):
+        """From `cur` to `base` (values by key) by edge_way_back's presses on m's steps (Standard's), each landing
+        registered and judged by check(tag) ([{"key", "delta"}] still off, [] when back); a landing still off planned
+        again from there, EDGE_TRIES times at most; a start no press reaches said, nothing more pressed. Sets the line's
+        "back" ({"same", "off", "tries", "presses", "under": "Standard"}) and, short of it, "failed"."""
+        tries, presses_all = 0, []
+        presses, off = edge_way_back(cur, base, m)
+        while not off:
+            if presses:
+                self.pushed(presses)
+                presses_all.append(presses)
+            tries += 1
+            tag = f"back{sum(1 for x in self.files if x.startswith('back')) + 1}"     # numbered across the area
+            self.reg(tag)
+            left = check(tag)
+            self.line["back"] = {"same": not left, "off": left, "tries": tries, "presses": presses_all,
+                                 "under": "Standard"}
+            if not left or tries > EDGE_TRIES:
+                break
+            cur = self.held(tag, keys)
+            presses, off = edge_way_back(cur, base, m)
+            if not presses and not off:
+                break                               # the measured records are back; the others are said in "off"
+        if off:
+            self.line["back"] = {"same": False, "off": [{"key": k, "delta": cur[k] - base[k]} for k in keys
+                                                        if cur.get(k) != base.get(k)],
+                                 "unreachable": sorted(off), "tries": tries, "presses": presses_all, "under": "Standard"}
+        if not self.line["back"]["same"]:
+            self.line["failed"] = (f"the frame is not where it began after {tries} registration"
+                                   f"{'s' if tries != 1 else ''} on the way back"
+                                   + (": no press reaches its start" if off else ""))
+
+
+def amt_keys(index: dict) -> set:
+    """AF Frame Move Amt's live record and its slot 1 copy (a registration writes it): a run that sets the row leaves
+    them out of its checks that a frame is back."""
+    got = amt_code(index, "Standard") or amt_code(index, "Large")
+    return {got[0], got[0].replace("global:", "set1:", 1)} if got else set()
+
+
 def edge_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, a, index: dict,
-              turned: str | None = None) -> dict:
-    """One area's edges (--edges): chosen; slot 1 registered at its start (base); pushed a.edge_presses Left and Up to
-    the low corner (low); Right 1 (snap-h: what Right moves), Right 1 and Down 1 (step-h: Right's step, what Down
-    moves), Down 1 and Right pushed (step-v: Down's step, the far horizontal edge), Down pushed (high: the far corner),
-    each registered and downloaded: edge_measure. The single presses are read once they settle (press_moves), the pushes
-    sent quickly (push). Then the way back: presses computed from the far corner (edge_way_back), registered, and checked
-    against the start's registration, record by record; a press the camera lost is made good in whole steps and checked
-    again, EDGE_TRIES times at most; a start no press reaches is said, nothing more pressed. A failure once the frame
-    has moved closes the screen and brings it back from the low corner, measuring there what is not yet known. Returns
+              turned: str | None = None, amt: str | None = "Standard", amt_state: dict | None = None) -> dict:
+    """One area's edges (--edges), measured under AF Frame Move Amt `amt`: chosen; slot 1 registered at its start
+    (base); pushed a.edge_presses Left and Up to the low corner (low); Right 1 (snap-h: what Right moves), Right 1 and
+    Down 1 (step-h: Right's step, what Down moves), Down 1 and Right pushed (step-v: Down's step, the far horizontal
+    edge), Down pushed (high: the far corner), each registered and downloaded: edge_measure. The single presses are read
+    once they settle (press_moves), the pushes sent quickly (push). Then the way back under Standard, the one it is
+    proved under (axis_way): a Large run sets Standard through its row first and counts in Standard's step
+    (standard_step, standard_m), and sets Large again before its next area's start, which must read Large. The way back
+    is registered and checked against the start's registration record by record (AF Frame Move Amt's own records left
+    out); a press the camera lost is made good and checked again, EDGE_TRIES times at most; a start no press reaches is
+    said, nothing more pressed. A failure once the frame has moved closes the screen, measures again on the low side what
+    is not yet known, pushes the frame to the far corner and brings it back from there under Standard as above. Returns
     the area's line, which says whether the frame is back ("back") or may be elsewhere ("moved" with no "back")."""
     from camkit import camset
     from prove_run import Failed, held_value, to_shooting
     from runner import changes_of, close_screen
-    n, cs, files, frames = a.edge_presses, {}, {}, {}
-    line = {"t": round(time.time(), 3), "area": t["label"], "code": t["code"], "edge_presses": n, "files": files,
-            "frames": frames, "moved": False}
+    n, large = a.edge_presses, amt == "Large"
+    amt_state = amt_state if amt_state is not None else {"now": amt}
+    w = Walk(cam, link, hdmi, run, cycle, model, a, turned, t, "edge", amt_state)
+    w.line["edge_presses"] = n
+    skip = amt_keys(index)
+    xy = standard_step(t["label"]) if large else None
 
-    def reg(tag):
-        frames[tag] = register_slot(cam, cycle, model, a.allow)["frames"]
-        path, at = download(cam, link, hdmi, f"edge-{tag}-{slug(t['label'])}")
-        files[tag] = path.name
-        afreg_run.ready_to_hold(cam, at, run, turned)
-        cs[tag] = camset.read(path)
+    def check(tag):
+        return off_of([c for c in changes_of(camset.diff(w.cs["base"], w.cs[tag])) if c["key"] not in skip])
 
-    def pushed(moves):
-        line["moved"] = True
-        frames.setdefault("pushes", []).append(push(cam, moves, turned))
+    def back_m(regs, m):
+        """The way back's measure: the run's own (Standard), or Standard's step on a Large run's groups and edges."""
+        if not large:
+            return m
+        got = standard_m(edge_records(m, index), xy) if xy else None
+        if got is None:
+            raise Failed(f"no Standard step for {t['label']} (the hand tables' FRAME_STEPS, the records' X and Y): the "
+                         "way back cannot be counted")
+        return got
 
-    def single(moves):
-        line["moved"] = True
-        sent, done = [], []
-        press_moves(cam, moves, sent, done, turned, run)
-        if done != [list(x) for x in moves]:
-            raise Failed(f"{say_moves(moves)} off the edge went out as {say_moves(done)}: the step cannot be read")
-
-    def values(tags, names=None):
-        """{tag: {key: value}} of every scalar record two of `tags` in a row differ in (`names`: the tags they stand
-        for in edge_measure)."""
-        keys = []
-        for x, y in zip(tags, tags[1:], strict=False):
-            keys += [c.key for c in camset.diff(cs[x], cs[y]) if c.key not in keys
-                     and not isinstance(c.before, list) and not isinstance(c.after, list)]
-        return {(names or tags)[i]: {k: held_value(cs[tag], k) for k in keys} for i, tag in enumerate(tags)}
-
-    def way_back(cur_tag, regs, m, first):
-        """The way back from `cur_tag`'s place, checked; the line's "back"."""
-        cur, tries, presses_all = regs[cur_tag], 0, []
-        presses, off = edge_way_back(cur, regs["base"], m, first)
-        while not off:
-            if presses:
-                pushed(presses)
-                presses_all.append(presses)
-            tries += 1
-            tag = f"back{sum(1 for x in files if x.startswith('back')) + 1}"   # numbered across the area
-            reg(tag)
-            diff = changes_of(camset.diff(cs["base"], cs[tag]))
-            line["back"] = {"same": not diff, "off": off_of(diff), "tries": tries, "presses": presses_all}
-            if not diff or tries > EDGE_TRIES:
-                break
-            cur = {k: held_value(cs[tag], k) for k in regs["base"]}
-            presses, off = edge_way_back(cur, regs["base"], m, False)
-            if not presses and not off:
-                break                               # the measured records are back; the others are said in "off"
-        if off:
-            line["back"] = {"same": False, "off": [{"key": k, "delta": d} for k, d in off.items()], "tries": tries,
-                            "presses": presses_all}
-        if not line["back"]["same"]:
-            line["failed"] = (f"the frame is not where it began after {tries} registration{'s' if tries != 1 else ''} "
-                              f"on the way back" + (": no press reaches its start" if off else ""))
+    def to_standard():
+        if large and w.amt["now"] != "Standard":
+            w.set_amt("Standard")
 
     try:
+        if large and w.amt["now"] != "Large":
+            w.set_amt("Large")
         got = afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, turned)
-        frames.update(chosen=got["chosen_frame"], after_ok=got["row_frame"])
+        w.frames.update(chosen=got["chosen_frame"], after_ok=got["row_frame"])
         to_shooting(link, hdmi, "the shooting screen with the area chosen")
-        reg("base")
-        pushed([["ms_left", n], ["ms_up", n]])
-        reg("low")
-        single([["ms_right", 1]])
-        reg("snap-h")
-        single([["ms_right", 1], ["ms_down", 1]])
-        reg("step-h")
-        single([["ms_down", 1]])
-        pushed([["ms_right", n]])
-        reg("step-v")
-        pushed([["ms_down", n]])
-        reg("high")
-        regs = values(list(EDGE_TAGS))
+        w.reg("base")
+        want = amt_code(index, amt) if amt else None
+        if want and held_value(w.cs["base"], want[0]) != want[1]:
+            raise Failed(f"the start's registration does not hold {AMT_ROW} {amt}'s code in {want[0]}: nothing was "
+                         "measured")
+        w.pushed([["ms_left", n], ["ms_up", n]])
+        w.reg("low")
+        w.single([["ms_right", 1]])
+        w.reg("snap-h")
+        w.single([["ms_right", 1], ["ms_down", 1]])
+        w.reg("step-h")
+        w.single([["ms_down", 1]])
+        w.pushed([["ms_right", n]])
+        w.reg("step-v")
+        w.pushed([["ms_down", n]])
+        w.reg("high")
+        regs = w.values(list(EDGE_TAGS))
         m = edge_measure(regs, n)
-        line.update(values=regs, odd=m["odd"], edges=edge_records(m, index))
-        way_back("high", regs, m, True)
+        w.line.update(values=regs, odd=m["odd"], edges=edge_records(m, index))
+        mb = back_m(regs, m)
+        to_standard()
+        w.way_back(regs["high"], regs["base"], mb, check, list(regs["base"]))
     except Failed as e:
-        line["failed"] = str(e)
+        w.line["failed"] = str(e)
         close_screen(cam, link)
-        if line["moved"] and not (line.get("back") or {}).get("same"):
-            line.pop("back", None)
+        if w.line["moved"] and not (w.line.get("back") or {}).get("same"):
+            w.line.pop("back", None)
             try:
                 to_shooting(link, hdmi, "the shooting screen to bring the frame back")
-                known = all(x in cs for x in EDGE_TAGS[:5])
-                pushed([["ms_left", n], ["ms_up", n]])
-                reg("again-low")
-                if known:
-                    regs = values(["base", "low", "snap-h", "step-h", "step-v", "again-low"])
-                    regs["high"] = regs["step-v"]       # the far corner is not needed to come back
-                    way_back("again-low", regs, edge_measure(regs, n), True)
-                else:
-                    single([["ms_right", 1]])
-                    reg("again-snap-h")
-                    single([["ms_right", 1], ["ms_down", 1]])
-                    reg("again-step-h")
-                    single([["ms_down", 1]])
-                    reg("again-step-v")
-                    regs = values(["base", "again-low", "again-snap-h", "again-step-h", "again-step-v"],
-                                  ["base", "low", "snap-h", "step-h", "step-v"])
-                    regs["high"] = regs["step-v"]
-                    way_back("step-v", regs, edge_measure(regs, n), False)
-                line["failed"] = str(e)             # the area's own failure, the frame brought back or not
+                low = ["low", "snap-h", "step-h", "step-v"]
+                if not all(x in w.cs for x in low):
+                    w.pushed([["ms_left", n], ["ms_up", n]])
+                    w.reg("again-low")
+                    w.single([["ms_right", 1]])
+                    w.reg("again-snap-h")
+                    w.single([["ms_right", 1], ["ms_down", 1]])
+                    w.reg("again-step-h")
+                    w.single([["ms_down", 1]])
+                    w.reg("again-step-v")
+                    low = [f"again-{x}" for x in low]
+                to_standard()
+                w.pushed([["ms_right", n], ["ms_down", n]])
+                w.reg("again-high")
+                regs = w.values(["base", *low, "again-high"], list(EDGE_TAGS))
+                m = edge_measure(regs, n)
+                w.way_back(regs["high"], regs["base"], back_m(regs, m), check, list(regs["base"]))
+                w.line["failed"] = str(e)           # the area's own failure, the frame brought back or not
             except Failed as e2:
-                line["recovery_failed"] = str(e2)
+                w.line["recovery_failed"] = str(e2)
                 close_screen(cam, link)
-    return line
+    return w.line
 
 
-def edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned):
+def edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned, amt=None):
     """--edges's session body after the setup: each area of the plan (edge_area), its line written to edges.jsonl and
     summed up as it comes. An area whose frame is not known to be back ends the run; a failed area whose frame never
     moved, or came back, ends it as an area does in a framepos run (held vertically at once, else three in a row).
-    edges_summary.txt is written again after each area."""
+    edges_summary.txt is written again after each area. AF Frame Move Amt is the setup's `amt` at the start, followed
+    from area to area (a Large run's way back is made under Standard)."""
     from runner import write_text
     grip = getattr(a, "grip", None)
-    in_a_row = 0
+    in_a_row, amt_state = 0, {"now": amt}
     for t in todo:
         try:
             line = edge_area(s.cam, s.link, hdmi, run, cycle, model, labels, axes, t, routes[t["label"]], a, index,
-                             turned)
+                             turned, amt, amt_state)
         except BaseException:
             print(f"  {t['label']}: stopped with its frame perhaps moved: on the shooting screen with {ROW} = "
-                  f"{t['label']}, check its place by hand", flush=True)
+                  f"{t['label']}, check its place by hand, or bring it back with --put-back {run.dir.name}", flush=True)
             raise
         line.update(tag, setup=setup)
         jsonl.append(run.dir / "edges.jsonl", line)
@@ -1371,7 +1543,8 @@ def edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, 
         write_text(run.dir / "edges_summary.txt",
                    "\n".join(edge_summary_lines(jsonl.read(run.dir / "edges.jsonl"))) + "\n")
         if line["moved"] and not (line.get("back") or {}).get("same"):
-            print(f"the frame of {t['label']} is not known to be where it began: stopping", flush=True)
+            print(f"the frame of {t['label']} is not known to be where it began: stopping; --put-back {run.dir.name} "
+                  "brings it back where a press reaches its start", flush=True)
             break
         in_a_row = in_a_row + 1 if line.get("failed") else 0
         if line.get("failed") and grip in TURNED:
@@ -1379,6 +1552,124 @@ def edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, 
             break
         if in_a_row == 3:
             print("three areas in a row failed: stopping", flush=True)
+            break
+
+
+# ---------------------------------------------------------------- --put-back: a frame an edges run left behind
+
+def left_behind(lines: list) -> list:
+    """The lines of an edges run whose frame moved and is not back, the last line of each area in each context."""
+    last = {}
+    for ln in lines:
+        if ln.get("area"):
+            last.pop((ln["area"], ln.get("context")), None)
+            last[(ln["area"], ln.get("context"))] = ln
+    return [ln for ln in last.values() if ln.get("moved") and not (ln.get("back") or {}).get("same")]
+
+
+def put_back_plan(line: dict, table=None) -> tuple:
+    """(Standard's measure for the way back, why not): what --put-back needs of an edges line to bring its frame back:
+    the start's registration of the measured records ("values" "base", "edges") and Standard's step for its area
+    (standard_step, standard_m). The way back's presses are counted from the far corner once it is registered."""
+    if not line.get("edges") or not (line.get("values") or {}).get("base"):
+        return None, "the run measured no edges for it, so which records hold its place is not known"
+    xy = standard_step(line["area"], table)
+    if xy is None:
+        return None, f"the hand tables' FRAME_STEPS give no Standard step for {line['area']}"
+    m = standard_m(line["edges"], xy)
+    if m is None:
+        return None, "a measured record's name gives no X or Y, so Standard's step cannot be put on it"
+    far = (line["values"].get("high") or {})
+    _, off = edge_way_back(far, line["values"]["base"], m) if far else ({}, {})
+    if off:
+        return None, ("no press reaches its start from the far corner ("
+                      + "; ".join(f"{shown_key(k)} {d:+d}" for k, d in off.items()) + ")")
+    return m, ""
+
+
+def put_back_area(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple, a, index: dict, turned,
+                  src: dict, m: dict) -> dict:
+    """One area of --put-back under Standard (the setup's): chosen; slot 1 registered where its frame is now (now); if
+    the measured records already hold the start's, nothing pressed; else pushed Right and Down to the far corner
+    (high), registered, and brought back by edge_way_back from there (Walk.way_back), each landing registered and
+    checked on the measured records alone against the start's registration in the edges run `src` (the start's file
+    holds that run's AF Frame Move Amt, this one's Standard). A failure leaves the frame where it is: a run again starts
+    from wherever that is."""
+    from prove_run import Failed, to_shooting
+    from runner import close_screen
+    w = Walk(cam, link, hdmi, run, cycle, model, a, turned, t, "put", {"now": "Standard"})
+    keys = [rec["key"] for rec in src["edges"]]
+    base = {k: src["values"]["base"][k] for k in keys}
+    w.line.update(source={"run": a.put_back, "start": src["files"].get("base"), "context": src.get("context")})
+
+    def check(tag):
+        return [{"key": k, "delta": v - base[k]} for k, v in w.held(tag, keys).items() if v != base[k]]
+    try:
+        got = afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, turned)
+        w.frames.update(chosen=got["chosen_frame"], after_ok=got["row_frame"])
+        to_shooting(link, hdmi, "the shooting screen with the area chosen")
+        w.reg("now")
+        now = w.held("now", keys)
+        w.line["values"] = {"now": now}
+        if not check("now"):
+            w.line["back"] = {"same": True, "off": [], "tries": 0, "presses": [], "under": "Standard", "already": True}
+            return w.line
+        w.pushed([["ms_right", a.edge_presses], ["ms_down", a.edge_presses]])
+        w.reg("high")
+        high = w.line["values"]["high"] = w.held("high", keys)
+        far = [{"key": k, "delta": high[k] - src["values"]["high"][k]} for k in keys
+               if src["values"].get("high", {}).get(k) is not None and high[k] != src["values"]["high"][k]]
+        if far:
+            w.line["far_off"] = far                 # the far corner reads otherwise than the edges run's
+        w.way_back(high, base, m, check, keys)
+    except Failed as e:
+        w.line["failed"] = str(e)
+        close_screen(cam, link)
+    return w.line
+
+
+def put_back_summary_of(line: dict) -> list:
+    """A --put-back line in words: put back or not, the difference by key where not; never a place."""
+    head = f"{line['area']} (code {line.get('code')}" + (f"; {line['context']})" if line.get("context") else ")")
+    src = line.get("source") or {}
+    out = [f"{head}: to its start in {src.get('run')} ({src.get('start')})"]
+    if line.get("far_off"):
+        out.append("    the far corner read otherwise than the edges run's: "
+                   + "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" for x in line["far_off"]))
+    if line.get("failed"):
+        out.append(f"    failed: {line['failed']}")
+    back = line.get("back")
+    if back and back["same"]:
+        out.append("    already where it began: nothing pressed" if back.get("already") else
+                   "    put back under Standard: the registration after it matched the start's on the measured records")
+    elif back:
+        off = "; ".join(f"{shown_key(x['key'])} {x['delta']:+d}" for x in back.get("off") or []) or "its place unknown"
+        out.append(f"    NOT PUT BACK: {off} off: on the shooting screen with {ROW} = {line['area']}, move it back by "
+                   "hand")
+    elif line.get("moved"):
+        out.append(f"    ITS FRAME MAY BE MOVED: run --put-back {src.get('run')} again, or move it back by hand")
+    else:
+        out.append("    its frame was not moved")
+    return out
+
+
+def put_back_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned):
+    """--put-back's session body after the setup: each area put back (put_back_area), its line written to
+    put_back.jsonl and said; an area not put back ends the run."""
+    for t in todo:
+        src, m = a.put_back_lines[t["label"]]
+        try:
+            line = put_back_area(s.cam, s.link, hdmi, run, cycle, model, labels, axes, t, routes[t["label"]], a,
+                                 index, turned, src, m)
+        except BaseException:
+            print(f"  {t['label']}: stopped with its frame perhaps moved: run --put-back {a.put_back} again", flush=True)
+            raise
+        line.update(tag, setup=setup)
+        jsonl.append(run.dir / "put_back.jsonl", line)
+        lines.append(line)
+        print("\n".join(put_back_summary_of(line)), flush=True)
+        if not (line.get("back") or {}).get("same"):
+            print(f"{t['label']} is not put back: stopping", flush=True)
             break
 
 
@@ -1421,13 +1712,17 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
         if out.exists():
             summary = summary_lines(jsonl.read(out))
             write_text(run.dir / "framepos_summary.txt", "\n".join(summary) + "\n")
-        if getattr(a, "edges", False):
+        if getattr(a, "put_back", None):
+            found = sum(1 for ln in lines if (ln.get("back") or {}).get("same"))
+            print(f"frames put back where {a.put_back} began them: {found} of {len(todo)} "
+                  f"({paths.shown(run.dir / 'put_back.jsonl')})", flush=True)
+        elif getattr(a, "edges", False):
             found = sum(1 for ln in lines if ln.get("edges") and not ln.get("failed") and ln["back"]["same"])
             print(f"areas whose edges were measured, their frame back where it began: {found} of {len(todo)} "
                   f"(summary: {paths.shown(run.dir / 'edges_summary.txt')})", flush=True)
         else:
             found = sum(1 for ln in lines if ln.get("changed"))
-        if todo and not getattr(a, "edges", False):
+        if todo and not getattr(a, "edges", False) and not getattr(a, "put_back", None):
             print(f"areas whose frame's place showed in the registrations: {found} of {len(todo)} "
                   f"(summary: {paths.shown(run.dir / 'framepos_summary.txt')})", flush=True)
         sweeps = [ln for ln in lines if ln.get("sweep")]
@@ -1467,10 +1762,13 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
             tg["context"] = context_of(getattr(a, "context", None), amt, mv, grip, a.vertical)
             if not turned:                          # Off: every screen read level
                 tg.pop("upright", None)
-    edges = getattr(a, "edges", False)
-    setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip, circ=edges)
+    edges, putting = getattr(a, "edges", False), bool(getattr(a, "put_back", None))
+    setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip, circ=edges or putting)
+    if putting:
+        put_back_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned)
+        return
     if edges:
-        edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned)
+        edge_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned, amt)
         return
     if a.zone_grid:
         zone_grid(s, a, run, hdmi, cycle, model, labels, axes, routes, index, out, zone_tag, lines, setup)
@@ -1545,6 +1843,74 @@ def zone_grid(s, a, run, hdmi, cycle, model, labels, axes, routes, index, out, t
     lines.append(line)
 
 
+def put_back_main(a) -> int:
+    """--put-back RUN: the frames RUN's edges.jsonl leaves out of place (left_behind), each with what its line gives to
+    bring it back (put_back_plan; an area it cannot is said and left out), held as RUN held the camera (its lines'
+    "grip"), the plan printed; with the owner's word for Camera Set. Memory, the session (prove: the setup puts Switch
+    V/H AF Area as the grip has it, Circ. of Focus Point and AF Frame Move Amt Standard; put_back_loop)."""
+    for flag, given in (("--edges", a.edges), ("--zone-grid", a.zone_grid), ("--moves", a.moves is not None),
+                        ("--areas", a.areas is not None)):
+        if given:
+            sys.exit(f"framepos_run: --put-back with {flag}: a put-back brings back the frames {a.put_back}'s lines name")
+    if a.frame_move_amt not in (None, "Standard"):
+        sys.exit(f"framepos_run: --put-back is made under {AMT_ROW} Standard, where the way back is proved")
+    src = left_behind(jsonl.read(paths.run_root() / a.put_back / "edges.jsonl"))
+    if not src:
+        print(f"no frame of {a.put_back} is left out of place: its edges.jsonl says each came back, or names none")
+        return 0
+    grips = {ln.get("grip") for ln in src}
+    if len(grips) > 1 or (a.grip and a.grip not in grips):
+        sys.exit(f"framepos_run: --put-back {a.put_back}: its lines were made held {sorted(map(str, grips))}"
+                 + (f", not --grip {a.grip}" if a.grip else "") + ": one way at a time, the run's own")
+    a.grip = grips.pop()
+    doc = definitions.with_evidence(read_json(definitions.active()), definitions.active())
+    index = {s["key"]: s for s in doc.get("settings") or []}
+    todo, a.put_back_lines = [], {}
+    for ln in src:
+        m, why = put_back_plan(ln)
+        if m is None:
+            print(f"  {ln['area']}: not put back: {why}; move it back by hand", flush=True)
+            continue
+        t = plan(doc, ln["area"])[0]
+        todo.append(t)
+        a.put_back_lines[t["label"]] = (ln, m)
+    want, stops = amt_code(index, "Standard"), setting_code(index, [CIRC_ROW], CIRC_OFF)
+    if want is None or stops is None:
+        sys.exit(f"framepos_run: --put-back: the definition gives no code for {AMT_ROW} = Standard or {CIRC_ROW} = "
+                 f"{CIRC_OFF}, so the run could not check the camera took them")
+    context = context_of(a.context, "Standard", None, a.grip)
+    print(f"{len(todo)} frames {a.put_back} left out of place, to be put back ({context!r}; run {a.run}):", flush=True)
+    for t in todo:
+        ln = a.put_back_lines[t["label"]][0]
+        print(f"  {t['label']} (code {t['code']}): to its start registration in {a.put_back} "
+              f"({ln['files'].get('base')}), measured under {ln.get('context')!r}", flush=True)
+    tracking = any(t["tracking"] for t in todo)
+    focus = a.focus_mode == "menu" or (a.focus_mode == "auto" and tracking)
+    drive = a.drive_mode == "menu" or (a.drive_mode == "auto" and tracking)
+    sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, "Standard", a.grip, True)]
+    print(f"set through the menu first: {'; '.join(sets)}; the start file put back at the end puts them back (a "
+          "frame's place is in no settings file: the restore leaves it where it is put)", flush=True)
+    print(f"the download after the setup must hold Standard's code {want[1]} in {want[0]} and {CIRC_OFF}'s code "
+          f"{stops[1]} in {stops[0]}, or the run stops before any area", flush=True)
+    if afreg_run.vertical_plan(a.grip, index):
+        print(afreg_run.vertical_plan(a.grip, index), flush=True)
+    print(f"each area: slot 1 registered ({MEMORY_ROW}) where its frame is now; at its start already, nothing pressed; "
+          f"else pushed {a.edge_presses} Right and Down to the far corner, registered, brought back by presses counted "
+          "from there in Standard's step (the hand tables' FRAME_STEPS) and registered, which must match the start's "
+          f"registration on the measured records, up to {EDGE_TRIES} more to make good a press the camera lost; a start "
+          "no press reaches is said, nothing more pressed, and the run stops there", flush=True)
+    if a.list or not todo:
+        return 0
+    if not memory_allowed(a.allow):
+        sys.exit(f"registering slot 1 opens {MEMORY_ROW}, a never-open action row (camkit.safety): it is opened only "
+                 f"with the owner's word, --allow {MEMORY_ROW!r}")
+    others = [x for x in a.allow if not memory_allowed([x])]
+    if others:
+        sys.exit(f"framepos_run: --allow names {others}: this run opens no never-open row but {MEMORY_ROW}")
+    a.zone_target = None
+    return prove(a, doc, todo, focus, drive, context, allowed_or_exit(a.allow), amt="Standard")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--areas", default=None,
@@ -1571,6 +1937,10 @@ def main(argv=None) -> int:
                          "every movable area but the zones unless --areas names some")
     ap.add_argument("--edge-presses", type=int, default=EDGE_PRESSES,
                     help=f"--edges: the presses a push toward an edge takes, ten to ninety-nine (default {EDGE_PRESSES})")
+    ap.add_argument("--put-back", metavar="RUN", default=None,
+                    help="bring back each frame an --edges run left out of place (its edges.jsonl says it moved and is "
+                         "not back) to that run's start registration, under AF Frame Move Amt Standard through the far "
+                         "corner, held as that run held the camera; checked on the measured records")
     ap.add_argument("--moves", default=None,
                     help="the presses that move a point or box area's frame in place of Left 3, Up 2: a direction (Left, "
                          "Right, Up, Down) and one to nine presses, comma-separated in the order taken ('Right 1', "
@@ -1592,7 +1962,7 @@ def main(argv=None) -> int:
     add_info_ok_argument(ap)    # Mode Dial Control Set's note before its table (afreg_run.focus_dial_by_menu: pass_note)
     a = ap.parse_args(argv)
     notes_named_or_exit(a.info_ok, [afreg_run.DIAL_ROW])
-    a.run = a.run or ("kit2_framepos_edges" if a.edges else "kit2_framepos")
+    a.run = a.run or ("kit2_framepos_put_back" if a.put_back else "kit2_framepos_edges" if a.edges else "kit2_framepos")
     if a.summary:
         got = edge_summary_lines(jsonl.read(paths.run_root() / a.run / "edges.jsonl")) if a.edges else \
             summary_lines(jsonl.read(paths.run_root() / a.run / "framepos.jsonl"))
@@ -1603,8 +1973,13 @@ def main(argv=None) -> int:
                              ("--no-check-back", not a.check_back, "an edge measure always checks its frame is back")):
         if a.edges and given:
             sys.exit(f"framepos_run: --edges with {flag}: {why}")
-    if a.edges and not 10 <= a.edge_presses <= 99:
+    if (a.edges or a.put_back) and not 10 <= a.edge_presses <= 99:
         sys.exit(f"framepos_run: --edge-presses {a.edge_presses}: a push takes ten to ninety-nine presses")
+    if a.edges and a.frame_move_amt == "leave":
+        sys.exit("framepos_run: --edges with --frame-move-amt leave: the way back is made under Standard, and the run "
+                 "must know which it measures under: Standard or Large")
+    if a.put_back:
+        return put_back_main(a)
     if a.zone_grid and a.grip:
         sys.exit("framepos_run: --zone-grid with --grip: the nine-place sweep is made level; with --grip use --areas Zone")
     if a.zone_grid and not ZONE:
@@ -1635,6 +2010,12 @@ def main(argv=None) -> int:
     if a.edges and stops is None:
         sys.exit(f"framepos_run: --edges: the definition has no {CIRC_ROW} record proved by its row whose values name "
                  f"{CIRC_OFF!r}, so the run could not check that a frame stops at its edge rather than wrapping round")
+    if a.edges and amt == "Large":
+        lacking = [t["label"] for t in todo if standard_step(t["label"]) is None]
+        if lacking or amt_code(index, "Standard") is None:
+            sys.exit(f"framepos_run: --edges under Large makes each way back under Standard, counted in Standard's step: "
+                     f"the hand tables' FRAME_STEPS give none for {lacking}" if lacking else
+                     f"framepos_run: --edges under Large: the definition gives no code for {AMT_ROW} = Standard")
     context = context_of(a.context, amt, moves, a.grip)
     if a.edges:
         print(f"{len(todo)} areas' edges ({context!r}; run {a.run}):", flush=True)
@@ -1681,6 +2062,10 @@ def main(argv=None) -> int:
               "nine --zone-grid proves", flush=True)
         print(f"about {per} minutes an area ({REG_S} s a registration, {PUSHED_S} s a pushed press, not yet timed on "
               f"the camera), {total} minutes for these {len(todo)}", flush=True)
+        if amt == "Large":
+            print(f"under Large each way back is made under Standard: {AMT_ROW} = Standard through its row once the far "
+                  "corner is registered, the presses counted in Standard's step (the hand tables' FRAME_STEPS), and "
+                  "Large again before the next area, whose start must read Large", flush=True)
     print(f"each area: slot 1 registered ({MEMORY_ROW}) "
           + ("at each step above" if a.edges else "before and after the moves"
              + (", and after the put-back, to check it" if a.check_back else ""))

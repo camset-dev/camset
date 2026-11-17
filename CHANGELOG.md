@@ -222,6 +222,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   exactly, each record's edges and step per press read from slot 1's registrations, with Circ. of Focus Point set to
   Does Not Circulate and AF Frame Move Amt to Standard first. A frame whose start no press reaches is said with the
   difference and the run stops.
+- Under `--frame-move-amt Large`, `framepos_run.py --edges` now brings each frame back under Standard, where a press
+  that would cross the centre stops on it as the way back counts on, and Large crosses it; the Large way back left a
+  frame out of place. `--put-back RUN` brings back each frame an edges run left out, through the far corner under
+  Standard, checked by a registration.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
