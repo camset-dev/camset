@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand evidence (private/evidence/<model>_fw<firmware>.hand.json)",
- "description": "How, when, in which run and from which state each fact of a camera's hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json) was proved: the mapper's own file, private whole, never published (docs/decisions/0016). The ILCE-1M2 firmware 4.00's own pass puts it back into the tables as kit/writer/hand_tables.py reads them (kit/writer/hand_evidence.py put_back), by table name, key and index: it only adds to the tables' entries, never makes one, and never replaces a public value (a note's evidence goes after the public note, as \"note+\"). Every other camera's plain pass never puts it into the tables: it takes the file only as this schema allows (evidence fields only, table by table; every part on an entry the tables hold; a NOT_OFFERED part with its \"$key\"), and writes each piece only where the definition keeps evidence, never into a public field; kit/writer/hand_evidence.py --check says, read only, which parts it would refuse. kit/schema_update.py --write, for any camera, refuses to write a definition whose hand tables hold FRAME_PROOFS, UNPROVED, NOT_OFFERED, PICKER_LISTS or KEEPS_APART entries while this file is not there; a mapper who proved none of those entries by hand says so with this file holding no evidence (\"tables\": {}).",
+ "description": "How, when, in which run and from which state each fact of a camera's hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json) was proved: the mapper's own file, private whole, never published (docs/decisions/0016). The ILCE-1M2 firmware 4.00's own pass puts it back into the tables as kit/writer/hand_tables.py reads them (kit/writer/hand_evidence.py put_back), by table name, key and index: it only adds to the tables' entries, never makes one, and never replaces a public value (a note's evidence goes after the public note, as \"note+\"). Every other camera's plain pass never puts it into the tables: it takes the file only as this schema allows (evidence fields only, table by table; every part on an entry the tables hold; a NOT_OFFERED part with its \"$key\"), and writes each piece only where the definition keeps evidence, never into a public field; kit/writer/hand_evidence.py --check says, read only, which parts it would refuse. kit/schema_update.py --write, for any camera, refuses to write a definition whose hand tables hold FRAME_PROOFS, UNPROVED, NOT_OFFERED, PICKER_LISTS, KEEPS_APART or FRAME_TRAVEL entries while this file is not there; a mapper who proved none of those entries by hand says so with this file holding no evidence (\"tables\": {}).",
  "type": "object",
  "required": [
   "hand_format",
@@ -198,6 +198,23 @@
          "type": "string",
          "description": "What showed the value the family took when the switch left its apart values: the runs and the day."
         }
+       }
+      }
+     }
+    },
+    "FRAME_TRAVEL": {
+     "type": "object",
+     "description": "What measured each focus frame's travel (FRAME_TRAVEL), by the entry's name: its runs, day and the states the camera was held and set in. It reaches no field of the definition, but without it the entry is not written.",
+     "propertyNames": {
+      "minLength": 1
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "evidence": {
+        "type": "string",
+        "description": "What measured the entry: the runs, their day and what each showed."
        }
       }
      }

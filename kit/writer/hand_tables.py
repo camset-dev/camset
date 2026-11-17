@@ -7,7 +7,8 @@ each table under its name: records whose name or note the camera proved wrong (R
 write, found by hand (NEW_RECORDS, FILTER_FLAGS, NEW_LIKE, FRAME_PROOFS), value names no proof can give (CAROUSEL,
 VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKER_LISTS), the values the menus never
 offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that keep a family's copies apart
-(KEEPS_APART), why a record cannot be proved (UNPROVED), and the label fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
+(KEEPS_APART), how far each focus frame travels (FRAME_TRAVEL), why a record cannot be proved (UNPROVED), and the label
+fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
 load() (writer/hand_evidence.py). A camera with no file has every table empty.
@@ -46,7 +47,8 @@ from . import hand_evidence
 TABLES = {
     "RECORD_FIXES": "entries", "FILTER_FLAGS": "entries", "NEW_RECORDS": "new_records", "NEW_LIKE": "new_like",
     "NEW_WHOLE_LABELS": "set", "NEW_CHECK_NAMES": "words", "LATE_COPY": "record_ids", "ZONE": "values",
-    "FRAME_STEPS": "steps", "FRAME_PROOFS": "entries", "CAROUSEL": "rows", "VALUE_FIXES": "rows", "PP7_VALUES": "rows",
+    "FRAME_STEPS": "steps", "FRAME_TRAVEL": "frame_travel", "FRAME_PROOFS": "entries", "CAROUSEL": "rows",
+    "VALUE_FIXES": "rows", "PP7_VALUES": "rows",
     "KEEP_LABELS": "set", "EV_DOWN_FROM_20": "set", "HOLD_TABLES": "entries", "HOLD_BRACKET_COPIES": "words",
     "ISO_TABLE": "text", "LABEL_FIXES": "words", "GROUP_NAMES": "words", "MY_MENU_ROW": "text",
     "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "PICKER_LISTS": "picker_lists",
@@ -58,7 +60,7 @@ OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
-         "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict}
+         "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "frame_travel": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
@@ -251,6 +253,53 @@ def _row(r, types_: tuple, where: str, words: str) -> list:
     return r
 
 
+def _listed(x, where: str) -> list:
+    """A list with something in it, as it is."""
+    if not _need(x, list, where):
+        raise _Shape(f"{where} lists nothing")
+    return x
+
+
+def _fields(x, names: tuple, where: str) -> dict:
+    """An object holding each of `names`, as it is."""
+    for f in names:
+        if f not in _need(x, dict, where):
+            raise _Shape(f"{where} has no {f!r}")
+    return x
+
+
+def _areas(x, where: str) -> list:
+    """Areas: some names, none empty, none twice."""
+    for i, a in enumerate(_listed(x, where)):
+        if not _need(a, str, f"{where}[{i}]").strip():
+            raise _Shape(f"{where}[{i}] is empty")
+    _unique(x)
+    return x
+
+
+def _span(x, where: str) -> list:
+    """[lowest, highest], two whole numbers, the second not below the first."""
+    _row(x, (int, int), where, "[lowest, highest] (two whole numbers)")
+    if x[1] < x[0]:
+        raise _Shape(f"{where} is {x!r}: its highest is below its lowest")
+    return x
+
+
+def _pair(p, where: str, words: str = "[X record, Y record] (two keys)") -> list:
+    """A pair of two different record keys, as it is."""
+    _row(p, (str, str), where, words)
+    if p[0] == p[1]:
+        raise _Shape(f"{where} names {p[0]!r} twice")
+    return p
+
+
+def _pairs(x, where: str) -> list:
+    """Some [X record, Y record] pairs (_pair)."""
+    for i, p in enumerate(_listed(x, where)):
+        _pair(p, f"{where}[{i}]")
+    return x
+
+
 def _pattern(text, where: str) -> re.Pattern:
     """`text` compiled as the writer runs it (Python's re); _Shape, saying where, when it does not compile."""
     try:
@@ -388,6 +437,40 @@ def _shaped(name: str, kind: str, raw):
                 if "untick_sets" in e:
                     _need(e["untick_sets"], int, f"{where}'s 'untick_sets'")
             _unique(entries, lambda e: e["setting"])
+        return raw
+    if kind == "frame_travel":
+        # a kind of focus frame, by a name: measured area by area ({places, limits}) or boxes one rule bounds ({inside,
+        # boxes[, sizes_tried]}), the fields writer/frames.py reads, each area in one limit of its entry at most
+        for name, e in _need(raw, dict, "the table").items():
+            if not name.strip():
+                raise _Shape("an entry has no name")
+            where = repr(name)
+            has = set(_need(e, dict, where))
+            if {"places", "limits"} <= has and not {"inside", "boxes", "sizes_tried"} & has:
+                _pairs(e["places"], f"{where}'s places")
+                for i, lim in enumerate(_listed(e["limits"], f"{where}'s limits")):
+                    _fields(lim, ("areas", "x", "y"), f"{where}'s limits[{i}]")
+                    _areas(lim["areas"], f"{where}'s limits[{i}]'s areas")
+                    for f in ("x", "y"):
+                        _span(lim[f], f"{where}'s limits[{i}]'s {f}")
+                _unique(a for lim in e["limits"] for a in lim["areas"])
+            elif {"inside", "boxes"} <= has and not {"places", "limits"} & has:
+                _fields(e["inside"], ("x", "y"), f"{where}'s inside")
+                for f in ("x", "y"):
+                    _span(e["inside"][f], f"{where}'s inside's {f}")
+                if "sizes_tried" in e:
+                    _fields(e["sizes_tried"], ("x", "y"), f"{where}'s sizes_tried")
+                    for f in ("x", "y"):
+                        for j, v in enumerate(_listed(e["sizes_tried"][f], f"{where}'s sizes_tried's {f}")):
+                            _need(v, int, f"{where}'s sizes_tried's {f}[{j}]")
+                for i, box in enumerate(_listed(e["boxes"], f"{where}'s boxes")):
+                    _fields(box, ("areas", "size", "places"), f"{where}'s boxes[{i}]")
+                    _areas(box["areas"], f"{where}'s boxes[{i}]'s areas")
+                    _pair(box["size"], f"{where}'s boxes[{i}]'s size", "[width record, height record] (two keys)")
+                    _pairs(box["places"], f"{where}'s boxes[{i}]'s places")
+            else:
+                raise _Shape(f"{where} is neither a frame measured area by area (places and limits) nor boxes one rule "
+                             "bounds (inside and boxes, and sizes_tried where known)")
         return raw
     if kind == "unproved":
         out = {}

@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, how far each focus frame can travel, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, FRAME_TRAVEL, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py) and refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -137,6 +137,17 @@
      }
     ]
    }
+  },
+  "FRAME_TRAVEL": {
+   "type": "object",
+   "propertyNames": {
+    "minLength": 1,
+    "pattern": "\\S"
+   },
+   "additionalProperties": {
+    "$ref": "#/$defs/frame_travel"
+   },
+   "description": "How far each movable focus frame can travel, by a name for each kind of frame (\"Spot\", \"Custom\"): where the camera stops the frame's centre, the records that hold that centre in each place the camera keeps one, and the Focus Area options each limit belongs to, named as the definition's Focus Area values name them. Written as frame on each of those records in the definition (kit/writer/frames.py), only where the hand evidence shows what measured the entry (its \"evidence\": how it was measured stays private, schemas/hand-evidence.schema.json); an entry that cannot take effect (a record the definition lacks or that names values, a limit outside a record's range, an area no setting of the definition names, a record two entries place differently) is said, \"not applied\", and left out whole. A place not measured yet (a way of holding the camera not tried) is left out, so its records carry no frame."
   },
   "FRAME_PROOFS": {
    "type": "object",
@@ -687,6 +698,216 @@
      "description": "What the camera set the family's setting and each of its copies to when the switch was changed from a value in apart to one that is not (the box unticked), in the states the proof tried: one of the setting's values and each copy's. Absent where that was not proved; written only where the hand evidence shows it (its \"untick\")."
     }
    }
+  },
+  "frame_travel": {
+   "type": "object",
+   "additionalProperties": false,
+   "properties": {
+    "places": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_pair"
+     },
+     "description": "A frame measured area by area: the [X, Y] record pairs that hold its centre, a pair for each place the camera keeps it in (in use, level, a grip's copy)."
+    },
+    "limits": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_limit"
+     },
+     "description": "With places: where the frame's centre stops, by area, each Focus Area option in one entry at most (areas whose limits are the same share one)."
+    },
+    "inside": {
+     "$ref": "#/$defs/frame_bounds",
+     "description": "Boxes whose size the file holds: the camera keeps the whole box, centred on its place, inside these bounds, so its centre stops half the box's width (height) inside them."
+    },
+    "sizes_tried": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "x",
+      "y"
+     ],
+     "properties": {
+      "x": {
+       "$ref": "#/$defs/frame_sizes"
+      },
+      "y": {
+       "$ref": "#/$defs/frame_sizes"
+      }
+     },
+     "description": "With inside: the widths (x) and heights (y) the boxes stood at when the rule was proved; at any other size it is not tried. Left out where that is not known."
+    },
+    "boxes": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_box"
+     },
+     "description": "With inside: each box the rule holds for, a box in use whichever it is among them."
+    }
+   },
+   "oneOf": [
+    {
+     "required": [
+      "places",
+      "limits"
+     ],
+     "not": {
+      "anyOf": [
+       {
+        "required": [
+         "inside"
+        ]
+       },
+       {
+        "required": [
+         "sizes_tried"
+        ]
+       },
+       {
+        "required": [
+         "boxes"
+        ]
+       }
+      ]
+     }
+    },
+    {
+     "required": [
+      "inside",
+      "boxes"
+     ],
+     "not": {
+      "anyOf": [
+       {
+        "required": [
+         "places"
+        ]
+       },
+       {
+        "required": [
+         "limits"
+        ]
+       }
+      ]
+     }
+    }
+   ],
+   "description": "One kind of focus frame, in one of two shapes: a frame whose limits were measured area by area (places and limits: the a1 II's spot sizes and Expand Spot, whose size no record holds), or boxes whose size the file holds, which one rule bounds (inside, boxes and, where known, sizes_tried: the a1 II's Custom boxes). A position is the frame's centre on the camera's grid (the a1 II's 640 x 480), as its records hold it; a press that would take the frame past a limit stops it there."
+  },
+  "frame_pair": {
+   "type": "array",
+   "minItems": 2,
+   "maxItems": 2,
+   "prefixItems": [
+    {
+     "$ref": "#/$defs/key"
+    },
+    {
+     "$ref": "#/$defs/key"
+    }
+   ],
+   "description": "[the X record, the Y record] (for a box's size: [its width's, its height's]), two records."
+  },
+  "frame_span": {
+   "type": "array",
+   "minItems": 2,
+   "maxItems": 2,
+   "items": {
+    "type": "integer"
+   },
+   "description": "[lowest, highest], both allowed."
+  },
+  "frame_bounds": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "x",
+    "y"
+   ],
+   "properties": {
+    "x": {
+     "$ref": "#/$defs/frame_span"
+    },
+    "y": {
+     "$ref": "#/$defs/frame_span"
+    }
+   },
+   "description": "{\"x\": [left, right], \"y\": [top, bottom]} on the camera's grid."
+  },
+  "frame_sizes": {
+   "type": "array",
+   "minItems": 1,
+   "uniqueItems": true,
+   "items": {
+    "type": "integer"
+   },
+   "description": "Sizes, as the size records hold them."
+  },
+  "frame_areas": {
+   "type": "array",
+   "minItems": 1,
+   "uniqueItems": true,
+   "items": {
+    "type": "string",
+    "minLength": 1
+   },
+   "description": "Focus Area options, each named as a setting of the definition names it among its values (\"Spot: M\", \"Tracking: Spot M\")."
+  },
+  "frame_limit": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "areas",
+    "x",
+    "y"
+   ],
+   "properties": {
+    "areas": {
+     "$ref": "#/$defs/frame_areas",
+     "description": "The areas these limits are for."
+    },
+    "x": {
+     "$ref": "#/$defs/frame_span",
+     "description": "The X the centre stops at, [left, right]."
+    },
+    "y": {
+     "$ref": "#/$defs/frame_span",
+     "description": "The Y the centre stops at, [top, bottom]."
+    }
+   },
+   "description": "Where a measured frame's centre stops, for some areas."
+  },
+  "frame_box": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "areas",
+    "size",
+    "places"
+   ],
+   "properties": {
+    "areas": {
+     "$ref": "#/$defs/frame_areas",
+     "description": "The areas that use the box."
+    },
+    "size": {
+     "$ref": "#/$defs/frame_pair",
+     "description": "The records that hold the box's size, [width, height], in each section the places are read in."
+    },
+    "places": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_pair"
+     },
+     "description": "The [X, Y] record pairs that hold the box's centre, a pair for each place the camera keeps it in."
+    }
+   },
+   "description": "A box the rule bounds: its areas, its size records and the records of its places."
   }
  }
 }

@@ -15,6 +15,7 @@ from runner import read_json
 
 from . import hand_evidence, hand_facts, hand_tables
 from .copies import with_copies, with_keeps_apart
+from .frames import with_frames
 from .fromdata import from_data, model_refused, say_stale, write_definition
 from .gate import gate, questions
 from .labels import clean
@@ -432,6 +433,10 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     # the switches that keep a family's copies apart (KEEPS_APART), on the copies just written
     if tables.KEEPS_APART or any("keeps_apart" in s for s in doc["settings"]):
         with_keeps_apart(doc, tables.KEEPS_APART, run.parent, (evidence or {}).get("KEEPS_APART"))
+    # how far each focus frame travels (FRAME_TRAVEL), on the records of its places; a definition whose table is emptied
+    # loses it
+    if tables.FRAME_TRAVEL or any("frame" in s for s in doc["settings"]):
+        with_frames(doc, tables.FRAME_TRAVEL, (evidence or {}).get("FRAME_TRAVEL"))
     without_observed(doc)
     doc = from_data(doc)
     print(f"{sum(1 for s in doc['settings'] if s.get('proved'))} of {len(doc['settings'])} settings proved; "

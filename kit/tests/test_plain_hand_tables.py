@@ -126,7 +126,9 @@ TABLES = {
         "global:0x01da": {"like": "global:0x01d8", "name": "Drive Mode (stills)",
                           "values": [[0, "Single Shooting"], [1, "Continuous"]], "note": "The stills copy."},
         "global:0x01dc": {"like": "global:0x01d8", "name": "Drive Mode (movie)",
-                          "values": [[0, "Single Shooting"], [1, "Continuous"]], "note": "The movie copy."}},
+                          "values": [[0, "Single Shooting"], [1, "Continuous"]], "note": "The movie copy."},
+        "global:0x006a": {"like": "global:0x01d8", "name": "A point's X", "values": [], "note": ""},
+        "global:0x006e": {"like": "global:0x01d8", "name": "A point's Y", "values": [], "note": ""}},
     "NEW_LIKE": {"global:0x0053": {"like": "global:0x01d8", "name": "Drive Mode (third)"}},
     "FRAME_PROOFS": {"global:0x0051": {"note": "What the flag holds.", "values": [[0, "Off"], [1, "On"]]}},
     "CAROUSEL": [["global:0x04d2", 2, "Middle"]],
@@ -138,6 +140,8 @@ TABLES = {
     "COPIES": {"global:0x01d8": ["global:0x01da", "global:0x01dc"]},
     "COPY_MODES": [["Stills"], ["Movie", "S&Q", "Time-lapse"]],
     "KEEPS_APART": {"global:0x0050": [{"setting": "global:0x01d8", "apart": [1], "untick_sets": 0}]},
+    "FRAME_TRAVEL": {"Point": {"places": [["global:0x006a", "global:0x006e"]],
+                               "limits": [{"areas": ["Single Shooting"], "x": [10, 200], "y": [20, 100]}]}},
     "UNPROVED": {"global:0x0052": ["state", None, "The camera keeps it while it works."]},
     "CONTEXT_WORDS": {", as set\\]": "]"},
 }
@@ -149,7 +153,8 @@ EVIDENCE = {
     "UNPROVED": {"global:0x0052": {"1": "2026-11-12"}},
     "NOT_OFFERED": {"0": {"$key": "global:0x04d2", "evidence": "the row walked whole in Movie mode, 2026-11-12"}},
     "KEEPS_APART": {"global:0x0050": {"0": {"$setting": "global:0x01d8", "evidence": "runs kit2_apart_*, 2026-11-12",
-                                           "untick": "run kit2_apart_untick, 2026-11-12"}}}}
+                                           "untick": "run kit2_apart_untick, 2026-11-12"}}},
+    "FRAME_TRAVEL": {"Point": {"evidence": "run kit2_edges, 2026-11-12"}}}
 
 
 def test_every_table_the_kit_knows_is_read_by_the_plain_pass_or_refused_there():
@@ -168,7 +173,7 @@ def test_each_table_the_plain_pass_reads_takes_effect_and_its_evidence_stays_pri
     menu row in the evidence only; a reason why a record cannot be proved is written, its day private; a not-offered
     mark holds while the walk never wrote the value, what shows it private; a video system's values where no row was
     walked under both; the copies written once the downloads bear them out, each copy with its modes, and the switch that
-    keeps them apart on its setting; a context the
+    keeps them apart on its setting; how far a frame travels on the records of its place; a context the
     runs reworded is the definition's in its new words. The public file names no run, day or hand proof, and check_public's
     rule finds nothing in it; the hand evidence file is in its JSON Schema's shape."""
     import jsonschema
@@ -222,6 +227,12 @@ def test_each_table_the_plain_pass_reads_takes_effect_and_its_evidence_stays_pri
     # KEEPS_APART: on the switch, the family it keeps apart and what unticking it sets them to
     assert by["global:0x0050"]["keeps_apart"] == [{"setting": "global:0x01d8", "apart": [1], "untick_sets": 0}]
     assert [k for k, s in by.items() if "keeps_apart" in s] == ["global:0x0050"]
+    # FRAME_TRAVEL: on each record of the place, its axis, its other record and the limits by area
+    assert by["global:0x006a"]["frame"] == {"axis": "x", "with": "global:0x006e",
+                                             "limits": [{"areas": ["Single Shooting"], "range": [10, 200]}]}
+    assert by["global:0x006e"]["frame"] == {"axis": "y", "with": "global:0x006a",
+                                             "limits": [{"areas": ["Single Shooting"], "range": [20, 100]}]}
+    assert [k for k, s in by.items() if "frame" in s] == ["global:0x006a", "global:0x006e"]
     # decision 16: nothing of how anything was proved in the public file
     assert definitions.evidence_in_public(pub) == [] and not EVIDENCE_WORDS.search(text)
     assert not datafiles.evidence_in_public(datafiles.hand_tables_file(CAM))
@@ -277,7 +288,9 @@ def test_write_stops_without_the_hand_evidence_the_tables_need(tmp_path, monkeyp
     for table, entry in (("FRAME_PROOFS", {"global:0x01d8": {"note": "What it holds."}}),
                          ("UNPROVED", {"global:0x01d8": ["state", None, "Why."]}),
                          ("NOT_OFFERED", [{"key": "global:0x01d8", "values": [5], "walk": "^Shooting", "why": "W.",
-                                           "menu": "Drive Mode"}])):
+                                           "menu": "Drive Mode"}]),
+                         ("FRAME_TRAVEL", {"Point": {"places": [["global:0x006a", "global:0x006e"]],
+                                                     "limits": [{"areas": ["A"], "x": [1, 2], "y": [1, 2]}]}})):
         c.tables(**{table: entry})
         with monkeypatch.context() as m:
             m.setattr(S.definitions, "load", lambda *a, **k: pytest.fail("read the definition"))

@@ -143,7 +143,8 @@ yet timed). One line an area in edges.jsonl ({"area", "code", "edge_presses", "f
 registration's place records: the run's own evidence, the start among them), "edges" (edge_records), "odd", "back":
 {"same", "off", "tries", "presses"}, "failed", "moved"}) and edges_summary.txt: each record's edges, step and first
 press off the corner, by key and the definition's name, never the start nor the presses, which tell it. Edges are
-camera facts for the hand tables, copied there by hand (docs/DATA_CONTRACTS.md: no kit step writes them): a run file,
+camera facts for the hand tables' FRAME_TRAVEL, copied there by hand (docs/DATA_CONTRACTS.md: no kit step writes them;
+the runs go into the hand evidence, and kit/writer/frames.py puts the table on the definition): a run file,
 not proofs.jsonl, which holds the values a record was proved to take; and they are an area's, where the definition's
 range and step are a record's, which areas of several sizes share (the Spot sizes). A Custom box's edges are those of
 the size its owner set (a setting of theirs), never a camera fact as they stand.

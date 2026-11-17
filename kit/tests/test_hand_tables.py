@@ -117,6 +117,9 @@ ENTRY = {"like": "global:0x0003", "name": "A", "values": [], "note": ""}
 NOT_OFFERED = {"key": "global:0x0001", "values": [1], "why": "Not on its list.", "menu": "Row"}
 PICKER = {"keys": "^global:0x0001\\[", "walk": "^Fn / Upper / 1$", "table": ["Fn", None], "why": "Walked full circle."}
 APART = {"setting": "global:0x0002", "apart": [1], "untick_sets": 0}
+SPOT = {"places": [["set:0x0001", "set:0x0002"]], "limits": [{"areas": ["Spot: M"], "x": [80, 560], "y": [72, 408]}]}
+BOXES = {"inside": {"x": [46, 594], "y": [42, 438]}, "sizes_tried": {"x": [402], "y": [182]},
+         "boxes": [{"areas": ["Custom 1"], "size": ["set:0x0011", "set:0x0010"], "places": [["set:0x0003", "set:0x0004"]]}]}
 DEEP = 100000                      # deeper than Python's parser follows
 
 
@@ -184,6 +187,31 @@ DEEP = 100000                      # deeper than Python's parser follows
     (j(KEEPS_APART={"global:0x0001": [{**APART, "apart": ["1"]}]}), "'global:0x0001'[0]'s 'apart'[0] is a string, not a whole number"),
     (j(KEEPS_APART={"global:0x0001": [{**APART, "untick_sets": True}]}), "'untick_sets' is true or false, not a whole number"),
     (j(KEEPS_APART={"global:0x0001": [APART, {**APART, "untick_sets": 2}]}), "KEEPS_APART holds 'global:0x0002' twice"),
+    # how far a focus frame travels: measured area by area ({places, limits}) or boxes one rule bounds ({inside, boxes})
+    (j(FRAME_TRAVEL=[SPOT]), "FRAME_TRAVEL is not in its shape: the table is an array, not an object"),
+    (j(FRAME_TRAVEL={" ": SPOT}), "FRAME_TRAVEL is not in its shape: an entry has no name"),
+    (j(FRAME_TRAVEL={"Spot": {"places": SPOT["places"]}}), "'Spot' is neither a frame measured area by area (places and limits)"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "inside": BOXES["inside"]}}), "'Spot' is neither a frame measured area by area"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "places": []}}), "'Spot''s places lists nothing"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "places": [["set:0x0001"]]}}), "'Spot''s places[0] is ['set:0x0001'], not [X record, Y record]"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "places": [["set:0x0001", "set:0x0001"]]}}), "'Spot''s places[0] names 'set:0x0001' twice"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": [{"areas": ["Spot: M"], "x": [80, 560]}]}}), "'Spot''s limits[0] has no 'y'"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": [{"areas": [], "x": [80, 560], "y": [72, 408]}]}}), "'Spot''s limits[0]'s areas lists nothing"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": [{"areas": [" "], "x": [80, 560], "y": [72, 408]}]}}), "'Spot''s limits[0]'s areas[0] is empty"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": [{"areas": ["Spot: M"], "x": [560, 80], "y": [72, 408]}]}}),
+     "'Spot''s limits[0]'s x is [560, 80]: its highest is below its lowest"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": [{"areas": ["Spot: M"], "x": [80.5, 560], "y": [72, 408]}]}}),
+     "'Spot''s limits[0]'s x is [80.5, 560], not [lowest, highest]"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "limits": SPOT["limits"] * 2}}), "FRAME_TRAVEL holds 'Spot: M' twice"),
+    (j(FRAME_TRAVEL={"Custom": {k: v for k, v in BOXES.items() if k != "boxes"}}), "'Custom' is neither a frame measured"),
+    (j(FRAME_TRAVEL={"Custom": {**BOXES, "inside": {"x": [46, 594]}}}), "'Custom''s inside has no 'y'"),
+    (j(FRAME_TRAVEL={"Custom": {**BOXES, "sizes_tried": {"x": [], "y": [182]}}}), "'Custom''s sizes_tried's x lists nothing"),
+    (j(FRAME_TRAVEL={"Custom": {**BOXES, "sizes_tried": {"x": ["402"], "y": [182]}}}),
+     "'Custom''s sizes_tried's x[0] is a string, not a whole number"),
+    (j(FRAME_TRAVEL={"Custom": {**BOXES, "boxes": [{**BOXES["boxes"][0], "size": ["set:0x0011"]}]}}),
+     "'Custom''s boxes[0]'s size is ['set:0x0011'], not [width record, height record]"),
+    (j(FRAME_TRAVEL={"Custom": {**BOXES, "boxes": [{k: v for k, v in BOXES["boxes"][0].items() if k != "places"}]}}),
+     "'Custom''s boxes[0] has no 'places'"),
     (j(LABEL_FIXES={"Slip": 1}), "LABEL_FIXES is not in its shape: 'Slip' is a whole number, not a string"),
     (j(MY_MENU_EMPTY={"label": "(empty)"}), "MY_MENU_EMPTY is not in its shape: it has no 'line'"),
     # the patterns the writer runs, each compiled (and each replacement tried) as the file is read
@@ -231,6 +259,27 @@ def test_a_tables_file_that_does_not_fit_is_refused_in_plain_words(monkeypatch, 
     said = str(got.value)
     assert words in said and p.name in said and "mend the file by hand" in said, said
     assert issubclass(hand_tables.Refused, SystemExit) and issubclass(hand_tables.Refused, ValueError)
+
+
+def test_a_frame_travel_table_reads_as_the_file_has_it_and_its_evidence_lands_on_its_own_entry(monkeypatch, tmp_path):
+    """FRAME_TRAVEL, both shapes, read as the file has it; its hand evidence, by the entry's name, put back onto that
+    entry ("evidence"), refused for a name the table lacks; the plain pass's check takes a part with "evidence" only and
+    says the same of a name the table lacks. Made-up keys."""
+    a_camera(monkeypatch, tmp_path, {"FRAME_TRAVEL": {"Spot": SPOT, "Custom": BOXES}})
+    assert hand_tables.load(CAM).FRAME_TRAVEL == {"Spot": SPOT, "Custom": BOXES}
+    doc = lambda part: {"hand_format": hand_evidence.FORMAT, "camera": CAM, "tables": {"FRAME_TRAVEL": part}}
+    write = lambda part: hand_evidence.path(CAM).write_text(json.dumps(doc(part)), encoding="utf-8")
+    write({"Custom": {"evidence": "runs kit2_x, 2026-01-02"}})
+    got = hand_tables.load(CAM).FRAME_TRAVEL
+    assert got == {"Spot": SPOT, "Custom": {**BOXES, "evidence": "runs kit2_x, 2026-01-02"}}
+    public = vars(hand_tables.load(CAM, evidence=False))
+    assert hand_evidence.plain_problems(doc({"Spot": {"evidence": "x"}}), CAM, public) == []
+    assert hand_evidence.plain_problems(doc({"Zone": {"evidence": "x"}}), CAM, public) == [
+        "FRAME_TRAVEL 'Zone': the tables have no such entry"]
+    assert hand_evidence.plain_problems(doc({"Spot": {"limits": []}}), CAM, public)      # a public field: the schema's no
+    write({"Zone": {"evidence": "x"}})
+    with pytest.raises(ValueError, match="no entry 'Zone'"):
+        hand_tables.load(CAM)
 
 
 def test_a_tables_file_saved_with_a_byte_order_mark_reads(monkeypatch, tmp_path):

@@ -112249,6 +112249,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x019e",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       125,
+       515
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       95,
+       545
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       80,
+       560
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       65,
+       575
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       60,
+       580
+      ]
+     }
+    ]
    }
   },
   {
@@ -112275,6 +112333,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x01c4",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       125,
+       515
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       95,
+       545
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       80,
+       560
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       65,
+       575
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       60,
+       580
+      ]
+     }
+    ]
    }
   },
   {
@@ -112301,6 +112417,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x01c6",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       125,
+       515
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       95,
+       545
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       80,
+       560
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       65,
+       575
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       60,
+       580
+      ]
+     }
+    ]
    }
   },
   {
@@ -112353,6 +112527,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x019c",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       106,
+       374
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       83,
+       397
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       72,
+       408
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       61,
+       419
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       58,
+       422
+      ]
+     }
+    ]
    }
   },
   {
@@ -112379,6 +112611,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x01be",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       106,
+       374
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       83,
+       397
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       72,
+       408
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       61,
+       419
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       58,
+       422
+      ]
+     }
+    ]
    }
   },
   {
@@ -112405,6 +112695,64 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x01c0",
+    "limits": [
+     {
+      "areas": [
+       "Spot: XL",
+       "Tracking: Spot XL"
+      ],
+      "range": [
+       106,
+       374
+      ]
+     },
+     {
+      "areas": [
+       "Spot: L",
+       "Tracking: Spot L"
+      ],
+      "range": [
+       83,
+       397
+      ]
+     },
+     {
+      "areas": [
+       "Spot: M",
+       "Tracking: Spot M"
+      ],
+      "range": [
+       72,
+       408
+      ]
+     },
+     {
+      "areas": [
+       "Spot: S",
+       "Tracking: Spot S",
+       "Expand Spot",
+       "Tracking: Expand Spot"
+      ],
+      "range": [
+       61,
+       419
+      ]
+     },
+     {
+      "areas": [
+       "Spot: XS",
+       "Tracking: Spot XS"
+      ],
+      "range": [
+       58,
+       422
+      ]
+     }
+    ]
    }
   },
   {
@@ -216218,6 +216566,31 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1329",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Custom 2",
+       "Custom 3",
+       "Tracking: Custom 1",
+       "Tracking: Custom 2",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x148a",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216240,6 +216613,32 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x1327",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Custom 2",
+       "Custom 3",
+       "Tracking: Custom 1",
+       "Tracking: Custom 2",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x1488",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216261,6 +216660,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1339",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14b6",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216282,6 +216702,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x133b",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14b6",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216324,6 +216765,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x13a1",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14b6",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216345,6 +216807,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x1333",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b4",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216366,6 +216850,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x1335",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b4",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216408,6 +216914,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x139f",
+    "limits": [
+     {
+      "areas": [
+       "Custom 1",
+       "Tracking: Custom 1"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b4",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216429,6 +216957,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1345",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14ba",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216450,6 +216999,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1347",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14ba",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216492,6 +217062,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x13a5",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14ba",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216513,6 +217104,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x133f",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b8",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216534,6 +217147,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x1341",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b8",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216576,6 +217211,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x13a3",
+    "limits": [
+     {
+      "areas": [
+       "Custom 2",
+       "Tracking: Custom 2"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14b8",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216597,6 +217254,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1351",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14be",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216618,6 +217296,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x1353",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14be",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216660,6 +217359,27 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "x",
+    "with": "set:0x13a9",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       46,
+       594
+      ],
+      "size": "set:0x14be",
+      "sizes_tried": [
+       168,
+       402
+      ]
+     }
+    ]
    }
   },
   {
@@ -216681,6 +217401,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x134b",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14bc",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216702,6 +217444,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x134d",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14bc",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {
@@ -216744,6 +217508,28 @@
     "sampled": {
      "linear": null
     }
+   },
+   "frame": {
+    "axis": "y",
+    "with": "set:0x13a7",
+    "limits": [
+     {
+      "areas": [
+       "Custom 3",
+       "Tracking: Custom 3"
+      ],
+      "inside": [
+       42,
+       438
+      ],
+      "size": "set:0x14bc",
+      "sizes_tried": [
+       132,
+       182,
+       318
+      ]
+     }
+    ]
    }
   },
   {

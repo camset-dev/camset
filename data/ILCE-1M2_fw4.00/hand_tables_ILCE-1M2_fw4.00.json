@@ -981,6 +981,48 @@
     ["Standard", "Custom 1", 28, 19],
     ["Large", "Custom 1", 56, 38]
   ],
+  "FRAME_TRAVEL": {
+    "Spot": {
+      "places": [
+        ["set:0x019c", "set:0x019e"],
+        ["set:0x01be", "set:0x01c4"],
+        ["set:0x01c0", "set:0x01c6"]
+      ],
+      "limits": [
+        {"areas": ["Spot: XL", "Tracking: Spot XL"], "x": [125, 515], "y": [106, 374]},
+        {"areas": ["Spot: L", "Tracking: Spot L"], "x": [95, 545], "y": [83, 397]},
+        {"areas": ["Spot: M", "Tracking: Spot M"], "x": [80, 560], "y": [72, 408]},
+        {"areas": ["Spot: S", "Tracking: Spot S", "Expand Spot", "Tracking: Expand Spot"], "x": [65, 575], "y": [61, 419]},
+        {"areas": ["Spot: XS", "Tracking: Spot XS"], "x": [60, 580], "y": [58, 422]}
+      ]
+    },
+    "Custom": {
+      "inside": {"x": [46, 594], "y": [42, 438]},
+      "sizes_tried": {"x": [168, 402], "y": [132, 182, 318]},
+      "boxes": [
+        {
+          "areas": ["Custom 1", "Tracking: Custom 1"],
+          "size": ["set:0x14b6", "set:0x14b4"],
+          "places": [["set:0x139f", "set:0x13a1"], ["set:0x1333", "set:0x1339"], ["set:0x1335", "set:0x133b"]]
+        },
+        {
+          "areas": ["Custom 2", "Tracking: Custom 2"],
+          "size": ["set:0x14ba", "set:0x14b8"],
+          "places": [["set:0x13a3", "set:0x13a5"], ["set:0x133f", "set:0x1345"], ["set:0x1341", "set:0x1347"]]
+        },
+        {
+          "areas": ["Custom 3", "Tracking: Custom 3"],
+          "size": ["set:0x14be", "set:0x14bc"],
+          "places": [["set:0x13a7", "set:0x13a9"], ["set:0x134b", "set:0x1351"], ["set:0x134d", "set:0x1353"]]
+        },
+        {
+          "areas": ["Custom 1", "Custom 2", "Custom 3", "Tracking: Custom 1", "Tracking: Custom 2", "Tracking: Custom 3"],
+          "size": ["set:0x148a", "set:0x1488"],
+          "places": [["set:0x1327", "set:0x1329"]]
+        }
+      ]
+    }
+  },
   "FRAME_PROOFS": {
     "set:0x019a": {
       "values": [

@@ -272,6 +272,7 @@ shown (section 1, rule 2).
 | AF Area Registration | `kit/provers/afreg_run.py --allow "Fn hold on the shooting screen" --areas missing` |
 | A memory's copies | `kit/tools/set_twins.py --evidenced ''`, then `kit/provers/memreg_run.py --allow "Camera Set. Memory"` |
 | Where a focus frame's place is kept | `kit/provers/framepos_run.py --allow "Camera Set. Memory"` |
+| How far a focus frame travels | `kit/provers/framepos_run.py --allow "Camera Set. Memory" --edges`, then the hand tables' `FRAME_TRAVEL`, its runs in the hand evidence |
 | Picture Profiles' own Reset, for the sample | `kit/provers/pp_reset_run.py --allow "Picture Profile Reset"`: `--peek`, then `--profiles PP1`, then a full run in Stills and one `--in Movie` (its docstring), then `kit/tools/make_sample.py <the download right after Initialize> --take "Picture Profile PP" --from <Stills pp_reset.json> --from <Movie pp_reset.json>` |
 | My Menu's slots | `kit/provers/mymenu_run.py --allow "Add Item"` |
 | Bracket fields | `kit/provers/bracket_run.py --option "Cont. Bracket" --look`, then without `--look` |

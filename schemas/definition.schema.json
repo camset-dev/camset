@@ -368,6 +368,99 @@
      "type": "integer",
      "description": "For a number: the step between the stored values allowed (250 for Knee Point); an edit snaps to it."
     },
+    "frame": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "axis",
+      "with",
+      "limits"
+     ],
+     "properties": {
+      "axis": {
+       "enum": [
+        "x",
+        "y"
+       ],
+       "description": "The coordinate this setting holds: x across, y down."
+      },
+      "with": {
+       "type": "string",
+       "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+       "description": "The setting that holds the frame's other coordinate in the same place; its own frame names this one back."
+      },
+      "limits": {
+       "type": "array",
+       "minItems": 1,
+       "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "areas"
+        ],
+        "properties": {
+         "areas": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+           "type": "string",
+           "minLength": 1
+          },
+          "description": "The Focus Area options these limits are for, each named as a setting of the definition names it among its values."
+         },
+         "range": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "A frame measured area by area: the lowest and highest the centre stops at on this axis, both allowed."
+         },
+         "inside": {
+          "type": "array",
+          "items": {
+           "type": "integer"
+          },
+          "minItems": 2,
+          "maxItems": 2,
+          "description": "A box whose size the file holds: the bounds the whole box stays inside on this axis, so its centre stops half its size inside them (the lowest at the first plus half the size, the highest at the second minus half)."
+         },
+         "size": {
+          "type": "string",
+          "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$",
+          "description": "With inside: the setting that holds the box's size on this axis (its width for x, its height for y), read in the same section."
+         },
+         "sizes_tried": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+           "type": "integer"
+          },
+          "description": "With inside: the sizes the rule was proved at; at any other size it is not tried. Absent where that is not known."
+         }
+        },
+        "oneOf": [
+         {
+          "required": [
+           "range"
+          ]
+         },
+         {
+          "required": [
+           "inside",
+           "size"
+          ]
+         }
+        ]
+       },
+       "description": "Where the frame's centre stops on this axis, by area: an editor that places the frame keeps it within the entry for the area in use."
+      }
+     },
+     "description": "This setting holds one coordinate of a movable focus frame's centre on the camera's grid (the a1 II's 640 x 480), and how far the frame can travel there, where it was measured on the camera: by area, the lowest and highest the centre stops at, or, for a box whose size the file holds, the bounds the whole box stays inside and the setting that holds its size. A press that would take the frame past a limit stops it there. An editor reads it to place the frame within those limits; a frame setting without it is one whose travel is not known (a place not measured yet, such as a way of holding the camera not tried). Written by kit/schema_update.py (kit/writer/frames.py) from the camera's hand table (FRAME_TRAVEL), where the mapper's hand evidence shows what measured it; keys, areas and limits only."
+    },
     "text": {
      "type": "object",
      "properties": {

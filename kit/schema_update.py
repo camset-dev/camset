@@ -54,6 +54,10 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
                 the hand evidence shows the entry (and its untick value); an entry that cannot take effect is said,
                 "not applied", and a download that contradicts one (the switch outside its apart values, the family at
                 more than one value) stops the write (writer/copies.py with_keeps_apart)
+  frame         on each record that holds a coordinate of a focus frame's centre (the hand table's FRAME_TRAVEL: the
+                spot's and the Custom boxes' places), its axis, the record of the other one and how far the frame
+                travels, by area, where the hand evidence shows what measured it; an entry that cannot take effect is
+                said, "not applied" (writer/frames.py with_frames)
   note_evidence the owner's allowance a proof carries ("allowance": "the owner allowed <row> remotely, <date>", a
                 never-open row proved with the owner's word) is added to the evidence of each setting it proved, once
                 (with_allowances); a hand table's proof says it in its own "allowance"
@@ -150,6 +154,7 @@ from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis
                            without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
 from writer.copies import with_copies, with_keeps_apart  # noqa: E402
+from writer.frames import with_frames  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
 # the hand tables, where their evidence is kept, and what the plain pass takes of them (by_lines_of, run_start and
@@ -167,6 +172,7 @@ COPIES = HAND.COPIES
 COPY_MODES = HAND.COPY_MODES
 COPY_MODES_UNKNOWN = HAND.COPY_MODES_UNKNOWN
 KEEPS_APART = HAND.KEEPS_APART
+FRAME_TRAVEL = HAND.FRAME_TRAVEL
 EV_DOWN_FROM_20 = HAND.EV_DOWN_FROM_20
 FRAME_PROOFS = HAND.FRAME_PROOFS
 GROUP_NAMES = HAND.GROUP_NAMES
@@ -1698,6 +1704,7 @@ def main():
     check_video_systems(doc, RUN_ROOT)          # no download of one system holds a value listed as the other's
     with_copies(doc, COPIES, RUN_ROOT, modes=COPY_MODES, unknown=COPY_MODES_UNKNOWN)
     with_keeps_apart(doc, KEEPS_APART, RUN_ROOT)   # the switches that keep a family's copies apart, on those copies
+    with_frames(doc, FRAME_TRAVEL)                 # how far each focus frame travels, on the records of its places
     spelled_names(by_key, spelled, over, derived)
     with_menu_rows(doc, axis_rows)      # the rows the definition kept from an older run, named so too
     for s in doc["settings"]:

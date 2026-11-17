@@ -135,6 +135,20 @@ the camera's own downloads at every write, keys, mode names and the switches' va
 and "… (movie)", or "… (copy 1)" and "… (copy 2)" where its mode is not known yet (a test checks it). What the a1 II's
 boxes were proved to do is on [its page](models/ILCE-1M2_fw4.00.md).
 
+### How far a focus frame travels (`frame`)
+
+Each Focus Area option's frame stops at limits of its own, and several options keep their frame's centre in the same
+records, so a record's `range` cannot hold them: each record of a frame's place carries `frame`, its axis, the place's
+other record and the limits by area, from the camera's `FRAME_TRAVEL` hand table (`kit/writer/frames.py`). A box whose
+size the file holds has one rule instead: the bounds it stays inside and its size records, read in the same section. A
+place not measured yet carries none.
+
+{{ schema_fields("definition", "$defs/setting/properties/frame") }}
+
+Each of its `limits`:
+
+{{ schema_fields("definition", "$defs/setting/properties/frame/properties/limits/items") }}
+
 ## `data/<model>_fw<fw>/camera_<model>_fw<fw>.json`: the camera's own facts
 
 Schema: `schemas/camera.schema.json`.
@@ -223,6 +237,14 @@ A `NOT_OFFERED` mark:
 A `KEEPS_APART` entry:
 
 {{ schema_fields("hand-tables", "$defs/keeps_apart") }}
+
+A `FRAME_TRAVEL` entry, and each of its `limits` and its `boxes`:
+
+{{ schema_fields("hand-tables", "$defs/frame_travel") }}
+
+{{ schema_fields("hand-tables", "$defs/frame_limit") }}
+
+{{ schema_fields("hand-tables", "$defs/frame_box") }}
 
 ## The hand evidence file: how each hand fact was proved
 
