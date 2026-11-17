@@ -1039,15 +1039,36 @@ def test_a_grip_registration_across_orientation_groups_is_reported_as_it_is():
     assert nothing["verdict"].startswith("nothing changed") and "edges" not in nothing["verdict"]
 
 
-def test_zone_grid_with_grip_is_refused_before_anything_connects(monkeypatch):
-    """The nine-place sweep leads the frame by Left and Up as level, and its proofs credit every copy at once (Switch
-    V/H AF Area Off): with --grip it is refused before the definition is read or anything connects."""
-    monkeypatch.setattr(F, "read_json", lambda path: pytest.fail("read the definition"))
-    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("connected"))
-    for argv in (["--zone-grid", "--grip", "down", "--allow", "Camera Set. Memory"],
-                 ["--list", "--zone-grid", "--areas", "Zone", "--grip", "up"]):
-        with pytest.raises(SystemExit, match="the nine-place sweep is made level; with --grip use --areas Zone"):
-            F.main(argv)
+def test_zone_grid_with_grip_level_is_refused_and_held_vertically_is_planned(monkeypatch, capsys):
+    """The level sweep is made with Switch V/H AF Area Off, so --zone-grid --grip level is refused before anything
+    connects. Held vertically (--grip down or up) the sweep is planned: the grip's setup (AF Point + AF Area) with Circ.
+    of Focus Point set so the zone stops at an edge, what each registration writes, and the run handed the grip. A plan
+    that would open Drive Mode's chooser held vertically (a Tracking area) needs --drive-mode leave."""
+    import pass3_run
+
+    def no_map(path):
+        raise SystemExit("no pass 1 map")
+    monkeypatch.setattr(pass3_run, "labels_of", no_map)
+    monkeypatch.setattr(F, "read_json", lambda path: edges_doc())
+    monkeypatch.setattr(F.definitions, "active", lambda *a, **k: "none.json")
+    called = []
+    monkeypatch.setattr(F, "prove", lambda *a, **k: called.append((a, k)) or 0)
+    with pytest.raises(SystemExit, match="the level sweep is made with Switch V/H AF Area Off, without --grip"):
+        F.main(["--zone-grid", "--grip", "level", "--allow", "Camera Set. Memory"])
+    assert F.main(["--list", "--zone-grid", "--grip", "down"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("0 areas and the zone grid sweep ('Switch V/H AF Area = AF Point + AF Area, camera grip down'")
+    assert ("  held grip down, Switch V/H AF Area = AF Point + AF Area: each registration writes the records every "
+            "orientation writes and grip down's copies") in out
+    assert "Switch V/H AF Area = AF Point + AF Area; Circ. of Focus Point = Does Not Circulate;" in out
+    assert "Drive Mode" not in out, "the Zone alone opens no Drive Mode chooser"
+    with pytest.raises(SystemExit, match="give --drive-mode leave"):
+        F.main(["--zone-grid", "--grip", "up", "--areas", "Tracking: Spot M", "--allow", "Camera Set. Memory"])
+    assert not called
+    assert F.main(["--zone-grid", "--grip", "up", "--allow", "Camera Set. Memory"]) == 0
+    assert F.main(["--zone-grid", "--grip", "up", "--areas", "Tracking: Spot M", "--drive-mode", "leave", "--allow",
+                   "Camera Set. Memory"]) == 0
+    assert [args[0].grip for args, kw in called] == ["up", "up"] and called[0][0][0].zone_target["label"] == "Zone"
 
 
 class Turned:
@@ -2349,3 +2370,207 @@ def test_the_setup_sets_circ_of_focus_point_and_stops_when_it_did_not_take(monke
         F.prepare(*args, circ=True)
     held[CIRC_KEY] = 0
     assert F.prepare(*args, circ=True)[-2:] == ["Circ. of Focus Point = Does Not Circulate", "AF Frame Move Amt = Standard"]
+
+
+# ---------------------------------------------------------------- --zone-grid held vertically
+
+# the a1 II's twelve zone records' names (keys as the camera's, a level copy and one or two of each grip's)
+ZONE_NAMES = {"set:0x019a": "Zone position (current; grid index)", "set:0x0f0b": "Zone position memory (grid index)",
+              "set:0x0f0d": "Zone position memory (grid index, copy)",
+              "set:0x0f2c": "Zone position memory (horizontal, grid index, copy 1)",
+              "set:0x0f32": "Zone position memory (vertical, grip down, grid index, copy 1)",
+              "set:0x0f34": "Zone position memory (vertical, grip down, grid index, copy 2)",
+              "set:0x0f38": "Zone position memory (vertical, grip up, grid index, copy 1)"}
+EVERY = ["set1:0x019a", "set1:0x0f0b", "set1:0x0f0d"]          # what every orientation's registration writes
+OWN = {"down": ["set1:0x0f32", "set1:0x0f34"], "up": ["set1:0x0f38"], "level": ["set1:0x0f2c"]}
+
+
+def zone_vertical_index() -> dict:
+    """The made-up definition with Vertical Display, Circ. of Focus Point and the zone records of ZONE_NAMES alone."""
+    extra = edge_index()
+    return index() | {k: extra[k] for k in (VD_KEY, CIRC_KEY)} | {k: {"key": k, "name": n, "values": GRID}
+                                                                  for k, n in ZONE_NAMES.items()}
+
+
+def test_a_vertical_sweeps_proof_lines_cover_every_orientations_records_and_that_grips_copies():
+    """Held vertically, with Switch V/H AF Area = AF Point + AF Area, a registration writes the records every
+    orientation writes and that grip's copies alone: the proof lines cover those (sweep_records), never the other grip's
+    nor the horizontal copies; level (Switch V/H AF Area Off) they are zone_records' as before. Each line says how the
+    camera was held; a copy that did not take the place's code is credited nothing."""
+    idx = zone_vertical_index()
+    assert F.sweep_records(idx, "down") == ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f32", "set:0x0f34"]
+    assert F.sweep_records(idx, "up") == ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f38"]
+    assert F.sweep_records(idx) == F.zone_records(idx) == ["set:0x019a", "set:0x0f32", "set:0x0f34", "set:0x0f38"]
+    changes = [{"key": k, "before": 0, "after": 7} for k in EVERY + ["set1:0x0f32"]] + \
+        [{"key": "set1:0x0f34", "before": 0, "after": 6}]
+    line = F.sweep_line(0, (-1, -1), 7, changes, "4_zone-upper-left.DAT", idx)
+    assert line["groups"] == {"horizontal": EVERY, "vertical, grip down": ["set1:0x0f32"], "vertical, grip up": []}
+    assert line["other"] == {"set1:0x0f34": 6}
+    held = {k.replace("set1:", "set:"): 7 for k in EVERY + ["set1:0x0f32"]} | {"set:0x0f34": 6}
+    got = F.sweep_proofs(line, held, "3_zone-start.DAT", changes, idx, {"context": "c"}, "down")
+    assert [(x["record"], x["applied"]) for x in got] == [("set:0x019a", True), ("set:0x0f0b", True),
+                                                          ("set:0x0f0d", True), ("set:0x0f32", True),
+                                                          ("set:0x0f34", False)]
+    assert all("Switch V/H AF Area = AF Point + AF Area, the camera held grip down" in x["via"] for x in got)
+    assert "Switch V/H AF Area = Off" in F.sweep_proofs(line, held, "b", changes, idx, {})[0]["via"]
+
+
+def test_the_key_mappings_that_explain_a_move_and_the_way_back_under_one():
+    """zone_fits: the turns and mirrors of the level keys under which presses lead from one place to another (the grid's
+    edges stopping the zone); one Right that moved the zone down leaves two (Down's way not seen); the way back under a
+    mapping (zone_back_presses) undoes it."""
+    level, down_right = F.KEY_MAPS[0], ((0, 1), (1, 0))             # Right moves it down, Down moves it right
+    assert F.zone_fits((-1, -1), [["ms_right", 1]], (0, -1)) == [level, ((1, 0), (0, -1))]
+    two = F.zone_fits((-1, -1), [["ms_right", 1]], (-1, 0))
+    assert len(two) == 2 and down_right in two and all(m[0] == (0, 1) for m in two)
+    assert F.mapping_words(down_right) == "Right moved it down, Down right"
+    assert F.mapping_words(level).startswith("as level")
+    assert F.zone_moved((1, -1), [["ms_left", 2]], level) == (-1, -1)
+    assert F.zone_moved((1, -1), [["ms_left", 2]], down_right) == (1, -1), "Left moves it up, stopped at the edge"
+    assert F.zone_back_presses((1, 1), (-1, -1), level) == [["ms_left", 2], ["ms_up", 2]]
+    turned = ((0, 1), (-1, 0))                                      # Right moves it down, Down left
+    back = F.zone_back_presses((1, 1), (-1, -1), turned)
+    assert back == [["ms_left", 2], ["ms_down", 2]] and F.zone_moved((1, 1), back, turned) == (-1, -1)
+
+
+def test_a_grip_sweeps_context_is_read_by_the_oriented_pattern_as_its_grip():
+    """The sweep's lines carry the grip context ("..., camera grip down, Vertical Display On"), which the hand tables'
+    ORIENTED pattern reads as that grip, Vertical Display On or Off."""
+    oriented = hand_tables.load(paths.A1II, evidence=False).ORIENTED
+    for grip, words in (("down", "grip down"), ("up", "grip up")):
+        for vertical in ("On", "Off"):
+            context = F.context_of(None, None, None, grip, vertical)
+            assert context.startswith(f"Switch V/H AF Area = AF Point + AF Area, camera {words}, Vertical Display ")
+            assert oriented.search(f"Camera Set. Memory / Zone place [{context}]")[1] == words
+
+
+class ZoneCam(Turned):
+    """A made-up camera whose Zone steps over its 3 x 3 grid as `mapping` (KEY_MAPS) moves it, stopped at an edge; held
+    `held` (down, up, level with Switch V/H AF Area = AF Point + AF Area, or None for it Off): a registration writes the
+    zone's code into the records every orientation writes and that grip's copies (EVERY, OWN), or with it Off into
+    every one. `drop`: the multi-selector presses lost, by number. Every screen level (Vertical Display Off)."""
+
+    def __init__(self, run, start=(0, 0), held="down", mapping=None, drop=(), **kw):
+        super().__init__(run, level=True, **kw)
+        self.zone, self.held, self.mapping = tuple(start), held, mapping or F.KEY_MAPS[0]
+        self.drop, self.presses = set(drop), 0
+        self.slot.update({k: self.CODES[self.zone] for k in EVERY + sum(OWN.values(), [])})
+
+    def press(self, key, **kw):
+        if self.now.get("text") == SLOTS and key == "enter":
+            self.pressed.append(key)
+            self.answer_once, self.n = None, self.n + 1
+            written = EVERY + sum(OWN.values(), []) if self.held is None else EVERY + OWN[self.held]
+            self.slot.update({k: self.CODES[self.zone] for k in written})
+            self.show("registered")
+            return
+        if self.now["kind"] == "shooting":
+            assert key in self.MOVE and kw.get("on_shooting") == key, (key, kw)
+            self.pressed.append(key)
+            self.n, self.presses = self.n + 1, self.presses + 1
+            if self.presses not in self.drop:
+                self.zone = F.zone_moved(self.zone, [[key, 1]], self.mapping)
+            return
+        super().press(key, **kw)
+
+
+@pytest.fixture
+def zones(turned, monkeypatch):
+    """The turned fixture's session on ZoneCam (its "extra" holding Vertical Display Off), Zone chosen on the level
+    dialog; go(s, grip) runs F.areas with --zone-grid alone and returns (the sweep's line, zone_grid.jsonl's lines,
+    proofs.jsonl's lines)."""
+    import afreg_run
+    monkeypatch.setattr(afreg_run, "choose_level", choose_level)
+    run, session = turned
+
+    def go(s, grip):
+        a = SimpleNamespace(zone_grid=True, zone_target=F.plan(made_up_doc(), "Zone")[0], context=None, moves=None,
+                            allow=["Camera Set. Memory"], check_back=True, grip=grip, edges=False, put_back=None)
+        tag = {"context": F.context_of(None, None, None, grip), "allowance": "a", **({"grip": grip} if grip else {}),
+               **({"upright": True} if grip in F.TURNED else {})}
+        lines = []
+        F.areas(s, a, run, None, None, None, CAROUSEL, CAROUSEL_AXES, [],
+                {"Zone": afreg_run.route("Zone", CAROUSEL, CAROUSEL_AXES)}, zone_vertical_index(), False, False,
+                run.dir / "framepos.jsonl", tag, lines, None, tag)
+        return lines[-1], F.jsonl.read(run.dir / "zone_grid.jsonl"), F.jsonl.read(run.dir / "proofs.jsonl")
+    return run, (lambda **kw: session(cls=ZoneCam, extra={VD_KEY: 1}, **kw)), go
+
+
+@pytest.mark.parametrize("grip", ["down", "up"])
+def test_a_sweep_held_vertically_walks_the_nine_places_and_says_what_each_wrote_by_orientation(zones, capsys, grip):
+    """--zone-grid held grip down (or up): the nine places walked as the level sweep walks them, each registration's
+    records by orientation (every orientation's records and that grip's copies, none of the other grip's), one console
+    line a place with codes, names and keys only; proof lines for those records with the grip context the ORIENTED
+    pattern reads; the zone put back and checked."""
+    run, session, go = zones
+    cam, s = session(held=grip, start=(1, 0))
+    sweep, grid, proofs = go(s, grip)
+    assert sweep["confirmed"] == 9 and sweep["back_same"] and "failed" not in sweep and cam.zone == (1, 0)
+    other = "vertical, grip up" if grip == "down" else "vertical, grip down"
+    own = "vertical, grip down" if grip == "down" else "vertical, grip up"
+    assert [x["name"] for x in grid] == ["Upper left", "Up", "Upper right", "Right", "Centre", "Left", "Lower left",
+                                         "Down", "Lower right"]
+    assert all(x["groups"]["horizontal"] == EVERY and x["groups"][own] == OWN[grip] and x["groups"][other] == []
+               and x["other"] == {} for x in grid)
+    context = f"Switch V/H AF Area = AF Point + AF Area, camera grip {grip}, Vertical Display Off"
+    assert all(x["context"] == context and x["grip"] == grip and "upright" not in x for x in grid + proofs)
+    applied = [p for p in proofs if p["applied"]]
+    assert {p["key"] for p in applied} == set(EVERY + OWN[grip]) and len(applied) == 9 * len(EVERY + OWN[grip])
+    assert all(p["kind"] == "registration mirror" and f"camera held grip {grip}" in p["via"] for p in proofs)
+    said = capsys.readouterr().out
+    assert (f"  zone sweep 1/9: Upper left -> code 7 (Upper left), confirmed; records: horizontal {', '.join(EVERY)}; "
+            f"{own} {', '.join(OWN[grip])}") in said
+    assert "the registration after the put-back matched the start's" in said and "Right (" not in said.split("1/9")[0]
+
+
+def test_a_level_sweep_is_as_it_was(zones):
+    """No grip: Switch V/H AF Area Off, every copy written at once, the proof lines zone_records' (the current record
+    and the vertical copies), the context the level one."""
+    run, session, go = zones
+    cam, s = session(held=None, start=(0, 0))
+    sweep, grid, proofs = go(s, None)
+    assert sweep["confirmed"] == 9 and sweep["back_same"] and cam.zone == (0, 0)
+    assert {p["key"] for p in proofs if p["applied"]} == {"set1:0x019a", "set1:0x0f32", "set1:0x0f34", "set1:0x0f38"}
+    assert all(x["context"] == "Switch V/H AF Area Off, camera level" for x in grid)
+
+
+def test_keys_that_move_the_zone_turned_are_said_as_a_finding_and_the_zone_still_comes_back(zones, capsys):
+    """Held grip up on a camera whose keys move the zone turned (Right moves it down, Down right): the corner reads as
+    routed (Left and Up still lead there), the next place does not; the walk ends saying what Right did and the one
+    turn of the keys that explains every move seen, writes no proof line for that place, and still puts the zone back
+    and checks it. The sweep fails with the finding."""
+    run, session, go = zones
+    cam, s = session(held="up", start=(0, 0), mapping=((0, 1), (1, 0)))
+    sweep, grid, proofs = go(s, "up")
+    assert cam.zone == (0, 0) and sweep["back_same"] and sweep["confirmed"] == 1 and len(grid) == 2
+    assert grid[1]["confirmed"] is False and grid[1]["fits"] == ["Right moved it down, Down right"]
+    assert "Right moved the zone +0 column(s), +1 row(s), where level it moves +1 column(s), +0 row(s)" in sweep["failed"]
+    assert {p["dat"] for p in proofs if p["applied"]} == {grid[0]["download"]}
+    said = capsys.readouterr().out
+    assert ("  zone sweep 2/9: Up NOT as routed: Right moved the zone +0 column(s), +1 row(s), where level it moves +1 "
+            "column(s), +0 row(s); the keys act turned: Right moved it down, Down right") in said
+
+
+def test_a_turn_the_moves_do_not_tell_apart_is_said_and_a_zone_off_its_start_is_said_not_guessed(zones, capsys):
+    """Keys turned half round from a start at an edge: the presses toward the upper left read elsewhere, which two
+    turns or mirrors explain; the counted presses back do not bring it to its start (a press met the edge), and with no
+    one mapping known nothing more is pressed: the zone-back differs and the sweep says so."""
+    run, session, go = zones
+    cam, s = session(held="down", start=(1, 1), mapping=((-1, 0), (0, -1)))
+    sweep, grid, proofs = go(s, "down")
+    assert len(grid) == 1 and grid[0]["confirmed"] is False and len(grid[0]["fits"]) == 2 and proofs == []
+    assert not sweep["back_same"] and cam.zone != (1, 1)
+    said = capsys.readouterr().out
+    assert "1/9: Upper left NOT as routed: the presses toward the upper left led elsewhere; 2 turns or mirrors" in said
+    assert "differs from the start's" in said and "move it back by hand" in said
+
+
+def test_a_press_lost_on_the_way_back_is_made_good_under_the_level_keys(zones, capsys):
+    """Every place read as routed, so the keys act as level: a press lost on the way back leaves the zone off its start,
+    which zone-back shows; it is brought there straight and checked again (zone-back2)."""
+    run, session, go = zones
+    cam, s = session(held="down", start=(0, 0), drop={11})          # the corner's 2 and the route's 8 before it
+    sweep, grid, proofs = go(s, "down")
+    assert sweep["confirmed"] == 9 and sweep["back_same"] and cam.zone == (0, 0)
+    assert sweep["files"]["back"].endswith("zone-back2.DAT")
+    assert "the registration after the put-back matched the start's" in capsys.readouterr().out

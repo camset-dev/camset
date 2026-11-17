@@ -8,6 +8,7 @@ moved with the multi-selector on the shooting screen, slot 1 registered again, t
     .venv/bin/python -u kit/provers/framepos_run.py --allow "Camera Set. Memory" --grip level --areas "Zone,Custom 1"
     .venv/bin/python -u kit/provers/framepos_run.py --summary            (the run's lines, deltas only; no camera)
     .venv/bin/python -u kit/provers/framepos_run.py --zone-grid --allow "Camera Set. Memory"     (the sweep only)
+    .venv/bin/python -u kit/provers/framepos_run.py --zone-grid --grip down --allow "Camera Set. Memory"   (held so)
     .venv/bin/python -u kit/provers/framepos_run.py --allow "Camera Set. Memory" --edges [--areas "Spot: M"] [--grip down]
     .venv/bin/python -u kit/provers/framepos_run.py --allow "Camera Set. Memory" --put-back RUN    (a frame RUN left out)
 
@@ -90,6 +91,23 @@ kit/pass2_report.py's mirrored_values hands the places to kit/schema_update.py, 
 flag runs the sweep only; with --areas the sweep first, then those areas. Codes, names and keys are all it prints: the
 start place and the presses that put the frame back (which tell it) stay in the run's files, except when the frame
 cannot be put back or the run stops with it moved: then the presses owed are printed, so the owner can finish by hand.
+A place that does not read as routed ends the walk: what the keys did is said (a step's own move from a place that read
+as routed; the presses toward the corner only as having led elsewhere, as they tell the start), with the turns and
+mirrors of the level keys that explain every move seen (zone_fits), and the zone is put back and checked all the same; a
+zone-back off its start is brought there straight once under the one mapping the walk showed (the level one where every
+place read as routed, after a press lost on the way back) and checked again, never under a guess.
+
+--zone-grid --grip down|up (2026-11-17): the same sweep held vertically, with the grip runs' setup (Switch V/H AF Area
+= AF Point + AF Area, and Circ. of Focus Point = Does Not Circulate so a zone stops at an edge), Zone chosen and the
+screens read as the grip runs read them (Vertical Display from the start download), the lines carrying their context
+("..., camera grip down, Vertical Display On"), "grip" and "upright". Each place's line names what its registration
+wrote by orientation (zone_group: the records every orientation writes, 0x019a, 0x0f0b and 0x0f0d, and that grip's
+copies) and any zone record that took another code ("other"). Its proof lines are the level sweep's kind, "registration
+mirror", for the records a registration held that way writes (sweep_records: the every-orientation records and the
+grip's own copies), each applied only where the record changed to the place's code: pass2_report.mirrored_values reads
+no context, and schema_update credits a value under the table's own label only, so they add the codes the level sweep
+proved and can contradict nothing; a copy that took a code of its own is credited nothing and shows in "other". The
+keys are not assumed to move the zone as level: the route check says what a place read as.
 
 --grip down|up (2026-11-15): the owner holds the camera vertically for the whole run, as afreg_run.py's --grip
 (orient_run.py's plumbing): the setup puts Switch V/H AF Area on AF Point + AF Area, so a registration writes that
@@ -107,8 +125,10 @@ put back first. The presses are the level ones (or --moves), but their direction
 no delta is judged against them (the verdict counts the records that changed), and each area's summary names every
 changed record by its definition key and the definition's name with its delta, then one line "grip down writes:
 <names>": the diff whole, never filtered to one orientation's copies. The lines carry the context ("Switch V/H AF Area
-= AF Point + AF Area, camera grip down"), "grip" and "upright": true. --zone-grid is refused with a grip before
-anything connects: its route and its proofs are made level. Vertical Display, read from the start download
+= AF Point + AF Area, camera grip down"), "grip" and "upright": true. --zone-grid takes --grip down or up (below);
+with --grip level it is refused, the level sweep being made with Switch V/H AF Area Off; a plan that would open Drive
+Mode's chooser held vertically (a Tracking area) is refused without --drive-mode leave, that chooser being drawn in the
+portrait arrangement, which the kit cannot read. Vertical Display, read from the start download
 (afreg_run.screens_held, 2026-11-16), decides what turns: Off keeps every screen level, so each is read as a level run
 reads it and the lines carry no "upright"; On, or not read, is the above, the portrait shooting screen the SDK's
 picture shows read as it is (camkit.screen.portrait_battery). The context ends "camera grip down, Vertical Display Off"
@@ -697,25 +717,92 @@ def zone_records(index: dict) -> list:
                   and "grid index" in s["name"] and ("vertical" in s["name"] or "(current" in s["name"]))
 
 
+def sweep_records(index: dict, grip: str | None = None) -> list:
+    """The zone records a sweep's proof lines cover: level (no grip, Switch V/H AF Area Off), zone_records; held
+    vertically (grip down or up, AF Point + AF Area), the records every orientation's registration writes (the current
+    record and the level memories: no orientation in their names) and that grip's own copies, never the other grip's nor
+    the horizontal copies, which its registrations do not write."""
+    if grip not in TURNED:
+        return zone_records(index)
+    own = GROUPS[1] if grip == "down" else GROUPS[2]
+    return sorted(k for k, s in index.items() if k.startswith("set:") and "Zone position" in (s.get("name") or "")
+                  and "grid index" in s["name"] and "horizontal" not in s["name"]
+                  and zone_group(s["name"]) in (GROUPS[0], own))
+
+
+# how the multi-selector's keys may move the zone on its grid held vertically: each of the eight turns and mirrors of
+# the level keys, as (what Right does, what Down does) in (columns, rows); level, Right moves it right and Down down
+KEY_MAPS = (((1, 0), (0, 1)), ((0, 1), (-1, 0)), ((-1, 0), (0, -1)), ((0, -1), (1, 0)),
+            ((-1, 0), (0, 1)), ((1, 0), (0, -1)), ((0, 1), (1, 0)), ((0, -1), (-1, 0)))
+WAYS = {(1, 0): "right", (-1, 0): "left", (0, 1): "down", (0, -1): "up"}
+
+
+def key_vector(key: str, mapping: tuple) -> tuple:
+    right, down = mapping
+    return {"ms_right": right, "ms_left": (-right[0], -right[1]), "ms_down": down, "ms_up": (-down[0], -down[1])}[key]
+
+
+def zone_moved(place: tuple, presses: list, mapping: tuple) -> tuple:
+    """A zone's place after `presses` ([[key, n]]) under a key mapping, each press stopped at the grid's edge (Circ. of
+    Focus Point = Does Not Circulate, which a vertical sweep sets)."""
+    c, r = place
+    for key, n in presses:
+        dc, dr = key_vector(key, mapping)
+        for _ in range(n):
+            c, r = max(-1, min(1, c + dc)), max(-1, min(1, r + dr))
+    return c, r
+
+
+def zone_fits(place: tuple, presses: list, read: tuple) -> list:
+    """The key mappings (KEY_MAPS) under which `presses` from `place` lead to `read`, the level one first."""
+    return [m for m in KEY_MAPS if zone_moved(place, presses, m) == tuple(read)]
+
+
+def mapping_words(mapping: tuple) -> str:
+    """A key mapping in words: "as level" for the level keys, else what Right and Down did."""
+    if mapping == KEY_MAPS[0]:
+        return "as level (Right moved it right, Down down)"
+    return f"Right moved it {WAYS[mapping[0]]}, Down {WAYS[mapping[1]]}"
+
+
+def zone_back_presses(now: tuple, start: tuple, mapping: tuple) -> list:
+    """The presses that bring a zone from `now` to `start` straight (no edge in the way: both lie on the grid) under a
+    key mapping: as many Right (or Left) presses as the move's share along Right's way, likewise Down."""
+    dc, dr = start[0] - now[0], start[1] - now[1]
+    right, down = mapping
+    kr, kd = dc * right[0] + dr * right[1], dc * down[0] + dr * down[1]
+    return [[k, abs(n)] for k, n in (("ms_right" if kr > 0 else "ms_left", kr), ("ms_down" if kd > 0 else "ms_up", kd))
+            if n]
+
+
 def sweep_line(k: int, expected: tuple, code, base_changes: list, download: str, index: dict, table=None) -> dict:
     """The place's line for zone_grid.jsonl: {"place" (the code read from the download), "name" (the table's), "expected"
     (the place the route led to), "confirmed", "download", "records" (every set1 record that changed to the code),
-    "groups"}; no value but the codes."""
+    "groups" (them by orientation, zone_group), "other" (each zone record, by the definition's name, that changed to
+    another code: {key: code}, a copy that took a place of its own)}; no value but the codes."""
     name = zone_names(table).get(code)
     keys = holders(base_changes, code)
+    other = {c["key"]: c["after"] for c in base_changes if c["key"].startswith("set1:") and c["key"] not in keys
+             and not isinstance(c["after"], list) and "Zone position" in ((index.get(def_key(c["key"])) or {})
+                                                                         .get("name") or "")}
     return {"t": round(time.time(), 3), "n": k + 1, "place": code, "name": name, "expected": place_name(expected, table),
             "confirmed": name is not None and code_place(code, table) == tuple(expected), "download": download,
-            "records": keys, "groups": groups_of(keys, index)}
+            "records": keys, "groups": groups_of(keys, index), "other": other}
 
 
-def sweep_proofs(line: dict, held: dict, base: str, changes: list, index: dict, tag: dict) -> list:
+def sweep_proofs(line: dict, held: dict, base: str, changes: list, index: dict, tag: dict,
+                 grip: str | None = None) -> list:
     """One proof line per zone record (zone_records) for the place: applied only when the place reads as the route led
     (line["confirmed"]), the record holds the place's code and it changed to it from the download before (it is among
     line["records"]). An unconfirmed place's download may still hold the start place, and a record that holds the code
     without changing may hold what the camera had, so neither is credited: a put-back by another name (decision 16).
-    `held`: {definition key: value in the place's download}; `changes`: the diff from the previous download."""
+    `held`: {definition key: value in the place's download}; `changes`: the diff from the previous download. Held
+    vertically (`grip` down or up) the records are sweep_records' for that grip, and a copy that took a code of its own
+    is credited nothing (it does not hold the place's code)."""
     code, out = line["place"], []
-    for rec in zone_records(index):
+    state = (f"{VH_ROW} = {VH_OPTION[grip]}, the camera held {held_words(grip)}" if grip in TURNED
+             else f"{VH_ROW} = {OFF}")
+    for rec in sweep_records(index, grip):
         key = rec.replace("set:", "set1:", 1)
         ch = [c for c in changes if c["key"] == key]
         why = None if line.get("confirmed") else "the place does not read as the route led there"
@@ -726,22 +813,23 @@ def sweep_proofs(line: dict, held: dict, base: str, changes: list, index: dict, 
         applied = why is None
         out.append({"path": [MEMORY_ROW, "Zone place"], "menu": MEMORY_ROW, "kind": PROOF_KIND, "record": rec, "key": key,
                     "index": code, "label": line["name"],
-                    "via": f"Focus Area = Zone with {VH_ROW} = {OFF}, the frame moved with the multi-selector to the "
+                    "via": f"Focus Area = Zone with {state}, the frame moved with the multi-selector to the "
                            f"{line['name']} place, then slot 1 registered ({MEMORY_ROW}, Enter on the slot)",
                     "slot": "1", "base": base, "dat": line["download"], "after": line["download"], "changes": ch,
                     "applied": applied, **({} if applied else {"not_applied": why}), **tag})
     return out
 
 
-def place_written(run_dir: Path, line: dict, held: dict, base: str, changes: list, index: dict, tag: dict) -> list:
+def place_written(run_dir: Path, line: dict, held: dict, base: str, changes: list, index: dict, tag: dict,
+                  grip: str | None = None) -> list:
     """A place of the sweep written: its line in zone_grid.jsonl always (confirmed or not), and its proof lines
-    (sweep_proofs) in proofs.jsonl, the run marked as a proof run, only once the place reads as the route led
-    (line["confirmed"]): an unconfirmed place writes no proof line. Returns the proof lines written."""
+    (sweep_proofs, for `grip`'s records) in proofs.jsonl, the run marked as a proof run, only once the place reads as the
+    route led (line["confirmed"]): an unconfirmed place writes no proof line. Returns the proof lines written."""
     from camkit.runs import mark_proof_run
     jsonl.append(run_dir / "zone_grid.jsonl", dict(line, **tag))
     if not line.get("confirmed"):
         return []
-    got = sweep_proofs(line, held, base, changes, index, tag)
+    got = sweep_proofs(line, held, base, changes, index, tag, grip)
     for p in got:
         jsonl.append(run_dir / "proofs.jsonl", p)
     mark_proof_run(run_dir, "kit/provers/framepos_run.py --zone-grid")     # the writer reads these lines
@@ -1226,67 +1314,108 @@ def zone_sweep(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tup
     (SWEEP_STEPS), slot 1 registered and a download "zone-<name>" at each, the place read from set1:0x019a and checked
     against the route; the frame put back where it started, slot 1 registered once more and a download "zone-back"
     which must match the start's. One line a place in zone_grid.jsonl, proof lines in proofs.jsonl. `owed`: the net
-    presses that put the frame back at the start, kept current for the caller. Returns the sweep's summary line."""
+    presses that put the frame back at the start, kept current for the caller. Held vertically (a.grip down or up) the
+    area is chosen and the screens read as the grip runs read them (turned unless Vertical Display is Off: a.vertical),
+    and the proof lines cover that grip's records (sweep_records). A place that does not read as the route led ends the
+    walk with what the keys did, the key mappings that explain it (zone_fits: the step's own move from a confirmed place;
+    for the corner, the presses from the start, never said, the start being the owner's), and the frame is still put back
+    and checked; a zone-back off its start is brought to it once by zone_back_presses under the one mapping the walk
+    showed (the level one where every place confirmed) and checked again. Returns the sweep's summary line, "failed"
+    where a place did not read as routed."""
     from camkit import camset
-    from prove_run import Failed, held_value, to_shooting
+    from prove_run import held_value, to_shooting
     from runner import changes_of
-    got = afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, None)
+    grip = getattr(a, "grip", None)
+    turned = turned_of(grip, getattr(a, "vertical", None))
+    got = afreg_run.choose_area(cam, run, cycle, model, labels, axes, r, turned)
     to_shooting(link, hdmi, "the shooting screen with Zone chosen")
     register_slot(cam, cycle, model, a.allow)
     start, at = download(cam, link, hdmi, "zone-start")
-    afreg_run.ready_to_hold(cam, at)
+    afreg_run.ready_to_hold(cam, at, run, turned)
     cs0 = camset.read(start)
     code0 = held_value(cs0, ZONE_CURRENT)
     place0 = code_place(code0)
     if place0 is None:
+        from prove_run import Failed
         raise Failed(f"the start download holds no zone place the table names ({ZONE_CURRENT}, {start.name})")
     # the start place is the owner's: read from the download and kept there, never printed (decision 16)
     print(f"  zone sweep: the start place was read from the download ({start.name})", flush=True)
-    done, sent, rows = [], [], []
+    done, sent, rows, finding = [], [], [], None
+    maps = list(KEY_MAPS)                   # the key mappings the walk has not ruled out
 
     def go(moves):
         try:
-            press_moves(cam, moves, sent, done)
+            press_moves(cam, moves, sent, done, turned, run)
         finally:
             owed[:] = net_back(done)
-    go(corner_moves(place0))
-    prev_cs, prev_name = cs0, start.name
+
+    def registered(tag_):
+        register_slot(cam, cycle, model, a.allow)
+        dat, at_ = download(cam, link, hdmi, tag_)
+        afreg_run.ready_to_hold(cam, at_, run, turned)
+        return dat, camset.read(dat)
+    corner = corner_moves(place0)
+    go(corner)
+    prev_cs, prev_name, prev_place = cs0, start.name, place0
     for k, (step, expected) in enumerate(sweep_route()):
         if step:
             go([[step, 1]])
         want = place_name(expected)
-        register_slot(cam, cycle, model, a.allow)
-        dat, at = download(cam, link, hdmi, f"zone-{slug(want)}")
-        afreg_run.ready_to_hold(cam, at)
-        cs = camset.read(dat)
+        dat, cs = registered(f"zone-{slug(want)}")
         code = held_value(cs, ZONE_CURRENT)
         changes = changes_of(camset.diff(prev_cs, cs))
         line = sweep_line(k, expected, code, changes, dat.name, index)
-        held = {rec: held_value(cs, rec.replace("set:", "set1:", 1)) for rec in zone_records(index)}
-        place_written(run.dir, line, held, prev_name, changes, index, tag)     # proof lines once confirmed only
+        presses = [[step, 1]] if step else corner
+        read = code_place(code)
+        fits = [] if read is None else zone_fits(prev_place, presses, read)
+        maps = [m for m in maps if m in fits]
+        line.update(step=WORDS[step] if step else "to the upper left", fits=[mapping_words(m) for m in maps])
+        held = {rec: held_value(cs, rec.replace("set:", "set1:", 1)) for rec in sweep_records(index, grip)}
+        place_written(run.dir, line, held, prev_name, changes, index, tag, grip)     # proof lines once confirmed only
         rows.append(line)
         if not line["confirmed"]:
-            # what an unconfirmed place's download holds may be the start place, the owner's: in zone_grid.jsonl only
-            print(f"  zone sweep {k + 1}/9: {want} NOT as routed (what the download holds is in zone_grid.jsonl)",
-                  flush=True)
-            raise Failed(f"the zone sweep's place {k + 1} does not read as {want}: the route does not hold ({dat.name})")
+            # what an unconfirmed place's download holds may tell the start place, the owner's: in zone_grid.jsonl only;
+            # what a single step from a confirmed place did is the keys' own doing, and is said
+            if step and read is not None:       # from a place that read as routed: the key's own move
+                level = key_vector(step, KEY_MAPS[0])
+                did = (f"{WORDS[step]} moved the zone {read[0] - prev_place[0]:+d} column(s), "
+                       f"{read[1] - prev_place[1]:+d} row(s), where level it moves {level[0]:+d} column(s), "
+                       f"{level[1]:+d} row(s)")
+            else:
+                did = "the presses toward the upper left led elsewhere"
+            explained = (f"; the keys act turned: {mapping_words(maps[0])}" if len(maps) == 1 else
+                         "; no turn or mirror of the level keys explains it (the zone may wrap at an edge)" if not maps
+                         else f"; {len(maps)} turns or mirrors of the keys explain it")
+            finding = f"place {k + 1} ({want}) does not read as routed: {did}{explained}"
+            print(f"  zone sweep {k + 1}/9: {want} NOT as routed: {did}{explained} (what the download holds is in "
+                  "zone_grid.jsonl)", flush=True)
+            break
         print(f"  zone sweep {k + 1}/9: {want} -> code {code} ({line['name']}), confirmed; records: "
-              f"{', '.join(line['records']) or 'none'}", flush=True)
-        prev_cs, prev_name = cs, dat.name
+              + ("; ".join(f"{g} {', '.join(keys)}" for g, keys in line["groups"].items() if keys) or "none"),
+              flush=True)
+        prev_cs, prev_name, prev_place = cs, dat.name, read
     back = net_back(done)
     go(back)
-    register_slot(cam, cycle, model, a.allow)
-    again, at = download(cam, link, hdmi, "zone-back")
-    afreg_run.ready_to_hold(cam, at)
-    off = changes_of(camset.diff(cs0, camset.read(again)))
+    again, cs_back = registered("zone-back")
+    off = changes_of(camset.diff(cs0, cs_back))
+    now = code_place(held_value(cs_back, ZONE_CURRENT))
+    fixed = []
+    mapping = KEY_MAPS[0] if finding is None else maps[0] if len(maps) == 1 else None
+    if off and now is not None and now != place0 and mapping is not None:
+        # counted presses put back nothing where a press met an edge: once more, straight, under the keys' mapping
+        fixed = zone_back_presses(now, place0, mapping)
+        go(fixed)
+        again, cs_back = registered("zone-back2")
+        off = changes_of(camset.diff(cs0, cs_back))
     # the presses that put it back tell where it started: in the sweep's line only, never printed
-    print("  zone sweep: put back where it started; the registration after it "
-          + ("matched the start's" if not off else f"differs from the start's in {', '.join(c['key'] for c in off)}"),
-          flush=True)
+    print("  zone sweep: the registration after the put-back "
+          + ("matched the start's" if not off else
+             f"differs from the start's in {', '.join(c['key'] for c in off)}: on the shooting screen with {ROW} = Zone, "
+             f"move it back by hand to where it began (the place {start.name} holds)"), flush=True)
     return {"t": round(time.time(), 3), "sweep": "zone-grid", "places": len(rows),
-            "confirmed": sum(x["confirmed"] for x in rows), "put_back": back, "back_same": not off,
+            "confirmed": sum(x["confirmed"] for x in rows), "put_back": back + fixed, "back_same": not off,
             "back_off": [c["key"] for c in off], "files": {"start": start.name, "back": again.name},
-            "frames": {"chosen": got["chosen_frame"]}, **tag}
+            "frames": {"chosen": got["chosen_frame"]}, **({"failed": finding} if finding else {}), **tag}
 
 
 def push(cam, moves: list, turned: str | None = None, gap: float = PUSH_GAP) -> list:
@@ -1763,7 +1892,9 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
             if not turned:                          # Off: every screen read level
                 tg.pop("upright", None)
     edges, putting = getattr(a, "edges", False), bool(getattr(a, "put_back", None))
-    setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip, circ=edges or putting)
+    upright_sweep = bool(getattr(a, "zone_grid", False)) and grip in TURNED      # the zone held vertically: edges stop it
+    setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip,
+                    circ=edges or putting or upright_sweep)
     if putting:
         put_back_loop(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, tag, lines, setup, turned)
         return
@@ -1827,7 +1958,8 @@ def zone_grid(s, a, run, hdmi, cycle, model, labels, axes, routes, index, out, t
         if owed:
             sent, done = [], []
             try:
-                press_moves(cam, owed, sent, done)
+                press_moves(cam, owed, sent, done, turned_of(getattr(a, "grip", None), getattr(a, "vertical", None)),
+                            run)
             except Failed as e2:
                 line["put_back_failed"] = str(e2)
                 print(f"  zone sweep: the frame could not be put back ({e2}): on the shooting screen with {ROW} = Zone, "
@@ -1918,7 +2050,8 @@ def main(argv=None) -> int:
                          "--zone-grid is given), all, or the definition's labels, comma-separated ('Zone,Spot: S')")
     ap.add_argument("--zone-grid", action="store_true",
                     help="sweep the Zone's nine grid places, slot 1 registered at each (zone_grid.jsonl); alone it runs "
-                         "this sweep only, with --areas the sweep first, then those areas")
+                         "this sweep only, with --areas the sweep first, then those areas; level with Switch V/H AF Area "
+                         "Off, or held as --grip down or up says")
     add_allow_argument(ap)
     ap.add_argument("--focus-mode", choices=("auto", "menu", "leave"), default="auto",
                     help="auto: Focus Mode = Continuous AF through the menu (its dial set with the menu) when the plan "
@@ -1980,8 +2113,9 @@ def main(argv=None) -> int:
                  "must know which it measures under: Standard or Large")
     if a.put_back:
         return put_back_main(a)
-    if a.zone_grid and a.grip:
-        sys.exit("framepos_run: --zone-grid with --grip: the nine-place sweep is made level; with --grip use --areas Zone")
+    if a.zone_grid and a.grip == "level":
+        sys.exit("framepos_run: --zone-grid with --grip level: the level sweep is made with Switch V/H AF Area Off, "
+                 "without --grip; held vertically, --grip down or up")
     if a.zone_grid and not ZONE:
         sys.exit("framepos_run: --zone-grid plans and checks its sweep by the Zone grid's places, and the hand tables of "
                  "the camera the kit works on name none (ZONE in data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json; "
@@ -2000,16 +2134,22 @@ def main(argv=None) -> int:
     tracking = any(t["tracking"] for t in todo)
     focus = a.focus_mode == "menu" or (a.focus_mode == "auto" and tracking)
     drive = a.drive_mode == "menu" or (a.drive_mode == "auto" and tracking)
+    if drive and a.grip in TURNED:
+        sys.exit(f"framepos_run: held vertically (--grip {a.grip}) Drive Mode's chooser is drawn in the portrait "
+                 "arrangement, which the kit cannot read (afreg_run.drive_single): give --drive-mode leave, Drive Mode "
+                 "left as the camera has it")
     amt = a.frame_move_amt if a.frame_move_amt in ("Standard", "Large") else \
         "Standard" if a.edges and a.frame_move_amt is None else None
     want = amt_code(index, amt) if amt else None
     if amt and want is None:
         sys.exit(f"framepos_run: --frame-move-amt {amt}: the definition has no {AMT_ROW} record whose values name "
                  f"{amt!r}, so the run could not check that the camera took it")
-    stops = setting_code(index, [CIRC_ROW], CIRC_OFF) if a.edges else None
-    if a.edges and stops is None:
-        sys.exit(f"framepos_run: --edges: the definition has no {CIRC_ROW} record proved by its row whose values name "
-                 f"{CIRC_OFF!r}, so the run could not check that a frame stops at its edge rather than wrapping round")
+    needs_circ = a.edges or (a.zone_grid and a.grip in TURNED)
+    stops = setting_code(index, [CIRC_ROW], CIRC_OFF) if needs_circ else None
+    if needs_circ and stops is None:
+        sys.exit(f"framepos_run: {'--edges' if a.edges else '--zone-grid held vertically'}: the definition has no "
+                 f"{CIRC_ROW} record proved by its row whose values name {CIRC_OFF!r}, so the run could not check that a "
+                 "frame stops at its edge rather than wrapping round")
     if a.edges and amt == "Large":
         lacking = [t["label"] for t in todo if standard_step(t["label"]) is None]
         if lacking or amt_code(index, "Standard") is None:
@@ -2031,13 +2171,19 @@ def main(argv=None) -> int:
         labels, axes = None, None
     if a.zone_grid:
         print("  zone grid sweep: " + sweep_words(), flush=True)
+        if a.grip in TURNED:
+            print(f"  held {held_words(a.grip)}, {VH_ROW} = {VH_OPTION[a.grip]}: each registration writes the records "
+                  f"every orientation writes and {held_words(a.grip)}'s copies, which the proof lines cover; a place that "
+                  "does not read as routed ends the walk with what the keys did, and the zone is put back and checked",
+                  flush=True)
     for t in todo:
         r = afreg_run.route(t["label"], labels, axes) if labels else None
         way = (f"carousel {labels[r[0]]!r}" + (f", axis {axes[r[1]]['values'][r[2]]!r}" if r[1] else "")) if r \
             else "no route in pass 1's map and the axis walk"
         print(f"  {t['label']} (code {t['code']}): {way}; " + ("its edges" if a.edges else
               f"moved {say_moves(t['moves'])}, put back {say_moves(back_of(t['moves']))}"), flush=True)
-    sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, amt, a.grip, a.edges)]
+    sets = [afreg_run.step_name(k, w) for k, w in setup_steps(focus, drive, amt, a.grip,
+                                                               a.edges or (a.zone_grid and a.grip in TURNED))]
     print(f"set through the menu first: {'; '.join(sets)}; the start file put back at the end puts them back",
           flush=True)
     if amt:

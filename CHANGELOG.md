@@ -227,6 +227,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   that would cross the centre stops on it as the way back counts on, and Large crosses it; the Large way back left a
   frame out of place. `--put-back RUN` brings back each frame an edges run left out, through the far corner under
   Standard, checked by a registration.
+- `framepos_run.py --zone-grid` now takes `--grip down` or `up`: the nine Zone places walked with the camera held that
+  way, each place saying which orientation's records its registration wrote, and keys that move the zone turned said
+  as a finding before the zone is put back and checked.
 - Where the page scan knows a row only by one reader's reading and OCR garbles its icon on the lit bar (the a1 II's
   S&Q Settings in S&Q mode stopped `mode_switch.py`), the menu navigation now asks the vision reader once what the lit
   row is and goes on only where it reads exactly that row. A `--network` or `--owner` run asks a local reader only and
