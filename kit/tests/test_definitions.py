@@ -3283,8 +3283,14 @@ def test_a_registrations_proof_of_the_memory_copy_sits_after_in_sets():
 FRAMEPOS = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e", "set:0x0f30", "set:0x019c",
             "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
 # what a Custom box's step is not known to be: the same at every size (each box measured at its default size only)
-BOX_STEP_SIZE = ("A Custom area's step may depend on that area's size: under Standard the three boxes moved alike, "
-                 "each at its default size, the only size tried.")
+BOX_STEP_SIZE = ("A Custom area's step may depend on that area's size: under Standard and under Large the three boxes "
+                 "moved alike, each at its default size, the only size tried.")
+# Large's step in words, in the spot's point notes, AF Frame Move Amt's note and the model page's row: no rule of "twice"
+LARGE_SPOT = "Under Large the step grows with the spot, Spot S stepping as Spot XS and Expand Spot as Spot M."
+# where a press that would carry a frame across the centre lands, with what was not tried, in AF Frame Move Amt's note
+CENTRE = ("Under Standard a press that would carry a frame back across the centre lands on the centre, as seen coming "
+          "back to it in every frame tried, each of which began there; under Large presses carried frames across the "
+          "centre.")
 
 
 def step_facts(steps: dict) -> dict:
@@ -3302,7 +3308,7 @@ def step_facts(steps: dict) -> dict:
                 f"under Large {lb[0]} in X and {lb[1]} in Y, twice Standard's both ways"),
         "all": (f"under Standard a press moved Spot M's point {sm[0]} in X and {sm[1]} in Y, Spot XS's {sxs[0]} and "
                 f"{sxs[1]}, and Custom 1's box {sb[0]} and {sb[1]}; under Large Spot M's point {lm[0]} in X and "
-                f"{lm[1]} in Y, Spot XS's {lxs[0]} and {lxs[1]}, and the box {lb[0]} and {lb[1]}, twice Standard's")}
+                f"{lm[1]} in Y, Spot XS's {lxs[0]} and {lxs[1]}, and the box {lb[0]} and {lb[1]}")}
 
 
 def frame_notes(T) -> dict:
@@ -3322,8 +3328,11 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     hand note that gives a Custom box's step, and the model page's row, says in one sentence (BOX_STEP_SIZE) that it
     may depend on the box's size and was measured at each box's default size only. The table holds Standard's step for
     every movable area, and the notes' claims stand on its rows: Spot S, L and XL and Expand Spot step as Spot M, Spot
-    XS less across, the three boxes alike, each Tracking area as its plain area. AF Frame Move Amt's hand entry is a note
-    only, its proof the report's; the Custom boxes' place records are 26 new memory set records laid out like the
+    XS less across, the three boxes alike, each Tracking area as its plain area; and Large's for every area, whose words
+    (LARGE_SPOT, in the point notes, AF Frame Move Amt's and the model page's row) stand on its rows too: the step grows
+    with the spot, Spot S's as Spot XS's, Expand Spot's as Spot M's, the boxes alike, each Tracking area as its plain
+    one. AF Frame Move Amt's note says where a press across the centre lands (CENTRE). AF Frame Move Amt's hand entry is a
+    note only, its proof the report's; the Custom boxes' place records are 26 new memory set records laid out like the
     spot's."""
     import schema_update as S
     T = hand_tables.load(A1, evidence=False)
@@ -3338,6 +3347,12 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     assert std["Spot XS"][0] < std["Spot M"][0] and std["Custom 2"] == std["Custom 3"] == std["Custom 1"]
     plain = [a for a in std if not a.startswith("Tracking: ")]
     assert len(plain) == 9 and len(std) == 18 and all(std[f"Tracking: {a}"] == std[a] for a in plain)
+    large = {area: xy for (option, area), xy in T.FRAME_STEPS.items() if option == "Large"}
+    assert set(large) == set(std) and all(large[f"Tracking: {a}"] == large[a] for a in plain)
+    sizes = [large[a] for a in ("Spot XS", "Spot S", "Spot M", "Spot L", "Spot XL")]
+    assert all(a[i] <= b[i] for a, b in zip(sizes, sizes[1:], strict=False) for i in (0, 1)) and sizes[0] < sizes[-1]
+    assert large["Spot S"] == large["Spot XS"] and large["Expand Spot"] == large["Spot M"]
+    assert large["Custom 1"] == large["Custom 2"] == large["Custom 3"]
     boxes = [k for k in S.NEW_RECORDS if k.startswith("set:0x13") and "box position" in S.NEW_RECORDS[k]["name"]]
     assert len(boxes) == 26 and all(S.NEW_RECORDS[k]["like"] == "set:0x019c" for k in boxes)
     amt_note = PUB_BY["global:0x03a3"]["note"]
@@ -3360,6 +3375,10 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
         assert BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"], k
     assert not [k for k in FRAMEPOS if BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"]]
     assert row.index(facts["all"]) < row.index(BOX_STEP_SIZE)     # and the model page's row, after its steps
+    for text in (notes["point"], notes["vertical"], amt_note, row, T.FRAME_PROOFS["global:0x03a3"]["note"]):
+        assert LARGE_SPOT in text, text
+    assert CENTRE in amt_note and CENTRE in T.FRAME_PROOFS["global:0x03a3"]["note"]
+    assert "twice Standard's" not in amt_note and "twice Standard's" not in row
     forbidden = re.compile(r"\b(?:edge|limit|travel|near|side|stood|further)\b|\b(?:stop|short|border|boundar|clamp|corner)\w*"
                            r"|\b(?:less|more) than\b|on the way|from the centre", re.I)
     geometry = r"640 x 480|3 x 3|\(320, 240 = centre\)|\(0 centre, [^)]*\)|slot 1|Custom [123]|copy [1-4]|ILCE-1M2|0x[0-9a-f]{4}"
@@ -3375,7 +3394,7 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
         assert not re.search(r"\d", bare(text)) and not forbidden.search(text), (bare(text), text)
     for text in (notes["point"], notes["box"]):
         assert "AF Frame Move Amt Standard" in text and "kit2_" not in text, text
-    assert "a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS" in notes["point"]
+    assert "a step AF Frame Move Amt sets, under Standard the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS" in notes["point"]
     assert "differ" not in notes["box"] and "moving with the presses" in notes["box"] and "moved Custom 1's box" in notes["box"]
     assert "Spot XS's step is smaller than Spot M's across (and, under Large, up and down too)" in entry
     assert not {"values", "proved", "sampled", "run", "date"} & set(S.FRAME_PROOFS["global:0x03a3"])
@@ -3467,7 +3486,7 @@ def test_tonights_hand_tables_hold_proofs_only():
         assert "AF Frame Move Amt Standard" in text and "kit2_" not in text, text
     for text in (S.FRAME_PROOFS["set:0x019c"]["note"], S.FRAME_PROOFS[next(iter(boxes))]["note"]):
         assert "AF Frame Move Amt Standard" in text and "kit2_framepos_amt" in text, text
-    assert ("a step AF Frame Move Amt sets, the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS"
+    assert ("a step AF Frame Move Amt sets, under Standard the same for Spot S, M, L and XL and Expand Spot and smaller for Spot XS"
             in notes["point"]) and "led to each of the nine places" in S.FRAME_PROOFS["set:0x019a"]["note"]
     assert "differ" not in notes["box"] and "moving with the presses" in notes["box"]
     assert "moved Custom 1's box" in notes["box"] and "Spot XS's step is smaller than Spot M's across (and, under Large, up and down too)" in entry
@@ -3475,9 +3494,12 @@ def test_tonights_hand_tables_hold_proofs_only():
     # 2's, by the menu), merged with the definition's (by_lines_of takes it not)
     assert not {"values", "proved", "sampled", "run", "date"} & set(S.FRAME_PROOFS["global:0x03a3"])
     assert "global:0x03a3" not in S.by_lines_of(S.FRAME_PROOFS)
-    # the public note, then its evidence after it (the hand evidence's "note+")
-    assert amt_note.endswith(". (set by the menu and measured through Stills slot 1's registrations, runs "
-                             "kit2_framepos_amt and kit2_framepos_amt_one, 2026-11-09)")
+    # the public note, then its evidence after it (the hand evidence's "note+"), and in the definition the public note
+    # alone, its evidence apart (note_evidence)
+    assert ". (set by the menu and measured through Stills slot 1's registrations, runs kit2_framepos_amt and " \
+        "kit2_framepos_amt_one, 2026-11-09; each frame's step under AF Frame Move Amt Standard measured" in amt_note
+    assert amt_note.endswith("in the earlier attempt, runs/kit2_a1fin_framepos_edges_gripup_large_plain, 2026-11-16)")
+    assert "global:0x03a3" not in by_key or by_key["global:0x03a3"]["note"] == amt_note[:amt_note.index(" (set by the menu")]
     if "global:0x03a3" in by_key:
         proof = by_key["global:0x03a3"]["proved"]
         assert proof["values"] == [0, 1] and "AF Frame Move Amt" in proof["menu"] and proof["run"] == "kit2_pass2"
