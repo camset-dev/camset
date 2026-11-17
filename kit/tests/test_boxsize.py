@@ -111,6 +111,80 @@ def test_list_prints_the_plan_and_sends_nothing(capsys, listed):
     assert "probe: rear_l 3 single clicks up, each registered, then 3 down" in out and "edges" not in out
 
 
+def put_back_source(tmp_path, monkeypatch, default=True, edges=True) -> str:
+    """A run of kit2_boxsize_c1_width's shape where paths.run_root finds it: its boxsize.jsonl's start line (Custom 1,
+    402 x 182, the defaults'; with `default` False a size of the owner's, 418 wide) and the finish it left (388 wide),
+    and its edges at the start size (`edges`); its name."""
+    from camkit import jsonl
+    monkeypatch.setattr(B.paths, "run_root", lambda *a, **k: tmp_path)
+    run = tmp_path / "kit2_boxsize_c1_width"
+    run.mkdir()
+    size = {"width": 402 if default else 418, "height": 182, "default_width": 402, "default_height": 182,
+            "in_use_width": 402 if default else 418, "in_use_height": 182}
+    place = {"set1:0x139f": 320, "set1:0x13a1": 240, "set1:0x1327": 320, "set1:0x1329": 240}
+    context = B.context_of("3:2")
+    jsonl.append(run / "boxsize.jsonl", {"what": "start", "box": "Custom 1", "file": "00010_size-001-start-custom-1.DAT",
+                                         "size": size, "place": place, "default": default, "context": context})
+    jsonl.append(run / "boxsize.jsonl", {"what": "finish", "box": "Custom 1", "size": dict(size, width=388),
+                                         "place": place, "context": context})
+    if edges:
+        jsonl.append(run / "edges.jsonl", {"area": "Custom 1", "code": 109, "at": "start", "size": size,
+                                           "files": {"base": "00012_edge-base-custom-1.DAT"},
+                                           "values": {"base": {"set1:0x139f": 320, "set1:0x13a1": 240}},
+                                           "edges": [], "back": {"same": True}, "context": context})
+    return run.name
+
+
+def allowed(*words) -> list:
+    return [x for w in words for x in ("--allow", w)]
+
+
+def test_list_prints_the_plan_and_reaches_no_camera_in_any_mode(no_camera, listed, tmp_path, monkeypatch, capsys):
+    """--list prints the plan and sends nothing, whatever else is given: a walk, a probe, --tracking, --put-back (for
+    a run of kit2_boxsize_c1_width's shape), with no word, the owner's two, or all three: no link, no session, no eyes
+    and no run folder (the no_camera guard)."""
+    run = put_back_source(tmp_path, monkeypatch)
+    for argv in (["--box", "Custom 1"], ["--box", "Custom 1", "--probe", "rear_l"], ["--box", "Custom 2", "--tracking"],
+                 ["--put-back", run]):
+        for words in ((), WORDS, (*WORDS, "Custom box Reset")):
+            assert B.main(argv + allowed(*words) + ["--list"]) == 0, (argv, words)
+            assert capsys.readouterr().out, (argv, words)
+    assert not (tmp_path / "kit2_boxsize_putback").exists() and not (tmp_path / "kit2_boxsize").exists()
+
+
+def test_the_put_back_plan_says_what_it_would_do_for_the_runs_box(no_camera, listed, tmp_path, monkeypatch, capsys):
+    """--put-back RUN --list: for RUN's box, the start size it would return to (by value where it is the defaults'),
+    how: registered where it is now, then counted clicks, then the editor's Reset under --allow "Custom box Reset" (given
+    or not, said), its place from RUN's edges at the start size; an owner's start size by clicks alone, never said;
+    a run that measured no edges at the start size has its place checked, not brought back."""
+    run = put_back_source(tmp_path, monkeypatch)
+    assert B.main(["--put-back", run, "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "Custom 1: back to the start of kit2_boxsize_c1_width, width 402, height 182 (the default records')" in out
+    assert "registered where it is now; then by counted clicks, each landing registered" in out
+    assert "where no click lands on it, the editor's Reset only with --allow 'Custom box Reset' (not given)" in out
+    assert "its place: back to the start's from kit2_boxsize_c1_width's edges at the start size" in out
+    assert "set through the menu first: Switch V/H AF Area = Off; Circ. of Focus Point = Does Not Circulate" in out
+    assert B.main(["--put-back", run, *allowed(*WORDS, "Custom box Reset"), "--list"]) == 0
+    assert "where no click lands on it, the editor's Reset (the trash button), --allow 'Custom box Reset' given" in \
+        capsys.readouterr().out
+
+
+def test_the_put_back_plan_for_an_owners_start_or_a_run_without_edges(no_camera, listed, tmp_path, monkeypatch, capsys):
+    """An owner's start size: said as the owner's, never by value, brought back by clicks alone (a Reset would not give
+    it); a run with no edges at its start size: the place checked at the finish, not brought back; a run with no start
+    line: nothing to put back to, before anything connects."""
+    run = put_back_source(tmp_path, monkeypatch, default=False, edges=False)
+    assert B.main(["--put-back", run, *allowed(*WORDS, "Custom box Reset"), "--list"]) == 0
+    out = capsys.readouterr().out
+    assert "a size that is not the defaults' (the owner's, not said)" in out and "418" not in out
+    assert "by counted clicks alone: an owner's size is never reset" in out
+    assert "measured no edges at the start size: its place is checked at the finish, not brought back" in out
+    (tmp_path / run / "boxsize.jsonl").write_text("", encoding="utf-8")
+    with pytest.raises(SystemExit, match="holds no start line"):
+        B.main(["--put-back", run, "--list"])
+
+
 def test_a_camera_run_needs_the_owners_two_words_and_the_reset_its_own(listed):
     """Registering a memory slot and opening the box's editor with SET (C4) are the owner's words, given per run:
     without both, nothing connects. The editor's Reset is a third word, never needed and never implied; any other

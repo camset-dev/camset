@@ -2328,6 +2328,26 @@ def test_list_with_put_back_plans_the_frames_the_run_left_held_as_it_held_them(c
     assert "no frame of kit2_made_up is left out of place" in capsys.readouterr().out
 
 
+def test_list_with_put_back_or_the_zone_grid_reaches_no_camera(no_camera, capsys, monkeypatch, tmp_path):
+    """--list --put-back RUN and --list --zone-grid print their plans and send nothing, with or without the owner's word:
+    no link, no session, no eyes, no run folder (the no_camera guard), and prove is never reached."""
+    import pass3_run
+
+    def no_map(path):
+        raise SystemExit("no pass 1 map")
+    monkeypatch.setattr(pass3_run, "labels_of", no_map)
+    monkeypatch.setattr(F, "prove", lambda *a, **k: pytest.fail("prove reached under --list"))
+    run = put_back_run(tmp_path, monkeypatch, spot_xl_line())
+    for words in ([], ["--allow", "Camera Set. Memory"]):
+        assert F.main(["--list", "--put-back", run, *words]) == 0
+        assert "to its start registration in kit2_made_up" in capsys.readouterr().out
+    monkeypatch.setattr(F, "read_json", lambda path: made_up_doc())
+    for words in ([], ["--allow", "Camera Set. Memory"]):
+        assert F.main(["--list", "--zone-grid", *words]) == 0
+        assert capsys.readouterr().out.startswith("0 areas and the zone grid sweep")
+    assert not (tmp_path / "kit2_framepos_put_back").exists()
+
+
 @pytest.mark.parametrize("argv,words", [
     (["--edges"], "--put-back with --edges"),
     (["--areas", "Spot: XL"], "--put-back with --areas"),

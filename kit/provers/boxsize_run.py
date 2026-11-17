@@ -887,6 +887,49 @@ def prove(a, doc: dict, recs: dict, table: dict, allowance: str) -> int:
     return 0 if ok else 1
 
 
+def put_back_source(name: str) -> tuple:
+    """(the start line, the edges line at the start size or None) of the run `name` (its boxsize.jsonl, its
+    edges.jsonl), read from its folder alone; exits where it holds no start line: nothing to put back to. A run walks
+    one box: its first start line is the start."""
+    src = paths.run_root() / name
+    starts = [ln for ln in jsonl.read(src / OUT) if ln.get("what") == "start"] if (src / OUT).exists() else []
+    if not starts:
+        sys.exit(f"boxsize_run: {paths.shown(src / OUT)} holds no start line: nothing to put back to")
+    edges = [ln for ln in jsonl.read(src / "edges.jsonl") if ln.get("at") == "start" and ln.get("area") == starts[0]["box"]] \
+        if (src / "edges.jsonl").exists() else []
+    return starts[0], (edges[0] if edges else None)
+
+
+def put_back_plan_lines(a, start: dict, edges: dict | None, recs: dict) -> list:
+    """What --put-back RUN will do, for its plan (printed before a run, alone with --list): nothing is sent. The start
+    size it returns to (by value where it is the default records'; an owner's, never said), the way: registered where it
+    is now, then counted clicks, then, from a default start, the editor's Reset as --allow RESET_WORD allows it or not;
+    its place, from RUN's edges at the start size where it has them."""
+    box, size, run = start["box"], start.get("size") or {}, a.put_back
+    if start.get("default"):
+        to = f"width {size.get('width')}, height {size.get('height')} (the default records')"
+        reset = (f"where no click lands on it, the editor's Reset (the trash button), --allow {RESET_WORD!r} given"
+                 if a.reset else f"where no click lands on it, the editor's Reset only with --allow {RESET_WORD!r} "
+                 "(not given): else the difference is said")
+        way = f"registered where it is now; then by counted clicks, each landing registered; {reset}"
+    else:
+        to = "a size that is not the defaults' (the owner's, not said)"
+        way = ("registered where it is now; then by counted clicks alone: an owner's size is never reset (a Reset gives "
+               "the defaults); a size no click lands on is said by its difference")
+    place = (f"its place: back to the start's from {run}'s edges at the start size (the frame pushed to its far corner "
+             "and brought back in Standard's step, each landing registered and checked)" if edges else
+             f"its place: {run} measured no edges at the start size: its place is checked at the finish, not brought "
+             "back")
+    sets = [afreg_run.step_name(k, w) for k, w in F.setup_steps(False, False, "Standard", None, True)]
+    return [f"{box}: back to the start of {run}, {to}, as {run} began it ({start.get('context')!r}; run {a.run})",
+            f"  {way}",
+            f"  {place}",
+            f"set through the menu first: {'; '.join(sets)}; the start file put back at the end puts them back (a box's "
+            "size and place are in no settings file: the restore leaves them where they are put)",
+            f"the box's records: width {recs['width']}, height {recs['height']}, defaults {recs['default_width']}, "
+            f"{recs['default_height']}"]
+
+
 def put_back_main(a) -> int:
     """--put-back RUN: RUN's start (its boxsize.jsonl's start line) and its edges at the start size (edges.jsonl's line
     "at": "start"), in a session of its own: the setup as an edges run's, the box chosen, its size brought back
@@ -895,13 +938,8 @@ def put_back_main(a) -> int:
     from camkit.runs import Run
     from prove_run import Failed, to_shooting
     from runner import load_scan, prover_session
-    src = paths.run_root() / a.put_back
-    starts = [ln for ln in jsonl.read(src / OUT) if ln.get("what") == "start"] if (src / OUT).exists() else []
-    if not starts:
-        sys.exit(f"boxsize_run: {src / OUT} holds no start line: nothing to put back to")
-    start = starts[0]
+    start, edges = put_back_source(a.put_back)
     box = start["box"]
-    edges = [ln for ln in jsonl.read(src / "edges.jsonl") if ln.get("at") == "start"] if (src / "edges.jsonl").exists() else []
     doc, table = read_definition(), custom_table()
     recs = box_records(doc, box, table)
     labels, axes, r, _, t = session_parts(argparse.Namespace(tracking=False), doc, box)
@@ -911,7 +949,6 @@ def put_back_main(a) -> int:
     hdmi = eyes_from_config(run)
     tag = {"context": start.get("context"), "source": a.put_back}
     ok = False
-    print(f"{box}: back to the start size and place of {a.put_back}", flush=True)
     with prover_session(run, hdmi, may_open={F.MEMORY_ROW}, show=0, expected=frozenset(F.EXPECTED_LEFT),
                         end_why="the settings download after the put-back") as s:
         from camkit import camset
@@ -967,6 +1004,12 @@ def main(argv=None) -> int:
                  f"and {RESET_WORD!r}")
     a.reset = reset_allowed(a.allow)
     if a.put_back:
+        # the plan from RUN's own files and the definition alone; --list ends here, before anything reaches the camera
+        start, edges = put_back_source(a.put_back)
+        recs = box_records(read_definition(), start["box"], custom_table())
+        print("\n".join(put_back_plan_lines(a, start, edges, recs)), flush=True)
+        if a.list:
+            return 0
         allowed_or_exit(a.allow)
         return put_back_main(a)
     if a.box not in BOXES:

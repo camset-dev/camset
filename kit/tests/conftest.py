@@ -178,6 +178,33 @@ class Eyes:
 
 
 @pytest.fixture
+def no_camera(monkeypatch):
+    """Every way a kit program reaches the camera made to fail the test: the link (camkit.link.Link), a prover's
+    session (runner.prover_session), the eyes (camkit.frames.eyes_from_config) and a run's folder (camkit.runs.Run),
+    where they are defined and in every kit module already holding them by name (one imported later takes the failing
+    one from where it is defined). What a --list must never touch: it prints the plan and sends nothing."""
+    import sys
+    for p in (ROOT / "kit", ROOT / "kit" / "provers"):
+        if str(p) not in sys.path:
+            sys.path.insert(0, str(p))
+    import camkit.frames
+    import camkit.link
+    import camkit.runs
+    import runner
+
+    def reached(*a, **k):
+        pytest.fail("the camera was reached (a link, a session, the eyes or a run's folder) where nothing may be sent")
+    real = {"Link": camkit.link.Link, "prover_session": runner.prover_session,
+            "eyes_from_config": camkit.frames.eyes_from_config, "Run": camkit.runs.Run}
+    for mod in list(sys.modules.values()):
+        if not str(getattr(mod, "__file__", "") or "").startswith(str(ROOT / "kit")):
+            continue
+        for name, obj in real.items():
+            if getattr(mod, name, None) is obj:
+                monkeypatch.setattr(mod, name, reached)
+
+
+@pytest.fixture
 def eyes(tmp_path, monkeypatch):
     """camkit.reading's OCR and reader seams faked (Eyes), its memo and latches cleared before and after."""
     from camkit import ocr, reading
