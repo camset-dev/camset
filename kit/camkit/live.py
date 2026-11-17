@@ -56,7 +56,9 @@ confirm, beside drive.py's word for an owner row's step or armed press, permit);
 question, ("profile_reset", "PPn"), which goes only where the screen read afresh is that question
 (profile_reset_passed); a consent named for one
 press on one named screen (answer_once: a prover's --allow for its own row's screen, drive.py's and card_actions.py's
---confirm "SCREEN TEXT"), which lifts the shape and never the word list; on a notice, the run's --info-ok (press's
+--confirm "SCREEN TEXT"), which lifts the shape and never the word list, or, for a row's own dialog drawn in its portrait
+arrangement held vertically (UprightDialog), judges that one Enter as a level dialog's on the frame read upright; on a
+notice, the run's --info-ok (press's
 notice_ok, after proving.screens.pass_named_notice's judgement) or a refused MENU on that very screen just before
 (menu_refused, leave_notice, whose OK goes on that notice alone: require_notice), each only where the notice's lit
 button reads OK and is plainly its only one (safety.lone_ok). An Enter or a trash button goes to the link only with
@@ -77,6 +79,8 @@ import os
 import shutil
 import tempfile
 import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -287,6 +291,25 @@ FOOTER_TOP = 415        # px: the footer band (camkit.screen's help glyph from y
 # a carousel's title line, where camkit.screen's dialog draws its lit option in orange (proving.screens.carousel_text's)
 DIALOG_TITLE = (110, 60, 636, 112)
 MENU_REFUSED = "the notice has just refused MENU"     # the way past a notice that refused MENU (safety.enter_refused)
+
+
+@dataclass(frozen=True)
+class UprightDialog:
+    """A prover's consent for one Enter on its row's own dialog drawn in its portrait arrangement: held vertically with
+    Vertical Display On, Focus Area's carousel is drawn so, which the SDK's picture squeezes into 640 x 480 and HDMI
+    turns a quarter, and camkit.screen reads it as no known kind, whose Enter the shape check refuses (2026-11-16,
+    kit2_a1fin_framepos_edges_gripdown_vdon2). Given through answer_once by afreg_run.choose_area's upright branch alone,
+    after its own checks (the row's title read upright, the option it stepped to under the cursor, no confirmation's
+    words), where --grip down|up is the operator's word that the camera is held so; judged here (confirm_refused:
+    upright_passed) on the frame judged, read upright by `read`, as a level dialog's Enter is judged: safety.enter_refused
+    as a dialog (a text read, no question mark above the footer, a carousel that asks nothing on its lit option), then
+    the confirmation words, which every consent keeps; its title read upright must be the row's own. It answers no other
+    kind of screen, nor the trash button, and is spent by its press. Chosen over teaching camkit.screen a portrait
+    dialog kind: that kind would be trusted by every guard on every screen of its shape, from any caller, where this
+    lifts one Enter on one named screen and judges it on the reading the prover already makes."""
+    name: str           # the consent's words, logged with the press: "<row>'s own dialog, read upright, held vertically"
+    row: str            # the row whose own dialog it is: its title read upright must be that row's (safety.clean_label)
+    read: Callable      # the camera -> (title, lit option, whole text, text above the footer) of its frame read upright
 
 
 def body_of(cam) -> str:
@@ -861,7 +884,9 @@ class LiveCamera:
           that profile's own reset question (safety.profile_reset_dialog), else no Enter;
         - `answer` (answer_once): a consent named for one press on one named screen (a prover's --allow for its own
           row's screen; drive.py's and card_actions.py's --confirm with the screen's whole text): the shape refuses
-          nothing, the word list still refuses a confirmation;
+          nothing, the word list still refuses a confirmation; an UprightDialog, for an Enter on a screen of no known
+          kind alone: that one Enter judged as a level dialog's on the frame read upright (upright_passed), and on any
+          other screen or key it answers nothing;
         - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
           `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
           only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
@@ -893,6 +918,10 @@ class LiveCamera:
         passed, lone = "", None
         if safety.first_time_screen(kind, text):
             kind = "notice"         # a first-time screen (no notice's frame lines, a "Don't show this again." box)
+        if isinstance(answer, UprightDialog):
+            upright, answer = answer, None      # a portrait dialog's consent answers that dialog alone
+            if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:
+                return self.upright_passed(key, upright, judged_at)
         if kind == "notice" and canon in safety.ENTER_KEYS:
             if notice_ok:
                 passed = f"--info-ok {notice_ok}"
@@ -920,6 +949,28 @@ class LiveCamera:
                              "that has just refused MENU")
         if passed:
             self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=kind, by=passed)
+        return judged_at
+
+    def upright_passed(self, key: str, consent: UprightDialog, judged_at: int) -> int:
+        """An Enter on a screen of no known kind under a portrait dialog's consent (UprightDialog): the frame judged
+        (look_before's) read upright by the consent's reader, its title the row's own (safety.clean_label, the icon OCR
+        reads before it left out), then judged as a level dialog's Enter on that reading (safety.enter_refused as a
+        dialog: text read, no question mark above the footer, asks() on the lit option) and by the confirmation words,
+        which every consent keeps. Refused, logged, on any of them, or where the reading fails; passed, logged with the
+        consent's words. Returns judged_at."""
+        try:
+            title, lit, text, body = consent.read(self)
+        except Exception as e:
+            self.refuse(key, f"{consent.name}: the frame read upright cannot be read ({type(e).__name__}), so whether it "
+                             "asks cannot be told")
+        if not safety.clean_label(title) or safety.clean_label(title) != safety.clean_label(consent.row):
+            self.refuse(key, f"{consent.name}: its title read upright ({str(title or '').strip()[:40]!r}) is not "
+                             f"{consent.row}'s: no Enter")
+        why = safety.enter_refused("dialog", text, lit, body, key=safety.canonical_input(key))
+        said = "" if why else safety.confirmation_refused(text)
+        if why or said:
+            self.refuse(key, f"{consent.name}, read upright: {why or f'it reads as a confirmation ({said})'}: no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
         return judged_at
 
     def look_before(self, key: str) -> None:

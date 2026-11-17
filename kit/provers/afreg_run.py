@@ -520,14 +520,21 @@ def choose_level(cam, cycle, model, labels, axes, i, o, v) -> dict:
 def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None) -> dict:
     """The area under the carousel's cursor (level, or in its portrait arrangement made upright with a grip down or up,
     which callers pass by turned_of: orient_run's open_row and step_to), checked for a confirmation, read by the second
-    reader, OK. The menu closes on OK (kit2_afreg 00024)."""
+    reader, OK. The menu closes on OK (kit2_afreg 00024). The portrait dialog reads as no known kind, whose Enter the
+    camera refuses by its shape: its OK carries the camera's consent for that one press on this row's own dialog
+    (camkit.live.UprightDialog, judged by the camera as a level dialog's Enter on the frame read upright,
+    orient_run.dialog_reading), given only here, after the title, the option and the confirmation check above. A notice
+    after OK fails the area, its words kept in the run's events alone; held vertically, so does a screen after OK that
+    reads neither as the shooting screen nor as a notice, looked at again a second later (a notice drawn in the portrait
+    arrangement reads as no known kind, and the area would else be measured as another), its words read upright."""
     from camkit import ocr
+    from camkit.live import UprightDialog
     from prove_run import Failed
     from proving.screens import carousel_text, vlm_option
     i, o, v = r
     how = {}                                    # how the axis value was read, when the strip's lit cell read it
     if grip:
-        from orient_run import GRIPS, open_row, reading, step_to, upright
+        from orient_run import GRIPS, dialog_reading, open_row, reading, step_to, upright
         k, shots = GRIPS[grip], run.dir / "upright"
         try:
             open_row(cam, cycle, model, ROW, k, shots)
@@ -547,10 +554,22 @@ def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None
     if safety.confirmation(full):
         raise Failed(f"{ROW}: the dialog reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+    if grip:
+        cam.answer_once = UprightDialog(f"{ROW}'s own dialog, read upright, held vertically (grip {grip})", ROW,
+                                        lambda c: dialog_reading(c, k, shots))
     cam.press("enter")
+    step = f"{ROW} = {axes[o]['values'][v] if v is not None else labels[i]}"
+    if grip and cam.read().kind not in ("shooting", "notice"):
+        time.sleep(1.0)
+        cam.refresh("after-ok")
+        kind = cam.read().kind
+        if kind not in ("shooting", "notice"):
+            name = kept_notice(cam, step, ocr.text_in(upright(cam, k, shots), (0, 0, 480, 640)), "area_notice")
+            cam.press("menu")
+            raise Failed(f"after OK on {step} the screen ({kind}, {name}) is not the shooting screen: taken for a notice "
+                         "drawn held vertically (its words are in the run's events.jsonl)")
     if cam.read().kind == "notice":
         said = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
-        step = f"{ROW} = {axes[o]['values'][v] if v is not None else labels[i]}"
         name = kept_notice(cam, step, said, "area_notice")
         cam.press("menu")
         raise Failed(f"a notice refused {step} ({name}; its words are in the run's events.jsonl)")

@@ -909,6 +909,95 @@ def test_x21_a_consent_never_answers_leave_notices_ok(tmp_path, monkeypatch):
         cam.press("enter", require_notice=True)
 
 
+# ---------------------------------------------------------------- a portrait dialog's Enter, read upright (2026-11-16)
+
+# Focus Area's dialog held vertically with Vertical Display On, as orient_run.dialog_reading reads its frame made upright
+# (kit2_a1fin_framepos_edges_gripdown_vdon2's 00051_up_upright.png): title (its icon read as "&"), the lit option, the
+# whole text with the footer's help glyph and keys, and the text above the footer
+UPRIGHT = ("& Focus Area", "Spot: M", "& Focus Area Spot: M XL L M S XS M C1 ? MENU Cancel OK",
+           "& Focus Area Spot: M XL L M S XS M C1")
+UPRIGHT_NAME = "Focus Area's own dialog, read upright, held vertically (grip down)"
+
+
+def upright_consent(seen=None, fails=None, **changed):
+    """afreg_run.choose_area's consent for the Enter on Focus Area's portrait dialog, its reading UPRIGHT with `changed`
+    put in (title, lit, text, body); `seen` collects the frames it was asked to read, `fails` an exception it raises."""
+    got = dict(zip(("title", "lit", "text", "body"), UPRIGHT, strict=True)) | changed
+
+    def read(cam):
+        if seen is not None:
+            seen.append(cam.frame.path.name)
+        if fails:
+            raise fails
+        return got["title"], got["lit"], got["text"], got["body"]
+    return live.UprightDialog(UPRIGHT_NAME, "Focus Area", read)
+
+
+def test_a_portrait_dialogs_enter_goes_by_its_consent_judged_as_a_level_dialogs_on_the_upright_reading(tmp_path,
+                                                                                                   monkeypatch):
+    """Held vertically with Vertical Display On, Focus Area's dialog is drawn in its portrait arrangement, which
+    camkit.screen reads as no known kind: its Enter is refused as one (the run of 2026-11-16 stopped there). The prover's
+    consent for that one Enter (UprightDialog) lets it go judged as a level dialog's is (safety.enter_refused as a
+    dialog, then the confirmation words) on the judged frame read upright, its title the row's own, the help glyph's "?"
+    in the footer counting for nothing as on a level dialog; the press is logged with the consent's words, and the
+    consent is spent by it."""
+    cam = camera(tmp_path, monkeypatch, "unknown", "Focus Area Spot: M ? MENU Cancel OK", "")
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("enter")
+    seen = []
+    cam = camera(tmp_path, monkeypatch, "unknown", "Focus Area Spot: M ? MENU Cancel OK", "")
+    cam.answer_once = upright_consent(seen)
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert seen == ["00001_x.png"], "read on the frame judged, once"
+    passed = [e for e in events(cam) if e["kind"] == "enter_passed"]
+    assert [e["by"] for e in passed] == [UPRIGHT_NAME] and passed[0]["screen"] == "unknown"
+    assert cam.answer_once is None
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("enter")                                  # spent: the next Enter has no consent
+
+
+@pytest.mark.parametrize("changed,why", [
+    ({"body": UPRIGHT[3] + " Clear registered faces?"}, "holds a question mark"),
+    ({"body": UPRIGHT[3] + " Cancel"}, "asks \\(Cancel\\)"),
+    ({"lit": ""}, "a lit text that cannot be read"),
+    ({"lit": "OK"}, "the lit button 'ok'"),
+    ({"text": UPRIGHT[2].replace("Spot: M", "Format the memory card"), "lit": "Wide"}, "reads as a confirmation"),
+    ({"text": "", "body": ""}, "nothing on the dialog screen can be read"),
+    ({"title": "& Focus Area Limit"}, "is not Focus Area's"),
+    ({"title": "Delete"}, "is not Focus Area's"),
+    ({"title": ""}, "is not Focus Area's"),
+    ({"fails": RuntimeError("no frame")}, "cannot be read \\(RuntimeError\\)")])
+def test_a_portrait_dialogs_consent_still_refuses_what_a_level_dialog_would_refuse(tmp_path, monkeypatch, changed, why):
+    """The upright reading judged as a level dialog's: a question mark above the footer, a Cancel or a button pair there,
+    a lit option that cannot be read or is a button's word, a confirmation's words, a reading of nothing, or one that
+    fails, each refuses; so does a title read upright that is not the row's own (another row, a question, nothing)."""
+    cam = camera(tmp_path, monkeypatch, "unknown", "Focus Area Spot: M", "")
+    cam.answer_once = upright_consent(**changed)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("enter")
+
+
+def test_a_portrait_dialogs_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
+    """The consent answers one Enter on a screen of no known kind and nothing else: on a notice, a first-time screen, a
+    dialog that asks or a list it lifts nothing and is never read (the screen's own judgement stands), and the trash
+    button meets the shape check as ever."""
+    for kind, text, lit, why in (("notice", NOT_AVAILABLE, "OK", "is a notice"),
+                                 ("unknown", FIRST_TIME, "OK", "is a notice"),
+                                 ("dialog", "Delete this image? OK Cancel", "OK", "question mark"),
+                                 ("list", "", "", "nothing on the list screen")):
+        seen = []
+        cam = camera(tmp_path, monkeypatch, kind, text, lit)
+        cam.answer_once = upright_consent(seen)
+        with pytest.raises(safety.Refused, match=why):
+            cam.press("enter")
+        assert seen == [], kind
+    cam = camera(tmp_path, monkeypatch, "unknown", "Focus Area Spot: M", "")
+    cam.answer_once = upright_consent()
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("c4", allow=frozenset({"c4"}))
+
+
 # ---------------------------------------------------------------- the fourth review: first-time screens, --info-ok for tables
 
 FIRST_TIME = ("In the next setting screen, you can check the function assigned to a specific button by pressing that "

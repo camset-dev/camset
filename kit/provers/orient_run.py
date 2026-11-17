@@ -50,6 +50,10 @@ GRIPS = {"down": -1, "up": 1}
 # the left edge: Custom's area frame beside the name reads as a stray "7")
 TITLE = (0, 0, 480, 52)
 LABEL = (0, 52, 300, 105)
+# the upright frame's footer band: below the line at y 586 the help glyph's "?" and the keys (MENU Cancel, OK), above it
+# the title, the option, the second axis and the carousel strip (kit2_a1fin_framepos_edges_gripdown_vdon2's
+# 00051_up_upright.png); camkit.live.FOOTER_TOP is the level frame's
+FOOTER_TOP = 580
 
 
 def squeezed(f) -> bool:
@@ -76,10 +80,18 @@ def upright(cam, k: int, shots: Path) -> list:
 
 def reading(cam, k: int, shots: Path) -> tuple[str, str]:
     """(title, option) on the portrait dialog, made upright."""
+    return dialog_reading(cam, k, shots)[:2]
+
+
+def dialog_reading(cam, k: int, shots: Path) -> tuple[str, str, str, str]:
+    """(title, option, whole text, text above the footer) on the portrait dialog, made upright: what the camera judges
+    its Enter on (camkit.live.UprightDialog), as it judges a level dialog's on its frame (text_of, body_of, the lit
+    option), the footer's help glyph and its "?" left out of the body as there."""
     lines = upright(cam, k, shots)
     title = ocr.text_in(lines, TITLE)
     opt = " ".join(ln.text for ln in lines if ln.inside(LABEL) and ln.x < 30)
-    return title, re.sub(r"[^A-Za-z0-9)]+$", "", opt.strip())
+    return (title, re.sub(r"[^A-Za-z0-9)]+$", "", opt.strip()), ocr.text_in(lines, (0, 0, 480, 640)),
+            ocr.text_in(lines, (0, 0, 480, FOOTER_TOP)))
 
 
 def axis_of(label: str, axes: dict):

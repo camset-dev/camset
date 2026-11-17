@@ -1564,7 +1564,13 @@ def portrait_dialog() -> np.ndarray:
     img[10:42, 10:200] = (255, 0, 0)            # the title, in orient_run.TITLE
     img[62:92, 8:80] = (0, 255, 0)              # the option, in orient_run.LABEL, at the left edge
     img[505:555, 200:420] = (0, 0, 255)         # the carousel strip
+    img[600:630, 140:470] = (255, 255, 0)       # the footer: the help glyph's "?" and the keys, below the line at 586
     return img
+
+
+# portrait_dialog's colours and the words a reader finds where each lies
+COLOUR_WORDS = (((255, 0, 0), "Focus Area"), ((0, 255, 0), "Wide"), ((0, 0, 255), "carousel"),
+                ((255, 255, 0), "? MENU Cancel OK"))
 
 
 def colour_reader(paths) -> dict:
@@ -1578,9 +1584,8 @@ def colour_reader(paths) -> dict:
         out[p] = []
         if img.shape[:2] != (640, 480):
             continue
-        for words, c in (("Focus Area", 0), ("Wide", 1), ("carousel", 2)):
-            a, b = (i for i in range(3) if i != c)
-            ys, xs = np.nonzero((img[..., c] > 160) & (img[..., a] < 90) & (img[..., b] < 90))
+        for colour, words in COLOUR_WORDS:
+            ys, xs = np.nonzero((np.abs(img - colour) < 70).all(axis=2))
             if len(xs):
                 out[p].append(Line(words, 1.0, int(xs.min()), int(ys.min()), int(np.ptp(xs)), int(np.ptp(ys))))
     return out
@@ -1612,10 +1617,85 @@ def test_a_portrait_dialog_reads_the_same_turned_over_hdmi_or_squeezed_by_the_sd
         cam.press = lambda key, cam=cam, f=f: setattr(cam, "frame", f)        # Right on the row: its dialog
         orient_run.open_row(cam, None, None, "Focus Area", k, tmp_path)
         assert orient_run.reading(cam, k, tmp_path) == ("Focus Area", "Wide"), source
+        # what the camera's Enter guard judges it on (camkit.live.UprightDialog): the footer's "?" below the body
+        assert orient_run.dialog_reading(cam, k, tmp_path) == (
+            "Focus Area", "Wide", "Focus Area Wide carousel ? MENU Cancel OK", "Focus Area Wide carousel"), source
         up = np.asarray(Image.open(tmp_path / f"{f.path.stem}_upright.png").convert("RGB")).astype(int)
         assert up.shape == (640, 480, 3) and np.abs(up - portrait).mean() < 3, source
     turned = SimpleNamespace(frame=SimpleNamespace(image=squeezed, path=tmp_path / "00049_right.png"))
     assert orient_run.reading(turned, k, tmp_path) == ("", ""), "the squeezed frame turned reads no title"
+
+
+def watched_enter(cam) -> list:
+    """The consent each Enter on Focus Area's dialog carried, as (its type, its words, its row, what it reads on the
+    camera's frame then), or None where it carried none; recorded as the camera would judge it, then pressed as ever."""
+    got, real = [], cam.press
+
+    def press(key, **kw):
+        if key == "enter" and "shown" in cam.now:
+            c = getattr(cam, "answer_once", None)
+            got.append(None if c is None else (type(c).__name__, c.name, c.row, c.read(cam)))
+        return real(key, **kw)
+    cam.press = press
+    return got
+
+
+def test_held_vertically_choosing_the_area_hands_the_camera_a_consent_for_its_own_dialogs_enter(turned):
+    """Held grip down with Vertical Display On, afreg_run.choose_area gives the Enter on Focus Area's portrait dialog the
+    camera's consent for that one press (camkit.live.UprightDialog), named for the row's own dialog read upright, once
+    its own upright checks passed; what it reads is the dialog made upright (orient_run.dialog_reading). The slot
+    screen's Enter keeps register_slot's own consent, and a level dialog's Enter carries none."""
+    run, session = turned
+    cam, s = session(extra={VD_KEY: 0})
+    got = watched_enter(cam)
+    out, lines = grip_areas(run, s, "Custom 1", "down", vd_index())
+    assert cam.chosen == ["Custom 1"] and F.jsonl.read(out)[0]["back"]["same"]
+    assert got == [("UprightDialog", "Focus Area's own dialog, read upright, held vertically (grip down)", "Focus Area",
+                    ("Focus Area", "Custom 1", "Focus Area Custom 1", "Focus Area Custom 1"))]
+
+
+def test_a_level_dialogs_enter_carries_no_upright_consent(turned, monkeypatch):
+    """Held grip down with Vertical Display Off (every screen level), the dialog's Enter carries no consent: a level
+    dialog is judged as ever."""
+    import afreg_run
+    monkeypatch.setattr(afreg_run, "choose_level", choose_level)
+    run, session = turned
+    cam, s = session(level=True, writes="vertical", extra={VD_KEY: 1})
+    got = watched_enter(cam)
+    grip_areas(run, s, "Custom 1", "down", vd_index())
+    assert cam.chosen == ["Custom 1"] and got == [None]
+
+
+class NoticeAfterOk(Turned):
+    """The turned camera on which OK on Focus Area's dialog brings a screen read as no known kind (a notice drawn in
+    the portrait arrangement, say), its words only on the frame made upright; MENU leaves it for the shooting screen."""
+    def press(self, key, **kw):
+        from camkit.ocr import Line
+        if key == "enter" and "shown" in self.now:
+            self.pressed.append(key)
+            self.now = {"kind": "unknown", "text": "", "upright": [Line("Made-up Row: Made-up Value", 1.0, 10, 200, 300, 30)]}
+            return
+        if key == "menu" and self.now["kind"] == "unknown":
+            self.pressed.append(key)
+            self.show("shooting")
+            return
+        return super().press(key, **kw)
+
+
+def test_held_vertically_a_screen_after_ok_that_is_not_the_shooting_screen_fails_the_area(turned, capsys):
+    """Held vertically, a notice may be drawn in its portrait arrangement and read as no known kind, which the notice
+    check alone would let by, and the area would then be measured as another: a screen after OK that reads neither as
+    the shooting screen nor as a notice, looked at again, fails the area as a notice does, its words read upright and
+    kept in the run's events alone, MENU leaving it; held vertically the run stops there."""
+    run, session = turned
+    cam, s = session(cls=NoticeAfterOk, extra={VD_KEY: 0})
+    out, lines = grip_areas(run, s, "Zone, Custom 1", "down", vd_index())
+    (line,) = F.jsonl.read(out)
+    assert "is not the shooting screen" in line["failed"] and "Made-up" not in line["failed"]
+    assert cam.pressed.count("menu") >= 1 and not [k for k in cam.pressed if k.startswith("ms_")]
+    assert [f["notice"] for k, f in cam.logged if k == "area_notice"] == ["Made-up Row: Made-up Value"]
+    said = capsys.readouterr().out
+    assert "stopping" in said and "Made-up" not in said
 
 
 def test_a_failed_upright_reading_says_which_eyes_and_how_the_frame_was_made_upright(monkeypatch, tmp_path):
@@ -1725,17 +1805,17 @@ class EdgeCam(Turned):
     """A made-up camera whose focus frames move on a grid and stop at its edges (GRID_REGS'): a press moves a frame a
     step along the grid, one that would pass an edge stops at the edge, one off an edge goes to the first grid place
     inward. The multi-selector's presses come through the link (a push) or through the camera (a single press) alike;
-    `drop` lists the link presses that are lost, by number; `turn` swaps the keys' axes; `fail_regs` the slot
-    registrations, by number, that bring no "Registered."; a registration writes Custom boxes into X and Y, any other
-    area into the made-up point records."""
+    `drop` lists the link presses that are lost, by number; `turn` swaps the keys' axes; `flip` turns their sense
+    (Right lowers where it raised); `fail_regs` the slot registrations, by number, that bring no "Registered."; a
+    registration writes Custom boxes into X and Y, any other area into the made-up point records."""
     GRID = {"x": (26, 614, 320, 28), "y": (33, 447, 240, 19)}       # low edge, high edge, anchor, step
     POINT = ("set1:0x0b10", "set1:0x0b12")
 
-    def __init__(self, run, start=None, drop=(), turn=False, fail_regs=(), **kw):
+    def __init__(self, run, start=None, drop=(), turn=False, fail_regs=(), flip=False, **kw):
         super().__init__(run, level=True, **kw)
         self.slot.update({self.POINT[0]: 300, self.POINT[1]: 200})
         self.pos = dict(start or {"Custom 1": (376, 183), "Expand Spot": (320, 240)})
-        self.drop, self.turn, self.fail_regs = set(drop), turn, set(fail_regs)
+        self.drop, self.turn, self.fail_regs, self.flip = set(drop), turn, set(fail_regs), flip
         self.link_presses, self.regs, self.pushed = 0, 0, []
         self.hdmi = SimpleNamespace(grab=lambda save=True: self.frame)
         self.link = SimpleNamespace(press=self.link_press)
@@ -1747,6 +1827,8 @@ class EdgeCam(Turned):
         axis, d = {"ms_right": ("x", 1), "ms_left": ("x", -1), "ms_down": ("y", 1), "ms_up": ("y", -1)}[key]
         if self.turn:
             axis = "y" if axis == "x" else "x"
+        if self.flip:
+            d = -d
         lo, hi, g0, s = self.GRID[axis]
         x, y = self.pos[self.area]
         v = x if axis == "x" else y
@@ -1889,6 +1971,23 @@ def test_edges_held_vertically_with_turned_keys_measure_what_each_key_moves(edge
     assert line["back"]["same"] and cam.pos["Custom 1"] == (376, 183)
     rec = {r["key"]: r for r in line["edges"]}
     assert rec[Y]["keys"] == "Left/Right" and rec[X]["keys"] == "Up/Down" and rec[X]["step"] == 28
+
+
+def test_edges_held_vertically_with_keys_turned_and_mirrored_take_what_the_registrations_show(edges):
+    """Held vertically the keys may move the other axis and the other way (Right lowers Y, Down lowers X): nothing
+    assumes Right raises X or Down raises Y. Which key moves which record, its step's sign, the edges by value and the
+    way back all come from the registrations: Left and Up reach the high values, the steps read negative ("Left raises
+    it", "Up raises it"), the edges are the same 26 to 614 and 33 to 447, and the frame ends where it began."""
+    run, session, go = edges
+    cam, s = session(turn=True, flip=True, extra={VD_KEY: 1})
+    (line,) = go(s, "Custom 1", grip="down")
+    assert line["back"]["same"] and cam.pos["Custom 1"] == (376, 183) and not line.get("odd")
+    rec = {r["key"]: r for r in line["edges"]}
+    assert (rec[Y]["keys"], rec[Y]["low"], rec[Y]["high"], rec[Y]["step"], rec[Y]["raises"], rec[Y]["corner"]) == \
+        ("Left/Right", 33, 447, 19, "Left", 447)
+    assert (rec[X]["keys"], rec[X]["low"], rec[X]["high"], rec[X]["step"], rec[X]["raises"], rec[X]["corner"]) == \
+        ("Up/Down", 26, 614, 28, "Up", 614)
+    assert (rec[Y]["first"], rec[X]["first"]) == (17, 14)
 
 
 def test_a_push_names_each_press_for_the_shooting_screen_and_stops_where_the_screen_is_not_it(quick, tmp_path):
