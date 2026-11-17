@@ -4,10 +4,12 @@ Area per orientation.
     .venv/bin/python -u kit/provers/orient_run.py --grip down [--row "Focus Area"]
     .venv/bin/python -u kit/provers/orient_run.py --grip down --af-point
 
-Held vertically the camera turns the shooting screen and the dialogs opened from the menu on HDMI
-too; the menu pages stay level (2026-10-30). The prover's dialog reader cannot read a turned
-dialog, so this one reads it by OCR on the frame turned upright: the title, and the option under
-the cursor in orange under it.
+Held vertically (Vertical Display On) the camera draws the shooting screen and the dialogs opened
+from the menu in their portrait arrangement; the menu pages stay level (2026-10-30). HDMI shows a
+portrait screen turned a quarter, the SDK's picture (the OSD eyes) unturned but squeezed into its
+640 x 480 (2026-11-16). The prover's dialog reader can read neither, so this one reads the dialog
+by OCR on the frame made upright, 480 x 640 (upright: HDMI's turned back, the SDK's resized): the
+title, and the option under the cursor in orange under it.
 
 As kit/prove_run.py does for a carousel row: each option against the row's base (the option the
 row opened on last), then each option with a second axis (runs/<model>_fw<fw>/kit2_axes/axes.json), every axis
@@ -41,7 +43,8 @@ from prove_run import (AXES, LOCK_S, Failed, enter_any, main_name, option_key, t
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, read_json, scan_position)
 
-# np.rot90's k that turns a frame upright: grip down the picture is turned a quarter anticlockwise
+# np.rot90's k that turns HDMI's frame upright: grip down the picture is turned a quarter anticlockwise (the SDK's
+# picture is never turned: upright resizes it)
 GRIPS = {"down": -1, "up": 1}
 # upright frame (480 x 640): the dialog's title, and the option under the cursor (lines starting at
 # the left edge: Custom's area frame beside the name reads as a stray "7")
@@ -49,16 +52,30 @@ TITLE = (0, 0, 480, 52)
 LABEL = (0, 52, 300, 105)
 
 
+def squeezed(f) -> bool:
+    """Whether the frame `f` is the SDK's picture of the camera's screen (the OSD eyes: camkit.frames' source "osd"),
+    which shows a portrait screen (held vertically with Vertical Display On: Focus Area's carousel, the shooting screen)
+    unturned but squeezed into its 640 x 480, where HDMI shows the same picture turned a quarter (2026-11-16:
+    kit2_a1fin_framepos_edges_gripdown_vdon's 00048_right.png resized to 480 x 640 matches kit2_pass2's
+    116917_right_upright.png element for element). A frame of no source is taken for HDMI's, as before."""
+    return getattr(f, "source", "") == "osd"
+
+
 def upright(cam, k: int, shots: Path) -> list:
-    """OCR lines of the frame on screen turned upright (saved beside the evidence, not numbered)."""
+    """OCR lines of the frame on screen made upright, the 480 x 640 portrait picture TITLE and LABEL are measured on
+    (saved beside the evidence, not numbered): HDMI's turned back a quarter (np.rot90 by k, GRIPS), the SDK's picture
+    resized, never turned (squeezed)."""
     f = cam.frame
     path = shots / f"{f.path.stem}_upright.png"
-    Image.fromarray(np.ascontiguousarray(np.rot90(f.image, k))).save(path)
+    if squeezed(f):
+        Image.fromarray(f.image).resize((480, 640), Image.LANCZOS).save(path)
+    else:
+        Image.fromarray(np.ascontiguousarray(np.rot90(f.image, k))).save(path)
     return ocr.read([path])[path]
 
 
 def reading(cam, k: int, shots: Path) -> tuple[str, str]:
-    """(title, option) on the turned dialog."""
+    """(title, option) on the portrait dialog, made upright."""
     lines = upright(cam, k, shots)
     title = ocr.text_in(lines, TITLE)
     opt = " ".join(ln.text for ln in lines if ln.inside(LABEL) and ln.x < 30)
@@ -84,7 +101,7 @@ def which(text: str, labels: list, axes: dict):
 
 
 def open_row(cam, cycle, model, row: str, k: int, shots: Path):
-    """From the shooting screen: MENU, the row, Right; the turned dialog with the row's title."""
+    """From the shooting screen: MENU, the row, Right; the portrait dialog with the row's title, made upright."""
     menu_from_shooting(cam)              # MENU, once more if it went unanswered after a download
     j = scan_position(cam, cycle)
     if j is None or go_to(cam, cycle, model, j, row) is None:

@@ -62,8 +62,9 @@ registration already holds the plan's first area, that area is registered last (
 or, alone, after one other area.
 
 --grip down|up: the owner holds the camera vertically for the whole run (orient_run.py's plumbing): Switch V/H AF Area
-= AF Point + AF Area, so a hold writes that orientation's copies alone; the turned Focus Area dialog is read upright
-(orient_run.open_row and step_to), the context says the grip, and "missing" reads that orientation's area record.
+= AF Point + AF Area, so a hold writes that orientation's copies alone; Focus Area's dialog, drawn in its portrait
+arrangement, is read made upright (orient_run.open_row and step_to; below), the context says the grip, and "missing"
+reads that orientation's area record.
 Not tried on the camera: whether the setup's lists stay level as the menu pages do (orient_run's note: menus stay
 level, dialogs turn); a list read turned fails the setup and the run restores. Each area's line ends "grip down writes:
 <names>" (2026-11-16): every record the hold changed, from the diff of the downloads before and after it, by the
@@ -74,13 +75,17 @@ and "(…, copy 2)" were named so from these lines, 2026-11-16). Nothing is judg
 (names_written).
 
 Held vertically, Vertical Display decides what the screens look like (2026-11-16): it is read from the start download
-by the record the definition proves its row writes (vertical_display; the a1 II's global:0x18a6), never set. Off keeps
-every screen level: each is read as a level run reads it (no "upright"), and the context says the truth, "Switch V/H
-AF Area = AF Point + AF Area, camera grip down, Vertical Display Off" (the hand tables' ORIENTED pattern, anchored at
-"camera grip down", does not read such a context). On, or not read, the dialog is read turned as above; the SDK's
-picture then draws the shooting screen in a portrait layout of its own, upright (camkit.screen.portrait_battery,
-kit2_hdmi_watch 09511_start.png), whose words are read as they are. How it draws Focus Area's dialog and the hold's
-message is not known: a dialog the turned reading cannot read stops the area, saying what the frame read as it is shows.
+by the record the definition proves its row writes (vertical_display; the a1 II's global:0x18a6), never set, and the
+context says what it holds, "Switch V/H AF Area = AF Point + AF Area, camera grip down, Vertical Display Off" or "...,
+Vertical Display On" (the hand tables' ORIENTED pattern reads either as grip down), nothing added where it was not
+read. Off keeps every screen level: each is read as a level run reads it (no "upright"). On, or not read, the camera
+draws Focus Area's dialog and the shooting screen in their portrait arrangement (the menus stay level), and they are
+read made upright as 480 x 640 (orient_run.upright; "upright" on the lines): HDMI shows such a screen turned a
+quarter, turned back (2026-10-30), the SDK's picture (the OSD eyes) unturned but squeezed into its 640 x 480, resized
+(kit2_a1fin_framepos_edges_gripdown_vdon's 00048_right.png beside kit2_pass2's 116917_right_upright.png, 2026-11-16).
+The portrait shooting screen the SDK's picture shows is read as it is (camkit.screen.portrait_battery, kit2_hdmi_watch
+09511_start.png). A dialog the upright reading cannot read stops the area, saying what the frame read as it is shows,
+which eyes the frame came from and how it was made upright (as_it_is).
 
 --grip level (2026-11-16): the same setup with the camera standing level, so a hold writes the level copies alone,
 proved directly rather than by elimination from the two vertical holds, as kit/provers/framepos_run.py's --grip level
@@ -253,11 +258,11 @@ def judge(t: dict, changes: list, after: dict) -> tuple:
 def context_of(grip: str | None, extra: str | None, vertical: str | None = None) -> str:
     """The state the holds are made in, which every proof line carries: Switch V/H AF Area Off, or with a grip AF Point
     + AF Area and how the camera stands ("camera grip down"; "camera level", as the hand tables' ORIENTED reads it),
-    held vertically with Vertical Display Off (`vertical`, read from the start download: screens_held) "Vertical
-    Display Off" after it, then --context."""
+    held vertically with Vertical Display read (`vertical`, from the start download: screens_held) "Vertical Display
+    Off" or "Vertical Display On" after it, nothing where it was not read, then --context."""
     base = f"{VH_ROW} = {VH[grip]}, camera {held_words(grip)}" if grip else f"{VH_ROW} {VH[None]}"
-    if grip in TURNED and vertical == VD_OFF:
-        base += f", {VD_ROW} {VD_OFF}"
+    if grip in TURNED and vertical in (VD_ON, VD_OFF):
+        base += f", {VD_ROW} {vertical}"
     return f"{base}, {extra}" if extra else base
 
 
@@ -292,15 +297,21 @@ def setting_code(index: dict, path: list, option: str) -> tuple | None:
     return None if i is None else (hits[0]["key"], values[i][0])
 
 
-TURNED_WORDS = "the screens are read turned, as held vertically with it On (the camera's own default)"
+# how the screens are read held vertically with Vertical Display On, either eyes: after "are read" or "reads <screens>"
+PORTRAIT_WORDS = ("in their portrait arrangement, made upright as 480 x 640 (orient_run.upright): turned a quarter "
+                  "over HDMI, which shows it turned, resized through the SDK's picture, which squeezes it unturned into "
+                  "640 x 480 (a portrait shooting screen it shows read as it is: camkit.screen.portrait_battery)")
+TURNED_WORDS = (f"taken as {VD_ON} (the camera's own default): Focus Area's dialog and the shooting screen are read "
+                f"{PORTRAIT_WORDS}")
 
 
 def vertical_display(index: dict, cs) -> tuple:
     """(state, what to say): Vertical Display as the settings file `cs` (the start download) holds it, "On" or "Off", by
     the record the definition (`index`: its settings by key) proves the row writes and the codes its values give On and
     Off (setting_code); None where the definition names no such record, the file holds none, or it holds a code its
-    values name neither, and the run reads its screens turned, as it did before it read the row. The state is said by
-    its label, which the run's context carries (the owner's wish, 2026-11-16); a code is never said."""
+    values name neither, and the run reads its screens as with it On, as it did before it read the row. The state is
+    said by its label, which the run's context carries (the owner's wish, 2026-11-16); a code is never said. What is
+    said of On, and of not read, holds for either eyes (PORTRAIT_WORDS)."""
     from prove_run import held_value
     on, off = setting_code(index, [VD_ROW], VD_ON), setting_code(index, [VD_ROW], VD_OFF)
     if on is None or off is None or on[0] != off[0]:
@@ -315,14 +326,14 @@ def vertical_display(index: dict, cs) -> tuple:
     if held == off[1]:
         return VD_OFF, f"{VD_ROW} {VD_OFF} in the start download ({key}): every screen stays level, read as it is"
     return VD_ON, (f"{VD_ROW} {VD_ON} in the start download ({key}): Focus Area's dialog and the shooting screen are "
-                   "read as held vertically (turned upright, or the portrait shooting screen as it is drawn)")
+                   f"read {PORTRAIT_WORDS}")
 
 
 def screens_held(grip: str | None, index: dict, cs) -> tuple:
     """(turned, vertical, what to say): how a run held as `grip` reads its screens. Held vertically (down, up) Vertical
     Display is read from the start download `cs` (vertical_display): Off keeps every screen level (turned None), On or
-    not read turns them (turned the grip, as before); standing level, or with no grip, nothing is read (None, None,
-    "")."""
+    not read reads them in their portrait arrangement (turned the grip, as before, whose frames orient_run.upright makes
+    upright for either eyes); standing level, or with no grip, nothing is read (None, None, "")."""
     if grip not in TURNED:
         return None, None, ""
     vertical, said = vertical_display(index, cs)
@@ -335,10 +346,10 @@ def vertical_plan(grip: str | None, index: dict) -> str:
         return ""
     on = setting_code(index, [VD_ROW], VD_ON)
     if on is None:
-        return f"held vertically: the definition names no {VD_ROW} record; {TURNED_WORDS}"
-    return (f"held vertically: {VD_ROW} read from the start download ({on[0]}): {VD_OFF} keeps every screen level, read "
-            f"as it is, and the context adds '{VD_ROW} {VD_OFF}'; {VD_ON} reads Focus Area's dialog turned upright and "
-            "the portrait shooting screen as it is drawn")
+        return f"held vertically: the definition names no {VD_ROW} record, so the context adds nothing; {TURNED_WORDS}"
+    return (f"held vertically: {VD_ROW} read from the start download ({on[0]}), the context adding '{VD_ROW} {VD_ON}' "
+            f"or '{VD_ROW} {VD_OFF}': {VD_OFF} keeps every screen level, read as it is; {VD_ON}, or not read, reads "
+            f"Focus Area's dialog and the shooting screen {PORTRAIT_WORDS}")
 
 
 def held_words(grip: str) -> str:
@@ -507,9 +518,9 @@ def choose_level(cam, cycle, model, labels, axes, i, o, v) -> dict:
 
 
 def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None) -> dict:
-    """The area under the carousel's cursor (level, or turned and read upright with a grip down or up, which callers
-    pass by turned_of: orient_run's open_row and step_to), checked for a confirmation, read by the second reader, OK.
-    The menu closes on OK (kit2_afreg 00024)."""
+    """The area under the carousel's cursor (level, or in its portrait arrangement made upright with a grip down or up,
+    which callers pass by turned_of: orient_run's open_row and step_to), checked for a confirmation, read by the second
+    reader, OK. The menu closes on OK (kit2_afreg 00024)."""
     from camkit import ocr
     from prove_run import Failed
     from proving.screens import carousel_text, vlm_option
@@ -547,16 +558,21 @@ def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None
 
 
 def as_it_is(cam) -> str:
-    """What a failed turned reading of Focus Area's dialog adds: whether the frame read as it is, level, shows the
-    row's title. Held vertically with Vertical Display On the dialog is read turned, as HDMI draws it (2026-10-30);
-    how the SDK's picture draws it is not known, and no other way is guessed: the camera's own screen is to be looked
-    at."""
+    """What a failed upright reading of Focus Area's dialog adds: whether the frame read as it is, level, shows the
+    row's title, and which eyes the frame came from with how it was made upright (orient_run.upright: HDMI's turned a
+    quarter back, the SDK's picture, which squeezes the portrait dialog unturned into its 640 x 480, resized to 480 x
+    640). Held vertically with Vertical Display On the camera draws the dialog in its portrait arrangement whatever the
+    eyes (2026-10-30 over HDMI, 2026-11-16 through the SDK's picture); no other way is guessed: the camera's own screen
+    is to be looked at."""
     from camkit import ocr
+    from orient_run import squeezed
     head = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 50))
     shows = f"shows {ROW}'s title" if bare(ROW) in bare(head) else f"shows no {ROW} title either"
+    made = ("the SDK's picture, resized to 480 x 640 (it squeezes the portrait dialog unturned into 640 x 480)"
+            if squeezed(cam.frame) else "HDMI's picture, turned a quarter back upright")
     return (f"; read as it is, the frame {shows} ({cam.read().kind}, {cam.frame.path.name}): held vertically with "
-            f"{VD_ROW} {VD_ON} the dialog is read turned, as HDMI draws it, and no other way is guessed: look at the "
-            f"camera's own screen with {ROW} open")
+            f"{VD_ROW} {VD_ON} the dialog is read in its portrait arrangement, the frame made upright from {made}, and "
+            f"no other way is guessed: look at the camera's own screen with {ROW} open")
 
 
 def dial_cell(name: str = FOCUS_DIAL) -> list:
@@ -760,10 +776,10 @@ def prepare(cam, link, hdmi, run, cycle, model, grip, focus: bool, drive: bool, 
 
 
 def shooting_words(cam, run, grip: str | None) -> str:
-    """The words on the shooting screen: as it is, level; held vertically (grip), read on the frame turned upright
-    (orient_run.upright, saved in the run's upright folder), as the turned shooting screen draws them, except on the
-    portrait shooting screen (camkit.screen.portrait_battery: the SDK's picture with Vertical Display On), which is drawn
-    upright and read as it is."""
+    """The words on the shooting screen: as it is, level; held vertically (grip), read on the frame made upright
+    (orient_run.upright: HDMI's turned back a quarter, the SDK's picture resized; saved in the run's upright folder),
+    except where the SDK's picture shows the portrait shooting screen (camkit.screen.portrait_battery: Vertical Display
+    On), its portrait arrangement squeezed unturned into 640 x 480, which is read as it is."""
     from camkit import ocr, screen
     from camkit.live import text_of
     if not grip or screen.portrait_battery(cam.frame.image):
@@ -776,7 +792,7 @@ def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
     """After a download the camera says "Saving to the connected device..." and locks the menu a moment (proving.nav
     .after_download waits so before a MENU): the same wait before the hold, then the shooting screen with no message.
     Held vertically (grip, which kit/provers/framepos_run.py's --grip passes) the message is looked for on the frame
-    turned upright too (shooting_words), and a turned shooting screen whose upright reading holds no text cannot show it
+    made upright too (shooting_words), and a portrait shooting screen whose upright reading holds no text cannot show it
     gone: it is waited on, and after 25 s the run stops saying so."""
     from camkit.live import text_of
     from prove_run import LOCK_S, Failed
@@ -792,7 +808,7 @@ def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
                 return
         if waited > 25:
             if unread:
-                raise Failed(f"held vertically (grip {grip}), the shooting screen turned upright reads no text "
+                raise Failed(f"held vertically (grip {grip}), the shooting screen made upright reads no text "
                              f"({cam.frame.path.name}): whether the download's message (\"Saving to the connected "
                              f"device...\") has gone cannot be judged on it, so no press goes out; is the camera held "
                              f"grip {grip}?")
@@ -900,7 +916,7 @@ def prove(a, doc: dict, todo: list, focus: bool, drive: bool, context: str, allo
         turned, vertical, said = screens_held(a.grip, index, camset.read(s.start))
         if said:
             print(f"  {said}", flush=True)
-        if vertical == VD_OFF:
+        if vertical:                                        # On or Off, as the start download holds it
             out.context = context_of(a.grip, a.context, vertical)
         ref, setup = prepare(cam, link, hdmi, run, cycle, model, a.grip, focus, drive, s.start)
         queue = ordered(todo, held_value(camset.read(ref), todo[0]["own_key"]), every)

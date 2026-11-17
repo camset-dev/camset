@@ -579,10 +579,12 @@ class HeldRecords(dict):
         return super().get(*args)
 
 
-def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold: dict) -> tuple:
+def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold: dict, extra: dict | None = None,
+                 eyes=None) -> tuple:
     """afreg_run.prove over `areas` held as `grip` says, on the made-up level camera (AfregCam), the setup's rows kept
-    rather than set, its session and downloads made up; a frame turned upright fails the test. Returns (the camera, the
-    rows the setup set, the run's proof lines); what it printed is the caller's capsys."""
+    rather than set, its session and downloads made up, seen through `eyes`; a frame turned upright fails the test.
+    `extra`: more records its downloads hold. Returns (the camera, the rows the setup set, the run's proof lines); what
+    it printed is the caller's capsys."""
     import contextlib
 
     import camkit.frames
@@ -597,7 +599,8 @@ def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold:
     import runner
     from camkit import camset
     labels = [lab for _, lab in afreg_doc()["settings"][0]["values"]]
-    cam = AfregCam({k: 0 for k in on_hold} | {"global:0x0000": 10, "global:0x0100": 10, "global:0x0200": 10}, on_hold)
+    cam = AfregCam({k: 0 for k in on_hold} | {"global:0x0000": 10, "global:0x0100": 10, "global:0x0200": 10}
+                   | (extra or {}), on_hold)
     files, rows, clock = {}, [], [1000.0]
 
     def download(tag):
@@ -633,7 +636,7 @@ def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold:
     monkeypatch.setattr(runner, "close_screen", lambda cam, link: None)
     monkeypatch.setattr(camkit.runs, "Run", lambda name: run)
     monkeypatch.setattr(camkit.runs, "mark_proof_run", lambda *a: None)
-    monkeypatch.setattr(camkit.frames, "eyes_from_config", lambda run: None)
+    monkeypatch.setattr(camkit.frames, "eyes_from_config", lambda run: eyes)
     monkeypatch.setattr(mode_switch, "open_menu", lambda cam: None)
     monkeypatch.setattr(prove_run, "to_shooting", lambda link, hdmi, why: None)
     monkeypatch.setattr(proving.screens, "carousel_text", lambda cam: "Spot: L")
@@ -646,7 +649,7 @@ def afreg_run_on(monkeypatch, tmp_path, A, doc: dict, areas: str, grip, on_hold:
     monkeypatch.setattr(camset, "read", lambda path: files[Path(path).name])
     monkeypatch.setattr(camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a.get(k), after=b.get(k))
                                                       for k in sorted(set(a) | set(b)) if a.get(k) != b.get(k)])
-    a = SimpleNamespace(grip=grip, scan=None, run="kit2_afreg_made_up", allow=[A.FN_HOLD])
+    a = SimpleNamespace(grip=grip, scan=None, run="kit2_afreg_made_up", allow=[A.FN_HOLD], context=None)
     assert A.prove(a, doc, A.plan(doc, areas, grip), False, False, A.context_of(grip, None), "allowed") == 0
     lines = [json.loads(x) for x in (tmp_path / "proofs.jsonl").read_text(encoding="utf-8").splitlines()]
     return cam, rows, lines
@@ -695,6 +698,39 @@ def test_an_afreg_run_with_no_grip_is_as_it_was(monkeypatch, tmp_path, capsys):
     assert line["applied"] and "grip" not in line and "upright" not in line
     assert line["context"] == "Switch V/H AF Area Off" and len(line["expected"]) == 6
     assert "registered; wrote global:0x0000 -> 12" in said and "writes:" not in said
+
+
+def test_an_afreg_run_held_vertically_with_vertical_display_on_says_it_in_its_context(monkeypatch, tmp_path, capsys):
+    """Held grip down with Vertical Display On in the start download, seen through the SDK's picture: the dialog and the
+    hold's message are read in their portrait arrangement (choose_area and shooting_words given the grip, whose frames
+    orient_run.upright makes upright, the SDK's resized), the upright folder made; the proof line carries "grip":
+    "down", "upright": true and the context "..., camera grip down, Vertical Display On"; the run says it read On."""
+    A = afreg_module()
+    doc = afreg_doc()
+    vd = {"key": "global:0x0e30", "name": "Made-up display turning", "values": [[0, "On"], [1, "Off"]],
+          "proved": {"menu": ["Vertical Display"]}}
+    doc["settings"].append(vd)
+    grips = []
+
+    def choose_area(cam, run, cycle, model, labels, axes, r, grip):
+        grips.append(("dialog", grip))
+        cam.kind = "shooting"                   # OK on the carousel closes the menu
+        return {"shown": "Spot: L", "vlm": "Spot: L", "chosen_frame": "1.png", "row_frame": "2.png"}
+
+    def shooting_words(cam, run, grip):
+        grips.append(("shooting", grip))
+        return cam.text
+    monkeypatch.setattr(A, "choose_area", choose_area)
+    monkeypatch.setattr(A, "shooting_words", shooting_words)
+    hold = {"global:0x0100": 12, "global:0x0110": 2}
+    cam, rows, lines = afreg_run_on(monkeypatch, tmp_path, A, doc, "Spot: L", "down", hold, {vd["key"]: 0},
+                                    SimpleNamespace(name="osd"))
+    said = capsys.readouterr().out
+    assert grips == [("dialog", "down"), ("shooting", "down")] and (tmp_path / "upright").is_dir()
+    (line,) = lines
+    assert line["grip"] == "down" and line["upright"] is True and line["applied"]
+    assert line["context"] == "Switch V/H AF Area = AF Point + AF Area, camera grip down, Vertical Display On"
+    assert "  Vertical Display On in the start download (global:0x0e30): Focus Area's dialog and the shooting screen" in said
 
 
 def test_each_afreg_grip_names_what_its_holds_write_in_its_own_words():

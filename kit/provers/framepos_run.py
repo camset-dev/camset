@@ -92,12 +92,14 @@ cannot be put back or the run stops with it moved: then the presses owed are pri
 
 --grip down|up (2026-11-15): the owner holds the camera vertically for the whole run, as afreg_run.py's --grip
 (orient_run.py's plumbing): the setup puts Switch V/H AF Area on AF Point + AF Area, so a registration writes that
-orientation's copies, and the run shows which. Held vertically the camera turns the shooting screen and the dialogs
-opened from the menu; the menu pages, the slot screen and its "Registered." stay level (kit2_vertical, held grip up,
-read them level). So Focus Area's dialog is read upright (afreg_run.choose_area), the shooting screen's words around
-the moves upright as afreg_run.hold_fn reads its message (afreg_run.shooting_words: the download's message waited out
-by ready_to_hold, a notice a press brings), and its kind judged as level (the turned shooting screen reads as the
-shooting screen: kit/tests/test_core.py's turned screens). A check the turned screen does not let the run make stops
+orientation's copies, and the run shows which. Held vertically the camera draws the shooting screen and the dialogs
+opened from the menu in their portrait arrangement, which HDMI shows turned a quarter and the SDK's picture unturned
+but squeezed into its 640 x 480; the menu pages, the slot screen and its "Registered." stay level (kit2_vertical, held
+grip up, read them level). So Focus Area's dialog is read made upright (afreg_run.choose_area; orient_run.upright turns
+HDMI's frame back and resizes the SDK's), the shooting screen's words around the moves likewise as afreg_run.hold_fn
+reads its message (afreg_run.shooting_words: the download's message waited out by ready_to_hold, a notice a press
+brings), and its kind judged as level (the turned shooting screen reads as the shooting screen: kit/tests/test_core.py's
+turned screens). A check the turned screen does not let the run make stops
 it, saying which and why: a screen not read as the shooting screen before a press, or a shooting screen whose upright
 reading holds no text (the camera perhaps held the other way); with a grip any area that fails ends the run, its frame
 put back first. The presses are the level ones (or --moves), but their directions are not taken to map onto X and Y:
@@ -107,8 +109,9 @@ changed record by its definition key and the definition's name with its delta, t
 = AF Point + AF Area, camera grip down"), "grip" and "upright": true. --zone-grid is refused with a grip before
 anything connects: its route and its proofs are made level. Vertical Display, read from the start download
 (afreg_run.screens_held, 2026-11-16), decides what turns: Off keeps every screen level, so each is read as a level run
-reads it, the lines carry no "upright" and the context ends "camera grip down, Vertical Display Off"; On, or not read,
-is the above, the portrait shooting screen the SDK's picture draws then read as it is (camkit.screen.portrait_battery).
+reads it and the lines carry no "upright"; On, or not read, is the above, the portrait shooting screen the SDK's
+picture shows read as it is (camkit.screen.portrait_battery). The context ends "camera grip down, Vertical Display Off"
+or "..., Vertical Display On" as the start download holds it, nothing added where it was not read.
 
 --grip level (2026-11-15): the same setup with the camera standing level, so a registration writes the level copies
 alone, proved directly rather than by elimination from the two vertical holds; every screen is read, and the frame
@@ -352,9 +355,9 @@ def context_of(extra: str | None, amt: str | None = None, moves: list | None = N
     """The state the registrations are made in, which every line carries and the summary keeps apart: the camera level
     with Switch V/H AF Area Off, or with a grip AF Point + AF Area and how the camera stands (held vertically in
     afreg_run's words, afreg_run.context_of: "Switch V/H AF Area = AF Point + AF Area, camera grip down", and ",
-    Vertical Display Off" when the start download holds it Off, `vertical`; level, "..., camera level", as the hand
-    tables' ORIENTED reads it), AF Frame Move Amt when the run sets it, the moves when --moves gave them ("moved Right
-    1"), then --context."""
+    Vertical Display Off" or ", Vertical Display On" as the start download holds it, `vertical`; level, "..., camera
+    level", as the hand tables' ORIENTED reads it), AF Frame Move Amt when the run sets it, the moves when --moves gave
+    them ("moved Right 1"), then --context."""
     held = (f"{VH_ROW} = {VH_OPTION[grip]}, camera level" if grip == "level" else
             afreg_run.context_of(grip, None, vertical) if grip else f"{VH_ROW} {OFF}, camera level")
     base = held + (f", {AMT_ROW} {amt}" if amt else "") + (f", moved {say_moves(moves)}" if moves else "")
@@ -1441,9 +1444,9 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     each area's line written and summed up as it comes; three areas failing in a row end it, and
     held vertically (a.grip down or up) one does, its frame put back first: the owner is holding the camera. Held
     vertically, Vertical Display is read from the start download (afreg_run.screens_held, kept as a.vertical): Off reads
-    every screen level, drops "upright" from the lines and ends their context's grip with "Vertical Display Off". A
-    zone's line, and the sweep's, carry `zone_tag` (the context without --moves, which a zone never takes) in place of
-    `tag`."""
+    every screen level and drops "upright" from the lines; On or Off ends their context's grip with "Vertical Display
+    On" or "Vertical Display Off". A zone's line, and the sweep's, carry `zone_tag` (the context without --moves, which
+    a zone never takes) in place of `tag`."""
     zone_tag = zone_tag or tag
     from camkit import camset
     from prove_run import Failed
@@ -1457,11 +1460,12 @@ def areas(s, a, run, hdmi, cycle, model, labels, axes, todo, routes, index, focu
     turned, a.vertical, said = afreg_run.screens_held(grip, index, start)
     if said:
         print(f"  {said}", flush=True)
-    if a.vertical == afreg_run.VD_OFF:
+    if a.vertical:                                  # On or Off, as the start download holds it
         moves = parse_moves(a.moves) if getattr(a, "moves", None) else None
         for tg, mv in ((tag, moves), (zone_tag, None)):
             tg["context"] = context_of(getattr(a, "context", None), amt, mv, grip, a.vertical)
-            tg.pop("upright", None)
+            if not turned:                          # Off: every screen read level
+                tg.pop("upright", None)
     edges = getattr(a, "edges", False)
     setup = prepare(cam, link, hdmi, run, cycle, model, focus, drive, s.start, amt, index, grip, circ=edges)
     if edges:

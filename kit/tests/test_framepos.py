@@ -1388,6 +1388,7 @@ def test_a_level_grip_run_reads_every_screen_level_and_says_what_level_writes(tu
 
 VD_KEY = "global:0x0e30"
 VD_OFF_CONTEXT = f"{GRIP_CONTEXT}, Vertical Display Off"
+VD_ON_CONTEXT = f"{GRIP_CONTEXT}, Vertical Display On"
 
 
 def vd_index(values=([0, "On"], [1, "Off"])) -> dict:
@@ -1409,7 +1410,9 @@ def test_vertical_display_is_read_by_its_rows_record_and_codes_never_guessed():
     """afreg_run.vertical_display: On or Off as the start download holds the record the definition proves the Vertical
     Display row writes, by the codes its values give On and Off (framepos_run.setting_code's rule); a definition
     without the record, a download without it, or a code its values name neither reads as not read, which keeps the
-    turned reading a grip run had before (the camera's own default is On), and says why; no code is said."""
+    portrait reading a grip run had before (the camera's own default is On), and says why; no code is said. On, and not
+    read, say how a portrait screen is made upright with either eyes: turned a quarter over HDMI, resized through the
+    SDK's picture, which squeezes it unturned into 640 x 480; neither says what the SDK's picture draws is unknown."""
     import afreg_run
     assert afreg_run.vertical_display(vd_index(), Download({VD_KEY: 1}))[0] == "Off"
     assert afreg_run.vertical_display(vd_index(), Download({VD_KEY: 0}))[0] == "On"
@@ -1417,13 +1420,42 @@ def test_vertical_display_is_read_by_its_rows_record_and_codes_never_guessed():
                              (vd_index(), {}, "the start download holds no"),
                              (vd_index(), {VD_KEY: 5}, "a code its values name neither On nor Off")):
         state, said = afreg_run.vertical_display(index, Download(held))
-        assert state is None and why in said and "turned" in said and "5" not in said, said
+        assert state is None and why in said and "own default" in said and "5" not in said, said
+        assert "turned a quarter over HDMI" in said and "resized through the SDK's picture" in said, said
+    said = afreg_run.vertical_display(vd_index(), Download({VD_KEY: 0}))[1]
+    assert said.startswith(f"Vertical Display On in the start download ({VD_KEY}): Focus Area's dialog and the shooting "
+                           "screen are read in their portrait arrangement, made upright as 480 x 640")
+    assert "turned a quarter over HDMI" in said and "resized through the SDK's picture" in said
+    assert "squeezes it unturned into 640 x 480" in said and "not known" not in said and "as it is drawn" not in said
+    assert afreg_run.vertical_display(vd_index(), Download({VD_KEY: 1}))[1] == (
+        f"Vertical Display Off in the start download ({VD_KEY}): every screen stays level, read as it is")
+
+
+def test_the_list_says_how_each_eyes_reads_held_vertically_and_what_the_context_adds():
+    """afreg_run.vertical_plan, the line --list prints held vertically (afreg_run.py's and framepos_run.py's): the record
+    Vertical Display is read from and what the context adds, On or Off; Off every screen level, On or not read the
+    portrait screens made upright, turned a quarter over HDMI, resized through the SDK's picture. Nothing said standing
+    level or with no grip."""
+    import afreg_run
+    plan = afreg_run.vertical_plan("down", vd_index())
+    assert plan.startswith(f"held vertically: Vertical Display read from the start download ({VD_KEY}), the context "
+                           "adding 'Vertical Display On' or 'Vertical Display Off': Off keeps every screen level, read "
+                           "as it is; On, or not read, reads Focus Area's dialog and the shooting screen in their "
+                           "portrait arrangement, made upright as 480 x 640")
+    assert "turned a quarter over HDMI" in plan and "resized through the SDK's picture" in plan
+    assert "not known" not in plan and "as it is drawn" not in plan
+    bare_plan = afreg_run.vertical_plan("up", grip_index())
+    assert bare_plan.startswith("held vertically: the definition names no Vertical Display record, so the context adds "
+                                "nothing; ")
+    assert "own default" in bare_plan and "resized through the SDK's picture" in bare_plan
+    assert afreg_run.vertical_plan("level", vd_index()) == afreg_run.vertical_plan(None, vd_index()) == ""
 
 
 def test_held_vertically_the_display_decides_how_screens_are_read_and_the_context_says_it():
-    """Held vertically (down, up) with Vertical Display Off every screen stays level (turned None) and the context ends
-    "Vertical Display Off" before --context; On, or not read, the screens turn as before and the context is as it was;
-    standing level, or with no grip, Vertical Display is not read and changes nothing."""
+    """Held vertically (down, up) with Vertical Display Off every screen stays level (turned None); On, or not read, the
+    screens turn as before; standing level, or with no grip, Vertical Display is not read and changes nothing. The
+    context ends "Vertical Display Off" or "Vertical Display On" before --context, as the start download holds it, and
+    adds nothing where it was not read."""
     import afreg_run
     off, on = Download({VD_KEY: 1}), Download({VD_KEY: 0})
     assert afreg_run.screens_held("down", vd_index(), off)[:2] == (None, "Off")
@@ -1434,10 +1466,14 @@ def test_held_vertically_the_display_decides_how_screens_are_read_and_the_contex
     assert afreg_run.context_of("down", None, "Off") == VD_OFF_CONTEXT
     assert afreg_run.context_of("up", "x", "Off") == ("Switch V/H AF Area = AF Point + AF Area, camera grip up, Vertical "
                                                       "Display Off, x")
-    assert afreg_run.context_of("down", None, "On") == afreg_run.context_of("down", None) == GRIP_CONTEXT
-    assert afreg_run.context_of("level", None, "Off") == LEVEL_CONTEXT
+    assert afreg_run.context_of("down", None, "On") == VD_ON_CONTEXT
+    assert afreg_run.context_of("up", "x", "On") == ("Switch V/H AF Area = AF Point + AF Area, camera grip up, Vertical "
+                                                     "Display On, x")
+    assert afreg_run.context_of("down", None) == afreg_run.context_of("down", None, None) == GRIP_CONTEXT
+    assert afreg_run.context_of("level", None, "Off") == afreg_run.context_of("level", None, "On") == LEVEL_CONTEXT
     assert F.context_of("x", "Standard", None, "down", "Off") == f"{VD_OFF_CONTEXT}, AF Frame Move Amt Standard, x"
-    assert F.context_of(None, None, None, "down", "On") == GRIP_CONTEXT
+    assert F.context_of(None, None, None, "down", "On") == VD_ON_CONTEXT
+    assert F.context_of(None, None, None, "down") == GRIP_CONTEXT
     assert afreg_run.turned_of("down", "Off") is None and afreg_run.turned_of("down", "On") == "down"
     assert F.turned_of("up", "Off") is None and F.turned_of("up") == "up" and F.turned_of("level", "On") is None
 
@@ -1445,7 +1481,7 @@ def test_held_vertically_the_display_decides_how_screens_are_read_and_the_contex
 def test_a_grip_proof_counts_for_the_orientation_it_names_whatever_vertical_display_was():
     """The report's row for a grip run's proof (pass2_report.row_name: the path, then the context in brackets) is read
     by the hand tables' ORIENTED pattern (kit/schema_update.py's notes on which orientation writes a record) as the
-    grip it names, with Vertical Display Off in the context as without it; a run with no grip names none."""
+    grip it names, with Vertical Display On or Off in the context as without it; a run with no grip names none."""
     import afreg_run
     from pass2_report import row_name
     oriented = hand_tables.load(paths.A1II, evidence=False).ORIENTED
@@ -1455,6 +1491,8 @@ def test_a_grip_proof_counts_for_the_orientation_it_names_whatever_vertical_disp
                 row = row_name({"path": [afreg_run.MENU], "kind": "list", "context": context})
                 assert oriented.search(row)[1] == words, (grip, vertical, row)
     assert "Vertical Display Off" in afreg_run.context_of("down", None, "Off")
+    assert "Vertical Display On" in afreg_run.context_of("up", None, "On") and "Vertical Display On" in F.context_of(
+        None, None, None, "down", "On")
     assert oriented.search(row_name({"path": [afreg_run.MENU], "kind": "list",
                                      "context": afreg_run.context_of(None, None)})) is None
 
@@ -1487,21 +1525,22 @@ def test_held_grip_down_with_vertical_display_off_reads_every_screen_level_and_s
 
 
 def test_held_grip_down_with_vertical_display_on_reads_the_turned_screens_as_before(turned, capsys):
-    """Vertical Display On in the start download: the turned screens read upright as a grip run read them before, the
-    lines marked "upright", the context as it was, and the run says it read Vertical Display On."""
+    """Vertical Display On in the start download: the portrait screens read upright as a grip run read them before, the
+    lines marked "upright", the context ending "Vertical Display On", and the run says it read Vertical Display On."""
     run, session = turned
     cam, s = session(extra={VD_KEY: 0})
     out, lines = grip_areas(run, s, "Zone, Custom 1", "down", vd_index())
     assert cam.chosen == ["Zone", "Custom 1"] and run.upright_reads
-    assert all(ln["upright"] is True and ln["context"] == GRIP_CONTEXT and ln["back"]["same"]
+    assert all(ln["upright"] is True and ln["context"] == VD_ON_CONTEXT and ln["back"]["same"]
                for ln in F.jsonl.read(out))
     assert f"Vertical Display On in the start download ({VD_KEY})" in capsys.readouterr().out
 
 
 def test_held_vertically_with_the_display_on_a_dialog_drawn_level_stops_the_run_saying_what_it_saw(turned, capsys):
-    """Vertical Display On, where Focus Area's dialog turns on HDMI: a dialog these eyes draw level is not guessed at.
-    The area fails before any press, saying the turned reading found no title, what the frame read as it is shows
-    (Focus Area's title, read level) and that the camera's own screen must be looked at; held vertically, the run
+    """Vertical Display On, where Focus Area's dialog is drawn in its portrait arrangement: a dialog drawn level is not
+    guessed at. The area fails before any press, saying the upright reading found no title, what the frame read as it
+    is shows (Focus Area's title, read level), which eyes the frame came from and how it was made upright (HDMI's, a
+    frame of no source: turned a quarter), and that the camera's own screen must be looked at; held vertically, the run
     stops there."""
     run, session = turned
     cam, s = session(extra={VD_KEY: 0})
@@ -1511,8 +1550,89 @@ def test_held_vertically_with_the_display_on_a_dialog_drawn_level_stops_the_run_
     (line,) = F.jsonl.read(out)
     assert "did not open its dialog" in line["failed"]
     assert "read as it is, the frame shows Focus Area's title" in line["failed"]
+    assert "HDMI's picture, turned a quarter back upright" in line["failed"] and "not known" not in line["failed"]
     assert "look at the camera's own screen" in line["failed"]
     assert "a failed area ends the run: stopping" in capsys.readouterr().out
+
+
+def portrait_dialog() -> np.ndarray:
+    """A made-up portrait dialog, 480 x 640, as the camera draws Focus Area's carousel held vertically with Vertical
+    Display On (kit2_pass2's 116917_right_upright.png and kit2_a1fin_framepos_edges_gripdown_vdon's 00048_right.png
+    resized, side by side, 2026-11-16): its title top left (red here), the option under the cursor beneath it (green),
+    the carousel strip along the bottom (blue); each colour stands for the words a reader finds there."""
+    img = np.zeros((640, 480, 3), np.uint8)
+    img[10:42, 10:200] = (255, 0, 0)            # the title, in orient_run.TITLE
+    img[62:92, 8:80] = (0, 255, 0)              # the option, in orient_run.LABEL, at the left edge
+    img[505:555, 200:420] = (0, 0, 255)         # the carousel strip
+    return img
+
+
+def colour_reader(paths) -> dict:
+    """A made-up OCR: on a 480 x 640 frame each of portrait_dialog's colours, where it lies, as its words; any other
+    frame reads nothing."""
+    from PIL import Image
+    from camkit.ocr import Line
+    out = {}
+    for p in paths:
+        img = np.asarray(Image.open(p).convert("RGB")).astype(int)
+        out[p] = []
+        if img.shape[:2] != (640, 480):
+            continue
+        for words, c in (("Focus Area", 0), ("Wide", 1), ("carousel", 2)):
+            a, b = (i for i in range(3) if i != c)
+            ys, xs = np.nonzero((img[..., c] > 160) & (img[..., a] < 90) & (img[..., b] < 90))
+            if len(xs):
+                out[p].append(Line(words, 1.0, int(xs.min()), int(ys.min()), int(np.ptp(xs)), int(np.ptp(ys))))
+    return out
+
+
+def test_a_portrait_dialog_reads_the_same_turned_over_hdmi_or_squeezed_by_the_sdks_picture(monkeypatch, tmp_path):
+    """Held vertically with Vertical Display On the camera draws Focus Area's dialog in its portrait arrangement: HDMI
+    shows it turned a quarter (anticlockwise, grip down), the SDK's picture (the OSD eyes: a frame of source "osd")
+    unturned but squeezed into its 640 x 480 (2026-11-16). orient_run.upright makes either the same 480 x 640 upright
+    picture, HDMI's turned back and the SDK's resized, never turned, so the title and the option read alike and
+    open_row finds the dialog; turned, the squeezed frame read no title (the run of 2026-11-16 stopped so)."""
+    import orient_run
+    from PIL import Image
+    from camkit import ocr
+    from camkit.frames import Frame
+    monkeypatch.setattr(ocr, "read", colour_reader)
+    for name in ("menu_from_shooting", "enter_any"):
+        monkeypatch.setattr(orient_run, name, lambda *a: None)
+    monkeypatch.setattr(orient_run, "scan_position", lambda cam, cycle: 0)
+    monkeypatch.setattr(orient_run, "go_to", lambda cam, cycle, model, j, row: 0)
+    portrait, k = portrait_dialog(), orient_run.GRIPS["down"]
+    squeezed = np.asarray(Image.fromarray(portrait).resize((640, 480), Image.LANCZOS))
+    frames = {"hdmi": Frame(np.ascontiguousarray(np.rot90(portrait, 1)), 0.0, tmp_path / "00001_right.png", "hdmi"),
+              "osd": Frame(squeezed, 0.0, tmp_path / "00048_right.png", "osd")}
+    assert orient_run.squeezed(frames["osd"]) and not orient_run.squeezed(frames["hdmi"])
+    assert not orient_run.squeezed(SimpleNamespace(image=squeezed, path=tmp_path / "x.png"))
+    for source, f in frames.items():
+        cam = SimpleNamespace(frame=None)
+        cam.press = lambda key, cam=cam, f=f: setattr(cam, "frame", f)        # Right on the row: its dialog
+        orient_run.open_row(cam, None, None, "Focus Area", k, tmp_path)
+        assert orient_run.reading(cam, k, tmp_path) == ("Focus Area", "Wide"), source
+        up = np.asarray(Image.open(tmp_path / f"{f.path.stem}_upright.png").convert("RGB")).astype(int)
+        assert up.shape == (640, 480, 3) and np.abs(up - portrait).mean() < 3, source
+    turned = SimpleNamespace(frame=SimpleNamespace(image=squeezed, path=tmp_path / "00049_right.png"))
+    assert orient_run.reading(turned, k, tmp_path) == ("", ""), "the squeezed frame turned reads no title"
+
+
+def test_a_failed_upright_reading_says_which_eyes_and_how_the_frame_was_made_upright(monkeypatch, tmp_path):
+    """afreg_run.as_it_is, what a failed upright reading of Focus Area's dialog adds: what the frame read as it is shows,
+    and the frame's eyes with the way it was made upright (the SDK's picture resized to 480 x 640, HDMI's turned a
+    quarter); never that what the SDK's picture draws is unknown."""
+    import afreg_run
+    from camkit import ocr
+    from camkit.frames import Frame
+    from camkit.ocr import Line
+    monkeypatch.setattr(ocr, "read", lambda paths: {p: [Line("Focus Area", 1.0, 10, 10, 200, 30)] for p in paths})
+    for source, way in (("osd", "the SDK's picture, resized to 480 x 640"), ("hdmi", "HDMI's picture, turned a quarter")):
+        f = Frame(np.zeros((480, 640, 3), np.uint8), 0.0, tmp_path / "00048_right.png", source)
+        cam = SimpleNamespace(frame=f, read=lambda: SimpleNamespace(kind="unknown"))
+        said = afreg_run.as_it_is(cam)
+        assert said.startswith("; read as it is, the frame shows Focus Area's title (unknown, 00048_right.png)"), said
+        assert way in said and "look at the camera's own screen" in said and "not known" not in said, said
 
 
 def test_held_vertically_the_portrait_shooting_screen_is_read_as_it_is(quick, tmp_path, monkeypatch):
