@@ -166,14 +166,18 @@ def after_download(hdmi, done_at: float, mode: str | None = None):
     """The camera shows "Saving to the connected device..." for a moment after a download returns, and MENU within
     the lock is ignored (a MENU into the notice, 2026-11-06): wait for the shooting screen and the lock
     (camkit.session.lock_over: LOCK_HDMI_S with HDMI eyes in the scan's mode where measured, else LOCK_S)."""
+    seen = session.LockSeen()
     while True:
         s = screen.read(hdmi.grab("after-download", save=False))
         waited = time.monotonic() - done_at
-        if s.kind == "shooting" and session.lock_over(waited, True, hdmi, mode):
+        seen.see(s.kind)
+        why = session.lock_over(waited, seen, hdmi, mode) if s.kind == "shooting" else ""
+        if why:
+            session.lock_log(hdmi, why, waited)
             return
         if waited > 25:
             raise SystemExit(f"after the download the camera stayed on a {s.kind} screen; nothing pressed")
-        time.sleep(0.4)
+        time.sleep(0.1 if session.lock_measured(hdmi, mode) else 0.4)
 
 
 def ok_to_press(s) -> bool:

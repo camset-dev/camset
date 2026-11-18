@@ -585,14 +585,20 @@ def test_the_link_open_line_says_when_the_runs_process_started(tmp_path, monkeyp
 
 
 class LockEyes:
-    """Eyes on a fake clock: the screen reads as `before` until `ready_at` s after the download, then as the shooting
-    screen; `grabs` counts the frames grabbed."""
-    def __init__(self, now, ready_at, name="hdmi", before="notice"):
-        self.now, self.ready_at, self.name, self.before, self.grabs = now, ready_at, name, before, 0
+    """Eyes on a fake clock after a download: the screen reads as each (kind, until) of `timeline` in turn, then as
+    the shooting screen; by default the shooting screen until 0.3 s (before the notice comes), the notice until
+    `ready_at` s, then the shooting screen. `grabs` counts the frames grabbed; `run` keeps the logged lines."""
+    def __init__(self, now, ready_at=1.97, name="hdmi", timeline=None):
+        self.now, self.name, self.grabs, self.logged = now, name, 0, []
+        self.timeline = timeline if timeline is not None else [("shooting", 0.3), ("notice", ready_at)]
+        self.run = SimpleNamespace(log=lambda kind, **f: self.logged.append((kind, f)))
+
+    def kind(self):
+        return next((k for k, until in self.timeline if self.now[0] < until), "shooting")
 
     def grab(self, tag="f", save=True):
         self.grabs += 1
-        return SimpleNamespace(kind="shooting" if self.now[0] >= self.ready_at else self.before)
+        return SimpleNamespace(kind=self.kind())
 
 
 def lock_clock(monkeypatch):
@@ -604,46 +610,66 @@ def lock_clock(monkeypatch):
     return session, now, clock
 
 
-@pytest.mark.parametrize("ready_at,ends", [(0.3, 2.4), (1.9, 2.4), (3.0, 3.0), (4.4, 4.4), (9.0, 4.5)])
-def test_with_hdmi_eyes_in_stills_the_lock_ends_at_the_later_of_the_shooting_screen_and_2_4_s(monkeypatch, ready_at,
-                                                                                              ends):
-    """camkit.session.wait_lock, HDMI eyes, the scan's mode Stills (the measurement: kit2_speed_lock, 2026-11-18): the
-    wait ends once the shooting screen has been seen and LOCK_HDMI_S has passed, whichever is later, never before the
-    shooting screen is seen; a shooting screen never seen ends it where the old rule did, at LOCK_S."""
+@pytest.mark.parametrize("timeline,ends,why", [
+    (None, 1.97, "the shooting screen after the notice"),                      # the measured case: at once
+    ([("shooting", 0.3), ("notice", 0.9)], 0.9, "the shooting screen after the notice"),   # a quick save: no floor
+    ([("notice", 6.0)], 6.0, "the shooting screen after the notice"),          # a save that keeps its notice 6 s
+    ([], 2.4, "the shooting screen, no notice seen, and 2.4 s"),               # the notice missed: 2.4 s as landed
+    ([("unknown", 9.0)], 4.5, "4.5 s"),                                        # nothing seen: the old rule
+    ([("notice", 99.0)], 25.05, "the notice still on show after 25 s")])       # a notice that never goes
+def test_with_hdmi_eyes_in_stills_the_lock_ends_on_the_shooting_screen_after_the_notice(monkeypatch, timeline, ends,
+                                                                                       why):
+    """camkit.session.wait_lock, HDMI eyes, the scan's mode Stills (kit2_speed_lock's lock_seen.jsonl: MENU taken the
+    moment the notice is gone): the shooting screen after the notice ends the wait at once, however soon (no floor) or
+    late (a notice on show past LOCK_S is waited out); the shooting screen with no notice seen keeps LOCK_HDMI_S;
+    nothing seen ends it at LOCK_S as before; a notice that never goes ends it at LOCK_NOTICE_LIMIT. Never before the
+    shooting screen is seen after the notice, or the rule that ended it; one line logged per wait."""
     session, now, clock = lock_clock(monkeypatch)
     monkeypatch.setattr(session, "MODE", "Stills")
-    how = session.wait_lock(0.0, LockEyes(now, ready_at), clock=clock)
-    assert now[0] == pytest.approx(ends, abs=0.11) and now[0] >= min(max(ready_at, session.LOCK_HDMI_S), 4.5) - 1e-9
-    assert how == ("lock" if ready_at > 4.5 else "shooting seen")
+    eyes = LockEyes(now, timeline=timeline)
+    assert session.wait_lock(0.0, eyes, clock=clock) == why
+    assert now[0] == pytest.approx(ends, abs=0.06)
+    assert eyes.logged == [("lock_wait", {"ended": why, "seconds": pytest.approx(ends, abs=0.06)})]
 
 
 @pytest.mark.parametrize("eyes_name,mode", [("osd", "Stills"), ("hdmi", "Movie"), ("hdmi", "S&Q"), ("hdmi", None)])
 def test_osd_eyes_movie_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode):
     """OSD eyes (its picture lags, not measured), Movie and S&Q (not measured) and a run that cannot tell its mode keep
-    LOCK_S, no frame looked at; a caller's own longer wait (prove_run's 5 s) is never cut short either."""
+    LOCK_S, no frame looked at, the notice or not; a caller's own longer wait (prove_run's 5 s) is never cut short."""
     session, now, clock = lock_clock(monkeypatch)
     monkeypatch.setattr(session, "MODE", mode)
-    eyes = LockEyes(now, 0.1, name=eyes_name)
-    assert session.wait_lock(0.0, eyes, clock=clock) == "lock" and now[0] == pytest.approx(4.5) and eyes.grabs == 0
+    eyes = LockEyes(now, 0.5, name=eyes_name)
+    assert session.wait_lock(0.0, eyes, clock=clock) == "4.5 s" and now[0] == pytest.approx(4.5) and eyes.grabs == 0
     now[0] = 0.0
     session.wait_lock(0.0, None, "Stills", clock=clock, longest=5.0)
     assert now[0] == pytest.approx(5.0)
     assert session.lock_measured(SimpleNamespace(name="hdmi"), "Stills") and not session.lock_measured(None, "Stills")
 
 
-def test_lock_over_is_the_old_rule_or_the_measured_one():
-    """lock_over: past `longest` always (the old rule); before it only with HDMI eyes in a measured mode, the shooting
-    screen seen and LOCK_HDMI_S passed."""
+def test_lock_over_is_the_old_rule_or_what_the_eyes_saw():
+    """lock_over on what has been seen: past `longest` always, but where the measured rule applies and the notice is
+    on show (up to LOCK_NOTICE_LIMIT); before it with HDMI eyes in a measured mode, the shooting screen after the notice
+    at once, or the shooting screen with no notice once LOCK_HDMI_S has passed."""
     from camkit import session
+
+    def seen(*kinds):
+        s = session.LockSeen()
+        for k in kinds:
+            s.see(k)
+        return s
     hdmi = SimpleNamespace(name="hdmi")
-    assert session.lock_over(4.6, False) and not session.lock_over(4.4, True, hdmi)
-    assert session.lock_over(2.4, True, hdmi, "Stills") and not session.lock_over(2.3, True, hdmi, "Stills")
-    assert not session.lock_over(3.0, False, hdmi, "Stills") and not session.lock_over(3.0, True, hdmi, "Movie")
+    assert session.lock_over(4.6, seen()) and not session.lock_over(4.4, seen("shooting"), hdmi)
+    assert session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "Stills")
+    assert not session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "Movie")
+    assert not session.lock_over(6.0, seen("notice"), hdmi, "Stills") and session.lock_over(6.0, seen("notice"), hdmi)
+    assert session.lock_over(2.4, seen("shooting"), hdmi, "Stills") and not session.lock_over(2.3, seen("shooting"),
+                                                                                              hdmi, "Stills")
 
 
-def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills"):
-    """proving.nav.after_download on a fake clock: the camera's screen the notice until `ready_at` s, then the shooting
-    screen; (when it ended, the keys pressed)."""
+def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills", timeline=None):
+    """proving.nav.after_download on a fake clock: the camera's screen as LockEyes' timeline (by default the
+    shooting screen until 0.3 s, the notice until `ready_at`, then the shooting screen); (when it ended, the keys
+    pressed, the lines logged)."""
     from camkit import session
     from proving import nav
     now = [0.0]
@@ -651,42 +677,47 @@ def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills"):
     monkeypatch.setattr(nav.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
     monkeypatch.setattr(session, "MODE", mode)
     pressed = []
+    eyes = LockEyes(now, ready_at, name=name, timeline=timeline)
 
     def glance(tag):
-        kind = "shooting" if now[0] >= ready_at else "notice"
+        kind = eyes.kind()
         return SimpleNamespace(kind=kind), SimpleNamespace(kind=kind)
     cam = SimpleNamespace(glance=glance, refresh=lambda tag, frame=None: SimpleNamespace(kind=frame.kind),
-                          press=lambda key, **k: pressed.append(key), hdmi=SimpleNamespace(name=name))
+                          press=lambda key, **k: pressed.append(key), hdmi=eyes)
     nav.after_download(cam, 0.0)
-    return now[0], pressed
+    return now[0], pressed, eyes.logged
 
 
-def test_after_download_ends_on_the_shooting_screen_past_2_4_s_with_hdmi_in_stills(monkeypatch):
-    """proving.nav.after_download, its looks every 0.4 s from 1 s: with HDMI eyes in Stills it ends at the first look
-    past LOCK_HDMI_S on the shooting screen (2.6 s, the notice gone at 1.9 s), not at the first past LOCK_S (4.6 s)
-    as before; OSD eyes and Movie end at 4.6 s as before; MENU after it either way."""
-    assert after_download_on(monkeypatch, 1.9) == (pytest.approx(2.6), ["menu"])
-    assert after_download_on(monkeypatch, 3.3)[0] == pytest.approx(3.4)
-    assert after_download_on(monkeypatch, 1.9, name="osd")[0] == pytest.approx(4.6)
-    assert after_download_on(monkeypatch, 1.9, mode="Movie")[0] == pytest.approx(4.6)
+def test_after_download_ends_on_the_shooting_screen_after_the_notice_with_hdmi_in_stills(monkeypatch):
+    """proving.nav.after_download: with HDMI eyes in Stills, its looks every 0.1 s from the reply, it ends at the
+    first look on the shooting screen after the notice (2.0 s, the notice gone at 1.97 s), a notice on show 6 s waited
+    out, and with no notice seen the shooting screen once 2.4 s have passed; OSD eyes and Movie end at the first look
+    past LOCK_S, 4.6 s, as before; MENU after it every time, one line logged."""
+    end, pressed, logged = after_download_on(monkeypatch, 1.97)
+    assert end == pytest.approx(2.0, abs=0.01) and pressed == ["menu"]
+    assert [f["ended"] for k, f in logged] == ["the shooting screen after the notice"]
+    assert after_download_on(monkeypatch, 6.0)[0] == pytest.approx(6.0, abs=0.11)
+    assert after_download_on(monkeypatch, 1.97, timeline=[])[0] == pytest.approx(2.4, abs=0.11)
+    assert after_download_on(monkeypatch, 1.97, name="osd")[0] == pytest.approx(4.6)
+    assert after_download_on(monkeypatch, 1.97, mode="Movie")[0] == pytest.approx(4.6)
 
 
 def test_the_page_scans_wait_after_its_download_goes_by_its_mode(monkeypatch):
-    """page_scan.after_download: the shooting screen and LOCK_HDMI_S in Stills over HDMI, LOCK_S in Movie."""
+    """page_scan.after_download: the shooting screen after the notice in Stills over HDMI (1.97 s), LOCK_S in Movie."""
     import page_scan
-    for mode, ends in (("Stills", 2.4), ("Movie", 4.5)):
+    for mode, ends in (("Stills", 1.97), ("Movie", 4.5)):
         now = [0.0]
         monkeypatch.setattr(page_scan.time, "monotonic", lambda now=now: now[0])
         monkeypatch.setattr(page_scan.time, "sleep", lambda s, now=now: now.__setitem__(0, now[0] + s))
         monkeypatch.setattr(page_scan.screen, "read", lambda f: f)
-        eyes = LockEyes(now, 1.9)
+        eyes = LockEyes(now, 1.97)
         page_scan.after_download(eyes, 0.0, mode)
         assert now[0] == pytest.approx(ends, abs=0.41) and now[0] >= ends - 1e-9
 
 
 def test_the_box_provers_wait_the_measured_lock_with_their_own_eyes(monkeypatch, tmp_path):
-    """boxes_run.choose and optboxes_run.keep: after the download, the lock by camkit.session.wait_lock with the run's
-    eyes, so HDMI eyes in Stills end it at 2.4 s once the shooting screen is seen."""
+    """boxes_run.choose: after the download, the lock by camkit.session.wait_lock with the run's eyes, so HDMI eyes in
+    Stills end it once the shooting screen is back after the notice (1.0 s here)."""
     import boxes_run
     from camkit import session
     session_, now, clock = lock_clock(monkeypatch)
@@ -697,7 +728,7 @@ def test_the_box_provers_wait_the_measured_lock_with_their_own_eyes(monkeypatch,
     eyes = LockEyes(now, 1.0)
     link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT")
     boxes_run.choose(None, link, eyes, None, None, ["Frame Rate"], 0, ["30p", "60p"], 1, ["A", "B"])
-    assert now[0] == pytest.approx(2.4) and eyes.grabs >= 1
+    assert now[0] == pytest.approx(1.0, abs=0.06) and eyes.grabs >= 1
 
 
 def test_the_crawl_the_first_open_check_afreg_and_prove_run_go_through_the_one_wait(monkeypatch, tmp_path):

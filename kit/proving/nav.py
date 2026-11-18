@@ -15,7 +15,7 @@ from camkit.screen import same_position, same_state
 from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
 
-from .base import LOCK_S, Failed, lock_over
+from .base import LOCK_S, Failed, LockSeen, lock_log, lock_measured, lock_over
 from .screens import SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png, same_place
 
 # While a DISP Set row is proved the shooting screen can be in another display mode ("No Disp. Info.":
@@ -95,19 +95,26 @@ def after_download(cam, done_at: float):
     closes the menu; wait for that to clear and for the menu lock to pass, then MENU if closed. The looks
     every 0.4 s are not saved (LiveCamera.glance); the one that decides is, and becomes the camera's frame
     (refresh(frame=)): 70,638 frames of these looks sat in kit2_pass2 (the speed review of 2026-11-18). The lock is
-    over by camkit.session.lock_over: with HDMI eyes in a mode measured, once the shooting screen (or a menu page) is
-    on show and LOCK_HDMI_S has passed; else once LOCK_S has, as always."""
-    time.sleep(1.0)
+    over by camkit.session.lock_over on what the looks have seen: with HDMI eyes in a mode measured, at the shooting
+    screen (or a menu page) after the notice, the looks every 0.1 s from the download's reply; else once LOCK_S has
+    passed on the shooting screen or a menu page, the looks from 1 s every 0.4 s, as always."""
+    eyes = getattr(cam, "hdmi", None)
+    measured = lock_measured(eyes)
+    time.sleep(0.0 if measured else 1.0)
+    seen = LockSeen()
     while True:
         f, s = cam.glance("after-download")
         waited = time.monotonic() - done_at
         ready = s.kind in ("menu", "submenu") or shooting_like(s, waited)
-        if ready and lock_over(waited, ready, getattr(cam, "hdmi", None)):
+        seen.see("shooting" if ready else s.kind)
+        why = lock_over(waited, seen, eyes) if ready else ""
+        if why:
+            lock_log(eyes, why, waited)
             break
         if waited > 25:
             cam.refresh("after-download", frame=f)
             raise Failed(f"after a download the camera stayed on a {s.kind} screen")
-        time.sleep(0.4)
+        time.sleep(0.1 if measured else 0.4)
     s = cam.refresh("after-download", frame=f)
     if shooting_like(s):
         cam.press("menu")

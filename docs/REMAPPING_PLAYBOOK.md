@@ -410,8 +410,8 @@ Each line is a symptom, then its cause, then what to do.
   remote session until opened). The prover then looks at the OSD.
 - **The capture dies after a frame-rate change** → the HDMI format follows the movie settings. Restores need no HDMI.
 - **MENU unanswered just after a download** → the menu is locked while the camera shows its saving notice. The kit
-  waits 4.5 s (`LOCK_S`), or, with HDMI eyes in Stills, until the shooting screen is back and 2.4 s have passed
-  (`camkit.session.wait_lock`). Never press MENU twice on a slow menu.
+  waits 4.5 s (`LOCK_S`), or, with HDMI eyes in Stills, until the shooting screen is back after the notice, however
+  long the notice stays (`camkit.session.wait_lock`). Never press MENU twice on a slow menu.
 - **The menu reopens after a download with the focus in the group column** → the position matches no page of the
   scan. A session that opens the menu that way presses Right once, onto the page's rows, before it matches the scan;
   a menu that still matches no page fails closed ("the menu opened on a screen the scan does not know") and the

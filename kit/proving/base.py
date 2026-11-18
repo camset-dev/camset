@@ -10,7 +10,8 @@ import re
 import time
 
 from camkit import paths
-from camkit.session import LOCK_S, lock_over, wait_lock  # noqa: F401 (the menu's lock after a download, for provers)
+from camkit.session import (LOCK_S, LockSeen, lock_log, lock_measured, lock_over,  # noqa: F401 (the lock after a
+                            wait_lock)                                            # download, for the provers)
 from runner import read_json
 
 RUN_ROOT = paths.module_root()          # the camera's runs, runs/<model>_fw<fw>/ (camkit.paths)
