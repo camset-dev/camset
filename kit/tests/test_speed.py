@@ -355,3 +355,39 @@ def test_the_box_provers_pass_the_flag_on_a_step_alone(monkeypatch):
         boxes_run.look_open(cam, None, ["S&Q Settings", "Frame Rate"], 0)
     assert sent and all(flag for _, flag in sent)
 
+
+# ---------------------------------------------------------------- E: waits nothing needs
+
+
+def test_the_menu_lock_after_a_download_is_waited_only_for_what_is_left_of_it():
+    """proving.base.lock_left (crawl_run's wait after its start download): what is left of LOCK_S since the download
+    returned, so a crawl whose ledger build took longer than the lock waits nothing more, one that took a second waits
+    the rest; never less than the lock in all."""
+    from proving import base
+    now, slept = [100.0 + 10.9], []                 # the ledger built in 10.9 s
+    clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda s: slept.append(s) or now.__setitem__(0, now[0] + s))
+    base.lock_left(100.0, clock)
+    now[0] = 200.0 + 1.0
+    base.lock_left(200.0, clock)
+    assert slept == [pytest.approx(base.LOCK_S - 1.0)] and now[0] == pytest.approx(200.0 + base.LOCK_S)
+
+
+def test_the_settings_downloads_go_once_the_shooting_screen_is_back_with_no_second_waited(monkeypatch, tmp_path):
+    """boxes_run.choose, optboxes_run.keep's download and the session's end download as soon as the shooting screen is
+    back: camlink waits up to 5 s for the camera to allow a settings download (sdk_session.h, downloadSettings) and the
+    session's end tries four times; the lock after the download is waited as before."""
+    import boxes_run
+    import runner
+    seq = []
+    monkeypatch.setattr(boxes_run, "step_ok", lambda *a: {"chosen_frame": "c", "row_frame": "r", "vlm": ""})
+    monkeypatch.setattr(boxes_run, "to_shooting", lambda *a: seq.append("shooting"))
+    monkeypatch.setattr(boxes_run.time, "sleep", lambda s: seq.append(("sleep", s)))
+    link = SimpleNamespace(download=lambda tag: seq.append("download") or tmp_path / f"{tag}.DAT")
+    boxes_run.choose(None, link, None, None, None, ["Frame Rate"], 0, ["30p", "60p"], 1, ["A", "B"])
+    assert seq == ["shooting", "download", ("sleep", boxes_run.LOCK_S)]
+    seq.clear()
+    monkeypatch.setattr(runner.time, "sleep", lambda s: seq.append(("sleep", s)))
+    monkeypatch.setattr(runner.session, "finish", lambda link, start, **k: seq.append("download"))
+    runner.end_session(link, None, tmp_path / "start.DAT", reach=lambda link, eyes, why: seq.append("shooting"))
+    assert seq == ["shooting", "download"]
+

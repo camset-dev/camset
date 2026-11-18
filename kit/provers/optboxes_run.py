@@ -511,7 +511,7 @@ def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx:
     cam.press("enter")
     row_frame = getattr(cam.frame.path, "name", "")
     to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
+    # no wait first: camlink waits up to 5 s for the camera to allow a settings download
     dat = link.download(f"{names[idx]}-{vals.index(target)}".replace(" ", "-"))
     time.sleep(LOCK_S)
     return {"chosen_frame": chosen, "row_frame": row_frame, "shown": read.ocr, "vlm": read.vlm, "vlm_reader": read.reader,

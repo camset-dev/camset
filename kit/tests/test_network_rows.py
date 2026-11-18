@@ -2737,7 +2737,8 @@ def crawl_main(tmp_path, monkeypatch, raised, restored=True, network=None, argv=
                         ("Link", lambda r: contextlib.nullcontext(SimpleNamespace(download=lambda tag: tmp_path / "b.DAT",
                                                                                   press=lambda *a, **k: None))),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
-                        ("wait_for", lambda *a, **k: None), ("time", SimpleNamespace(sleep=lambda s: None)),
+                        ("wait_for", lambda *a, **k: None),
+                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0)),
                         ("LiveCamera", lambda *a, **k: SimpleNamespace()), ("crawl_from_menu", crawl_from_menu),
                         ("close_for_restore", lambda cam, link, start: None),
                         ("end_session", lambda *a, **k: log.append(("end", {x: k[x] for x in k if x != "reach"}))

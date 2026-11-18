@@ -613,6 +613,17 @@ def test_the_proof_run_proves_each_box_from_its_own_base(fake, monkeypatch):
         assert len(bases) == 1 and (bases != {r["base"] for r in by_box["Range"]}) == (eyes == "osd")
 
 
+def test_keep_downloads_once_the_shooting_screen_is_back(fake, monkeypatch):
+    """keep: OK, to the shooting screen, the download at once (camlink waits up to 5 s for the camera to allow it), then
+    the menu lock (LOCK_S) as before."""
+    seq = []
+    monkeypatch.setattr(O, "to_shooting", lambda *a, **k: seq.append("shooting"))
+    monkeypatch.setattr(O.time, "sleep", lambda s: seq.append(("sleep", s)))
+    cam = fake()
+    link = SimpleNamespace(download=lambda tag: seq.append("download") or SimpleNamespace(name=f"{tag}.DAT"))
+    O.keep(cam, link, None, None, None, "Zebra Level", "Custom 1", ROW, 2, [f"±{v}" for v in range(1, 11)], "±6")
+    assert seq[seq.index("shooting"):] == ["shooting", "download", ("sleep", O.LOCK_S)]
+
 def test_a_value_whose_records_did_not_move_is_kept_as_not_proved(fake, monkeypatch, capsys):
     """A value chosen whose download differs in no record from its base: the line keeps it with no changes (the report
     credits it nothing), and the run says it was not proved, never guessing a record."""

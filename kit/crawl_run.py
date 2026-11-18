@@ -99,7 +99,7 @@ from camkit.live import lit_text, LiveCamera, PageLabels, reader_label, text_of 
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
-from proving.base import LOCK_S  # noqa: E402
+from proving.base import LOCK_S, lock_left  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
                     add_network_argument, add_scan_argument, cards_statement_refused, close_for_restore, end_session,
                     known_groups,
@@ -775,6 +775,7 @@ def main():
                 time.sleep(1.0)
             wait_for(hdmi, ("shooting",), "the first settings download", link=link)
             before = link.download("before")
+            downloaded = time.monotonic()
             print(f"settings saved: {before.name}", flush=True)
             ledger = coverage.crawl_gate(run, a, before)    # the ledger's word on each row; --skip-settled skips
             # a look lap writes a row's name as rows.jsonl keeps it, the name it keeps or its placeholder (kept_label,
@@ -783,7 +784,7 @@ def main():
             first = first_open.FirstOpens(link, hdmi, run, before, seen, skip_why, LOCK_S, private=look,
                                           per=a.first_open_check,
                                           name=functools.partial(kept_label, known=names) if look else None)
-            time.sleep(5)                                  # MENU within ~3 s of a download locks the menu
+            lock_left(downloaded, time)         # MENU within ~3 s of a download locks the menu: what is left of LOCK_S
             # no options: inside a network row the camera lets nothing be chosen (camkit.live, safety.look_refused). The
             # row labels and the values the kit knows go to every run: an opening check judges the row, never a value
             # shown beside it (safety.row_judged); a look lap's camera knows the labels this body was seen to open

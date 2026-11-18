@@ -795,7 +795,8 @@ def end_session(link, eyes, start: Path, why: str = "the settings download after
             kind, why_not = restorable_now(link, eyes)
             if kind is None:
                 hold_for_owner(link, eyes, start, why_not, keys)
-        time.sleep(1)
+        # no wait first: camlink waits up to 5 s for the camera to allow a settings download (sdk_session.h,
+        # downloadSettings: SaveOperationEnableStatus), and the session's end tries it four times (session.ended)
         return session.finish(link, start, tag=tag, **({} if show is None else {"show": show}),
                               **({"expected": frozenset(expected)} if expected else {}), **({"keys": True} if keys else {}))
 

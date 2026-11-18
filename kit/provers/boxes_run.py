@@ -181,8 +181,7 @@ def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
     settings download."""
     got = step_ok(cam, cycle, model, path, b, vals, target, names)
     to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
-    dat = link.download(f"{path[-1]}-{b}-{target}")
+    dat = link.download(f"{path[-1]}-{b}-{target}")     # camlink waits up to 5 s for the camera to allow it
     time.sleep(LOCK_S)
     return {**got, "dat": dat}
 
