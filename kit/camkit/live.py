@@ -389,14 +389,53 @@ class OptionBoxes:
 OPTION_TITLE = (110, 60, 400, 106)
 BOX_WORD = (100, 280, 640, 342)
 VALUE_FOLD = str.maketrans({"‡": "±"})      # OCR's reading of the ± before a range ("‡5")
+# OCR's readings of the sign before a range's digits: all of them the box's own ± (kit2_pass2 241418-241440, the probe's
+# Range walk: "+5", "÷4", "¢5", "‡1", "±6"), and of the digits' look-alikes in a box of digits alone (241426 and 241431
+# read a 3 as Cyrillic З; O, О, l, I and | are no digit's reading but these in such a field)
+BOX_SIGNS = "±+÷¢‡"
+DIGIT_FOLD = str.maketrans({"З": "3", "з": "3", "О": "0", "о": "0", "O": "0", "o": "0", "l": "1", "I": "1", "|": "1"})
+_NUMBER_SHAPE = re.compile(rf"([{re.escape(BOX_SIGNS)}]?)([0-9ЗзОоOolI|]+)(\+?)")
 
 
-def option_boxes_refused(consent: OptionBoxes, lines, image) -> str:
+def box_shape(like) -> tuple | None:
+    """(sign, suffix) of a box's values shaped as `like`, one of them: a sign before the digits (whatever glyph OCR read
+    for it, the box's own ±) and a "+" after them (a lower limit's "100+"), each "" where there is none; None for a value
+    of words (Type's "Std+Range")."""
+    m = _NUMBER_SHAPE.fullmatch(re.sub(r"\s+", "", str(like or "")))
+    return ("±" if m.group(1) else "", m.group(3)) if m else None
+
+
+def box_value(text, like) -> str:
+    """`text`, read in a box whose values are shaped as `like`, put in that shape: the sign the box's own (±) whatever
+    glyph OCR read for it, the digits mapped from their look-alikes (DIGIT_FOLD), a trailing "+" kept where the box has
+    one; spaces out. Where `like` is no number's shape (a box of words) or `text` holds no clean digits, `text` as read,
+    its spaces out, for the caller to judge."""
+    t = re.sub(r"\s+", "", str(text or ""))
+    shape = box_shape(like)
+    if shape is None:
+        return t
+    sign, suffix = shape
+    core = t.lstrip(BOX_SIGNS) if sign else t
+    core = core.rstrip(BOX_SIGNS) if suffix else core
+    digits = core.translate(DIGIT_FOLD)
+    return f"{sign}{digits}{suffix}" if re.fullmatch(r"\d+", digits) else t
+
+
+def box_number(text, like) -> int | None:
+    """The number `text` reads in a box shaped as `like` (box_value), or None where it reads no clean one."""
+    if box_shape(like) is None:
+        return None
+    m = re.fullmatch(r"±?(\d+)\+?", box_value(text, like))
+    return int(m.group(1)) if m else None
+
+
+def option_boxes_refused(consent: OptionBoxes, lines, image, read: str | None = None) -> str:
     """Why a screen whose OCR lines are `lines` and whose picture is `image` is not `consent.option`'s row of boxes with
     its `consent.word` box lit on `consent.value`, ready for the OK that keeps it (OptionBoxes), or "" when it is: the
     title line names the option and the word above the lit box is the box's (both compared without spaces or
-    punctuation), the box at `consent.at` is lit (orange) and reads the value (OCR's "‡" taken for "±", spaces out), the
-    footer draws the OK key (camkit.screen.footer_keys), no question mark and no confirmation's word above the footer."""
+    punctuation), the box at `consent.at` is lit (orange) and reads the value (OCR's reading in the value's shape,
+    box_value; `read`, the caller's own reading of it, its second reader's among them, where given), the footer draws
+    the OK key (camkit.screen.footer_keys), no question mark and no confirmation's word above the footer."""
     title = ocr.text_in(lines, OPTION_TITLE).strip()
     if not _compact(title) or _compact(title) != _compact(consent.option):
         return f"its title line reads {title[:40]!r}, not {consent.option}"
@@ -407,8 +446,8 @@ def option_boxes_refused(consent: OptionBoxes, lines, image) -> str:
     lit = screen._orange(np.asarray(image))[y0:y1, x0:x1]
     if lit.size == 0 or float(lit.mean()) <= 0.3:
         return f"the {consent.word} box is not lit"
-    value = re.sub(r"\s+", "", ocr.text_in(lines, consent.at).translate(VALUE_FOLD))
-    if value != re.sub(r"\s+", "", consent.value):
+    value = box_value(read if read is not None else ocr.text_in(lines, consent.at), consent.value)
+    if value != box_value(consent.value, consent.value):
         return f"the {consent.word} box reads {value!r}, not {consent.value!r}"
     if "ok_key" not in screen.footer_keys(image):
         return "its footer draws no OK key"
