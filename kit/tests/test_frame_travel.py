@@ -95,7 +95,10 @@ def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
     """The a1 II's public definition: each record of each FRAME_TRAVEL place carries the frame the table gives it
     (writer/frames.placed), every other setting none: the spot's four places (current, level, grip down, grip up),
     each Custom box's four and the box in use, each frame's limits picked by Aspect Ratio (global:0x01fe, kept in the
-    memory sets as in the live settings); each limit within its record's range where it has one; every Focus Area
+    memory sets as in the live settings), and how each shooting mode picks them (in_modes: Movie as 16:9, measured, and
+    S&Q as Movie, inferred, for the spots and the box in use; Custom 1-3's own places in Stills only, their size records
+    holding other numbers in a Movie memory), the modes the camera's memory sets name; each limit within its record's
+    range where it has one; every Focus Area
     option the spot's and the boxes' limits name is a value of the definition's Focus Area records; at each ratio one
     limit for each area; and each Custom box's default size, as the sample (written after Initialize) holds it, is one
     the rule was tried at for every ratio."""
@@ -104,11 +107,26 @@ def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
     table = hand_tables.load(A1, evidence=False).FRAME_TRAVEL
     want = {}
     for e in table.values():
-        for kx, ky, lims in frames.placed(e):
-            want[kx] = {"axis": "x", "with": ky, "by": e["by"], "limits": lims["x"]}
-            want[ky] = {"axis": "y", "with": kx, "by": e["by"], "limits": lims["y"]}
+        for (kx, ky, lims), in_modes in zip(frames.placed(e), frames.place_modes(e), strict=True):
+            want[kx] = {"axis": "x", "with": ky, "by": e["by"], "in_modes": in_modes, "limits": lims["x"]}
+            want[ky] = {"axis": "y", "with": kx, "by": e["by"], "in_modes": in_modes, "limits": lims["y"]}
     assert {k: s["frame"] for k, s in by.items() if "frame" in s} == want
     assert len(want) == 2 * 4 + 2 * 4 * 3 + 2
+    measured = [{"modes": ["Stills"]}, {"modes": ["Movie"], "as": 2}, {"modes": ["S&Q"], "as": 2, "inferred": True}]
+    in_use = ("set:0x1327", "set:0x1329")
+    assert {k for k, f in want.items() if f["in_modes"] == measured} == \
+        {k for kx, ky in table["Spot"]["places"] for k in (kx, ky)} | set(in_use)
+    assert all(f["in_modes"] == [{"modes": ["Stills"]}] for k, f in want.items() if k.startswith("set:0x13") and k not in in_use)
+    assert [b["areas"] for b in table["Custom"]["boxes"] if "in_modes" in b] == \
+        [[*[f"Custom {n}" for n in (1, 2, 3)], *[f"Tracking: Custom {n}" for n in (1, 2, 3)]]]
+    assert {m for f in want.values() for e in f["in_modes"] for m in e["modes"]} <= set(pub["camera"]["memory_sets"]["modes"])
+    # and the model page says so: Movie measured, S&Q inferred, the boxes' own places Stills only and why, what is untried
+    page = (Path(__file__).resolve().parents[2] / "docs/models/ILCE-1M2_fw4.00.md").read_text(encoding="utf-8")
+    row = next(ln for ln in page.splitlines() if ln.startswith("| Focus frame travel |"))
+    for words in ("in Movie, as measured, and in S&Q, as inferred from Movie", "Custom 1-3's own places get limits in Stills only",
+                  "the in-use size records held the Stills ones", "Custom boxes in Movie at a second size and from a recalled Movie "
+                  "Memory 2 or 3", "a box's size range in Movie", "a place set by touch", "Time-lapse"):
+        assert words in row, words
     ratio = by["global:0x01fe"]
     assert ratio["name"] == "Aspect Ratio" and ratio["in_sets"]
     assert ratio["values"] == [[0, "3:2"], [1, "4:3"], [2, "16:9"], [3, "1:1"]]
@@ -236,5 +254,41 @@ def test_limits_by_a_setting_merge_their_values_and_are_checked_against_it(capsy
         doc = made_up()
         doc["settings"].append(setting("global:0x0040", values=[[0, "3:2"], [1, "16:9"]]))
         frames.with_frames(doc, table, {**SAID, "Again": SAID["Spot"]})
+        out = capsys.readouterr().out
+        assert words in out and "not applied" in out, out
+
+
+def test_how_each_shooting_mode_picks_the_limits_goes_onto_each_frame(capsys):
+    """in_modes, how some shooting modes' sections pick the limits: written on each record of the entry's places as the
+    entry gives it, a box's own in place of its entry's for that box's places alone; refused, said and left out: a mode
+    the camera does not name, an "as" that is no value of "by", a record two entries place with other modes."""
+    def doc():
+        d = made_up()
+        d["settings"].append(setting("global:0x0040", values=[[0, "3:2"], [1, "16:9"]]))
+        d["camera"] = {"memory_sets": {"modes": {"Stills": [1, 2, 3], "Movie": [4, 5, 6]}}}
+        return d
+    modes = [{"modes": ["Stills"]}, {"modes": ["Movie"], "as": 1, "inferred": True}]
+    spot = {"places": SPOT["places"], "by": "global:0x0040", "in_modes": modes, "limits": [
+        {"areas": ["Spot: M"], "when": [0, 1], "x": [80, 560], "y": [72, 408]}]}
+    pics = [{"when": [0], "x": [1, 1], "y": [1, 1]}, {"when": [1], "x": [1, 1], "y": [27, 32]}]
+    box = BOXES["boxes"][0]
+    boxes = {"inside": BOXES["inside"], "by": "global:0x0040", "grid": {"x": 640, "y": 480}, "pictures": pics,
+             "in_modes": [{"modes": ["Stills"]}],
+             "boxes": [box, {"areas": ["Spot: S"], "size": box["size"], "places": [["set:0x0030", "set:0x0031"]], "in_modes": modes}]}
+    d = doc()
+    d["settings"] += [setting("set:0x0030"), setting("set:0x0031")]
+    d["settings"] = [s for s in d["settings"] if s["key"] != "global:0x0030"]
+    assert frames.with_frames(d, {"Spot": spot, "Custom": boxes}, SAID) == 6
+    by = {s["key"]: s for s in d["settings"]}
+    assert [list(by[k]["frame"]) for k in ("set:0x0001", "set:0x0003")] == [["axis", "with", "by", "in_modes", "limits"]] * 2
+    assert by["set:0x0001"]["frame"]["in_modes"] == by["set:0x0002"]["frame"]["in_modes"] == modes
+    assert by["set:0x0003"]["frame"]["in_modes"] == by["set:0x0004"]["frame"]["in_modes"] == [{"modes": ["Stills"]}]
+    assert by["set:0x0030"]["frame"]["in_modes"] == by["set:0x0031"]["frame"]["in_modes"] == modes
+    assert frames.place_modes(boxes) == [[{"modes": ["Stills"]}], modes] and frames.place_modes(SPOT) == [None]
+    for table, words in (({"Spot": {**spot, "in_modes": [{"modes": ["Cinema"]}]}}, "the camera names no shooting mode 'Cinema'"),
+                         ({"Spot": {**spot, "in_modes": [{"modes": ["Movie"], "as": 7}]}}, "global:0x0040 has no value 7"),
+                         ({"Spot": spot, "Again": {**spot, "in_modes": modes[:1], "limits": [{**spot["limits"][0], "areas": ["Spot: S"]}]}},
+                          "or on other modes")):
+        frames.with_frames(doc(), table, {**SAID, "Again": SAID["Spot"]})
         out = capsys.readouterr().out
         assert words in out and "not applied" in out, out

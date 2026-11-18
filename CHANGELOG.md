@@ -66,6 +66,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   definition's range now says, a click 16 across or 12 up and down, and the notes no longer give the wrong steps of
   the first test. The travel rule holds at every size tried at 3:2, so the definition counts it proved across the
   whole range there, and at the default sizes only at the other aspect ratios.
+- **The a1 II's focus frames in Movie and S&Q:** a frame's `in_modes` says how each shooting mode picks its limits,
+  and the editor reads it (`Frame::picks`): the spots and the box in use take Stills' 16:9 limits in Movie, as measured,
+  and in S&Q, as inferred from Movie. Custom 1-3's own places keep limits in Stills only, since their size records hold
+  other numbers in a Movie memory.
 - **The a1 II's Zone and Custom box position copies, and the spot size and Custom area AF Area Registration writes,
   say which way the camera was held** (horizontal, grip down, grip up or current, as the spot's do), from
   registrations made level, grip down and grip up; the Custom boxes' now show outside Expert mode, like the spot's.

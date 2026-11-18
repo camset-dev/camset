@@ -723,6 +723,14 @@
      "$ref": "#/$defs/key",
      "description": "The setting whose value, read in the same section as the place, picks the limits (the a1 II's Aspect Ratio, where the limits change): with it every limit says the values it is for (when), and boxes give each value's picture (pictures). Left out where the limits hold whatever the camera's settings."
     },
+    "in_modes": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_mode"
+     },
+     "description": "How each shooting mode's sections pick the limits, where the mode decides: each entry's modes read by, or take the limits for one value of it (as), inferred or measured. A section of a mode no entry names has no limits known (the a1 II's Time-lapse sets, and its Custom boxes' own places outside Stills). Absent: every section reads by. Each mode in one entry at most; a box may give its own (frame_box), for its places alone."
+    },
     "inside": {
      "$ref": "#/$defs/frame_bounds",
      "description": "Boxes whose size the file holds: the camera keeps the whole box, centred on its place, inside these bounds on the grid's whole span (fractions allowed, as the rule that reproduces every measured limit needs them), so its centre stops half the box's width (height) inside them, each end rounded to the nearest whole number, a half toward the centre."
@@ -955,6 +963,14 @@
       "$ref": "#/$defs/frame_pair"
      },
      "description": "The [X, Y] record pairs that hold the box's centre, a pair for each place the camera keeps it in."
+    },
+    "in_modes": {
+     "type": "array",
+     "minItems": 1,
+     "items": {
+      "$ref": "#/$defs/frame_mode"
+     },
+     "description": "This box's own in_modes, for its places alone, in place of its entry's (the a1 II's box in use, whose size records hold the size the rule reads in Movie too)."
     }
    },
    "description": "A box the rule bounds: its areas, its size records and the records of its places."
@@ -1040,6 +1056,34 @@
     "minimum": 1
    },
    "description": "[numerator, denominator], the numerator not above the denominator."
+  },
+  "frame_mode": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "modes"
+   ],
+   "properties": {
+    "modes": {
+     "type": "array",
+     "minItems": 1,
+     "uniqueItems": true,
+     "items": {
+      "type": "string",
+      "minLength": 1
+     },
+     "description": "Shooting modes, as camera.memory_sets.modes names them (\"Stills\", \"Movie\", \"S&Q\", \"Time-lapse\"); a memory set's mode is the one it is listed under, the live settings' camera.live_mode's."
+    },
+    "as": {
+     "type": "integer",
+     "description": "The value of by whose limits hold in these modes, by not read there (the a1 II's Movie: Stills' at 16:9, whatever Aspect Ratio holds). Without it these modes read by."
+    },
+    "inferred": {
+     "const": true,
+     "description": "With as: that was inferred, not measured, in these modes (the a1 II's S&Q, taken as Movie): an editor says so where it places a frame by it."
+    }
+   },
+   "description": "How the sections of some shooting modes pick the frame's limits."
   }
  }
 }

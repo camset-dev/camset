@@ -253,6 +253,22 @@ def _row(r, types_: tuple, where: str, words: str) -> list:
     return r
 
 
+def _in_modes(x, has_by: bool, where: str) -> list:
+    """A frame's in_modes: entries each naming some shooting modes, no mode twice, and taking the limits by "by" (no
+    "as") or as for one value of it ("as", where there is a "by"), "inferred" only ever true and only beside an "as"."""
+    for i, m in enumerate(_listed(x, where)):
+        _fields(m, ("modes",), f"{where}[{i}]")
+        _areas(m["modes"], f"{where}[{i}]'s modes")
+        if "as" in m:
+            if not has_by:
+                raise _Shape(f"{where}[{i}] has an 'as', and its entry has no 'by'")
+            _need(m["as"], int, f"{where}[{i}]'s as")
+        if "inferred" in m and (_need(m["inferred"], bool, f"{where}[{i}]'s inferred") is not True or "as" not in m):
+            raise _Shape(f"{where}[{i}]'s inferred is only ever true, beside an 'as'")
+    _unique(mode for m in x for mode in m["modes"])
+    return x
+
+
 def _listed(x, where: str) -> list:
     """A list with something in it, as it is."""
     if not _need(x, list, where):
@@ -461,7 +477,8 @@ def _shaped(name: str, kind: str, raw):
         # a kind of focus frame, by a name: measured area by area ({places, limits}) or boxes one rule bounds ({inside,
         # boxes[, sizes_tried]}), the fields writer/frames.py reads; with "by" (the setting whose value picks the limits)
         # every limit names the values it is for ("when"), and boxes give each value's picture ("pictures", with the
-        # grid); each area, and each area at each value, in one limit of its entry at most
+        # grid); each area, and each area at each value, in one limit of its entry at most; "in_modes", how some shooting
+        # modes' sections pick the limits, on the entry or (for its places alone) on a box
         for name, e in _need(raw, dict, "the table").items():
             if not name.strip():
                 raise _Shape("an entry has no name")
@@ -469,6 +486,8 @@ def _shaped(name: str, kind: str, raw):
             has = set(_need(e, dict, where))
             if "by" in has:
                 _need(e["by"], str, f"{where}'s by")
+            if "in_modes" in has:
+                _in_modes(e["in_modes"], "by" in has, f"{where}'s in_modes")
             if {"places", "limits"} <= has and not {"inside", "boxes", "sizes_tried", "pictures", "grid"} & has:
                 _pairs(e["places"], f"{where}'s places")
                 for i, lim in enumerate(_listed(e["limits"], f"{where}'s limits")):
@@ -516,6 +535,8 @@ def _shaped(name: str, kind: str, raw):
                     _areas(box["areas"], f"{where}'s boxes[{i}]'s areas")
                     _pair(box["size"], f"{where}'s boxes[{i}]'s size", "[width record, height record] (two keys)")
                     _pairs(box["places"], f"{where}'s boxes[{i}]'s places")
+                    if "in_modes" in box:
+                        _in_modes(box["in_modes"], "by" in has, f"{where}'s boxes[{i}]'s in_modes")
             else:
                 raise _Shape(f"{where} is neither a frame measured area by area (places and limits) nor boxes one rule "
                              "bounds (inside and boxes, and sizes_tried where known)")

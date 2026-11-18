@@ -120,12 +120,17 @@ APART = {"setting": "global:0x0002", "apart": [1], "untick_sets": 0}
 SPOT = {"places": [["set:0x0001", "set:0x0002"]], "limits": [{"areas": ["Spot: M"], "x": [80, 560], "y": [72, 408]}]}
 BOXES = {"inside": {"x": [46, 594], "y": [42, 438]}, "sizes_tried": {"x": [402], "y": [182]},
          "boxes": [{"areas": ["Custom 1"], "size": ["set:0x0011", "set:0x0010"], "places": [["set:0x0003", "set:0x0004"]]}]}
-# the same, their limits picked by a setting ("by"): each limit's values ("when"), each value's picture with the grid
-BY_SPOT = {"places": SPOT["places"], "by": "global:0x0040", "limits": [
+# the same, their limits picked by a setting ("by"): each limit's values ("when"), each value's picture with the grid;
+# how each shooting mode picks them (in_modes), on the entry and on a box for its places alone
+MODES = [{"modes": ["Stills"]}, {"modes": ["Movie"], "as": 1}, {"modes": ["S&Q"], "as": 1, "inferred": True}]
+BY_SPOT = {"places": SPOT["places"], "by": "global:0x0040", "in_modes": MODES, "limits": [
     {"areas": ["Spot: M"], "when": [0], "x": [80, 560], "y": [72, 408]}, {"areas": ["Spot: M"], "when": [1], "x": [80, 560], "y": [41, 439]}]}
 BY_BOXES = {"by": "global:0x0040", "grid": {"x": 640, "y": 480}, "inside": {"x": [46.25, 593.75], "y": [41.875, 438.125]},
+            "in_modes": MODES[:1],
             "pictures": [{"when": [0], "x": [1, 1], "y": [1, 1], "sizes_tried": {"x": [402], "y": [182]}},
-                         {"when": [1], "x": [1, 1], "y": [27, 32]}], "boxes": BOXES["boxes"]}
+                         {"when": [1], "x": [1, 1], "y": [27, 32]}],
+            "boxes": [*BOXES["boxes"], {"areas": ["Custom 1"], "size": ["set:0x0013", "set:0x0012"],
+                                        "places": [["set:0x0005", "set:0x0006"]], "in_modes": MODES}]}
 DEEP = 100000                      # deeper than Python's parser follows
 
 
@@ -220,7 +225,8 @@ DEEP = 100000                      # deeper than Python's parser follows
      "'Custom''s boxes[0] has no 'places'"),
     (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "by": 40}}), "'Spot''s by is a whole number, not a string"),
     (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [SPOT["limits"][0]]}}), "'Spot''s limits[0] has no 'when', and its entry has a 'by'"),
-    (j(FRAME_TRAVEL={"Spot": {k: v for k, v in BY_SPOT.items() if k != "by"}}), "'Spot''s limits[0] has a 'when', and its entry has no 'by'"),
+    (j(FRAME_TRAVEL={"Spot": {k: v for k, v in BY_SPOT.items() if k not in ("by", "in_modes")}}),
+     "'Spot''s limits[0] has a 'when', and its entry has no 'by'"),
     (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [BY_SPOT["limits"][0], {**BY_SPOT["limits"][1], "when": [0]}]}}),
      "FRAME_TRAVEL holds ('Spot: M', 0) twice"),
     (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "limits": [{**BY_SPOT["limits"][0], "when": []}]}}), "'Spot''s limits[0]'s when lists nothing"),
@@ -236,6 +242,17 @@ DEEP = 100000                      # deeper than Python's parser follows
      "'Custom''s pictures[0]'s x is [3, 2]: no part of the grid's span"),
     (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "pictures": [BY_BOXES["pictures"][0], {**BY_BOXES["pictures"][1], "when": [0]}]}}),
      "FRAME_TRAVEL holds 0 twice"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": MODES[0]}}), "'Spot''s in_modes is an object, not an array"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": [{"as": 1}]}}), "'Spot''s in_modes[0] has no 'modes'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": [{"modes": ["Movie"], "as": "1"}]}}), "'Spot''s in_modes[0]'s as is a string, not a whole number"),
+    (j(FRAME_TRAVEL={"Spot": {**SPOT, "in_modes": [{"modes": ["Movie"], "as": 1}]}}), "'Spot''s in_modes[0] has an 'as', and its entry has no 'by'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": [{"modes": ["Movie"], "inferred": True}]}}),
+     "'Spot''s in_modes[0]'s inferred is only ever true, beside an 'as'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": [{"modes": ["Movie"], "as": 1, "inferred": False}]}}),
+     "'Spot''s in_modes[0]'s inferred is only ever true, beside an 'as'"),
+    (j(FRAME_TRAVEL={"Spot": {**BY_SPOT, "in_modes": [{"modes": ["Movie"]}, {"modes": ["Movie"], "as": 1}]}}), "FRAME_TRAVEL holds 'Movie' twice"),
+    (j(FRAME_TRAVEL={"Custom": {**BY_BOXES, "boxes": [{**BOXES["boxes"][0], "in_modes": [{"modes": []}]}]}}),
+     "'Custom''s boxes[0]'s in_modes[0]'s modes lists nothing"),
     (j(LABEL_FIXES={"Slip": 1}), "LABEL_FIXES is not in its shape: 'Slip' is a whole number, not a string"),
     (j(MY_MENU_EMPTY={"label": "(empty)"}), "MY_MENU_EMPTY is not in its shape: it has no 'line'"),
     # the patterns the writer runs, each compiled (and each replacement tried) as the file is read

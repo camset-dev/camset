@@ -7,9 +7,13 @@ pairs that hold the centre, and its limits, where the centre stops, by area), or
 bounds the whole box stays inside, the sizes the rule was tried at, and each box's areas, size records and places).
 Where the limits depend on another setting (the a1 II's Aspect Ratio), the entry names it ("by") and each limit the
 values it is for ("when"); boxes then give, for each value, the part of the grid's span the picture covers on each axis
-("pictures", with the grid's span). Each record of a place gets, for its own axis:
+("pictures", with the grid's span). Where the shooting mode decides how the limits are picked ("in_modes"), each entry
+names some modes (as camera.memory_sets.modes names them): their sections read "by" (no "as"), or take the limits for
+one value of it without reading it ("as", "inferred" where that was inferred, not measured); a section of a mode no entry
+names has none known. A box may give its own, for its places alone (place_modes). Each record of a place gets, for its
+own axis:
 
-    {"axis": "x", "with": <the place's other record>, "by": <setting>,
+    {"axis": "x", "with": <the place's other record>, "by": <setting>, "in_modes": [{"modes": [...], "as": 2}, ...],
      "limits": [{"areas": [...], "when": [...], "range": [low, high]}, ...]}
     {"axis": "x", "with": ..., "by": ..., "limits": [{"areas": [...], "inside": [low, high], "size": <width record>,
      "grid": 640, "pictures": [{"when": [...], "fraction": [n, d], "sizes_tried": [...] or "sizes_range": [low, high]},
@@ -22,12 +26,13 @@ hand evidence shows what measured it ("evidence": the ILCE-1M2's pass has it put
 reads it apart); the evidence reaches no field of the definition (docs/decisions/0016). An entry that cannot take
 effect is printed, "not applied", and left out whole (frame_problem). Keys, areas and limits only: nothing a camera's
 file held."""
+import json
 import math
 from fractions import Fraction
 
 AXES = ("x", "y")
 # the fields of a frame in the order the definition writes them
-FRAME_FIELDS = ("axis", "with", "by", "limits")
+FRAME_FIELDS = ("axis", "with", "by", "in_modes", "limits")
 
 
 def _merged(limits: list, key) -> list:
@@ -79,6 +84,14 @@ def placed(e: dict) -> list:
     return out
 
 
+def place_modes(e: dict) -> list:
+    """For every place of the FRAME_TRAVEL entry `e`, in placed's order, how the shooting modes pick its limits
+    ("in_modes"): its box's own, else the entry's, else None (every section reads "by")."""
+    if "places" in e:
+        return [e.get("in_modes")] * len(e["places"])
+    return [box.get("in_modes", e.get("in_modes")) for box in e["boxes"] for _ in box["places"]]
+
+
 def _nearest(x: Fraction, centre: Fraction) -> int:
     """`x` to the nearest whole number, a half toward `centre`."""
     low = math.floor(x)
@@ -105,16 +118,24 @@ def box_limits(lim: dict, size: int, value: int | None = None) -> tuple | None:
     return _nearest(c + (lo_s - c) / f, c), _nearest(c + (hi_s - c) / f, c)
 
 
-def frame_problem(e: dict, by_key: dict, areas: set, want: dict) -> str | None:
+def frame_problem(e: dict, by_key: dict, areas: set, want: dict, modes: set | None = None) -> str | None:
     """Why the FRAME_TRAVEL entry `e` cannot take effect in the definition (`by_key`, its settings by key; `areas`,
-    every value name its settings give; `want`, {key: (axis, other record, by, its areas by value)} the entries before
-    it placed), in words, or None: each record of a place a setting of the definition that holds a number (no named
+    every value name its settings give; `want`, {key: (axis, other record, (by, its in_modes as JSON), its areas by
+    value)} the entries before it placed), in words, or None: each record of a place a setting of the definition that holds a number (no named
     values), each limit within its range where it has one (a box's bounds, for its centre stays inside them), each size
     record a setting of the definition, each area one some setting names as a value, the setting its limits depend on
     ("by") one of the definition's and each value a limit or a picture names one of that setting's, and a record placed
-    twice (by this entry or one before it) only on the same axis with the same other record and setting, none of its
-    areas given limits twice for one value."""
+    twice (by this entry or one before it) only on the same axis with the same other record, setting and modes, none of
+    its areas given limits twice for one value; each shooting mode its modes name ("in_modes") one the camera names
+    (`modes`: camera.memory_sets.modes and camera.live_mode's, when the definition has them) and each "as" a value of
+    "by"."""
     by = e.get("by")
+    for m in [m for ms in [e.get("in_modes")] + [b.get("in_modes") for b in e.get("boxes") or []] for m in ms or []]:
+        unknown = [x for x in m["modes"] if modes and x not in modes]
+        if unknown:
+            return f"the camera names no shooting mode {unknown[0]!r} (camera.memory_sets.modes)"
+        if "as" in m and m["as"] not in {v for v, _ in (by_key.get(by) or {}).get("values") or []}:
+            return f"{by} has no value {m['as']}, which its modes take the limits as"
     if by is not None:
         s = by_key.get(by)
         if s is None:
@@ -124,7 +145,8 @@ def frame_problem(e: dict, by_key: dict, areas: set, want: dict) -> str | None:
         if named - codes:
             return f"{by} has no value {sorted(named - codes)[0]}"
     seen = dict(want)
-    for kx, ky, lims in placed(e):
+    for (kx, ky, lims), in_modes in zip(placed(e), place_modes(e), strict=True):
+        by_modes = (by, json.dumps(in_modes))
         for axis, k, other in (("x", kx, ky), ("y", ky, kx)):
             s = by_key.get(k)
             if s is None:
@@ -143,15 +165,15 @@ def frame_problem(e: dict, by_key: dict, areas: set, want: dict) -> str | None:
                     return f"no setting of the definition names the area {missing[0]!r} as a value"
             new = {(a, v) for lim in lims[axis] for a in lim["areas"]
                    for v in (lim.get("when") or [None] if "pictures" not in lim else [p for pic in lim["pictures"] for p in pic["when"]])}
-            had_axis, had_other, had_by, had = seen.get(k, (axis, other, by, set()))
+            had_axis, had_other, had_by, had = seen.get(k, (axis, other, by_modes, set()))
             if (had_axis, had_other) != (axis, other):
                 return f"{k} is placed twice, once as the {had_axis} of {had_other}"
-            if had_by != by:
-                return f"{k} is placed twice, its limits depending once on {had_by} and once on {by}"
+            if had_by != by_modes:
+                return f"{k} is placed twice, its limits depending once on {had_by[0]} and once on {by}, or on other modes"
             twice = {a for a, v in had for b, w in new if a == b and (v == w or v is None or w is None)}
             if twice:
                 return f"{k} is given limits twice for {sorted(twice)[0]!r}"
-            seen[k] = (axis, other, by, had | new)
+            seen[k] = (axis, other, by_modes, had | new)
     return None
 
 
@@ -164,20 +186,24 @@ def with_frames(doc: dict, table: dict, evidence: dict | None = None) -> int:
     settings carry a frame."""
     by_key = {s["key"]: s for s in doc["settings"]}
     areas = {lab for s in doc["settings"] for _, lab in s.get("values") or []}
+    camera = doc.get("camera") or {}
+    modes = set((camera.get("memory_sets") or {}).get("modes") or {}) | set(((camera.get("live_mode") or {}).get("modes") or {}).values())
     want, by_of, values_of = {}, {}, {}
     for name, e in table.items():
-        why = frame_problem(e, by_key, areas, {k: (f["axis"], f["with"], by_of[k], values_of[k]) for k, f in want.items()})
+        why = frame_problem(e, by_key, areas, {k: (f["axis"], f["with"], by_of[k], values_of[k]) for k, f in want.items()},
+                            modes)
         if why is None and not (e.get("evidence") or ((evidence or {}).get(name) or {}).get("evidence")):
             why = "nothing in the hand evidence shows what measured it (its \"evidence\" in FRAME_TRAVEL)"
         if why:
             print(f"  frame travel {name}: {why}; not applied")
             continue
-        for kx, ky, lims in placed(e):
+        for (kx, ky, lims), in_modes in zip(placed(e), place_modes(e), strict=True):
             for axis, k, other in (("x", kx, ky), ("y", ky, kx)):
                 frame = want.setdefault(k, {"axis": axis, "with": other, **({"by": e["by"]} if "by" in e else {}),
+                                            **({"in_modes": json.loads(json.dumps(in_modes))} if in_modes else {}),
                                             "limits": []})
                 frame["limits"] += lims[axis]
-                by_of[k] = e.get("by")
+                by_of[k] = (e.get("by"), json.dumps(in_modes))
                 values_of[k] = values_of.get(k, set()) | {
                     (a, v) for lim in lims[axis] for a in lim["areas"]
                     for v in (lim.get("when") or [None] if "pictures" not in lim else [p for pic in lim["pictures"] for p in pic["when"]])}

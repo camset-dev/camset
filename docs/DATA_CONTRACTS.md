@@ -144,7 +144,9 @@ other record and the limits by area, from the camera's `FRAME_TRAVEL` hand table
 size the file holds has one rule instead: the bounds it stays inside and its size records, read in the same section. A
 place not measured yet carries none. Where the limits change with another setting (the a1 II's Aspect Ratio), the
 frame names it (`by`), read in the same section, and each limit the values it is for; a box's rule then gives each
-value's picture.
+value's picture. Where the shooting mode decides which limits hold (`in_modes`), a section's mode is the one
+`camera.memory_sets.modes` lists its memory set under (the live settings': `camera.live_mode`): its modes read `by`,
+or take the limits for one value of it without reading it, measured or inferred; a mode no entry names has none.
 
 {{ schema_fields("definition", "$defs/setting/properties/frame") }}
 

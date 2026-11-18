@@ -112254,6 +112254,26 @@
     "axis": "x",
     "with": "set:0x019e",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -112493,6 +112513,26 @@
     "axis": "x",
     "with": "set:0x01c4",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -112732,6 +112772,26 @@
     "axis": "x",
     "with": "set:0x01c6",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -112971,6 +113031,26 @@
     "axis": "x",
     "with": "set:0x01c8",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -113210,6 +113290,26 @@
     "axis": "y",
     "with": "set:0x019c",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -113387,6 +113487,26 @@
     "axis": "y",
     "with": "set:0x01be",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -113564,6 +113684,26 @@
     "axis": "y",
     "with": "set:0x01c0",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -113741,6 +113881,26 @@
     "axis": "y",
     "with": "set:0x01c2",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -113968,7 +114128,7 @@
     14
    ],
    "values": [],
-   "note": "Custom 1's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 1's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396 in Stills, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. In the Movie memory set registered in Movie that was read, it and its default (0x14c0) held a taller number than in Stills for the same box, as the 16:9 picture's stretch would make it, while the in-use height (0x1488) held the Stills one; the box's place there therefore gets no limits from the Stills rule. Its range there, and how the camera reads the Stills number the other Movie and S&Q memory sets hold, are not tried. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -114156,7 +114316,7 @@
     14
    ],
    "values": [],
-   "note": "Custom 2's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 2's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396 in Stills, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. In the Movie memory set registered in Movie that was read, it and its default (0x14c4) held a taller number than in Stills for the same box, as the 16:9 picture's stretch would make it, while the in-use height (0x1488) held the Stills one; the box's place there therefore gets no limits from the Stills rule. Its range there, and how the camera reads the Stills number the other Movie and S&Q memory sets hold, are not tried. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -114318,7 +114478,7 @@
     14
    ],
    "values": [],
-   "note": "Custom 3's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 3's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396 in Stills, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. In the Movie memory set registered in Movie that was read, it and its default (0x14c8) held a taller number than in Stills for the same box, as the 16:9 picture's stretch would make it, while the in-use height (0x1488) held the Stills one; the box's place there therefore gets no limits from the Stills rule. Its range there, and how the camera reads the Stills number the other Movie and S&Q memory sets hold, are not tried. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
@@ -114481,7 +114641,7 @@
     14
    ],
    "values": [],
-   "note": "The height of the Custom box chosen as Focus Area, whichever of the three, its Tracking area's too: the box's own height, 32 to 396. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "The height of the Custom box chosen as Focus Area, whichever of the three, its Tracking area's too: the box's own height, 32 to 396; in the Movie memory set registered in Movie that was read, the Stills number while the box's own record held a taller one (0x14b4). Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
@@ -217892,6 +218052,26 @@
     "axis": "x",
     "with": "set:0x1329",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -217991,6 +218171,26 @@
     "axis": "y",
     "with": "set:0x1327",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     },
+     {
+      "modes": [
+       "Movie"
+      ],
+      "as": 2
+     },
+     {
+      "modes": [
+       "S&Q"
+      ],
+      "as": 2,
+      "inferred": true
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218079,6 +218279,13 @@
     "axis": "x",
     "with": "set:0x1339",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218173,6 +218380,13 @@
     "axis": "x",
     "with": "set:0x133b",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218267,6 +218481,13 @@
     "axis": "x",
     "with": "set:0x133d",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218361,6 +218582,13 @@
     "axis": "x",
     "with": "set:0x13a1",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218455,6 +218683,13 @@
     "axis": "y",
     "with": "set:0x1333",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218539,6 +218774,13 @@
     "axis": "y",
     "with": "set:0x1335",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218623,6 +218865,13 @@
     "axis": "y",
     "with": "set:0x1337",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218707,6 +218956,13 @@
     "axis": "y",
     "with": "set:0x139f",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218791,6 +219047,13 @@
     "axis": "x",
     "with": "set:0x1345",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218885,6 +219148,13 @@
     "axis": "x",
     "with": "set:0x1347",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -218979,6 +219249,13 @@
     "axis": "x",
     "with": "set:0x1349",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219073,6 +219350,13 @@
     "axis": "x",
     "with": "set:0x13a5",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219167,6 +219451,13 @@
     "axis": "y",
     "with": "set:0x133f",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219251,6 +219542,13 @@
     "axis": "y",
     "with": "set:0x1341",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219335,6 +219633,13 @@
     "axis": "y",
     "with": "set:0x1343",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219419,6 +219724,13 @@
     "axis": "y",
     "with": "set:0x13a3",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219503,6 +219815,13 @@
     "axis": "x",
     "with": "set:0x1351",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219597,6 +219916,13 @@
     "axis": "x",
     "with": "set:0x1353",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219691,6 +220017,13 @@
     "axis": "x",
     "with": "set:0x1355",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219785,6 +220118,13 @@
     "axis": "x",
     "with": "set:0x13a9",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219879,6 +220219,13 @@
     "axis": "y",
     "with": "set:0x134b",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -219963,6 +220310,13 @@
     "axis": "y",
     "with": "set:0x134d",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -220047,6 +220401,13 @@
     "axis": "y",
     "with": "set:0x134f",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [
@@ -220131,6 +220492,13 @@
     "axis": "y",
     "with": "set:0x13a7",
     "by": "global:0x01fe",
+    "in_modes": [
+     {
+      "modes": [
+       "Stills"
+      ]
+     }
+    ],
     "limits": [
      {
       "areas": [

@@ -186,15 +186,54 @@ pub struct KeepsApart {
 
 /// One coordinate of a focus frame's centre (`Setting::frame`): which (`axis`, "x" across or "y" down), the setting that
 /// holds the other one in the same place (`with`, whose own frame names this one back), the setting whose value in the
-/// same section picks the limits where they change with it (`by`; None: they hold whatever the camera's settings), and
-/// where the centre stops on this axis, by area (`limits`).
+/// same section picks the limits where they change with it (`by`; None: they hold whatever the camera's settings), how
+/// the shooting mode decides which hold (`in_modes`; `Frame::picks`), and where the centre stops on this axis, by area
+/// (`limits`).
 #[derive(Clone, Debug, Deserialize, PartialEq)]
 pub struct Frame {
     pub axis: String,
     pub with: String,
     #[serde(default)]
     pub by: Option<String>,
+    /// How each shooting mode's sections pick the limits (`FrameMode`), where the mode decides; empty: every section
+    /// reads `by`. A section of a mode no entry names has no limits known.
+    #[serde(default)]
+    pub in_modes: Vec<FrameMode>,
     pub limits: Vec<FrameLimit>,
+}
+
+impl Frame {
+    /// Which limits hold in a section whose shooting mode is `mode` (`Doc::section_mode`: a memory set's is the mode
+    /// `camera.memory_sets.modes` lists it under, the live settings' the one `camera.live_mode` says) and whose `by`
+    /// setting holds `held`: Some((the value of `by` whose limits hold, None where the frame has no `by`; whether that
+    /// was inferred rather than measured)). Where a mode entry (`in_modes`) gives an `as_value`, it holds there whatever
+    /// `held` is (the a1 II's Movie and S&Q: Stills' limits at 16:9, whatever Aspect Ratio the set holds). None where no
+    /// limits are known: in a frame with entries, a mode none names or no mode (the definition does not say the
+    /// section's); or `held` unknown where it is read.
+    pub fn picks(&self, mode: Option<&str>, held: Option<i64>) -> Option<(Option<i64>, bool)> {
+        let entry = match self.in_modes.is_empty() {
+            true => None,
+            false => Some(self.in_modes.iter().find(|m| mode.is_some_and(|x| m.modes.iter().any(|n| n == x)))?),
+        };
+        match entry.and_then(|m| m.as_value.map(|v| (v, m.inferred))) {
+            Some((v, inferred)) => Some((Some(v), inferred)),
+            None if self.by.is_some() => Some((Some(held?), false)),
+            None => Some((None, false)),
+        }
+    }
+}
+
+/// Some shooting modes (`modes`, as `camera.memory_sets.modes` names them: a memory set's mode is the one it is listed
+/// under, the live settings' `camera.live_mode`'s) and how their sections pick a frame's limits: by reading the frame's
+/// `by` (`as_value` None), or as for one value of it, `by` not read there (`as_value`), that inferred rather than
+/// measured where `inferred`.
+#[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
+pub struct FrameMode {
+    pub modes: Vec<String>,
+    #[serde(default, rename = "as")]
+    pub as_value: Option<i64>,
+    #[serde(default)]
+    pub inferred: bool,
 }
 
 /// Where a frame's centre stops on one axis for some areas (`areas`, Focus Area options as the definition's values name
@@ -1651,8 +1690,9 @@ impl Schema {
     /// the bounds a box stays inside with the setting of its size, which the definition holds, and never both; where
     /// the limits change with a setting (`by`), one the definition holds, every range naming some of its values
     /// (`when`) and every box giving pictures for some of them, each a part of the grid's span and the bounds within the
-    /// grid, and without `by` neither. A definition that says otherwise is refused, saying which, so the editor never
-    /// places a frame from it.
+    /// grid, and without `by` neither; its shooting modes (`in_modes`) the camera's, each in one entry, each `as` a value
+    /// of `by` and `inferred` only beside one, the other coordinate's the same. A definition that says otherwise is
+    /// refused, saying which, so the editor never places a frame from it.
     fn check_frames(&self) -> Result<(), String> {
         let by_key: std::collections::HashMap<&str, &Setting> = self.settings.iter().map(|s| (s.key.as_str(), s)).collect();
         fn areas(f: &Frame) -> Vec<&str> {
@@ -1661,6 +1701,10 @@ impl Schema {
             a.dedup();
             a
         }
+        // the shooting modes the camera names, its memory sets' and its live settings' (none named: any, as no section
+        // then has a mode and Frame::picks gives such a frame no limits)
+        let known: std::collections::BTreeSet<&str> = self.camera.memory_sets.iter().flat_map(|m| m.modes.keys().map(String::as_str))
+            .chain(self.camera.live_mode.iter().flat_map(|l| l.modes.values().map(String::as_str))).collect();
         for s in &self.settings {
             let Some(f) = &s.frame else { continue };
             let why = |w: String| Err(format!("{} holds a focus frame's coordinate, but {w}", s.name));
@@ -1679,6 +1723,14 @@ impl Schema {
                 Some(c) => !when.is_empty() && when.iter().all(|v| c.contains(v)),
                 None => when.is_empty(),
             };
+            let mut seen_modes = std::collections::BTreeSet::new();
+            for m in &f.in_modes {
+                let fits = !m.modes.is_empty() && m.modes.iter().all(|x| (known.is_empty() || known.contains(x.as_str())) && seen_modes.insert(x.clone()))
+                    && match (m.as_value, &codes) { (Some(v), Some(c)) => c.contains(&v), (Some(_), None) => false, (None, _) => !m.inferred };
+                if !fits {
+                    return why(format!("its shooting modes {} are not the camera's, each once, taking a value of {}", m.modes.join(", "), f.by.as_deref().unwrap_or("no setting")));
+                }
+            }
             for l in &f.limits {
                 if l.areas.is_empty() || l.areas.iter().any(|a| a.trim().is_empty()) {
                     return why("a limit names no area".into());
@@ -1711,8 +1763,8 @@ impl Schema {
             }
             let Some(o) = by_key.get(f.with.as_str()) else { return why(format!("the definition holds no {}", f.with)) };
             match &o.frame {
-                Some(of) if of.axis == other_axis && of.with == s.key && of.by == f.by && areas(of) == areas(f) => {}
-                _ => return why(format!("{} is not its other coordinate, with limits for the same areas by the same setting", o.name)),
+                Some(of) if of.axis == other_axis && of.with == s.key && of.by == f.by && of.in_modes == f.in_modes && areas(of) == areas(f) => {}
+                _ => return why(format!("{} is not its other coordinate, with limits for the same areas by the same setting and modes", o.name)),
             }
         }
         Ok(())
@@ -2047,12 +2099,30 @@ mod tests {
         assert_eq!((up_box.with.as_str(), up_box.limits[0].inside, up_box.limits[0].size.as_deref()), ("set:0x1337", Some((41.875, 438.125)), Some("set:0x14b4")));
         assert_eq!(s.settings.iter().filter(|x| x.frame.is_some()).count(), 34);
         assert!(made(serde_json::json!({})).frame.is_none());
+        // how a section's shooting mode picks the limits: a memory set's mode is the one camera.memory_sets.modes lists
+        // it under; the spots and the box in use take 16:9's in Movie (measured) and in S&Q (inferred), whatever Aspect
+        // Ratio the set holds, Custom 1-3's own places have limits in Stills only, and Time-lapse has none
+        assert_eq!([1, 4, 7, 10].map(|n| s.camera.memory_mode(n)), [Some("Stills"), Some("Movie"), Some("S&Q"), Some("Time-lapse")]);
+        let modes = |f: &Frame| f.in_modes.iter().map(|m| (m.modes.join(","), m.as_value, m.inferred)).collect::<Vec<_>>();
+        let all = vec![("Stills".to_string(), None, false), ("Movie".to_string(), Some(2), false), ("S&Q".to_string(), Some(2), true)];
+        assert_eq!((modes(spot), modes(y), modes(up), modes(in_use)), (all.clone(), all.clone(), all.clone(), all));
+        assert_eq!((modes(boxed), modes(up_box)), (vec![("Stills".to_string(), None, false)], vec![("Stills".to_string(), None, false)]));
+        assert_eq!(s.settings.iter().filter(|x| x.frame.as_ref().is_some_and(|f| f.in_modes.iter().any(|m| m.modes == ["Movie"]))).count(), 10);
+        assert_eq!([spot.picks(Some("Stills"), Some(1)), spot.picks(Some("Movie"), Some(0)), spot.picks(Some("S&Q"), Some(3)),
+            spot.picks(Some("Time-lapse"), Some(0)), spot.picks(None, Some(0)), spot.picks(Some("Stills"), None)],
+            [Some((Some(1), false)), Some((Some(2), false)), Some((Some(2), true)), None, None, None]);
+        assert_eq!([boxed.picks(Some("Stills"), Some(2)), boxed.picks(Some("Movie"), Some(2)), boxed.picks(Some("S&Q"), Some(2))], [Some((Some(2), false)), None, None]);
+        assert_eq!(in_use.picks(Some("Movie"), Some(3)), Some((Some(2), false)));
+        // without in_modes every section reads by; without by the limits hold whatever the settings
+        let plain = Frame { in_modes: vec![], ..spot.clone() };
+        assert_eq!((plain.picks(None, Some(3)), plain.picks(Some("Movie"), None)), (Some((Some(3), false)), None));
+        assert_eq!(Frame { by: None, ..plain }.picks(Some("Movie"), None), Some((None, false)));
     }
 
     /// A focus frame's coordinate that does not hold together refuses the whole definition, saying why: an axis not x
     /// or y, another coordinate the definition lacks or that does not name it back, a limit that is neither a range
-    /// within the setting's own nor a box's bounds with its size, a size setting the definition lacks. The a1 II's,
-    /// as the kit writes it, is taken.
+    /// within the setting's own nor a box's bounds with its size, a size setting the definition lacks, shooting modes
+    /// that are not the camera's or not as its other coordinate's. The a1 II's, as the kit writes it, is taken.
     #[test]
     fn a_frame_that_does_not_hold_together_refuses_the_definition() {
         let with = |key: &'static str, f: serde_json::Value| a1_with(move |v| {
@@ -2062,6 +2132,8 @@ mod tests {
         });
         let spot = |limits: serde_json::Value| serde_json::json!({ "axis": "x", "with": "set:0x01c4", "limits": limits });
         let m = serde_json::json!([{ "areas": ["Spot: M"], "range": [80, 560] }]);
+        let by_modes = |in_modes: serde_json::Value| serde_json::json!({ "axis": "x", "with": "set:0x01c4", "by": "global:0x01fe", "in_modes": in_modes,
+            "limits": [{ "areas": ["Spot: M"], "when": [0, 1, 2, 3], "range": [80, 560] }] });
         assert!(Schema::from_text(&a1_text()).is_ok());
         for (key, f, words) in [
             ("set:0x01be", serde_json::json!({ "axis": "z", "with": "set:0x01c4", "limits": m }), "not x or y"),
@@ -2080,6 +2152,13 @@ mod tests {
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "by": "global:0x01fe", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 700], "size": "set:0x14b6", "grid": 640, "pictures": [{ "when": [0], "fraction": [1, 1] }] }] }), "do not fit its grid"),
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "by": "global:0x01fe", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 593.75], "size": "set:0x14b6", "grid": 640, "pictures": [{ "when": [0], "fraction": [3, 2] }] }] }), "do not fit its grid"),
             ("set:0x1333", serde_json::json!({ "axis": "x", "with": "set:0x1339", "limits": [{ "areas": ["Custom 1", "Tracking: Custom 1"], "inside": [46.25, 593.75], "size": "set:0x14b6" }] }), "by the same setting"),
+            // shooting modes: the camera's, each in one entry, each as a value of by and inferred only beside one, the
+            // other coordinate's the same
+            ("set:0x01be", by_modes(serde_json::json!([{ "modes": ["Cinema"] }])), "shooting modes Cinema are not the camera's"),
+            ("set:0x01be", by_modes(serde_json::json!([{ "modes": ["Movie"], "as": 9 }])), "shooting modes Movie are not the camera's"),
+            ("set:0x01be", by_modes(serde_json::json!([{ "modes": ["Movie"], "inferred": true }])), "shooting modes Movie are not the camera's"),
+            ("set:0x01be", by_modes(serde_json::json!([{ "modes": ["Stills"] }, { "modes": ["Stills"], "as": 2 }])), "shooting modes Stills are not the camera's"),
+            ("set:0x01be", by_modes(serde_json::json!([{ "modes": ["Stills"] }])), "by the same setting and modes"),
         ] {
             let e = Schema::from_text(&with(key, f.clone())).unwrap_err();
             assert!(e.contains("holds a focus frame's coordinate, but") && e.contains(words), "{f}: {e}");
