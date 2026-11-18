@@ -1062,6 +1062,7 @@ class LiveCamera:
                 self.run.log("address_screen_opened", key=key, frame=self.frame.path.name)
         # every press expects a change: a press that seems ignored gets a full second before it counts
         # as "nothing happened" (Picture Profile: a Down showed no change within 0.5 s, 2026-10-28)
+        self.pressed_from = self.frame          # the frame the press was made on (proving.screens.title_settled)
         f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
         self.frame, self.screen = f, self.reading(f)
         self.rest(f"{key}-rest")

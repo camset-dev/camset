@@ -564,6 +564,37 @@ class HdmiSource:
         f = self.grab(tag)
         return f, moved
 
+    def settle_box(self, box, prior=None, quiet: float = 0.15, timeout: float = 3.5) -> tuple:
+        """Wait until the picture inside `box` (x0, y0, x1, y1 of the 640x480 frame) has stopped changing for `quiet`
+        s and, with `prior` (an image: the frame a press was made on), differs from prior's there: (the latest frame,
+        not saved; whether it differs from prior's). The blocks that changed by themselves before the wait began are
+        ignored there, as settle ignores them. At `timeout` the latest frame, as it is."""
+        start = time.monotonic()
+        x0, y0, x1, y1 = box
+        cells = (slice(y0 // 8, -(-y1 // 8)), slice(x0 // 8, -(-x1 // 8)))
+        steady = ~self.noisy(start)[cells]
+
+        def moved(a, b):
+            return bool(((np.abs(a[cells] - b[cells]) > 6.0) & steady).any())
+        before = _small(prior) if prior is not None else None
+        last, still_since, changed = None, None, before is None
+        while time.monotonic() - start < timeout:
+            f = self.latest()
+            if f is None or (last is not None and f.t == last.t):
+                time.sleep(0.005)
+                continue
+            changed = changed or moved(f.small, before)
+            if last is not None and not moved(f.small, last.small):
+                still_since = still_since or last.t
+                if changed and f.t - still_since >= quiet:
+                    last = f
+                    break
+            else:
+                still_since = None
+            last = f
+        f = last if last is not None else self.grab(save=False)
+        return Frame(f.image, f.t, None, "hdmi", f.small), changed
+
     def attach(self, link):
         """Nothing to do: HDMI needs no camera link (OsdFeed does)."""
 

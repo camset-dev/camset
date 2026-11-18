@@ -116,7 +116,7 @@ from proving.base import (AXES, LOCK_S, PASS1, Blocked, Failed, finish_attempt, 
 from proving.screens import (BAR_X, SEEN, _matches, ask_second, at_label, bar_text, carousel_text,  # noqa: E402,F401
                              closest_row, first_time_notice, glued, info_notice_ok, keeps_lead, later, main_name,
                              notice_focus, option_key, place, refuse_or_fail, run_tmp_png, same_place, settled,
-                             strip_value, vlm_option)
+                             strip_value, title_settled, vlm_option)
 from proving.nav import (CYCLE, MODEL, after_download, cancel, enter_any, enter_path, enter_pp,  # noqa: E402,F401
                          find_row, move_to, shooting_like, to_row, to_shooting, where_in)
 from proving.options import (by_place, by_position, closest_function, function_name, icon_bits,  # noqa: E402,F401
@@ -434,8 +434,9 @@ def prove_by_display(cam, link, run, job, base_path: Path, out, top, row_place, 
 
 
 def axis_title(cam) -> str:
-    time.sleep(0.4)                               # the title redraws after the strip
-    cam.refresh("reread")
+    """The carousel's title once its strip has stopped changing (proving.screens.title_settled: it redraws after the
+    side strip), read again on the same frame where nothing has moved since."""
+    title_settled(cam)
     return carousel_text(cam)
 
 

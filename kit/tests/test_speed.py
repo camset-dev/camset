@@ -996,3 +996,126 @@ def test_no_second_menu_goes_before_a_fresh_frame_after_the_full_wait_shows_the_
     cam = MenuCamera(now, 0.6)
     nav.to_row(cam, ["Shooting"], None, "here")
     assert cam.pressed == [] and cam.taken == [pytest.approx(0.6, abs=0.06)] and now[0] < 0.7
+
+
+# ---------------------------------------------------------------- a carousel's title, read once its strip is still
+
+
+def title_feed(monkeypatch, changes_at=(), blink=False):
+    """camkit.frames.HdmiSource with a made-up feed on a fake clock, 30 frames a second: the title strip (TITLE_BOX)
+    drawn anew at each time of `changes_at`, otherwise still; with `blink`, a block inside the strip that changes on
+    every frame, as a blinking readout does, also before the wait; (the eyes, the clock's now, the prior image)."""
+    from camkit import frames
+    from camkit.frames import Frame
+    now = [0.0]
+    monkeypatch.setattr(frames.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(frames.time, "sleep", lambda s: now.__setitem__(0, now[0] + max(s, 1 / 30)))
+    eyes = frames.HdmiSource.__new__(frames.HdmiSource)
+
+    def picture(t):
+        img = np.zeros((480, 640, 3), np.uint8)
+        n = sum(1 for c in changes_at if t >= c)          # how many redraws have happened by t
+        img[64:108, 120:600] = 40 + 30 * (n % 6)           # the title strip's text, a different grey per redraw
+        if blink and int(t * 30) % 2:
+            img[64:72, 128:136] = 250                      # one block that blinks
+        return img
+
+    def latest():
+        t = round(now[0] * 30) / 30
+        img = picture(t)
+        return Frame(img, t, None, "hdmi", frames._small(img))
+    eyes.latest = latest
+    eyes.noisy = lambda until, level=6.0: (np.zeros((60, 80), bool) if not blink else
+                                           np.pad(np.ones((1, 1), bool), ((8, 51), (16, 63))))
+    eyes.grab = lambda tag="f", save=True: latest()
+    return eyes, now, picture(-1.0)
+
+
+@pytest.mark.parametrize("changes_at,ends,changed", [
+    ((0.3,), 0.45, True),               # the title redraws 0.3 s after the press settled: read 0.15 s after that
+    ((0.0,), 0.15, True),               # already redrawn: read once it has been still 0.15 s
+    (tuple(0.2 + k / 30 for k in range(55)), 2.15, True),     # still changing frame by frame until 2 s
+    ((), 3.5, False)])                  # never redrawn from the frame the press was made on: read at the deadline
+def test_the_title_strip_is_read_once_it_has_changed_from_the_pressed_frame_and_stopped(monkeypatch, changes_at,
+                                                                                        ends, changed):
+    """HdmiSource.settle_box over the title strip with the frame the press was made on: the wait ends once the strip
+    differs from that frame and has been still TITLE_QUIET s, never before it changes; at the deadline (TITLE_LATE,
+    3.5 s) where it never does."""
+    from proving import screens
+    eyes, now, prior = title_feed(monkeypatch, changes_at)
+    f, moved = eyes.settle_box(screens.TITLE_BOX, prior, quiet=screens.TITLE_QUIET, timeout=screens.TITLE_LATE)
+    assert moved == changed and now[0] == pytest.approx(ends, abs=0.07)
+    assert now[0] >= (max(changes_at) if changes_at else screens.TITLE_LATE) - 1e-9
+
+
+def test_a_block_that_blinks_by_itself_in_the_strip_is_ignored(monkeypatch):
+    """A block of the strip that changed by itself before the wait (HdmiSource.noisy) is left out, as settle leaves it
+    out: the strip, redrawn at 0.3 s, is read 0.15 s later, not at the deadline."""
+    from proving import screens
+    eyes, now, prior = title_feed(monkeypatch, (0.3,), blink=True)
+    f, moved = eyes.settle_box(screens.TITLE_BOX, prior, quiet=screens.TITLE_QUIET, timeout=screens.TITLE_LATE)
+    assert moved and now[0] == pytest.approx(0.45, abs=0.07)
+
+
+class TitleCam:
+    """A camera on a carousel for proving.screens.title_settled: HDMI or OSD eyes whose settle_box is recorded, the
+    frame the last press was made on (a carousel frame, or the menu page it was opened from)."""
+    def __init__(self, name="hdmi", opened=False):
+        self.calls, self.refreshed = [], []
+        self.hdmi = SimpleNamespace(name=name, settle_box=self.settle_box)
+        self.frame = SimpleNamespace(image="after", kind="dialog")
+        self.pressed_from = SimpleNamespace(image="before", kind="menu" if opened else "dialog")
+
+    def settle_box(self, box, prior, quiet, timeout):
+        self.calls.append((prior, quiet, timeout))
+        return SimpleNamespace(image="settled", kind="dialog"), True
+
+    def read(self):
+        return SimpleNamespace(kind=self.frame.kind)
+
+    def refresh(self, tag, frame=None):
+        self.refreshed.append(frame)
+        self.frame = frame if frame is not None else SimpleNamespace(image="fresh", kind="dialog")
+        return self.read()
+
+
+def test_the_title_wait_watches_over_hdmi_and_reads_the_same_frame_once(monkeypatch):
+    """proving.screens.title_settled: over HDMI, after a step within the carousel, the strip must change from the
+    pressed frame and be still TITLE_QUIET s; just opened, still TITLE_OPEN_QUIET s (0.4, today's wait) with nothing to
+    change from; a second call with no press or grab between takes the same frame, nothing waited. OSD eyes: 0.4 s and
+    a fresh grab every time, as before."""
+    from proving import screens
+    monkeypatch.setattr(screens.screen, "read", lambda f: SimpleNamespace(kind=f.kind))
+    cam = TitleCam()
+    assert screens.title_settled(cam) is False and cam.calls == [("before", screens.TITLE_QUIET, screens.TITLE_LATE)]
+    assert cam.frame.image == "settled" and screens.title_settled(cam) is True and len(cam.calls) == 1
+    cam = TitleCam(opened=True)
+    screens.title_settled(cam)
+    assert cam.calls == [(None, screens.TITLE_OPEN_QUIET, screens.TITLE_LATE)]
+    slept = []
+    monkeypatch.setattr(screens.time, "sleep", slept.append)
+    cam = TitleCam(name="osd")
+    assert screens.title_settled(cam) is False and screens.title_settled(cam) is False
+    assert slept == [0.4, 0.4] and cam.calls == [] and cam.refreshed == [None, None]
+
+
+def test_a_second_reading_of_the_same_carousel_frame_is_the_first_ones(monkeypatch):
+    """option_index (a carousel's option by its title) and prove_run.axis_title over HDMI: read again with no press
+    between, they take the first reading, no wait, no OCR or reader asked again; after a press, read afresh."""
+    import prove_run
+    from proving import options, screens
+    monkeypatch.setattr(screens.screen, "read", lambda f: SimpleNamespace(kind=f.kind))
+    read = []
+    monkeypatch.setattr(options, "carousel_text", lambda cam: read.append(cam.frame.image) or "Auto")
+    monkeypatch.setattr(prove_run, "carousel_text", lambda cam: read.append(cam.frame.image) or "Auto")
+    cam = TitleCam()
+    assert options.option_index(cam, ["Auto", "Manual"], "dialog") == 0
+    assert options.option_index(cam, ["Auto", "Manual"], "dialog") == 0
+    assert len(cam.calls) == 1 and read == ["settled"]
+    cam.pressed_from, cam.frame = cam.frame, SimpleNamespace(image="next", kind="dialog")     # a press went out
+    assert options.option_index(cam, ["Auto", "Manual"], "dialog") == 0 and len(cam.calls) == 2
+    read.clear()
+    cam.frame = SimpleNamespace(image="again", kind="dialog")
+    prove_run.axis_title(cam)
+    prove_run.axis_title(cam)
+    assert len(cam.calls) == 3 and len(read) == 2, "the OCR of the same frame is OCR's own cache; no second wait"

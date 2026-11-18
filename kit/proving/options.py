@@ -15,7 +15,33 @@ from camkit.match import function_name, same_functions  # noqa: F401
 
 from . import base
 from .base import frame_file
-from .screens import _matches, bar_text, carousel_text, main_name, option_key, vlm_option
+from .screens import _matches, bar_text, carousel_text, main_name, option_key, title_settled, vlm_option
+
+_READ: list = []                    # the frame, the labels and the answer of the last carousel reading
+
+
+def _dialog_index(cam, labels, kind) -> int | None:
+    """A carousel's option by its title, on the frame on show (option_index's dialog branch)."""
+    t = re.sub(r":{2,}", ":", carousel_text(cam))          # "Fluor:: Day White": a dot read as a second colon
+    hits = [i for i, l in enumerate(labels) if option_key(l) == option_key(t)]
+    if not hits:          # the second-axis value differs from pass 1's ("Continuous Shooting: Hi")
+        hits = [i for i, l in enumerate(labels)
+                if option_key(main_name(l, kind)) == option_key(main_name(t, kind))]
+    if not hits and t and not re.search(r"\d", t):
+        # a carousel of numbers with one word among them, the automatic position whose second axis is a
+        # scale of words (ISO AUTO Min. SS: Fast's Slower to Faster; it opened on "Standard", 2026-11-07):
+        # the one wordy option is that position, whatever word the camera shows there
+        words = [i for i, l in enumerate(labels) if not re.search(r"\d", l)]
+        hits = words if len(words) == 1 else hits
+    if len(hits) != 1:    # still not one option: the vision model's reading of the title
+        v = vlm_option(cam)
+        vh = [i for i, l in enumerate(labels) if option_key(l) == option_key(v)] if v else []
+        if v and not vh:
+            # the reader gives the lit entry of the side strip with its icon's letters ("ISO ASS 2"" for the
+            # title 2", which OCR drops as too short, 2026-11-07): the one label the reading ends with
+            vh = [i for i, l in enumerate(labels) if len(option_key(l)) >= 2 and option_key(v).endswith(option_key(l))]
+        hits = vh if len(vh) == 1 else hits
+    return hits[0] if len(hits) == 1 else None
 
 
 def option_index(cam, labels, kind: str = "list", table=None) -> int | None:
@@ -23,29 +49,13 @@ def option_index(cam, labels, kind: str = "list", table=None) -> int | None:
     label read), else the one label that matches (OCR, then the vision model)."""
     s = cam.read()
     if kind == "dialog":
-        # the title line redraws a moment after the side strip (ISO, 2026-10-29): look again first
-        time.sleep(0.4)
-        cam.refresh("reread")
-        t = re.sub(r":{2,}", ":", carousel_text(cam))          # "Fluor:: Day White": a dot read as a second colon
-        hits = [i for i, l in enumerate(labels) if option_key(l) == option_key(t)]
-        if not hits:          # the second-axis value differs from pass 1's ("Continuous Shooting: Hi")
-            hits = [i for i, l in enumerate(labels)
-                    if option_key(main_name(l, kind)) == option_key(main_name(t, kind))]
-        if not hits and t and not re.search(r"\d", t):
-            # a carousel of numbers with one word among them, the automatic position whose second axis is a
-            # scale of words (ISO AUTO Min. SS: Fast's Slower to Faster; it opened on "Standard", 2026-11-07):
-            # the one wordy option is that position, whatever word the camera shows there
-            words = [i for i, l in enumerate(labels) if not re.search(r"\d", l)]
-            hits = words if len(words) == 1 else hits
-        if len(hits) != 1:    # still not one option: the vision model's reading of the title
-            v = vlm_option(cam)
-            vh = [i for i, l in enumerate(labels) if option_key(l) == option_key(v)] if v else []
-            if v and not vh:
-                # the reader gives the lit entry of the side strip with its icon's letters ("ISO ASS 2"" for the
-                # title 2", which OCR drops as too short, 2026-11-07): the one label the reading ends with
-                vh = [i for i, l in enumerate(labels) if len(option_key(l)) >= 2 and option_key(v).endswith(option_key(l))]
-            hits = vh if len(vh) == 1 else hits
-        return hits[0] if len(hits) == 1 else None
+        # the title line redraws a moment after the side strip (ISO, 2026-10-29): its strip watched first
+        # (proving.screens.title_settled); a second reading of the same frame takes the first one's answer
+        if title_settled(cam) and _READ and _READ[0] is cam.frame and _READ[1] == tuple(labels):
+            return _READ[2]
+        got = _dialog_index(cam, labels, kind)
+        _READ[:] = [cam.frame, tuple(labels), got]
+        return got
     if kind == "list" and any("★" in l for l in labels):
         # ratings by their star count (screen.count_stars), anything else by its text
         n = screen.count_stars(cam.frame.image, s.bar)

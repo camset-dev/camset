@@ -6,6 +6,7 @@ where the run names it with --info-ok (pass_named_notice, pass_note), since 2026
 import difflib
 import os
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from types import SimpleNamespace
@@ -206,6 +207,41 @@ def later(read, cam) -> Later:
 def settled(v):
     """v's answer where it is a Later (waited for), else v as it is: what a proof line keeps in its "vlm" field."""
     return v.result() if isinstance(v, Later) else v
+
+
+# A carousel's title line redraws a moment after its side strip (ISO, 2026-10-29), so it was read after a fixed 0.4 s
+# and a fresh grab, twice per option. With HDMI eyes it is now read once its strip has stopped changing (TITLE_QUIET),
+# having changed from the frame the press was made on where that press stepped within the carousel (a Down: the
+# title must change), or after a still TITLE_OPEN_QUIET where it opened it (the title's change from the menu page
+# says nothing). TITLE_LATE, the deadline, read as it is then, as before: today's 0.4 s plus the 2.9 s the speed
+# review measured as the 99th percentile of a carousel Down's change on live-preview carousels, plus one quiet window
+# (0.2 s). A second reading with no press or grab between them takes the first one's frame, waiting nothing.
+TITLE_BOX = (110, 60, 636, 112)
+TITLE_QUIET = 0.15
+TITLE_OPEN_QUIET = 0.4
+TITLE_LATE = 3.5
+_TITLED: list = []                  # the frame the last title wait settled on
+
+
+def title_settled(cam, tag: str = "reread") -> bool:
+    """The carousel's title ready to read on the camera's frame (see TITLE_BOX). With HDMI eyes: True where the frame
+    on show is the one the last such wait settled on (no press, no grab since), nothing waited; else the strip watched
+    (HdmiSource.settle_box) and the frame it settled on taken (refresh(frame=)), False. With other eyes 0.4 s and a
+    fresh grab every time, as before (the OSD picture lags: a later grab can show more), False."""
+    eyes = getattr(cam, "hdmi", None)
+    if getattr(eyes, "name", "") == "hdmi" and hasattr(eyes, "settle_box"):
+        if _TITLED and _TITLED[0] is getattr(cam, "frame", None):
+            return True
+        prior = getattr(cam, "pressed_from", None)
+        within = prior is not None and screen.read(prior).kind == cam.read().kind
+        f, _ = eyes.settle_box(TITLE_BOX, prior.image if within else None,
+                               quiet=TITLE_QUIET if within else TITLE_OPEN_QUIET, timeout=TITLE_LATE)
+        cam.refresh(tag, frame=f)
+        _TITLED[:] = [cam.frame]
+        return False
+    time.sleep(0.4)
+    cam.refresh(tag)
+    return False
 
 
 def box_answer(cam, timeout: float = 25.0) -> tuple:
