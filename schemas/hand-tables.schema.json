@@ -497,6 +497,50 @@
     "unit": {
      "type": "string",
      "description": "Its unit."
+    },
+    "inactive_when": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "record",
+      "name",
+      "values",
+      "unlock",
+      "unlock_label"
+     ],
+     "properties": {
+      "record": {
+       "type": "integer",
+       "description": "The live record whose value decides it, by its id in decimal."
+      },
+      "name": {
+       "type": "string",
+       "description": "That record's setting's name."
+      },
+      "values": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "The values that leave the setting out."
+      },
+      "except": {
+       "type": "array",
+       "items": {
+        "type": "integer"
+       },
+       "description": "Or the values that alone keep it in."
+      },
+      "unlock": {
+       "type": "integer",
+       "description": "A value that brings it back."
+      },
+      "unlock_label": {
+       "type": "string",
+       "description": "That value's name."
+      }
+     },
+     "description": "When the camera leaves the setting out, greyed or not drawn, keeping its value: the definition's inactive_when, which the editor shows."
     }
    }
   },

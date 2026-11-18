@@ -62,7 +62,9 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
                 never-open row proved with the owner's word) is added to the evidence of each setting it proved, once
                 (with_allowances); a hand table's proof says it in its own "allowance"
 Number records (with a range, proved through number fields or a side list of numbers) keep their
-sample labels: their values are the numbers themselves.
+sample labels: their values are the numbers themselves. So are a row of boxes' numbers (writer/proofs.box_numbers), a
+new one laid out with no values from its samples; drawn with a sign or a suffix ("±5", "100+"), every number of the
+range is named so (with_drawn).
 
 --write refuses (exit 1, each listed) while the report holds a question the pass does not settle (questions): a
 conflict whose label it keeps against the camera's reading, a new record it does not add, a record not one to one, a
@@ -147,8 +149,8 @@ from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEY
                              plain_reason, refresh_from_data, reset_names, say_stale, text, with_camera,
                              with_expert, with_menu, with_place, with_plain_words, write_definition)
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
-                           disputed_out, kept_proof, mixed, note_readers, one_slot_table, print_kept, reader_source,
-                           sampled_scale, scaled_numbers, shown, menu_row, with_allowances, written_values,
+                           box_numbers, disputed_out, kept_proof, mixed, note_readers, one_slot_table, print_kept,
+                           reader_source, with_drawn, sampled_scale, scaled_numbers, shown, menu_row, with_allowances, written_values,
                            with_in_sets_proved,
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
                            without_observed, without_written_with)
@@ -964,10 +966,12 @@ def main():
                 proved[k] |= set(r["proved"].values())
                 continue
             grid = "wbgrid" in e.get("kinds", ())
-            if "[field" in e["row"] or (s.get("range") and (grid or all(num(lab) is not None for lab in r["proved"]))) \
+            if "[field" in e["row"] or (s.get("range") and (grid or all(num(lab, e.get("boxes")) is not None
+                                                                         for lab in r["proved"]))) \
                     or (r.get("linear") is True and sampled_scale(s, set(r["proved"].values()))):
-                # a number field is proved by samples, one of them the row's own start: only how many
-                # and whether they lie on a line are kept (the values would carry the user's setting). So is a White
+                # a number field (or a box's numbers, as the boxes draw them) is proved by samples, one of them the row's
+                # own start: only how many and whether they lie on a line are kept (the values would carry the user's
+                # setting). So is a White
                 # Balance grid (its ends, 0, the corners and an inside point) and a listed scale of numbers whose
                 # samples lie on a line (sampled_scale: the colour temperature, Exposure Std. Adjust's sixths)
                 proved.setdefault(k, set())
@@ -1187,9 +1191,11 @@ def main():
                 menus[k].add(menu_row(row, axis_rows))
                 note_readers(readers, k, r)
                 derived[k].update({v: "derived" for v, _ in s["values"] if v not in r["proved"].values()})
-                if "[field" in e["row"]:
+                if "[field" in e["row"] or box_numbers(e, r):
                     proved.setdefault(k, set())
                     sampled.setdefault(k, {"proofs": 0, "linear": None})["proofs"] += e["options"]
+                    if r.get("linear") is not None:
+                        sampled[k]["linear"] = bool(r["linear"])
                 else:
                     proved[k] |= set(r["proved"].values())
                 changed.append((k, s["name"], "new", None, s["values"]))
@@ -1388,6 +1394,7 @@ def main():
             f = next(f for f in ("name", *fix) if fix_differs(s, {f: fix[f]}))
             changed.append((k, s["name"], f, None, fix[f][:60]) if f == "note" else (k, s["name"], f, s.get(f), fix[f]))
             apply_fix(s, fix)
+    with_drawn(report, by_key, sampled, changed)    # a box's numbers drawn "±5" or "100+", named so over its range
     # PP7-PP9 (elements 6-8 of each profile array) are not on this body's menu (2026-10-30): the list
     # offers PP1-PP6, PP10, PP11 in Stills and Movie mode alike, and Log Shooting on greys it out.
     # Why (2026-10-31): they are the first a1's log presets, kept in the file but dropped from this

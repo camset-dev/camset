@@ -2,7 +2,8 @@
 counted line still wrote, written_values), what backs each value's name (proved.names), the option trees, a number the
 camera shows scaled (shown_as), the old lists of the values camera files held taken out (without_observed), the marks
 on the values no option was seen to write taken out (without_held), the records a proof wrote together taken out
-(without_written_with), a list of numbers sampled on a line (sampled_scale), one code table for an array's slots
+(without_written_with), a list of numbers sampled on a line (sampled_scale), a box's numbers and their names as the
+camera draws them (box_numbers, drawn_values), one code table for an array's slots
 (one_slot_table), the mark on a record pass2_report found not one to one, a live setting's memory copy seen taken by a
 registration (in_sets_proved), and the owner's allowance a proof carries in the note's evidence (with_allowances)."""
 import collections
@@ -12,11 +13,44 @@ import re
 from pathlib import Path
 
 from camkit import option_tree
-from pass2_report import (carried_over, element_changes, linear, row_name, rows_of, sampled_from_start,
-                          scale_number, stood_on)
+from pass2_report import (box_number, carried_over, element_changes, linear, num, row_name, rows_of,
+                          sampled_from_start, scale_number, stood_on)
 
 from .labels import clean, squashed, value_order
 from .notes import add_evidence
+
+
+def box_numbers(e: dict, r: dict) -> bool:
+    """A record a row of boxes proved with numbers alone (the report entry's "boxes", its labels read as the boxes
+    draw them, pass2_report.num: Zebra's "±5", "100+"): a number, proved by samples like a number field, whose labels
+    name no list."""
+    return bool(e.get("boxes")) and bool(r["proved"]) and all(num(lab, True) is not None for lab in r["proved"])
+
+
+def drawn_values(s: dict, labels) -> list | None:
+    """A box's numbers named as the camera draws them, every number of the setting's range: the proved labels all of
+    one shape with a sign or a suffix (pass2_report.box_number: Zebra's Range "±1" to "±10", its Lower Limit "50+" to
+    "109+"), each number in that shape. None for plain numbers (they need no names), labels of two shapes or none a
+    box's, or a setting with no range yet."""
+    drawn = [box_number(lab) for lab in labels]
+    shapes = {(d[0], d[2]) for d in drawn if d}
+    if not drawn or None in drawn or len(shapes) != 1 or not s.get("range"):
+        return None
+    sign, suffix = shapes.pop()
+    lo, hi = s["range"]
+    return [[v, f"{sign}{v}{suffix}"] for v in range(lo, hi + 1)] if sign or suffix else None
+
+
+def with_drawn(report: list, by_key: dict, sampled: dict, changed: list) -> None:
+    """Each record the report's rows of boxes proved with numbers drawn with a sign or a suffix, written sampled
+    (`sampled`) and its range known (a RECORD_FIXES entry's): its values every number of the range as the camera draws
+    it (drawn_values), each change in `changed`. Both passes, after the record fixes."""
+    for e in report:
+        for k, r in e["records"].items():
+            vals = drawn_values(by_key[k], r["proved"]) if k in sampled and box_numbers(e, r) else None
+            if vals and by_key[k].get("values") != vals:
+                changed.append((k, by_key[k]["name"], "values", None, f"{vals[0][1]} to {vals[-1][1]}"))
+                by_key[k]["values"] = vals
 
 
 def sampled_scale(s: dict, codes) -> bool:

@@ -28,7 +28,8 @@ unticked on its own (filter_run.py --untick) is its item's row in the state "box
 
 A list that offered one option only is proved by its display (prove_run's "proof": "display"): the label read off
 the screen writes the value its row's records held, a seen value like any other, its name backed by the readers that
-read it as any option's is.
+read it as any option's is. A row of boxes (a proof line's "boxes": boxes_run's, optboxes_run's) says so ("boxes"),
+and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among them (num).
 
 A registration mirror line ("kind": "registration mirror": kit/provers/memreg_run.py's, a live setting chosen in its
 menu and a memory slot registered to see the slot's copy take it; kit/provers/framepos_run.py --zone-grid's, a frame's
@@ -1087,22 +1088,44 @@ def two_labels_one_value(opts: dict, recs: dict) -> dict:
     return {key: sorted(set(sum(clash, [])))} if clash else {}
 
 
-def linear(vals: dict):
+def linear(vals: dict, boxes: bool = False):
     """For sampled number fields: does the stored value follow the shown number on a straight line
     through the lowest and highest? None when it cannot be told (under three numbers). The keys may be the numbers
-    themselves (scale_line, grid_lines)."""
-    pts = sorted({(n, v) for lab, v in vals.items()
-                  if isinstance(v, (int, float)) and (n := lab if isinstance(lab, (int, float)) else num(lab)) is not None})
+    themselves (scale_line, grid_lines); `boxes`: labels read as a box draws its numbers too (num)."""
+    pts = sorted({(n, v) for lab, v in vals.items() if isinstance(v, (int, float))
+                  and (n := lab if isinstance(lab, (int, float)) else num(lab, boxes)) is not None})
     if len(pts) < 3 or pts[-1][0] == pts[0][0]:
         return None
     (x0, y0), (x1, y1) = pts[0], pts[-1]
     return all(abs(y0 + (y1 - y0) * (x - x0) / (x1 - x0) - y) < 1e-6 for x, y in pts)
 
 
-def num(t):
-    """The number in a label, with its sign ("-15", "+7", "92.5%", "02"); None for text."""
+def num(t, boxes: bool = False):
+    """The number in a label, with its sign ("-15", "+7", "92.5%", "02"); None for text. On a row of boxes (`boxes`:
+    a proof line's "boxes", optboxes_run's and boxes_run's) also a box's number as the camera draws it (box_number:
+    Zebra's "±5" is 5, its lower limit "100+" 100), which no list's label is read as."""
     m = re.fullmatch(r"\s*([+-]?)\s*(\d+(?:\.\d+)?)\s*%?\s*", str(t or ""))
-    return None if not m else float(m.group(2)) * (-1 if m.group(1) == "-" else 1)
+    if m:
+        return float(m.group(2)) * (-1 if m.group(1) == "-" else 1)
+    drawn = box_number(t) if boxes else None
+    return None if drawn is None else float(drawn[1])
+
+
+# a box's number as optboxes_run writes it, in its values' shape (camkit.live.box_value): a range either side ("±5"), a
+# lower limit ("100+"), a plain number ("70")
+BOX_NUMBER = re.compile(r"(±?)(\d+)(\+?)")
+
+
+def box_number(t) -> tuple | None:
+    """(sign, number, suffix) of a box's number as the camera draws it (BOX_NUMBER): "±5" is ("±", 5, ""), "100+"
+    ("", 100, "+"), "70" ("", 70, ""); None for anything else (a word, a unit, a decimal, a sign and a suffix)."""
+    m = BOX_NUMBER.fullmatch(str(t or ""))
+    return (m[1], int(m[2]), m[3]) if m and not (m[1] and m[3]) else None
+
+
+def box_row(opts: dict) -> bool:
+    """A row of boxes: its proofs made by a box prover (a proof line's "boxes": true; boxes_run, optboxes_run)."""
+    return any(o.get("boxes") is True for o in opts.values())
 
 
 # a number on a scale as the camera shows it: an option's name in front ("C.Temp./Filter: 6000 K"), a sign, ± for zero,
@@ -1592,9 +1615,11 @@ def scale_verdict(opts: dict, kinds: set, key: str, vals: dict, s: dict | None, 
     - a list or a carousel axis of numbers in one unit (scale_line) that sampled the definition's longer list (the
       colour temperature's 4 of 75): its numbers; a list proved whole is no sample, whatever its numbers;
     - a White Balance grid: its positions against what it stored, the corners and inside point included (grid_lines).
+    A row of boxes (box_row) reads its numbers as the boxes draw them ("±5", "100+": num).
     """
     if any(o.get("sampled") for o in opts.values() if o["kind"] != "wbgrid") or kinds & {"sidelist", "fields"}:
-        return linear(vals) if all(num(lab) is not None for lab in vals) else None
+        boxes = box_row(opts)
+        return linear(vals, boxes) if all(num(lab, boxes) is not None for lab in vals) else None
     if "wbgrid" in kinds:
         o = next(o for o in opts.values() if o["kind"] == "wbgrid")
         return lines.get((o["preset"], o.get("context") or "", key))
@@ -1771,6 +1796,9 @@ def main():
                  "notices": notices}
         if name in UNWALKED_CELLS:
             entry["cell_name"] = f"its own reading, with its place: {UNWALKED_CELLS[name]}"
+        boxes = box_row(opts)
+        if boxes:
+            entry["boxes"] = True       # its numbers read as the boxes draw them (num), here and in kit/schema_update.py
         screens = screen_records(opts, kept_over)
         for c in carried:
             if c["row"] == name and c["key"] in screens:
@@ -1801,7 +1829,7 @@ def main():
                     any(lab.endswith((": ticked", ": unticked")) for lab in vals):
                 verdict, notes = judge_ticks(vals, {v: lab for v, lab in s.get("values") or []})
             elif s.get("range") and (any(o["kind"] == "fields" for o in opts.values()) or
-                                     all(num(lab) is not None for lab in vals)):
+                                     all(num(lab, boxes) is not None for lab in vals)):
                 # a number: its listed values are only samples; every stored value must be in range
                 lo, hi = s["range"]
                 out_of = [v for v in vals.values() if not lo <= v <= hi]

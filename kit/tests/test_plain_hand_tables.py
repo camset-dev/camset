@@ -602,6 +602,51 @@ def test_a_new_like_record_is_the_same_whatever_the_reports_order_and_a_later_ru
     assert next(s for s in c.written()[0]["settings"] if s["key"] == "global:0x0053") == third
 
 
+def box_row(box: str, proved: dict) -> dict:
+    """A report row of Zebra Level > Custom 1's boxes as kit/provers/optboxes_run.py proves them (the sample's own
+    records, made-up proofs): a row of boxes, its labels as the camera draws them, its numbers on their line."""
+    key = {"Type": "global:0x0dde", "Lower Limit": "global:0x0de0", "Standard": "global:0x0de2", "Range": "global:0x0de4"}
+    return {"row": f"Exposure > Zebra Level > Custom 1 > {box} [Shoot Mode M]", "options": len(proved) + 1,
+            "notices": [], "kinds": ["list"], "boxes": True,
+            "records": {key[box]: rec(proved, linear=None if box == "Type" else True)}}
+
+
+ZEBRA = [box_row("Range", {"±1": 1, "±10": 10, "±4": 4, "±6": 6}),
+         box_row("Lower Limit", {"50+": 50, "109+": 109, "99+": 99, "101+": 101, "80+": 80}),
+         box_row("Standard", {"0": 0, "109": 109, "69": 69, "71": 71, "55": 55}),
+         box_row("Type", {"Lower Limit": 1, "Std+Range": 0})]
+GREY = {"record": 0x0dde, "name": "Type", "values": [1], "unlock": 0, "unlock_label": "Std+Range"}
+
+
+def test_a_row_of_boxes_gives_numbers_sampled_on_their_line_named_as_the_camera_draws_them(tmp_path, monkeypatch,
+                                                                                           capsys):
+    """optboxes_run's rows of boxes in the plain pass: each box of numbers a number proved by samples on its line, none
+    of its samples listed (one is the camera's own setting, docs/decisions/0016), laid out with no values from them
+    when NEW_LIKE names it; once a record fix gives its range, a box drawn "±N" or "N+" names every number of it so, a
+    box of plain numbers nothing; the Type box a list proved whole. A record fix's inactive_when is put on its setting.
+    A second write gives the same file."""
+    c = Cam(tmp_path, monkeypatch)
+    c.tables(NEW_LIKE={"global:0x0de0": {"like": "global:0x01d8", "name": "Zebra Level > Custom 1 > Lower Limit"}},
+             RECORD_FIXES={"global:0x0de4": {"name": "Zebra Level > Custom 1 > Range", "range": [1, 10],
+                                             "inactive_when": GREY},
+                           "global:0x0de0": {"name": "Zebra Level > Custom 1 > Lower Limit", "range": [50, 109]},
+                           "global:0x0de2": {"name": "Zebra Level > Custom 1 > Standard", "range": [0, 109]}})
+    c.report([ROWS[0], *ZEBRA])
+    c.write(capsys)
+    pub, ev, text = c.written()
+    by = {s["key"]: s for s in pub["settings"]}
+    rng, low, std, typ = (by[k] for k in ("global:0x0de4", "global:0x0de0", "global:0x0de2", "global:0x0dde"))
+    assert (rng["values"], rng["range"]) == ([[v, f"±{v}"] for v in range(1, 11)], [1, 10])
+    assert (low["values"], low["range"]) == ([[v, f"{v}+"] for v in range(50, 110)], [50, 109])
+    assert (std["values"], std["range"]) == ([], [0, 109]), "plain numbers need no names, nor list a sample"
+    assert rng["proved"] == low["proved"] == std["proved"] == {"sampled": {"linear": True}}
+    assert "laid out like global:0x01d8" in ev["global:0x0de0"]["note_evidence"]
+    assert (typ["values"], typ["proved"]) == ([[0, "Std+Range"], [1, "Lower Limit"]], {"values": [0, 1]})
+    assert rng["inactive_when"] == GREY and "inactive_when" not in low
+    c.write(capsys)
+    assert c.target.read_text(encoding="utf-8") == text
+
+
 def test_stale_hand_evidence_is_refused_in_plain_words_in_either_pass(tmp_path, monkeypatch, capsys):
     """Evidence for an entry the tables no longer hold: the plain pass, through schema_update.main, stops with the file,
     the table, the key and what to do, no traceback; the ILCE-1M2's way of reading (put_back) stops so too (Refused, a

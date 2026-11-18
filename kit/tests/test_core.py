@@ -4115,6 +4115,40 @@ def test_a_sampled_list_or_axis_of_numbers_gets_the_line_rule():
     assert R.scale_verdict(grid, {"wbgrid"}, "k", {"A7": 7000}, s, {(4, "Movie mode", "k"): True}) is True
 
 
+def test_a_row_of_boxes_reads_its_numbers_as_the_boxes_draw_them():
+    """num reads a box's number as the camera draws it on a row of boxes alone (optboxes_run's Zebra boxes: Range "±5"
+    is 5, Lower Limit "100+" 100), never a list's label so ("±0" is a signed list's zero, "100+" Zebra Level's own
+    option); scale_verdict then gives a box's samples their line, one off it False, and the same labels off a row of
+    boxes none."""
+    import pass2_report as R
+    assert (R.num("±5", True), R.num("100+", True), R.num("70", True), R.num("-3", True)) == (5, 100, 70, -3)
+    assert R.num("±5") is None and R.num("100+") is None and R.num("±0") is None
+    for text in ("±5+", "Std+Range", "Lower Limit", "ISO 100", "5.5+", "+", ""):
+        assert R.num(text, True) is None, f"{text!r} is no box's number"
+    boxes = {0: {"kind": "list", "sampled": True, "boxes": True}}
+    rng = {"±1": 1, "±10": 10, "±4": 4, "±6": 6}
+    assert R.scale_verdict(boxes, {"list"}, "k", rng, None, {}) is True
+    assert R.scale_verdict(boxes, {"list"}, "k", {"50+": 50, "109+": 109, "80+": 80}, None, {}) is True
+    assert R.scale_verdict(boxes, {"list"}, "k", {**rng, "±6": 7}, None, {}) is False
+    assert R.scale_verdict(boxes, {"list"}, "k", {"Std+Range": 0, "Lower Limit": 1}, None, {}) is None
+    assert R.scale_verdict({0: {"kind": "list", "sampled": True}}, {"list"}, "k", rng, None, {}) is None
+
+
+def test_a_box_drawn_with_a_sign_or_a_suffix_names_every_number_of_its_range_so():
+    """drawn_values: a box's proved labels all "±N" or all "N+" name every number of the setting's range in that shape;
+    plain numbers, two shapes, words or no range name nothing. box_numbers: a row of boxes whose labels are numbers."""
+    from writer import proofs
+    assert proofs.drawn_values({"range": [1, 10]}, ["±1", "±10", "±4"]) == [[v, f"±{v}"] for v in range(1, 11)]
+    assert proofs.drawn_values({"range": [50, 109]}, ["50+", "109+"]) == [[v, f"{v}+"] for v in range(50, 110)]
+    for s, labels in (({"range": [0, 109]}, ["0", "109", "55"]), ({"range": [1, 10]}, ["±1", "10+"]),
+                      ({"range": [0, 1]}, ["Std+Range", "Lower Limit"]), ({}, ["±1", "±10"]), ({"range": [1, 2]}, [])):
+        assert proofs.drawn_values(s, labels) is None, (s, labels)
+    assert proofs.box_numbers({"boxes": True}, {"proved": {"±1": 1, "±10": 10}})
+    assert not proofs.box_numbers({}, {"proved": {"±1": 1, "±10": 10}})
+    assert not proofs.box_numbers({"boxes": True}, {"proved": {"Std+Range": 0, "Lower Limit": 1}})
+    assert not proofs.box_numbers({"boxes": True}, {"proved": {}})
+
+
 def wbgrid(preset, axis, value, changes, context=None, back=False):
     """A White Balance grid proof as kit/provers/grid_run.py writes it (made-up records)."""
     r = {"path": ["White Balance"], "kind": "wbgrid", "option": f"grid {preset}", "preset": preset, "axis": axis,

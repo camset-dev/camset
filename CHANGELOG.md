@@ -125,6 +125,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`kit/schema_update.py` takes `optboxes_run.py`'s boxes:** a box's numbers as the camera draws them (Zebra's
+  "±5", "100+") are numbers proved by samples on their line, never listed, and once a `RECORD_FIXES` range is
+  there every number of it is named as drawn. A `RECORD_FIXES` entry can also give a setting's `inactive_when`, the
+  other setting's values under which the camera leaves it out.
 - **`kit/provers/optboxes_run.py` proves a list option that draws its own row of boxes,** such as Zebra Level's Custom
   1 and Custom 2: `--probe` walks each box to its ends and chooses nothing, then the proof run keeps a few values of each
   box with OK and puts the start file back.

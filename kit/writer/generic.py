@@ -20,9 +20,9 @@ from .fromdata import from_data, model_refused, say_stale, write_definition
 from .gate import gate, questions
 from .labels import clean
 from .offered import check_video_systems, with_video_systems
-from .proofs import (axis_value_rows, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept, reworded,
-                     sampled_scale, with_allowances, with_in_sets_proved, with_menu_rows, with_names, written_values,
-                     with_option_trees, with_scales, without_observed)
+from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
+                     reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
+                     with_names, written_values, with_option_trees, with_scales, without_observed)
 
 
 def newest_download(run: Path) -> Path:
@@ -141,11 +141,13 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
                 continue
             s = by_key.get(k)
             grid = "wbgrid" in e.get("kinds", ())
-            # a number field, a list of numbers, a White Balance grid (its ends and 0 named, grid_labels), or a listed
+            # a number field, a list of numbers, a box's numbers (box_numbers: "±5", "100+"), a White Balance grid (its
+            # ends and 0 named, grid_labels), or a listed
             # scale whose samples lie on a line (sampled_scale): sampled, its proofs not listed, for one is the
             # camera's own setting (docs/decisions/0016)
             numbers = "[field" in e["row"] or (bool(r["proved"]) and all(num(lab) is not None for lab in r["proved"])) \
-                or grid or (s is not None and r.get("linear") is True and sampled_scale(s, set(r["proved"].values())))
+                or box_numbers(e, r) or grid \
+                or (s is not None and r.get("linear") is True and sampled_scale(s, set(r["proved"].values())))
             if s is None and k.split("[")[0] in by_key:
                 continue                               # a slot of a record the definition holds whole
             if k in T.NEW_LIKE:
@@ -239,6 +241,7 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     hand_facts.new_records(doc, by_key, T, E, cs, over, changed, reported)
     hand_facts.value_fixes(by_key, T, over, changed)
     hand_facts.record_fixes(by_key, T, E, changed)
+    with_drawn(report, by_key, sampled, changed)    # a box's numbers drawn "±5" or "100+", named so over its range
     hand_facts.unproved(doc, by_key, T, E, changed, taken_out)
     hand_facts.extra_values(by_key, T, over, changed)
     hand_facts.frame_proofs(by_key, T, E, over, changed, mirrored_values(run) if T.FRAME_PROOFS else {}, allowed)
@@ -304,13 +307,13 @@ def lay_like(doc: dict, by_key: dict, k: str, rows: list, tables, run: Path, cs,
             doc["settings"].append(s)
             by_key[k] = s
             changed.append((k, s["name"], "new", None, rows[0][2]))
-        for _e, r, _row in rows:
-            like_more(s, r, whole)
+        for e, r, _row in rows:
+            like_more(s, e, r, whole)
         return order
     e0, r0, _ = rows[0]
     fresh = hand_facts.like_setting(k, by_key, e0, r0, tables.NEW_LIKE, tables.NEW_WHOLE_LABELS, start, run.name)
-    for _e, r, _row in rows[1:]:
-        like_more(fresh, r, whole)
+    for e, r, _row in rows[1:]:
+        like_more(fresh, e, r, whole)
     proved = {v for _e, r, _row in rows for v in r["proved"].values() if not isinstance(v, (list, dict))}
     fill = {v for v, _ in fresh["values"] if v not in proved}
     fix = tables.RECORD_FIXES.get(k) or {}
@@ -334,14 +337,17 @@ def lay_like(doc: dict, by_key: dict, k: str, rows: list, tables, run: Path, cs,
         derived[k].update({v: "derived" for v in fill})
         changed.append((k, s["name"], "laid out", None, like))
     else:
-        for _e, r, _row in rows:
-            like_more(s, r, whole)
+        for e, r, _row in rows:
+            like_more(s, e, r, whole)
     return order
 
 
-def like_more(s: dict, r: dict, whole: bool) -> None:
+def like_more(s: dict, e: dict, r: dict, whole: bool) -> None:
     """A value a later row proves of a record laid out like its sibling, named by its rule (the part of the label after
-    its colon unless `whole`), where the record does not name it yet."""
+    its colon unless `whole`), where the record does not name it yet; none from a box's numbers (box_numbers), samples
+    whose labels would tell the camera's own setting."""
+    if box_numbers(e, r):
+        return
     labels = dict((v, lab) for v, lab in s.get("values") or [])
     for lab, v in r["proved"].items():
         labels.setdefault(v, clean(lab if whole else lab.split(":", 1)[-1].strip()))

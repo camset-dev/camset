@@ -41,7 +41,7 @@ from camkit import paths
 from .labels import clean
 from .mirror import mirror_key, mirror_of
 from .notes import ALLOWANCE, apply_fix, fix_differs
-from .proofs import sampled_scale
+from .proofs import box_numbers, sampled_scale
 
 # the tables the plain pass reads, in the order schemas/hand-tables.schema.json's description lists them
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
@@ -208,8 +208,9 @@ def like_setting(key: str, by_key: dict, e: dict, r: dict, like_table: dict, who
                  run_name: str) -> dict:
     """A proved record the schema lacked, laid out like its sibling (`like_table`, the hand tables' NEW_LIKE: key ->
     (sibling, name)): size, count and memory-set presence from the run's start file (`start`, run_start), labels from
-    the proofs (axis value alone, the whole label for a record `whole`, NEW_WHOLE_LABELS, lists); `run_name` the run
-    its evidence names."""
+    the proofs (axis value alone, the whole label for a record `whole`, NEW_WHOLE_LABELS, lists); none from a number
+    field's or a box's numbers (box_numbers), samples whose labels would tell the camera's own setting; `run_name` the
+    run its evidence names."""
     from camkit import camset
     like, name = like_table[key]
     rid = int(key.split("0x")[1], 16)
@@ -217,8 +218,8 @@ def like_setting(key: str, by_key: dict, e: dict, r: dict, like_table: dict, who
     rec = cs.get(0, rid)
     base = by_key[like]
     s = {f: base[f] for f in ("area", "source", "tab", "group", "order", "scalar", "modes") if f in base}
-    vals = {} if "[field" in e["row"] else {v: clean(lab if key in whole else lab.split(":", 1)[-1].strip())
-                                            for lab, v in r["proved"].items()}
+    vals = {} if "[field" in e["row"] or box_numbers(e, r) else \
+        {v: clean(lab if key in whole else lab.split(":", 1)[-1].strip()) for lab, v in r["proved"].items()}
     # the sibling's spelling of a label the proofs read the same ("ISO 160" for the box's "ISO160")
     sib = {v: lab for v, lab in base.get("values") or []}
     vals = {v: sib[v] if re.sub(r"\s+", "", str(sib.get(v, ""))).lower() == re.sub(r"\s+", "", lab).lower() else lab
@@ -361,8 +362,9 @@ def value_fixes(by_key: dict, tables, over: dict, changed: list) -> None:
 
 
 def record_fixes(by_key: dict, tables, ev: dict, changed: list) -> None:
-    """RECORD_FIXES: a setting's name, tab, group, range or unit the camera proved wrong, put on it, and its note, word
-    for word, its evidence into note_evidence alone (hand_note); one the definition does not hold yet is said."""
+    """RECORD_FIXES: a setting's name, tab, group, range or unit the camera proved wrong, or when it leaves it out
+    (inactive_when), put on it, and its note, word for word, its evidence into note_evidence alone (hand_note); one the
+    definition does not hold yet is said."""
     for k, fix in tables.RECORD_FIXES.items():
         if k not in by_key:
             print(f"  record fix  {k} {fix['name'][:40]!r}: the definition has no such setting yet, not applied")
