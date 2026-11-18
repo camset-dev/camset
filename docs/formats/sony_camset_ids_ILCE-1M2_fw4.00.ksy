@@ -3006,10 +3006,40 @@ enums:
       id: movie_interval_rec_interval_time
       doc: 'Movie Interval Rec Interval Time [Shooting > Image Quality/Rec]: 10 5s, 11 4s, 12 3s, 13 2s, 14 1s.
         live settings; 1 of 1 settings on it proved on the camera.'
+    0x1141:
+      id: record_setting_1141
+      doc: 'Record Setting (Time-lapse, XAVC HS 4K, 60p) [Shooting > Image Quality/Rec]: 6 200M 4:2:2 10bit, 8 150M
+        4:2:0 10bit, 12 100M 4:2:2 10bit, 17 75M 4:2:0 10bit, 22 45M 4:2:0 10bit. live settings; 1 of 1 settings
+        on it proved on the camera.'
+    0x1143:
+      id: record_setting_1143
+      doc: 'Record Setting (Time-lapse, XAVC HS 4K, 24p) [Shooting > Image Quality/Rec]: 12 100M 4:2:2 10bit, 13
+        100M 4:2:0 10bit, 19 50M 4:2:2 10bit, 20 50M 4:2:0 10bit, 23 30M 4:2:0 10bit. live settings; 1 of 1 settings
+        on it proved on the camera.'
     0x1145:
-      id: movie_interval_rec_recording_setting
-      doc: 'Movie Interval Rec Recording Setting [Shooting > Image Quality/Rec]: 6 200M 422 10bit, 9 150M 420 8bit.
-        live settings; 1 of 1 settings on it proved on the camera.'
+      id: record_setting_1145
+      doc: 'Record Setting (Time-lapse, XAVC S 4K, 60p) [Shooting > Image Quality/Rec]: 6 200M 422 10bit, 9 150M
+        420 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x1147:
+      id: record_setting_1147
+      doc: 'Record Setting (Time-lapse, XAVC S 4K, 30p) [Shooting > Image Quality/Rec]: 10 140M 4:2:2 10bit, 14
+        100M 4:2:0 8bit, 18 60M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x1149:
+      id: record_setting_1149
+      doc: 'Record Setting (Time-lapse, XAVC S 4K, 24p) [Shooting > Image Quality/Rec]: 12 100M 4:2:2 10bit, 14
+        100M 4:2:0 8bit, 18 60M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x114b:
+      id: record_setting_114b
+      doc: 'Record Setting (Time-lapse, XAVC S HD, 60p) [Shooting > Image Quality/Rec]: 19 50M 4:2:2 10bit, 21 50M
+        4:2:0 8bit, 24 25M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x114d:
+      id: record_setting_114d
+      doc: 'Record Setting (Time-lapse, XAVC S HD, 30p) [Shooting > Image Quality/Rec]: 19 50M 4:2:2 10bit, 21 50M
+        4:2:0 8bit, 25 16M 4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+    0x114f:
+      id: record_setting_114f
+      doc: 'Record Setting (Time-lapse, XAVC S HD, 24p) [Shooting > Image Quality/Rec]: 19 50M 4:2:2 10bit, 21 50M
+        4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
     0x1165:
       id: video_light_setting
       doc: 'Video Light Setting [Shooting > Image Quality/Rec]: 0 Off, 1 2 Sec, 2 5 Sec, 3 10 Sec. live settings;

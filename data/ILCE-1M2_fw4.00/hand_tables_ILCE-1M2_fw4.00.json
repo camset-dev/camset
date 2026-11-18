@@ -84,6 +84,10 @@
     "global:0x1478": {"name": "Aspect Marker Disp."},
     "global:0x0240": {"name": "Rec Frame Rate (S&Q, XAVC S 4K)"},
     "global:0x1137": {"name": "Rec Frame Rate (Time-lapse, XAVC S 4K)"},
+    "global:0x1145": {
+      "name": "Record Setting (Time-lapse, XAVC S 4K, 60p)",
+      "note": "Time-lapse keeps a Record Setting for each movie format and rate, each listing what that format and rate offer: proved for XAVC S 4K, XAVC HS 4K and XAVC S HD at every rate each offers; XAVC S-I 4K, XAVC S-I HD and XAVC HS 8K not tried."
+    },
     "global:0x0248": {
       "name": "Frame Rate (S&Q)",
       "note": "One record for every movie format. XAVC S HD and XAVC S-I HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash)."
@@ -927,6 +931,13 @@
     "global:0x1139": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S HD)"},
     "global:0x113b": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S-I 4K)"},
     "global:0x113d": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S-I HD)"},
+    "global:0x1141": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC HS 4K, 60p)"},
+    "global:0x1143": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC HS 4K, 24p)"},
+    "global:0x1147": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S 4K, 30p)"},
+    "global:0x1149": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S 4K, 24p)"},
+    "global:0x114b": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 60p)"},
+    "global:0x114d": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 30p)"},
+    "global:0x114f": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 24p)"},
     "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K)"},
     "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD)"},
     "global:0x0258": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 24p)"},
@@ -948,6 +959,13 @@
     "global:0x12ca": {"like": "global:0x12b7", "name": "Playback Filter Condition: Smartphone Trans State"}
   },
   "NEW_WHOLE_LABELS": [
+    "global:0x1141",
+    "global:0x1143",
+    "global:0x1147",
+    "global:0x1149",
+    "global:0x114b",
+    "global:0x114d",
+    "global:0x114f",
     "global:0x0210",
     "global:0x0214",
     "global:0x0216",

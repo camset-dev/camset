@@ -434,7 +434,7 @@
    "initialize": "resets"
   },
   "global:0x1145": {
-   "name": "Movie Interval Rec Recording Setting",
+   "name": "Record Setting (Time-lapse, XAVC S 4K, 60p)",
    "tab": "Shooting",
    "result": "resets",
    "initialize": "resets"

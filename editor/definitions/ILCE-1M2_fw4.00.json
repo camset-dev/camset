@@ -12884,7 +12884,7 @@
    "key": "global:0x1145",
    "area": "global",
    "id": 4421,
-   "name": "Movie Interval Rec Recording Setting",
+   "name": "Record Setting (Time-lapse, XAVC S 4K, 60p)",
    "tab": "Shooting",
    "group": "Image Quality/Rec",
    "order": 9000,
@@ -12907,7 +12907,7 @@
      "150M 420 8bit"
     ]
    ],
-   "note": "",
+   "note": "Time-lapse keeps a Record Setting for each movie format and rate, each listing what that format and rate offer: proved for XAVC S 4K, XAVC HS 4K and XAVC S HD at every rate each offers; XAVC S-I 4K, XAVC S-I HD and XAVC HS 8K not tried.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -221638,6 +221638,336 @@
      0,
      2,
      4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x114b",
+   "id": 4427,
+   "name": "Record Setting (Time-lapse, XAVC S HD, 60p)",
+   "values": [
+    [
+     19,
+     "50M 4:2:2 10bit"
+    ],
+    [
+     21,
+     "50M 4:2:0 8bit"
+    ],
+    [
+     24,
+     "25M 4:2:0 8bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     19,
+     21,
+     24
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x114d",
+   "id": 4429,
+   "name": "Record Setting (Time-lapse, XAVC S HD, 30p)",
+   "values": [
+    [
+     19,
+     "50M 4:2:2 10bit"
+    ],
+    [
+     21,
+     "50M 4:2:0 8bit"
+    ],
+    [
+     25,
+     "16M 4:2:0 8bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     19,
+     21,
+     25
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x114f",
+   "id": 4431,
+   "name": "Record Setting (Time-lapse, XAVC S HD, 24p)",
+   "values": [
+    [
+     19,
+     "50M 4:2:2 10bit"
+    ],
+    [
+     21,
+     "50M 4:2:0 8bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     19,
+     21
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1141",
+   "id": 4417,
+   "name": "Record Setting (Time-lapse, XAVC HS 4K, 60p)",
+   "values": [
+    [
+     6,
+     "200M 4:2:2 10bit"
+    ],
+    [
+     8,
+     "150M 4:2:0 10bit"
+    ],
+    [
+     12,
+     "100M 4:2:2 10bit"
+    ],
+    [
+     17,
+     "75M 4:2:0 10bit"
+    ],
+    [
+     22,
+     "45M 4:2:0 10bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     6,
+     8,
+     12,
+     17,
+     22
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1143",
+   "id": 4419,
+   "name": "Record Setting (Time-lapse, XAVC HS 4K, 24p)",
+   "values": [
+    [
+     12,
+     "100M 4:2:2 10bit"
+    ],
+    [
+     13,
+     "100M 4:2:0 10bit"
+    ],
+    [
+     19,
+     "50M 4:2:2 10bit"
+    ],
+    [
+     20,
+     "50M 4:2:0 10bit"
+    ],
+    [
+     23,
+     "30M 4:2:0 10bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     12,
+     13,
+     19,
+     20,
+     23
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1147",
+   "id": 4423,
+   "name": "Record Setting (Time-lapse, XAVC S 4K, 30p)",
+   "values": [
+    [
+     10,
+     "140M 4:2:2 10bit"
+    ],
+    [
+     14,
+     "100M 4:2:0 8bit"
+    ],
+    [
+     18,
+     "60M 4:2:0 8bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     10,
+     14,
+     18
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Record Setting"
+   ],
+   "row_at": [
+    6,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1149",
+   "id": 4425,
+   "name": "Record Setting (Time-lapse, XAVC S 4K, 24p)",
+   "values": [
+    [
+     12,
+     "100M 4:2:2 10bit"
+    ],
+    [
+     14,
+     "100M 4:2:0 8bit"
+    ],
+    [
+     18,
+     "60M 4:2:0 8bit"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     12,
+     14,
+     18
     ]
    }
   }

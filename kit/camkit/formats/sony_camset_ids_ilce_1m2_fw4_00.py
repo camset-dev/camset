@@ -781,7 +781,14 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         rec_frame_rate_113b = 4411
         rec_frame_rate_113d = 4413
         movie_interval_rec_interval_time = 4415
-        movie_interval_rec_recording_setting = 4421
+        record_setting_1141 = 4417
+        record_setting_1143 = 4419
+        record_setting_1145 = 4421
+        record_setting_1147 = 4423
+        record_setting_1149 = 4425
+        record_setting_114b = 4427
+        record_setting_114d = 4429
+        record_setting_114f = 4431
         video_light_setting = 4453
         framing_stabilizer = 4458
         auto_framing = 4462

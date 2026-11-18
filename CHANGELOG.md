@@ -59,6 +59,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   4K, XAVC S HD, XAVC S-I 4K and XAVC S-I HD are in the definition, each with only what its own box offers, named by
   their format as Record Setting's are, and S&Q's Frame Rate gains 240fps, offered under the two HD formats. Under XAVC
   HS 8K the camera offers no S&Q frame rate.
+- **The a1 II's Time-lapse Record Setting per format and rate:** XAVC S 4K, XAVC HS 4K and XAVC S HD at every rate each
+  offers, each record listing only its own list; the XAVC S-I formats and XAVC HS 8K are not tried yet.
 - **The a1 II's Zone place for each way of holding the camera shows outside Expert mode,** one row per hold in each
   memory set. Its two other records, which the camera writes alike, are its copies in Expert mode and change with it.
 - **The a1 II definition says how far each focus frame can travel** (`frame` on the records of each place: each spot
