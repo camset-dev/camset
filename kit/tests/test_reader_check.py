@@ -326,8 +326,12 @@ def test_a_reader_failing_during_the_run_is_said_once_and_logged(world, tmp_path
     err = capsys.readouterr().err
     assert err.count("reader 'omlx' failed during the run (HTTP 401 Unauthorized: bad key <key> for <address>") == 1
     events = [json.loads(line) for line in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
-    assert [(e["kind"], e["reader"]) for e in events] == [("reader_failing", "omlx")]
-    for text in (err, events[0]["why"]):
+    failing = [e for e in events if e["kind"] == "reader_failing"]
+    assert [(e["kind"], e["reader"]) for e in failing] == [("reader_failing", "omlx")]
+    # each question is logged with its time (vlm.asked), never its failure's words
+    assert [(e["kind"], e["reader"], e["answered"]) for e in events if e["kind"] == "reader_asked"] == \
+        [("reader_asked", "omlx", False)] * 3
+    for text in (err, failing[0]["why"], json.dumps(events)):
         for leak in ("sk-abcdef", "127.0.0.1", "8007", "203.0.113.7", "nas.local", "/Users/you", "sk-test", "someone@"):
             assert leak not in text, (leak, text)
 

@@ -2,7 +2,12 @@
 import json
 import os
 import sys
+import time
 from pathlib import Path
+
+# when this process imported camkit, which every kit program imports before any other package: the run's "link_open"
+# line carries it (camkit.link), so the time from a run's start to its open link can be measured
+STARTED = time.time()
 
 KIT = Path(__file__).resolve().parent.parent
 ROOT = KIT.parent

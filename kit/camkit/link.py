@@ -53,7 +53,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import LINK_BIN, ConfigMissing, config, paths, provenance, safety
+from . import LINK_BIN, STARTED, ConfigMissing, config, paths, provenance, safety
 from .runs import RESTORE_BY_HAND, Run, restore_pending_any
 
 
@@ -360,7 +360,7 @@ class Link:
             first = self._reply(timeout)
         except LinkError as e:
             raise LinkError(self._not_ready(str(e)), opened=False) from None
-        self.run.log("link_open", args=self.args[1:], reply=first)
+        self.run.log("link_open", args=self.args[1:], reply=first, process_started=round(STARTED, 3))
         if not first.get("ok"):
             self.proc.wait(5)
             raise LinkError(f"camera link did not connect: {first.get('error')}", opened=False)

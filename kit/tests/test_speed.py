@@ -521,3 +521,59 @@ def test_the_page_scan_over_its_saved_frames_gives_the_same_records_with_fewer_l
     changes = sum(1 for r in records if r.get("new_page"))
     asked = changes - len([n for n in eyes.skipped if n.endswith("down-late.png")])
     assert asked < changes // 5, f"late looks still asked: {asked} of {changes}"
+
+
+# ---------------------------------------------------------------- H: two lines for the next review
+
+
+def test_every_question_to_a_reader_logs_how_long_it_took(monkeypatch, tmp_path):
+    """camkit.vlm.ask_role logs each question it sends ("reader_asked": the role, the reader's configured name, the
+    seconds it took, whether it answered) in the run's events.jsonl, the stand-in's question too; nothing of the frame or
+    the answer. A question never sent (no reader, held) logs nothing."""
+    import json
+
+    from camkit import vlm
+    from camkit.runs import Run
+    run = Run("asked", root=tmp_path)
+    monkeypatch.setattr(vlm, "_RUN", run)
+    monkeypatch.setattr(vlm, "_FAILING", set())
+    monkeypatch.setattr(vlm, "playing", lambda name: {"name": "b70"})
+    monkeypatch.setattr(vlm, "local_only", lambda cfg, name: None)
+    monkeypatch.setattr(vlm, "_SKIPPED", set())
+
+    class Reader:
+        def __init__(self, fails=False):
+            self.fails = fails
+
+        def ask(self, image, prompt):
+            if self.fails:
+                raise TimeoutError("timed out")
+            return {"selected": "Off"}
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, timeout: Reader())
+    assert vlm.ask_role("second", b"frame", "a question", 25) == {"selected": "Off"}
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, timeout: Reader(fails=True))
+    with pytest.raises(TimeoutError):
+        vlm.ask_role("second", b"frame", "a question", 25)
+    asked = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    asked = [e for e in asked if e["kind"] == "reader_asked"]
+    assert [(e["role"], e["reader"], e["answered"]) for e in asked] == [("second", "b70", True), ("second", "b70", False)]
+    assert all(isinstance(e["seconds"], float) and e["seconds"] >= 0 for e in asked)
+    assert "Off" not in json.dumps(asked) and "a question" not in json.dumps(asked)
+
+
+def test_the_link_open_line_says_when_the_runs_process_started(tmp_path, monkeypatch):
+    """camkit.STARTED, set as camkit is imported (every kit program imports it before any other package), goes with the
+    run's "link_open" line ("process_started"), so the time from the process's start to the open link can be measured."""
+    import json
+
+    import camkit
+    import fake_camlink
+    from camkit.link import Link
+    from camkit.runs import Run
+    monkeypatch.delenv("CAMSET_USB", raising=False)
+    run = Run("started", root=tmp_path)
+    with Link(run, ip="192.0.2.10", binary=fake_camlink.COMMAND, catch_signals=False):
+        pass
+    opened = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    opened = next(e for e in opened if e["kind"] == "link_open")
+    assert opened["process_started"] == round(camkit.STARTED, 3) <= opened["t"]

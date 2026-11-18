@@ -1111,19 +1111,37 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     if str(cfg.get("name")) in _SKIPPED:
         raise NoReader(f"reader {cfg.get('name')!r} did not answer the run's start check, and no reader stands in for "
                        f"it: the {name} reader's questions go unanswered for this run")
+    t = time.monotonic()
     try:
-        return make_reader(cfg, timeout=timeout).ask(image, prompt)
+        answer = make_reader(cfg, timeout=timeout).ask(image, prompt)
+        asked(name, cfg, t, True)
+        return answer
     except Exception as e:
+        asked(name, cfg, t, False)
         failing(cfg, e, timeout)
         if not isinstance(e, urllib.error.URLError) or standing_in(name) is not None or stand_in(name, role(name)) is None:
             raise
     cfg = playing(name)
     local_only(cfg, name)
+    t = time.monotonic()
     try:
-        return make_reader(cfg, timeout=max(timeout, 60)).ask(image, prompt)
+        answer = make_reader(cfg, timeout=max(timeout, 60)).ask(image, prompt)
+        asked(name, cfg, t, True)
+        return answer
     except Exception as e:
+        asked(name, cfg, t, False)
         failing(cfg, e, max(timeout, 60))
         raise
+
+
+def asked(role_name: str, cfg: dict, since: float, answered: bool) -> None:
+    """One question a reader was sent, in the run's events.jsonl ("reader_asked": the role, the reader's configured
+    name, the seconds from the question to its answer or failure, whether it answered), nothing of the frame or the
+    answer: what the reader's time costs a run, which no log said before (the speed review of 2026-11-18)."""
+    with contextlib.suppress(Exception):
+        if _RUN is not None and hasattr(_RUN, "log"):
+            _RUN.log("reader_asked", role=role_name, reader=str(cfg.get("name")),
+                     seconds=round(time.monotonic() - since, 3), answered=answered)
 
 
 def ask_named_reader(cfg: dict, image: bytes, prompt: str, cache, timeout: float = 60.0, read_only=(),
