@@ -2133,6 +2133,38 @@ enums:
     0x0dbe:
       id: clarity_array
       doc: Clarity [Exposure/Color > Creative Look ST]. live settings; 18 of 18 settings on it proved on the camera.
+    0x0dde:
+      id: zebra_level_custom_1_type
+      doc: 'Zebra Level > Custom 1 > Type [Exposure/Color > Zebra Display]: 0 Std+Range, 1 Lower Limit. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x0de0:
+      id: zebra_level_custom_1_lower_limit
+      doc: Zebra Level > Custom 1 > Lower Limit [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings
+        on it proved on the camera.
+    0x0de2:
+      id: zebra_level_custom_1_standard
+      doc: Zebra Level > Custom 1 > Standard [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings on
+        it proved on the camera.
+    0x0de4:
+      id: zebra_level_custom_1_range
+      doc: Zebra Level > Custom 1 > Range [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings on it
+        proved on the camera.
+    0x0de6:
+      id: zebra_level_custom_2_type
+      doc: 'Zebra Level > Custom 2 > Type [Exposure/Color > Zebra Display]: 0 Std+Range, 1 Lower Limit. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x0de8:
+      id: zebra_level_custom_2_lower_limit
+      doc: Zebra Level > Custom 2 > Lower Limit [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings
+        on it proved on the camera.
+    0x0dea:
+      id: zebra_level_custom_2_standard
+      doc: Zebra Level > Custom 2 > Standard [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings on
+        it proved on the camera.
+    0x0dec:
+      id: zebra_level_custom_2_range
+      doc: Zebra Level > Custom 2 > Range [Exposure/Color > Zebra Display]. live settings; 1 of 1 settings on it
+        proved on the camera.
     0x0dee:
       id: user_bit_preset_byte_1
       doc: 'User Bit Preset: byte 1 [Setup > Other settings]. live settings; 1 of 1 settings on it proved on the

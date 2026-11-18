@@ -95,6 +95,50 @@
       "name": "Frame Rate (S&Q)",
       "note": "One record for every movie format. XAVC S HD and XAVC S-I HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash)."
     },
+    "global:0x0dde": {
+      "name": "Zebra Level > Custom 1 > Type",
+      "note": "Which boxes Custom 1 draws: Std+Range draws Standard and Range, Lower Limit draws Lower Limit. The boxes it does not draw keep their numbers."
+    },
+    "global:0x0de0": {
+      "name": "Zebra Level > Custom 1 > Lower Limit",
+      "range": [50, 109],
+      "inactive_when": {"record": 3550, "name": "Zebra Level > Custom 1 > Type", "values": [0], "unlock": 1, "unlock_label": "Lower Limit"},
+      "note": "Drawn 50+ to 109+, stored as the number. Custom 1 draws it only with Type on Lower Limit."
+    },
+    "global:0x0de2": {
+      "name": "Zebra Level > Custom 1 > Standard",
+      "range": [0, 109],
+      "inactive_when": {"record": 3550, "name": "Zebra Level > Custom 1 > Type", "values": [1], "unlock": 0, "unlock_label": "Std+Range"},
+      "note": "Drawn and stored as the number, 0 to 109. Custom 1 draws it only with Type on Std+Range."
+    },
+    "global:0x0de4": {
+      "name": "Zebra Level > Custom 1 > Range",
+      "range": [1, 10],
+      "inactive_when": {"record": 3550, "name": "Zebra Level > Custom 1 > Type", "values": [1], "unlock": 0, "unlock_label": "Std+Range"},
+      "note": "Drawn ±1 to ±10, stored as the number. Custom 1 draws it only with Type on Std+Range."
+    },
+    "global:0x0de6": {
+      "name": "Zebra Level > Custom 2 > Type",
+      "note": "Which boxes Custom 2 draws: Std+Range draws Standard and Range, Lower Limit draws Lower Limit. The boxes it does not draw keep their numbers."
+    },
+    "global:0x0de8": {
+      "name": "Zebra Level > Custom 2 > Lower Limit",
+      "range": [50, 109],
+      "inactive_when": {"record": 3558, "name": "Zebra Level > Custom 2 > Type", "values": [0], "unlock": 1, "unlock_label": "Lower Limit"},
+      "note": "Drawn 50+ to 109+, stored as the number. Custom 2 draws it only with Type on Lower Limit."
+    },
+    "global:0x0dea": {
+      "name": "Zebra Level > Custom 2 > Standard",
+      "range": [0, 109],
+      "inactive_when": {"record": 3558, "name": "Zebra Level > Custom 2 > Type", "values": [1], "unlock": 0, "unlock_label": "Std+Range"},
+      "note": "Drawn and stored as the number, 0 to 109. Custom 2 draws it only with Type on Std+Range."
+    },
+    "global:0x0dec": {
+      "name": "Zebra Level > Custom 2 > Range",
+      "range": [1, 10],
+      "inactive_when": {"record": 3558, "name": "Zebra Level > Custom 2 > Type", "values": [1], "unlock": 0, "unlock_label": "Std+Range"},
+      "note": "Drawn ±1 to ±10, stored as the number. Custom 2 draws it only with Type on Std+Range."
+    },
     "global:0x0473": {"name": "Operation in Vertical Orientation"},
     "global:0x04d2": {
       "name": "ISO AUTO Min. SS: automatic speed",
@@ -941,6 +985,14 @@
     "global:0x114b": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 60p)"},
     "global:0x114d": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 30p)"},
     "global:0x114f": {"like": "global:0x1145", "name": "Record Setting (Time-lapse, XAVC S HD, 24p)"},
+    "global:0x0dde": {"like": "global:0x0379", "name": "Zebra Level > Custom 1 > Type"},
+    "global:0x0de0": {"like": "global:0x0379", "name": "Zebra Level > Custom 1 > Lower Limit"},
+    "global:0x0de2": {"like": "global:0x0379", "name": "Zebra Level > Custom 1 > Standard"},
+    "global:0x0de4": {"like": "global:0x0379", "name": "Zebra Level > Custom 1 > Range"},
+    "global:0x0de6": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Type"},
+    "global:0x0de8": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Lower Limit"},
+    "global:0x0dea": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Standard"},
+    "global:0x0dec": {"like": "global:0x0379", "name": "Zebra Level > Custom 2 > Range"},
     "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K)"},
     "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD)"},
     "global:0x0258": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 24p)"},

@@ -5357,6 +5357,30 @@
   "global:0x0dbe[9]": {
    "help": "Adds local contrast, so texture and outlines look crisper; 0 adds none."
   },
+  "global:0x0dde": {
+   "help": "Whether this custom zebra marks a band of brightness (Standard, with Range either side of it) or everything from a level up (Lower Limit)."
+  },
+  "global:0x0de0": {
+   "help": "The zebra stripes mark every area at this brightness level or above."
+  },
+  "global:0x0de2": {
+   "help": "The brightness level the zebra stripes centre on."
+  },
+  "global:0x0de4": {
+   "help": "How far either side of Standard the zebra stripes reach."
+  },
+  "global:0x0de6": {
+   "help": "Whether this custom zebra marks a band of brightness (Standard, with Range either side of it) or everything from a level up (Lower Limit)."
+  },
+  "global:0x0de8": {
+   "help": "The zebra stripes mark every area at this brightness level or above."
+  },
+  "global:0x0dea": {
+   "help": "The brightness level the zebra stripes centre on."
+  },
+  "global:0x0dec": {
+   "help": "How far either side of Standard the zebra stripes reach."
+  },
   "global:0x0dee": {
    "help": "The user bit you set, recorded with movies: its first pair of digits."
   },

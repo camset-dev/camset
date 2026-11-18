@@ -560,6 +560,14 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         sharpness_array = 3454
         sharpness_range_array = 3486
         clarity_array = 3518
+        zebra_level_custom_1_type = 3550
+        zebra_level_custom_1_lower_limit = 3552
+        zebra_level_custom_1_standard = 3554
+        zebra_level_custom_1_range = 3556
+        zebra_level_custom_2_type = 3558
+        zebra_level_custom_2_lower_limit = 3560
+        zebra_level_custom_2_standard = 3562
+        zebra_level_custom_2_range = 3564
         user_bit_preset_byte_1 = 3566
         user_bit_preset_byte_2 = 3567
         user_bit_preset_byte_3 = 3568

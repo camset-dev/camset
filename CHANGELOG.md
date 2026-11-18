@@ -55,6 +55,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Zebra Level Custom 1 and Custom 2 boxes are settings of their own:** Type, Standard 0 to 109, Range
+  ±1 to ±10 and Lower Limit 50+ to 109+, each number proved at its ends and a few values between, the rest on their
+  line. The boxes a Type does not draw show greyed, their numbers kept, as the camera leaves them out.
 - **The a1 II's S&Q and Time-lapse frame rates per movie format:** S&Q's and Time-lapse's Rec Frame Rate under XAVC HS
   4K, XAVC S HD, XAVC S-I 4K and XAVC S-I HD are in the definition, each with only what its own box offers, named by
   their format as Record Setting's are, and S&Q's Frame Rate gains 240fps, offered under the two HD formats. Under XAVC
