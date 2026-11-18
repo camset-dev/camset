@@ -1,5 +1,5 @@
 """Prove a two-box screen: two values side by side, Left/Right between the boxes, Up/Down through a
-box's values, OK applies both (S&Q and Time-lapse Frame Rate Settings, Movie mode, 2026-10-30).
+box's values, OK leaves (S&Q and Time-lapse Frame Rate Settings, Movie mode, 2026-10-30).
 
     .venv/bin/python -u kit/provers/boxes_run.py --scan kit2_page_scan_movie --context "Movie mode" \\
         --row "S&Q Settings > Frame Rate Settings" --boxes "Rec Frame Rate,Frame Rate"
@@ -17,6 +17,20 @@ read, OK, a settings download. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proof
 last in the path); the start file goes back on at the end and is checked. Each proof line keeps the vision model's
 reading of the chosen value ("vlm") beside OCR's ("shown"), as the second reading. The value a box opened on is proved
 only from another start: --first BOX=VALUE.
+
+On the Frame Rate Settings screens the value a box shows is already the setting: stepped to 24p and left with MENU,
+no OK, the row read "Recording Frame Rate: 24p" (kit2_pass2 240079 -> 240080, XAVC HS 4K, 2026-11-17) and the download
+after held it (240083). So each proof is what the record holds once the box was stepped to its value, and the OK only
+leaves. The screen reads as no known kind, whose Enter the camera's shape check refuses (2026-11-14; the proofs before
+it pressed it unguarded), so that OK goes by the screen's own consent (camkit.live.TwoBoxes: screen_consent), judged
+on its shape; a screen it cannot judge so gets no OK and stops the run.
+A box that draws a dash (dashed: XAVC HS 8K's S&Q boxes, 240050, where Up raised "not available as follows: File
+Format") is not offered in this state: the look presses nothing on it, and the run writes it to its failures.jsonl as
+prove_run writes a row the camera would not open ("blocked": NOT_OFFERED, keyed like the box's proofs, tagged with
+--context), and goes on.
+Exit status: 0 for a run that ends, a STOP, and boxes not offered; once the start file is back and checked, a run a
+refusal stopped exits EXIT_REFUSED and one anything else stopped EXIT_INCOMPLETE, as kit/crawl_run.py does
+(kit/exit_status.py; kit/tools/chain.py stops there); a restore that does not check out, EXIT_UNRESTORED.
 """
 import argparse
 import json
@@ -27,12 +41,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, match, ocr, safety, screen  # noqa: E402
+import numpy as np  # noqa: E402  (after camkit, which installs the plain words: test_start)
 from camkit.frames import eyes_from_config  # noqa: E402
+from camkit.link import StopRequested  # noqa: E402
+from camkit.live import TwoBoxes  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
-from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
-                    proofs_file, prover_session, scan_position)
+from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, add_scan_argument, changes_of, close_screen, load_scan,  # noqa: E402
+                    menu_from_shooting, proofs_file, prover_session, scan_position)
 
 # each screen's two boxes, measured off the frames: S&Q / Time-lapse Frame Rate Settings, and ISO AUTO's
 # Minimum / Maximum (ISO > ISO AUTO > Right, Movie mode, 2026-11-01)
@@ -43,6 +60,16 @@ RIGHTS = 1                       # Rights from the row to the boxes (ISO: one in
 CRUMB = (0, 0, 640, 40)
 FOOTER = (0, 425, 640, 480)
 LOOKALIKE = str.maketrans("рРоОкКсС", "pPoOkKcC")          # OCR's Cyrillic: "30р", "ОК"
+# a dash's ink in a box, at most (px, tall and wide): kit2_pass2 240050's is 3 x 7 in either box, a value's glyphs 34 tall
+DASH = (8, 30)
+NOT_OFFERED = "not offered in this state: its box draws a dash"
+
+
+class NotOffered(Exception):
+    """A box that draws a dash (dashed), seen on `frame`: not offered in this state."""
+    def __init__(self, frame: str):
+        super().__init__(f"the box draws a dash ({frame})")
+        self.frame = frame
 
 
 def lines(cam):
@@ -52,6 +79,21 @@ def lines(cam):
 
 def value(cam, b: int) -> str:
     return re.sub(r"\s+", "", ocr.text_in(lines(cam), BOXES[b]).translate(LOOKALIKE))
+
+
+def dashed(cam, b: int) -> bool:
+    """Whether box b draws a dash: OCR reads no letter or digit in it (the dash read as nothing, or as "-"), and its ink,
+    the pixels off the box's own colour (orange when lit, dark when not; its border left out), is there and no more than
+    a short flat stroke (DASH). A box drawn empty (a frame caught mid-draw) is none, nor one whose glyphs OCR missed."""
+    if re.search(r"[^\W_]", value(cam, b)):
+        return False
+    x0, y0, x1, y1 = BOXES[b]
+    box = np.asarray(cam.frame.image)[y0 + 5:y1 - 5, x0 + 5:x1 - 5].astype(int)
+    if box.size == 0:
+        return False
+    ink = np.abs(box - np.median(box.reshape(-1, box.shape[-1]), axis=0)).sum(axis=2) > 120
+    ys, xs = np.nonzero(ink)
+    return bool(len(ys) and ys.max() - ys.min() < DASH[0] and xs.max() - xs.min() < DASH[1])
 
 
 def focus(cam) -> int | None:
@@ -83,8 +125,15 @@ def to_box(cam, b: int):
 
 
 def look(cam, link, cycle, model, path, b: int) -> tuple[list, str]:
-    """(the box's values in Down order, the value held)."""
+    """(the box's values in Down order, the value held). A box that draws a dash once the screen is open (dashed) is
+    left with MENU, nothing pressed on it, and raises NotOffered. On a screen whose box is its setting (the module's
+    words), the look leaves the box where its walk ended: the held value on a box that comes round, as the Frame Rate
+    boxes do; each proof is compared with its base all the same."""
     open_row(cam, cycle, model, path)
+    if dashed(cam, b):
+        frame = cam.frame.path.name
+        close_screen(cam, link)
+        raise NotOffered(frame)
     to_box(cam, b)
     held = value(cam, b)
     for _ in range(40):                       # Up to one end (or once round)
@@ -105,7 +154,16 @@ def look(cam, link, cycle, model, path, b: int) -> tuple[list, str]:
     return vals, held
 
 
-def choose(cam, link, hdmi, cycle, model, path, b, vals, target) -> dict:
+def screen_consent(path, names) -> TwoBoxes:
+    """The consent for the one OK that leaves the row's own two-box screen (camkit.live.TwoBoxes), named for the row,
+    its two boxes and where they stand (BOXES)."""
+    return TwoBoxes(f"{path[-1]}'s own two-box screen: OK leaves it on the values its boxes show (boxes_run)", path[-1],
+                    tuple(names), tuple(tuple(b) for b in BOXES))
+
+
+def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
+    """The box stepped to vals[target] (the setting from then on), its OK under the screen's consent (screen_consent),
+    a settings download."""
     open_row(cam, cycle, model, path)
     to_box(cam, b)
     for _ in range(len(vals) + 1):
@@ -121,6 +179,7 @@ def choose(cam, link, hdmi, cycle, model, path, b, vals, target) -> dict:
     if safety.confirmation(full):
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)     # a second reader, kept with the proof
+    cam.answer_once = screen_consent(path, names)        # the OK that leaves, judged on the screen's shape (TwoBoxes)
     cam.press("enter")
     after_ok = cam.frame.path.name
     to_shooting(link, hdmi, "the download after OK")
@@ -157,26 +216,47 @@ def arguments(argv=None):
     return a, path, names, first
 
 
-def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out) -> Path:
+def not_offered(fails, path, name: str, frame: str) -> None:
+    """A box not offered in this state, said and written to the run's failures (`fails`) as prove_run writes a row the
+    camera would not open: "blocked" (camkit.coverage: greyed in state; pass2_report: a row the camera would not open,
+    until a later proof of it), its path the box's proofs' (the row's, then the box's name)."""
+    where = " > ".join([*path, name])
+    print(f"{where}: {NOT_OFFERED} ({frame})", flush=True)
+    if fails is not None:
+        fails.write(json.dumps({"path": [*path, name], "why": f"{where}: {NOT_OFFERED}", "blocked": NOT_OFFERED,
+                                "frame": frame, "boxes": True}) + "\n")
+        fails.flush()
+
+
+def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, fails=None) -> Path:
     """Each box's values proved, as the module says; with first (box, value), that value chosen in that box before
     them. Each proof is compared with its base: the start file, or the download made after first's choice, so the
-    held value (the last proof of each box) is a return to the base and must change nothing. Returns the base; the
-    caller puts the start file back, whatever first chose."""
+    held value (the last proof of each box) is a return to the base and must change nothing. A box not offered in this
+    state (NotOffered) is written to `fails` (not_offered) and the next box tried; first's box not offered, nothing
+    else is. Returns the base; the caller puts the start file back, whatever first chose."""
     base = start
     if first:
         fb = names.index(first[0])
-        vals, held = look(cam, link, cycle, model, path, fb)
+        try:
+            vals, held = look(cam, link, cycle, model, path, fb)
+        except NotOffered as e:
+            not_offered(fails, path, names[fb], e.frame)
+            return base
         want = [i for i, v in enumerate(vals) if option_key(v) == option_key(first[1])]
         if len(want) != 1:
             raise Failed(f"--first: {first[1]!r} is not one value of {names[fb]}: {vals}")
-        base = choose(cam, link, hdmi, cycle, model, path, fb, vals, want[0])["dat"]
+        base = choose(cam, link, hdmi, cycle, model, path, fb, vals, want[0], names)["dat"]
         print(f"first {names[fb]} = {vals[want[0]]} (it held {held!r}): proofs start from {base.name}", flush=True)
     for b in [b for b in range(2) if only in (None, names[b])]:
-        vals, held = look(cam, link, cycle, model, path, b)
+        try:
+            vals, held = look(cam, link, cycle, model, path, b)
+        except NotOffered as e:
+            not_offered(fails, path, names[b], e.frame)
+            continue
         print(f"{names[b]}: {vals}, held {held!r}", flush=True)
         h = vals.index(held)
         for i in [i for i in range(len(vals)) if i != h] + [h]:
-            got = choose(cam, link, hdmi, cycle, model, path, b, vals, i)
+            got = choose(cam, link, hdmi, cycle, model, path, b, vals, i, names)
             ch = camset.diff(camset.read(base), camset.read(got["dat"]))
             r = {"path": path + [names[b]], "kind": "list", "index": i, "label": vals[i],
                  "shown": vals[i], "vlm": got["vlm"], "chosen_frame": got["chosen_frame"],
@@ -192,6 +272,21 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out) -
     return base
 
 
+def failures_file(run, context: str | None):
+    """The run's failures.jsonl opened for appending, each line tagged with `context` as its proofs are."""
+    from proving.base import Tagged
+    return Tagged(open(run.dir / "failures.jsonl", "a", encoding="utf-8", newline="\n"), context)
+
+
+def stop_status(e) -> int:
+    """The exit status of a run whose body ended on `e` (None: it ended), its start file back and checked: 0 for none and
+    for a STOP; EXIT_REFUSED for a refusal (camkit.safety.Refused: a press the guards would not send), EXIT_INCOMPLETE
+    for anything else (a Failed step, a lost feed), as kit/crawl_run.py exits."""
+    if e is None or isinstance(e, StopRequested):
+        return 0
+    return EXIT_REFUSED if isinstance(e, safety.Refused) else EXIT_INCOMPLETE
+
+
 def main(argv=None):
     a, path, names, first = arguments(argv)
     global BOXES, RIGHTS
@@ -199,9 +294,21 @@ def main(argv=None):
     cycle, model = load_scan(a.scan)
     run = Run("kit2_pass2")
     hdmi = eyes_from_config(run)
-    # the session ends restoring the start file, not the base --first made
-    with proofs_file(run, a.context) as out, prover_session(run, hdmi) as s:
-        prove(s.cam, s.link, hdmi, cycle, model, path, names, a.only, first, s.start, out)
+    stopped = []
+    # the session ends restoring the start file, not the base --first made; it says a body's exception and raises it no
+    # further (runner.prover_session), so the exception is kept here and the exit status told from it once the restore
+    # has checked out (a restore that does not exits EXIT_UNRESTORED from the session itself)
+    with proofs_file(run, a.context) as out, failures_file(run, a.context) as fails, prover_session(run, hdmi) as s:
+        try:
+            prove(s.cam, s.link, hdmi, cycle, model, path, names, a.only, first, s.start, out, fails)
+        except Exception as e:
+            stopped.append(e)
+            raise
+    code = stop_status(stopped[0] if stopped else None)
+    if code:
+        print(f"the run was stopped by {'a refusal' if code == EXIT_REFUSED else 'a failure'}: its start file is back and "
+              f"checked, but the proofs after it were not made (exit status {code})", flush=True)
+        sys.exit(code)
 
 
 if __name__ == "__main__":

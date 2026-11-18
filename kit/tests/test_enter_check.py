@@ -1490,3 +1490,111 @@ def test_only_boxsize_run_gives_the_reset_consent_and_only_the_camera_names_the_
         if re.search(r"C4_BOX_EDITOR|[\"']boxeditor[\"']", text):
             assert rel in ("camkit/safety.py", "camkit/live.py"), rel
 
+
+# ---------------------------------------------------------------- a row's own two-box screen, its OK (2026-11-17)
+
+# S&Q Frame Rate Settings under XAVC HS 4K as OCR reads it (kit2_pass2 240079_down.png, HDMI): the breadcrumb, each box's
+# name above its box (its icon read as letters), the two values, the screen's own three lines under the boxes, and the
+# footer (the trash icon read as nothing, its help glyph's "?", OK)
+SQ_LINES = [("Shooting > Image Qua... > S&0 Frame Rate Settings", 0, 3, 516, 33), ("Sad Rec Frame Rate", 115, 65, 218, 28),
+            ("S&Q Frame Rate", 389, 67, 167, 28), ("24p", 191, 189, 53, 38), ("120fps", 424, 184, 98, 46),
+            ("x5 Slow Motion", 65, 317, 150, 21),
+            ("Shooting time required for 5-second movie recording.", 65, 349, 510, 28),
+            ("0 h 00 min 01 s", 67, 383, 146, 25), ("?", 509, 441, 16, 24), ("• OK", 563, 437, 62, 28)]
+# Time-lapse Frame Rate Settings (kit2_pass2 122685_down.png): its second box is Interval Time, its footer OK alone
+TL_LINES = [("Shooting > Image Qua... > Frame Rate Settings", 0, 1, 518, 36), ("t Rec Frame Rate", 127, 65, 206, 28),
+            ("ü Interval Time", 383, 65, 184, 30), ("30р", 191, 189, 56, 37), ("1 s", 455, 189, 40, 30),
+            ("Shooting time required for 5-second movie recording.", 65, 349, 510, 28),
+            ("0 h 02 min 30 s", 65, 381, 150, 26), ("OK", 583, 437, 44, 30)]
+FRAME_BOXES = ((100, 178, 339, 233), (356, 178, 595, 233))      # boxes_run.LAYOUTS["framerate"]
+BOXES_NAME = "Frame Rate Settings's own two-box screen: OK leaves it on the values its boxes show"
+
+
+def ocr_lines(rows) -> list:
+    return [ocr.Line(t, 1.0, x, y, w, h) for t, x, y, w, h in rows]
+
+
+def boxes_camera(tmp_path, monkeypatch, rows=SQ_LINES, kind="unknown", names=("Rec Frame Rate", "Frame Rate"),
+                 row="Frame Rate Settings"):
+    """A camera on a row's two-box screen (no known kind) whose OCR lines are `rows`, its Enter carrying that screen's
+    consent (TwoBoxes) for `row` and the boxes `names`."""
+    text = " ".join(r[0] for r in rows)
+    cam = camera(tmp_path, monkeypatch, kind, text, "", body=" ".join(r[0] for r in rows if r[2] + r[4] / 2 < 415))
+    monkeypatch.setattr(live, "boxes_lines", lambda c: ocr_lines(rows))
+    cam.answer_once = live.TwoBoxes(BOXES_NAME, row, tuple(names), FRAME_BOXES)
+    return cam
+
+
+def test_a_two_box_screens_ok_goes_by_its_consent_judged_on_the_screens_own_shape(tmp_path, monkeypatch):
+    """S&Q Frame Rate Settings reads as no known kind, so its OK was refused (kit2_pass2 240079, 2026-11-17): the row's
+    two-box consent (TwoBoxes) lets it go judged on the screen's own shape, the three lines under the boxes its own
+    explanation; logged with the consent's words and spent by its press. The Time-lapse screen, its second box Interval
+    Time and its footer OK alone, and readings that glue the icon on or lose the help glyph pass alike."""
+    cam = boxes_camera(tmp_path, monkeypatch)
+    cam.answer_once = None
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("enter")                                  # the guard as it stopped the run
+    cam = boxes_camera(tmp_path, monkeypatch)
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert [e["by"] for e in events(cam) if e["kind"] == "enter_passed"] == [BOXES_NAME]
+    assert cam.answer_once is None
+    glued = [("Shooting > Image Qua... > S&0Frame Rate Settings", *SQ_LINES[0][1:])] + SQ_LINES[1:8] + [SQ_LINES[9]]
+    for rows, names in ((TL_LINES, ("Rec Frame Rate", "Interval Time")), (glued, ("Rec Frame Rate", "Frame Rate"))):
+        cam = boxes_camera(tmp_path, monkeypatch, rows, names=names)
+        with pytest.raises(Sent):
+            cam.press("enter")
+
+
+def _with(rows, i, text):
+    return [*rows[:i], (text, *rows[i][1:]), *rows[i + 1:]]
+
+
+@pytest.mark.parametrize("rows,why", [
+    (_with(SQ_LINES, 6, "Shooting time required for 5-second movie recording?"), "question mark"),
+    (_with(SQ_LINES, 5, "x5 Slow Motion?"), "question mark"),
+    (_with(SQ_LINES, 6, "Delete all movies on the card"), "reads as a confirmation"),
+    (_with(SQ_LINES, 7, "Format the memory card"), "reads as a confirmation"),
+    (_with(SQ_LINES, 0, "Shooting > Image Qua... > S&Q Settings"), "does not end with Frame Rate Settings"),
+    (_with(SQ_LINES, 2, "S&Q Interval Time"), "is not Frame Rate"),
+    (_with(SQ_LINES, 1, ""), "is not Rec Frame Rate"),
+    (_with(SQ_LINES, 3, "-"), "reads no value"),
+    (_with(SQ_LINES, 9, "MENU Cancel • OK"), "'menu'"),
+    (_with(SQ_LINES, 9, "Execute"), "'execute'"),
+    (SQ_LINES[:9], "offers no OK"),
+    (SQ_LINES + [("Recording will begin", 200, 130, 240, 28)], "stands where its screen draws none")])
+def test_a_two_box_screens_consent_refuses_any_screen_not_shaped_as_that_rows(tmp_path, monkeypatch, rows, why):
+    """A question mark or a confirmation's word in the lines under the boxes (or anywhere above the footer), a title that
+    does not end with the row's name, a box whose name above it is another's or cannot be read, a box that reads no
+    value, a footer with any word but OK or with no OK, a line where the screen draws none: no OK."""
+    cam = boxes_camera(tmp_path, monkeypatch, rows)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("enter")
+
+
+def test_a_two_box_screens_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
+    """On a notice, a dialog or a list the two-box consent lifts nothing and the screen's lines are never read for it; the
+    trash button on the two-box screen meets the shape check as ever."""
+    read = []
+    for kind, text, lit, why in (("notice", NOT_AVAILABLE, "OK", "is a notice"),
+                                 ("dialog", "Delete this image? OK Cancel", "OK", "question mark"),
+                                 ("list", "", "", "nothing on the list screen")):
+        cam = camera(tmp_path, monkeypatch, kind, text, lit)
+        monkeypatch.setattr(live, "boxes_lines", lambda c: read.append(1) or ocr_lines(SQ_LINES))
+        cam.answer_once = live.TwoBoxes(BOXES_NAME, "Frame Rate Settings", ("Rec Frame Rate", "Frame Rate"), FRAME_BOXES)
+        with pytest.raises(safety.Refused, match=why):
+            cam.press("enter")
+    assert read == []
+    cam = boxes_camera(tmp_path, monkeypatch)
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("c4", allow=frozenset({"c4"}))
+
+
+def test_only_boxes_run_gives_the_two_box_consent():
+    """The two-box screen's consent is boxes_run's alone: no other program of the kit builds it."""
+    import re
+    kit = Path(__file__).resolve().parents[1]
+    for f in sorted(kit.rglob("*.py")):
+        if "tests" not in f.parts and re.search(r"\bTwoBoxes\(", f.read_text(encoding="utf-8")):
+            assert f.relative_to(kit).as_posix() in ("camkit/live.py", "provers/boxes_run.py"), f
+

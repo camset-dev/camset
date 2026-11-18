@@ -57,7 +57,8 @@ question, ("profile_reset", "PPn"), which goes only where the screen read afresh
 (profile_reset_passed); a consent named for one
 press on one named screen (answer_once: a prover's --allow for its own row's screen, drive.py's and card_actions.py's
 --confirm "SCREEN TEXT"), which lifts the shape and never the word list, or, for a row's own dialog drawn in its portrait
-arrangement held vertically (UprightDialog), judges that one Enter as a level dialog's on the frame read upright; on a
+arrangement held vertically (UprightDialog), judges that one Enter as a level dialog's on the frame read upright, and for
+a Custom box's size editor (BoxEditor, BoxReset) or a row's two-box screen (TwoBoxes), on that screen's own shape; on a
 notice, the run's --info-ok (press's
 notice_ok, after proving.screens.pass_named_notice's judgement) or a refused MENU on that very screen just before
 (menu_refused, leave_notice, whose OK goes on that notice alone: require_notice), each only where the notice's lit
@@ -342,6 +343,80 @@ class BoxReset:
     it refuses). It answers no other key nor any other kind of screen, and is spent by its press."""
     name: str           # the consent's words, logged with the press
     box: str            # the box whose editor it is ("Custom 1"): the editor's title must be that box's
+
+
+@dataclass(frozen=True)
+class TwoBoxes:
+    """A prover's consent for one Enter on its row's own two-box screen, the OK that leaves it: S&Q and Time-lapse Frame
+    Rate Settings (Movie mode) read as no known kind, whose Enter the shape check refuses (kit2_pass2 240079, XAVC HS
+    4K, 2026-11-17; the proofs before 2026-11-14 pressed it unguarded). The value a box shows is already the setting:
+    stepped to 24p and left with MENU, the box's row read "Recording Frame Rate: 24p" (240080) and the download after
+    held it (240083), so the OK only leaves. Given through answer_once by kit/provers/boxes_run.py alone, once it has
+    stepped its box to the value it proves; judged here (confirm_refused: boxes_passed) on the frame judged, by the
+    screen's own shape (two_boxes_refused): its title ends with the row's name, each box's name stands above that box,
+    each box reads a value, no question mark above the footer, no line where the screen draws none (the lines under the
+    boxes are its own explanation), the footer OK and no other word; then the confirmation words on what stands above
+    the footer, which every consent keeps. It answers no other kind of screen, nor the trash button, and is spent by its
+    press. Chosen over teaching camkit.screen a two-box kind: that kind would be trusted by every guard on every screen
+    of its shape, from any caller, where this lifts one Enter on one named row's screen."""
+    name: str           # the consent's words, logged with the press
+    row: str            # the row whose screen it is: the breadcrumb must end with that row's name
+    boxes: tuple        # the two boxes' names, left first, as the screen draws them above the boxes
+    at: tuple           # the two boxes' places (x0, y0, x1, y1), as the prover measured them (boxes_run.LAYOUTS)
+
+
+# a two-box screen's breadcrumb; where a box's name stands, measured from the box (kit2_pass2 240079: "Rec Frame Rate"
+# 65-93 px down above the box at 178, the name a little wider than the box at either side)
+BOXES_TITLE = (0, 0, 640, 40)
+NAME_ABOVE = (20, 125, 70)          # px: beyond the box's sides; from its top up to the name's band, its top and bottom
+
+
+def boxes_lines(cam) -> list:
+    """The OCR lines of a row's two-box screen on the frame judged (TwoBoxes)."""
+    f = cam.frame
+    return ocr.read([f.path])[f.path]
+
+
+def _compact(t) -> str:
+    return re.sub(r"[^a-z0-9]", "", safety.fold(str(t or "")).lower())
+
+
+def two_boxes_refused(consent: TwoBoxes, lines) -> str:
+    """Why a screen whose OCR lines are `lines` is not `consent.row`'s own two-box screen, shaped as it is (TwoBoxes), or
+    "" when it is: its breadcrumb ends with the row's name and each box's name stands above that box (compared without
+    spaces or punctuation, so an icon OCR reads as letters before it, "Sad Rec Frame Rate", or glued on, stays the name);
+    each box reads a letter or a digit; no question mark above the footer; every line above the footer stands on the
+    breadcrumb, a box's name, a box, or under the boxes (the screen's own lines: "x5 Slow Motion", "Shooting time
+    required for 5-second movie recording."), a lone glyph (an arrow) anywhere; in the footer OK, and no other word
+    (its trash icon and help glyph read as nothing, a letter, or "?"). Fail closed: a screen OCR reads otherwise stops
+    the run before its OK."""
+    def text_at(box):
+        return ocr.text_in(lines, box).strip()
+    title = text_at(BOXES_TITLE)
+    if not _compact(consent.row) or not _compact(title).endswith(_compact(consent.row)):
+        return f"its title ({title[:60]!r}) does not end with {consent.row}"
+    places = [BOXES_TITLE]
+    side, up, down = NAME_ABOVE
+    for name, (x0, y0, x1, y1) in zip(consent.boxes, consent.at, strict=True):
+        above = (x0 - side, y0 - up, x1 + side, y0 - down)
+        said = text_at(above)
+        if not _compact(name) or not _compact(said).endswith(_compact(name)):
+            return f"the name above a box ({said[:40]!r}) is not {name}"
+        if not re.search(r"[^\W_]", text_at((x0, y0, x1, y1))):
+            return f"its box {name} reads no value"
+        places += [above, (x0, y0, x1, y1)]
+    places.append((0, max(b[3] for b in consent.at), 640, FOOTER_TOP))
+    if safety.question_mark(text_at((0, 0, 640, FOOTER_TOP))):
+        return "it holds a question mark above its footer"
+    for ln in lines:
+        if ln.y + ln.h / 2 < FOOTER_TOP and not any(ln.inside(p) for p in places) \
+                and len(re.findall(r"[^\W\d_]", ln.text)) > 1:
+            return f"a line ({ln.text.strip()[:40]!r}) stands where its screen draws none"
+    words = re.findall(r"[a-z]{2,}", safety.fold(text_at((0, FOOTER_TOP, 640, 480))).lower())
+    others = [w for w in words if w != "ok"]
+    if others:
+        return f"its footer reads {others[0]!r}, not its OK alone"
+    return "" if "ok" in words else "its footer offers no OK"
 
 
 # the size editor's title, top left above the box (kit2_freesize's 00394_c4.png); its footer's words, a key's word cut
@@ -964,7 +1039,9 @@ class LiveCamera:
           kind alone: that one Enter judged as a level dialog's on the frame read upright (upright_passed), and on any
           other screen or key it answers nothing; a BoxEditor likewise, that one Enter (a Custom box's size editor's
           OK) judged on the editor's own shape and the words above its footer (editor_passed); a BoxReset, that one C4
-          (the editor's Reset) judged so, the link then handed decision 7's size editor kind (reset_passed);
+          (the editor's Reset) judged so, the link then handed decision 7's size editor kind (reset_passed); a TwoBoxes,
+          that one Enter (the OK that leaves a row's two-box screen) judged on that screen's own shape and the words
+          above its footer (boxes_passed);
         - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
           `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
           only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
@@ -996,10 +1073,11 @@ class LiveCamera:
         passed, lone = "", None
         if safety.first_time_screen(kind, text):
             kind = "notice"         # a first-time screen (no notice's frame lines, a "Don't show this again." box)
-        if isinstance(answer, UprightDialog | BoxEditor):
-            consent, answer = answer, None      # a portrait dialog's, or a size editor's, consent answers it alone
-            if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:
-                passed_by = self.upright_passed if isinstance(consent, UprightDialog) else self.editor_passed
+        if isinstance(answer, UprightDialog | BoxEditor | TwoBoxes):
+            consent, answer = answer, None      # a portrait dialog's, a size editor's or a two-box screen's consent
+            if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:      # answers it alone
+                passed_by = self.upright_passed if isinstance(consent, UprightDialog) else \
+                    self.editor_passed if isinstance(consent, BoxEditor) else self.boxes_passed
                 return passed_by(key, consent, judged_at)
         if isinstance(answer, BoxReset):
             consent, answer = answer, None      # a size editor's Reset consent answers its C4 alone
@@ -1062,6 +1140,23 @@ class LiveCamera:
         the link decision 7's size editor kind for this C4 alone (box_reset_judged). Returns judged_at."""
         self.editor_passed(key, consent, judged_at)
         self.box_reset_judged = True
+        return judged_at
+
+    def boxes_passed(self, key: str, consent: TwoBoxes, judged_at: int) -> int:
+        """An Enter on a screen of no known kind under a row's two-box consent (TwoBoxes): the frame judged
+        (look_before's) read (boxes_lines) and judged by that screen's own shape (two_boxes_refused), then by the
+        confirmation words on what stands above its footer, which every consent keeps. Refused, logged, on any of them,
+        or where the reading fails; passed, logged with the consent's words. Returns judged_at."""
+        try:
+            lines = boxes_lines(self)
+        except Exception as e:
+            self.refuse(key, f"{consent.name}: the screen cannot be read ({type(e).__name__}), so whether it asks cannot "
+                             "be told")
+        why = two_boxes_refused(consent, lines)
+        said = "" if why else safety.confirmation_refused(ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)))
+        if why or said:
+            self.refuse(key, f"{consent.name}: {why or f'it reads as a confirmation ({said})'}: no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
         return judged_at
 
     def editor_passed(self, key: str, consent: BoxEditor | BoxReset, judged_at: int) -> int:

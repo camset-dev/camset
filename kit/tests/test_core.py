@@ -1463,7 +1463,7 @@ def _box_camera(monkeypatch, boxes):
     def look(cam, link, cycle, model, path, b):
         return list(boxes[b][0]), held[b]
 
-    def choose(cam, link, hdmi, cycle, model, path, b, vals, target):
+    def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names):
         held[b] = vals[target]
         dat = _Dat(f"{len(downloads) + 2:05d}_{b}_{target}.DAT", dict(held))
         downloads.append(dat)
