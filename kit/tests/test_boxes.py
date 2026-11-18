@@ -133,6 +133,56 @@ def test_the_row_screens_consent_passes_the_hs_4k_screen_and_choose_hands_it_bef
     assert handed == [("enter", consent)] and got["chosen_frame"] == "00079_down.png"
 
 
+# Time-lapse Frame Rate Settings as OCR read it on kit2_pass2 240575_right.png (2026-11-18), the row opened again after
+# its first proof: the footer's "● OK" drawn as ever, read not at all, its "?" alone; the run stopped there ("Right on
+# 'Frame Rate Settings' did not open its boxes (breadcrumb ..., footer '?')", exit 8)
+TL_575_LINES = [("Shooting > Image Qua... > Frame Rate Settings", 0, 3, 514, 36), ("t Rec Frame Rate", 127, 65, 205, 28),
+                ("tInterval Time", 381, 67, 185, 28), ("24p", 191, 189, 53, 38), ("1 s", 455, 189, 40, 30),
+                ("Shooting time required for 5-second movie recording.", 65, 349, 510, 28),
+                ("0 h 02 min 00 s", 67, 383, 146, 24), ("?", 509, 441, 13, 26)]
+TL_PATH = ["Time-lapse Settings", "Frame Rate Settings"]
+
+
+def opened(monkeypatch, rows, picture, name="240575_right.png"):
+    """boxes_run.open_row over a made-up camera whose screen, once Right is pressed, reads `rows` and draws `picture`:
+    the menu, the scan's route and the submenu's Enter made up (nothing reached)."""
+    from test_enter_check import ocr_lines
+    cam = SimpleNamespace(frame=SimpleNamespace(image=picture, path=Path(name)), presses=[], lines=ocr_lines(rows))
+    cam.press = lambda key, **k: cam.presses.append(key)
+    monkeypatch.setattr(boxes_run, "lines", lambda c: c.lines)
+    monkeypatch.setattr(boxes_run, "menu_from_shooting", lambda c: None)
+    monkeypatch.setattr(boxes_run, "scan_position", lambda c, cycle: 0)
+    monkeypatch.setattr(boxes_run, "go_to", lambda *a: True)
+    monkeypatch.setattr(boxes_run, "enter_any", lambda c, path, i: None)
+    boxes_run.open_row(cam, [], {}, TL_PATH)
+    return cam
+
+
+def test_the_boxes_opened_is_judged_by_the_ok_key_drawn_not_by_ocr_finding_it(monkeypatch):
+    """240575: Right opened the Time-lapse boxes, their footer's "● OK" drawn as on every frame, and OCR read its "?"
+    alone, so the run took the screen for not opened and stopped. open_row judges the footer's OK as drawn
+    (camkit.screen.footer_keys, as the consent judges it), so that reading opens; ISO AUTO's two boxes, whose footer
+    draws MENU Cancel beside its OK (kit2_pass2 206963), open as ever."""
+    from test_enter_check import footer_picture
+    cam = opened(monkeypatch, TL_575_LINES, footer_picture())
+    assert cam.presses == ["right"]
+    iso = footer_picture(stray=(389, 440, 500, 465))           # "MENU Cancel" beside the OK, as ISO AUTO's footer
+    opened(monkeypatch, TL_575_LINES, iso)
+
+
+@pytest.mark.parametrize("rows,keys,why", [
+    (TL_575_LINES[:7] + [("? • OK", 509, 441, 120, 26)], ("help_only",), "no OK key drawn"),
+    (TL_575_LINES, (), "no OK key drawn"),
+    ([("Shooting > Image Qua... > Time-lapse Settings", 0, 3, 514, 36)] + TL_575_LINES[1:], ("help_only", "ok_key"),
+     "did not open its boxes")])
+def test_a_screen_whose_footer_draws_no_ok_or_whose_title_is_another_is_not_the_boxes(monkeypatch, rows, keys, why):
+    """No OK key drawn in the footer (OCR reading "• OK" there or not), or a breadcrumb that is not the row's: the boxes
+    did not open, and the row stops before anything but Right is pressed."""
+    from test_enter_check import footer_picture
+    with pytest.raises(boxes_run.Failed, match=why):
+        opened(monkeypatch, rows, footer_picture(keys=keys))
+
+
 class Lines(list):
     def write(self, line):
         self.append(json.loads(line))

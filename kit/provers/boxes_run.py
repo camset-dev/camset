@@ -7,7 +7,8 @@ box's values, OK leaves (S&Q and Time-lapse Frame Rate Settings, Movie mode, 202
         --row ISO --boxes "ISO AUTO Minimum,ISO AUTO Maximum" --layout iso --rights 2   # ISO AUTO in use
 
 The pixel reader does not know these screens, so this reads them by OCR: the breadcrumb must end in
-the row's label and the footer must offer OK before anything but an arrow is pressed. The box under
+the row's label, and the footer must draw its OK key (camkit.screen.footer_keys, by pixels: OCR drops it
+as often as not) before anything but an arrow is pressed. The box under
 the cursor is the orange one; each box's value is the text inside it. The box names are given on the
 command line, as read off the camera's frame (OCR reads their icons as letters: "sad Rec Frame Rate").
 First a look per box: Up until the value stops changing or comes round, then Down the same way (its
@@ -40,7 +41,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, match, ocr, safety, screen  # noqa: E402
+from camkit import camset, ocr, safety, screen  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which installs the plain words: test_start)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
@@ -103,6 +104,10 @@ def focus(cam) -> int | None:
 
 
 def open_row(cam, cycle, model, path):
+    """From the shooting screen: MENU, the row by the scan, Right (RIGHTS times); the boxes opened where the breadcrumb
+    holds the row's label, a box is lit and the footer draws its OK key (camkit.screen.footer_keys, by pixels, as the
+    screen's consent judges it: OCR read "● OK" on one frame and missed it on the next, kit2_pass2 240268 and 240575,
+    2026-11-18, the footer the same pixel for pixel); else Failed, nothing but Right pressed."""
     menu_from_shooting(cam)              # MENU, once more if it went unanswered after a download
     j = scan_position(cam, cycle)
     if j is None or go_to(cam, cycle, model, j, path[0]) is None:
@@ -112,8 +117,11 @@ def open_row(cam, cycle, model, path):
         cam.press("right")
     crumb = ocr.text_in(lines(cam), CRUMB)
     foot = ocr.text_in(lines(cam), FOOTER).translate(LOOKALIKE)
-    if option_key(path[-1]) not in option_key(crumb) or not match.offers_ok(foot) or focus(cam) is None:
+    if option_key(path[-1]) not in option_key(crumb) or focus(cam) is None:
         raise Failed(f"Right on {path[-1]!r} did not open its boxes (breadcrumb {crumb!r}, footer {foot!r})")
+    if "ok_key" not in screen.footer_keys(cam.frame.image):
+        raise Failed(f"Right on {path[-1]!r} did not open its boxes: no OK key drawn in the footer ({cam.frame.path.name}; "
+                     f"OCR read the footer {foot!r})")
 
 
 def to_box(cam, b: int):
