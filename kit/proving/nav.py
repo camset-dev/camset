@@ -32,9 +32,24 @@ CYCLE: list = []                 # the page scan's Down cycle and page model, fo
 MODEL: dict = {}
 
 
-def find_row(cam, label) -> bool:
+def find_row(cam, label, at=None) -> bool:
     """Down to the submenu row labelled `label`. Submenus wrap: if one lap finds no match, go to the
-    closest reading when it is clearly closer than every other row's, and remember it."""
+    closest reading when it is clearly closer than every other row's, and remember it. With `at`, the row's
+    place as this run saw it (to_row's row_place): Down until the cursor is at that place (place: the page's
+    picture and the cursor's row, no OCR), the label read there once; a place that does not read as the label
+    (a submenu that scrolls keeps its page and cursor row), or never comes, is walked by label from where the
+    cursor is. A reading a row cost 0.22 s (the speed review of 2026-11-18). Every Down is read and judged as
+    ever, and the Right after it checks the live bar against the never-open list."""
+    if at is not None and cam.read().kind == "submenu":
+        first = cam.read()
+        for _ in range(20):
+            if same_place(place(cam), at):
+                if at_label(cam, "submenu", label):
+                    return True
+                break
+            cam.press("down")
+            if same_state(cam.read(), first):
+                break
     first = cam.read()
     texts = []
     for _ in range(20):
@@ -56,13 +71,14 @@ def find_row(cam, label) -> bool:
     return True
 
 
-def enter_path(cam, path, start: int):
-    """From path[start]'s row on screen, Right into each submenu and Down to the next label."""
-    for label in path[start + 1:]:
+def enter_path(cam, path, start: int, at=None):
+    """From path[start]'s row on screen, Right into each submenu and Down to the next label; the last by its place
+    `at` where this run knows it (find_row)."""
+    for k, label in enumerate(path[start + 1:], start + 1):
         cam.press("right")
         if cam.read().kind != "submenu":
             raise Failed(f"Right on {path[start]!r} opened {cam.read().kind}, not its submenu")
-        if not find_row(cam, label):
+        if not find_row(cam, label, at=at if k == len(path) - 1 else None):
             raise Failed(f"no row {label!r} in the submenu")
 
 
@@ -111,7 +127,7 @@ def to_row(cam, path, top=None, row_place=None):
     if same_place(here, row_place):
         return
     if same_place(here, top):
-        enter_any(cam, path, 0)
+        enter_any(cam, path, 0, at=row_place)
         return
     i = where_in(cam, path)
     if i is None:
@@ -122,7 +138,7 @@ def to_row(cam, path, top=None, row_place=None):
         if j is None or go_to(cam, CYCLE, MODEL, j, path[0]) is None:
             raise Failed(f"MENU reopened on a screen that is not on the way to {' > '.join(path)}")
         i = 0
-    enter_any(cam, path, i)
+    enter_any(cam, path, i, at=row_place)
 
 
 def move_to(cam, cur: int, k: int, n: int, kind: str = "list"):
@@ -139,9 +155,10 @@ def cancel(cam, link):
     cam.cancel_to_menu()
 
 
-def enter_pp(cam, path):
+def enter_pp(cam, path, at=None):
     """From the Picture Profile row: Right into the carousel, Down to PP1, Right into its panel (this
-    commits PP1 as the Picture Profile), then into submenus and down to the row."""
+    commits PP1 as the Picture Profile), then into submenus and down to the row (by its place `at` where this run
+    knows it: find_row)."""
     if cam.read().kind != "menu" or not at_label(cam, "menu", path[0]):
         raise Failed(f"not on the Picture Profile row ({cam.read().kind}, {cam.frame.path.name})")
     cam.press("right")
@@ -159,7 +176,7 @@ def enter_pp(cam, path):
     if cam.read().kind != "submenu":
         raise Failed(f"Right on {path[1]} opened {cam.read().kind}, not its panel")
     for k, label in enumerate(path[2:]):
-        if not find_row(cam, label):
+        if not find_row(cam, label, at=at if k == len(path) - 3 else None):
             raise Failed(f"no row {label!r} in {' > '.join(path[:2 + k])}")
         if k < len(path) - 3:
             cam.press("right")
@@ -167,11 +184,13 @@ def enter_pp(cam, path):
                 raise Failed(f"Right on {label!r} opened {cam.read().kind}, not its submenu")
 
 
-def enter_any(cam, path, start: int):
+def enter_any(cam, path, start: int, at=None):
+    """From path[start]'s row on screen down to the path's last row (enter_path, or enter_pp for a PP's panel), that
+    row by its place `at` where this run knows it (to_row's row_place)."""
     if path[0] == "Picture Profile" and len(path) > 2 and re.fullmatch(r"PP\d+", path[1]) and start == 0:
-        enter_pp(cam, path)
+        enter_pp(cam, path, at=at)
     else:
-        enter_path(cam, path, start)
+        enter_path(cam, path, start, at=at)
 
 
 LEAVE_S = 3.0           # s leave_playback looks for the shooting screen after its one press

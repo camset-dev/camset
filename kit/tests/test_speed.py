@@ -214,3 +214,77 @@ def test_the_evidence_reading_that_fails_is_kept_empty_and_a_network_rows_is_kep
     lines, _ = prove_two(tmp_path, monkeypatch, lambda cam: "Off DIRECT-madeup", job=job)
     assert [p["vlm"] for p in lines] == [P.kept_option("Off DIRECT-madeup", ["On", "Off"])] * 2
     assert "DIRECT" not in str(lines)
+
+
+# ---------------------------------------------------------------- C: back to a submenu row by its place
+
+
+class Submenu:
+    """A made-up submenu of `labels` that comes round, the cursor on `at`; the camera at the row a proof's MENU left it
+    on (the submenu's own row on the page above, with Right opening the submenu on its first row). Each press is read
+    as LiveCamera reads it; `bars` counts the bar readings (OCR) and `pressed` the keys with the bar each went on."""
+    def __init__(self, labels, at=0):
+        self.labels, self.at, self.bars, self.pressed = list(labels), at, 0, []
+
+    def read(self):
+        return SimpleNamespace(kind="submenu", row=self.at % 6, page=self.at // 6)
+
+    def press(self, key, **kw):
+        self.pressed.append((key, self.labels[self.at]))
+        if key == "down":
+            self.at = (self.at + 1) % len(self.labels)
+
+
+@pytest.fixture
+def submenu(monkeypatch):
+    from proving import nav
+
+    def bar_text(cam):
+        cam.bars += 1
+        return cam.labels[cam.at]
+    monkeypatch.setattr(nav, "bar_text", bar_text)
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: cam.read().kind == kind and bar_text(cam) == label)
+    monkeypatch.setattr(nav, "place", lambda cam: ("submenu", cam.at // 6, cam.at % 6))
+    monkeypatch.setattr(nav, "same_place", lambda a, b: a == b)
+    monkeypatch.setattr(nav, "same_state", lambda a, b: a.row == b.row and a.page == b.page)
+    return nav
+
+
+LABELS = ["Black Level", "Gamma", "Black Gamma", "Knee", "Color Mode", "Saturation", "Color Phase", "Color Depth",
+          "Detail", "Copy", "Reset"]
+
+
+def test_back_at_a_submenu_row_whose_place_is_known_the_label_is_read_once(submenu):
+    """find_row with the row's place from this run (to_row's row_place): Down by place, no reading at each row, the
+    label read once there, before the Right that follows (whose never-open check reads the live bar, as ever). Without
+    a place, two readings a row (the check and the lap's), as before; the same Downs either way."""
+    nav = submenu
+    cam = Submenu(LABELS)
+    assert nav.find_row(cam, "Color Depth") is True and cam.at == 7 and cam.bars == 15
+    by_label = list(cam.pressed)
+    cam = Submenu(LABELS)
+    assert nav.find_row(cam, "Color Depth", at=("submenu", 1, 1)) is True and cam.at == 7 and cam.bars == 1
+    assert cam.pressed == by_label
+
+
+def test_a_known_place_that_does_not_read_as_the_row_falls_back_to_the_walk_by_label(submenu):
+    """The place found but its bar reading another row (a submenu that scrolls keeps its page and cursor row): the walk
+    by label goes on from there, a reading a row, and finds the row; a place never reached is walked by label too."""
+    nav = submenu
+    cam = Submenu(LABELS)
+    assert nav.find_row(cam, "Color Depth", at=("submenu", 0, 3)) is True and cam.at == 7
+    cam = Submenu(LABELS)
+    assert nav.find_row(cam, "Copy", at=("submenu", 5, 0)) is True and cam.at == 9
+
+
+def test_to_row_gives_the_rows_place_to_the_last_step_alone(monkeypatch):
+    """to_row's walk back from the top-level row: Right into each submenu, the rows above found by label, the proved row
+    by its place (enter_path, enter_pp)."""
+    from proving import nav
+    found = []
+    monkeypatch.setattr(nav, "find_row", lambda cam, label, at=None: found.append((label, at)) or True)
+    cam = SimpleNamespace(press=lambda key: None, read=lambda: SimpleNamespace(kind="submenu"))
+    nav.enter_path(cam, ["Shooting", "Silent Mode Settings", "Target Function Settings", "Aperture Drive in AF"], 0,
+                   at="the place")
+    assert found == [("Silent Mode Settings", None), ("Target Function Settings", None),
+                     ("Aperture Drive in AF", "the place")]
