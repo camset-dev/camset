@@ -125,6 +125,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`kit/provers/optboxes_run.py` proves a list option that draws its own row of boxes,** such as Zebra Level's Custom
+  1 and Custom 2: `--probe` walks each box to its ends and chooses nothing, then the proof run keeps a few values of each
+  box with OK and puts the start file back.
 - **HDMI eyes take a dongle that offers another size than the crop was measured on:** put its mode under `"capture"`
   in `private/config.json`'s `"hdmi"` and the kit scales the crop to it. A mode the dongle refuses is now said in plain
   words, with the modes it offers.

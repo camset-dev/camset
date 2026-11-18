@@ -264,6 +264,7 @@ shown (section 1, rule 2).
 | Scales (a number between − and +), panel sliders | `kit/provers/scale_run.py --row ...` (`--panel-row`) |
 | Exposure Comp., Flash Comp. | `kit/provers/sdk_run.py --property ExposureBiasCompensation --row "Exposure Comp." --values missing` |
 | Two-box screens (S&Q, Time-lapse frame rates) | `kit/provers/boxes_run.py --row ... --boxes "Left name,Right name"` |
+| A list option that draws its own boxes (Zebra Level > Custom 1, Custom 2) | `kit/provers/optboxes_run.py --row "Zebra Level" --option "Custom 1" --probe`, then without `--probe` (HDMI eyes: its number boxes step fast, and one screen stalls the link over OSD) |
 | Turned dialogs (camera held vertically) | `kit/provers/orient_run.py --grip down` (or `up`) |
 | Checkbox grids (Focus Area Limit) | `kit/provers/grid_run.py [--row ROW]` |
 | Shoot Mode set with the menu | `kit/provers/shootmode_run.py --start FILE` |
