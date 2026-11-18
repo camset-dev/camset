@@ -95,7 +95,7 @@ from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import lit_text, LiveCamera, reader_label, submenu_labels, text_of  # noqa: E402
+from camkit.live import lit_text, LiveCamera, PageLabels, reader_label, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import wait_for  # noqa: E402
@@ -932,7 +932,7 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
         try:
             # a Wi-Fi or Bluetooth setting that answers Right with a notice keeps the notice's text where it is one the
             # kit knows and names no identity (camkit.crawl, safety.notice_kept)
-            out = crawl(cam, cycle[j:] + cycle[:j], model, max_rows=limit, on_row=on_row, labels=submenu_labels,
+            out = crawl(cam, cycle[j:] + cycle[:j], model, max_rows=limit, on_row=on_row, labels=PageLabels(),
                         **({"tabs": tabs} if tabs else {}),
                         panels=panels, network=network,
                         notices=(text_of, known_labels(model), row_values(model)) if network or look else None,

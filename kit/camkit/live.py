@@ -1681,17 +1681,26 @@ def submenu_labels(cam, vlm_timeout: float = 25.0):
     vlm_timeout) both read the page; a row is never-open if EITHER reading flags it, and its label
     is the VLM's when there is one (OCR reads row icons as letters). A row neither could read gets
     an empty label and is not opened."""
+    return _submenu_labels(cam, vlm_timeout)[:2]
+
+
+def submenu_texts(lines, s) -> list:
+    """The visible rows of the submenu page `s` as OCR read them (`lines`): each row's name, its value column left out."""
+    return [ocr.text_in(lines, (55, top, 470, bottom)).strip() for top, bottom in s.rows[:s.count or 0]]
+
+
+def _submenu_labels(cam, vlm_timeout: float):
+    """submenu_labels' (page key, rows), and whether the reader answered."""
     f, s = cam.frame, cam.read()
     key = screen.rows_key(f.image)          # not just the page: scrolled lists keep their breadcrumb
     lines = ocr.read([f.path])[f.path]
     n = s.count or 0
-    texts = []
-    for top, bottom in s.rows[:n]:
-        texts.append(ocr.text_in(lines, (55, top, 470, bottom)).strip())
-    vlm_labels = []
+    texts = submenu_texts(lines, s)
+    vlm_labels, answered = [], False
     try:
         answer = ask_role("second", f.path.read_bytes(), PROMPTS["menu"], vlm_timeout)
         vlm_labels = [str(r.get("label") or "") for r in (answer.get("rows") or []) if isinstance(r, dict)]
+        answered = True
     except Exception as e:
         # OCR alone; never-open is still checked on it, with its usual slips undone (safety.never_open)
         cam.run.log("reader_failed", frame=f.path.name, why=scrub(f"{type(e).__name__}: {e}"[:300]))
@@ -1702,7 +1711,41 @@ def submenu_labels(cam, vlm_timeout: float = 25.0):
         why = next((w for w in (safety.never_open(t) for t in readings) if w), None)
         label = (vlm_labels[i] if i < len(vlm_labels) and vlm_labels[i] else (texts[i] if i < len(texts) else ""))
         rows.append({"label": label, "never_open": why, "readings": readings})
-    return key, rows
+    return key, rows, answered
+
+
+class PageLabels:
+    """submenu_labels with each view of a submenu page read once: crawl_run's label reader, which camkit.crawl asks at
+    every submenu row. A view is the page (screen.page_key) and its visible rows as OCR reads them on the frame, so the
+    cursor's bar moving down the page keeps the view, while a page that scrolls instead of paging (Recog. Target) is a
+    new view at each scroll; the reader (about 2.5 s a call) is asked once per view, OCR on every frame as before. A
+    reading the reader did not answer is not kept (the next row asks again), nor is a view where OCR read a row as
+    nothing (two views could share that key). Before 2026-11-18 the reader was asked at every row: the crawl's cache,
+    keyed by screen.rows_key, was looked up only after the reading, and that key changes with the cursor (108 of 119
+    submenu Downs, kit2_breadth_crawl). Each call is logged ("page_labels": frame, hit, calls, hits). What is checked
+    at the press is not this: the never-open check at Right reads the live bar."""
+
+    def __init__(self, vlm_timeout: float = 25.0):
+        self.vlm_timeout, self.views, self.calls, self.hits = vlm_timeout, {}, 0, 0
+
+    def __call__(self, cam):
+        f, s = cam.frame, cam.read()
+        texts = submenu_texts(ocr.read([f.path])[f.path], s)
+        view = (screen.page_key(f.image), tuple(texts)) if texts and all(texts) else None
+        got = self.views.get(view) if view is not None else None
+        hit = got is not None
+        if hit:
+            self.hits += 1
+        else:
+            self.calls += 1
+            key, rows, answered = _submenu_labels(cam, self.vlm_timeout)
+            got = (key, rows)
+            if view is not None and answered:
+                self.views[view] = got
+        log = getattr(getattr(cam, "run", None), "log", None)
+        if log:
+            log("page_labels", frame=f.path.name, hit=hit, calls=self.calls, hits=self.hits)
+        return got
 
 
 # The three below were card_actions.py's (now in kit/tools/) until 2026-11-04, when the scripts were grouped into
