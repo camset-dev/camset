@@ -298,11 +298,96 @@ def capture_input(device: str, size, fps) -> list[str]:
     return ["-f", "v4l2", "-framerate", str(fps), "-video_size", f"{w}x{h}", "-i", node]
 
 
+def scaled_crop(crop, size, capture) -> tuple:
+    """The calibrated crop (x, y, width, height, measured on frames of `size`) on frames of `capture`, each number scaled
+    by capture/size and rounded: 1080p's (150, 0, 1620, 1080) is (300, 0, 3240, 2160) at 2160p. A capture of another
+    shape than the calibration's is refused (ValueError, in plain words): the crop cannot be scaled onto it."""
+    (cw, ch), (sw, sh) = (int(v) for v in capture), (int(v) for v in size)
+    if abs(cw * sh - ch * sw) > max(cw, sw):          # a pixel's rounding aside, the same shape
+        raise ValueError(f"the dongle's capture size {cw}x{ch} is not the shape of {sw}x{sh}, the size the crop was "
+                         "measured on, so the crop cannot be scaled onto it: ask the dongle for a mode of that shape "
+                         "(\"capture\" in private/config.json's \"hdmi\"), or measure the crop again on the capture size")
+    fx, fy = cw / sw, ch / sh
+    x, y, w, h = crop
+    return round(x * fx), round(y * fy), round(w * fx), round(h * fy)
+
+
+def hdmi_settings(c: dict) -> dict:
+    """The dongle's settings from private/config.json's "hdmi" (`c`): "size", "fps" and "crop" are the calibration's
+    (the frames the crop was measured on); "capture" ({"size": [W, H], "fps": F}, optional) is the mode asked of the
+    dongle, its fps the calibration's when not given; absent, the dongle is asked for the calibration's size and fps,
+    as before. A "capture" with no size of two positive whole numbers, or no positive fps, is refused in plain words."""
+    out = {"device": c["device"], "size": tuple(c["size"]), "fps": c["fps"],
+           "crop": tuple(c["crop"]) if c.get("crop") else None, "capture": None}
+    cap = c.get("capture")
+    if cap is None:
+        return out
+    size, fps = (cap.get("size"), cap.get("fps", c["fps"])) if isinstance(cap, dict) else (None, None)
+    good = (isinstance(size, list) and len(size) == 2 and all(isinstance(v, int) and v > 0 for v in size)
+            and isinstance(fps, (int, float)) and not isinstance(fps, bool) and fps > 0)
+    if not good:
+        raise ValueError(f"private/config.json's \"hdmi\" \"capture\" is {cap!r}: it takes {{\"size\": [width, height], "
+                         "\"fps\": rate}, the mode the dongle offers, such as {\"size\": [3840, 2160], \"fps\": 29.97}")
+    out["capture"] = (tuple(size), fps)
+    return out
+
+
+def hdmi_command(device: str, size, fps, crop, capture=None) -> tuple:
+    """(ffmpeg's command line, the size of the frames it writes) for the dongle: asked for `capture` ((size, fps), the
+    mode it offers; the calibration's `size` and `fps` when None), its picture cropped by the calibration's `crop`
+    scaled onto the capture (scaled_crop) and scaled to the canonical 640x480 in that one step, so the picture is
+    resampled once; with no crop, the capture's frames whole."""
+    cap_size, cap_fps = capture if capture else (tuple(size), fps)
+    vf = []
+    if crop:
+        x, y, w, h = scaled_crop(crop, size, cap_size) if tuple(cap_size) != tuple(size) else tuple(crop)
+        vf = ["-vf", f"crop={w}:{h}:{x}:{y},scale={W}:{H}:flags=lanczos"]
+    # passthrough + no buffering: by default ffmpeg pads rawvideo output to a constant rate with
+    # duplicate frames (2026-10-28: ~400 frames/s arrived and the picture lagged the camera)
+    cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", "-flags", "low_delay",
+           "-probesize", "32", "-analyzeduration", "0",
+           *capture_input(device, cap_size, cap_fps), *vf, "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt",
+           "rgb24", "-"]
+    return cmd, ((W, H) if crop else tuple(cap_size))
+
+
+MODE = re.compile(r"(\d+)x(\d+)@\[([\d.]+)\s+([\d.]+)\]\s*fps")      # one mode ffmpeg lists a dongle offering
+
+
+def feed_error(lines, size, fps) -> str:
+    """Why the dongle sent no frames, in plain words, from ffmpeg's error lines (`lines`), the mode asked being `size`
+    at `fps`: where ffmpeg says that mode is not supported and lists the modes it is, what was asked, the modes offered
+    as ffmpeg listed them, and what to do; else a plain sentence that sends to the run's log, where ffmpeg's own words
+    are (HdmiSource logs them). ffmpeg's lines themselves are never in it."""
+    text = " ".join(str(x) for x in lines or ())
+    w, h = size
+    asked = f"{w}x{h} at {fps:g} fps"
+    if re.search(r"not supported by the device", text):
+        modes = []
+        for m in MODE.finditer(text):
+            mode = f"{m.group(1)}x{m.group(2)} at {float(m.group(3)):g} fps"
+            if mode not in modes:
+                modes.append(mode)
+        first = MODE.search(text)
+        example = (f"{{\"size\": [{first.group(1)}, {first.group(2)}], \"fps\": {float(first.group(3)):g}}}" if first
+                   else "{\"size\": [width, height], \"fps\": rate}")
+        offers = f"it offers {', '.join(modes)} (as ffmpeg listed them)" if modes else "ffmpeg listed no mode it offers"
+        return (f"the capture dongle does not offer {asked}, the mode the kit asked of it; {offers}. Put that mode under "
+                f"\"capture\" in private/config.json's \"hdmi\" ({example}): the kit then scales the crop to it. Or set "
+                "the camera's HDMI Resolution back to the size the crop was measured on (a camera reset puts it on "
+                "Auto)")
+    return (f"the capture dongle sent no frames: ffmpeg could not read it at {asked} (its own words are in the run's "
+            "log). Check the cable, that the camera's HDMI output is on, and the mode asked (private/config.json's "
+            "\"hdmi\": \"capture\", else its size and fps)")
+
+
 class HdmiSource:
     """Continuous capture from a named HDMI dongle; grab() returns the newest frame.
 
     With a calibrated crop, ffmpeg crops and scales to the canonical layout itself, so only 640x480
-    frames reach Python (a tenth of the data at 59.94 fps)."""
+    frames reach Python (a tenth of the data at 59.94 fps). A dongle that offers another size than the crop was
+    measured on is asked for its own ("capture", hdmi_settings) and the crop scaled onto it in that one step
+    (hdmi_command): the owner's Cam Link 4K offered 3840x2160 at 29.97 fps alone after a camera reset (2026-11-18)."""
     name = "hdmi"
     withheld = False        # as OsdSource's: while set, every frame saved is black (Frame.save)
     # share of 8x8 blocks: ~5 blocks. Once self-changing blocks are masked the uncompressed feed has a
@@ -312,21 +397,20 @@ class HdmiSource:
     NOISY_WINDOW = 2.0   # before a press: blocks that blinked in this window are ignored by settle()
     REFUSE = re.compile(r"facetime|iphone|continuity|desk view|integrated|webcam", re.I)   # never a built-in camera
 
-    def __init__(self, run, device: str, size=(1920, 1080), fps=30, crop: tuple | None = None):
+    def __init__(self, run, device: str, size=(1920, 1080), fps=30, crop: tuple | None = None, capture=None):
+        """size, fps, crop: the calibration's (the frames the crop was measured on); capture: (size, fps), the mode
+        asked of the dongle (hdmi_settings' "capture"), the calibration's own when None. The frames the dongle sends
+        are the capture's: size and fps here are its (calibrated_size keeps the calibration's)."""
         if self.REFUSE.search(device):
             raise ValueError(f"refusing to open {device!r}: not a capture dongle")
         found = capture_devices()
         linux = sys.platform.startswith("linux")      # v4l2 names carry extras ("Cam Link 4K: Cam Link 4K")
         if not (device in found or device.startswith("/dev/") or (linux and any(device.lower() in d.lower() for d in found))):
             raise ValueError(f"no capture device named {device!r}; found {found}")
-        self.run, self.size, self.crop = run, size, crop
-        vf = ["-vf", f"crop={crop[2]}:{crop[3]}:{crop[0]}:{crop[1]},scale={W}:{H}:flags=lanczos"] if crop else []
-        self.out = (W, H) if crop else size
-        # passthrough + no buffering: by default ffmpeg pads rawvideo output to a constant rate with
-        # duplicate frames (2026-10-28: ~400 frames/s arrived and the picture lagged the camera)
-        self.cmd = ["ffmpeg", "-hide_banner", "-loglevel", "error", "-fflags", "nobuffer", "-flags", "low_delay",
-                    "-probesize", "32", "-analyzeduration", "0",
-                    *capture_input(device, size, fps), *vf, "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"]
+        self.run, self.crop, self.calibrated_size = run, crop, tuple(size)
+        self.cmd, self.out = hdmi_command(device, size, fps, crop, capture)
+        self.capture_size, self.fps = (tuple(capture[0]), capture[1]) if capture else (tuple(size), fps)
+        self.size = self.capture_size       # what the dongle sends, for anything that times or sizes by the source
         self._lock = threading.Lock()
         self._latest: Frame | None = None
         self._hist: deque = deque()          # (t, thumbnail)
@@ -357,9 +441,20 @@ class HdmiSource:
 
     @classmethod
     def from_config(cls, run):
-        """The dongle as calibrated in private/config.json "hdmi"."""
-        c = config()["hdmi"]
-        return cls(run, c["device"], tuple(c["size"]), c["fps"], tuple(c["crop"]))
+        """The dongle as calibrated in private/config.json "hdmi", asked for its "capture" mode where one is given
+        (hdmi_settings)."""
+        return cls(run, **hdmi_settings(config()["hdmi"]))
+
+    def no_frames(self, why: str) -> str:
+        """The error a feed that sends no frames raises: feed_error's plain words from ffmpeg's last lines (a refused
+        mode names the modes the dongle offers), those lines themselves in the run's log alone ("hdmi_feed_error")."""
+        lines = list(getattr(self, "errors", ()) or ())
+        if lines:
+            with contextlib.suppress(Exception):            # a log that cannot be written changes no error
+                self.run.log("hdmi_feed_error", why=why, ffmpeg=lines)
+            return feed_error(lines, getattr(self, "capture_size", None) or getattr(self, "size", (0, 0)),
+                              getattr(self, "fps", 0))
+        return why
 
     def _read(self, proc):
         w, h = self.out
@@ -417,15 +512,14 @@ class HdmiSource:
                     if f is not None:
                         return f
                     time.sleep(0.05)
-            said = f" (ffmpeg: {self.errors[-1]})" if self.errors else ""
-            raise RuntimeError(f"the capture dongle stopped sending frames{said}")
+            raise RuntimeError(self.no_frames("the capture dongle stopped sending frames"))
         return f
 
     def grab(self, tag="f", save=True) -> Frame:
         end = time.monotonic() + 5
         while (f := self.latest()) is None:
             if time.monotonic() > end:
-                raise RuntimeError("no frames from the capture dongle")
+                raise RuntimeError(self.no_frames("no frames from the capture dongle"))
             time.sleep(0.01)
         f = Frame(f.image, f.t, None, "hdmi", f.small)
         if save:
@@ -482,7 +576,8 @@ def canonical(img: np.ndarray, crop: tuple | None = None) -> np.ndarray:
     """Crop to the camera's UI area and scale to 640x480.
 
     Default crop for a 16:9 frame is the centred 4:3 region. Measured 2026-10-28 on the a1 II at 1080p:
-    the UI is a 3:2 area at x 150-1770 that scales exactly onto the OSD layout (private/config.json "hdmi").
+    the UI is a 3:2 area at x 150-1770 that scales exactly onto the OSD layout (private/config.json "hdmi"). A frame
+    of another size takes the crop scaled onto it (scaled_crop), as HdmiSource's capture does.
     """
     h, w = img.shape[:2]
     if crop is None:

@@ -96,7 +96,8 @@ keys.
   shell the kit runs from (step 4).
 - **`eyes`:** `"osd"` (the default) or `"hdmi"`; `CAMSET_EYES` overrides it for one command.
 - **`hdmi`** (with `"eyes": "hdmi"`): the dongle's name (`device`), `size`, `fps` and the `crop` that maps the camera's
-  UI to 640x480.
+  UI to 640x480, all measured on the same frames; `capture` (`{"size": [W, H], "fps": F}`, optional) is the mode to
+  ask of a dongle that offers another of the same shape, the crop scaled to it.
 - **`camera_model`** (LAN only, optional): the SDK's model number, such as `"ILCE-1"`; the default is `ILCE-1M2`.
 - **`camera`** and **`cameras`** (optional): which camera the kit works on, as `<model>_fw<firmware>` (step 4 prints
   it), and an entry for each of several cameras. With one camera, leave them out.

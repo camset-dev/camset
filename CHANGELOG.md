@@ -125,6 +125,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **HDMI eyes take a dongle that offers another size than the crop was measured on:** put its mode under `"capture"`
+  in `private/config.json`'s `"hdmi"` and the kit scales the crop to it. A mode the dongle refuses is now said in plain
+  words, with the modes it offers.
 - **A run now survives a network error the camera reports on its remote link:** it sends nothing until the link
   recovers by itself, about a minute later, then cancels with MENU and restores, where it closed the link and left the
   camera unrestored. The error says so in plain words and names the screen that was on show.
