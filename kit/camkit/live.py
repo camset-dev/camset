@@ -382,6 +382,7 @@ class OptionBoxes:
     word: str           # the word the camera writes above the lit box ("Standard")
     value: str          # the value that box must hold ("71", "±6", "Lower Limit")
     at: tuple           # where that box stands (x0, y0, x1, y1), as the prover measured it (optboxes_run.PLACES)
+    places: tuple = ()  # every place of the row (optboxes_run.PLACES): where given, `at` must be the one lit of them
 
 
 # the option's title line (its lit option under the row's name, "Custom 1") and the band where the camera writes the lit
@@ -429,23 +430,63 @@ def box_number(text, like) -> int | None:
     return int(m.group(1)) if m else None
 
 
+def boxes_drawn(image, places) -> int:
+    """How many boxes of the row `places` the screen draws, by their outlines: the places, from the first on, whose top
+    edge is drawn (grey, about 90 on a drawn box, 0 where none is: kit2_pass2 241720 draws two under Lower Limit, 241717
+    three under Std+Range), or lit."""
+    g = np.asarray(image, np.float32)
+    g = g[..., :3].mean(axis=2) if g.ndim == 3 else g
+    lit = set(boxes_lit(image, places))
+    n = 0
+    for i, (x0, y0, x1, y1) in enumerate(places):
+        edge = float(g[y0:y0 + 3, x0 + 8:x1 - 8].max(axis=0).mean()) if y1 > y0 + 3 and x1 > x0 + 16 else 0.0
+        if edge <= 40 and i not in lit:
+            break
+        n += 1
+    return n
+
+
+def boxes_lit(image, places) -> list:
+    """The places of the row that are filled orange (camkit.screen._orange over 0.3; a lit box is 0.66-0.84, an unlit
+    one 0.0 on the a1 II's frames), in order. Pixels alone: no reader is asked whether a box is lit."""
+    o = screen._orange(np.asarray(image))
+    return [i for i, (x0, y0, x1, y1) in enumerate(places) if o[y0:y1, x0:x1].size and float(o[y0:y1, x0:x1].mean()) > 0.3]
+
+
+def in_box_refused(option: str, word: str | None, at: int, places, lines, image) -> str:
+    """Why the screen is not `option`'s row of boxes with its box `at` (of `places`) the one lit and named `word` above
+    the row, or "" when it is: the title line names the option, exactly one box of the row is filled orange, by pixels
+    (boxes_lit), and it is `at`, and the word above the row is `word` (any word where None: a box not yet named).
+    kit/provers/optboxes_run.py's check after every press inside the boxes and before every reading there: a Right on
+    the last box leaves the boxes for the list, whose cursor then moves with Up and Down (kit2_pass2 241721, 241724,
+    241752-241754), which the prover must never take for a box."""
+    title = ocr.text_in(lines, OPTION_TITLE).strip()
+    if not _compact(title) or _compact(title) != _compact(option):
+        return f"its title line reads {title[:40]!r}, not {option}"
+    lit = boxes_lit(image, places)
+    if not lit:
+        return "no box of the row is lit (the list's cursor, or no row of boxes, is on show)"
+    if lit != [at]:
+        return f"box {lit[0] + 1} of the row is lit, not box {at + 1}" if len(lit) == 1 else f"{len(lit)} boxes are lit"
+    said = ocr.text_in(lines, BOX_WORD).strip()
+    if word is None:
+        return "" if _compact(said) else "no word stands above the row"
+    return "" if _compact(said) == _compact(word) else f"the word above the row reads {said[:40]!r}, not {word}"
+
+
 def option_boxes_refused(consent: OptionBoxes, lines, image, read: str | None = None) -> str:
     """Why a screen whose OCR lines are `lines` and whose picture is `image` is not `consent.option`'s row of boxes with
     its `consent.word` box lit on `consent.value`, ready for the OK that keeps it (OptionBoxes), or "" when it is: the
     title line names the option and the word above the lit box is the box's (both compared without spaces or
     punctuation), the box at `consent.at` is lit (orange) and reads the value (OCR's reading in the value's shape,
     box_value; `read`, the caller's own reading of it, its second reader's among them, where given), the footer draws
-    the OK key (camkit.screen.footer_keys), no question mark and no confirmation's word above the footer."""
-    title = ocr.text_in(lines, OPTION_TITLE).strip()
-    if not _compact(title) or _compact(title) != _compact(consent.option):
-        return f"its title line reads {title[:40]!r}, not {consent.option}"
-    said = ocr.text_in(lines, BOX_WORD).strip()
-    if _compact(said) != _compact(consent.word):
-        return f"the word above the lit box reads {said[:40]!r}, not {consent.word}"
-    x0, y0, x1, y1 = consent.at
-    lit = screen._orange(np.asarray(image))[y0:y1, x0:x1]
-    if lit.size == 0 or float(lit.mean()) <= 0.3:
-        return f"the {consent.word} box is not lit"
+    the OK key (camkit.screen.footer_keys), no question mark and no confirmation's word above the footer. The first
+    three are the prover's check after every press (in_box_refused), on every place of the row where the consent names
+    them (`places`: the box at `at` the one lit of them), else on `at` alone."""
+    places = tuple(consent.places) or (tuple(consent.at),)
+    why = in_box_refused(consent.option, consent.word, places.index(tuple(consent.at)), places, lines, image)
+    if why:
+        return why
     value = box_value(read if read is not None else ocr.text_in(lines, consent.at), consent.value)
     if value != box_value(consent.value, consent.value):
         return f"the {consent.word} box reads {value!r}, not {consent.value!r}"

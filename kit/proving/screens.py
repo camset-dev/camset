@@ -176,8 +176,8 @@ def box_answer(cam, timeout: float = 25.0) -> tuple:
     """(the text inside the lit box of a row of boxes, as the second reader reads it (PROMPTS["box"]: one "value"),
     the configured name of the reader that answered, whether it stands in for the second reader): kit/provers/
     optboxes_run.py's question about Zebra Level's Custom boxes, where vlm_option's "item under the cursor" is the list's
-    lit option. The value is None where the reader fails, or answers anything but an object with one non-empty "value"
-    (no guess is made of it)."""
+    lit option. The value is None where the reader fails, says no box is orange ({"value": null}), or answers anything
+    but an object with one non-empty "value" (no guess is made of it)."""
     from camkit import vlm
     try:
         v = ask_second(cam.frame.path.read_bytes(), PROMPTS["box"], timeout=timeout)

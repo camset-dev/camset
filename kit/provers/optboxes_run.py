@@ -7,26 +7,38 @@
 
 The row opens a side list; with the option lit (the title line names it) the camera draws a row of boxes at the bottom.
 Right enters them, the first box lit and its name written above the row ("Type"); Right again lights the next
-("Standard", then "Range"), Left goes back; Up and Down step the lit box. The first box (Type) redraws the row: on
-Std+Range it is Type, Standard and Range, on Lower Limit Type and Lower Limit. A stepped value is applied live; MENU
-cancels the screen and takes it back, OK keeps it. Boxes are named by the word the camera writes above the lit one.
+("Standard", then "Range"), Left goes back; Up and Down step the lit box. Right on the last box leaves the boxes for
+the list, whose cursor Up and Down then move to another option, and Left from the list lights the last box (kit2_pass2
+241721-241726, 241750-241754). The first box (Type) redraws the row: on Std+Range it is Type, Standard and Range, on
+Lower Limit Type and Lower Limit. A stepped value is applied live; MENU cancels the screen and takes it back, OK keeps
+it. Boxes are named by the word the camera writes above the lit one, counted by their drawn outlines (drawn).
+
+Check 1 (in_box) follows every press inside the boxes and comes before every reading there: the title line names the
+option, exactly one box of the row is filled orange (by pixels) and it is the box meant, the word above the row is its
+name; anything else stops the run at once, before another key goes. Moves between boxes are a known number of Rights or
+Lefts (go), never a Right on the last box nor a Left on the first; the second reader is asked only on a frame check 1
+has just passed (ask_box).
 This prover sits beside boxes_run, not in it: boxes_run's screen is two fixed boxes reached by Right from the row, while
 here an option of a list draws the boxes, their count and names change with the first box, and the list is stepped to
 the option first; the exit statuses, the proof run and the shape of a proof line are boxes_run's.
 
 --probe, read only: the option lit, the first box walked once round (its options), each of its options' row of boxes
-read (Right through them, each name as written), each box under each option walked to both ends (Down until a further
-press changes nothing or comes round, then Up the same way: the values in Up order; a box of numbers read in its
-values' shape, OCR's glyph for the ± and the digits' look-alikes undone, and the second reader asked about the lit box
-itself (proving.screens.box_answer, PROMPTS["box"]) where OCR's reading is empty, unclean or breaks the walk, which must
-step as a stepped box does, and always about the value held and each end: value_read, walk), then MENU, which cancels it all,
-and the session's restore check. Nothing is chosen. One line goes to kit2_pass2/option_boxes.jsonl (PROBES): the
-option's rows of boxes ("types") and each box's values, the one it held and the first box's option it is drawn under.
+counted from what is drawn and named (Right to each box the row draws, the word above it), each box under each option
+walked (walk: Down until a further press changes nothing, an end, or a value seen before comes back, a list that comes
+round, recorded with no ends; then Up to the top end; MAX_WALK presses at most each way: what is read is recorded, a box
+of numbers read in its values' shape, OCR's glyph for the ± and the digits' look-alikes undone, and the second reader
+asked about the lit box itself (proving.screens.box_answer, PROMPTS["box"]) where OCR's reading is empty or unclean, and
+always about the value held, each end and a value come round; Standard and Range held to their constant step as well),
+then MENU, which cancels it all, and the session's restore check. Nothing is chosen. One line goes to
+kit2_pass2/option_boxes.jsonl (PROBES) once every box of every Type is read, none from a probe that stopped: the
+option's rows of boxes ("types") and each box's values, the one it held, whether it comes round, and the first box's
+option it is drawn under. The proof run refuses a probe line that lacks a box of a Type's row (probe_refused).
 
 The proof run plans from the option's latest probe: a base first, the option chosen with its boxes as they stand (the
 first box on the value it holds, OK), so the row's own record (Zebra Level moving to Custom N) moves there, and every
 box proof is compared with that base, its changes the box's records alone. Each box then: both ends, the held value's
-neighbours, one in the middle, and last the held value, which must change nothing (values_for); a box drawn under
+neighbours, one in the middle (for a list that comes round, the neighbours and the value opposite), and last the held
+value, which must change nothing (values_for); a box drawn under
 another of the first box's options (Lower Limit) from a base with the first box on that option. Each value is stepped
 to and kept with OK, judged first on the screen's own shape (camkit.live.option_boxes_refused: the title names the
 option, the word above the lit box is the box's, it is lit on the value, the footer draws the OK key, nothing asks);
@@ -55,7 +67,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, live, ocr, safety, screen  # noqa: E402
+from camkit import camset, live, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from boxes_run import EXIT_REFUSED, LOOKALIKE, PROOF_RUN, stop_status  # noqa: E402
@@ -77,6 +89,10 @@ LIST_STEPS = 12                        # Down presses at most to light the optio
 # the screen that stalls the remote link while OSD Image Mode is on (kit2_zebra_split, 2026-11-18): this box lit on this
 # value while the other box reads that value
 HAZARD = {"box": "Standard", "value": "30", "while": ("Range", "±5")}
+# the a1 II's boxes that step by one constant step and stop at two ends (kit2_pass2: Standard 0 to 109, Range ±1 to ±10),
+# that step held as a consistency test of their readings; any other box's values are recorded as read (Lower Limit's
+# are not known yet: a list such as 70+ to 100+, perhaps one that comes round)
+STEPPED = ("Standard", "Range")
 
 
 def _read(cam, box, expect: str = "text") -> str:
@@ -103,20 +119,63 @@ def read_at(cam, b: int) -> str:
 
 
 def lit_place(cam) -> int | None:
-    """The place of the lit box (its orange), or None with no box lit."""
-    o = screen._orange(cam.frame.image)
-    lit = [float(o[y0:y1, x0:x1].mean()) for x0, y0, x1, y1 in PLACES]
-    best = max(range(len(PLACES)), key=lambda i: lit[i])
-    return best if lit[best] > 0.3 else None
+    """The place of the one lit box (its orange, camkit.live.boxes_lit), or None with none lit or more than one."""
+    lit = live.boxes_lit(cam.frame.image, PLACES)
+    return lit[0] if len(lit) == 1 else None
 
 
 def drawn(cam) -> int:
-    """How many boxes the row draws: the places that read a value."""
-    return sum(1 for b in range(len(PLACES)) if read_at(cam, b))
+    """How many boxes the row draws, by their outlines (camkit.live.boxes_drawn): two under Lower Limit, three under
+    Std+Range on the a1 II. The prover moves between them by this count, never by pressing past an end."""
+    return live.boxes_drawn(cam.frame.image, PLACES)
 
 
 def _same(a, b) -> bool:
     return option_key(a) == option_key(b)
+
+
+def cursor_refused(cam, option: str, name: str | None, b: int) -> str:
+    """Why the frame on show is not `option`'s box b (named `name`) with the cursor in it, or "" (live.in_box_refused)."""
+    return live.in_box_refused(option, name, b, PLACES, boxes_lines(cam), cam.frame.image)
+
+
+_PASSED = []                            # the frame check 1 last passed on: the only one the reader is asked about
+
+
+def in_box(cam, option: str, name: str | None, b: int) -> None:
+    """Check 1, after every press inside the boxes and before every reading there: the title line names `option`,
+    exactly one box of the row is filled orange (pixels) and it is box b, and the word above the row is `name` (any
+    word where None); else the run stops at once, before another key goes. A Right on the last box leaves the boxes
+    for the list, whose cursor Up and Down then move (kit2_pass2 241721, 241724, 241752-241754): the walk took Custom
+    2's row for Custom 1's Lower Limit there, and the reader read "70+" in no box at all. The frame it passes on is the
+    only one the second reader may then be asked about (ask_box)."""
+    _PASSED.clear()
+    why = cursor_refused(cam, option, name, b)
+    if why:
+        raise Failed(f"the cursor is no longer in {option}'s {name or f'box {b + 1}'} "
+                     f"({getattr(cam.frame.path, 'name', '')}): {why}")
+    _PASSED.append(cam.frame)
+
+
+def press_in(cam, key: str, option: str, names: list, b: int, vals: list | None = None) -> None:
+    """`key` pressed with the cursor inside the boxes, then check 1 on box b: Up or Down step box b (the hazard refused
+    first, hazard_refused); Left or Right move to box b, the box beside the one lit."""
+    if key in ("up", "down"):
+        why = hazard_refused(cam, b, key, names, vals)
+        if why:
+            raise Refused(why)
+    cam.press(key)
+    in_box(cam, option, names[b] if b < len(names) else None, b)
+
+
+def go(cam, option: str, names: list, src: int, dst: int) -> None:
+    """From box `src` to box `dst` of the row `names`: that many Rights or Lefts, each followed by check 1. Never a
+    Right on the last box nor a Left on the first: `dst` is a box the row draws (drawn)."""
+    if not 0 <= dst < len(names):
+        raise Failed(f"{option}: no box {dst + 1} in its row of {len(names)} ({', '.join(names)})")
+    step = 1 if dst > src else -1
+    for k in range(src + step, dst + step, step):
+        press_in(cam, "right" if step > 0 else "left", option, names, k)
 
 
 def open_option(cam, cycle, model, row: str, option: str) -> None:
@@ -134,13 +193,12 @@ def open_option(cam, cycle, model, row: str, option: str) -> None:
     raise Failed(f"{row}: {option!r} never came up in its list (its title line read {title(cam)!r})")
 
 
-def enter_box(cam, index: int, name: str) -> None:
-    """From the list with the option lit: Right into its boxes, to box `index`, which must be lit and named `name`."""
-    for _ in range(index + 1):
-        cam.press("right")
-    if lit_place(cam) != index or not _same(word(cam), name):
-        raise Failed(f"Right {index + 1} time(s) lit box {lit_place(cam)} named {word(cam)!r}, not {name!r} "
-                     f"({getattr(cam.frame.path, 'name', '')})")
+def enter_box(cam, index: int, names: list, option: str) -> None:
+    """From the list with the option lit: Right into its boxes (the first box lit), then to box `index` of the row
+    `names` (go), every press followed by check 1."""
+    cam.press("right")
+    in_box(cam, option, names[0] if names else None, 0)
+    go(cam, option, names, 0, index)
 
 
 def _next(now: str, key: str, vals: list | None = None) -> str | None:
@@ -167,6 +225,9 @@ class BoxRead(NamedTuple):
 def ask_box(cam) -> tuple:
     """The second reader's (text, name, stands in) about the lit box (proving.screens.box_answer), asked once more after
     RETRY_WAIT where it does not answer: it runs on another machine, which can be busy. The text is None after both."""
+    if not _PASSED or _PASSED[0] is not cam.frame:
+        raise Failed(f"the second reader was about to be asked about a box on {getattr(cam.frame.path, 'name', '')}, a "
+                     "frame check 1 has not passed (the cursor's place in the boxes unchecked): not asked")
     said, who, standing = box_answer(cam)
     if said is None:
         time.sleep(RETRY_WAIT)
@@ -232,13 +293,6 @@ def hazard_refused(cam, b: int, key: str, names: list, vals: list | None = None)
             f"{other} off {its} first")
 
 
-def press_box(cam, b: int, key: str, names: list, vals: list | None = None) -> None:
-    why = hazard_refused(cam, b, key, names, vals)
-    if why:
-        raise Refused(why)
-    cam.press(key)
-
-
 def _stepped(like: str, prev: str, key: str, step: int | None):
     """What a press of `key` from `prev` may bring in a box of numbers shaped as `like`: `prev` again (an end stays on
     a further press), or a value one constant step on, in the press's direction (`step` once the walk has seen one)."""
@@ -252,73 +306,105 @@ def _stepped(like: str, prev: str, key: str, step: int | None):
     return fits
 
 
-def walk(cam, b: int, names: list | None = None) -> tuple:
-    """(the lit box b's values in Up order, the value it held): Down until a further press changes nothing (its low end)
-    or it comes round to the value it held, then Up the same way. The box is left where the walk ended. A box of
-    numbers is read in its values' shape, the second reader asked where OCR's reading breaks the walk (value_at), and
-    must walk as a stepped box does: each press one constant step on, an end a value that stays; a reading that still
-    does not stops the walk, naming its frame. A box of words (Type) is read as it is, and may come round."""
-    names = names or []
+class Walk(NamedTuple):
+    """A box walked: its values in Up order (for a list that comes round, in the order Up shows them from the value
+    held), the value it held, and whether it comes round (a list with no ends) rather than stopping at two ends."""
+    values: list
+    held: str
+    wraps: bool = False
+
+
+def walk(cam, b: int, names: list, option: str) -> Walk:
+    """Box b of the row `names` (its cursor in it: check 1 first and after every press, press_in) walked to its ends:
+    Down until a further press changes nothing (its low end) or a value seen before comes back (a list that comes round:
+    recorded so, with no ends), then Up from the low end to the top end the same way. What is read is recorded, nothing
+    assumed of it: a value of numbers is read in its values' shape, the second reader asked about the lit box where OCR's
+    reading is empty or unclean, and always about the value held and each end (value_read). A box that steps by one
+    constant step (STEPPED) is held to that too where its readings are numbers, a consistency test sent to the reader
+    when broken. No end and no coming round within MAX_WALK presses stops the walk in plain words. The box is left where
+    the walk ended."""
     name = names[b] if b < len(names) else "?"
+    in_box(cam, option, name, b)
     held = read_at(cam, b)
     numbers = live.box_shape(held) is not None
     if numbers:
         held = value_at(cam, b, held, always=True, need=f"the value {name} held")
-    step = None
+    stepped, step = numbers and name in STEPPED, None
 
-    def read(prev, key):
+    def read(prev, key, seen):
         if not numbers:
             return read_at(cam, b)
-        fits = _stepped(held, prev, key, step)
-        end = live.box_value(read_at(cam, b), held) == prev       # stayed: an end, which the reader confirms
-        return value_at(cam, b, held, fits, always=end,
-                        need=f"after {key} from {prev!r}, {'an end of ' + name if end else name}")
-    cur = held
+        steps = _stepped(held, prev, key, step) if stepped else None
+        fits = None if steps is None else (lambda v: steps(v) or v in seen)
+        ocr_v = live.box_value(read_at(cam, b), held)
+        end, back = ocr_v == prev, ocr_v != prev and ocr_v in seen   # each decides what is written: the reader confirms
+        return value_at(cam, b, held, fits, always=end or back,
+                        need=f"after {key} from {prev!r}, " + ("an end of " if end else "a value seen before in " if back
+                                                                else "") + name)
+
+    def stop(why):
+        return Failed(f"{option}'s {name} ({getattr(cam.frame.path, 'name', '')}): {why}: the walk stops")
+    seen = [held]                       # in Down order
     for _ in range(MAX_WALK):
-        press_box(cam, b, "down", names)
-        v = read(cur, "down")
-        if v in (cur, held):
-            break
-        if numbers:
-            step = step or abs(live.box_number(v, held) - live.box_number(cur, held))
-        cur = v
-    vals = [cur if numbers else read_at(cam, b)]
+        press_in(cam, "down", option, names, b)
+        v = read(seen[-1], "down", seen)
+        if v == seen[-1]:
+            break                       # the low end: it stayed on a further press
+        if v in seen:                   # came round: a list with no ends, in the order Up shows it from the value held
+            if v != held:
+                raise stop(f"Down brought {v!r} back after {seen}, not the value held: the readings disagree")
+            return Walk([held] + seen[:0:-1], held, True)
+        if stepped:
+            step = step or abs(live.box_number(v, held) - live.box_number(seen[-1], held))
+        seen.append(v)
+    else:
+        raise stop(f"neither an end (a value that stays on a further press) nor its values coming round within "
+                   f"{MAX_WALK} Down presses")
+    vals = [seen[-1]]
     for _ in range(MAX_WALK):
-        press_box(cam, b, "up", names)
-        v = read(vals[-1], "up")
-        if v == vals[-1] or v == vals[0]:
-            break
-        if numbers:
+        press_in(cam, "up", option, names, b)
+        v = read(vals[-1], "up", vals)
+        if v == vals[-1]:
+            break                       # the top end
+        if v in vals:
+            raise stop(f"Up brought {v!r} back after {vals}, though Down stopped at an end: the readings disagree")
+        if stepped:
             step = step or abs(live.box_number(v, held) - live.box_number(vals[-1], held))
         vals.append(v)
-    if held not in vals or len(set(vals)) != len(vals) or not all(vals):
-        raise Failed(f"box {b} ({name}): the walk read {vals} with {held!r} held")
-    return vals, held
+    else:
+        raise stop(f"no top end within {MAX_WALK} Up presses")
+    if held not in vals or not all(vals):
+        raise stop(f"the walk read {vals} with {held!r} held")
+    return Walk(vals, held, False)
 
 
-def step_to(cam, b: int, vals: list, target: str, names: list) -> None:
-    """The lit box b stepped to `target` by its probe's values (Up order); Failed where it reads a value not among them
-    or the target never comes up; the hazard refused on the way (press_box)."""
+def step_to(cam, b: int, vals: list, target: str, names: list, option: str) -> None:
+    """Box b (its cursor in it) stepped to `target` by its probe's values (Up order), every press followed by check 1
+    (press_in, the hazard refused on the way); Failed where it reads a value not among them or the target never comes
+    up."""
+    in_box(cam, option, names[b] if b < len(names) else None, b)
     for _ in range(len(vals) + 1):
         now = value_at(cam, b, target, lambda v: v in vals, need=f"stepping to {target!r}")
         if now == target:
             return
         if now not in vals:
             raise Failed(f"box {b}: read {now!r}, not one of its values ({getattr(cam.frame.path, 'name', '')})")
-        press_box(cam, b, "up" if vals.index(target) > vals.index(now) else "down", names, vals)
+        press_in(cam, "up" if vals.index(target) > vals.index(now) else "down", option, names, b, vals)
     raise Failed(f"box {b}: {target!r} never came up")
 
 
-def row_names(cam) -> list:
-    """With the first box lit: the names of the row's boxes, Right through them, each as written; then Left back."""
-    names = [word(cam)]
-    for i in range(1, len(PLACES)):
-        cam.press("right")
-        if lit_place(cam) != i:
-            break
+def row_names(cam, option: str, first: str) -> list:
+    """With the first box lit (named `first`): the row's boxes counted from what is drawn (drawn: their outlines), each
+    named by the word the camera writes above it as Right lights it in turn, then Left back to the first; every press
+    followed by check 1, never a Right on the last box (it leaves the boxes for the list) nor a Left on the first."""
+    in_box(cam, option, first, 0)
+    count = drawn(cam)
+    names = [first]
+    for i in range(1, count):
+        press_in(cam, "right", option, names, i)
         names.append(word(cam))
-    for _ in range(len(names) - 1):
-        cam.press("left")
+    for i in range(count - 2, -1, -1):
+        press_in(cam, "left", option, names, i)
     return names
 
 
@@ -336,25 +422,31 @@ def probe(cam, link, cycle, model, row: str, option: str) -> dict:
     """The read-only look (the module's --probe); its record (written by main)."""
     open_option(cam, cycle, model, row, option)
     cam.press("right")
-    if lit_place(cam) != 0 or not word(cam):
-        raise Failed(f"Right on {option!r} lit no named box ({getattr(cam.frame.path, 'name', '')})")
+    in_box(cam, option, None, 0)        # the first box lit, its name written above the row
     first = word(cam)
-    tvals, theld = walk(cam, 0, [first])
-    boxes, types = {first: {"values": tvals, "held": theld}}, {}
-    for t in [theld] + [v for v in tvals if v != theld]:
-        step_to(cam, 0, tvals, t, [first])
-        names = row_names(cam)
+    tw = walk(cam, 0, [first], option)
+    boxes, types = {first: {"values": tw.values, "held": tw.held, "wraps": tw.wraps}}, {}
+    for t in [tw.held] + [v for v in tw.values if v != tw.held]:
+        step_to(cam, 0, tw.values, t, [first], option)
+        names = row_names(cam, option, first)
         types[t] = names
         for n in hazard_order(names):
             i = names.index(n)
-            for _ in range(i):
-                cam.press("right")
-            vals, held = walk(cam, i, names)
-            boxes[n] = {"values": vals, "held": held, "type": t}
-            for _ in range(i):
-                cam.press("left")
+            go(cam, option, names, 0, i)
+            w = walk(cam, i, names, option)
+            boxes[n] = {"values": w.values, "held": w.held, "type": t, "wraps": w.wraps}
+            go(cam, option, names, i, 0)
     close_screen(cam, link)            # MENU: the screen cancelled, every stepped value taken back
     return {"row": row, "option": option, "types": types, "boxes": boxes}
+
+
+def probe_refused(probed: dict) -> str:
+    """Why a probe line cannot plan a proof run, or "": every box of every Type's row must have its walk in it."""
+    boxes = probed.get("boxes") or {}
+    missing = sorted({n for names in (probed.get("types") or {}).values() for n in names if n not in boxes})
+    if not probed.get("types"):
+        return "it records no row of boxes"
+    return f"it lacks the walk of {', '.join(missing)}" if missing else ""
 
 
 def latest_probe(run, row: str, option: str) -> dict | None:
@@ -373,13 +465,18 @@ def latest_probe(run, row: str, option: str) -> dict | None:
     return got
 
 
-def values_for(name: str, vals: list, held: str, range_held: str | None = None) -> list:
+def values_for(name: str, vals: list, held: str, range_held: str | None = None, wraps: bool = False) -> list:
     """The values a box is proved on: both ends, the held value's neighbours, one in the middle, then the held value
-    (which must change nothing); for a box of two or three options, each other one, then the held. The hazard's value
-    is left out while its other box holds its value (HAZARD)."""
-    i = vals.index(held)
-    picks = [vals[0], vals[-1], vals[i - 1] if i else None, vals[i + 1] if i + 1 < len(vals) else None,
-             vals[len(vals) // 2]] if len(vals) > 3 else list(vals)
+    (which must change nothing); for a list that comes round (no ends), the held value's neighbours either side and
+    the one opposite it; for a box of two or three options, each other one, then the held. The hazard's value is left
+    out while its other box holds its value (HAZARD)."""
+    i, n = vals.index(held), len(vals)
+    if n <= 3:
+        picks = list(vals)
+    elif wraps:
+        picks = [vals[(i - 1) % n], vals[(i + 1) % n], vals[(i + n // 2) % n]]
+    else:
+        picks = [vals[0], vals[-1], vals[i - 1] if i else None, vals[i + 1] if i + 1 < n else None, vals[n // 2]]
     out = []
     for v in picks:
         if v is None or v == held or v in out:
@@ -396,10 +493,11 @@ def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx:
     the value kept decides the proof), then a settings download; {"chosen_frame", "row_frame", "shown", "vlm",
     "vlm_reader", "read_by", "stand_in", "dat"}."""
     open_option(cam, cycle, model, row, option)
-    enter_box(cam, idx, names[idx])
-    step_to(cam, idx, vals, target, names)
+    enter_box(cam, idx, names, option)
+    step_to(cam, idx, vals, target, names, option)
+    in_box(cam, option, names[idx], idx)
     consent = live.OptionBoxes(f"{option}'s {names[idx]} box on {target}: OK keeps it (optboxes_run)", option, names[idx],
-                               target, PLACES[idx])
+                               target, PLACES[idx], tuple(PLACES))
     read = value_read(cam, idx, target, lambda v: v in vals, always=True, need=f"the value {target!r} to keep with OK")
     if read.value != target:
         raise Failed(f"{row} > {option} > {names[idx]}: it reads {read.value!r} on {getattr(cam.frame.path, 'name', '')}, "
@@ -461,7 +559,7 @@ def prove(cam, link, hdmi, cycle, model, row: str, option: str, probed: dict, on
             print(f"{name}: from a base with {other} on {off} (OSD eyes: {name} {HAZARD['value']} with {other} at {its} "
                   "stalls the camera's remote link)", flush=True)
         vals = info["values"]
-        for target in values_for(name, vals, info["held"], range_held):
+        for target in values_for(name, vals, info["held"], range_held, info.get("wraps", False)):
             got = keep(cam, link, hdmi, cycle, model, row, option, names, idx, vals, target)
             ch = _diff(b_base, got["dat"])
             out.write(json.dumps({"path": [row, option, name], "kind": "list", "index": vals.index(target),
@@ -504,6 +602,10 @@ def main(argv=None):
         if probed is None:
             sys.exit(f"no probe of {a.row} > {a.option} in {PROOF_RUN}: run this command with --probe first (read only), "
                      "which walks each box to its ends; nothing was sent to the camera")
+        why = probe_refused(probed)
+        if why:
+            sys.exit(f"the latest probe of {a.row} > {a.option} in {PROOF_RUN} cannot plan a proof run: {why}. Run the "
+                     "probe again; nothing was sent to the camera")
         if a.only and a.only not in probed.get("boxes", {}):
             sys.exit(f"--only {a.only!r}: not a box the probe saw ({', '.join(probed.get('boxes', {}))})")
     hdmi = eyes_from_config(run)
@@ -517,12 +619,15 @@ def main(argv=None):
                     with open(Path(run.dir) / PROBES, "a", encoding="utf-8", newline="\n") as f:
                         f.write(json.dumps(got) + "\n")
                     for n, b in got["boxes"].items():
-                        print(f"{n}: {len(b['values'])} values, {b['values'][0]} to {b['values'][-1]}, held "
-                              f"{b['held']!r}", flush=True)
+                        span = "a list that comes round" if b.get("wraps") else f"{b['values'][0]} to {b['values'][-1]}"
+                        print(f"{n}: {len(b['values'])} values, {span}, held {b['held']!r}", flush=True)
             else:
                 prove(s.cam, s.link, hdmi, cycle, model, a.row, a.option, probed, a.only, s.start, out)
         except Exception as e:
             stopped.append(e)
+            if a.probe:
+                print(f"the probe stopped before every box of every Type was read: nothing was written to {PROBES}",
+                      flush=True)
             raise
     code = stop_status(stopped[0] if stopped else None)
     if code:

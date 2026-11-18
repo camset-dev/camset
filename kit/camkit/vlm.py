@@ -207,10 +207,13 @@ PROMPTS.update({
 PROMPTS.update({
     # the lit box of a row of boxes near the bottom (Zebra Level's Custom boxes: Type, Standard, Range, Lower Limit),
     # where "option" names the list's lit option instead; measured with the b70 reader on 2026-11-18, about 1 s a call:
-    # kit2_pass2 241491 "64" (OCR read nothing), 241490 "65", 241440 "±10", 241426 "±3" (OCR read a Cyrillic З)
+    # kit2_pass2 241491 "64" (OCR read nothing), 241490 "65", 241440 "±10", 241426 "±3" (OCR read a Cyrillic З). Its
+    # first wording said one box was orange, and on 241753 and 241754 (no box lit, the list's cursor on 70 and 75) the
+    # reader answered "70+" and "75+": it may now say none is, {"value": null}, which is no answer (box_answer)
     "box": (
-        "This is a camera settings screen. In the row of boxes near the bottom, exactly one box is filled orange. "
-        'Reply with JSON only: {"value": "<the text inside the orange box, exactly as drawn>"}'),
+        "This is a camera settings screen. In the row of boxes near the bottom, at most one box is filled orange. "
+        'Reply with JSON only: {"value": "<the text inside the orange box, exactly as drawn>"}, or {"value": null} '
+        "if no box in that row is filled orange."),
 })
 PROMPTS.update({
     # title.v2, never the orange line under it, and a turned screen read turned

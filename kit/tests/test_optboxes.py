@@ -58,6 +58,28 @@ def test_the_stored_frames_read_as_the_option_its_lit_box_and_values(rel, word, 
     assert [O.read_at(cam, b) for b in range(3)] == values and O.drawn(cam) == 3
 
 
+@pytest.mark.parametrize("name,option,word,b,why", [
+    ("241720_right.png", "Custom 1", "Lower Limit", 1, ""),                        # in Custom 1's Lower Limit box
+    ("241721_right.png", "Custom 1", "Lower Limit", 1, "no box of the row is lit"),   # one Right more: out, on the list
+    ("241724_down.png", "Custom 1", "Lower Limit", 1, "not Custom 1"),            # the list's cursor on Custom 2
+    ("241752_right.png", "Custom 2", "Lower Limit", 1, "no box of the row is lit"),
+    ("241753_down.png", "Custom 2", "Lower Limit", 1, "not Custom 2"),            # the list's cursor on 70
+    ("241754_down.png", "Custom 2", "Lower Limit", 1, "not Custom 2"),            # and on 75
+    ("241491_down.png", "Custom 1", "Standard", 1, ""),
+    ("241429_down.png", "Custom 1", "Range", 2, ""),
+    ("241426_down.png", "Custom 1", "Range", 2, ""),
+    ("241491_down.png", "Custom 1", "Range", 2, "box 2 of the row is lit, not box 3")])
+def test_check_1_tells_a_box_with_the_cursor_in_it_from_the_list(name, option, word, b, why):
+    """The check after every press inside the boxes (camkit.live.in_box_refused, by pixels for the lit box): the probe's
+    frames where it walked off the boxes (241721 one Right past the last box, 241724 the list's cursor on Custom 2,
+    241752-241754 on C2, 70 and 75) each fail it with words that say so; the frames in a box pass it."""
+    from camkit import ocr as camkit_ocr
+    f = stored(f"kit2_pass2/shots/{name}")
+    lines = camkit_ocr.read([f.path])[f.path]
+    got = live.in_box_refused(option, word, b, O.PLACES, lines, f.image)
+    assert (got == "") if not why else (why in got), got
+
+
 def test_a_box_value_keeps_its_words_and_closes_the_spaces_ocr_puts_by_a_sign(monkeypatch):
     """read_at: "Lower Limit" stays two words (a proof's label), while "Std +Range", "‡ 5" and "100 +" close up."""
     def reads(rows):
@@ -117,8 +139,8 @@ def test_the_range_walk_on_the_stored_frames_gives_1_to_10_with_5_held(monkeypat
     monkeypatch.setattr(O, "box_answer", lambda cam: asked.append(cam.frame.path.name) or
                         (said.get(cam.frame.path.name), "vllm", False))
     cam = frames_cam(frames)
-    vals, held = O.walk(cam, 2, ["Type", "Standard", "Range"])
-    assert (vals, held) == ([f"±{v}" for v in range(1, 11)], "±5")
+    w = O.walk(cam, 2, ["Type", "Standard", "Range"], "Custom 1")
+    assert (w.values, w.held, w.wraps) == ([f"±{v}" for v in range(1, 11)], "±5", False)
     assert cam.presses == ["down"] * 5 + ["up"] * 10 and asked == list(said)
 
 
@@ -145,21 +167,25 @@ def test_the_box_question_is_asked_of_the_lit_box_on_the_stored_frames(monkeypat
     from camkit.frames import load
     for n, f in frames.items():
         assert screens.box_answer(SimpleNamespace(frame=load(f))) == (BOX_SAID[n], "vllm", False)
-    assert set(prompts) == {vlm.PROMPTS["box"]}
+    assert set(prompts) == {vlm.PROMPTS["box"]} and '{"value": null}' in vlm.PROMPTS["box"]
     logged = []
     cam = SimpleNamespace(frame=load(frames["241491_down.png"]), hdmi=SimpleNamespace(name="hdmi"),
                           run=SimpleNamespace(log=lambda kind, **f: logged.append((kind, f))))
+    O.in_box(cam, "Custom 1", "Standard", 1)
     got = O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
     assert (got.value, got.ocr, got.vlm, got.reader, got.by) == ("64", "", "64", "vllm", "vlm")
     assert [f for k, f in logged if k == "box_reading"] == [{"box": 1, "frame": "241491_down.png", "ocr": "",
                                                               "vlm": "64", "taken": "64", "reader": "vllm"}]
+    monkeypatch.setattr(screens, "ask_second", lambda image, prompt, timeout: {"value": None})
+    assert screens.box_answer(cam)[0] is None, "a reader that says no box is orange gives no answer"
 
 
 class Reads:
     """A made-up box whose OCR reads `ocr` in turn (one per frame) and whose second reader reads `vlm` in turn (None:
-    no answer)."""
-    def __init__(self, ocr, vlm=None):
+    no answer); check 1 fails on the frames `out` names (the cursor gone from the box)."""
+    def __init__(self, ocr, vlm=None, out=()):
         self.ocr, self.vlm, self.i, self.presses, self.asked = list(ocr), list(vlm or []), 0, [], []
+        self.out = set(out)
         self.hdmi = SimpleNamespace(name="hdmi")
         self.frame = SimpleNamespace(path=Path("00100_x.png"), image=None)
         self.logged = []
@@ -177,7 +203,13 @@ def reads(monkeypatch):
     monkeypatch.setattr(O, "box_answer", lambda cam: cam.asked.append(cam.i) or
                         (cam.vlm[cam.i] if cam.i < len(cam.vlm) else None, "vllm", False))
     monkeypatch.setattr(O.time, "sleep", lambda s: None)
+
+    monkeypatch.setattr(O, "cursor_refused", lambda cam, option, name, b: "no box of the row is lit" if cam.i in cam.out
+                        else "")
     return Reads
+
+
+ROW = ["Type", "Standard", "Range"]
 
 
 def test_a_reading_no_stepped_box_gives_goes_to_the_second_reader(reads):
@@ -185,8 +217,8 @@ def test_a_reading_no_stepped_box_gives_goes_to_the_second_reader(reads):
     that frame and its value taken where it fits; it is asked too about the held value and each end. Every asked frame
     is logged with both readings and the one taken; OCR's other readings never ask it."""
     cam = reads(["±3", "±2", "±?", "±1", "±2", "±3", "±3"], vlm=["±3", None, "±1", "±1", None, None, "±3"])
-    vals, held = O.walk(cam, 2, ["Type", "Standard", "Range"])
-    assert (vals, held) == (["±1", "±2", "±3"], "±3")
+    w = O.walk(cam, 2, ROW, "Custom 1")
+    assert (w.values, w.held, w.wraps) == (["±1", "±2", "±3"], "±3", False)
     assert cam.asked == [0, 2, 3, 6]
     logged = [f for k, f in cam.logged if k == "box_reading"]
     assert [(f["ocr"], f["vlm"], f["taken"]) for f in logged] == [("±3", "±3", "±3"), ("±?", "±1", "±1"),
@@ -198,7 +230,47 @@ def test_a_reading_that_fits_no_walk_stops_naming_its_frame(reads):
     frame, as before."""
     cam = reads(["±3", "±2", "±7"], vlm=["±3", None, "±7"])
     with pytest.raises(O.Failed, match=r"00102_down\.png"):
-        O.walk(cam, 2, ["Type", "Standard", "Range"])
+        O.walk(cam, 2, ROW, "Custom 1")
+
+
+def test_a_wrapping_list_and_a_box_with_ends_are_recorded_as_read(reads):
+    """walk records what it reads, assuming no step: a box whose Down brings back a value already seen (the one held)
+    is a list that comes round, recorded with no ends, in the order Up shows it from the value held; a box that stays
+    on a further press has an end there. The reader confirms each end and the value come round. Lower Limit (no
+    constant step held) may step unevenly; Range (STEPPED) must step evenly."""
+    cam = reads(["100+", "95+", "85+", "70+", "100+"], vlm=["100+", None, None, None, "100+"])
+    w = O.walk(cam, 1, ["Type", "Lower Limit"], "Custom 2")
+    assert (w.values, w.held, w.wraps) == (["100+", "70+", "85+", "95+"], "100+", True)
+    assert cam.presses == ["down"] * 4 and cam.asked == [0, 4]
+    cam = reads(["95+", "85+", "85+", "95+", "100+", "100+"], vlm=["95+", None, "85+", None, None, "100+"])
+    w = O.walk(cam, 1, ["Type", "Lower Limit"], "Custom 2")
+    assert (w.values, w.held, w.wraps) == (["85+", "95+", "100+"], "95+", False)
+    assert cam.presses == ["down", "down", "up", "up", "up"] and cam.asked == [0, 2, 5]
+    cam = reads(["±3", "±2", "±3"], vlm=["±3", None, "±3"])
+    w = O.walk(cam, 2, ROW, "Custom 1")
+    assert (w.values, w.wraps) == (["±3", "±2"], True), "a STEPPED box that comes round is recorded so, not refused"
+
+
+def test_a_walk_that_finds_neither_an_end_nor_its_values_coming_round_stops_at_the_cap(reads):
+    """MAX_WALK presses with every reading new: the walk stops in plain words, no value assumed."""
+    cam = reads(["300+"] + [f"{299 - k}+" for k in range(O.MAX_WALK + 5)], vlm=["300+"])
+    with pytest.raises(O.Failed, match=f"neither an end .* within {O.MAX_WALK} Down presses"):
+        O.walk(cam, 1, ["Type", "Lower Limit"], "Custom 2")
+    assert cam.presses == ["down"] * O.MAX_WALK
+
+
+def test_a_walk_stops_at_once_when_check_1_fails_and_the_reader_is_not_asked_there(reads):
+    """After the second Down check 1 fails (the cursor gone from the box): the walk stops naming the box and the frame,
+    no key goes after it, and the second reader is not asked on that frame, nor on any frame check 1 has not passed."""
+    cam = reads(["±3", "±2", "±1", "±1"], vlm=["±3", "±2", "70+", "70+"], out={2})
+    with pytest.raises(O.Failed, match=r"no longer in Custom 1's Range \(00102_down\.png\)"):
+        O.walk(cam, 2, ROW, "Custom 1")
+    assert cam.presses == ["down", "down"] and 2 not in cam.asked
+    cam = reads(["±3"], vlm=["±3"])
+    cam.press("down")                   # a frame no check has passed
+    with pytest.raises(O.Failed, match="check 1 has not passed"):
+        O.value_read(cam, 2, "±3", always=True)
+    assert cam.asked == []
 
 
 def test_ocr_reading_nothing_takes_the_readers_value_once_it_answers(reads, monkeypatch):
@@ -206,6 +278,7 @@ def test_ocr_reading_nothing_takes_the_readers_value_once_it_answers(reads, monk
     is asked once more after a short wait and its answer then taken."""
     cam = reads(["65", ""], vlm=[None, "64"])
     cam.i = 1
+    O.in_box(cam, "Custom 1", "Standard", 1)
     got = O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
     assert (got.value, got.by, cam.asked) == ("64", "vlm", [1])
     answers = iter([(None, "vllm", False), ("64", "vllm", False)])
@@ -219,12 +292,13 @@ def test_a_reader_that_does_not_answer_twice_stops_the_walk_in_plain_words(reads
     """No answer, then none on the retry: the walk stops saying the second reader did not answer, never a guess."""
     cam = reads(["65", ""], vlm=[None, None])
     cam.i = 1
+    O.in_box(cam, "Custom 1", "Standard", 1)
     with pytest.raises(O.Failed, match="second reader did not answer"):
         O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
     assert cam.asked == [1, 1]
     cam = reads(["±5"], vlm=[None])
     with pytest.raises(O.Failed, match="did not answer"):
-        O.walk(cam, 2, ["Type", "Standard", "Range"])       # the held value is always asked: no answer stops it
+        O.walk(cam, 2, ROW, "Custom 1")       # the held value is always asked: no answer stops it
 
 
 def test_the_ok_consent_passes_on_its_own_screen_and_refuses_any_other():
@@ -233,37 +307,59 @@ def test_the_ok_consent_passes_on_its_own_screen_and_refuses_any_other():
     value, the footer draws the OK key, no question mark or confirmation word above it."""
     f = stored("kit2_look_zebra_a/shots/00014_right.png")
     lines = ocr_lines(STD70)
-    ok = live.OptionBoxes("made up", "Custom 1", "Standard", "70", O.PLACES[1])
+    ok = live.OptionBoxes("made up", "Custom 1", "Standard", "70", O.PLACES[1], tuple(O.PLACES))
     assert live.option_boxes_refused(ok, lines, f.image) == ""
-    for consent, why in ((live.OptionBoxes("x", "Custom 2", "Standard", "70", O.PLACES[1]), "title"),
-                         (live.OptionBoxes("x", "Custom 1", "Range", "70", O.PLACES[1]), "word above"),
-                         (live.OptionBoxes("x", "Custom 1", "Standard", "71", O.PLACES[1]), "reads"),
-                         (live.OptionBoxes("x", "Custom 1", "Standard", "70", O.PLACES[2]), "not lit")):
+    row = tuple(O.PLACES)
+    for consent, why in ((live.OptionBoxes("x", "Custom 2", "Standard", "70", O.PLACES[1], row), "title"),
+                         (live.OptionBoxes("x", "Custom 1", "Range", "70", O.PLACES[1], row), "word above"),
+                         (live.OptionBoxes("x", "Custom 1", "Standard", "71", O.PLACES[1], row), "reads"),
+                         (live.OptionBoxes("x", "Custom 1", "Standard", "70", O.PLACES[2], row), "box 2 of the row is lit"),
+                         (live.OptionBoxes("x", "Custom 1", "Standard", "70", O.PLACES[2]), "no box of the row is lit")):
         assert why in live.option_boxes_refused(consent, lines, f.image)
     asks = [r if r[0] != "Std+Range" else ("Delete all settings?", *r[1:]) for r in STD70]
     assert "question mark" in live.option_boxes_refused(ok, ocr_lines(asks), f.image)
     no_ok = f.image.copy()
     no_ok[430:480, 540:640] = 0
     assert "OK key" in live.option_boxes_refused(ok, lines, no_ok)
+    two = f.image.copy()
+    two[349:404, 502:620] = two[349:404, 382:500]                  # Range drawn lit as well
+    assert "2 boxes are lit" in live.option_boxes_refused(ok, lines, two)
+
+
+@pytest.mark.parametrize("name,count,lit", [("241717_up.png", 3, [1]), ("241720_right.png", 2, [1]),
+                                            ("241721_right.png", 2, []), ("241724_down.png", 2, []),
+                                            ("241753_down.png", 0, []), ("241491_down.png", 3, [1]),
+                                            ("241429_down.png", 3, [2]), ("241745_down.png", 3, [0])])
+def test_the_rows_boxes_are_counted_by_their_outlines_and_the_lit_one_by_its_orange(name, count, lit):
+    """camkit.live.boxes_drawn and boxes_lit, by pixels alone: three boxes under Std+Range, two under Lower Limit,
+    none where the list's cursor is on a plain level (241753); the lit one by its orange, none with the list's cursor
+    moving."""
+    f = stored(f"kit2_pass2/shots/{name}")
+    assert live.boxes_drawn(f.image, O.PLACES) == count and live.boxes_lit(f.image, O.PLACES) == lit
 
 
 # ---------------------------------------------------------------- a made-up camera on the option's boxes
 
 
 class Cam:
-    """A made-up camera on Zebra Level: Right on the menu row opens the list on `start`; Down/Up step the list (it comes
-    round); with an option that draws boxes lit, Right enters them (box 0 first, then the next), Left goes back; Up/Down
-    step the lit box (a number stops at its ends, Type comes round); OK keeps it all and closes; MENU (close) cancels
-    the screen's changes. `records` is what a download holds: Zebra Level's option and each box's value."""
+    """A made-up camera on Zebra Level, as the a1 II's frames show it (kit2_pass2 241717-241754): Right on the menu row
+    opens the list on `start`; Down/Up step the list's cursor (it comes round); with an option that draws boxes lit,
+    Right from the list enters them at the first box and Left from the list at the last; in the boxes Right lights the
+    next and Left the one before, but Right on the last box (and, not seen on the camera, Left on the first) leaves
+    them for the list, whose cursor Up and Down then move to another option. Up/Down step the lit box (Standard and
+    Range stop at their ends, Type and, where `lower_wraps`, Lower Limit come round); OK keeps it all and closes; MENU
+    (close) cancels the screen's changes. Each press shows a new frame. `off_ends` counts the presses that left the
+    boxes so; `records` is what a download holds: Zebra Level's option and each box's value."""
     LIST = ["70", "75", "80", "85", "90", "95", "100", "100+", "Custom 1", "Custom 2"]
     TYPES = ["Std+Range", "Lower Limit"]
 
-    def __init__(self, start="70", eyes="hdmi"):
+    def __init__(self, start="70", eyes="hdmi", lower_wraps=False):
         self.level, self.at, self.lit, self.open = start, 0, None, False
         self.saved = {"Custom 1": {"Type": "Std+Range", "Standard": 70, "Range": 5, "Lower Limit": 100},
                       "Custom 2": {"Type": "Lower Limit", "Standard": 70, "Range": 5, "Lower Limit": 100}}
         self.edit = None
-        self.presses, self.consents, self.shown = [], [], []
+        self.lower_wraps = lower_wraps
+        self.presses, self.consents, self.shown, self.off_ends = [], [], [], []
         self.hdmi = SimpleNamespace(name=eyes)
         self.frame = SimpleNamespace(path=Path("00001_x.png"), image=None)
         self.answer_once = None
@@ -282,26 +378,34 @@ class Cam:
 
     def press(self, key, **k):
         self.presses.append(key)
+        self.frame = SimpleNamespace(path=Path(f"{len(self.presses) + 1:05d}_{key}.png"), image=None)
         if not self.open:
             if key == "right":
                 self.open, self.at = True, self.LIST.index(self.level)
             return
         boxes = self.boxes()
-        if key == "right":
-            if self.lit is None and boxes:
-                self.lit, self.edit = 0, dict(self.saved[self.option()])
-            elif self.lit is not None and self.lit + 1 < len(boxes):
-                self.lit += 1
-        elif key == "left" and self.lit:
-            self.lit -= 1
+        if key in ("right", "left") and self.lit is None:
+            if boxes:                   # from the list: Right enters at the first box, Left at the last
+                self.edit = self.edit or dict(self.saved[self.option()])
+                self.lit = 0 if key == "right" else len(boxes) - 1
+        elif key in ("right", "left"):
+            to = self.lit + (1 if key == "right" else -1)
+            if 0 <= to < len(boxes):
+                self.lit = to
+            else:                       # off the row's end: the cursor goes to the list
+                self.off_ends.append((key, self.lit, self.frame.path.name))
+                self.lit = None
         elif key in ("up", "down"):
             if self.lit is None:
                 self.at = (self.at + (1 if key == "down" else -1)) % len(self.LIST)
+                self.edit = None
             else:
                 name = boxes[self.lit][0]
                 if name == "Type":
                     i = self.TYPES.index(self.edit["Type"])
                     self.edit["Type"] = self.TYPES[(i + 1) % 2]
+                elif name == "Lower Limit" and self.lower_wraps:
+                    self.edit[name] = 50 + (self.edit[name] - 50 + (1 if key == "up" else -1)) % 60
                 else:
                     lo, hi = {"Standard": (0, 109), "Range": (1, 10), "Lower Limit": (50, 109)}[name]
                     self.edit[name] = max(lo, min(hi, self.edit[name] + (1 if key == "up" else -1)))
@@ -335,6 +439,16 @@ def fake(monkeypatch):
     monkeypatch.setattr(O, "lit_place", lambda cam: cam.lit)
     monkeypatch.setattr(O, "read_at", lambda cam, b: cam.boxes()[b][1] if b < len(cam.boxes()) else "")
     monkeypatch.setattr(O, "drawn", lambda cam: len(cam.boxes()))
+
+    def cursor(cam, option, name, b):   # check 1 on the made-up screen: the option, its box b the one lit, its word
+        if not cam.open or cam.option() != option:
+            return f"its title line reads {cam.option() if cam.open else ''!r}, not {option}"
+        if cam.lit is None:
+            return "no box of the row is lit"
+        if cam.lit != b:
+            return f"box {cam.lit + 1} of the row is lit, not box {b + 1}"
+        return "" if name is None or cam.boxes()[b][0] == name else f"the word above the row is not {name}"
+    monkeypatch.setattr(O, "cursor_refused", cursor)
     monkeypatch.setattr(O, "menu_from_shooting", lambda cam: None)
     monkeypatch.setattr(O, "scan_position", lambda cam, cycle: 0)
     monkeypatch.setattr(O, "go_to", lambda *a: True)
@@ -368,28 +482,62 @@ def test_a_number_box_is_walked_to_both_ends_and_type_once_round(fake):
     Up order; Standard from 70 gives 0 to 109, Type (two options that come round) both, the held value kept."""
     cam = fake()
     O.open_option(cam, None, None, "Zebra Level", "Custom 1")
-    O.enter_box(cam, 1, "Standard")
-    vals, held = O.walk(cam, 1)
-    assert held == "70" and vals == [str(v) for v in range(110)]
+    O.enter_box(cam, 1, ROW, "Custom 1")
+    w = O.walk(cam, 1, ROW, "Custom 1")
+    assert w.held == "70" and w.values == [str(v) for v in range(110)] and not w.wraps
     cam = fake()
     O.open_option(cam, None, None, "Zebra Level", "Custom 1")
-    O.enter_box(cam, 0, "Type")
-    assert O.walk(cam, 0) == (["Std+Range", "Lower Limit"], "Std+Range")
+    O.enter_box(cam, 0, ROW, "Custom 1")
+    assert O.walk(cam, 0, ["Type"], "Custom 1") == (["Std+Range", "Lower Limit"], "Std+Range", True)
 
 
-def test_the_probe_reads_every_box_under_each_type_and_chooses_nothing(fake, tmp_path):
-    """--probe: the option lit, each Type's row of boxes named as drawn, each box walked to its ends (Range before
-    Standard, so Standard never passes 30 with Range at ±5), MENU at the end; one line written, no OK pressed, the
-    camera's saved values untouched."""
-    cam = fake()
+@pytest.mark.parametrize("lower_wraps", [False, True])
+def test_the_probe_reads_every_box_under_each_type_and_chooses_nothing(fake, lower_wraps):
+    """--probe: the option lit, each Type's row of boxes counted as drawn and named, each box walked (Range before
+    Standard, so Standard never passes 30 with Range at ±5), MENU at the end; no OK pressed, the camera's saved values
+    untouched. A Lower Limit with ends is recorded with them, one that comes round as a list with no ends."""
+    cam = fake(lower_wraps=lower_wraps)
     got = O.probe(cam, None, None, None, "Zebra Level", "Custom 1")
     assert got["types"] == {"Std+Range": ["Type", "Standard", "Range"], "Lower Limit": ["Type", "Lower Limit"]}
-    assert got["boxes"]["Type"]["values"] == ["Std+Range", "Lower Limit"]
+    assert got["boxes"]["Type"] == {"values": ["Std+Range", "Lower Limit"], "held": "Std+Range", "wraps": True}
     assert got["boxes"]["Standard"]["values"][0] == "0" and got["boxes"]["Standard"]["values"][-1] == "109"
-    assert got["boxes"]["Range"] == {"values": [f"±{v}" for v in range(1, 11)], "held": "±5", "type": "Std+Range"}
-    assert got["boxes"]["Lower Limit"]["values"][0] == "50+" and got["boxes"]["Lower Limit"]["type"] == "Lower Limit"
+    assert got["boxes"]["Range"] == {"values": [f"±{v}" for v in range(1, 11)], "held": "±5", "type": "Std+Range",
+                                     "wraps": False}
+    lower = got["boxes"]["Lower Limit"]
+    assert lower["type"] == "Lower Limit" and lower["wraps"] == lower_wraps and len(lower["values"]) == 60
+    assert lower["values"][:2] == (["100+", "101+"] if lower_wraps else ["50+", "51+"])
+    assert O.probe_refused(got) == ""
     assert "enter" not in cam.presses and cam.saved["Custom 1"]["Standard"] == 70
     assert not any(lit == 1 and boxes[1:] == (("Standard", "30"), ("Range", "±5")) for lit, boxes in cam.shown)
+
+
+def test_the_prover_never_presses_past_either_end_of_the_row(fake, monkeypatch):
+    """On a camera where Right on the last box leaves the boxes for the list (241721, 241750) and Left from there
+    lights the last box again (241722, 241751): the probe and the proof run count the row's boxes from what is drawn
+    and move between them by that count, so no Right is ever sent on the last box, nor a Left on the first."""
+    cam = fake()
+    probed = O.probe(cam, None, None, None, "Zebra Level", "Custom 1")
+    assert cam.off_ends == []
+    monkeypatch.setattr(O.camset, "read", lambda d: d.values)
+    monkeypatch.setattr(O.camset, "diff", lambda a, b: [])
+    start = SimpleNamespace(name="00001_before.DAT", values=cam.records())
+    O.prove(cam, link_for(cam), None, None, None, "Zebra Level", "Custom 1", probed, None, start, Lines())
+    assert cam.off_ends == [] and cam.consents
+
+
+def test_a_press_that_leaves_the_boxes_stops_the_run_before_another_key(fake):
+    """The cursor gone from the box after a press (here a camera whose second box is not drawn as counted, so the
+    Right to it lands on the list): check 1 stops the run at once in plain words, and no key goes after it."""
+    cam = fake()
+    O.open_option(cam, None, None, "Zebra Level", "Custom 2")       # Lower Limit: Type and one box
+    O.enter_box(cam, 0, ["Type", "Lower Limit"], "Custom 2")
+    O.go(cam, "Custom 2", ["Type", "Lower Limit"], 0, 1)
+    sent = len(cam.presses)
+    with pytest.raises(O.Failed, match=r"the cursor is no longer in Custom 2's Range .*no box of the row is lit"):
+        O.go(cam, "Custom 2", ["Type", "Lower Limit", "Range"], 1, 2)
+    assert len(cam.presses) == sent + 1 and cam.presses[-1] == "right"
+    with pytest.raises(O.Failed, match="no box 4"):
+        O.go(cam, "Custom 2", ROW, 0, 3)
 
 
 def test_the_proof_values_take_the_ends_the_neighbours_a_middle_and_the_held_last():
@@ -400,6 +548,8 @@ def test_the_proof_values_take_the_ends_the_neighbours_a_middle_and_the_held_las
     std = O.values_for("Standard", vals, "31", range_held="±5")
     assert "30" not in std and std[-1] == "31"
     assert O.values_for("Type", ["Std+Range", "Lower Limit"], "Std+Range") == ["Lower Limit", "Std+Range"]
+    ring = ["100+", "101+", "102+", "50+", "51+", "52+"]       # a list that comes round, from the value held
+    assert O.values_for("Lower Limit", ring, "100+", wraps=True) == ["52+", "101+", "50+", "100+"]
 
 
 def test_standard_30_with_range_5_is_refused_on_osd_eyes_and_crossed_safely_otherwise(fake):
@@ -408,15 +558,15 @@ def test_standard_30_with_range_5_is_refused_on_osd_eyes_and_crossed_safely_othe
     cam = fake(eyes="osd")
     cam.saved["Custom 1"]["Standard"] = 32
     O.open_option(cam, None, None, "Zebra Level", "Custom 1")
-    O.enter_box(cam, 1, "Standard")
+    O.enter_box(cam, 1, ROW, "Custom 1")
     with pytest.raises(O.Refused, match="stalls the camera's remote link"):
-        O.step_to(cam, 1, [str(v) for v in range(110)], "20", names=["Type", "Standard", "Range"])
+        O.step_to(cam, 1, [str(v) for v in range(110)], "20", ROW, "Custom 1")
     assert O.read_at(cam, 1) == "31"
     cam = fake(eyes="hdmi")
     cam.saved["Custom 1"]["Standard"] = 32
     O.open_option(cam, None, None, "Zebra Level", "Custom 1")
-    O.enter_box(cam, 1, "Standard")
-    O.step_to(cam, 1, [str(v) for v in range(110)], "20", names=["Type", "Standard", "Range"])
+    O.enter_box(cam, 1, ROW, "Custom 1")
+    O.step_to(cam, 1, [str(v) for v in range(110)], "20", ROW, "Custom 1")
     assert O.read_at(cam, 1) == "20"
 
 
@@ -487,7 +637,8 @@ def run_main(monkeypatch, tmp_path, body, args=()):
     monkeypatch.setattr(O, "Run", lambda name: SimpleNamespace(dir=tmp_path))
     monkeypatch.setattr(O, "eyes_from_config", lambda run: None)
     monkeypatch.setattr(O, "prover_session", session)
-    monkeypatch.setattr(O, "latest_probe", lambda run, row, option: {"boxes": {}, "types": {}})
+    monkeypatch.setattr(O, "latest_probe", lambda run, row, option: {
+        "types": {"Std+Range": ["Type"]}, "boxes": {"Type": {"values": ["Std+Range"], "held": "Std+Range"}}})
     monkeypatch.setattr(O, "prove", body)
     monkeypatch.setattr(O, "probe", body)
     O.main(["--row", "Zebra Level", "--option", "Custom 1", "--scan", str(tmp_path), *args])
@@ -511,10 +662,31 @@ def test_a_stopped_run_exits_as_the_other_provers_do(monkeypatch, tmp_path, args
     run_main(monkeypatch, tmp_path, raises(StopRequested("STOP")), args)
 
 
+def test_a_probe_writes_its_line_only_when_it_read_every_box(monkeypatch, tmp_path, capsys):
+    """--probe: a probe that ends writes its one line (PROBES); one stopped part way (check 1 failing, a reader
+    that does not answer) writes nothing and says so."""
+    with pytest.raises(SystemExit):
+        run_main(monkeypatch, tmp_path, raises(O.Failed("the cursor is no longer in Custom 1's Lower Limit")), ["--probe"])
+    assert not (tmp_path / O.PROBES).exists() and f"nothing was written to {O.PROBES}" in capsys.readouterr().out
+    got = {"row": "Zebra Level", "option": "Custom 1", "types": {"Std+Range": ["Type"]},
+           "boxes": {"Type": {"values": ["Std+Range", "Lower Limit"], "held": "Std+Range", "wraps": True}}}
+    run_main(monkeypatch, tmp_path, lambda *a, **k: got, ["--probe"])
+    lines = (tmp_path / O.PROBES).read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1 and json.loads(lines[0])["types"] == got["types"]
+    assert "a list that comes round" in capsys.readouterr().out
+
+
 def test_a_proof_run_with_no_probe_stops_before_the_link(monkeypatch, tmp_path, no_camera):
-    """The proof run plans from the option's probe: with none in the run, it stops naming the probe command, nothing
-    reached."""
+    """The proof run plans from the option's probe: with none in the run, it stops naming the probe command; with a
+    probe line that lacks a box of a Type's row (written before the probe wrote only whole probes), it stops naming the
+    box. Nothing reached either way."""
     monkeypatch.setattr(O, "load_scan", lambda scan: (None, None))
     monkeypatch.setattr(O, "Run", lambda name: SimpleNamespace(dir=tmp_path))
     with pytest.raises(SystemExit, match="--probe"):
         O.main(["--row", "Zebra Level", "--option", "Custom 1", "--scan", str(tmp_path)])
+    part = {"row": "Zebra Level", "option": "Custom 1", "types": {"Std+Range": ROW, "Lower Limit": ["Type", "Lower Limit"]},
+            "boxes": {n: {"values": ["x"], "held": "x"} for n in ("Type", "Standard", "Range")}}
+    (tmp_path / O.PROBES).write_text(json.dumps(part) + "\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="lacks the walk of Lower Limit"):
+        O.main(["--row", "Zebra Level", "--option", "Custom 1", "--scan", str(tmp_path)])
+    assert O.probe_refused({"types": {}, "boxes": {}}) == "it records no row of boxes"
