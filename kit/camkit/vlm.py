@@ -205,6 +205,14 @@ PROMPTS.update({
 # second, held-out one (kit/tools/reader_census.py --questions, its "v3" questions; the candidates not kept stay with
 # the census, its CANDIDATES). The second questions keep their text beside it.
 PROMPTS.update({
+    # the lit box of a row of boxes near the bottom (Zebra Level's Custom boxes: Type, Standard, Range, Lower Limit),
+    # where "option" names the list's lit option instead; measured with the b70 reader on 2026-11-18, about 1 s a call:
+    # kit2_pass2 241491 "64" (OCR read nothing), 241490 "65", 241440 "±10", 241426 "±3" (OCR read a Cyrillic З)
+    "box": (
+        "This is a camera settings screen. In the row of boxes near the bottom, exactly one box is filled orange. "
+        'Reply with JSON only: {"value": "<the text inside the orange box, exactly as drawn>"}'),
+})
+PROMPTS.update({
     # title.v2, never the orange line under it, and a turned screen read turned
     "title.v3": (
         "This is a Sony camera screen. Copy its title exactly as drawn: the white text at the top, never the orange "

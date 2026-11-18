@@ -104,23 +104,60 @@ def frames_cam(frames):
 def test_the_range_walk_on_the_stored_frames_gives_1_to_10_with_5_held(monkeypatch):
     """The probe's Range walk replayed on its own frames (241424 lit on ±5, then 241425-241440): ±1 to ±10 with ±5 held,
     five Downs and ten Ups (the camera's run pressed eleven, taking "+10" and "÷10" for two values: read in the box's
-    shape they are one, the end that stayed), and the second reader never needed (the normaliser alone fits)."""
+    shape they are one, the end that stayed). OCR's readings alone make the walk; the second reader is asked about the
+    held value and each end alone (always asked there: they decide what is written down), its answers stubbed."""
     shots = RUNS / "kit2_pass2" / "shots"
     names = ["241424_right.png"] + [f"{n}_down.png" for n in range(241425, 241430)] + \
             [f"{n}_up.png" for n in range(241430, 241441)]
     frames = [shots / n for n in names]
     if not all(f.exists() for f in frames):
         pytest.skip(f"{shots} does not hold the probe's frames")
+    said = {"241424_right.png": "±5", "241429_down.png": "±1", "241439_up.png": "±10"}
     asked = []
-    monkeypatch.setattr(O, "vlm_option", lambda cam: asked.append(cam.frame.path.name) or "")
+    monkeypatch.setattr(O, "box_answer", lambda cam: asked.append(cam.frame.path.name) or
+                        (said.get(cam.frame.path.name), "vllm", False))
     cam = frames_cam(frames)
     vals, held = O.walk(cam, 2, ["Type", "Standard", "Range"])
     assert (vals, held) == ([f"±{v}" for v in range(1, 11)], "±5")
-    assert cam.presses == ["down"] * 5 + ["up"] * 10 and asked == []
+    assert cam.presses == ["down"] * 5 + ["up"] * 10 and asked == list(said)
+
+
+# the second reader's answers to the box question (PROMPTS["box"]) on four frames of the probe, measured with the b70
+# reader on 2026-11-18: 241491 is the frame OCR read nothing in (Standard lit at 64, Range left on ±10)
+BOX_SAID = {"241491_down.png": "64", "241490_down.png": "65", "241440_up.png": "±10", "241426_down.png": "±3"}
+
+
+def test_the_box_question_is_asked_of_the_lit_box_on_the_stored_frames(monkeypatch):
+    """proving.screens.box_answer asks the second reader about the lit box itself (PROMPTS["box"], not the option
+    question, whose "item under the cursor" is the list's Custom 1 on this screen) and takes its one "value"; on
+    241491, where OCR read the Standard box as nothing, the reader's 64 is taken and logged with OCR's reading."""
+    import proving.screens as screens
+    from camkit import vlm
+    shots = RUNS / "kit2_pass2" / "shots"
+    frames = {n: shots / n for n in BOX_SAID}
+    if not all(f.exists() for f in frames.values()):
+        pytest.skip(f"{shots} does not hold the probe's frames")
+    by_bytes = {f.read_bytes(): BOX_SAID[n] for n, f in frames.items()}
+    prompts = []
+    monkeypatch.setattr(screens, "ask_second", lambda image, prompt, timeout: prompts.append(prompt) or
+                        {"value": by_bytes[image]})
+    monkeypatch.setattr(vlm, "playing", lambda role: {"name": "vllm"})
+    from camkit.frames import load
+    for n, f in frames.items():
+        assert screens.box_answer(SimpleNamespace(frame=load(f))) == (BOX_SAID[n], "vllm", False)
+    assert set(prompts) == {vlm.PROMPTS["box"]}
+    logged = []
+    cam = SimpleNamespace(frame=load(frames["241491_down.png"]), hdmi=SimpleNamespace(name="hdmi"),
+                          run=SimpleNamespace(log=lambda kind, **f: logged.append((kind, f))))
+    got = O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
+    assert (got.value, got.ocr, got.vlm, got.reader, got.by) == ("64", "", "64", "vllm", "vlm")
+    assert [f for k, f in logged if k == "box_reading"] == [{"box": 1, "frame": "241491_down.png", "ocr": "",
+                                                              "vlm": "64", "taken": "64", "reader": "vllm"}]
 
 
 class Reads:
-    """A made-up box whose OCR reads `ocr` in turn (one per frame) and whose second reader reads `vlm` in turn."""
+    """A made-up box whose OCR reads `ocr` in turn (one per frame) and whose second reader reads `vlm` in turn (None:
+    no answer)."""
     def __init__(self, ocr, vlm=None):
         self.ocr, self.vlm, self.i, self.presses, self.asked = list(ocr), list(vlm or []), 0, [], []
         self.hdmi = SimpleNamespace(name="hdmi")
@@ -137,26 +174,57 @@ class Reads:
 @pytest.fixture
 def reads(monkeypatch):
     monkeypatch.setattr(O, "read_at", lambda cam, b: cam.ocr[min(cam.i, len(cam.ocr) - 1)])
-    monkeypatch.setattr(O, "vlm_option", lambda cam: cam.asked.append(cam.i) or (cam.vlm[cam.i] if cam.i < len(cam.vlm)
-                                                                                 else ""))
+    monkeypatch.setattr(O, "box_answer", lambda cam: cam.asked.append(cam.i) or
+                        (cam.vlm[cam.i] if cam.i < len(cam.vlm) else None, "vllm", False))
+    monkeypatch.setattr(O.time, "sleep", lambda s: None)
     return Reads
 
 
 def test_a_reading_no_stepped_box_gives_goes_to_the_second_reader(reads):
     """A reading that breaks the walk (no clean value, or not one step from the last): the second reader is asked on
-    that frame; its value is taken where it fits, the disagreement logged; OCR's clean readings never ask it."""
-    cam = reads(["±3", "±2", "±?", "±1", "±2", "±3", "±3"], vlm=["", "", "±1", "", "", "", ""])
+    that frame and its value taken where it fits; it is asked too about the held value and each end. Every asked frame
+    is logged with both readings and the one taken; OCR's other readings never ask it."""
+    cam = reads(["±3", "±2", "±?", "±1", "±2", "±3", "±3"], vlm=["±3", None, "±1", "±1", None, None, "±3"])
     vals, held = O.walk(cam, 2, ["Type", "Standard", "Range"])
     assert (vals, held) == (["±1", "±2", "±3"], "±3")
-    assert cam.asked == [2] and [f["vlm"] for k, f in cam.logged if k == "box_reading"] == ["±1"]
+    assert cam.asked == [0, 2, 3, 6]
+    logged = [f for k, f in cam.logged if k == "box_reading"]
+    assert [(f["ocr"], f["vlm"], f["taken"]) for f in logged] == [("±3", "±3", "±3"), ("±?", "±1", "±1"),
+                                                                 ("±1", "±1", "±1"), ("±3", "±3", "±3")]
 
 
 def test_a_reading_that_fits_no_walk_stops_naming_its_frame(reads):
     """±3, ±2, then ±7 by OCR and by the second reader alike: no stepped box gives it, and the walk stops naming the
     frame, as before."""
-    cam = reads(["±3", "±2", "±7"], vlm=["", "", "±7"])
+    cam = reads(["±3", "±2", "±7"], vlm=["±3", None, "±7"])
     with pytest.raises(O.Failed, match=r"00102_down\.png"):
         O.walk(cam, 2, ["Type", "Standard", "Range"])
+
+
+def test_ocr_reading_nothing_takes_the_readers_value_once_it_answers(reads, monkeypatch):
+    """OCR read nothing in the box (241491's case): the reader's 64 is taken and logged; a reader that does not answer
+    is asked once more after a short wait and its answer then taken."""
+    cam = reads(["65", ""], vlm=[None, "64"])
+    cam.i = 1
+    got = O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
+    assert (got.value, got.by, cam.asked) == ("64", "vlm", [1])
+    answers = iter([(None, "vllm", False), ("64", "vllm", False)])
+    calls = []
+    monkeypatch.setattr(O, "box_answer", lambda c: calls.append(1) or next(answers))
+    got = O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
+    assert got.value == "64" and len(calls) == 2
+
+
+def test_a_reader_that_does_not_answer_twice_stops_the_walk_in_plain_words(reads):
+    """No answer, then none on the retry: the walk stops saying the second reader did not answer, never a guess."""
+    cam = reads(["65", ""], vlm=[None, None])
+    cam.i = 1
+    with pytest.raises(O.Failed, match="second reader did not answer"):
+        O.value_read(cam, 1, "65", O._stepped("65", "65", "down", 1))
+    assert cam.asked == [1, 1]
+    cam = reads(["±5"], vlm=[None])
+    with pytest.raises(O.Failed, match="did not answer"):
+        O.walk(cam, 2, ["Type", "Standard", "Range"])       # the held value is always asked: no answer stops it
 
 
 def test_the_ok_consent_passes_on_its_own_screen_and_refuses_any_other():
@@ -280,7 +348,8 @@ def fake(monkeypatch):
         return "" if ok else "not that screen"
     monkeypatch.setattr(O, "ok_refused", judged)
     # the second reader reads the lit box as drawn, in its own words (a range with its sign): what a proof line keeps
-    monkeypatch.setattr(O, "vlm_option", lambda cam: cam.boxes()[cam.lit][1] if cam.lit is not None else "")
+    monkeypatch.setattr(O, "box_answer", lambda cam: (cam.boxes()[cam.lit][1] if cam.lit is not None else None,
+                                                      "vllm", False))
     return Cam
 
 
@@ -386,6 +455,7 @@ def test_the_proof_run_proves_each_box_from_its_own_base(fake, monkeypatch):
             by_box.setdefault(r["path"][2], []).append(r)
         assert set(by_box) == {"Type", "Standard", "Range", "Lower Limit"}
         assert all(r["vlm"] == r["shown"] == r["label"] for r in out), "OCR's reading and the second reader's, both kept"
+        assert all(r["vlm_reader"] == "vllm" and r["read_by"] == "both" for r in out), "the reader of each kept value"
         assert [c["key"] for c in by_box["Standard"][0]["changes"]] == ["global:0x0de2"]
         assert [c["key"] for c in by_box["Lower Limit"][0]["changes"]] == ["global:0x0de0"]
         assert all(r["changes"] == [] for r in (rows[-1] for rows in by_box.values())), "the held value changes nothing"

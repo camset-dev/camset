@@ -17,8 +17,9 @@ the option first; the exit statuses, the proof run and the shape of a proof line
 --probe, read only: the option lit, the first box walked once round (its options), each of its options' row of boxes
 read (Right through them, each name as written), each box under each option walked to both ends (Down until a further
 press changes nothing or comes round, then Up the same way: the values in Up order; a box of numbers read in its
-values' shape, OCR's glyph for the ± and the digits' look-alikes undone, the second reader asked where a reading
-breaks the walk, which must step as a stepped box does: value_at, walk), then MENU, which cancels it all,
+values' shape, OCR's glyph for the ± and the digits' look-alikes undone, and the second reader asked about the lit box
+itself (proving.screens.box_answer, PROMPTS["box"]) where OCR's reading is empty, unclean or breaks the walk, which must
+step as a stepped box does, and always about the value held and each end: value_read, walk), then MENU, which cancels it all,
 and the session's restore check. Nothing is chosen. One line goes to kit2_pass2/option_boxes.jsonl (PROBES): the
 option's rows of boxes ("types") and each box's values, the one it held and the first box's option it is drawn under.
 
@@ -51,6 +52,7 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, live, ocr, safety, screen  # noqa: E402
@@ -59,7 +61,8 @@ from camkit.runs import Run  # noqa: E402
 from boxes_run import EXIT_REFUSED, LOOKALIKE, PROOF_RUN, stop_status  # noqa: E402
 from boxes_run import lines as boxes_lines  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import LOCK_S, Failed, option_key, to_shooting, vlm_option  # noqa: E402
+from prove_run import LOCK_S, Failed, option_key, to_shooting  # noqa: E402
+from proving.screens import box_answer  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, scan_position)
 
@@ -69,6 +72,7 @@ Refused = safety.Refused
 PLACES = [(138, 349, 380, 404), (382, 349, 500, 404), (502, 349, 620, 404)]
 PROBES = "option_boxes.jsonl"          # in PROOF_RUN: one line per probe
 MAX_WALK = 130                         # presses at most to a box's end (Standard has 110 values)
+RETRY_WAIT = 2.0                       # s before the second reader is asked again, where it did not answer (ask_box)
 LIST_STEPS = 12                        # Down presses at most to light the option in its list
 # the screen that stalls the remote link while OSD Image Mode is on (kit2_zebra_split, 2026-11-18): this box lit on this
 # value while the other box reads that value
@@ -148,27 +152,69 @@ def _next(now: str, key: str, vals: list | None = None) -> str | None:
     return f"{m.group(1)}{int(m.group(2)) + (1 if key == 'up' else -1)}{m.group(3)}" if m else None
 
 
-def value_at(cam, b: int, like: str, fits=None) -> str:
-    """Box b's value read in the shape of its values (`like`, one of them: camkit.live.box_value, OCR's glyph for the
-    sign and the digits' look-alikes undone). Where that reading is no clean value of the shape, or `fits` (what a press
-    may have brought) refuses it, the second reader is asked (vlm_option, the reading boxes_run keeps with its proofs):
-    its value, in the same shape, is taken where it is clean and fits, the disagreement logged ("box_reading"); else
-    OCR's, for the caller to judge. A box of words (Type) is read as it is (read_at), never sent to the reader here.
-    The owner's rule: the second reader is right where OCR drops or mangles short text, and it is asked before a row
-    fails (2026-11-06; kit2_pass2 241424-241440, the probe's Range walk, read the ± four ways and a 3 as Cyrillic З)."""
+class BoxRead(NamedTuple):
+    """One reading of a box: the value taken, OCR's reading as read (ocr), the second reader's in the box's shape
+    (vlm, None: not asked), the reader that answered (reader) and whether it stands in for the second reader, and which
+    gave the value (by: "ocr", "both", "vlm")."""
+    value: str
+    ocr: str
+    vlm: str | None = None
+    reader: str | None = None
+    by: str = "ocr"
+    stand_in: bool = False
+
+
+def ask_box(cam) -> tuple:
+    """The second reader's (text, name, stands in) about the lit box (proving.screens.box_answer), asked once more after
+    RETRY_WAIT where it does not answer: it runs on another machine, which can be busy. The text is None after both."""
+    said, who, standing = box_answer(cam)
+    if said is None:
+        time.sleep(RETRY_WAIT)
+        said, who, standing = box_answer(cam)
+    return said, who, standing
+
+
+def value_read(cam, b: int, like: str, fits=None, always: bool = False, need: str = "") -> BoxRead:
+    """Box b's value, read in the shape of its values (`like`, one of them: camkit.live.box_value, OCR's glyph for the
+    sign and the digits' look-alikes undone; a box of words as read). OCR's reading stands alone where it is a clean
+    value that `fits` (what a press may have brought) takes and `always` is False. Otherwise, and always where `always`
+    (an end of a walk, the value held, a value to be kept with OK: each decides what is written down), the second
+    reader is asked about the lit box itself (ask_box, one retry), and both readings are logged with the one taken
+    ("box_reading": frame, box, ocr, vlm, taken, reader). Its value, in the box's shape, is taken where it is clean and
+    fits; where it does not answer, or its value does not fit, the walk stops in plain words naming the frame, never a
+    guess (`need` says what the reading was for). The owner's rule (2026-11-06): the reader is right where OCR drops or
+    mangles short text, and it is asked before a row fails; about 1 s a call, it is used where it makes sense."""
     raw = read_at(cam, b)
-    if live.box_shape(like) is None:
-        return raw
-    v = live.box_value(raw, like)
-    if live.box_number(v, like) is not None and (fits is None or fits(v)):
-        return v
-    said = live.box_value(vlm_option(cam) or "", like)
-    if live.box_number(said, like) is not None and (fits is None or fits(said)):
-        log = getattr(getattr(cam, "run", None), "log", None)
-        if log:
-            log("box_reading", box=b, frame=getattr(cam.frame.path, "name", ""), ocr=raw, vlm=said)
-        return said
-    return v
+    words = live.box_shape(like) is None
+    ocr_v = raw if words else live.box_value(raw, like)
+
+    def clean(v):
+        return bool(v) and (words or live.box_number(v, like) is not None) and (fits is None or fits(v))
+    if clean(ocr_v) and not always:
+        return BoxRead(ocr_v, raw)
+    said, who, standing = ask_box(cam)
+    vlm_v = None if said is None else (" ".join(said.split()) if words else live.box_value(said, like))
+    if words and vlm_v is not None and option_key(vlm_v) == option_key(ocr_v):
+        vlm_v = ocr_v                   # the same words, spaced as OCR read them (the label a proof line keeps)
+    taken = vlm_v if vlm_v is not None and clean(vlm_v) else None
+    frame = getattr(cam.frame.path, "name", "")
+    log = getattr(getattr(cam, "run", None), "log", None)
+    if log:
+        log("box_reading", box=b, frame=frame, ocr=raw, vlm=vlm_v, taken=taken, reader=who)
+    why = need or f"OCR read {raw!r}"
+    if said is None:
+        raise Failed(f"box {b} on {frame}: {why}, and the second reader did not answer (asked twice, {RETRY_WAIT:g} s "
+                     "apart): the kit does not guess a value. Check the reader (kit/tools/reader_check.py) and run the "
+                     "probe again")
+    if taken is None:
+        raise Failed(f"box {b} on {frame}: {why}, the second reader read {said!r}, and neither is a value a stepped box "
+                     "gives here: the kit does not guess which")
+    return BoxRead(taken, raw, vlm_v, who, "both" if taken == ocr_v else "vlm", standing)
+
+
+def value_at(cam, b: int, like: str, fits=None, always: bool = False, need: str = "") -> str:
+    """value_read's value alone."""
+    return value_read(cam, b, like, fits, always, need).value
 
 
 def hazard_refused(cam, b: int, key: str, names: list, vals: list | None = None) -> str:
@@ -217,19 +263,16 @@ def walk(cam, b: int, names: list | None = None) -> tuple:
     held = read_at(cam, b)
     numbers = live.box_shape(held) is not None
     if numbers:
-        held = value_at(cam, b, held)
+        held = value_at(cam, b, held, always=True, need=f"the value {name} held")
     step = None
 
     def read(prev, key):
         if not numbers:
             return read_at(cam, b)
         fits = _stepped(held, prev, key, step)
-        v = value_at(cam, b, held, fits)
-        if not fits(v):
-            raise Failed(f"box {b} ({name}): after {key} from {prev!r} it read {v!r} on "
-                         f"{getattr(cam.frame.path, 'name', '')}, which no stepped box gives, and the second reader read "
-                         "no value that fits")
-        return v
+        end = live.box_value(read_at(cam, b), held) == prev       # stayed: an end, which the reader confirms
+        return value_at(cam, b, held, fits, always=end,
+                        need=f"after {key} from {prev!r}, {'an end of ' + name if end else name}")
     cur = held
     for _ in range(MAX_WALK):
         press_box(cam, b, "down", names)
@@ -257,7 +300,7 @@ def step_to(cam, b: int, vals: list, target: str, names: list) -> None:
     """The lit box b stepped to `target` by its probe's values (Up order); Failed where it reads a value not among them
     or the target never comes up; the hazard refused on the way (press_box)."""
     for _ in range(len(vals) + 1):
-        now = value_at(cam, b, target, lambda v: v in vals)
+        now = value_at(cam, b, target, lambda v: v in vals, need=f"stepping to {target!r}")
         if now == target:
             return
         if now not in vals:
@@ -349,17 +392,22 @@ def values_for(name: str, vals: list, held: str, range_held: str | None = None) 
 
 def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx: int, vals: list, target: str) -> dict:
     """Box `idx` (of the row `names`) stepped to `target` and kept with OK, judged first on the screen's own shape
-    (ok_refused), then a settings download; {"chosen_frame", "row_frame", "shown", "dat"}."""
+    (ok_refused) and on the box's value as OCR and the second reader read it (value_read, the reader always asked:
+    the value kept decides the proof), then a settings download; {"chosen_frame", "row_frame", "shown", "vlm",
+    "vlm_reader", "read_by", "stand_in", "dat"}."""
     open_option(cam, cycle, model, row, option)
     enter_box(cam, idx, names[idx])
     step_to(cam, idx, vals, target, names)
     consent = live.OptionBoxes(f"{option}'s {names[idx]} box on {target}: OK keeps it (optboxes_run)", option, names[idx],
                                target, PLACES[idx])
-    shown = value_at(cam, idx, target, lambda v: v in vals)     # OCR's, or the second reader's where OCR's is unclean
-    why = ok_refused(cam, consent, shown)
+    read = value_read(cam, idx, target, lambda v: v in vals, always=True, need=f"the value {target!r} to keep with OK")
+    if read.value != target:
+        raise Failed(f"{row} > {option} > {names[idx]}: it reads {read.value!r} on {getattr(cam.frame.path, 'name', '')}, "
+                     f"not {target!r}: no OK")
+    why = ok_refused(cam, consent, read.value)
     if why:
         raise Failed(f"{row} > {option} > {names[idx]} = {target}: no OK: {why}")
-    chosen, seen_vlm = getattr(cam.frame.path, "name", ""), vlm_option(cam)     # the second reading, kept with it
+    chosen = getattr(cam.frame.path, "name", "")
     cam.answer_once = consent           # read as a dialog the camera's own guard judges it; as no known kind, this does
     cam.press("enter")
     row_frame = getattr(cam.frame.path, "name", "")
@@ -367,7 +415,8 @@ def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx:
     time.sleep(1)
     dat = link.download(f"{names[idx]}-{vals.index(target)}".replace(" ", "-"))
     time.sleep(LOCK_S)
-    return {"chosen_frame": chosen, "row_frame": row_frame, "shown": shown, "vlm": seen_vlm, "dat": dat}
+    return {"chosen_frame": chosen, "row_frame": row_frame, "shown": read.ocr, "vlm": read.vlm, "vlm_reader": read.reader,
+            "read_by": read.by, "stand_in": read.stand_in, "dat": dat}
 
 
 def ok_refused(cam, consent, read: str | None = None) -> str:
@@ -417,10 +466,14 @@ def prove(cam, link, hdmi, cycle, model, row: str, option: str, probed: dict, on
             ch = _diff(b_base, got["dat"])
             out.write(json.dumps({"path": [row, option, name], "kind": "list", "index": vals.index(target),
                                   "label": target, "shown": got["shown"], "vlm": got["vlm"],
+                                  "vlm_reader": got["vlm_reader"], "read_by": got["read_by"],
+                                  **({"vlm_stand_in": True} if got["stand_in"] else {}),
                                   "chosen_frame": got["chosen_frame"],
                                   "row_frame": got["row_frame"], "dat": got["dat"].name, "base": b_base.name,
                                   "applied": True, "boxes": True, "sampled": True, "changes": changes_of(ch)}) + "\n")
             out.flush()
+            if got["stand_in"]:
+                print(f"  {name} = {target}: read by {got['vlm_reader']!r}, standing in for the second reader", flush=True)
             if ch:
                 print(f"  {name} = {target}: {len(ch)} records {[(c.key, c.before, c.after) for c in ch][:4]}", flush=True)
             elif target != info["held"]:

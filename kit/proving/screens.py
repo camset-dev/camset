@@ -172,6 +172,25 @@ def vlm_option(cam) -> str:
     return str(v.get("selected") or "") if v else ""
 
 
+def box_answer(cam, timeout: float = 25.0) -> tuple:
+    """(the text inside the lit box of a row of boxes, as the second reader reads it (PROMPTS["box"]: one "value"),
+    the configured name of the reader that answered, whether it stands in for the second reader): kit/provers/
+    optboxes_run.py's question about Zebra Level's Custom boxes, where vlm_option's "item under the cursor" is the list's
+    lit option. The value is None where the reader fails, or answers anything but an object with one non-empty "value"
+    (no guess is made of it)."""
+    from camkit import vlm
+    try:
+        v = ask_second(cam.frame.path.read_bytes(), PROMPTS["box"], timeout=timeout)
+    except Exception:
+        v = None
+    value = v.get("value") if isinstance(v, dict) else None
+    try:
+        who, standing = str(vlm.playing("second").get("name") or ""), vlm.standing_in("second") is not None
+    except Exception:
+        who, standing = "", False
+    return (value.strip() if isinstance(value, str) and value.strip() else None), who, standing
+
+
 def ask_second(image: bytes, prompt: str, timeout: float) -> dict:
     """The "second" reader's answer; when it will not connect, the next configured reader that answers takes the
     role for the rest of the run: camkit.vlm.ask_role, through which every question a run asks about a frame goes
