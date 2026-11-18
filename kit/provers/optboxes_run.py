@@ -63,18 +63,19 @@ import json
 import re
 import sys
 import time
+import unicodedata
 from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, live, ocr, safety  # noqa: E402
+from camkit import camset, live, match, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from boxes_run import EXIT_REFUSED, LOOKALIKE, PROOF_RUN, stop_status  # noqa: E402
 from boxes_run import lines as boxes_lines  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, option_key, to_shooting  # noqa: E402
-from proving.screens import box_answer  # noqa: E402
+from proving.screens import box_answer, word_answer  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, scan_position)
 
@@ -107,8 +108,22 @@ def title(cam) -> str:
 
 
 def word(cam) -> str:
-    """The word the camera writes above the lit box ("Type", "Standard"), "" with none lit."""
+    """The word the camera writes above the lit box ("Type", "Standard") as OCR reads it, "" with none lit: never a
+    box's name as it is (box_name)."""
     return _read(cam, live.BOX_WORD, "label").strip()
+
+
+def clean_name(t) -> str:
+    """`t` in plain Latin, OCR's look-alike letters folded (camkit.match.LOOKALIKES: OCR read "Tyрe", its р Cyrillic,
+    above the a1 II's Type box), its spaces one: "" where it is empty or still holds a letter that is not ASCII."""
+    t = " ".join(unicodedata.normalize("NFKC", str(t or "")).translate(match.LOOKALIKES).split())
+    return t if t.isascii() and re.search(r"[A-Za-z]", t) else ""
+
+
+def only_box(probed: dict, only: str | None) -> str | None:
+    """The probe's name of the box --only names (compared as option names are: case, spaces and look-alikes aside),
+    or None where it names none of them."""
+    return next((n for n in (probed.get("boxes") or {}) if option_key(n) == option_key(only or "")), None)
 
 
 def read_at(cam, b: int) -> str:
@@ -221,6 +236,34 @@ class BoxRead(NamedTuple):
     reader: str | None = None
     by: str = "ocr"
     stand_in: bool = False
+
+
+def box_name(cam, option: str, b: int) -> str:
+    """The name of box b, lit, as the camera writes it above the row, in plain Latin (clean_name): what the probe line,
+    the proof line's path, --only and every message carry. Where OCR's word is empty or not plain Latin once its
+    look-alikes are folded, the second reader is asked for it (proving.screens.word_answer, PROMPTS["box_word"]), only
+    on a frame check 1 has just passed (in_box), once more after RETRY_WAIT where it does not answer, and both readings
+    logged ("box_name"); a name still not plain Latin stops the run, nothing written."""
+    raw = word(cam)
+    got = clean_name(raw)
+    if got:
+        return got
+    frame = getattr(cam.frame.path, "name", "")
+    if not _PASSED or _PASSED[0] is not cam.frame:
+        raise Failed(f"the second reader was about to be asked the name of {option}'s box {b + 1} on {frame}, a frame "
+                     "check 1 has not passed: not asked")
+    said, who, standing = word_answer(cam)
+    if said is None:
+        time.sleep(RETRY_WAIT)
+        said, who, standing = word_answer(cam)
+    got = clean_name(said)
+    log = getattr(getattr(cam, "run", None), "log", None)
+    if log:
+        log("box_name", box=b, frame=frame, ocr=raw, vlm=said, taken=got or None, reader=who)
+    if not got:
+        raise Failed(f"{option}'s box {b + 1} on {frame}: the word above the row reads {raw!r} to OCR and "
+                     f"{said!r} to the second reader: not a name in plain Latin letters, so it is not written down")
+    return got
 
 
 def ask_box(cam) -> tuple:
@@ -403,7 +446,7 @@ def row_names(cam, option: str, first: str) -> list:
     names = [first]
     for i in range(1, count):
         press_in(cam, "right", option, names, i)
-        names.append(word(cam))
+        names.append(box_name(cam, option, i))
     for i in range(count - 2, -1, -1):
         press_in(cam, "left", option, names, i)
     return names
@@ -424,7 +467,7 @@ def probe(cam, link, cycle, model, row: str, option: str) -> dict:
     open_option(cam, cycle, model, row, option)
     cam.press("right")
     in_box(cam, option, None, 0)        # the first box lit, its name written above the row
-    first = word(cam)
+    first = box_name(cam, option, 0)
     tw = walk(cam, 0, [first], option)
     boxes, types = {first: {"values": tw.values, "held": tw.held, "wraps": tw.wraps}}, {}
     for t in [tw.held] + [v for v in tw.values if v != tw.held]:
@@ -444,9 +487,14 @@ def probe(cam, link, cycle, model, row: str, option: str) -> dict:
 def probe_refused(probed: dict) -> str:
     """Why a probe line cannot plan a proof run, or "": every box of every Type's row must have its walk in it."""
     boxes = probed.get("boxes") or {}
-    missing = sorted({n for names in (probed.get("types") or {}).values() for n in names if n not in boxes})
+    names = {n for row in (probed.get("types") or {}).values() for n in row} | set(boxes)
+    missing = sorted({n for row in (probed.get("types") or {}).values() for n in row if n not in boxes})
+    unclean = sorted(n for n in names if clean_name(n) != n)
     if not probed.get("types"):
         return "it records no row of boxes"
+    if unclean:
+        return (f"it names {', '.join(map(repr, unclean))}, not in plain Latin letters (OCR's look-alikes, which a "
+                "proof line would carry into the report and the definition): probe again")
     return f"it lacks the walk of {', '.join(missing)}" if missing else ""
 
 
@@ -607,7 +655,7 @@ def main(argv=None):
         if why:
             sys.exit(f"the latest probe of {a.row} > {a.option} in {PROOF_RUN} cannot plan a proof run: {why}. Run the "
                      "probe again; nothing was sent to the camera")
-        if a.only and a.only not in probed.get("boxes", {}):
+        if a.only and only_box(probed, a.only) is None:
             sys.exit(f"--only {a.only!r}: not a box the probe saw ({', '.join(probed.get('boxes', {}))})")
     hdmi = eyes_from_config(run)
     stopped = []
@@ -623,7 +671,8 @@ def main(argv=None):
                         span = "a list that comes round" if b.get("wraps") else f"{b['values'][0]} to {b['values'][-1]}"
                         print(f"{n}: {len(b['values'])} values, {span}, held {b['held']!r}", flush=True)
             else:
-                prove(s.cam, s.link, hdmi, cycle, model, a.row, a.option, probed, a.only, s.start, out)
+                prove(s.cam, s.link, hdmi, cycle, model, a.row, a.option, probed,
+                      only_box(probed, a.only) if a.only else None, s.start, out)
         except Exception as e:
             stopped.append(e)
             if a.probe:

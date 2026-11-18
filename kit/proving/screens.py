@@ -214,12 +214,25 @@ def box_answer(cam, timeout: float = 25.0) -> tuple:
     optboxes_run.py's question about Zebra Level's Custom boxes, where vlm_option's "item under the cursor" is the list's
     lit option. The value is None where the reader fails, says no box is orange ({"value": null}), or answers anything
     but an object with one non-empty "value" (no guess is made of it)."""
+    return _one_answer(cam, "box", "value", timeout)
+
+
+def word_answer(cam, timeout: float = 25.0) -> tuple:
+    """(the name the camera writes above a row of boxes for its lit box, as the second reader reads it (PROMPTS
+    ["box_word"]: one "word"), the reader's configured name, whether it stands in): kit/provers/optboxes_run.py's
+    question where OCR's reading of that name is not plain Latin, or empty. None as box_answer gives it."""
+    return _one_answer(cam, "box_word", "word", timeout)
+
+
+def _one_answer(cam, prompt: str, field: str, timeout: float) -> tuple:
+    """The second reader's one string `field` about the frame on show, asked PROMPTS[prompt]: (it, the reader's name,
+    whether it stands in), it None where the reader fails, answers null or anything but one non-empty string."""
     from camkit import vlm
     try:
-        v = ask_second(cam.frame.path.read_bytes(), PROMPTS["box"], timeout=timeout)
+        v = ask_second(cam.frame.path.read_bytes(), PROMPTS[prompt], timeout=timeout)
     except Exception:
         v = None
-    value = v.get("value") if isinstance(v, dict) else None
+    value = v.get(field) if isinstance(v, dict) else None
     try:
         who, standing = str(vlm.playing("second").get("name") or ""), vlm.standing_in("second") is not None
     except Exception:

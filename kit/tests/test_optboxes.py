@@ -701,3 +701,78 @@ def test_a_proof_run_with_no_probe_stops_before_the_link(monkeypatch, tmp_path, 
     with pytest.raises(SystemExit, match="lacks the walk of Lower Limit"):
         O.main(["--row", "Zebra Level", "--option", "Custom 1", "--scan", str(tmp_path)])
     assert O.probe_refused({"types": {}, "boxes": {}}) == "it records no row of boxes"
+
+
+# ---------------------------------------------------------------- a box's name, in clean Latin
+
+
+@pytest.mark.parametrize("name,option", [("241414_right.png", "Custom 1"), ("241744_right.png", "Custom 2"),
+                                         ("241745_down.png", "Custom 2")])
+def test_the_type_box_read_with_a_cyrillic_letter_is_named_type(name, option, monkeypatch):
+    """On today's probes' Type-lit frames OCR reads the word above the row as "Tyрe", its р Cyrillic (U+0440): the box's
+    name is "Type", folded from it (camkit.match.LOOKALIKES), the second reader not asked."""
+    f = stored(f"kit2_pass2/shots/{name}")
+    cam = SimpleNamespace(frame=f, hdmi=SimpleNamespace(name="hdmi"), run=SimpleNamespace(log=lambda kind, **k: None))
+    assert O.word(cam) == "Tyрe"
+    monkeypatch.setattr(O, "word_answer", lambda cam: pytest.fail("the reader was asked"))
+    O.in_box(cam, option, None, 0)
+    assert O.box_name(cam, option, 0) == "Type"
+
+
+def test_a_word_ocr_cannot_put_in_plain_latin_goes_to_the_second_reader(monkeypatch):
+    """A word above the row that holds a letter no look-alike fold makes Latin, or none at all: the second reader's word
+    for it is taken (asked once check 1 has passed on that frame, and logged with OCR's reading); one that is still not
+    plain Latin, or no answer, stops the run in plain words; and no reader is asked on a frame check 1 has not passed."""
+    logged = []
+    cam = SimpleNamespace(frame=SimpleNamespace(path=Path("00009_right.png"), image=None),
+                          hdmi=SimpleNamespace(name="hdmi"), run=SimpleNamespace(log=lambda kind, **k: logged.append((kind, k))))
+    monkeypatch.setattr(O, "cursor_refused", lambda *a: "")
+    monkeypatch.setattr(O.time, "sleep", lambda s: None)
+    for ocr_word in ("Tyπe", "", "T¥пe"):
+        monkeypatch.setattr(O, "word", lambda cam, w=ocr_word: w)
+        monkeypatch.setattr(O, "word_answer", lambda cam: ("Type", "vllm", False))
+        O.in_box(cam, "Custom 1", None, 0)
+        assert O.box_name(cam, "Custom 1", 0) == "Type"
+    assert [k["taken"] for kind, k in logged if kind == "box_name"] == ["Type"] * 3
+    for said in ("Tyπe", None):
+        monkeypatch.setattr(O, "word_answer", lambda cam, s=said: (s, "vllm", False))
+        O.in_box(cam, "Custom 1", None, 0)
+        with pytest.raises(O.Failed, match="not a name in plain Latin letters"):
+            O.box_name(cam, "Custom 1", 0)
+    cam.frame = SimpleNamespace(path=Path("00010_right.png"), image=None)     # a frame no check has passed
+    monkeypatch.setattr(O, "word_answer", lambda cam: pytest.fail("asked on an unchecked frame"))
+    with pytest.raises(O.Failed, match="check 1 has not passed"):
+        O.box_name(cam, "Custom 1", 0)
+
+
+def test_the_first_boxs_proof_path_is_written_in_latin_and_only_type_proves_it(fake, monkeypatch):
+    """The made-up camera's OCR reads "Tyрe" above its first box: the probe names the box "Type", the proof lines'
+    path is ["Zebra Level", "Custom 1", "Type"], and --only Type proves that box."""
+    monkeypatch.setattr(O, "word", lambda cam: ("Tyрe" if cam.boxes()[cam.lit][0] == "Type" else cam.boxes()[cam.lit][0])
+                        if cam.lit is not None else "")
+    probed = probe_of(fake())
+    assert probed["types"]["Std+Range"][0] == "Type" and "Type" in probed["boxes"]
+    assert O.probe_refused(probed) == ""
+    cam = fake()
+    monkeypatch.setattr(O.camset, "read", lambda d: d.values)
+    monkeypatch.setattr(O.camset, "diff", lambda a, b: [])
+    out = Lines()
+    start = SimpleNamespace(name="00001_before.DAT", values=cam.records())
+    O.prove(cam, link_for(cam), None, None, None, "Zebra Level", "Custom 1", probed, O.only_box(probed, "Type"), start,
+            out)
+    assert out and {tuple(r["path"]) for r in out} == {("Zebra Level", "Custom 1", "Type")}
+    assert O.only_box(probed, "type") == "Type" and O.only_box(probed, "Gamma") is None
+
+
+def test_a_probe_line_naming_a_box_in_look_alike_letters_is_refused(monkeypatch, tmp_path, no_camera):
+    """The proof run refuses a probe line whose box names are not plain Latin (the "Tyрe" line of the probes before
+    this), saying to probe again; nothing reached."""
+    monkeypatch.setattr(O, "load_scan", lambda scan: (None, None))
+    monkeypatch.setattr(O, "Run", lambda name: SimpleNamespace(dir=tmp_path))
+    bad = "Tyрe"
+    line = {"row": "Zebra Level", "option": "Custom 1", "types": {"Std+Range": [bad, "Standard", "Range"]},
+            "boxes": {n: {"values": ["x"], "held": "x"} for n in (bad, "Standard", "Range")}}
+    (tmp_path / O.PROBES).write_text(json.dumps(line) + "\n", encoding="utf-8")
+    with pytest.raises(SystemExit, match="not in plain Latin letters.*probe again|probe again.*not in plain Latin"):
+        O.main(["--row", "Zebra Level", "--option", "Custom 1", "--scan", str(tmp_path)])
+    assert "not in plain Latin letters" in O.probe_refused(line)

@@ -214,6 +214,13 @@ PROMPTS.update({
         "This is a camera settings screen. In the row of boxes near the bottom, at most one box is filled orange. "
         'Reply with JSON only: {"value": "<the text inside the orange box, exactly as drawn>"}, or {"value": null} '
         "if no box in that row is filled orange."),
+    # the name the camera writes above that row for its lit box (kit/provers/optboxes_run.py's box_name), asked only
+    # where OCR's reading is not plain Latin after its look-alikes are folded, or is empty (OCR read "Tyрe", its р
+    # Cyrillic, on kit2_pass2 241414 and 241744: folded, that one needs no question); not yet measured on a reader
+    "box_word": (
+        "This is a camera settings screen. Near the bottom is a row of boxes, at most one of them filled orange, and "
+        "above the row the camera writes the name of the orange box. Reply with JSON only: "
+        '{"word": "<that name, exactly as drawn>"}, or {"word": null} if no box in that row is filled orange.'),
 })
 PROMPTS.update({
     # title.v2, never the orange line under it, and a turned screen read turned

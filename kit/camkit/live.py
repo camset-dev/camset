@@ -456,7 +456,9 @@ def boxes_lit(image, places) -> list:
 def in_box_refused(option: str, word: str | None, at: int, places, lines, image) -> str:
     """Why the screen is not `option`'s row of boxes with its box `at` (of `places`) the one lit and named `word` above
     the row, or "" when it is: the title line names the option, exactly one box of the row is filled orange, by pixels
-    (boxes_lit), and it is `at`, and the word above the row is `word` (any word where None: a box not yet named).
+    (boxes_lit), and it is `at`, and the word above the row is `word` (where None, a box not yet named, whatever it
+    reads: its name is then read, by the second reader where OCR's reading is empty or not plain Latin,
+    kit/provers/optboxes_run.py's box_name).
     kit/provers/optboxes_run.py's check after every press inside the boxes and before every reading there: a Right on
     the last box leaves the boxes for the list, whose cursor then moves with Up and Down (kit2_pass2 241721, 241724,
     241752-241754), which the prover must never take for a box."""
@@ -470,7 +472,7 @@ def in_box_refused(option: str, word: str | None, at: int, places, lines, image)
         return f"box {lit[0] + 1} of the row is lit, not box {at + 1}" if len(lit) == 1 else f"{len(lit)} boxes are lit"
     said = ocr.text_in(lines, BOX_WORD).strip()
     if word is None:
-        return "" if _compact(said) else "no word stands above the row"
+        return ""
     return "" if _compact(said) == _compact(word) else f"the word above the row reads {said[:40]!r}, not {word}"
 
 
