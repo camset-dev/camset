@@ -14,6 +14,7 @@ from camkit.link import CameraRefused, LinkError, StopRequested
 from camkit.screen import same_position, same_state
 from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
+from runner import menu_check
 
 from .base import LOCK_S, Failed, LockSeen, lock_log, lock_measured, lock_over
 from .screens import SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png, same_place
@@ -131,8 +132,7 @@ def to_row(cam, path, top=None, row_place=None):
         # screen, opened ISO (the wheel's Right; PP3, 2026-10-29)
         if not shooting_like(cam.read()):
             break
-        time.sleep(1.5)
-        if not shooting_like(cam.refresh("menu-check")):
+        if not shooting_like(menu_check(cam, "menu-check", clock=time)):      # a menu page at once over HDMI
             break
         cam.press("menu")
     if cam.read().kind not in ("menu", "submenu", "tiles"):

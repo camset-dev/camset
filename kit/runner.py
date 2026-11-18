@@ -637,16 +637,39 @@ def scan_position(cam, cycle) -> int | None:
     return next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
 
 
+MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
+MENU_PAGES = ("menu", "submenu", "tiles")
+
+
+def menu_check(cam, tag: str = "menu-check", clock=None, poll: float = 0.05):
+    """The screen after a MENU from the shooting screen that seemed not taken: with HDMI eyes the frames are watched
+    (LiveCamera.glance, unsaved) for up to MENU_LATE s and the first that reads as a menu page is taken at once
+    (refresh(frame=)); where none comes, and with other eyes, a fresh frame after the full MENU_LATE s (refresh), which
+    alone may say the MENU was not taken (2026-10-29: a second MENU on a menu that was only slow closed it, and the
+    next Right, on the shooting screen, opened ISO). clock: the caller's time module (this module's by default)."""
+    clock = clock or time
+    eyes = getattr(cam, "hdmi", None)
+    if getattr(eyes, "name", "") == "hdmi" and hasattr(cam, "glance"):
+        start = clock.monotonic()
+        while clock.monotonic() - start < MENU_LATE:
+            clock.sleep(poll)
+            f, s = cam.glance(tag)
+            if s.kind in MENU_PAGES:
+                return cam.refresh(tag, frame=f)
+    else:
+        clock.sleep(MENU_LATE)
+    return cam.refresh(tag)
+
+
 def menu_from_shooting(cam) -> None:
     """MENU from the shooting screen. MENU can go unanswered just after a download (two in a row, 2026-10-30): look
-    again at a fresh frame and only then press it once more, as prove_run's to_row does; a second MENU on a menu that
-    is only slow closes it again."""
+    again (menu_check: at once on a menu page with HDMI eyes, else at a fresh frame after MENU_LATE s) and only then
+    press it once more, as prove_run's to_row does; a second MENU on a menu that is only slow closes it again."""
     cam.press("menu")
     for _ in range(3):
         if cam.read().kind != "shooting":
             break
-        time.sleep(1.5)
-        if cam.refresh("menu-check").kind != "shooting":
+        if menu_check(cam, "menu-check").kind != "shooting":
             break
         cam.press("menu")
 

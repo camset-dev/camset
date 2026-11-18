@@ -911,3 +911,88 @@ def test_the_runs_that_still_hold_their_hdmi_eyes_hand_them_to_the_check(monkeyp
     prove_src = (KIT / "prove_run.py").read_text(encoding="utf-8")
     assert "restore_checked(run, ending, start, note, eyes=eyes," in runner_src
     assert "verify_restore(run, ref, eyes=hdmi," in prove_src and "check_restore(run, ending, start, eyes=hdmi," in prove_src
+
+
+# ---------------------------------------------------------------- a MENU from the shooting screen, watched
+
+
+class MenuCamera:
+    """A camera on a fake clock just after a MENU from the shooting screen: its screen the shooting screen until
+    `menu_at` s (None: never), then a menu page; MENU presses counted; `fresh` the refreshes that grabbed a new frame,
+    `taken` those that took a watched one."""
+    def __init__(self, now, menu_at, name="hdmi"):
+        self.now, self.menu_at, self.hdmi = now, menu_at, SimpleNamespace(name=name)
+        self.pressed, self.fresh, self.taken, self.glances = [], [], [], 0
+        self.screen = SimpleNamespace(kind="shooting")
+
+    def kind(self):
+        return "menu" if self.menu_at is not None and self.now[0] >= self.menu_at else "shooting"
+
+    def read(self):
+        return self.screen
+
+    def glance(self, tag):
+        self.glances += 1
+        k = self.kind()
+        return SimpleNamespace(kind=k, t=self.now[0]), SimpleNamespace(kind=k)
+
+    def refresh(self, tag, frame=None):
+        (self.fresh if frame is None else self.taken).append(round(self.now[0], 2))
+        self.screen = SimpleNamespace(kind=frame.kind if frame is not None else self.kind())
+        return self.screen
+
+    def press(self, key, **k):
+        self.pressed.append((key, round(self.now[0], 2)))
+        if key == "menu" and self.menu_at is None:
+            self.menu_at = self.now[0] + 99.0       # still not taken
+
+
+def menu_clock():
+    now = [0.0]
+    return now, SimpleNamespace(monotonic=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s))
+
+
+def test_a_menu_page_that_comes_is_taken_at_once_and_one_that_does_not_is_judged_on_a_fresh_frame(monkeypatch):
+    """runner.menu_check with HDMI eyes: the first frame that reads as a menu page ends the wait (0.4 s here, not
+    1.5); where none comes, a fresh frame after the full MENU_LATE s decides, as before; OSD eyes: MENU_LATE s and a
+    fresh frame, nothing watched."""
+    import runner
+    now, clock = menu_clock()
+    cam = MenuCamera(now, 0.4)
+    assert runner.menu_check(cam, clock=clock).kind == "menu" and cam.taken == [pytest.approx(0.4, abs=0.06)]
+    assert now[0] < 0.46 and cam.fresh == []
+    now[0] = 0.0
+    cam = MenuCamera(now, None)
+    assert runner.menu_check(cam, clock=clock).kind == "shooting"
+    assert cam.fresh == [pytest.approx(runner.MENU_LATE, abs=0.06)] and cam.taken == []
+    now[0] = 0.0
+    cam = MenuCamera(now, 0.4, name="osd")
+    assert runner.menu_check(cam, clock=clock).kind == "menu" and cam.glances == 0
+    assert cam.fresh == [pytest.approx(runner.MENU_LATE)]
+
+
+def test_no_second_menu_goes_before_a_fresh_frame_after_the_full_wait_shows_the_shooting_screen(monkeypatch):
+    """runner.menu_from_shooting and proving.nav.to_row: a menu that comes 0.4 s after MENU is taken then, with no
+    second MENU; a MENU not taken gets its second press only after a fresh frame at the full MENU_LATE s still shows
+    the shooting screen (the rule of 2026-10-29), at most twice more."""
+    import runner
+    from proving import nav
+    now, clock = menu_clock()
+    monkeypatch.setattr(runner, "time", clock)
+    cam = MenuCamera(now, 0.4)
+    runner.menu_from_shooting(cam)
+    assert [k for k, t in cam.pressed] == ["menu"] and now[0] == pytest.approx(0.4, abs=0.06)
+    now[0] = 0.0
+    cam = MenuCamera(now, None)
+    runner.menu_from_shooting(cam)
+    assert [t for k, t in cam.pressed] == [0.0, pytest.approx(1.5, abs=0.06), pytest.approx(3.0, abs=0.12),
+                                           pytest.approx(4.5, abs=0.18)]
+    assert all(f >= p for f, (k, p) in zip(cam.fresh, cam.pressed, strict=False))
+    # nav.to_row's own loop, on the same rule
+    now[0] = 0.0
+    monkeypatch.setattr(nav, "time", clock)
+    monkeypatch.setattr(nav, "place", lambda cam: "here")
+    monkeypatch.setattr(nav, "same_place", lambda a, b: a == b)
+    cam = MenuCamera(now, 0.6)
+    nav.to_row(cam, ["Shooting"], None, "here")
+    assert cam.pressed == [] and cam.taken == [pytest.approx(0.6, abs=0.06)] and now[0] < 0.7
