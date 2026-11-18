@@ -900,6 +900,12 @@ def _universe(led: Ledger, defn: dict, settings: list, src: Sources) -> None:
                 subs[key] = _entry(top["mode"], top["tab"], top["group"], row[:k], "setting", top["order"])
                 subs[key]["top"] = top
             subs[key]["settings"].append(s["key"])
+    # a deeper row a look or a crawl names by a label that reads as a row a setting is placed on, under the same row
+    # above (same_label: a slip or a cut, "Operation in Vertical Orientati"; an icon read as letters, "S&Q Record
+    # Setting"), is that row: no entry of its own, and Ledger.find takes its facts there
+    placed = {}
+    for (top_id, labels), e in subs.items():
+        placed.setdefault((top_id, labels[:-1]), []).append(e)
     # the deeper rows a look or a crawl names (a submenu's rows holding no setting)
     for path, mode, tab in _seen_paths(src, led):
         top = index.get((mode or MENU_MODE, tab, plain(path[0]))) if tab else None
@@ -911,6 +917,8 @@ def _universe(led: Ledger, defn: dict, settings: list, src: Sources) -> None:
         for k in range(2, len(path) + 1):
             key = (id(top), tuple(plain(x) for x in path[:k]))
             if key not in subs:
+                if any(same_label(e["path"][-1], path[k - 1]) for e in placed.get((id(top), key[1][:-1]), [])):
+                    break
                 subs[key] = _entry(top["mode"], top["tab"], top["group"], [top["path"][0], *path[1:k]], "look",
                                    top["order"])
                 subs[key]["top"] = top

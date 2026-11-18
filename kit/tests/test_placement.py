@@ -76,6 +76,31 @@ def test_a_setting_hangs_on_its_row_with_the_cameras_labels_and_order():
     assert got["global:0x0005"] == {"row": ["Cont. Shooting Speed", "Hi+ (E-Shutter)"], "row_at": [1, 0]}
 
 
+
+def test_a_path_read_cut_short_gives_way_to_one_that_leads_to_the_row_whole():
+    """A proof path read with a slip or cut short ("Cont. Shooting Speed > Hi+ (E-Shut") stops on the row above the one
+    it names: a later path of the same setting that leads with all its labels to a row under that row places it there;
+    without one the row above stands."""
+    d = doc(setting("global:0x0001", "Hi+", menus=["Cont. Shooting Speed > Hi+ (E-Shut", "Cont. Shooting Speed > Hi+ (E-Shutter)"]),
+            setting("global:0x0002", "Hi", menus=["Cont. Shooting Speed > Hi (E-Shut"]))
+    got = placement.settings(d, TREE)
+    assert got["global:0x0001"] == {"row": ["Cont. Shooting Speed", "Hi+ (E-Shutter)"], "row_at": [1, 0]}
+    assert got["global:0x0002"] == {"row": ["Cont. Shooting Speed"], "row_at": [1]}
+
+
+@needs_evidence
+def test_the_a1_iis_rows_read_with_a_slip_or_only_in_movie_hang_on_their_own_row():
+    """The a1 II's Operation in Vertical Orientation (one proof path cut short), Breathing Comp. and Movie's File
+    Settings > File Number (rows only the Movie menu has, proved in Movie mode) and 4K Output Set. (HDMI Only) (its
+    hand proof's row) each hang on their own row, not on the row above or a Stills row of the same name."""
+    by = {s["key"]: s for s in definitions.load_public(definitions.path(A1))["settings"]}
+    assert by["global:0x0473"]["row"] == ["Touch Pad Settings", "Operation in Vertical Orientation"]
+    assert by["global:0x0473"]["name"] == "Operation in Vertical Orientation"
+    assert (by["global:0x0296"]["row"], by["global:0x0296"].get("row_mode")) == (["Lens Compensation", "Breathing Comp."], "Movie")
+    assert (by["global:0x02a4"]["row"], by["global:0x02a4"].get("row_mode")) == (["File Settings", "File Number"], "Movie")
+    assert by["global:0x029e"]["row"] == ["File/Folder Settings", "File Number"]
+    assert by["global:0x0494"]["row"] == ["HDMI Output Settings", "4K Output Set. (HDMI Only)"]
+
 def test_the_choice_beside_an_option_is_under_that_option():
     d = doc(setting("global:0x0001", "Drive Mode", menus=["Drive Mode"], values=DRIVE),
             setting("global:0x0002", "Continuous speed", menus=["Drive Mode / Continuous Shooting", "Drive Mode / Continuous Shooting [recheck]"]),

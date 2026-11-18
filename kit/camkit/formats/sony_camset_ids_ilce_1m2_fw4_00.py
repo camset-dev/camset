@@ -327,7 +327,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         touch_operation = 1136
         touch_sensitivity = 1137
         touch_panel_pad = 1138
-        operation_in_vertical_orientatir = 1139
+        operation_in_vertical_orientation = 1139
         touch_position_mode = 1140
         operation_area = 1141
         touch_func_in_shooting = 1142

@@ -234,6 +234,17 @@ class Tree:
         gname = self.named.get((tab, name), name)
         return next((x for x in t["groups"] if x["name"] == gname or x["name"] == self.place.display.get(name, name)), None)
 
+    def whole(self, tab, menus, near=None):
+        """The row the first of `menus` (proof paths) leads to with all its labels from one of the tab's top rows, else
+        None."""
+        for path in menus:
+            segs = self.segments(path, tab)
+            if segs:
+                node, used = self.locate(tab, segs, near, anywhere=False)
+                if node is not None and used == len(segs):
+                    return node
+        return None
+
     def hang(self, tab, menus, near, name, by_name=True, anywhere=True) -> tuple:
         """Where a record hangs: (its row, None), by the first of its proof paths that leads to a row, else by its
         name in its camera group (`near`; not without `by_name`), else by a path that starts at a row named as its
@@ -244,10 +255,17 @@ class Tree:
         t = self.by_tab.get(tab)
         if not t:
             return None, None
-        for path in menus:
+        for i, path in enumerate(menus):
             segs = self.segments(path, tab)
-            hit = self.find(tab, segs, near, anywhere) if segs else None
+            hit, used = self.locate(tab, segs, near, anywhere) if segs else (None, 0)
             if hit:
+                # a path read cut short or with a slip ("Operation in Vertical Orientati") stops on the row above the
+                # one it names: a later path that leads with all its labels to a row under that row wins
+                if used < len(segs) and self.locate(tab, segs, near, anywhere=False)[0] is hit:
+                    under = {id(x) for x, _ in self.nodes(hit["kids"])}
+                    later = self.whole(tab, menus[i + 1:], near)
+                    if later is not None and id(later) in under:
+                        return later, None
                 return hit, None
         g = self.group_of(tab, near)
         if g and by_name:
@@ -329,9 +347,19 @@ def reach(t: "Tree", modes: list, paths: list, tab: str, near, name: str) -> tup
     row. kit/schema_update.py writes a setting's place by it (settings()) and the proof viewer hangs its records by
     it (grown())."""
     node, _ = t.hang(tab, paths, near, name)
+    said = [mode_of(p, [n for n, _ in modes]) for p in paths]
+    if node and t.whole(tab, paths, near) is None and (node["opts"] or node["st"] == "walked"
+                                                        or any(not k.get("made") for k in node["kids"])):
+        # no path leads to the Stills row whole (it stops on the row above, or the setting's name found it) and the
+        # walk knows that row's contents: a mode's row a path proved in that mode leads to whole wins (Breathing
+        # Comp., on the Movie menu's Lens Compensation; Movie's File Settings > File Number)
+        for mode, m in modes:
+            mine = [p for p, w in zip(paths, said, strict=True) if w == mode]
+            got = m.whole(tab, mine, near) if mine else None
+            if got is not None:
+                return m, got
     if node:
         return t, node
-    said = [mode_of(p, [n for n, _ in modes]) for p in paths]
     for mode, m in modes:
         mine = [p for p, w in zip(paths, said, strict=True) if w == mode]
         if not mine and tab in t.by_tab:          # a path with no context at all, on a row only a mode's menu has

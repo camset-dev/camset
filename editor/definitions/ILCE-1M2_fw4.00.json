@@ -11787,13 +11787,14 @@
    "group": "File",
    "order": 9000,
    "row": [
-    "File/Folder Settings",
+    "File Settings",
     "File Number"
    ],
    "row_at": [
-    19,
+    25,
     0
    ],
+   "row_mode": "Movie",
    "values": [
     [
      0,
@@ -11949,11 +11950,14 @@
    "group": "Image Quality/Rec",
    "order": 9000,
    "row": [
-    "Lens Compensation"
+    "Lens Compensation",
+    "Breathing Comp."
    ],
    "row_at": [
-    14
+    14,
+    3
    ],
+   "row_mode": "Movie",
    "values": [
     [
      0,
@@ -209146,10 +209150,12 @@
    "group": "External Output",
    "order": 9000,
    "row": [
-    "HDMI Output Settings"
+    "HDMI Output Settings",
+    "4K Output Set. (HDMI Only)"
    ],
    "row_at": [
-    59
+    59,
+    2
    ],
    "values": [
     [
@@ -210209,15 +210215,17 @@
    "key": "global:0x0473",
    "area": "global",
    "id": 1139,
-   "name": "Operation in Vertical Orientatir",
+   "name": "Operation in Vertical Orientation",
    "tab": "Setup",
    "group": "Touch Operation",
    "order": 9000,
    "row": [
-    "Touch Pad Settings"
+    "Touch Pad Settings",
+    "Operation in Vertical Orientation"
    ],
    "row_at": [
-    24
+    24,
+    0
    ],
    "values": [
     [

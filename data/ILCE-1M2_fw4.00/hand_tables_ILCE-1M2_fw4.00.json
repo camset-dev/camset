@@ -82,6 +82,7 @@
       "note": "Not Aspect Marker Level (0x1476), nor another marker type's level, nor Movie mode's Aspect Marker, whose row is one list, Off and the ratios, writing 0x0326: none of them writes it."
     },
     "global:0x1478": {"name": "Aspect Marker Disp."},
+    "global:0x0473": {"name": "Operation in Vertical Orientation"},
     "global:0x04d2": {
       "name": "ISO AUTO Min. SS: automatic speed",
       "note": "Used when ISO AUTO Min. SS (0x0336) is 0 (automatic); Right/Left on that option."

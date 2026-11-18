@@ -1232,8 +1232,8 @@ enums:
       doc: 'Touch Panel/Pad [Setup > Touch Operation]: 0 Both Valid, 1 Touch Panel Only, 2 Touch Pad Only. live
         settings; 1 of 1 settings on it proved on the camera.'
     0x0473:
-      id: operation_in_vertical_orientatir
-      doc: 'Operation in Vertical Orientatir [Setup > Touch Operation]: 0 On, 1 Off. live settings; 1 of 1 settings
+      id: operation_in_vertical_orientation
+      doc: 'Operation in Vertical Orientation [Setup > Touch Operation]: 0 On, 1 Off. live settings; 1 of 1 settings
         on it proved on the camera.'
     0x0474:
       id: touch_position_mode
