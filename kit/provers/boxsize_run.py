@@ -844,7 +844,8 @@ def body(s, a, run, hdmi, cycle, model, labels, axes, index, recs, rule, t, r, t
             to_shooting(link, hdmi, "the shooting screen to put the size back")
             ok = sw.back_to_start() and False
         return sw.finish() and ok
-    except BaseException:
+    except BaseException as e:
+        say_trace(e)
         print(f"  {recs['box']} may be left at another size or place: run {PROG} --allow {F.MEMORY_ROW!r} --allow "
               f"{SET_WORD!r}{f' --allow {RESET_WORD!r}' if sw.default else ''} --put-back {run.dir.name}", flush=True)
         raise
@@ -900,7 +901,83 @@ def put_back_source(name: str) -> tuple:
     return starts[0], (edges[0] if edges else None)
 
 
-def put_back_plan_lines(a, start: dict, edges: dict | None, recs: dict) -> list:
+def box_history(box: str) -> dict:
+    """What the camera's runs (their boxsize.jsonl) say of `box`, in the order they began: {"owed": (run, why) or None,
+    "began": {run: the run whose start was owed when it began, or None}}. A walk that does not end with its size and
+    place back (it stopped before its finish line, or its finish says what was not put back) leaves the box owed to its
+    start; a walk that begins while a start is owed starts from a box out of place, whatever it finds, and owes nothing
+    of its own; a put-back of the owed run that ends with both back clears it. A size the owner set by hand has no such
+    run behind it."""
+    top, found = paths.run_root(), []
+    for d in sorted(top.iterdir()) if top.is_dir() else []:
+        if (d / OUT).is_file():
+            lines = [ln for ln in jsonl.read(d / OUT) if ln.get("box") == box]
+            if lines:
+                found.append((lines[0].get("t") or 0, d.name, lines))
+    owed, began = None, {}
+    for _, name, lines in sorted(found):
+        fin = [ln for ln in lines if ln.get("what") == "finish"]
+        clean = bool(fin) and not fin[-1].get("size_off") and not fin[-1].get("place_off")
+        src = next((ln.get("source") for ln in lines if ln.get("source")), None)
+        if src:                                          # a put-back of the run `src`
+            if clean and (owed is None or owed[0] == src):
+                owed = None
+            continue
+        began[name] = owed[0] if owed else None
+        if owed is None and not clean:
+            owed = (name, "it stopped before its finish" if not fin else "it ended with its size or place not back")
+    return {"owed": owed, "began": began}
+
+
+def left_out(box: str) -> tuple | None:
+    """(the run that left `box` out of place, why), where the runs say no put-back since brought it back; else None."""
+    return box_history(box)["owed"]
+
+
+def owed_refusal(box: str, put_back: str | None = None) -> str:
+    """Why a camera run may not go, or "": a walk of `box` while an earlier run's start is owed (left_out), which would
+    take the box's displaced size for the owner's; a put-back of a run that began while another's start was owed, whose
+    start is not the box's. Both name the put-back to run instead."""
+    hist = box_history(box)
+    words = f"{PROG} --allow {F.MEMORY_ROW!r} --allow {SET_WORD!r} --allow {RESET_WORD!r}"
+    if put_back:
+        origin = hist["began"].get(put_back)
+        if origin:
+            return (f"{put_back} began while {origin} had left {box} out of place, so its start is not the box's: put back "
+                    f"to {origin}'s start instead: {words} --put-back {origin}")
+        return ""
+    if hist["owed"]:
+        run, why = hist["owed"]
+        return (f"{run} left {box} out of place ({why}), and no put-back since brought it back: a walk would take where "
+                f"the box is for its start; run {words} --put-back {run} first")
+    return ""
+
+
+def target_travel(edges: dict | None, start: dict) -> dict | None:
+    """The edges line at a run's start size made the put-back's target: its start registration ("values" "base") taken
+    from the run's start line (its place records, the box's place when the run began), where it holds them; the steps,
+    edges and centre stay the line's own (measured at that size)."""
+    if not edges:
+        return None
+    values = dict(edges.get("values") or {})
+    base, place = dict(values.get("base") or {}), start.get("place") or {}
+    base.update({k: place[k] for k in base if place.get(k) is not None})
+    return dict(edges, values=dict(values, base=base))
+
+
+def say_trace(e: BaseException) -> None:
+    """The traceback of an exception that is no Failed, no STOP and no Ctrl-C, printed to the console before the
+    session's own end takes over: "stopped: KeyError: 0" alone says nothing of where (2026-11-17)."""
+    import traceback
+
+    from camkit.link import StopRequested
+    from prove_run import Failed
+    if not isinstance(e, Failed | StopRequested | KeyboardInterrupt):
+        traceback.print_exception(e, file=sys.stdout)
+        sys.stdout.flush()
+
+
+def put_back_plan_lines(a, start: dict, edges: dict | None, recs: dict, centre: bool = False) -> list:
     """What --put-back RUN will do, for its plan (printed before a run, alone with --list): nothing is sent. The start
     size it returns to (by value where it is the default records'; an owner's, never said), the way: registered where it
     is now, then counted clicks, then, from a default start, the editor's Reset as --allow RESET_WORD allows it or not;
@@ -917,9 +994,12 @@ def put_back_plan_lines(a, start: dict, edges: dict | None, recs: dict) -> list:
         way = ("registered where it is now; then by counted clicks alone: an owner's size is never reset (a Reset gives "
                "the defaults); a size no click lands on is said by its difference")
     place = (f"its place: back to the start's from {run}'s edges at the start size (the frame pushed to its far corner "
-             "and brought back in Standard's step, each landing registered and checked)" if edges else
+             "from wherever it is and brought back in Standard's step to the start line's place, each landing registered "
+             "and checked)" if edges else
              f"its place: {run} measured no edges at the start size: its place is checked at the finish, not brought "
              "back")
+    if edges and centre:
+        place += "; its start place is the grid's centre, which the centre stop reaches at any size"
     sets = [afreg_run.step_name(k, w) for k, w in F.setup_steps(False, False, "Standard", None, True)]
     return [f"{box}: back to the start of {run}, {to}, as {run} began it ({start.get('context')!r}; run {a.run})",
             f"  {way}",
@@ -951,19 +1031,24 @@ def put_back_main(a) -> int:
     ok = False
     with prover_session(run, hdmi, may_open={F.MEMORY_ROW}, show=0, expected=frozenset(F.EXPECTED_LEFT),
                         end_why="the settings download after the put-back") as s:
-        from camkit import camset
-        code, _ = aspect_of(index, camset.read(s.start))
-        tag["setup"] = F.prepare(s.cam, s.link, hdmi, run, cycle, model, False, False, s.start, "Standard", index, None,
-                                 circ=True)
-        sw = Sizes(s.cam, s.link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, rule_of(table), tag, index, code)
-        sw.start_travel = edges[0] if edges else None
-        afreg_run.choose_area(s.cam, run, cycle, model, labels, axes, r, None)
-        to_shooting(s.link, hdmi, "the shooting screen with the box chosen")
         try:
-            ok = sw.put_back(start)
-        except Failed as e:
-            print(f"  stopped: {e}", flush=True)
-        ok = sw.finish() and ok
+            from camkit import camset
+            code, _ = aspect_of(index, camset.read(s.start))
+            tag["setup"] = F.prepare(s.cam, s.link, hdmi, run, cycle, model, False, False, s.start, "Standard", index,
+                                     None, circ=True)
+            sw = Sizes(s.cam, s.link, hdmi, run, cycle, model, a, t, r, labels, axes, recs, rule_of(table), tag, index,
+                       code)
+            sw.start_travel = target_travel(edges, start)       # the place's target: the run's start line's place
+            afreg_run.choose_area(s.cam, run, cycle, model, labels, axes, r, None)
+            to_shooting(s.link, hdmi, "the shooting screen with the box chosen")
+            try:
+                ok = sw.put_back(start)
+            except Failed as e:
+                print(f"  stopped: {e}", flush=True)
+            ok = sw.finish() and ok
+        except BaseException as e:
+            say_trace(e)
+            raise
     return 0 if ok else 1
 
 
@@ -1006,19 +1091,29 @@ def main(argv=None) -> int:
     if a.put_back:
         # the plan from RUN's own files and the definition alone; --list ends here, before anything reaches the camera
         start, edges = put_back_source(a.put_back)
-        recs = box_records(read_definition(), start["box"], custom_table())
-        print("\n".join(put_back_plan_lines(a, start, edges, recs)), flush=True)
-        if a.list:
-            return 0
+        doc = read_definition()
+        recs = box_records(doc, start["box"], custom_table())
+        index = {s["key"]: s for s in doc.get("settings") or []}
+        target = target_travel(edges, start)
+        centre = bool(target) and F.at_centre((target.get("values") or {}).get("base") or {}, index)
+        print("\n".join(put_back_plan_lines(a, start, edges, recs, centre)), flush=True)
+        why = owed_refusal(start["box"], a.put_back)
+    else:
+        if a.box not in BOXES:
+            sys.exit(f"boxsize_run: --box {a.box!r} is none of Custom 1, Custom 2 or Custom 3")
+        doc, table = read_definition(), custom_table()
+        recs = box_records(doc, a.box, table)
+        print("\n".join(plan_lines(a, recs)), flush=True)
+        why = owed_refusal(a.box)
+    if a.list:
+        if why:
+            print(f"a camera run is refused: {why}", flush=True)
+        return 0
+    if why:
+        sys.exit(f"boxsize_run: {why}")
+    if a.put_back:
         allowed_or_exit(a.allow)
         return put_back_main(a)
-    if a.box not in BOXES:
-        sys.exit(f"boxsize_run: --box {a.box!r} is none of Custom 1, Custom 2 or Custom 3")
-    doc, table = read_definition(), custom_table()
-    recs = box_records(doc, a.box, table)
-    print("\n".join(plan_lines(a, recs)), flush=True)
-    if a.list:
-        return 0
     return prove(a, doc, recs, table, allowed_or_exit(a.allow))
 
 

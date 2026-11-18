@@ -655,3 +655,198 @@ def test_a_size_change_that_moves_the_boxs_place_is_a_finding(walk, capsys):
     (line,) = [ln for ln in lines_of(sw) if ln["what"] == "probe"]
     assert {"key": "set1:0x139f", "delta": 3} in line["place_moved"]
     assert "the box's place moved with its size: set1:0x139f +3" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- Custom 2 left out of place (2026-11-17)
+
+# Custom 2's place records (FRAME_TRAVEL's own places and the box in use's), as a registration writes them, at a start
+# made up at the grid's centre
+C2_PLACE = {"set1:0x13a3": 320, "set1:0x13a5": 240, "set1:0x133f": 320, "set1:0x1345": 240, "set1:0x1341": 320,
+            "set1:0x1347": 240, "set1:0x1343": 320, "set1:0x1349": 240, "set1:0x1327": 320, "set1:0x1329": 240}
+C2_DEFAULT = {"width": 402, "height": 132, "default_width": 402, "default_height": 132, "in_use_width": 402,
+              "in_use_height": 132}
+
+
+def c2_runs(tmp_path, monkeypatch, cleaned=False) -> None:
+    """The three runs of 2026-11-17 in their real shape, where paths.run_root finds them (the sizes Sony's defaults and
+    the dials' ends, the places made up): kit2_boxsize_c2, a walk of Custom 2 from its defaults, stopped by its STOP file
+    after "front smallest: height 32" (no finish line; its edges at the start size kept); kit2_boxsize_c2_putback, which
+    stopped before writing a line (no boxsize.jsonl); kit2_boxsize_c2_height, a walk that took 402 x 32 for the owner's
+    size and finished with its place 3 off. `cleaned`: a later put-back of kit2_boxsize_c2 that brought it back."""
+    from camkit import jsonl
+    monkeypatch.setattr(B.paths, "run_root", lambda *a, **k: tmp_path)
+    ctx = B.context_of("3:2")
+
+    def size(w, h, default=C2_DEFAULT):
+        return dict(default, width=w, height=h, in_use_width=w, in_use_height=h)
+
+    def write(run, *lines, t0=1000.0):
+        (tmp_path / run).mkdir(exist_ok=True)
+        for i, ln in enumerate(lines):
+            jsonl.append(tmp_path / run / "boxsize.jsonl", {"t": t0 + i, "box": "Custom 2", **ln, "context": ctx})
+    write("kit2_boxsize_c2", {"what": "start", "file": "00010_size-001-start-custom-2.DAT", "size": size(402, 132),
+                              "place": C2_PLACE, "default": True},
+          {"what": "travel", "at": "start", "size": size(402, 132), "check": [], "back": True},
+          {"what": "rear_l toward its smallest", "turns": [["rear_l", -40]], "size": size(28, 132), "place": C2_PLACE},
+          {"what": "end", "dial": "rear_l", "end": "smallest", "size": size(28, 132)},
+          {"what": "rear_l back to its start", "turns": [["rear_l", -1]], "size": size(388, 132), "place": C2_PLACE},
+          {"what": "reset", "size": size(402, 132), "place": C2_PLACE, "back": True},
+          {"what": "front toward its smallest", "turns": [["front", -40]], "size": size(402, 32), "place": C2_PLACE},
+          {"what": "front toward its smallest, checked", "turns": [["front", -2]], "size": size(402, 32),
+           "place": C2_PLACE},
+          {"what": "end", "dial": "front", "end": "smallest", "size": size(402, 32)})
+    keys = list(C2_PLACE)
+    jsonl.append(tmp_path / "kit2_boxsize_c2" / "edges.jsonl",
+                 {"area": "Custom 2", "code": 110, "at": "start", "size": size(402, 132), "context": ctx,
+                  "files": {"base": "00012_edge-base-custom-2.DAT"}, "edges": [{"key": k} for k in keys],
+                  "values": {"base": dict(C2_PLACE), "high": {k: v + 100 for k, v in C2_PLACE.items()}},
+                  "back": {"same": True}, "moved": True})
+    (tmp_path / "kit2_boxsize_c2_putback").mkdir()
+    (tmp_path / "kit2_boxsize_c2_putback" / "setup.jsonl").write_text("{}\n", encoding="utf-8")
+    off = dict(C2_PLACE, **{"set1:0x1329": 243})
+    write("kit2_boxsize_c2_height", {"what": "start", "size": size(402, 32), "place": C2_PLACE, "default": False},
+          {"what": "travel", "at": "start", "size": size(402, 32), "check": [], "back": False},
+          {"what": "finish", "size": size(402, 32), "place": off, "size_off": {}, "place_off": {"set1:0x1329": 3}},
+          t0=3000.0)
+    if cleaned:
+        write("kit2_boxsize_c2_putback2", {"what": "now", "size": size(402, 32), "place": off, "source": "kit2_boxsize_c2"},
+              {"what": "finish", "size": size(402, 132), "place": C2_PLACE, "size_off": {}, "place_off": {},
+               "source": "kit2_boxsize_c2"}, t0=4000.0)
+
+
+def test_a_walk_refuses_to_start_on_a_box_an_earlier_run_left_out_of_place(no_camera, listed, tmp_path, monkeypatch,
+                                                                         capsys):
+    """kit2_boxsize_c2 stopped with Custom 2 at 402 x 32, and nothing since brought it back (the put-back stopped
+    before a line; kit2_boxsize_c2_height began from that state and ended with the place off): a walk of Custom 2 is
+    refused before anything connects, naming the put-back to run first, never taking 402 x 32 for the owner's size;
+    --list says so in its plan. A put-back of the run that began from the displaced state is refused too, naming the run
+    whose start is owed. Another box, with no such run behind it, is not refused."""
+    c2_runs(tmp_path, monkeypatch)
+    for argv in (["--box", "Custom 2"], ["--box", "Custom 2", "--dials", "front"]):
+        with pytest.raises(SystemExit, match=r"kit2_boxsize_c2 left Custom 2 out of place.*--put-back kit2_boxsize_c2\b"):
+            B.main(argv + allowed(*WORDS, "Custom box Reset"))
+    with pytest.raises(SystemExit, match=r"kit2_boxsize_c2_height began.*--put-back kit2_boxsize_c2\b"):
+        B.main(["--put-back", "kit2_boxsize_c2_height", *allowed(*WORDS, "Custom box Reset")])
+    assert B.main(["--box", "Custom 2", "--list"]) == 0
+    assert "a camera run is refused: kit2_boxsize_c2 left Custom 2 out of place" in capsys.readouterr().out
+    assert B.main(["--put-back", "kit2_boxsize_c2", "--list"]) == 0
+    assert "refused" not in capsys.readouterr().out
+    called = []
+    monkeypatch.setattr(B, "prove", lambda *a, **k: called.append(a) or 0)
+    assert B.main(["--box", "Custom 3", *allowed(*WORDS)]) == 0 and called
+
+
+def test_a_put_back_that_brought_the_box_back_lifts_the_refusal(no_camera, listed, tmp_path, monkeypatch):
+    """Once a put-back of kit2_boxsize_c2 has finished with the size and place back, a walk of Custom 2 starts."""
+    c2_runs(tmp_path, monkeypatch, cleaned=True)
+    called = []
+    monkeypatch.setattr(B, "prove", lambda *a, **k: called.append(a) or 0)
+    assert B.main(["--box", "Custom 2", *allowed(*WORDS)]) == 0 and called
+    assert B.left_out("Custom 2") is None
+
+
+class Box2(BoxCam):
+    """BoxCam as Custom 2: its records' keys, its defaults 402 x 132 and the height's ladder from its smallest (32, 12 a
+    click: 132 lies on no click from 32); its place where kit2_boxsize_c2_height left it (Y 3 off)."""
+    H = (32, 470, 12)
+
+    def __init__(self):
+        super().__init__(402, 32)
+        self.place2 = dict(C2_PLACE, **{"set1:0x1329": 243})
+
+    def reset(self):
+        self.shown, self.resets = [402, 132], self.resets + 1
+
+    def records(self) -> Download:
+        return Download({"set1:0x14ba": self.width, "set1:0x14b8": self.height, "set1:0x14c6": 402, "set1:0x14c4": 132,
+                         "set1:0x148a": self.width, "set1:0x1488": self.height, **self.place2})
+
+
+@pytest.fixture
+def c2_session(monkeypatch, tmp_path, listed):
+    """--put-back kit2_boxsize_c2 run through its whole session on Box2: the session, setup, choosing, the editor,
+    registering and the place's put-back (framepos_run.put_back_area, its source kept) made up; the session's own end
+    (prover_session's except) kept as the real one keeps it. Returns (the box, what the session saw)."""
+    import contextlib
+
+    import afreg_run
+    import camkit.frames
+    import camkit.runs
+    import prove_run
+    import runner
+    from camkit import camset
+    c2_runs(tmp_path, monkeypatch)
+    box, seen = Box2(), {"stopped": [], "put_back_area": []}
+    regs = []
+
+    def reg(self, tag):
+        self.files[tag] = f"{len(regs):05d}_{tag}.DAT"
+        self.cs[tag] = box.records()
+        regs.append(tag)
+
+    @contextlib.contextmanager
+    def session(run, eyes, **kw):
+        try:
+            yield SimpleNamespace(cam=SimpleNamespace(frame=SimpleNamespace(image=None)), link=None,
+                                  start=tmp_path / "00001_before.DAT")
+        except Exception as e:
+            seen["stopped"].append(f"{type(e).__name__}: {e}")
+            print(f"stopped: {type(e).__name__}: {e}", flush=True)
+
+    def put_back_area(cam, link, hdmi, run, cycle, model, labels, axes, t, r, a, index, turned, src, m):
+        seen["put_back_area"].append(src)
+        box.place2 = dict(box.place2, **src["values"]["base"])
+        return {"area": t["label"], "back": {"same": True, "off": []}}
+    monkeypatch.setattr(runner, "prover_session", session)
+    monkeypatch.setattr(runner, "load_scan", lambda scan: (None, None))
+    def run_of(name):
+        (tmp_path / name).mkdir(exist_ok=True)
+        return SimpleNamespace(dir=tmp_path / name, dat=tmp_path)
+    monkeypatch.setattr(camkit.runs, "Run", run_of)
+    monkeypatch.setattr(camkit.frames, "eyes_from_config", lambda run: None)
+    monkeypatch.setattr(camset, "read", lambda path: Download({"global:0x01fe": 0}))
+    monkeypatch.setattr(B, "session_parts", lambda a, doc, name: ([], {}, (5, name, 1), None, {"label": name,
+                                                                                               "code": 110}))
+    monkeypatch.setattr(F, "prepare", lambda *a, **k: ["Switch V/H AF Area = Off"])
+    monkeypatch.setattr(afreg_run, "choose_area", lambda *a, **k: {})
+    monkeypatch.setattr(prove_run, "to_shooting", lambda *a, **k: None)
+    monkeypatch.setattr(F.Walk, "reg", reg)
+    monkeypatch.setattr(B, "open_editor", lambda sw: box.opened())
+    monkeypatch.setattr(B, "turn", lambda cam, name, dial, n: box.turned(dial, n))
+    monkeypatch.setattr(B, "keep_size", lambda cam, name: box.ok())
+    monkeypatch.setattr(B, "press_reset", lambda cam, name: box.reset())
+    monkeypatch.setattr(B, "editor_box", lambda image: None)
+    monkeypatch.setattr(F, "put_back_plan", lambda line, table=None, index=None: ({"h": {}, "v": {}}, ""))
+    monkeypatch.setattr(F, "put_back_area", put_back_area)
+    return box, seen
+
+
+def test_the_put_back_of_a_stopped_walk_brings_size_and_place_back_to_its_start(c2_session, capsys):
+    """--put-back kit2_boxsize_c2 as Custom 2 stands (402 x 32, its place 3 off since kit2_boxsize_c2_height): the size
+    by clicks (32 to 128, then 140: no click lands on 132) and the editor's Reset under its word, registered at the
+    defaults; then the place back to kit2_boxsize_c2's START place (its start line's place records), from wherever the
+    box is, through the far corner (framepos_run.put_back_area with the start as its target), checked at the finish.
+    The start is the grid's centre, which the plan says (the centre stop reaches it at any size)."""
+    box, seen = c2_session
+    assert B.main(["--put-back", "kit2_boxsize_c2", *allowed(*WORDS, "Custom box Reset")]) == 0
+    assert (box.width, box.height) == (402, 132) and box.resets == 1 and box.turns == [("front", 8), ("front", 1)]
+    ((src,),) = [seen["put_back_area"]]
+    assert src["values"]["base"] == C2_PLACE and box.place2 == C2_PLACE
+    out = capsys.readouterr().out
+    assert "its start place is the grid's centre, which the centre stop reaches at any size" in out
+    assert "Custom 2 put back by its editor's Reset: width 402, height 132" in out
+    assert "Custom 2 back at its start size and place (registered)" in out and not seen["stopped"]
+
+
+def test_an_error_in_a_put_back_prints_its_traceback_and_the_session_still_ends(c2_session, capsys, monkeypatch):
+    """An exception that is no Failed (a KeyError, as "stopped: KeyError: 0" said on 2026-11-17 and nothing more)
+    prints its traceback to the console before the session's own end (the restore) takes over."""
+    box, seen = c2_session
+
+    def broken(self, start_line):
+        return {}[0]
+    monkeypatch.setattr(B.Sizes, "put_back", broken)
+    assert B.main(["--put-back", "kit2_boxsize_c2", *allowed(*WORDS, "Custom box Reset")]) == 1
+    out = capsys.readouterr().out
+    assert "Traceback (most recent call last)" in out and "KeyError: 0" in out and "in broken" in out
+    assert seen["stopped"] == ["KeyError: 0"]
