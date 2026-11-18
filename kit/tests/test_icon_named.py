@@ -77,7 +77,8 @@ def ms(monkeypatch):
     import mode_switch
     monkeypatch.setattr(mode_switch, "find", lambda cam, cycle, model, label: None)
     monkeypatch.setattr(mode_switch, "bar_text", lambda cam: cam.bar(cam.options[cam.at]))
-    monkeypatch.setattr(mode_switch, "list_labels", lambda path: RATIOS if path == ["Aspect Ratio"] else None)
+    monkeypatch.setattr(mode_switch, "list_labels", lambda path, mode="Stills": RATIOS if path == ["Aspect Ratio"] else
+                        MOVIE if (path, mode) == (["File Format"], "Movie") else None)
     return mode_switch
 
 
@@ -114,3 +115,130 @@ def test_set_row_never_takes_a_near_miss_for_the_option(ms):
     with pytest.raises(Failed, match="did not come round"):
         ms.set_row(cam, None, None, ["Aspect Ratio"], "16:9", lambda m: None)
     assert cam.chosen is None
+
+
+# ---------------------------------------------------------------- the Movie File Format list (2026-11-17)
+
+# the Movie crawl's labels for File Format; each row draws a two-line boxed icon ("XAVC HS" over "8K") before its label,
+# and the lit bar reads the icon garbled, then the label whole: "XAVES XAVC S HD" (kit2_breadth_fmt_XAVC_HS_8K
+# 00098_down.png, its events' set_row_missed)
+MOVIE = ["XAVC HS 8K", "XAVC HS 4K", "XAVC S 4K", "XAVC S HD", "XAVC S-I 4K", "XAVC S-I HD"]
+ICON = {"XAVC HS": "XAVHS", "XAVC S": "XAVES", "XAVC S-I": "XAVSI"}      # each icon as garbled as the camera's reading
+STILLS = ["RAW", "RAW & JPEG", "JPEG", "HEIF", "RAW & HEIF"]         # a made-up Stills File Format list
+
+
+def camera_reading(label: str) -> str:
+    """A bar as the camera reads it: the icon's top line garbled (ICON), then the label whole."""
+    return f"{ICON[label.rsplit(' ', 1)[0]]} {label}"
+
+
+@pytest.mark.parametrize("i,label", list(enumerate(MOVIE)))
+def test_a_movie_format_read_after_its_garbled_icon_names_that_format(i, label):
+    """Each of the six as the bar reads it (the icon garbled, then the label whole), and clean, ring-prefixed and doubled
+    (the icon read as the label) alike."""
+    assert camera_reading(label).split(" ", 1)[1] == label
+    for reading in (camera_reading(label), f"o {camera_reading(label)}", label, f"{label} {label}"):
+        assert match.icon_named(MOVIE, reading) == i, reading
+    assert match.icon_named(MOVIE, "XAVES XAVC S HD") == 3
+
+
+def test_a_movie_format_never_names_a_near_miss():
+    """Whole words, digits exactly: "... XAVC HS 4K" is never XAVC S 4K, "... XAVC S-I HD" never XAVC S HD, 8K never 4K;
+    a reading no label ends names none; two labels that both end it name none (fail closed)."""
+    assert match.icon_named(MOVIE, "XAVHS XAVC HS 4K") == 1 and match.icon_named(MOVIE, "XAVSI XAVC S-I HD") == 5
+    assert match.icon_named(MOVIE, "XAVES XAVC S 8K") is None and match.icon_named(MOVIE, "XAVES XAVC S") is None
+    assert match.ending_option(MOVIE, "XAVHS XAVC HS 4K") == 1 and match.ending_option(MOVIE, "XAVSI XAVC S-I HD") == 5
+    assert match.ending_option(MOVIE, "XAVES XAVC S 8K") is None
+    assert match.ending_option(["4K", "XAVC 4K"], "XAVES XAVC 4K") is None, "two labels end the reading"
+    assert match.ending_option(["XAVC S HD"], "XAVC S HD") is None, "a label alone is no icon's leftovers and the label"
+    assert match.icon_named(RATIOS, "4:3 16:9") is None and match.icon_named(RATIOS, "16:9 16:9") == 2
+
+
+def maps(tmp_path, monkeypatch) -> None:
+    """A made-up pass 1 map (a Stills File Format list, STILLS) and a Movie crawl's map (File Format the movie
+    formats), where pass3_run and framepos_run's mode_map find them."""
+    import json
+
+    import framepos_run
+    import pass3_run
+    for run, name, labels in (("kit2_pass1", "map_all.json", STILLS), ("kit2_crawl_movie", "map.json", MOVIE)):
+        (tmp_path / run).mkdir()
+        (tmp_path / run / name).write_text(json.dumps({"rows": [
+            {"path": ["File Format"], "kind": "list", "options": [{"index": i, "label": x} for i, x in enumerate(labels)]}]}),
+            encoding="utf-8")
+    monkeypatch.setattr(pass3_run, "RUN_ROOT", tmp_path)
+    monkeypatch.setattr(pass3_run, "PASS1", tmp_path / "kit2_pass1")
+    monkeypatch.setattr(framepos_run.paths, "run_root", lambda *a, **k: tmp_path)
+
+
+def test_a_rows_labels_come_from_the_map_of_the_mode_its_scan_is_in(tmp_path, monkeypatch):
+    """list_labels: Stills from pass 1's map, as before (File Format the still image formats); Movie from that mode's
+    crawl (framepos_run.mode_map, its row named), so --set "File Format=XAVC HS 8K" on a Movie scan matches the movie
+    formats; a mode no crawl maps the row in gives none, and set_row compares as before."""
+    import framepos_run
+    import mode_switch
+    maps(tmp_path, monkeypatch)
+    assert mode_switch.list_labels(["File Format"]) == STILLS == mode_switch.list_labels(["File Format"], "Stills")
+    assert mode_switch.list_labels(["File Format"], "Movie") == MOVIE
+    assert framepos_run.mode_map("Movie", tmp_path, ["File Format"]) == str(tmp_path / "kit2_crawl_movie" / "map.json")
+    assert framepos_run.mode_map("Movie", tmp_path) is None, "Focus Area, its own row, is in no made-up crawl"
+    assert mode_switch.list_labels(["File Format"], "S&Q") is None
+    # the a1 II's pass 1 has no File Format row (Stills' formats sit elsewhere): none in Stills, Movie's still found
+    (tmp_path / "kit2_pass1" / "map_all.json").write_text('{"rows": []}', encoding="utf-8")
+    assert mode_switch.list_labels(["File Format"]) is None
+    assert mode_switch.list_labels(["File Format"], "Movie") == MOVIE
+
+
+def test_set_row_in_stills_reads_pass_1s_labels_as_before(tmp_path, monkeypatch):
+    """A Stills row, the labels pass 1's (list_labels as before): the saved one ring-prefixed, and "RAW & JPEG" never
+    names JPEG (its label ends the reading, but the reading is another label whole)."""
+    import mode_switch
+    maps(tmp_path, monkeypatch)
+    monkeypatch.setattr(mode_switch, "find", lambda cam, cycle, model, label: None)
+    monkeypatch.setattr(mode_switch, "bar_text", lambda cam: cam.bar(cam.options[cam.at]))
+    for want in STILLS:
+        cam = ListCam(STILLS, bar=lambda o: f"o {o}" if o == "RAW" else o)
+        mode_switch.set_row(cam, None, None, ["File Format"], want, lambda m: None)
+        assert cam.chosen == want and cam.presses == ["right"] + ["down"] * STILLS.index(want) + ["enter"]
+
+
+def test_set_row_chooses_the_movie_format_its_bar_reads_after_the_icon(ms):
+    """set_row in Movie: Down until the bar names the option by the Movie map's labels, OK on it; in Stills the same
+    readings never name it (the still image formats), and the step stops as before."""
+    from prove_run import Failed
+    for want in MOVIE:
+        cam = ListCam(MOVIE, bar=camera_reading)
+        ms.set_row(cam, None, None, ["File Format"], want, lambda m: None, mode="Movie")
+        assert cam.chosen == want and cam.presses == ["right"] + ["down"] * MOVIE.index(want) + ["enter"]
+    cam = ListCam(MOVIE, bar=camera_reading)
+    with pytest.raises(Failed, match="did not come round"):
+        ms.set_row(cam, None, None, ["File Format"], "XAVC HS 8K", lambda m: None)
+
+
+def test_set_hands_set_row_the_mode_the_waiting_switch_left(monkeypatch, tmp_path):
+    """mode_switch --set with a switch waiting in Movie (its record's scan_mode): each row is set with the labels of
+    that mode (set_row's mode), the scan loaded in it; no camera (every call made up)."""
+    import contextlib
+    import json
+
+    import mode_switch as M
+    (tmp_path / M.KEPT).write_text(json.dumps({"to": "Movie", "scan_mode": "Movie", "start": "x.DAT"}),
+                                   encoding="utf-8")
+    seen, scans = [], []
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT")
+    for name, value in (("Run", lambda name: SimpleNamespace(dir=tmp_path)),
+                        ("in_mode", lambda scan, mode: scans.append(mode) or scan),
+                        ("load_scan", lambda scan: (None, None)), ("check_readers", lambda: None),
+                        ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda lk: None, close=lambda: None)),
+                        ("Link", lambda run: contextlib.nullcontext(link)), ("to_shooting", lambda *a: None),
+                        ("LiveCamera", lambda *a, **k: SimpleNamespace()), ("open_menu", lambda cam: None),
+                        ("close_screen", lambda cam, lk: None),
+                        ("set_row", lambda cam, cycle, model, path, option, say, mode="Stills":
+                            seen.append((path, option, mode)))):
+        monkeypatch.setattr(M, name, value)
+    monkeypatch.setattr(M.time, "sleep", lambda s: None)
+    monkeypatch.setattr(M.camset, "read", lambda path: {})
+    monkeypatch.setattr(M.camset, "diff", lambda a, b: [SimpleNamespace(key="global:0x0200", before=1, after=2)])
+    monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--set", "File Format=XAVC HS 8K", "--run", "made_up"])
+    M.main()
+    assert seen == [(["File Format"], "XAVC HS 8K", "Movie")] and scans == ["Movie"]

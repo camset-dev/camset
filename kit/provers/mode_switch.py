@@ -220,12 +220,20 @@ def shoot_mode(cam, cycle, model, family: int, mode: str | None, say) -> str:
     return got
 
 
-def list_labels(path: list) -> list | None:
-    """A list row's options as pass 1's map names them (pass3_run.labels_of), or None where the map holds no list at
-    `path` (or no map is there): set_row then compares the bar with the option alone."""
+def list_labels(path: list, mode: str = "Stills") -> list | None:
+    """A list row's options as the map of the shooting `mode` names them (pass3_run.labels_of): pass 1's in Stills,
+    another mode's crawl as framepos_run.mode_map finds it for the row (kit2_crawl_movie for Movie's File Format, the
+    movie formats, a row pass 1's map has not); None where that map holds no list at `path` (or no map of the mode has
+    the row): set_row then compares the bar with the option alone."""
     from pass3_run import labels_of
+    mp = None
+    if mode != "Stills":
+        from framepos_run import mode_map
+        mp = mode_map(mode, path=list(path))
+        if mp is None:
+            return None
     try:
-        labels, kind = labels_of(list(path))
+        labels, kind = labels_of(list(path), mp)
     except (SystemExit, OSError, ValueError, KeyError):
         return None
     return labels if kind == "list" else None
@@ -233,23 +241,25 @@ def list_labels(path: list) -> list | None:
 
 def bar_names(reading, option: str, labels: list | None) -> bool:
     """Whether the lit bar's `reading` names `option`: as read, the radio ring left out (camkit.match.clean); else, where
-    pass 1's map gives the row's options (`labels`) and names `option` among them once, by the one option
-    camkit.match.icon_named names in the reading, an icon read as text before the label ("16:9 16:9", Aspect Ratio)."""
+    the mode's map gives the row's options (`labels`: list_labels) and names `option` among them once, by the one
+    option camkit.match.icon_named names in the reading, an icon read as text before the label ("16:9 16:9", Aspect
+    Ratio; "XAVES XAVC S HD", Movie's File Format)."""
     if option_key(clean(reading)) == option_key(option):
         return True
     want = match.index_of(labels, option) if labels else None
     return want is not None and match.icon_named(labels, reading) == want
 
 
-def set_row(cam, cycle, model, path: list, option: str, say):
+def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills"):
     """A list row (a top-level row, or a submenu's: "Proxy Settings > Px Proxy Recording") put on `option` and left
     there: to the row by the scan, Right, Down through the list to the option (by the bar's text), OK; an
     information screen with buttons after the choice is taken with its OK where it reads as a table (Exposure Ctrl
     Type), and where it reads as no known kind left with MENU, its OK only where the camera refuses MENU and OK is its
     only button (proving.screens.info_notice_ok, 2026-11-14); a notice closed with MENU. For the state a prove run needs; the switch's --restore puts the start file back over it. The bar is read
     without the radio ring OCR can put before the saved option ("o Set with Dial", kit2_tables 08452_enter.png), so a
-    row already on `option` is found there too (camkit.match.clean), and, by pass 1's labels for the row, with an icon
-    OCR reads as text before the label (bar_names: Aspect Ratio's "16:9 16:9"). A row inside a panel ("Viewfinder Bright. >
+    row already on `option` is found there too (camkit.match.clean), and, by the labels the map of the shooting `mode`
+    (the menu the camera shows) gives the row (list_labels), with an icon OCR reads as text before the label
+    (bar_names: Aspect Ratio's "16:9 16:9", Movie's File Format "XAVES XAVC S HD"). A row inside a panel ("Viewfinder Bright. >
     Brightness Setup"): OK brings the panel back, its title the panel's own, with its slider lit (an OK in its footer,
     kit2_hdmi_watch 02362 -> 02363), which is the choice made, no information to take. What a screen after the choice
     reads is never said nor put in a failure (it can show the owner's values: a panel's number, a notice): the frame is
@@ -260,7 +270,7 @@ def set_row(cam, cycle, model, path: list, option: str, say):
     cam.press("right")
     if cam.read().kind != "list":
         raise Failed(f"Right on {' > '.join(path)!r} opened {cam.read().kind}, not a list ({cam.frame.path.name})")
-    labels = list_labels(path)
+    labels = list_labels(path, mode)
     for _ in range(24):
         if bar_names(bar_text(cam), option, labels):
             break
@@ -430,7 +440,7 @@ def main():
                     for item in a.set:
                         row, _, option = item.partition("=")
                         open_menu(cam)
-                        set_row(cam, cycle, model, [x.strip() for x in row.split(" > ")], option.strip(), say)
+                        set_row(cam, cycle, model, [x.strip() for x in row.split(" > ")], option.strip(), say, mode=now)
                         close_screen(cam, link)
                         time.sleep(1.0)
                 finally:

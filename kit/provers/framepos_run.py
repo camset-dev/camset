@@ -409,11 +409,11 @@ def scan_for(scan):
     return in_mode(scan, run_mode(scan))
 
 
-def mode_map(mode: str, root: Path | None = None) -> str | None:
-    """The map a run in `mode` plans Focus Area from: None for Stills (pass 1's, kit2_pass1/map_all.json); for another
-    mode a crawl of it, kit2_crawl*/map.json whose name names the mode (kit2_crawl_movie, kit2_crawl_sq; as
-    kit/tools/proof_viewer.py's walk_frames and menu_tree.py --mode read them), the plainest name first among those whose
-    map has the row; None where none has it."""
+def mode_map(mode: str, root: Path | None = None, path: list | None = None) -> str | None:
+    """The map a run in `mode` plans Focus Area from (or the row at `path`: mode_switch.list_labels' File Format in
+    Movie): None for Stills (pass 1's, kit2_pass1/map_all.json); for another mode a crawl of it, kit2_crawl*/map.json
+    whose name names the mode (kit2_crawl_movie, kit2_crawl_sq; as kit/tools/proof_viewer.py's walk_frames and
+    menu_tree.py --mode read them), the plainest name first among those whose map has the row; None where none has it."""
     import json
     if mode == "Stills":
         return None
@@ -429,7 +429,7 @@ def mode_map(mode: str, root: Path | None = None) -> str | None:
             rows = json.loads((crawl / "map.json").read_text(encoding="utf-8")).get("rows") or []
         except (OSError, ValueError, AttributeError):
             continue
-        if any(r.get("path") == [ROW] for r in rows):
+        if any(r.get("path") == (list(path) if path else [ROW]) for r in rows):
             return str(crawl / "map.json")
     return None
 

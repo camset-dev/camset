@@ -91,22 +91,42 @@ def index_of(options: list, reading) -> int | None:
     return hits[0] if len(hits) == 1 else None
 
 
+def ending_option(options: list, reading) -> int | None:
+    """The one option whose label ends the reading whole after at least one word before it (an icon's leftovers): the
+    reading's last words, as many as the label has, each the label's word as index_of compares a label exactly (norm,
+    and a number never a word), so digits are compared exactly and a word is never part of another ("XAVHS XAVC HS 4K"
+    is XAVC HS 4K, never XAVC S 4K; "XAVSI XAVC S-I HD" never XAVC S HD; 8K never 4K). None where no label ends the
+    reading, or two do (fail closed: "4K" and "XAVC 4K" both end "XAVES XAVC 4K")."""
+    words = clean(reading).split()
+    hits = []
+    for i, o in enumerate(options):
+        want = str(o or "").split()
+        if 0 < len(want) < len(words) and all(norm(x) == norm(y) and same(x, y)
+                                              for x, y in zip(words[-len(want):], want, strict=True)):
+            hits.append(i)
+    return hits[0] if len(hits) == 1 else None
+
+
 def icon_named(options: list, reading) -> int | None:
     """The one option a list row's reading names where the row may draw an icon OCR reads as text before its label:
-    the reading as index_of names it, its radio mark left out (clean); else, where it names none whole, the reading cut
-    at each space, every part before or after a cut that names an option (index_of) naming the same one, which it then
-    names, else none. The a1 II's Aspect Ratio list draws a boxed ratio before each ratio, its bar read "3:2 3:2"
-    (kit2_a1fin_probe_keep 00082_down.png, 2026-11-17). Digits are compared exactly as index_of compares them: "16:9"
-    is never "1:1" nor "6:9"; a reading whose parts name two options names none (fail closed), and one that names an
-    option whole is never cut ("Auto Manual" is that option, not Manual)."""
+    the reading as index_of names it, its radio mark left out (clean); else the one option whose label ends it whole
+    after the icon's leftovers (ending_option), provided the leftovers, and each part of them cut at a space, name no
+    other option (index_of); else none. The a1 II's Aspect Ratio list draws a boxed ratio before each ratio, its bar read
+    "3:2 3:2" (kit2_a1fin_probe_keep 00082_down.png, 2026-11-17); its Movie File Format list a two-line boxed icon
+    ("XAVC S" over "HD"), read garbled before the label, "XAVES XAVC S HD" (kit2_breadth_fmt_XAVC_HS_8K 00098_down.png,
+    2026-11-17). Digits are compared exactly: "16:9" is never "1:1" nor "6:9", "... XAVC HS 4K" never XAVC S 4K; a
+    reading no label ends names none, one whose leftovers name another option ("4:3 16:9") names none (fail closed), and
+    one that names an option whole is never cut ("Auto Manual" is that option, not Manual)."""
     t = clean(reading)
     i = index_of(options, t)
     if i is not None:
         return i
-    words = t.split()
-    hits = {index_of(options, " ".join(part)) for k in range(1, len(words)) for part in (words[:k], words[k:])}
-    hits.discard(None)
-    return hits.pop() if len(hits) == 1 else None
+    i = ending_option(options, t)
+    if i is None:
+        return None
+    left = t.split()[:-len(str(options[i]).split())]
+    named = {index_of(options, " ".join(part)) for k in range(1, len(left) + 1) for part in (left[:k], left[-k:])}
+    return i if named <= {i, None} else None
 
 
 def table_row_label(labels) -> str:
