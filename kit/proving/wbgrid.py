@@ -11,7 +11,7 @@ from runner import changes_of
 from .base import Failed
 from .nav import after_download, move_to, to_row
 from .options import option_index
-from .screens import place, same_place, vlm_option
+from .screens import later, place, same_place, settled, vlm_option
 
 WB_AXES = {"A-B": ("right", "left", "A", "B", (230, 318, 420, 362)),
            "G-M": ("up", "down", "G", "M", (230, 362, 420, 408))}
@@ -105,7 +105,7 @@ def prove_wb_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                 if now != cur:
                     raise Failed(f"{name} {axis}: the grid shows {now}, the last OK chose {cur}")
             go(axis, target)
-            chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+            chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
             cam.press("enter")
             s = cam.read()
             if s.kind == "notice":
@@ -119,7 +119,7 @@ def prove_wb_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             back = n == len(order) - 1
             rec = {"path": path, "kind": "wbgrid", "option": job["option"], "preset": P, "axis": axis,
                    "index": [P, axis, "back" if back else target], "label": f"{labels[P]} {axis} {target}",
-                   "value": target, "chosen_frame": chosen, "vlm": seen_vlm, "dat": dat.name, "base": base_path.name,
+                   "value": target, "chosen_frame": chosen, "vlm": settled(seen_vlm), "dat": dat.name, "base": base_path.name,
                    "changes": changes_of(changes),
                    "sampled": True, "applied": True}
             out.write(json.dumps(rec) + "\n")

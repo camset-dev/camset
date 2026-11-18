@@ -114,9 +114,9 @@ import proving.tables  # noqa: E402,F401
 from proving.base import (AXES, LOCK_S, PASS1, Blocked, Failed, finish_attempt, frame_file, number,  # noqa: E402,F401
                           RestoreAfter, Tagged)
 from proving.screens import (BAR_X, SEEN, _matches, ask_second, at_label, bar_text, carousel_text,  # noqa: E402,F401
-                             closest_row, first_time_notice, glued, info_notice_ok, keeps_lead, main_name,
-                             notice_focus, option_key, place, refuse_or_fail, run_tmp_png, same_place, strip_value,
-                             vlm_option)
+                             closest_row, first_time_notice, glued, info_notice_ok, keeps_lead, later, main_name,
+                             notice_focus, option_key, place, refuse_or_fail, run_tmp_png, same_place, settled,
+                             strip_value, vlm_option)
 from proving.nav import (CYCLE, MODEL, after_download, cancel, enter_any, enter_path, enter_pp,  # noqa: E402,F401
                          find_row, move_to, shooting_like, to_row, to_shooting, where_in)
 from proving.options import (by_place, by_position, closest_function, function_name, icon_bits,  # noqa: E402,F401
@@ -241,13 +241,14 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, kind)
 
         def chosen_now(k=k):
-            """The cursor on option k on the screen as read now, and the evidence of it; Failed where it is not."""
+            """The cursor on option k on the screen as read now, and the evidence of it; Failed where it is not. The
+            second reader's reading of it is asked in the background (proving.screens.later), joined before the line."""
             if which_option(cam, job) != k:
                 raise Failed(f"{name}: the cursor is not on {labels[k]!r} ({text(cam)!r})")
-            frame, seen = cam.frame.path.name, vlm_option(cam)                    # evidence: the option under the cursor
+            frame, seen = cam.frame.path.name, later(vlm_option, cam)             # evidence: the option under the cursor
             now = text(cam)                            # as the camera shows it now (a carousel: with its axis value)
             if network_row:         # inside a network row only the map's own option names are kept (KEPT)
-                now, seen = kept_option(now, labels), kept_option(seen, labels)
+                now = kept_option(now, labels)
             return frame, seen, now
         chosen, seen_vlm, shown = enter_chosen(cam, chosen_now(), chosen_now)
         if network_row:
@@ -309,20 +310,25 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         history.append({ch.key: ch.after for ch in changes})
-        rec = {"path": path, "kind": kind, "index": k, "label": labels[k], "shown": shown, "chosen_frame": chosen, "vlm": seen_vlm,
+        rec = {"path": path, "kind": kind, "index": k, "label": labels[k], "shown": shown, "chosen_frame": chosen, "vlm": None,
                "row_frame": back, "dat": dat.name, "base": base_path.name,
                "changes": changes_of(changes),
                "notice": notice, "applied": not refused, "attempt": attempt,
                # the class a network decision lifted the row from: the tools that read the proof's frames later keep
                # no reader's text of an identity row's (kit/tools/reread_proofs.py, kit/tools/reader_census.py)
                **({"network": job.get("network_class") or safety.LIFT_IDENTITY} if network_row else {})}
-        out.write(json.dumps(rec) + "\n")
-        out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
         tell(f"   {labels[k]!r:24s} {brief}{' ...' if len(changes) > 6 else ''}")
         keys |= {ch.key for ch in changes}
         last, prev = dat, (cur if refused else k)
-        after_download(cam, done)
+        try:
+            after_download(cam, done)       # the second reader's evidence reading goes on meanwhile
+        finally:
+            # the line written whatever after_download did, as when it went out before it: the evidence joined first,
+            # inside a network row only the map's own option names kept (KEPT)
+            rec["vlm"] = kept_option(settled(seen_vlm), labels) if network_row else settled(seen_vlm)
+            out.write(json.dumps(rec) + "\n")
+            out.flush()
         if k == c and changes and not network_row:
             put_back = put_back_leftovers(changes, history)
             if put_back is None:
@@ -408,9 +414,9 @@ def prove_by_display(cam, link, run, job, base_path: Path, out, top, row_place, 
     if s.count not in (None, 1):
         cancel(cam, link)
         raise Failed(f"{name}: the map has one option, the list on screen {s.count}: map the row again")
-    shown, seen_vlm, chosen = bar_text(cam), vlm_option(cam), cam.frame.path.name
+    shown, seen_vlm, chosen = bar_text(cam), later(vlm_option, cam), cam.frame.path.name
     cancel(cam, link)                           # MENU: out of the list, nothing chosen
-    back = cam.frame.path.name
+    back, seen_vlm = cam.frame.path.name, settled(seen_vlm)
     target = definitions.active(required=False)
     settings = definitions.with_evidence(read_json(target), target)["settings"] if target is not None and target.exists() else []
     cs = camset.read(base_path)
@@ -546,8 +552,9 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                 raise Failed(f"{name}: the carousel shows {axis_title(cam)!r}, not {saved!r}")
             if not final and axis_reading(cam, vals)[0] != k:
                 raise Failed(f"{name}: the axis is not on {vals[k]!r} ({axis_title(cam)!r})")
-            return cam.frame.path.name, axis_title(cam), vlm_option(cam)
-        chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), vlm_option(cam)), axis_now)
+            return cam.frame.path.name, axis_title(cam), later(vlm_option, cam)
+        chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), later(vlm_option, cam)),
+                                               axis_now)
         s = cam.read()
         notice, refused = None, False
         if s.kind == "notice":
@@ -566,15 +573,18 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         rec = {"path": path, "kind": "axis", "option": job["option"], "index": k, "label": vals[k], "shown": shown,
-               "final": final, "chosen_frame": chosen, "vlm": seen_vlm, **how, "row_frame": cam.frame.path.name, "dat": dat.name,
+               "final": final, "chosen_frame": chosen, "vlm": None, **how, "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "notice": notice, "applied": not refused,
                "changes": changes_of(changes)}
-        out.write(json.dumps(rec) + "\n")
-        out.flush()
         brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
         print(f"   {vals[k]!r:40s} {brief}{' ...' if len(changes) > 6 else ''}", flush=True)
         last = dat
-        after_download(cam, done)
+        try:
+            after_download(cam, done)       # the second reader's evidence reading goes on meanwhile
+        finally:
+            rec["vlm"] = settled(seen_vlm)  # the line written whatever after_download did, the evidence joined first
+            out.write(json.dumps(rec) + "\n")
+            out.flush()
         if rebase is not None and k == rebase and not final and not refused:
             # the state --first asked for: from here the proofs are against it, and the carousel now opens on it
             base_path, base, a0, saved, downs0, rebase = dat, camset.read(dat), k, shown, 0, None

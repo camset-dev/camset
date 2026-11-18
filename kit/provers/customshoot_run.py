@@ -36,6 +36,7 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, enter_path, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
                     close_for_restore, close_screen, load_scan, menu_from_shooting, proofs_file, prover_session,
                     restoring, scan_position)
@@ -171,7 +172,7 @@ def visit(cam, link, hdmi, cycle, model, h: int, cells: list) -> dict:
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if safety.confirmation(full):
         raise Failed(f"the screen reads like a confirmation ({safety.confirmation(full)}): no Register")
-    chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
     cam.press("enter")
     said = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if cam.read().kind == "notice" and "registered" not in said.lower():
@@ -224,7 +225,7 @@ def main():
                 greyed = any(r["box"] == i for r in got["refused"])
                 label = ITEMS[i] if i < n else "(all back)"
                 rec = {"path": path, "kind": "checklist", "index": i, "label": label, "boxes": got["boxes"],
-                       "chosen_frame": got["chosen_frame"], "vlm": got["vlm"], "row_frame": got["row_frame"],
+                       "chosen_frame": got["chosen_frame"], "vlm": settled(got["vlm"]), "row_frame": got["row_frame"],
                        "dat": got["dat"].name, "base": start.name, "said": got["said"],
                        "notice": {"text": "greyed: the tick did not flip", "frame": got["refused"][0]["frame"]}
                        if greyed else None,

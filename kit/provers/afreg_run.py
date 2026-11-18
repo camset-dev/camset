@@ -411,11 +411,12 @@ def proof_line(t: dict, got: dict, hold: dict, base: Path, dat: Path, changes: l
                grip: str | None, setup: list, upright: bool | None = None) -> dict:
     """The area's proof line; "upright" where its screens were read turned (`upright`; by default as the grip turns
     them, turned_of), "grip" with any grip."""
+    from proving.screens import settled
     credited, side, applied, why = judge(t, changes, after)
     upright = bool(turned_of(grip)) if upright is None else upright
     return {"path": [MENU], "menu": MENU, "kind": "list", "index": t["code"], "label": t["label"],
             "via": f"Focus Area = {t['label']} chosen in the menu, then Fn held {HOLD_MS} ms on the shooting screen",
-            "shown": got["shown"], "vlm": got["vlm"], **{k: got[k] for k in ("read_by", "cell_readings") if k in got},
+            "shown": got["shown"], "vlm": settled(got["vlm"]), **{k: got[k] for k in ("read_by", "cell_readings") if k in got},
             "chosen_frame": got["chosen_frame"], "row_frame": got["row_frame"],
             "hold_frames": hold["frames"], "said": hold["said"], "dat": dat.name, "base": base.name,
             "expected": [{"key": k, "value": v} for k, v in t["expected"].items()], "changes": credited,
@@ -550,7 +551,7 @@ def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None
     from camkit import ocr
     from camkit.live import UprightDialog
     from prove_run import Failed
-    from proving.screens import carousel_text, vlm_option
+    from proving.screens import carousel_text, later, vlm_option
     i, o, v = r
     how = {}                                    # how the axis value was read, when the strip's lit cell read it
     if grip:
@@ -573,7 +574,7 @@ def choose_area(cam, run, cycle, model, labels, axes, r: tuple, grip: str | None
         full = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
     if safety.confirmation(full):
         raise Failed(f"{ROW}: the dialog reads like a confirmation ({safety.confirmation(full)}): no OK")
-    chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
     if grip:
         cam.answer_once = UprightDialog(f"{ROW}'s own dialog, read upright, held vertically (grip {grip})", ROW,
                                         lambda c: dialog_reading(c, k, shots))

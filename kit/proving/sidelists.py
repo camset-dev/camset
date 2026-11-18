@@ -16,7 +16,7 @@ from runner import changes_of
 
 from .base import Failed, frame_file
 from .nav import after_download, move_to, to_row
-from .screens import option_key, place, refuse_or_fail, same_place, vlm_option
+from .screens import later, option_key, place, refuse_or_fail, same_place, settled, vlm_option
 
 # --spread: a side list proves its lowest, middle and highest value (numbers already sample so; a long
 # text list takes its first, middle and last), the owner's choice for rows whose codes are proved
@@ -250,7 +250,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, "sidelist")
         if side_index(cam, job) != k:
             raise Failed(f"{name}: the cursor is not on {vals[k]!r} ({side_text(cam)!r})")
-        chosen, shown, seen_vlm = cam.frame.path.name, side_text(cam), vlm_option(cam)
+        chosen, shown, seen_vlm = cam.frame.path.name, side_text(cam), later(vlm_option, cam)
         cam.press("enter")
         s = cam.read()
         notice, refused = None, False
@@ -269,7 +269,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         dat = link.download(f"{path[-1]}-{k}")
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
-        rec = {"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": shown, "chosen_frame": chosen, "vlm": seen_vlm,
+        rec = {"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": shown, "chosen_frame": chosen, "vlm": settled(seen_vlm),
                "row_frame": cam.frame.path.name, "dat": dat.name, "base": base_path.name, "notice": notice,
                "changes": changes_of(changes),
                "sampled": job["plan"] != list(range(n)), "applied": not refused}

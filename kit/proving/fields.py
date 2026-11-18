@@ -15,7 +15,7 @@ from runner import changes_of
 
 from .base import Failed, frame_file, number
 from .nav import after_download, to_row
-from .screens import ask_second, option_key, place, refuse_or_fail, same_place, vlm_option
+from .screens import ask_second, later, option_key, place, refuse_or_fail, same_place, settled, vlm_option
 
 
 def field_values(cam) -> list:
@@ -213,7 +213,7 @@ def prove_fields_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
                     print(f"   field {k} shows {values[at]!r} after the move to {values[t]!r}: correcting", flush=True)
                 if at != t:
                     raise Failed(f"{name}: field {k} shows {field_values(cam)!r}, not {values[t]!r}")
-                chosen, shown, seen_vlm = cam.frame.path.name, " | ".join(field_values(cam)), vlm_option(cam)
+                chosen, shown, seen_vlm = cam.frame.path.name, " | ".join(field_values(cam)), later(vlm_option, cam)
                 cam.press("enter")
                 s = cam.read()
                 notice = None
@@ -234,7 +234,7 @@ def prove_fields_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
                 done = time.monotonic()
                 changes = camset.diff(base, camset.read(dat))
                 held = {"path": path, "kind": "fields", "index": [k, t], "label": fld["labels"][t], "value": values[t],
-                        "shown": shown, "chosen_frame": chosen, "vlm": seen_vlm, "row_frame": back, "dat": dat.name,
+                        "shown": shown, "chosen_frame": chosen, "vlm": settled(seen_vlm), "row_frame": back, "dat": dat.name,
                         "base": base_path.name, "notice": notice, "sampled": fld["plan"] != list(range(n)),
                         "changes": changes_of(changes)}
                 brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"

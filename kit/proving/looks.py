@@ -13,7 +13,7 @@ from runner import changes_of
 from .base import Failed
 from .nav import after_download, move_to, to_row
 from .options import icon_index
-from .screens import ask_second, place, same_place, vlm_option
+from .screens import ask_second, later, place, same_place, settled, vlm_option
 
 LOOK_PARAMS = range(1, 9)          # the panel's cells after the look itself: Contrast ... Clarity
 
@@ -249,7 +249,7 @@ def prove_look_base(cam, link, run, job, base_path: Path, out, top=None) -> Path
         if look_title(cam) != LOOK_CODES[t]:
             raise Failed(f"{name}: the title reads {look_title(cam)}, not {LOOK_CODES[t]}")
         shown = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 55, 640, 115)).strip()
-        chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+        chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
         cam.press("enter")
         s = cam.read()
         if s.kind == "notice":
@@ -260,7 +260,7 @@ def prove_look_base(cam, link, run, job, base_path: Path, out, top=None) -> Path
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         rec = {"path": path, "kind": "lookbase", "option": job["option"], "look": L, "index": t,
-               "label": LOOK_CODES[t], "shown": shown, "chosen_frame": chosen, "vlm": seen_vlm,
+               "label": LOOK_CODES[t], "shown": shown, "chosen_frame": chosen, "vlm": settled(seen_vlm),
                "dat": dat.name, "base": base_path.name, "applied": True,
                "changes": changes_of(changes)}
         out.write(json.dumps(rec) + "\n")
@@ -344,7 +344,7 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             got, said = look_checked(cam, got, t, f"{name} {pname}", (lo, hi))
             if got != t:
                 raise Failed(f"{name} {pname}: the cell shows {got}, not {t}" + (f" ({said})" if said else ""))
-            chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+            chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
             cam.press("enter")
             s = cam.read()
             if s.kind == "notice":
@@ -358,7 +358,7 @@ def prove_look_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             back = t == start
             rec = {"path": path, "kind": "look", "option": job["option"], "look": L, "field": p, "param": pname,
                    "index": [L, p, "back" if back else t], "label": f"{pname} {t:+d}" if lo < 0 else f"{pname} {t}",
-                   "value": t, "range": [lo, hi], "range_from": range_from, "chosen_frame": chosen, "vlm": seen_vlm, "dat": dat.name, "base": base_path.name,
+                   "value": t, "range": [lo, hi], "range_from": range_from, "chosen_frame": chosen, "vlm": settled(seen_vlm), "dat": dat.name, "base": base_path.name,
                    "changes": changes_of(changes),
                    "sampled": True, "applied": True}
             out.write(json.dumps(rec) + "\n")

@@ -6,7 +6,9 @@ where the run names it with --info-ok (pass_named_notice, pass_note), since 2026
 import difflib
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 
@@ -170,6 +172,40 @@ def vlm_option(cam) -> str:
     vLLM all the time if it makes sense; ~1 s a call)."""
     v = option_answer(cam)
     return str(v.get("selected") or "") if v else ""
+
+
+# one worker: a proof's evidence question goes out while the run goes on (Enter, the download, the wait after it); the
+# questions that decide a press never come here and are asked in line, as before
+_EVIDENCE = ThreadPoolExecutor(max_workers=1, thread_name_prefix="evidence")
+
+
+class Later:
+    """A proof's evidence reading, the one kept in its "vlm" field and never deciding a press: `read` (the prover's
+    vlm_option) asked on a worker thread about the frame on show when it was made (its own frame object, so the frame
+    the run shows next is never the one read), joined by result() before the proof line is written. The answer is the
+    one read(cam) gives in line: the reader's failure is its empty answer, said once in the run by the reader
+    (camkit.vlm.failing), as before, and so is anything read raises (option_answer takes every failure for no answer),
+    so that the line is written. The speed review of 2026-11-18: the evidence question cost 0.8-1.1 s a proof with the
+    reader free, 5-8 s with it slow, all of it waited."""
+
+    def __init__(self, read, cam):
+        self._future = _EVIDENCE.submit(read, SimpleNamespace(frame=cam.frame))
+
+    def result(self):
+        try:
+            return self._future.result()
+        except Exception:
+            return ""
+
+
+def later(read, cam) -> Later:
+    """read(cam) (a prover's vlm_option) asked in the background about the frame on show now (Later)."""
+    return Later(read, cam)
+
+
+def settled(v):
+    """v's answer where it is a Later (waited for), else v as it is: what a proof line keeps in its "vlm" field."""
+    return v.result() if isinstance(v, Later) else v
 
 
 def box_answer(cam, timeout: float = 25.0) -> tuple:

@@ -31,6 +31,7 @@ from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
                     restoring, scan_position)
@@ -147,7 +148,7 @@ def main():
                         if got != modes[f][m]:
                             close_screen(cam, link)
                             raise Failed(f"{FAMILIES[f]}: the title reads {got!r}, not {modes[f][m]!r}")
-                        chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+                        chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
                         cam.press("enter")
                         notice = None
                         if cam.read().kind == "notice":
@@ -160,7 +161,7 @@ def main():
                         ch = camset.diff(base, camset.read(dat))
                         rec = {"path": ["Shoot Mode"], "kind": "axis", "option": FAMILIES[f], "index": m,
                                "label": f"{FAMILIES[f]}: {modes[f][m]}", "shown": modes[f][m],
-                               "final": f == 0 and m == 0, "chosen_frame": chosen, "vlm": seen_vlm,
+                               "final": f == 0 and m == 0, "chosen_frame": chosen, "vlm": settled(seen_vlm),
                                "dat": dat.name, "base": start.name, "notice": notice, "applied": notice is None,
                                "changes": changes_of(ch)}
                         out.write(json.dumps(rec) + "\n")

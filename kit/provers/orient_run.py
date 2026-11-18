@@ -40,6 +40,7 @@ from PIL import Image  # noqa: E402
 from pass3_run import labels_of  # noqa: E402
 from prove_run import (AXES, LOCK_S, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
                        vlm_option)
+from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, read_json, scan_position)
 
@@ -149,7 +150,7 @@ def choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, i, v=None) 
     full = ocr.text_in(upright(cam, k, shots), (0, 0, 480, 640))
     if safety.confirmation(full):
         raise Failed(f"the dialog reads like a confirmation ({safety.confirmation(full)}): no OK")
-    chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)     # a second reader, kept with the proof
+    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)     # a second reader, kept with the proof
     cam.press("enter")
     after_ok = cam.frame.path.name
     to_shooting(link, hdmi, "the download after OK")
@@ -211,7 +212,7 @@ def main():
 
         def record(i, got, base, extra):
             ch = camset.diff(camset.read(base), camset.read(got["dat"]))
-            r = {"path": [row], **extra, "shown": got["shown"], "vlm": got["vlm"], "chosen_frame": got["chosen_frame"],
+            r = {"path": [row], **extra, "shown": got["shown"], "vlm": settled(got["vlm"]), "chosen_frame": got["chosen_frame"],
                  "row_frame": got["row_frame"], "dat": got["dat"].name, "base": base.name,
                  "changes": changes_of(ch), "applied": True, "upright": True}
             out.write(json.dumps(r) + "\n")

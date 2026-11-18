@@ -23,6 +23,7 @@ from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, PASS1, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, read_json, scan_position)
 
@@ -123,7 +124,7 @@ def visit(cam, link, hdmi, cycle, model, path, labels, cells: list) -> dict:
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if safety.confirmation(full):
         raise Failed(f"the grid reads like a confirmation ({safety.confirmation(full)}): no OK")
-    chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
     cam.press("enter")
     notice = None
     if cam.read().kind == "notice":
@@ -168,7 +169,7 @@ def main():
             ch = camset.diff(base, camset.read(got["dat"]))
             label = labels[i] if i < n else "(all back)"
             rec = {"path": path, "kind": "checklist", "index": i, "label": label, "boxes": got["boxes"],
-                   "chosen_frame": got["chosen_frame"], "vlm": got["vlm"], "row_frame": got["row_frame"],
+                   "chosen_frame": got["chosen_frame"], "vlm": settled(got["vlm"]), "row_frame": got["row_frame"],
                    "dat": got["dat"].name, "base": start.name, "notice": got["notice"],
                    "applied": got["notice"] is None, "grid": True, "changes": changes_of(ch)}
             out.write(json.dumps(rec) + "\n")

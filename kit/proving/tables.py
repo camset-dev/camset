@@ -18,8 +18,8 @@ from .base import RUN_ROOT, Failed, RestoreAfter
 from .nav import after_download, move_to, to_row
 from .options import function_name, option_index, same_functions
 from .putback import put_back_leftovers, say_put_back
-from .screens import (BAR_X, _matches, ask_second, bar_text, info_notice_ok, notice_before, option_key, place,
-                      refuse_or_fail, same_place, vlm_option)
+from .screens import (BAR_X, _matches, ask_second, bar_text, info_notice_ok, later, notice_before, option_key,
+                      place, refuse_or_fail, same_place, settled, vlm_option)
 
 # Picker functions that open a setup screen of their own when chosen (a Recall Custom hold's registration, which
 # copies that hold into the registration working copy; Rating's Rating Set; Recog. Target Select's targets) are
@@ -577,7 +577,7 @@ def prove_table_row(cam, link, run, job, base_path: Path, out, top=None) -> Path
             raise Failed(f"{name}: the {kind} opened on option {cur}, the last OK chose {prev} ({labels[prev]!r})")
         k = order.pop(0)
         seen = to_option(cam, labels, cur, k, kind, job, name)     # by the labels on screen, then checked
-        chosen, shown, seen_vlm = cam.frame.path.name, bar_text(cam), vlm_option(cam)
+        chosen, shown, seen_vlm = cam.frame.path.name, bar_text(cam), later(vlm_option, cam)
         cam.press("enter")
         chose_info, own = None, None
         if not on_cell(cam, job) and cam.read().kind not in OWN_KINDS:
@@ -617,7 +617,7 @@ def prove_table_row(cam, link, run, job, base_path: Path, out, top=None) -> Path
         history.append({ch.key: ch.after for ch in changes})
         rec = {"path": path, "kind": "table", "screen": where, "option": job["option"], "cell": job["cell"], "opens": kind,
                "index": k, "label": labels[k], "shown": shown, "in_cell": in_cell, "chosen_frame": chosen,
-               "cell_frame": cell_frame, "vlm": seen_vlm, "row_frame": cam.frame.path.name, "dat": dat.name,
+               "cell_frame": cell_frame, "vlm": settled(seen_vlm), "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "changes": changes_of(changes),
                "applied": True, "planned": table_planned(job, k), **({"info_notice": info} if info else {}),
                **({"chose_notice": chose_info} if chose_info else {}), **({"own_screen": own} if own else {}),

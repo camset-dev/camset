@@ -49,6 +49,7 @@ from camkit.live import TwoBoxes  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, add_scan_argument, changes_of, close_screen, load_scan,  # noqa: E402
                     menu_from_shooting, proofs_file, prover_session, scan_position)
 
@@ -204,7 +205,7 @@ def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if safety.confirmation(full):
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
-    chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)     # a second reader, kept with the proof
+    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)     # a second reader, kept with the proof
     cam.answer_once = screen_consent(path, names)        # the OK that leaves, judged on the screen's shape (TwoBoxes)
     cam.press("enter")
     return {"chosen_frame": chosen, "row_frame": cam.frame.path.name, "vlm": seen_vlm}
@@ -312,7 +313,7 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, f
             got = choose(cam, link, hdmi, cycle, model, path, b, vals, i, names)
             ch = camset.diff(camset.read(base), camset.read(got["dat"]))
             r = {"path": path + [names[b]], "kind": "list", "index": i, "label": vals[i],
-                 "shown": vals[i], "vlm": got["vlm"], "chosen_frame": got["chosen_frame"],
+                 "shown": vals[i], "vlm": settled(got["vlm"]), "chosen_frame": got["chosen_frame"],
                  "row_frame": got["row_frame"],
                  "dat": got["dat"].name, "base": base.name, "applied": True, "boxes": True,
                  "changes": changes_of(ch)}

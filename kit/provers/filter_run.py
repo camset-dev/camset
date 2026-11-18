@@ -45,6 +45,7 @@ from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_in_argument, close_for_res
                     load_scan, proofs_file, restore_checked, scan_arg)
 from prove_run import (Failed, after_download, bar_text, check_box_label, check_state,  # noqa: E402
                        finish_attempt, focused_button, is_box, move_to, option_key, to_shooting, vlm_option)
+from proving.screens import later, settled  # noqa: E402
 
 ROW = "Playback Filter Condition"
 ITEMS = ["Date", "Folder", "Still Images/Movies", "Rating", "Protect", "Shot Mark", "FTP Transfer Status",
@@ -182,7 +183,7 @@ def prove_item(cam, link, run, cycle, model, i: int, start: Path, out, say) -> i
                 raise Failed(f"{name}: {cam.read().kind} ({cam.frame.path.name}), not the chooser, for option {j}")
             cur = j - 1                           # the chooser opens on the option chosen last
         move_to(cam, cur, j, n)
-        shown, chosen, seen = bar_text(cam), cam.frame.path.name, vlm_option(cam)
+        shown, chosen, seen = bar_text(cam), cam.frame.path.name, later(vlm_option, cam)
         cam.press("enter")
         if cam.read().kind != "checklist" or not is_box(box_label(cam), ITEMS, i):
             raise Failed(f"{name}: after choosing {labels[j]!r} the screen is {cam.read().kind} "
@@ -196,7 +197,7 @@ def prove_item(cam, link, run, cycle, model, i: int, start: Path, out, say) -> i
         changes = camset.diff(base, camset.read(dat))
         written |= {c.key for c in changes}
         out.write(json.dumps({"path": [ROW, ITEMS[i]], "kind": "list", "index": j, "label": labels[j], "shown": shown,
-                              "chosen_frame": chosen, "vlm": seen, "row_frame": back, "dat": dat.name,
+                              "chosen_frame": chosen, "vlm": settled(seen), "row_frame": back, "dat": dat.name,
                               "base": start.name, "applied": True, "attempt": attempt, "part_of": ROW,
                               "changes": [{"key": c.key, "before": c.before, "after": c.after} for c in changes]})
                   + "\n")
@@ -270,7 +271,7 @@ def prove_grid(cam, link, run, cycle, model, i: int, start: Path, out, say) -> i
                 raise Failed(f"{name}: box {b - 1} ticked again instead of unticked")
         if not grid_tick(cam, name, b):
             raise Failed(f"{name}: box {b} unticked instead of ticked")
-        shown, chosen, seen = STARS[b], cam.frame.path.name, vlm_option(cam)
+        shown, chosen, seen = STARS[b], cam.frame.path.name, later(vlm_option, cam)
         grid_enter(cam, name)
         if cam.read().kind != "checklist" or not is_box(box_label(cam), ITEMS, i):
             raise Failed(f"{name}: after the grid's Enter the screen is {cam.read().kind} ({cam.frame.path.name}), "
@@ -284,7 +285,7 @@ def prove_grid(cam, link, run, cycle, model, i: int, start: Path, out, say) -> i
         changes = camset.diff(base, camset.read(dat))
         written |= {c.key for c in changes}
         out.write(json.dumps({"path": [ROW, ITEMS[i]], "kind": "list", "index": b, "label": STARS[b], "shown": shown,
-                              "chosen_frame": chosen, "vlm": seen, "row_frame": back, "dat": dat.name,
+                              "chosen_frame": chosen, "vlm": settled(seen), "row_frame": back, "dat": dat.name,
                               "base": start.name, "applied": True, "attempt": attempt, "part_of": ROW, "grid_box": b,
                               "changes": [{"key": c.key, "before": c.before, "after": c.after} for c in changes]})
                   + "\n")
@@ -344,7 +345,7 @@ def untick_item(cam, link, run, cycle, model, i: int, key: str | None, out, say)
     if cam.read().kind != "checklist" or box_state(cam) is not False:
         raise Failed(f"{name}: Enter in the box column did not untick the box ({cam.read().kind}, "
                      f"{box_state(cam)}, {cam.frame.path.name})")
-    chosen, seen = cam.frame.path.name, vlm_option(cam)
+    chosen, seen = cam.frame.path.name, later(vlm_option, cam)
     cam.press("menu")
     if cam.read().kind != "menu":
         raise Failed(f"{name}: MENU off the checklist left {cam.read().kind} ({cam.frame.path.name})")
@@ -355,7 +356,7 @@ def untick_item(cam, link, run, cycle, model, i: int, key: str | None, out, say)
     applied = untick_applied(changes, key)
     attempt = f"{run.dir.name}-{time.time_ns():x}"
     out.write(json.dumps({"path": [ROW, ITEMS[i]], "kind": "list", "index": 0, "label": "Not ticked",
-                          "shown": "Not ticked", "chosen_frame": chosen, "vlm": seen, "row_frame": back,
+                          "shown": "Not ticked", "chosen_frame": chosen, "vlm": settled(seen), "row_frame": back,
                           "dat": dat.name, "base": dat0.name, "applied": applied, "attempt": attempt,
                           "part_of": ROW, "untick": True, "ticked_frame": ticked, "changes": changes}) + "\n")
     out.flush()

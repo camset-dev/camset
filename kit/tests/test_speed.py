@@ -2,6 +2,7 @@
 reads, judges and refuses before a press exactly as it was. Stored frames where runs/ holds them (skipped otherwise);
 made-up cameras otherwise.
 """
+import contextlib
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -122,3 +123,94 @@ def test_a_view_is_read_again_where_ocr_left_a_row_unread_or_the_reader_did_not_
     reader(cam)
     reader(cam)
     assert len(calls) == 5, "a row OCR read as nothing: no key, read every time"
+
+
+# ---------------------------------------------------------------- B: a proof's evidence reading in the background
+
+
+class TwoOptions:
+    """prove_row's camera for a two-option list (On, Off) opened from its row, the cursor where which_option says; each
+    press shows a new frame (its name counts the presses)."""
+    def __init__(self, tmp_path):
+        self.where, self.option, self.keys, self.tmp = "row", 1, [], tmp_path
+        self.frame = SimpleNamespace(path=tmp_path / "00001_start.png", image=None)
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        self.frame = SimpleNamespace(path=self.tmp / f"{len(self.keys) + 1:05d}_{key}.png", image=None)
+        if key == "right":
+            self.where = "list"
+        elif key in ("down", "up") and self.where == "list":
+            self.option = 1 - self.option
+        elif key in ("enter", "menu"):
+            self.where = "row"
+
+    def read(self):
+        return SimpleNamespace(kind={"row": "submenu", "list": "list"}[self.where])
+
+
+def prove_two(tmp_path, monkeypatch, read, on_download=None, job=None):
+    """prove_run.prove_row on TwoOptions with `read` as its vlm_option: (its proof lines, the order of its downloads
+    and after_downloads). on_download() runs as each download goes out."""
+    import io
+    import json
+
+    import prove_run as P
+    from camkit.runs import Run
+    events = []
+    for name, value in (("place", lambda cam: "here"), ("same_place", lambda a, b: True), ("to_row", lambda *a: None),
+                        ("which_option", lambda cam, job: cam.option), ("vlm_option", read),
+                        ("bar_text", lambda cam: ["On", "Off"][cam.option]),
+                        ("after_download", lambda cam, done: events.append("after_download")),
+                        ("finish_attempt", lambda *a, **k: None)):
+        monkeypatch.setattr(P, name, value)
+    monkeypatch.setattr(P.camset, "read", lambda p: SimpleNamespace())
+    monkeypatch.setattr(P.camset, "diff", lambda a, b: [])
+    monkeypatch.setattr(P.time, "time_ns", lambda: 1)
+
+    def download(tag):
+        events.append("download")
+        if on_download:
+            on_download()
+        return tmp_path / f"{tag}.DAT"
+    out = io.StringIO()
+    with contextlib.suppress(P.RestoreAfter):           # a network row ends with the session's upload
+        P.prove_row(TwoOptions(tmp_path), SimpleNamespace(download=download), Run("pass2", root=tmp_path),
+                    job or {"path": ["Silent Mode"], "kind": "list", "labels": ["On", "Off"]}, tmp_path / "base.DAT", out)
+    return [json.loads(x) for x in out.getvalue().splitlines()], events
+
+
+def test_the_evidence_reading_goes_on_while_the_proof_does_and_its_line_is_as_before(tmp_path, monkeypatch):
+    """prove_row asks the second reader about the chosen option on a worker thread, from the frame it was chosen on:
+    the reader is still reading while Enter, the download and the wait after it go out (here it answers only once the
+    download has gone out, which a reading asked in line could never see), and each proof line is the one written with
+    the reader answering in line, in the same order, its "vlm" the answer about its own chosen frame."""
+    import threading
+    lines, events = prove_two(tmp_path, monkeypatch, lambda cam: f"seen {cam.frame.path.name}")
+    downloaded, asked = threading.Event(), []
+
+    def slow(cam):
+        asked.append((threading.current_thread().name, cam.frame.path.name))
+        downloaded.wait(5)
+        return f"seen {cam.frame.path.name}" if downloaded.is_set() else "asked in line"
+    background, events2 = prove_two(tmp_path, monkeypatch, slow, on_download=downloaded.set)
+    assert background == lines and events2 == events == ["download", "after_download"] * 2
+    assert [p["vlm"] for p in lines] == [f"seen {p['chosen_frame']}" for p in lines]
+    assert asked and all(name.startswith("evidence") for name, _ in asked)
+    assert [frame for _, frame in asked] == [p["chosen_frame"] for p in lines]
+
+
+def test_the_evidence_reading_that_fails_is_kept_empty_and_a_network_rows_is_kept_as_before(tmp_path, monkeypatch):
+    """A reading that fails (raises) is the empty answer the reader's failure always gave, and the line is written; a
+    network row's reading is joined, then cut to the map's own option names (kept_option), as it was before."""
+    import prove_run as P
+
+    def broken(cam):
+        raise RuntimeError("no reader")
+    lines, _ = prove_two(tmp_path, monkeypatch, broken)
+    assert [p["vlm"] for p in lines] == ["", ""]
+    job = {"path": ["Bluetooth Function"], "kind": "list", "labels": ["On", "Off"], "choose": [0, 1],
+           "network_row": "Bluetooth Function"}
+    lines, _ = prove_two(tmp_path, monkeypatch, lambda cam: "Off DIRECT-madeup", job=job)
+    assert [p["vlm"] for p in lines] == [P.kept_option("Off DIRECT-madeup", ["On", "Off"])] * 2
+    assert "DIRECT" not in str(lines)

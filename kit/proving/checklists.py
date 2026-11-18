@@ -17,7 +17,7 @@ from . import nav
 from .base import Failed, finish_attempt, frame_file
 from .nav import after_download, to_row
 from .putback import mirrored_boxes, put_back_leftovers, say_put_back
-from .screens import INFO_OK, option_key, pass_named_notice, place, same_place, vlm_option
+from .screens import INFO_OK, later, option_key, pass_named_notice, place, same_place, settled, vlm_option
 
 CHECK_LATER = ("DISP",)          # DISP (Screen Disp) Set: radio sub-options inside, done last, by itself (--rows names it)
 OK_RIGHT = ("DISP (Screen Disp) Set",)   # checklists whose OK/Cancel sit in a column right of the boxes (Down wraps)
@@ -217,7 +217,7 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
             cam.press("down")
         if cam.read().focus != "button" or option_key(focused_button(cam)) not in (option_key("OK"), option_key("Enter")):
             raise Failed(f"{name}: the cursor is not on OK ({focused_button(cam)!r})")
-        chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)
+        chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
         cam.press("enter")
         s = cam.read()
         notice, refused = None, False
@@ -237,7 +237,7 @@ def _prove_check_row(cam, link, run, job, base_path: Path, out, top=None) -> Pat
         history.append({ch.key: ch.after for ch in changes})
         flips.append({} if refused else {b["box"]: b["ticked"] for b in changed_boxes})
         rec = {"path": path, "kind": "checklist", "index": index, "label": label, "attempt": attempt,
-               "boxes": changed_boxes, "chosen_frame": chosen, "vlm": seen_vlm, "row_frame": cam.frame.path.name, "dat": dat.name,
+               "boxes": changed_boxes, "chosen_frame": chosen, "vlm": settled(seen_vlm), "row_frame": cam.frame.path.name, "dat": dat.name,
                "base": base_path.name, "notice": notice, "applied": not refused, **extra,
                **({"info_ok": info} if info else {}), "changes": changes_of(changes)}
         out.write(json.dumps(rec) + "\n")

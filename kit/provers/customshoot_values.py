@@ -39,6 +39,7 @@ from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines, open_hold, row_box, to_item, to_register  # noqa: E402
 from prove_run import LOCK_S, Failed, to_shooting, vlm_option  # noqa: E402
+from proving.screens import later  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, load_scan, proofs_file, prover_session, restoring)
 
@@ -369,7 +370,7 @@ def prove_item(cam, link, hdmi, cycle, model, h, k, opts, s0, wraps, base, base_
             to_option(cam, opts, j, wraps)
         # the second reading, of the option itself (it used to be taken on Register, where it named
         # whatever row the screen showed: 1 of 235 named the option, 2026-10-31)
-        seen_vlm = vlm_option(cam)
+        seen_vlm = later(vlm_option, cam)
         cam.press("enter")
         if cam.read().kind != "checklist":
             raise Failed(f"{name}: Enter on {opts[j]!r} left a {cam.read().kind} screen "
@@ -385,7 +386,7 @@ def prove_item(cam, link, hdmi, cycle, model, h, k, opts, s0, wraps, base, base_
         chosen, dat, said = register(cam, link, hdmi, f"hold{h}-{name}-{j}")
         ch = camset.diff(base, camset.read(dat))
         rec = {"path": [ROW, f"Recall Custom hold {h}", name], "kind": "list", "index": j,
-               "label": opts[j], "final": j == s0, "chosen_frame": chosen, "vlm": seen_vlm,
+               "label": opts[j], "final": j == s0, "chosen_frame": chosen, "vlm": seen_vlm.result(),
                "shown_on_hold": shown,
                **({"via": "counted presses, labels in the camera's Focus Area order after the hold's own top rows"} if counted else {}),
                "dat": dat.name, "base": base_path.name, "said": said, "applied": True,
