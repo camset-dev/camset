@@ -517,6 +517,29 @@ def test_an_option_that_opens_a_page_places_its_rows_on_every_options_page():
     assert placement.option_page(placement.Tree(d, PAGES), "Color", "Profile > Tone > Gamma", lambda n: []) is None
 
 
+def test_the_viewer_hangs_the_page_an_option_opens_in_its_rows_subsection(monkeypatch):
+    """A setting the definition places on the page an option of a row opens, no family's ("Look > B > Depth", as Zebra
+    Level's Custom 1 boxes), hangs in the proof viewer in that row's subsection for the option, the row's own setting
+    on the row, as the definition places them (one placement)."""
+    def s(key, name, menus, values=(), id_=1):
+        return {"key": key, "area": "global", "id": id_, "name": name, "tab": "Color", "group": "Color/Tone",
+                "order": 9000, "values": [list(v) for v in values],
+                "proved": {"run": "kit2_pass2", "date": "2026-10-29", "menu": list(menus)}}
+    d = {"model": "TEST", "tabs": ["Color"], "layouts": [{"model": "TEST", "firmware": "1.00"}], "camera": {},
+         "menu": [{"tab": "Color", "group": "Color/Tone", "label": x, "order": i} for i, x in enumerate(["Tone", "Profile", "Look"])],
+         "settings": [s("global:0x0002", "Look", ["Look"], [[0, "A"], [1, "B"]], 2),
+                      s("global:0x0003", "Look > B > Depth", ["Look > B > Depth"], id_=3),
+                      s("global:0x0004", "Look > A > Strength", ["Look > A > Strength"], id_=4)]}
+    for x in d["settings"]:
+        x.update(placement.settings(d, PAGES).get(x["key"], {}))
+    assert d["settings"][1]["under_option"] == "B" and d["settings"][1]["row"] == ["Look", "B", "Depth"]
+    monkeypatch.setattr(pv.datafiles, "load_menu_tree", lambda cam: PAGES)
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    look = next(x for x, _ in pv.menu_nodes(pv.menu(d, pv.records(d, {}), Path("."))) if x["l"] == "Look")
+    assert look["recs"] == ["global:0x0002"]
+    assert look["subs"] == [{"name": "A", "keys": ["global:0x0004"]}, {"name": "B", "keys": ["global:0x0003"]}]
+
+
 def test_the_a1s_picture_profiles_sit_on_each_profiles_page():
     """On the a1 II every Picture Profile parameter, PP1 to PP11, sits on its profile's page under the Picture Profile
     row (Color/Tone): row ["Picture Profile", "PPn", the page's rows...], row_at the row's number, n - 1, the page's

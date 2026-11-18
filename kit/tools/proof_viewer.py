@@ -400,7 +400,7 @@ def records(doc, ev) -> list:
                     "vals": s.get("values") or [], "pv": p.get("values"), "menu": p.get("menu") or [],
                     "run": p.get("run"), "date": p.get("date"), "sampled": bool(p.get("sampled")),
                     "proved": bool(p), "why": s.get("unproved_reason"), "us": s.get("unproved_sets"), "is": bool(s.get("in_sets")),
-                    "note": s.get("note") or "",
+                    "note": s.get("note") or "", "rp": s.get("row") or [], "uo": s.get("under_option"),
                     "ev": ev.get(s["key"], []), **place.of(s)})
     place.families(out, [f for f in (doc.get("camera") or {}).get("families", []) if f.get("prefix")])
     for r in out:
@@ -519,11 +519,19 @@ def mode_rows(stills, modes, tabs: list) -> None:
         t["groups"].sort(key=lambda g: first[id(g)])
 
 
+def option_page(r: dict, row: dict) -> bool:
+    """A record (records()) the definition places on the page an option of `row` opens: its row ("rp") steps from that
+    row through the option ("uo", its under_option) to the page's rows (["Zebra Level", "Custom 1", "Type"])."""
+    path, opt = r.get("rp") or [], r.get("uo")
+    return bool(opt) and opt in path[1:] and norm(path[path.index(opt, 1) - 1]) == norm(row["l"])
+
+
 def menu(doc, recs, here: Path) -> list:
     """The camera's tabs, groups and rows (the menu tree), every record hung on the row its proof went through
     (placement.grown, as the definition places it: a row in another tab where its own tab has none, the sub-rows its
     paths name under a row the tree knows none under; else by its name, else at the end of its group), Picture
-    Profiles and Creative Looks as subsections of their rows; the other shooting modes' rows after a group's Stills
+    Profiles and Creative Looks as subsections of their rows, and so the page an option of a row opens (option_page);
+    the other shooting modes' rows after a group's Stills
     rows (mode_rows), and the records placement hangs there with them; records no menu lists in groups of their own
     after the camera's."""
     cam = definition_key(doc)
@@ -553,7 +561,11 @@ def menu(doc, recs, here: Path) -> list:
         # the tree knows none (headings with no walk frames of their own)
         _, hit = placement.grown(cam_tree, modes, leaves, menus, r["t"], r["cg"], r["n"])
         g = None if hit else cam_tree.hang(r["t"], menus, r["cg"], r["n"])[1]
-        if hit:
+        if hit and option_page(r, hit):
+            # on the page an option of the row opens, as the definition places it (placement.option_page: Zebra
+            # Level's Custom 1 boxes): the row's subsection for that option, as a family's profile is
+            fams[hit["id"]].setdefault(r["uo"], (999, []))[1].append(r["k"])
+        elif hit:
             hit["recs"].append(r["k"])
         elif g:
             g["extra"].append(r["k"])
@@ -564,7 +576,8 @@ def menu(doc, recs, here: Path) -> list:
         for g in t["groups"]:
             for x, _ in nodes(g["rows"]):
                 if x["id"] in fams:
-                    x["kids"] = []          # the profiles and looks come from their records
+                    if x.get("fam"):
+                        x["kids"] = []          # the profiles and looks come from their records
                     x["subs"] = [{"name": s, "keys": keys} for s, (_, keys) in
                                  sorted(fams[x["id"]].items(), key=lambda kv: (kv[1][0], [int(c) if c.isdigit() else c for c in re.split(r"(\d+)", kv[0])]))]
         groups = collections.OrderedDict()
