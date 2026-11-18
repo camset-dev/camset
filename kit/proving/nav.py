@@ -15,7 +15,7 @@ from camkit.screen import same_position, same_state
 from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
 
-from .base import LOCK_S, Failed
+from .base import LOCK_S, Failed, lock_over
 from .screens import SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png, same_place
 
 # While a DISP Set row is proved the shooting screen can be in another display mode ("No Disp. Info.":
@@ -94,12 +94,15 @@ def after_download(cam, done_at: float):
     """The camera shows "Saving to the connected device..." just after a download returns and
     closes the menu; wait for that to clear and for the menu lock to pass, then MENU if closed. The looks
     every 0.4 s are not saved (LiveCamera.glance); the one that decides is, and becomes the camera's frame
-    (refresh(frame=)): 70,638 frames of these looks sat in kit2_pass2 (the speed review of 2026-11-18)."""
+    (refresh(frame=)): 70,638 frames of these looks sat in kit2_pass2 (the speed review of 2026-11-18). The lock is
+    over by camkit.session.lock_over: with HDMI eyes in a mode measured, once the shooting screen (or a menu page) is
+    on show and LOCK_HDMI_S has passed; else once LOCK_S has, as always."""
     time.sleep(1.0)
     while True:
         f, s = cam.glance("after-download")
         waited = time.monotonic() - done_at
-        if waited > LOCK_S and (s.kind in ("menu", "submenu") or shooting_like(s, waited)):
+        ready = s.kind in ("menu", "submenu") or shooting_like(s, waited)
+        if ready and lock_over(waited, ready, getattr(cam, "hdmi", None)):
             break
         if waited > 25:
             cam.refresh("after-download", frame=f)

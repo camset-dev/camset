@@ -112,7 +112,7 @@ import proving.sidelists  # noqa: E402
 import proving.tables  # noqa: E402,F401
 # every name of the parts, under its old place (the walkers, the provers and the tests import them from here)
 from proving.base import (AXES, LOCK_S, PASS1, Blocked, Failed, finish_attempt, frame_file, number,  # noqa: E402,F401
-                          RestoreAfter, Tagged)
+                          RestoreAfter, Tagged, wait_lock)
 from proving.screens import (BAR_X, SEEN, _matches, ask_second, at_label, bar_text, carousel_text,  # noqa: E402,F401
                              closest_row, first_time_notice, glued, info_notice_ok, keeps_lead, later, main_name,
                              notice_focus, option_key, place, refuse_or_fail, run_tmp_png, same_place, settled,
@@ -1076,6 +1076,7 @@ def main():
                     time.sleep(1.0)
                 to_shooting(link, eyes, "the settings download")
                 here = link.download("before" if start is None else "session")
+                downloaded = time.monotonic()
                 if start is None:
                     start = here
                     print(f"start file: {start.name}", flush=True)
@@ -1087,7 +1088,7 @@ def main():
                     print("a new session does not start from the start file's settings: stopping", flush=True)
                     unrestored = True
                     break
-                time.sleep(5)
+                wait_lock(downloaded, eyes, clock=time, longest=5.0)     # the menu's lock (camkit.session.wait_lock)
                 left = len(pending)
                 try:
                     status = session(link, eyes, run, cycle, model, pending, start, out, failures)

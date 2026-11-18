@@ -325,7 +325,7 @@ class FirstOpens:
         reads as), is a check that cannot be made, no download asked. Raises FirstOpenFailed, the marker kept, when a record
         differs (each row's look says "changed", or PAGE where the rows of a page cannot be told apart) or the check
         cannot be made; a STOP leaves them pending for the run's end (ended)."""
-        from .session import PLAYBACK_HELD, compared, in_playback_now
+        from .session import PLAYBACK_HELD, compared, in_playback_now, wait_lock
         rows = list(self.pending)
         if all(key(p) in self.notices for p in rows):
             try:
@@ -347,6 +347,7 @@ class FirstOpens:
             if in_playback_now(self.link):          # whatever the screen read as: no download in Playback
                 raise RuntimeError(f"{PLAYBACK_HELD}: no download was asked")
             after = self.link.download("first-open")
+            done = time.monotonic()
             changes = compared(self.start, after, say=lambda m: None)
         except StopRequested:
             raise                       # still pending: the run's end decides by its own download (ended)
@@ -360,7 +361,7 @@ class FirstOpens:
             self.failure = f"{len(keys)} records then differed from the start file ({', '.join(keys[:8])})"
             raise FirstOpenFailed(self.failure, keys)
         self._clean(rows, "checked")
-        time.sleep(self.lock)
+        wait_lock(done, self.eyes, clock=time, longest=self.lock)       # the lock after the download (camkit.session)
         cam.press("menu")
 
     def left_playback(self) -> bool:

@@ -760,7 +760,7 @@ def test_a_page_scan_that_stops_still_restores(monkeypatch, capsys):
     monkeypatch.setattr(page_scan, "Link", lambda run: FakeLink(run, []))
     monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: FakeEyes())
     monkeypatch.setattr(page_scan, "to_shooting", lambda link, eyes, why: None)
-    monkeypatch.setattr(page_scan, "after_download", lambda eyes, t: None)
+    monkeypatch.setattr(page_scan, "after_download", lambda eyes, t, mode=None: None)
     monkeypatch.setattr(page_scan, "end_session", lambda link, eyes, start, why: ended.append(start.name)
                         or session.Ending(Path("after.DAT")))
     monkeypatch.setattr(sys, "argv", ["page_scan.py", "--run", "kit2_scan_test", "--mode", "Stills"])

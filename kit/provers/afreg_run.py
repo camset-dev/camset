@@ -787,7 +787,8 @@ def prepare(cam, link, hdmi, run, cycle, model, grip, focus: bool, drive: bool, 
     download, the steps). The count only is printed."""
     from camkit import camset
     from mode_switch import open_menu
-    from prove_run import LOCK_S, to_shooting
+    from prove_run import to_shooting
+    from proving.base import wait_lock
     from runner import close_screen
     steps = []
     rows = {f"{' > '.join(p)} = {o}": (p, o) for p, o in setup_rows(grip, focus)}
@@ -806,12 +807,13 @@ def prepare(cam, link, hdmi, run, cycle, model, grip, focus: bool, drive: bool, 
     to_shooting(link, hdmi, "the download after the setup")
     time.sleep(1)
     ref = link.download("after-setup")
+    done = time.monotonic()
     changed = [c.key for c in camset.diff(camset.read(start), camset.read(ref))]
     jsonl.append(run.dir / "setup.jsonl", {"t": round(time.time(), 3), "steps": steps, "start": start.name,
                                            "after": ref.name, "changed": changed})
     print(f"setup: {'; '.join(steps)}; {len(changed)} records now differ from the start file (the restore puts them "
           "back)", flush=True)
-    time.sleep(LOCK_S)
+    wait_lock(done, hdmi, clock=time)       # the menu's lock after the download (camkit.session.wait_lock)
     return ref, steps
 
 
@@ -888,15 +890,17 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     any grip the area's line ends "<grip> writes:" and every record the diff holds, by the definition's names (`index`:
     its settings by key; names_written). Returns the line."""
     from camkit import camset
-    from prove_run import LOCK_S, held_value, to_shooting
+    from prove_run import held_value, to_shooting
+    from proving.base import wait_lock
     from runner import changes_of
     turned = turned_of(grip) if turned == AS_GRIP else turned
     got = choose_area(cam, run, cycle, model, labels, axes, r, turned)
     to_shooting(link, hdmi, "the download before the hold")
     time.sleep(1)
     base = link.download(f"before-{slug(t['label'])}")
+    based = time.monotonic()
     if held_value(camset.read(base), t["own_key"]) == t["code"]:
-        time.sleep(LOCK_S)                      # the menu lock after a download, before the next area's MENU
+        wait_lock(based, hdmi, clock=time)      # the menu lock after a download, before the next area's MENU
         raise PutOff(t["label"])
     ready_to_hold(cam, time.monotonic())
     hold = hold_fn(cam, run, turned, allowed)
@@ -904,6 +908,7 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     to_shooting(link, hdmi, "the download after the hold")
     time.sleep(1)
     dat = link.download(f"after-{slug(t['label'])}")
+    done = time.monotonic()
     after_cs = camset.read(dat)
     changes = changes_of(camset.diff(camset.read(base), after_cs))
     after = {k: held_value(after_cs, k) for k in t["expected"]}
@@ -917,7 +922,7 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     held = f"; {held_words(grip)} writes: {names_written(changes, index or {})}" if grip else ""
     print(f"  {t['label']} (code {t['code']}): {verdict}; wrote {wrote}{other}"
           f"{'' if hold['said'] else '; no message read'}{held}", flush=True)
-    time.sleep(LOCK_S)
+    wait_lock(done, hdmi, clock=time)       # the menu lock after the download, before the next area's MENU
     return line
 
 

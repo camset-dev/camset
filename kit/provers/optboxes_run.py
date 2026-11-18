@@ -74,7 +74,8 @@ from camkit.runs import Run  # noqa: E402
 from boxes_run import EXIT_REFUSED, LOOKALIKE, PROOF_RUN, stop_status  # noqa: E402
 from boxes_run import lines as boxes_lines  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import LOCK_S, Failed, option_key, to_shooting  # noqa: E402
+from prove_run import Failed, option_key, to_shooting  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from proving.screens import box_answer, word_answer  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, scan_position)
@@ -561,7 +562,7 @@ def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx:
     to_shooting(link, hdmi, "the download after OK")
     # no wait first: camlink waits up to 5 s for the camera to allow a settings download
     dat = link.download(f"{names[idx]}-{vals.index(target)}".replace(" ", "-"))
-    time.sleep(LOCK_S)
+    wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {"chosen_frame": chosen, "row_frame": row_frame, "shown": read.ocr, "vlm": read.vlm, "vlm_reader": read.reader,
             "read_by": read.by, "stand_in": read.stand_in, "dat": dat}
 

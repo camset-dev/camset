@@ -360,16 +360,16 @@ def test_the_box_provers_pass_the_flag_on_a_step_alone(monkeypatch):
 
 
 def test_the_menu_lock_after_a_download_is_waited_only_for_what_is_left_of_it():
-    """proving.base.lock_left (crawl_run's wait after its start download): what is left of LOCK_S since the download
-    returned, so a crawl whose ledger build took longer than the lock waits nothing more, one that took a second waits
-    the rest; never less than the lock in all."""
-    from proving import base
+    """camkit.session.wait_lock (crawl_run's wait after its start download), where the measured lock does not apply:
+    what is left of LOCK_S since the download returned, so a crawl whose ledger build took longer than the lock waits
+    nothing more, one that took a second waits the rest; never less than the lock in all."""
+    from camkit import session
     now, slept = [100.0 + 10.9], []                 # the ledger built in 10.9 s
     clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda s: slept.append(s) or now.__setitem__(0, now[0] + s))
-    base.lock_left(100.0, clock)
+    session.wait_lock(100.0, None, clock=clock)
     now[0] = 200.0 + 1.0
-    base.lock_left(200.0, clock)
-    assert slept == [pytest.approx(base.LOCK_S - 1.0)] and now[0] == pytest.approx(200.0 + base.LOCK_S)
+    session.wait_lock(200.0, None, clock=clock)
+    assert slept == [pytest.approx(session.LOCK_S - 1.0)] and now[0] == pytest.approx(200.0 + session.LOCK_S)
 
 
 def test_the_settings_downloads_go_once_the_shooting_screen_is_back_with_no_second_waited(monkeypatch, tmp_path):
@@ -384,7 +384,9 @@ def test_the_settings_downloads_go_once_the_shooting_screen_is_back_with_no_seco
     monkeypatch.setattr(boxes_run.time, "sleep", lambda s: seq.append(("sleep", s)))
     link = SimpleNamespace(download=lambda tag: seq.append("download") or tmp_path / f"{tag}.DAT")
     boxes_run.choose(None, link, None, None, None, ["Frame Rate"], 0, ["30p", "60p"], 1, ["A", "B"])
-    assert seq == ["shooting", "download", ("sleep", boxes_run.LOCK_S)]
+    from camkit import session
+    assert seq[:2] == ["shooting", "download"] and seq[2][0] == "sleep" and len(seq) == 3
+    assert seq[2][1] == pytest.approx(session.LOCK_S, abs=0.05), "no eyes: LOCK_S, as before"
     seq.clear()
     monkeypatch.setattr(runner.time, "sleep", lambda s: seq.append(("sleep", s)))
     monkeypatch.setattr(runner.session, "finish", lambda link, start, **k: seq.append("download"))
@@ -577,3 +579,188 @@ def test_the_link_open_line_says_when_the_runs_process_started(tmp_path, monkeyp
     opened = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
     opened = next(e for e in opened if e["kind"] == "link_open")
     assert opened["process_started"] == round(camkit.STARTED, 3) <= opened["t"]
+
+
+# ---------------------------------------------------------------- the menu's lock after a download, as measured
+
+
+class LockEyes:
+    """Eyes on a fake clock: the screen reads as `before` until `ready_at` s after the download, then as the shooting
+    screen; `grabs` counts the frames grabbed."""
+    def __init__(self, now, ready_at, name="hdmi", before="notice"):
+        self.now, self.ready_at, self.name, self.before, self.grabs = now, ready_at, name, before, 0
+
+    def grab(self, tag="f", save=True):
+        self.grabs += 1
+        return SimpleNamespace(kind="shooting" if self.now[0] >= self.ready_at else self.before)
+
+
+def lock_clock(monkeypatch):
+    """A fake clock from 0 (the download's reply), and camkit.session's screen reading the fake frames' kinds."""
+    from camkit import session
+    now = [0.0]
+    clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(session, "screen", SimpleNamespace(read=lambda f: f))
+    return session, now, clock
+
+
+@pytest.mark.parametrize("ready_at,ends", [(0.3, 2.4), (1.9, 2.4), (3.0, 3.0), (4.4, 4.4), (9.0, 4.5)])
+def test_with_hdmi_eyes_in_stills_the_lock_ends_at_the_later_of_the_shooting_screen_and_2_4_s(monkeypatch, ready_at,
+                                                                                              ends):
+    """camkit.session.wait_lock, HDMI eyes, the scan's mode Stills (the measurement: kit2_speed_lock, 2026-11-18): the
+    wait ends once the shooting screen has been seen and LOCK_HDMI_S has passed, whichever is later, never before the
+    shooting screen is seen; a shooting screen never seen ends it where the old rule did, at LOCK_S."""
+    session, now, clock = lock_clock(monkeypatch)
+    monkeypatch.setattr(session, "MODE", "Stills")
+    how = session.wait_lock(0.0, LockEyes(now, ready_at), clock=clock)
+    assert now[0] == pytest.approx(ends, abs=0.11) and now[0] >= min(max(ready_at, session.LOCK_HDMI_S), 4.5) - 1e-9
+    assert how == ("lock" if ready_at > 4.5 else "shooting seen")
+
+
+@pytest.mark.parametrize("eyes_name,mode", [("osd", "Stills"), ("hdmi", "Movie"), ("hdmi", "S&Q"), ("hdmi", None)])
+def test_osd_eyes_movie_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode):
+    """OSD eyes (its picture lags, not measured), Movie and S&Q (not measured) and a run that cannot tell its mode keep
+    LOCK_S, no frame looked at; a caller's own longer wait (prove_run's 5 s) is never cut short either."""
+    session, now, clock = lock_clock(monkeypatch)
+    monkeypatch.setattr(session, "MODE", mode)
+    eyes = LockEyes(now, 0.1, name=eyes_name)
+    assert session.wait_lock(0.0, eyes, clock=clock) == "lock" and now[0] == pytest.approx(4.5) and eyes.grabs == 0
+    now[0] = 0.0
+    session.wait_lock(0.0, None, "Stills", clock=clock, longest=5.0)
+    assert now[0] == pytest.approx(5.0)
+    assert session.lock_measured(SimpleNamespace(name="hdmi"), "Stills") and not session.lock_measured(None, "Stills")
+
+
+def test_lock_over_is_the_old_rule_or_the_measured_one():
+    """lock_over: past `longest` always (the old rule); before it only with HDMI eyes in a measured mode, the shooting
+    screen seen and LOCK_HDMI_S passed."""
+    from camkit import session
+    hdmi = SimpleNamespace(name="hdmi")
+    assert session.lock_over(4.6, False) and not session.lock_over(4.4, True, hdmi)
+    assert session.lock_over(2.4, True, hdmi, "Stills") and not session.lock_over(2.3, True, hdmi, "Stills")
+    assert not session.lock_over(3.0, False, hdmi, "Stills") and not session.lock_over(3.0, True, hdmi, "Movie")
+
+
+def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills"):
+    """proving.nav.after_download on a fake clock: the camera's screen the notice until `ready_at` s, then the shooting
+    screen; (when it ended, the keys pressed)."""
+    from camkit import session
+    from proving import nav
+    now = [0.0]
+    monkeypatch.setattr(nav.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(nav.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(session, "MODE", mode)
+    pressed = []
+
+    def glance(tag):
+        kind = "shooting" if now[0] >= ready_at else "notice"
+        return SimpleNamespace(kind=kind), SimpleNamespace(kind=kind)
+    cam = SimpleNamespace(glance=glance, refresh=lambda tag, frame=None: SimpleNamespace(kind=frame.kind),
+                          press=lambda key, **k: pressed.append(key), hdmi=SimpleNamespace(name=name))
+    nav.after_download(cam, 0.0)
+    return now[0], pressed
+
+
+def test_after_download_ends_on_the_shooting_screen_past_2_4_s_with_hdmi_in_stills(monkeypatch):
+    """proving.nav.after_download, its looks every 0.4 s from 1 s: with HDMI eyes in Stills it ends at the first look
+    past LOCK_HDMI_S on the shooting screen (2.6 s, the notice gone at 1.9 s), not at the first past LOCK_S (4.6 s)
+    as before; OSD eyes and Movie end at 4.6 s as before; MENU after it either way."""
+    assert after_download_on(monkeypatch, 1.9) == (pytest.approx(2.6), ["menu"])
+    assert after_download_on(monkeypatch, 3.3)[0] == pytest.approx(3.4)
+    assert after_download_on(monkeypatch, 1.9, name="osd")[0] == pytest.approx(4.6)
+    assert after_download_on(monkeypatch, 1.9, mode="Movie")[0] == pytest.approx(4.6)
+
+
+def test_the_page_scans_wait_after_its_download_goes_by_its_mode(monkeypatch):
+    """page_scan.after_download: the shooting screen and LOCK_HDMI_S in Stills over HDMI, LOCK_S in Movie."""
+    import page_scan
+    for mode, ends in (("Stills", 2.4), ("Movie", 4.5)):
+        now = [0.0]
+        monkeypatch.setattr(page_scan.time, "monotonic", lambda now=now: now[0])
+        monkeypatch.setattr(page_scan.time, "sleep", lambda s, now=now: now.__setitem__(0, now[0] + s))
+        monkeypatch.setattr(page_scan.screen, "read", lambda f: f)
+        eyes = LockEyes(now, 1.9)
+        page_scan.after_download(eyes, 0.0, mode)
+        assert now[0] == pytest.approx(ends, abs=0.41) and now[0] >= ends - 1e-9
+
+
+def test_the_box_provers_wait_the_measured_lock_with_their_own_eyes(monkeypatch, tmp_path):
+    """boxes_run.choose and optboxes_run.keep: after the download, the lock by camkit.session.wait_lock with the run's
+    eyes, so HDMI eyes in Stills end it at 2.4 s once the shooting screen is seen."""
+    import boxes_run
+    from camkit import session
+    session_, now, clock = lock_clock(monkeypatch)
+    monkeypatch.setattr(session, "MODE", "Stills")
+    monkeypatch.setattr(boxes_run, "time", clock)
+    monkeypatch.setattr(boxes_run, "step_ok", lambda *a: {"chosen_frame": "c", "row_frame": "r", "vlm": ""})
+    monkeypatch.setattr(boxes_run, "to_shooting", lambda *a: None)
+    eyes = LockEyes(now, 1.0)
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT")
+    boxes_run.choose(None, link, eyes, None, None, ["Frame Rate"], 0, ["30p", "60p"], 1, ["A", "B"])
+    assert now[0] == pytest.approx(2.4) and eyes.grabs >= 1
+
+
+def test_the_crawl_the_first_open_check_afreg_and_prove_run_go_through_the_one_wait(monkeypatch, tmp_path):
+    """Every other caller changed waits through camkit.session.wait_lock with its own eyes: first_open's check (its
+    `lock` the longest wait), afreg's waits before a MENU (after the setup, after an area's download, and an area
+    put off), and prove_run's wait after a session's download (5 s the longest, as before)."""
+    from camkit import first_open, session
+    from proving import base
+    import afreg_run
+    calls = []
+
+    def wait_lock(since, eyes=None, mode=None, clock=None, longest=session.LOCK_S, poll=0.1):
+        calls.append((getattr(eyes, "name", None), longest))
+        return "lock"
+    monkeypatch.setattr(session, "wait_lock", wait_lock)
+    monkeypatch.setattr(base, "wait_lock", wait_lock)
+    # afreg: the setup's download, then an area put off (held already), then an area registered
+    monkeypatch.setattr(afreg_run, "setup_steps", lambda *a: [])
+    monkeypatch.setattr(afreg_run, "setup_rows", lambda *a: [])
+    monkeypatch.setattr(afreg_run.time, "sleep", lambda s: None)
+    import camkit.camset as camset
+    import prove_run
+    monkeypatch.setattr(camset, "read", lambda p: p)
+    monkeypatch.setattr(camset, "diff", lambda a, b: [])
+    monkeypatch.setattr(prove_run, "to_shooting", lambda *a, **k: None)
+    hdmi = SimpleNamespace(name="hdmi")
+    run = SimpleNamespace(dir=tmp_path)
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT")
+    afreg_run.prepare(None, link, hdmi, run, None, None, None, False, False, tmp_path / "start.DAT")
+    t = {"label": "Wide", "code": 1, "own_key": "k", "expected": []}
+    monkeypatch.setattr(afreg_run, "choose_area", lambda *a: {"shown": "Wide"})
+    monkeypatch.setattr(prove_run, "held_value", lambda cs, k: 1)
+    with pytest.raises(afreg_run.PutOff):
+        afreg_run.register(None, link, hdmi, run, None, None, [], [], t, (0, "Wide", None), None, [], None)
+    monkeypatch.setattr(prove_run, "held_value", lambda cs, k: 0)
+    monkeypatch.setattr(afreg_run, "ready_to_hold", lambda *a, **k: None)
+    monkeypatch.setattr(afreg_run, "hold_fn", lambda *a, **k: {"said": "registered", "frames": []})
+    monkeypatch.setattr(afreg_run, "proof_line", lambda *a, **k: {"changes": [], "side_effects": [], "applied": True})
+    afreg_run.register(None, link, hdmi, run, None, None, [], [], t, (0, "Wide", None), None, [], SimpleNamespace(
+        write=lambda s: None, flush=lambda: None))
+    assert calls == [("hdmi", session.LOCK_S)] * 3
+    calls.clear()
+    # first_open's check, its lock given as the crawl gives it
+    fo = first_open.FirstOpens(SimpleNamespace(download=lambda tag: tmp_path / "f.DAT", call=lambda *a, **k: {}),
+                               hdmi, SimpleNamespace(root=tmp_path, log=lambda *a, **k: None), tmp_path / "s.DAT",
+                               first_open.Seen(), "", 3.5, wait=lambda *a, **k: "shooting")
+    monkeypatch.setattr(first_open, "coverage", SimpleNamespace(append_look=lambda *a, **k: None))
+    monkeypatch.setattr(session, "in_playback_now", lambda link: False)
+    monkeypatch.setattr(session, "compared", lambda start, after, say=None: [])
+    fo.pending = []
+    fo._clean = lambda rows, how: None
+    fo.settle(SimpleNamespace(press=lambda key, **k: None))
+    assert calls == [("hdmi", 3.5)]
+
+
+def test_the_crawl_and_prove_run_wait_after_their_download_through_the_one_wait():
+    """crawl_run's wait after its start download and prove_run's after a session's download (5 s before, its longest
+    still) are camkit.session.wait_lock with the run's eyes, measured from the download's reply (their mains need a
+    camera: read off their source)."""
+    import re
+    crawl = (KIT / "crawl_run.py").read_text(encoding="utf-8")
+    prove = (KIT / "prove_run.py").read_text(encoding="utf-8")
+    assert re.search(r'before = link\.download\("before"\)\n\s+downloaded = time\.monotonic\(\)', crawl)
+    assert "wait_lock(downloaded, hdmi, clock=time)" in crawl and "lock_left" not in crawl
+    assert re.search(r'here = link\.download\([^\n]*\)\n\s+downloaded = time\.monotonic\(\)', prove)
+    assert "wait_lock(downloaded, eyes, clock=time, longest=5.0)" in prove and "time.sleep(5)\n" not in prove

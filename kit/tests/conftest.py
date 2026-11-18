@@ -29,6 +29,16 @@ def own_runs(tmp_path_factory, monkeypatch):
     return top
 
 
+@pytest.fixture(autouse=True)
+def no_scan_mode(monkeypatch):
+    """No test inherits the shooting mode another test's page scan set (camkit.session.MODE, which runner.load_scan
+    sets and the menu's lock after a download goes by)."""
+    import sys
+    s = sys.modules.get("camkit.session")
+    if s is not None:
+        monkeypatch.setattr(s, "MODE", None)
+
+
 # The test modules whose kit/drive.py runs open, with Right or Enter and more presses after it, rows of a made-up
 # camera that has no looks or crawls: on a real body each would be a first open (camkit.first_open), refused before it
 # connects unless the press is Right alone (29 tests, 2026-11-15)

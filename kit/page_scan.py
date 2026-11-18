@@ -36,11 +36,11 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths, screen  # noqa: E402
+from camkit import jsonl, paths, screen, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.runs import Run  # noqa: E402
-from prove_run import LOCK_S, to_shooting  # noqa: E402
+from prove_run import to_shooting  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SCAN_ID, SCAN_MODES, end_session, mark_lap_whole,  # noqa: E402
                     record_mode, recorded_mode, refuse_switched, restore_checked, scan_mode, scan_record,
                     switch_for_scan, write_json)
@@ -162,13 +162,14 @@ class Scan:
             print(f"MENU -> {screen.read(f).kind}", flush=True)
 
 
-def after_download(hdmi, done_at: float):
+def after_download(hdmi, done_at: float, mode: str | None = None):
     """The camera shows "Saving to the connected device..." for a moment after a download returns, and MENU within
-    LOCK_S of it is ignored (a MENU into the notice, 2026-11-06): wait for the shooting screen and the lock."""
+    the lock is ignored (a MENU into the notice, 2026-11-06): wait for the shooting screen and the lock
+    (camkit.session.lock_over: LOCK_HDMI_S with HDMI eyes in the scan's mode where measured, else LOCK_S)."""
     while True:
         s = screen.read(hdmi.grab("after-download", save=False))
         waited = time.monotonic() - done_at
-        if waited > LOCK_S and s.kind == "shooting":
+        if s.kind == "shooting" and session.lock_over(waited, True, hdmi, mode):
             return
         if waited > 25:
             raise SystemExit(f"after the download the camera stayed on a {s.kind} screen; nothing pressed")
@@ -251,7 +252,7 @@ def main():
             # at the end if anything moved
             to_shooting(link, hdmi, "the start download")
             start = link.download("before")
-            after_download(hdmi, time.monotonic())
+            after_download(hdmi, time.monotonic(), a.mode)
             t0 = time.monotonic()
             try:
                 Scan(run, link, hdmi, a.max).run_scan()

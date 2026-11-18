@@ -10,21 +10,12 @@ import re
 import time
 
 from camkit import paths
+from camkit.session import LOCK_S, lock_over, wait_lock  # noqa: F401 (the menu's lock after a download, for provers)
 from runner import read_json
 
 RUN_ROOT = paths.module_root()          # the camera's runs, runs/<model>_fw<fw>/ (camkit.paths)
 PASS1 = RUN_ROOT / "kit2_pass1"
 
-LOCK_S = 4.5                     # MENU sooner than this after a download leaves the menu locked
-
-
-def lock_left(since: float, clock=time) -> None:
-    """Wait what is left of LOCK_S since `since` (clock.monotonic() as a download returned; clock: the caller's time
-    module): work done meanwhile (a crawl's ledger, built in about 11 s) counts toward the lock, never a second of it
-    waited twice."""
-    left = LOCK_S - (clock.monotonic() - since)
-    if left > 0:
-        clock.sleep(left)
 
 
 class Failed(Exception):

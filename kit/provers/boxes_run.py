@@ -48,7 +48,8 @@ from camkit.link import StopRequested  # noqa: E402
 from camkit.live import TwoBoxes  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import LOCK_S, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from prove_run import Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, add_scan_argument, changes_of, close_screen, load_scan,  # noqa: E402
                     menu_from_shooting, proofs_file, prover_session, scan_position)
@@ -182,7 +183,7 @@ def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
     got = step_ok(cam, cycle, model, path, b, vals, target, names)
     to_shooting(link, hdmi, "the download after OK")
     dat = link.download(f"{path[-1]}-{b}-{target}")     # camlink waits up to 5 s for the camera to allow it
-    time.sleep(LOCK_S)
+    wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {**got, "dat": dat}
 
 

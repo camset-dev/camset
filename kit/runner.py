@@ -618,6 +618,7 @@ def load_scan(scan, mode: str | None = None) -> tuple[list, dict]:
     a folder, or LATEST_SCAN (scan_dir: the latest of the runner's mode, `mode` or the one --scan carries), which is
     said."""
     latest, scan = scan == LATEST_SCAN, scan_dir(scan, mode)
+    session.MODE = recorded_mode(scan)      # the mode the menu's lock after a download goes by (session.wait_lock)
     if latest:
         print(f"page scan: {scan.name} (the camera's latest {recorded_mode(scan)} mode scan"
               f"{f' made in {AUTO}' if scan_auto(scan) else ''}; --scan names another)", flush=True)
