@@ -125,6 +125,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A run now survives a network error the camera reports on its remote link:** it sends nothing until the link
+  recovers by itself, about a minute later, then cancels with MENU and restores, where it closed the link and left the
+  camera unrestored. The error says so in plain words and names the screen that was on show.
 - **The kit no longer presses Enter on a screen that asks something, whatever its words or language, unless the run
   names that screen.** `drive.py --confirm` now takes the screen's text and covers one press, and formatting or
   deleting a card needs the owner route (`drive.py --owner`).

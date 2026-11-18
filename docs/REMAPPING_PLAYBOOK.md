@@ -434,6 +434,10 @@ Each line is a symptom, then its cause, then what to do.
   closed ("its bar does not read it"). A look at such a row's frames with the kit's own OCR shows the bar's shape.
 - **No HDMI frames and no OSD image at the start of a session** → the monitor is asleep, or the HDMI cable is out: ask
   the owner to wake the camera by hand and check the cable.
+- **"the camera's remote link reported a network error while this screen was on show"** → a screen whose picture the
+  camera cannot send while the kit reads its screen through the link (OSD eyes) stalled the session; the kit sends
+  nothing, waits for the link to recover by itself (about a minute), then cancels with MENU and restores. HDMI eyes
+  avoid it.
 - **The viewfinder rows answer "This function is currently disabled."** → the HDMI cable is in. With it out they open
   only with the finder in use (eye sensor covered, monitor folded in): the owner's actions, one per message.
 - **"Connect_SSH_GetFingerprintFailed"** → SSH port 22 is closed. Remote Shooting is off, or bound

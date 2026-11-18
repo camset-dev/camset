@@ -67,6 +67,32 @@ class LinkError(Exception):
         self.opened = opened
 
 
+class NetworkError(LinkError):
+    """A command the camera did not take while the SDK reported a network error on the remote link (Link.network_error):
+    said in plain words, the camera's own reply in the run's log alone. Never a CameraRefused: nothing says the camera
+    itself refused it (a MENU refused so is no notice's refusal, proving.nav.to_shooting)."""
+
+
+# The SDK's warnings on the remote link, as camlink writes them on stderr ({"event": "warning", "code", "text"}): one
+# screen (Zebra Level > Custom 1 with its Standard box lit at 30, while OSD Image Mode was on) stalled the session, the
+# error came 10-36 s after it appeared, and, the session kept, the recovery 55.3 s after each error (55.39, 55.29,
+# 55.40 and 55.37 s, measured four times on 2026-11-18, kit2_zebra_split). A key sent at the instant of the recovery was
+# refused (button_held, the camera did not act); one sent 2.0 s after it was taken and the link stayed up
+NET_ERROR = (131079, "NetworkErrorOccurred")
+NET_RECOVERED = (131080, "NetworkErrorRecovered")
+RECOVER_TIMEOUT = 75.0          # s: the most wait_recovered waits for the recovery (55.3 s measured, and some margin)
+RECOVER_SETTLE = 2.0            # s: after the recovery, before the next key (at once was refused; 2.0 s was taken)
+RECOVER_POLL = 0.25             # s: how often the wait looks at the link's state (its events come on their own thread)
+NET_ERROR_SAID = ("the camera's remote link reported a network error while this screen was on show, and the camera "
+                  "did not take the command: the kit sends nothing more until the link recovers (about a minute), then "
+                  "cancels with MENU and restores")
+
+
+def _is(ev: dict, which: tuple) -> bool:
+    """Whether camlink's event `ev` is the SDK's warning `which` ((code, text)), by its code or its text."""
+    return ev.get("event") == "warning" and (ev.get("code") == which[0] or ev.get("text") == which[1])
+
+
 class CameraRefused(LinkError):
     """A reply came back and said the command was not taken ("button not accepted": the camera did nothing; camlink's
     own guard refused it): kit/drive.py takes an armed press refused so as not gone, closes with MENU and restores.
@@ -295,6 +321,10 @@ class Link:
         self.menus = 0
         self._mode_listed = None  # whether the body lists MODE_PROPERTY, once props has said (mode_listed)
         self._props_failed = False    # props failed on this open link: in_playback asks it no more (C4's check does)
+        # the SDK's network error on the remote link (NET_ERROR, NET_RECOVERED): in error since when (the clock's time),
+        # recovered when; no disconnect (gone stays ""), and over once the recovery comes (network_error, wait_recovered)
+        self._clock, self._sleep = time.monotonic, time.sleep       # the tests' own clock and sleep stand in
+        self._net_reset()
 
     # -------------------------------------------------------------- lifetime
 
@@ -322,6 +352,7 @@ class Link:
                                      stderr=subprocess.PIPE, **own_group)
         self.output_ended = False
         self.disconnected, self._dropped_after = "", -1      # a new session: nothing of the last one's drop
+        self._net_reset()                                    # nor of its network error
         threading.Thread(target=self._pump, args=(self.proc.stdout, self._stdout_line), daemon=True).start()
         self._stderr_pump = threading.Thread(target=self._pump, args=(self.proc.stderr, self._event), daemon=True)
         self._stderr_pump.start()
@@ -424,6 +455,49 @@ class Link:
             return "camlink's output has ended"
         return getattr(self, "disconnected", "")
 
+    def _net_reset(self) -> None:
+        self.net_error_since, self.net_recovered_at = None, None
+
+    def _now(self) -> float:
+        return getattr(self, "_clock", time.monotonic)()
+
+    def network_error(self) -> str:
+        """Why the camera's remote link is in the SDK's network-error state, in plain words, or "" when it is not: from
+        NetworkErrorOccurred until NetworkErrorRecovered (_event). It is no disconnect (gone stays ""): the session comes
+        back by itself, about a minute later, if the kit keeps it and sends nothing (wait_recovered)."""
+        since = getattr(self, "net_error_since", None)
+        if since is None:
+            return ""
+        return f"the camera's remote link reported a network error {max(0.0, self._now() - since):.0f} s ago"
+
+    def wait_recovered(self, timeout: float = RECOVER_TIMEOUT, settle: float = RECOVER_SETTLE) -> bool:
+        """Sending nothing, until the SDK's network error is over: in the error state, waits for NetworkErrorRecovered,
+        then `settle` s more (a key sent at the recovery was refused, one 2.0 s after it taken: RECOVER_SETTLE), and
+        returns True; False at once on a disconnect or camlink's end (gone), and at `timeout` s with no recovery. A
+        recovery less than `settle` s past is given the rest of it; with no error at all it returns True at once. Each
+        wait is logged ("network_wait": its outcome and seconds)."""
+        sleep = getattr(self, "_sleep", time.sleep)
+        start = self._now()
+        waited = getattr(self, "net_error_since", None) is not None
+        outcome = "recovered"
+        while getattr(self, "net_error_since", None) is not None:
+            if self.gone():
+                outcome = f"dropped ({self.gone()})"
+                break
+            left = timeout - (self._now() - start)
+            if left <= 0:
+                outcome = "timed out"
+                break
+            sleep(min(RECOVER_POLL, left))
+        if getattr(self, "net_error_since", None) is None:
+            rec = getattr(self, "net_recovered_at", None)
+            if rec is not None and self._now() - rec < settle:
+                sleep(settle - (self._now() - rec))
+                waited = True
+        if waited:
+            self.run.log("network_wait", outcome=outcome, s=round(self._now() - start, 1))
+        return outcome == "recovered"
+
     def _event(self, line):
         """An SDK event from camlink's stderr, kept and logged. camlink writes objects ({"event": ...}); anything else
         a library prints there is kept as text. Nothing here may raise: this runs on the thread that drains stderr,
@@ -440,6 +514,10 @@ class Link:
         if ev.get("event") == "disconnected":
             self._dropped_after = self._seq
             self.disconnected = "the SDK reported the camera disconnected"
+        elif _is(ev, NET_ERROR):
+            self.net_error_since = self._now()          # no disconnect: the session may come back (wait_recovered)
+        elif _is(ev, NET_RECOVERED):
+            self.net_error_since, self.net_recovered_at = None, self._now()
         try:
             # the log's own keys ("t", "kind") are kept apart from the event's
             self.run.log("sdk_event", **{(f"event_{k}" if k in ("t", "kind") else k): v for k, v in ev.items()})
@@ -607,9 +685,12 @@ class Link:
         """The command's reply when camlink answers ok; LinkError otherwise. A reply that came back saying the camera
         (or camlink's own guard) did not take the command ("button not accepted": nothing done) is CameraRefused; a
         button whose release was refused ("button_held": it went down, and may have acted) and camlink's last word
-        after a signal are plain LinkError, as no reply at all is."""
+        after a signal are plain LinkError, as no reply at all is. One the camera did not take while the SDK reported a
+        network error on the link (network_error) is NetworkError, in plain words, its reply in the run's log alone."""
         r = self.call(command, timeout, **guard)
         if not r.get("ok"):
+            if self.network_error() and r.get("cause") != "signal":
+                raise NetworkError(NET_ERROR_SAID)
             kind = LinkError if r.get("cause") in ("button_held", "signal") else CameraRefused
             raise kind(f"{command}: {r.get('error')}")
         return r
