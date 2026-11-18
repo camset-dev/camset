@@ -1641,9 +1641,21 @@ class LiveCamera:
     def read(self) -> screen.Screen:
         return self.screen
 
-    def refresh(self, tag: str) -> screen.Screen:
-        """Grab and read the screen now, without a press (after a download closed the menu)."""
-        self.frame = self.hdmi.grab(tag)
+    def glance(self, tag: str) -> tuple:
+        """(a frame grabbed now, not saved; the screen on it as this camera reads it), the camera's own frame and screen
+        left as they are: a look a waiting loop takes many times (proving.nav.after_download: one every 0.4 s), whose
+        deciding frame refresh(frame=) saves and makes the camera's."""
+        f = self.hdmi.grab(tag, save=False)
+        return f, self.reading(f)
+
+    def refresh(self, tag: str, frame=None) -> screen.Screen:
+        """Grab and read the screen now, without a press (after a download closed the menu); or take `frame`, one glance
+        grabbed unsaved, saved now as the evidence it is (black while a row whose values are withheld is open)."""
+        if frame is None:
+            self.frame = self.hdmi.grab(tag)
+        else:
+            keep(frame, self.run.shot_path(tag), getattr(self.hdmi, "withheld", False))
+            self.frame = frame
         self.screen = self.reading(self.frame)
         self.screen.frame_path = self.frame.path.name
         self.rest(f"{tag}-rest")

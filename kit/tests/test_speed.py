@@ -391,3 +391,59 @@ def test_the_settings_downloads_go_once_the_shooting_screen_is_back_with_no_seco
     runner.end_session(link, None, tmp_path / "start.DAT", reach=lambda link, eyes, why: seq.append("shooting"))
     assert seq == ["shooting", "download"]
 
+
+
+# ---------------------------------------------------------------- F: the looks after a download, unsaved
+
+
+def test_after_download_saves_only_the_look_that_decides(monkeypatch):
+    """proving.nav.after_download: a look every 0.4 s until the lock has passed and the menu or the shooting screen is
+    on show, none of them saved (LiveCamera.glance), then the deciding look saved and made the camera's frame
+    (refresh(frame=)), and MENU where it is the shooting screen; the same waits and the same decision as before."""
+    from proving import nav
+    now = [0.0]
+    monkeypatch.setattr(nav.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(nav.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    kinds = iter(["notice", "notice", "shooting", "shooting", "shooting", "shooting", "shooting", "shooting",
+                  "shooting", "shooting", "shooting", "shooting"])
+    looks, kept, pressed = [], [], []
+
+    def glance(tag):
+        f = SimpleNamespace(n=len(looks), kind=next(kinds))
+        looks.append(f)
+        return f, SimpleNamespace(kind=f.kind)
+
+    def refresh(tag, frame=None):
+        kept.append(frame)
+        return SimpleNamespace(kind=frame.kind)
+    cam = SimpleNamespace(glance=glance, refresh=refresh, press=lambda key, **k: pressed.append(key))
+    nav.after_download(cam, 0.0)
+    waited = 1.0 + 0.4 * (len(looks) - 1)
+    assert waited > nav.LOCK_S and kept == [looks[-1]] and pressed == ["menu"]
+
+
+def test_a_glance_is_not_saved_and_a_refresh_saves_the_glance_it_takes(tmp_path):
+    """LiveCamera.glance grabs unsaved and leaves the camera's frame; refresh(frame=) saves that very frame under the
+    run's shots (black while a row whose values are withheld is open) and reads it as the camera's screen."""
+    from camkit.frames import Frame
+    from camkit.runs import Run
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run("looks", root=tmp_path)
+    img = np.full((480, 640, 3), 40, np.uint8)
+    saved = []
+    cam.hdmi = SimpleNamespace(grab=lambda tag, save=True: saved.append(save) or Frame(img.copy(), 0.0, None, "hdmi"),
+                               withheld=False)
+    cam.frame, cam.screen = "before", "before"
+    cam.rest = lambda tag: None
+    cam._moves = lambda: 0
+    cam._inside_after = lambda: None
+    f, s = cam.glance("after-download")
+    assert saved == [False] and f.path is None and cam.frame == "before" and s.kind
+    cam.refresh("after-download", frame=f)
+    assert cam.frame is f and f.path.exists() and f.path.parent == cam.run.dir / "shots" and saved == [False]
+    cam.hdmi.withheld = True
+    g, _ = cam.glance("after-download")
+    cam.refresh("after-download", frame=g)
+    from PIL import Image
+    assert np.asarray(Image.open(g.path)).max() == 0, "withheld: saved black"
+

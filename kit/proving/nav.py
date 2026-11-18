@@ -92,16 +92,20 @@ def where_in(cam, path) -> int | None:
 
 def after_download(cam, done_at: float):
     """The camera shows "Saving to the connected device..." just after a download returns and
-    closes the menu; wait for that to clear and for the menu lock to pass, then MENU if closed."""
+    closes the menu; wait for that to clear and for the menu lock to pass, then MENU if closed. The looks
+    every 0.4 s are not saved (LiveCamera.glance); the one that decides is, and becomes the camera's frame
+    (refresh(frame=)): 70,638 frames of these looks sat in kit2_pass2 (the speed review of 2026-11-18)."""
     time.sleep(1.0)
     while True:
-        s = cam.refresh("after-download")
+        f, s = cam.glance("after-download")
         waited = time.monotonic() - done_at
         if waited > LOCK_S and (s.kind in ("menu", "submenu") or shooting_like(s, waited)):
             break
         if waited > 25:
+            cam.refresh("after-download", frame=f)
             raise Failed(f"after a download the camera stayed on a {s.kind} screen")
         time.sleep(0.4)
+    s = cam.refresh("after-download", frame=f)
     if shooting_like(s):
         cam.press("menu")
 
