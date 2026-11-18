@@ -382,6 +382,26 @@ def _compact(t) -> str:
     return re.sub(r"[^a-z0-9]", "", safety.fold(str(t or "")).lower())
 
 
+def _above(box) -> tuple:
+    """Where a two-box screen draws a box's name (NAME_ABOVE): over the box, a little wider than it."""
+    side, up, down = NAME_ABOVE
+    x0, y0, x1, _ = box
+    return (x0 - side, y0 - up, x1 + side, y0 - down)
+
+
+def names_drawn(lines, at, names) -> list | None:
+    """The two box names `names` (in any order) in the order a two-box screen whose OCR lines are `lines` draws them
+    over its boxes `at`, left first: each box's text above it (where TwoBoxes reads it) ending with one of them, the
+    longest that fits ("Sad Rec Frame Rate" ends with Frame Rate too: it is Rec Frame Rate's); None where the two boxes
+    do not give the two names once each (another row's screen, a name OCR misread)."""
+    out = []
+    for box in at:
+        said = _compact(ocr.text_in(lines, _above(box)))
+        fits = [n for n in names if _compact(n) and said.endswith(_compact(n))]
+        out.append(max(fits, key=lambda n: len(_compact(n))) if fits else None)
+    return out if None not in out and sorted(out) == sorted(names) and len(set(out)) == len(names) else None
+
+
 def two_boxes_refused(consent: TwoBoxes, lines, image) -> str:
     """Why a screen whose OCR lines are `lines` and whose picture is `image` is not `consent.row`'s own two-box screen,
     shaped as it is (TwoBoxes), or "" when it is: its breadcrumb ends with the row's name and each box's name stands
@@ -401,9 +421,8 @@ def two_boxes_refused(consent: TwoBoxes, lines, image) -> str:
     if not _compact(consent.row) or not _compact(title).endswith(_compact(consent.row)):
         return f"its title ({title[:60]!r}) does not end with {consent.row}"
     places = [BOXES_TITLE]
-    side, up, down = NAME_ABOVE
     for name, (x0, y0, x1, y1) in zip(consent.boxes, consent.at, strict=True):
-        above = (x0 - side, y0 - up, x1 + side, y0 - down)
+        above = _above((x0, y0, x1, y1))
         said = text_at(above)
         if not _compact(name) or not _compact(said).endswith(_compact(name)):
             return f"the name above a box ({said[:40]!r}) is not {name}"

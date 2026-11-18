@@ -34,8 +34,16 @@ The switch is a run of its own, bracketed as every run is (decision 15): the sta
 The switch navigates the menu of the mode the camera is in (--in, default Stills: its latest page scan by default,
 runner.latest_scan); --set, with a switch waiting, the menu of the mode the switch left it in (the kept record's
 "scan_mode", else its --to: a family, or P/A/S/M/Auto in Stills).
+--set takes a list row ("ROW=OPTION", set_row) or a two-box row's box ("S&Q Settings > Frame Rate Settings > Rec
+Frame Rate=24p", 2026-11-18): a row the definition holds exactly two boxes under on that menu and boxes_run has proved
+(two_box; anything else stops before the link opens when the definition and those proofs have the row on another
+menu, or not that box). The box is set by boxes_run's own opening, look, stepping and OK (boxes_run.set_value: its
+screen's consent, the drawn OK key, the dash check), and a download after it must show exactly one record moved, one
+of that box's records in the definition (one for each movie format): the run says which records differ and stops
+otherwise. Any stop exits 1, the switch waiting for --restore.
 """
 import argparse
+import json
 import re
 import sys
 import time
@@ -239,6 +247,104 @@ def list_labels(path: list, mode: str = "Stills") -> list | None:
     return labels if kind == "list" else None
 
 
+def definition(run) -> dict:
+    """The camera's definition (camkit.definitions, its public part), as filter_run reads it; {} where there is none
+    (no definition file, or a run folder no camera's: its --set items are then list rows, as before)."""
+    from camkit import definitions, paths
+    try:
+        p = definitions.path(run.dir.parent.name)
+        return definitions.load_public(p) if p.exists() else {}
+    except (OSError, ValueError, KeyError, paths.NoCamera):
+        return {}
+
+
+def box_proofs(run) -> set:
+    """The paths boxes_run proved as boxes of a two-box screen: its proof lines (kind "list", "boxes": true; a
+    checklist's carry "boxes" too, kind "checklist") in its run beside `run` (boxes_run.PROOF_RUN), each the row's path
+    and a box's name; empty where there are none."""
+    import boxes_run
+    try:
+        f = Path(run.dir).parent / boxes_run.PROOF_RUN / "proofs.jsonl"
+        lines = f.read_text(encoding="utf-8").splitlines() if f.exists() else []
+    except OSError:
+        return set()
+    out = set()
+    for line in lines:
+        if '"boxes": true' not in line:
+            continue
+        try:
+            r = json.loads(line)
+        except ValueError:
+            continue
+        if r.get("boxes") is True and r.get("kind") == "list" and isinstance(r.get("path"), list):
+            out.add(tuple(r["path"]))
+    return out
+
+
+def _fits(s: dict, mode: str) -> bool:
+    return s.get("row_mode") in (None, "", mode)
+
+
+def _boxes_under(row: list, depth: int, doc: dict, mode: str | None) -> list:
+    """The definition's settings one level under `row` (their row `depth` long), on the menu of `mode` (None: any)."""
+    return [s for s in doc.get("settings") or [] if isinstance(s.get("row"), list) and len(s["row"]) == depth
+            and s["row"][:-1] == row and (mode is None or _fits(s, mode))]
+
+
+def two_box(path: list, mode: str, doc: dict, proved: set) -> dict | None:
+    """The two-box row `path` names a box of, on the menu of the shooting `mode` (S&Q Settings > Frame Rate Settings >
+    Rec Frame Rate): the definition (`doc`) holds exactly two boxes under the row on that menu (settings whose row is the
+    row's path and a box's name, their row_mode that mode or none), and boxes_run has proved the row's boxes (`proved`,
+    box_proofs). The maps hold no such row (the crawl meets the screen as an unknown one, kit2_crawl_movie), and the
+    definition alone does not tell a two-box screen from a submenu of two rows (Time-lapse Settings, BULB Timer Settings,
+    40 rows of the a1 II's), so boxes_run's own proofs say which it is. {"row", "box", "names", "keys": the definition's
+    records at that row and box, one for each movie format}, or None: a list row, set by set_row as before."""
+    if len(path) < 2:
+        return None
+    row, box = list(path[:-1]), path[-1]
+    under = _boxes_under(row, len(path), doc, mode)
+    names = sorted({s["row"][-1] for s in under})
+    if len(names) != 2 or not any((*row, n) in proved for n in names):
+        return None
+    return {"row": row, "box": box, "names": names, "keys": [s["key"] for s in under if s["row"][-1] == box]}
+
+
+def set_plan(items: list, mode: str, doc: dict, proved: set) -> list:
+    """[(path, option, two_box or None)] for --set's items on the menu of `mode`; stops before the link opens on an
+    item with no value, on a box its two-box row does not have, and on a two-box row the definition holds on another
+    mode's menu only."""
+    plan = []
+    for item in items:
+        row, _, option = item.partition("=")
+        path, option = [x.strip() for x in row.split(" > ")], option.strip()
+        if not option:
+            sys.exit(f"--set {item!r} names no value (ROW=OPTION): nothing was sent to the camera")
+        box = two_box(path, mode, doc, proved)
+        if box is not None and box["box"] not in box["names"]:
+            sys.exit(f"--set {item!r}: {box['box']!r} is not one of its two boxes ({' and '.join(box['names'])}): "
+                     "nothing was sent to the camera")
+        anywhere = _boxes_under(path[:-1], len(path), doc, None) if box is None and len(path) > 1 else []
+        names = {s["row"][-1] for s in anywhere}
+        if len(names) == 2 and any((*path[:-1], n) in proved for n in names):
+            menus = sorted({s.get("row_mode") or "" for s in anywhere} - {""})
+            sys.exit(f"--set {item!r}: not a two-box row on the {mode} menu: the definition has it on the "
+                     f"{', '.join(menus)} menu only. Nothing was sent to the camera")
+        plan.append((path, option, box))
+    return plan
+
+
+def box_moved(box: dict, ch: list) -> str:
+    """Why the records that differ (`ch`, camset.diff) after a box was set are not exactly one of that box's records
+    (box["keys"], the definition's), or "" when they are."""
+    if not ch:
+        return f"no record of {box['box']} moved"
+    if len(ch) > 1:
+        return f"{len(ch)} records moved ({', '.join(c.key for c in ch)}), not one of {box['box']}'s alone"
+    if ch[0].key not in box["keys"]:
+        return f"{ch[0].key} moved, which the definition names no record of {box['box']} ({', '.join(box['keys'])})"
+    return ""
+
+
 def bar_names(reading, option: str, labels: list | None) -> bool:
     """Whether the lit bar's `reading` names `option`: as read, the radio ring left out (camkit.match.clean); else, where
     the mode's map gives the row's options (`labels`: list_labels) and names `option` among them once, by the one
@@ -373,7 +479,9 @@ def main():
                          f"({', '.join(SHOWN_EXPOSURES)}): Movie, \"Stills M\", \"Movie Auto\"")
     ap.add_argument("--set", action="append", default=[], metavar="ROW=OPTION",
                     help="with a switch waiting (--keep): put this list row on OPTION and leave it, for the state a prove "
-                         "run needs (a submenu's row as 'Proxy Settings > Px Proxy Recording=On'); --restore covers it")
+                         "run needs (a submenu's row as 'Proxy Settings > Px Proxy Recording=On'), or a two-box row's "
+                         "box, named as boxes_run names it ('S&Q Settings > Frame Rate Settings > Rec Frame Rate=24p'), "
+                         "checked by a download that one of that box's records moved; --restore covers it")
     ap.add_argument("--scan", default=LATEST_SCAN, type=scan_arg,
                     help="the page scan of the menu the camera shows now (a run in runs/<model>_fw<fw>/, or a path; "
                          "default: the camera's latest page scan made in that mode, runner.latest_scan)")
@@ -426,23 +534,41 @@ def main():
         now = info.get("scan_mode") or switched_mode(info["to"])
         if a.in_mode and a.in_mode != now:
             sys.exit(f"--in {a.in_mode}: the switch waiting in {kept} left the camera in {now} mode; nothing was sent")
+        plan = set_plan(a.set, now, definition(run), box_proofs(run))   # a box no two-box row here has: stopped
         cycle, model = load_scan(in_mode(a.scan, now))
         check_readers()     # no reader listed: stop before the link opens, nothing pressed
+        import boxes_run
         hdmi = eyes_from_config(run)
         try:
             with Link(run) as link:
                 hdmi.attach(link)
                 to_shooting(link, hdmi, "the download before the settings")
-                before = link.download("before-set")
+                before = last = link.download("before-set")
                 time.sleep(5)
                 cam = LiveCamera(link, hdmi, run, may_open=MAY_OPEN)
                 try:
-                    for item in a.set:
-                        row, _, option = item.partition("=")
-                        open_menu(cam)
-                        set_row(cam, cycle, model, [x.strip() for x in row.split(" > ")], option.strip(), say, mode=now)
+                    for path, option, box in plan:
+                        if box is None:
+                            open_menu(cam)
+                            set_row(cam, cycle, model, path, option, say, mode=now)
+                            close_screen(cam, link)
+                            time.sleep(1.0)
+                            continue
+                        # a two-box row's box: boxes_run's own opening, look, stepping and OK (from the shooting
+                        # screen), then a download that says the records that moved: exactly one of that box's
+                        got = boxes_run.set_value(cam, link, cycle, model, box["row"], box["names"], box["box"], option)
+                        say(f"{' > '.join(path)}: {option!r} chosen (its values {', '.join(got['values'])}; it held "
+                            f"{got['held']!r})")
                         close_screen(cam, link)
-                        time.sleep(1.0)
+                        to_shooting(link, hdmi, f"the download after {box['box']}")
+                        time.sleep(2)
+                        now_dat = link.download("after-box")
+                        moved = camset.diff(camset.read(last), camset.read(now_dat))
+                        say(f"   {len(moved)} records moved: {', '.join(f'{c.key} {c.before!r} -> {c.after!r}' for c in moved)}")
+                        why = box_moved(box, moved)
+                        if why:
+                            raise Failed(f"{' > '.join(path)}={option}: {why}")
+                        last = now_dat
                 finally:
                     close_screen(cam, link)
                 to_shooting(link, hdmi, "the download after the settings")
@@ -454,8 +580,9 @@ def main():
                     say(f"   {c.key}: {c.before!r} -> {c.after!r}")
                 if not ch:
                     raise Failed("the settings changed nothing")
-        except Failed as e:
-            say(f"stopped: {e}")
+        except (Failed, boxes_run.NotOffered, safety.Refused) as e:
+            # the switch stays waiting: its --restore puts the start file back over whatever was set
+            say(f"stopped: {type(e).__name__}: {e}")
             sys.exit(1)
         finally:
             hdmi.close()

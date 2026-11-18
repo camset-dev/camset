@@ -41,7 +41,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, safety, screen  # noqa: E402
+from camkit import camset, live, ocr, safety, screen  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which installs the plain words: test_start)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
@@ -64,6 +64,7 @@ LOOKALIKE = str.maketrans("рРоОкКсС", "pPoOkKcC")          # OCR's Cyril
 # a dash's ink in a box, at most (px, tall and wide): kit2_pass2 240050's is 3 x 7 in either box, a value's glyphs 34 tall
 DASH = (8, 30)
 NOT_OFFERED = "not offered in this state: its box draws a dash"
+PROOF_RUN = "kit2_pass2"         # the run its proofs go to (kit/provers/mode_switch.py's box_proofs reads them there)
 
 
 class NotOffered(Exception):
@@ -138,6 +139,11 @@ def look(cam, link, cycle, model, path, b: int) -> tuple[list, str]:
     words), the look leaves the box where its walk ended: the held value on a box that comes round, as the Frame Rate
     boxes do; each proof is compared with its base all the same."""
     open_row(cam, cycle, model, path)
+    return look_open(cam, link, path, b)
+
+
+def look_open(cam, link, path, b: int) -> tuple[list, str]:
+    """look's walk on the row's screen already open (open_row): the dash check, the walk, MENU."""
     if dashed(cam, b):
         frame = cam.frame.path.name
         close_screen(cam, link)
@@ -170,8 +176,20 @@ def screen_consent(path, names) -> TwoBoxes:
 
 
 def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
-    """The box stepped to vals[target] (the setting from then on), its OK under the screen's consent (screen_consent),
-    a settings download."""
+    """The box stepped to vals[target] (the setting from then on), its OK under the screen's consent (step_ok), a
+    settings download."""
+    got = step_ok(cam, cycle, model, path, b, vals, target, names)
+    to_shooting(link, hdmi, "the download after OK")
+    time.sleep(1)
+    dat = link.download(f"{path[-1]}-{b}-{target}")
+    time.sleep(LOCK_S)
+    return {**got, "dat": dat}
+
+
+def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
+    """The row opened, box b stepped to vals[target] (the setting from then on) and left with OK under the screen's
+    consent (screen_consent); {"chosen_frame", "row_frame", "vlm"}: the frame it was chosen on, the frame after OK, the
+    second reader's reading of it."""
     open_row(cam, cycle, model, path)
     to_box(cam, b)
     for _ in range(len(vals) + 1):
@@ -189,12 +207,39 @@ def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
     chosen, seen_vlm = cam.frame.path.name, vlm_option(cam)     # a second reader, kept with the proof
     cam.answer_once = screen_consent(path, names)        # the OK that leaves, judged on the screen's shape (TwoBoxes)
     cam.press("enter")
-    after_ok = cam.frame.path.name
-    to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
-    dat = link.download(f"{path[-1]}-{b}-{target}")
-    time.sleep(LOCK_S)
-    return {"chosen_frame": chosen, "row_frame": after_ok, "dat": dat, "vlm": seen_vlm}
+    return {"chosen_frame": chosen, "row_frame": cam.frame.path.name, "vlm": seen_vlm}
+
+
+def drawn_names(cam, names) -> list:
+    """The row's two box names `names` (any order) in the order its open screen draws them, left first
+    (camkit.live.names_drawn: each box's name read where the screen's consent reads it); Failed where they are not
+    those two, before anything but Right was pressed."""
+    got = live.names_drawn(lines(cam), BOXES, list(names))
+    if got is None:
+        raise Failed(f"the names drawn above its boxes are not {' and '.join(names)} ({cam.frame.path.name}): not that "
+                     "row's two-box screen")
+    return got
+
+
+def set_value(cam, link, cycle, model, path, names, box: str, value: str) -> dict:
+    """One box of the row's two-box screen put on `value` and left there (kit/provers/mode_switch.py --set "ROW > BOX=
+    VALUE"): the row opened (open_row: its breadcrumb, a lit box, the OK key drawn), its boxes' names read where they
+    are drawn (drawn_names, `names` in any order), the box looked at as a proof's look is (look_open: NotOffered where
+    it draws a dash), then opened again, stepped to the value and left with OK under the screen's consent (step_ok).
+    Failed where the value is not one of the box's values as the camera walks them, or the box holds it already
+    (nothing to set, no OK). Returns {"values": the box's values in Down order, "held": the one it held, "box": its
+    index, "names": the names left first, "chosen_frame", ...}."""
+    open_row(cam, cycle, model, path)
+    names = drawn_names(cam, names)
+    b = names.index(box)
+    vals, held = look_open(cam, link, path, b)
+    want = [i for i, v in enumerate(vals) if option_key(v) == option_key(value)]
+    if len(want) != 1:
+        raise Failed(f"{path[-1]} > {box}: {value!r} is not one of its values ({', '.join(vals)}): nothing chosen")
+    if vals[want[0]] == held:
+        raise Failed(f"{path[-1]} > {box} already holds {held!r}: nothing to set, no OK")
+    got = step_ok(cam, cycle, model, path, b, vals, want[0], names)
+    return {**got, "values": vals, "held": held, "box": b, "names": names}
 
 
 def arguments(argv=None):
@@ -300,7 +345,7 @@ def main(argv=None):
     global BOXES, RIGHTS
     BOXES, RIGHTS = LAYOUTS[a.layout], a.rights
     cycle, model = load_scan(a.scan)
-    run = Run("kit2_pass2")
+    run = Run(PROOF_RUN)
     hdmi = eyes_from_config(run)
     stopped = []
     # the session ends restoring the start file, not the base --first made; it says a body's exception and raises it no
