@@ -335,13 +335,25 @@ enums:
       id: memory_slot_filled
       doc: 'Memory slot filled [Shooting > Shooting Mode]: 2 Empty, 4 Registered. memory sets; 1 of 1 settings on
         it proved on the camera.'
+    0x023e:
+      id: rec_frame_rate_023e
+      doc: 'Rec Frame Rate (S&Q, XAVC HS 4K) [Shooting > Image Quality/Rec]: 0 60p, 4 24p, 5 120p. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x0240:
-      id: sq_recording_frame_rate_setting
-      doc: 'SQ Recording Frame Rate Setting [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p, 4 24p, 5
+      id: rec_frame_rate_0240
+      doc: 'Rec Frame Rate (S&Q, XAVC S 4K) [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p, 4 24p, 5
         120p, 6 100p. live settings; 1 of 1 settings on it proved on the camera.'
+    0x0242:
+      id: rec_frame_rate_0242
+      doc: 'Rec Frame Rate (S&Q, XAVC S HD) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p, 5 120p. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x0244:
+      id: rec_frame_rate_0244
+      doc: 'Rec Frame Rate (S&Q, XAVC S-I 4K) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x0248:
-      id: sq_frame_rate
-      doc: SQ Frame Rate [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
+      id: frame_rate
+      doc: Frame Rate (S&Q) [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
     0x024e:
       id: record_setting_024e
       doc: 'Record Setting (S&Q, XAVC HS 4K) [Shooting > Image Quality/Rec]: 8 200M 4:2:2 10bit, 12 150M 4:2:0 10bit,
@@ -2966,9 +2978,13 @@ enums:
       id: unknown_camera_state_1126
       doc: Unknown camera state (not a menu setting) [Setup > Other settings]. live settings; 0 of 1 settings on
         it proved on the camera.
+    0x1135:
+      id: rec_frame_rate_1135
+      doc: 'Rec Frame Rate (Time-lapse, XAVC HS 4K) [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p,
+        4 24p. live settings; 1 of 1 settings on it proved on the camera.'
     0x1137:
-      id: movie_interval_rec_frame_rate_setting
-      doc: 'Movie Interval Rec Frame Rate Setting [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p, 4
+      id: rec_frame_rate_1137
+      doc: 'Rec Frame Rate (Time-lapse, XAVC S 4K) [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p, 4
         24p. live settings; 1 of 1 settings on it proved on the camera.'
     0x113f:
       id: movie_interval_rec_interval_time

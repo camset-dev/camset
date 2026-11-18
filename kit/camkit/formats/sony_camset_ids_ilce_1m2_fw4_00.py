@@ -95,8 +95,11 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         record_setting_0224 = 548
         record_setting_0226 = 550
         memory_slot_filled = 572
-        sq_recording_frame_rate_setting = 576
-        sq_frame_rate = 584
+        rec_frame_rate_023e = 574
+        rec_frame_rate_0240 = 576
+        rec_frame_rate_0242 = 578
+        rec_frame_rate_0244 = 580
+        frame_rate = 584
         record_setting_024e = 590
         record_setting_0254 = 596
         record_setting_0256 = 598
@@ -771,7 +774,8 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         recording_self_timer_continuous = 4351
         recog_trgt_select_auto_array = 4361
         unknown_camera_state_1126 = 4390
-        movie_interval_rec_frame_rate_setting = 4407
+        rec_frame_rate_1135 = 4405
+        rec_frame_rate_1137 = 4407
         movie_interval_rec_interval_time = 4415
         movie_interval_rec_recording_setting = 4421
         video_light_setting = 4453

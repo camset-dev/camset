@@ -422,7 +422,7 @@
    "initialize": "resets"
   },
   "global:0x1137": {
-   "name": "Movie Interval Rec Frame Rate Setting",
+   "name": "Rec Frame Rate (Time-lapse, XAVC S 4K)",
    "tab": "Shooting",
    "result": "resets",
    "initialize": "resets"
@@ -458,13 +458,13 @@
    "initialize": "resets"
   },
   "global:0x0248": {
-   "name": "SQ Frame Rate",
+   "name": "Frame Rate (S&Q)",
    "tab": "Shooting",
    "result": "resets",
    "initialize": "resets"
   },
   "global:0x0240": {
-   "name": "SQ Recording Frame Rate Setting",
+   "name": "Rec Frame Rate (S&Q, XAVC S 4K)",
    "tab": "Shooting",
    "result": "resets",
    "initialize": "resets"

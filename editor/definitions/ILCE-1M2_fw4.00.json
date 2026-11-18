@@ -12757,7 +12757,7 @@
    "key": "global:0x1137",
    "area": "global",
    "id": 4407,
-   "name": "Movie Interval Rec Frame Rate Setting",
+   "name": "Rec Frame Rate (Time-lapse, XAVC S 4K)",
    "tab": "Shooting",
    "group": "Image Quality/Rec",
    "order": 9000,
@@ -13946,7 +13946,7 @@
    "key": "global:0x0248",
    "area": "global",
    "id": 584,
-   "name": "SQ Frame Rate",
+   "name": "Frame Rate (S&Q)",
    "tab": "Shooting",
    "group": "Image Quality/Rec",
    "order": 9000,
@@ -13962,6 +13962,10 @@
    ],
    "row_mode": "Movie",
    "values": [
+    [
+     0,
+     "240fps"
+    ],
     [
      2,
      "120fps"
@@ -14021,6 +14025,7 @@
    ],
    "video_system_values": {
     "NTSC": [
+     0,
      2,
      4,
      6,
@@ -14037,7 +14042,7 @@
      13
     ]
    },
-   "note": "",
+   "note": "One record for every movie format. XAVC S HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash).",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -14045,6 +14050,7 @@
    "modes": "",
    "proved": {
     "values": [
+     0,
      2,
      3,
      4,
@@ -14067,7 +14073,7 @@
    "key": "global:0x0240",
    "area": "global",
    "id": 576,
-   "name": "SQ Recording Frame Rate Setting",
+   "name": "Rec Frame Rate (S&Q, XAVC S 4K)",
    "tab": "Shooting",
    "group": "Image Quality/Rec",
    "order": 9000,
@@ -117312,7 +117318,7 @@
      "Tracking"
     ]
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy. With Switch V/H AF Area on, Focus Area writes it only with the camera level.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -117661,7 +117667,7 @@
      ]
     }
    ],
-   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy.",
+   "note": "Written by AF Area Registration: with it On, holding Fn on the shooting screen copies the live Focus Area memories here (the camera: \"Registered the focus area\"), with Switch V/H AF Area on AF Point + AF Area into the records of the way the camera is held, with it Off into all three orientations. A Tracking area's hold writes its start area; any other area's hold copies the Tracking start area in use, which says nothing of the area registered. Focus Area Limit excluding the registered area resets it to Wide. Del. Regist. AF Area sets the six Tracking start area records to Spot: M, the codes a Tracking: Spot M hold writes, and leaves the kind and area records as they were: the start area records alone do not tell a deleted registration from a Tracking: Spot M one. A memory slot keeps its own copy. With Switch V/H AF Area on, Focus Area writes it only with the camera level.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -221258,6 +221264,209 @@
    "expert": true,
    "size": 1,
    "count": 1
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "S&Q Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    5,
+    0,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x023e",
+   "id": 574,
+   "name": "Rec Frame Rate (S&Q, XAVC HS 4K)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     4,
+     "24p"
+    ],
+    [
+     5,
+     "120p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     4,
+     5
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "S&Q Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    5,
+    0,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0242",
+   "id": 578,
+   "name": "Rec Frame Rate (S&Q, XAVC S HD)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     4,
+     "24p"
+    ],
+    [
+     5,
+     "120p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     2,
+     4,
+     5
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "S&Q Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    5,
+    0,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0244",
+   "id": 580,
+   "name": "Rec Frame Rate (S&Q, XAVC S-I 4K)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     4,
+     "24p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     2,
+     4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    6,
+    0,
+    0
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1135",
+   "id": 4405,
+   "name": "Rec Frame Rate (Time-lapse, XAVC HS 4K)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     1,
+     "50p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     3,
+     "25p"
+    ],
+    [
+     4,
+     "24p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ]
+   }
   }
  ],
  "menu": [
