@@ -12,7 +12,8 @@ values it is for ("when"); boxes then give, for each value, the part of the grid
     {"axis": "x", "with": <the place's other record>, "by": <setting>,
      "limits": [{"areas": [...], "when": [...], "range": [low, high]}, ...]}
     {"axis": "x", "with": ..., "by": ..., "limits": [{"areas": [...], "inside": [low, high], "size": <width record>,
-     "grid": 640, "pictures": [{"when": [...], "fraction": [n, d], "sizes_tried": [...]}, ...]}]}
+     "grid": 640, "pictures": [{"when": [...], "fraction": [n, d], "sizes_tried": [...] or "sizes_range": [low, high]},
+     ...]}]}
 
 limits that differ only in their values merged into one ("when" the values of all). An editor that places a frame
 keeps it, for the area in use (and the value the section holds of "by"), within its range, or for a box within the
@@ -47,7 +48,8 @@ def placed(e: dict) -> list:
     """[(X key, Y key, {axis: [limit]})] for every place of the FRAME_TRAVEL entry `e`, each limit as the definition
     writes it for that axis: a measured frame's places each with every limit (areas, when, range), those alike on the
     axis but for their values merged; a box's places each with the rule and that box's size record (areas, inside, size,
-    and sizes_tried, or the grid and each value's picture, those alike on the axis merged)."""
+    and sizes_tried, or the grid and each value's picture with its sizes tried or the range they were tried across,
+    those alike on the axis merged)."""
     out = []
     if "places" in e:
         per = {a: _merged([{"areas": list(lim["areas"]), **({"when": list(lim["when"])} if "when" in lim else {}),
@@ -59,8 +61,10 @@ def placed(e: dict) -> list:
 
     def pictures(a: str) -> list:
         pics = [{"when": list(p["when"]), "fraction": list(p[a]),
-                 **({"sizes_tried": sorted(p["sizes_tried"][a])} if "sizes_tried" in p else {})} for p in e["pictures"]]
-        return _merged(pics, lambda p: (tuple(p["fraction"]), tuple(p.get("sizes_tried") or ())))
+                 **({"sizes_tried": sorted(p["sizes_tried"][a])} if "sizes_tried" in p else {}),
+                 **({"sizes_range": list(p["sizes_range"][a])} if "sizes_range" in p else {})} for p in e["pictures"]]
+        return _merged(pics, lambda p: (tuple(p["fraction"]), tuple(p.get("sizes_tried") or ()),
+                                        tuple(p.get("sizes_range") or ())))
     for box in e["boxes"]:
         for kx, ky in box["places"]:
             lims = {}

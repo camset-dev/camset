@@ -1010,6 +1010,23 @@
       }
      },
      "description": "The widths (x) and heights (y) the boxes stood at when the rule was proved for these values; at any other size it is not tried."
+    },
+    "sizes_range": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "x",
+      "y"
+     ],
+     "properties": {
+      "x": {
+       "$ref": "#/$defs/frame_span"
+      },
+      "y": {
+       "$ref": "#/$defs/frame_span"
+      }
+     },
+     "description": "The widths (x) and heights (y) the sizes the rule was proved across, [smallest, largest]: tried at both and at sizes between, every one giving the measured limits exactly, the rule's form the same at every size, so every size in it counts as tried (as samples on a line establish a scale); in place of sizes_tried."
     }
    },
    "description": "The picture for some values of the entry's by."

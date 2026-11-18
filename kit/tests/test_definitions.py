@@ -3319,9 +3319,11 @@ def test_a_registrations_proof_of_the_memory_copy_sits_after_in_sets():
 
 FRAMEPOS = ["set:0x019a", "set:0x0f0b", "set:0x0f0d", "set:0x0f2c", "set:0x0f2e", "set:0x0f30", "set:0x019c",
             "set:0x019e", "set:0x01be", "set:0x01c0", "set:0x01c2", "set:0x01c4", "set:0x01c6", "set:0x01c8"]
-# what a Custom box's step is not known to be: the same at every size (each box measured at its default size only)
-BOX_STEP_SIZE = ("A Custom area's step may depend on that area's size: under Standard and under Large the three boxes "
-                 "moved alike, each at its default size, the only size tried.")
+# what a Custom box's step is known to be across its sizes: Standard's the same at every size tried with room for two
+# whole steps (the box size runs, 2026-11-17), Large's tried at each box's default size only
+BOX_STEP_SIZE = ("A Custom area's step did not change with its size where it was tried: under Standard every box "
+                 "stepped as at its default size at every size tried that left it room for two whole steps; under Large "
+                 "only each box's default size was tried.")
 # Large's step in words, in the spot's point notes, AF Frame Move Amt's note and the model page's row: no rule of "twice"
 LARGE_SPOT = "Under Large the step grows with the spot, Spot S stepping as Spot XS and Expand Spot as Spot M."
 # where a press that would carry a frame across the centre lands, with what was not tried, in AF Frame Move Amt's note
@@ -3363,7 +3365,7 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     notes, AF Frame Move Amt's, the model page's row and the changelog's entry, and nowhere else a number does: no
     position, no size, the Custom 1 box's steps under Large twice Standard's; no word says where a frame stood. Every
     hand note that gives a Custom box's step, and the model page's row, says in one sentence (BOX_STEP_SIZE) that it
-    may depend on the box's size and was measured at each box's default size only. The table holds Standard's step for
+    did not change with the box's size where tried (under Large at the defaults only). The table holds Standard's step for
     every movable area, and the notes' claims stand on its rows: Spot S, L and XL and Expand Spot step as Spot M, Spot
     XS less across, the three boxes alike, each Tracking area as its plain area; and Large's for every area, whose words
     (LARGE_SPOT, in the point notes, AF Frame Move Amt's and the model page's row) stand on its rows too: the step grows
@@ -3407,7 +3409,7 @@ def test_the_frame_steps_come_from_one_table_in_the_public_files():
     for k in FRAMEPOS[6:] + boxes:                     # and as the hand tables say them
         want = "box" if k in boxes else "point"
         assert facts[want] in T.FRAME_PROOFS[k]["note"], k
-    # each Custom box's step was measured at its default size only: each note that gives it says so, in the same words
+    # how far each Custom box's step is known across its sizes: each note that gives it says so, in the same words
     for k in boxes + ["global:0x03a3"]:
         assert BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"], k
     assert not [k for k in FRAMEPOS if BOX_STEP_SIZE in T.FRAME_PROOFS[k]["note"]]
@@ -3535,7 +3537,8 @@ def test_tonights_hand_tables_hold_proofs_only():
     # alone, its evidence apart (note_evidence)
     assert ". (set by the menu and measured through Stills slot 1's registrations, runs kit2_framepos_amt and " \
         "kit2_framepos_amt_one, 2026-11-09; each frame's step under AF Frame Move Amt Standard measured" in amt_note
-    assert amt_note.endswith("in the earlier attempt, runs/kit2_a1fin_framepos_edges_gripup_large_plain, 2026-11-16)")
+    assert "in the earlier attempt, runs/kit2_a1fin_framepos_edges_gripup_large_plain, 2026-11-16; " in amt_note
+    assert amt_note.endswith("runs/kit2_boxsize_c2_height2 and runs/kit2_boxsize_c3b, 2026-11-17)")    # the box size runs
     assert "global:0x03a3" not in by_key or by_key["global:0x03a3"]["note"] == amt_note[:amt_note.index(" (set by the menu")]
     if "global:0x03a3" in by_key:
         proof = by_key["global:0x03a3"]["proved"]

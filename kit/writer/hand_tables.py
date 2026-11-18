@@ -504,6 +504,12 @@ def _shaped(name: str, kind: str, raw):
                                 raise _Shape(f"{where}'s pictures[{i}]'s {f} is {frac!r}: no part of the grid's span")
                         if "sizes_tried" in pic:
                             _sizes(pic["sizes_tried"], f"{where}'s pictures[{i}]'s sizes_tried")
+                        if "sizes_range" in pic:
+                            if "sizes_tried" in pic:
+                                raise _Shape(f"{where}'s pictures[{i}] has sizes_tried beside sizes_range: one or the other")
+                            _fields(pic["sizes_range"], ("x", "y"), f"{where}'s pictures[{i}]'s sizes_range")
+                            for f in ("x", "y"):
+                                _span(pic["sizes_range"][f], f"{where}'s pictures[{i}]'s sizes_range's {f}")
                     _unique(v for pic in e["pictures"] for v in pic["when"])
                 for i, box in enumerate(_listed(e["boxes"], f"{where}'s boxes")):
                     _fields(box, ("areas", "size", "places"), f"{where}'s boxes[{i}]")

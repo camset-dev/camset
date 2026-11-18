@@ -128,7 +128,44 @@ def test_the_a1_iis_frames_are_its_hand_tables_and_nothing_else():
     for box in table["Custom"]["boxes"]:
         size = [int.from_bytes(cs.get(1, int(k.split(":")[1], 16)).raw[:4], "little") for k in box["size"]]
         for axis, n in zip(("x", "y"), size, strict=True):
-            assert all(n in pic["sizes_tried"][axis] for pic in table["Custom"]["pictures"]), (box["areas"], axis, n)
+            assert all(n in pic["sizes_tried"][axis] if "sizes_tried" in pic else
+                       pic["sizes_range"][axis][0] <= n <= pic["sizes_range"][axis][1]
+                       for pic in table["Custom"]["pictures"]), (box["areas"], axis, n)
+
+
+# each Custom box's travel measured at sizes other than its default, Aspect Ratio 3:2: (box, width, height) -> (X lowest,
+# X highest, Y lowest, Y highest); at the largest width (height) the box does not move across (up and down)
+AT_SIZES = {
+    ("Custom 1", 28, 182): (60, 580, 133, 347), ("Custom 1", 548, 182): (320, 320, 133, 347),
+    ("Custom 1", 402, 32): (247, 393, 58, 422), ("Custom 1", 402, 396): (247, 393, 240, 240),
+    ("Custom 1", 514, 122): (303, 337, 103, 377),
+    ("Custom 2", 28, 132): (60, 580, 108, 372), ("Custom 2", 548, 132): (320, 320, 108, 372),
+    ("Custom 2", 402, 32): (247, 393, 58, 422), ("Custom 2", 402, 396): (247, 393, 240, 240),
+    ("Custom 2", 514, 72): (303, 337, 78, 402),
+    ("Custom 3", 28, 318): (60, 580, 201, 279), ("Custom 3", 548, 318): (320, 320, 201, 279),
+    ("Custom 3", 168, 32): (130, 510, 58, 422), ("Custom 3", 168, 396): (130, 510, 240, 240),
+    ("Custom 3", 280, 258): (186, 454, 171, 309),
+}
+
+
+def test_the_custom_box_rule_gives_the_limits_measured_at_every_size_tried():
+    """At Aspect Ratio 3:2 the rule (writer/frames.box_limits on the definition's frames) gives exactly the travel
+    measured at each box's smallest and largest width and height and at an odd size; the 3:2 picture says the rule was
+    proved across the whole range of sizes (sizes_range) the size records hold, the other ratios' at the default sizes;
+    and each box's size records hold that range."""
+    by = {s["key"]: s for s in definitions.load_public(A1)["settings"]}
+    first = {"Custom 1": ("set:0x1333", "set:0x1339"), "Custom 2": ("set:0x133f", "set:0x1345"),
+             "Custom 3": ("set:0x134b", "set:0x1351")}
+    limit = lambda k: by[k]["frame"]["limits"][0]
+    for (box, w, h), want in AT_SIZES.items():
+        kx, ky = first[box]
+        assert frames.box_limits(limit(kx), w, 0) + frames.box_limits(limit(ky), h, 0) == want, (box, w, h)
+    for k, size in (("set:0x1333", "set:0x14b6"), ("set:0x1339", "set:0x14b4"), ("set:0x1327", "set:0x148a")):
+        pics = limit(k)["pictures"]
+        assert [p["sizes_range"] for p in pics if 0 in p["when"]] == [by[size]["range"]], k
+        assert all("sizes_tried" in p for p in pics if 0 not in p["when"]), k
+    assert [by[k]["range"] for k in ("set:0x14b6", "set:0x14ba", "set:0x14be")] == [[28, 548]] * 3
+    assert [by[k]["range"] for k in ("set:0x14b4", "set:0x14b8", "set:0x14bc")] == [[32, 396]] * 3
 
 
 # every Custom box limit measured at the three default sizes (Custom 1 402 x 182, Custom 2 402 x 132, Custom 3 168 x

@@ -68,7 +68,8 @@ Lines in the run's boxsize.jsonl, each with the context (camera level, Switch V/
 Aspect Ratio read from the start download): the start ("default": whether the start size is the defaults'), each size
 ("turns", "size", "place", "place_moved", "screen_box", "file"), each dial's ends ("what": "end") and steps ("what":
 "pattern"), each travel ("what": "travel": the size, each record's measured and predicted limits) and the finish. The
-data agent extends FRAME_TRAVEL's sizes_tried and the size records' ranges from them; no kit step writes them.
+data agent extends FRAME_TRAVEL's sizes_tried (or sizes_range, both ends and sizes between tried) and the size records'
+ranges from them; no kit step writes them.
 
 Nothing a record held is printed but sizes and limits, camera facts: a start size that is not the defaults' is the
 owner's (decision 16), never printed; the sizes reached from it are said by their difference from it, and the limits at

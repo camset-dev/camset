@@ -112210,7 +112210,7 @@
      "Large"
     ]
    ],
-   "note": "Sizes the step a press of the multi-selector moves a focus frame: under Standard a press moved Spot M's point 30 in X and 20 in Y, Spot XS's 20 and 20, and Custom 1's box 28 and 19; under Large Spot M's point 60 in X and 38 in Y, Spot XS's 36 and 32, and the box 56 and 38. Under Large the step grows with the spot, Spot S stepping as Spot XS and Expand Spot as Spot M. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Standard a press that would carry a frame back across the centre lands on the centre, as seen coming back to it in every frame tried, each of which began there; under Large presses carried frames across the centre.",
+   "note": "Sizes the step a press of the multi-selector moves a focus frame: under Standard a press moved Spot M's point 30 in X and 20 in Y, Spot XS's 20 and 20, and Custom 1's box 28 and 19; under Large Spot M's point 60 in X and 38 in Y, Spot XS's 36 and 32, and the box 56 and 38. Under Large the step grows with the spot, Spot S stepping as Spot XS and Expand Spot as Spot M. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Standard a press that would carry a frame back across the centre lands on the centre, as seen coming back to it in every frame tried, each of which began there; under Large presses carried frames across the centre.",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -113968,21 +113968,41 @@
     14
    ],
    "values": [],
-   "note": "Custom 1's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 1's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    32,
+    396
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     32,
+     44,
+     56,
+     68,
+     80,
+     92,
+     104,
+     122,
+     180,
+     182,
+     192,
+     194,
+     206,
+     218,
+     324,
+     336,
+     348,
+     360,
+     372,
+     384,
+     396
+    ]
    }
   },
   {
@@ -114000,21 +114020,61 @@
     14
    ],
    "values": [],
-   "note": "Custom 1's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 1's width, set in the box's editor (Focus Area, the box lit, SET) with the rear dial L: a click steps 16 from the width the box has, from 28 to 548, an end stopping it, so the widths reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    28,
+    548
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     28,
+     44,
+     60,
+     76,
+     82,
+     92,
+     98,
+     108,
+     124,
+     162,
+     178,
+     188,
+     204,
+     242,
+     258,
+     268,
+     284,
+     322,
+     338,
+     348,
+     364,
+     388,
+     402,
+     404,
+     418,
+     420,
+     428,
+     434,
+     436,
+     444,
+     450,
+     452,
+     468,
+     484,
+     500,
+     508,
+     514,
+     516,
+     524,
+     532,
+     548
+    ]
    }
   },
   {
@@ -114096,21 +114156,38 @@
     14
    ],
    "values": [],
-   "note": "Custom 2's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 2's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    32,
+    396
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     32,
+     44,
+     56,
+     68,
+     72,
+     80,
+     92,
+     104,
+     128,
+     132,
+     140,
+     324,
+     336,
+     348,
+     360,
+     372,
+     384,
+     396
+    ]
    }
   },
   {
@@ -114128,21 +114205,38 @@
     14
    ],
    "values": [],
-   "note": "Custom 2's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 2's width, set in the box's editor (Focus Area, the box lit, SET) with the rear dial L: a click steps 16 from the width the box has, from 28 to 548, an end stopping it, so the widths reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    28,
+    548
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     28,
+     44,
+     60,
+     76,
+     92,
+     108,
+     124,
+     388,
+     402,
+     404,
+     452,
+     468,
+     484,
+     500,
+     514,
+     516,
+     532,
+     548
+    ]
    }
   },
   {
@@ -114224,21 +114318,37 @@
     14
    ],
    "values": [],
-   "note": "Custom 3's height (set with the front dial, 4 units a click). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 3's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    32,
+    396
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     32,
+     44,
+     56,
+     68,
+     80,
+     92,
+     104,
+     258,
+     312,
+     318,
+     324,
+     336,
+     348,
+     360,
+     372,
+     384,
+     396
+    ]
    }
   },
   {
@@ -114256,21 +114366,38 @@
     14
    ],
    "values": [],
-   "note": "Custom 3's width (set with the rear dial L, 16 units every three clicks). Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "Custom 3's width, set in the box's editor (Focus Area, the box lit, SET) with the rear dial L: a click steps 16 from the width the box has, from 28 to 548, an end stopping it, so the widths reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    28,
+    548
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     28,
+     44,
+     60,
+     76,
+     92,
+     108,
+     124,
+     164,
+     168,
+     180,
+     280,
+     452,
+     468,
+     484,
+     500,
+     516,
+     532,
+     548
+    ]
    }
   },
   {
@@ -114354,22 +114481,49 @@
     14
    ],
    "values": [],
-   "note": "The height of the Custom box chosen as Focus Area, whichever of the three. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "The height of the Custom box chosen as Focus Area, whichever of the three, its Tracking area's too: the box's own height, 32 to 396. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    32,
+    396
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     32,
+     44,
+     56,
+     68,
+     72,
+     80,
+     92,
+     104,
+     122,
+     128,
+     132,
+     140,
+     180,
+     182,
+     192,
+     194,
+     206,
+     218,
+     258,
+     312,
+     318,
+     324,
+     336,
+     348,
+     360,
+     372,
+     384,
+     396
+    ]
    }
   },
   {
@@ -114420,22 +114574,66 @@
     14
    ],
    "values": [],
-   "note": "The width of the Custom box chosen as Focus Area, whichever of the three. Kept only in the memory sets: a slot holds the sizes it was registered with.",
+   "note": "The width of the Custom box chosen as Focus Area, whichever of the three, its Tracking area's too: the box's own width, 28 to 548. Kept only in the memory sets: a slot holds the sizes it was registered with.",
    "in_sets": true,
    "expert": true,
    "scalar": true,
    "size": 4,
    "count": 1,
    "range": [
-    0,
-    4095
+    28,
+    548
    ],
    "unit": "",
    "modes": "",
    "proved": {
-    "sampled": {
-     "linear": null
-    }
+    "values": [
+     28,
+     44,
+     60,
+     76,
+     82,
+     92,
+     98,
+     108,
+     124,
+     162,
+     164,
+     168,
+     178,
+     180,
+     188,
+     204,
+     242,
+     258,
+     268,
+     280,
+     284,
+     322,
+     338,
+     348,
+     364,
+     388,
+     402,
+     404,
+     418,
+     420,
+     428,
+     434,
+     436,
+     444,
+     450,
+     452,
+     468,
+     484,
+     500,
+     508,
+     514,
+     516,
+     524,
+     532,
+     548
+    ]
    }
   },
   {
@@ -217680,7 +217878,7 @@
    "id": 4903,
    "name": "Custom box position in use: X",
    "values": [],
-   "note": "The X of the Custom box in use, whichever of the three, as 0x019c is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "The X of the Custom box in use, whichever of the three, as 0x019c is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "expert": true,
    "size": 4,
@@ -217713,16 +217911,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -217732,6 +217929,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -217767,7 +217977,7 @@
    "id": 4905,
    "name": "Custom box position in use: Y",
    "values": [],
-   "note": "The Y of the Custom box in use, whichever of the three, as 0x019e is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "The Y of the Custom box in use, whichever of the three, as 0x019e is the spot's. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "expert": true,
    "size": 4,
@@ -217800,7 +218010,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -217844,7 +218066,7 @@
    "id": 4915,
    "name": "Custom 1 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 1's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -217872,16 +218094,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -217891,6 +218112,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -217926,7 +218160,7 @@
    "id": 4917,
    "name": "Custom 1 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 1's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -217954,16 +218188,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -217973,6 +218206,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218008,7 +218254,7 @@
    "id": 4919,
    "name": "Custom 1 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 1's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218036,16 +218282,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218055,6 +218300,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218090,7 +218348,7 @@
    "id": 5023,
    "name": "Custom 1 box position: X (current)",
    "values": [],
-   "note": "Custom 1's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218118,16 +218376,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218137,6 +218394,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218172,7 +218442,7 @@
    "id": 4921,
    "name": "Custom 1 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 1's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218200,7 +218470,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218244,7 +218526,7 @@
    "id": 4923,
    "name": "Custom 1 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 1's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218272,7 +218554,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218316,7 +218610,7 @@
    "id": 4925,
    "name": "Custom 1 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 1's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218344,7 +218638,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218388,7 +218694,7 @@
    "id": 5025,
    "name": "Custom 1 box position: Y (current)",
    "values": [],
-   "note": "Custom 1's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 1's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218416,7 +218722,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218460,7 +218778,7 @@
    "id": 4927,
    "name": "Custom 2 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 2's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218488,16 +218806,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218507,6 +218824,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218542,7 +218872,7 @@
    "id": 4929,
    "name": "Custom 2 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 2's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218570,16 +218900,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218589,6 +218918,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218624,7 +218966,7 @@
    "id": 4931,
    "name": "Custom 2 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 2's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218652,16 +218994,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218671,6 +219012,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218706,7 +219060,7 @@
    "id": 5027,
    "name": "Custom 2 box position: X (current)",
    "values": [],
-   "note": "Custom 2's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218734,16 +219088,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -218753,6 +219106,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -218788,7 +219154,7 @@
    "id": 4933,
    "name": "Custom 2 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 2's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218816,7 +219182,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218860,7 +219238,7 @@
    "id": 4935,
    "name": "Custom 2 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 2's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218888,7 +219266,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -218932,7 +219322,7 @@
    "id": 4937,
    "name": "Custom 2 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 2's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -218960,7 +219350,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -219004,7 +219406,7 @@
    "id": 5029,
    "name": "Custom 2 box position: Y (current)",
    "values": [],
-   "note": "Custom 2's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 2's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219032,7 +219434,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -219076,7 +219490,7 @@
    "id": 4939,
    "name": "Custom 3 box position: X (horizontal)",
    "values": [],
-   "note": "Custom 3's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219104,16 +219518,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -219123,6 +219536,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -219158,7 +219584,7 @@
    "id": 4941,
    "name": "Custom 3 box position: X (vertical, grip down)",
    "values": [],
-   "note": "Custom 3's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219186,16 +219612,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -219205,6 +219630,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -219240,7 +219678,7 @@
    "id": 4943,
    "name": "Custom 3 box position: X (vertical, grip up)",
    "values": [],
-   "note": "Custom 3's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219268,16 +219706,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -219287,6 +219724,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -219322,7 +219772,7 @@
    "id": 5031,
    "name": "Custom 3 box position: X (current)",
    "values": [],
-   "note": "Custom 3's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's X, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219350,16 +219800,15 @@
       "pictures": [
        {
         "when": [
-         0,
-         2
+         0
         ],
         "fraction": [
          1,
          1
         ],
-        "sizes_tried": [
-         168,
-         402
+        "sizes_range": [
+         28,
+         548
         ]
        },
        {
@@ -219369,6 +219818,19 @@
         "fraction": [
          8,
          9
+        ],
+        "sizes_tried": [
+         168,
+         402
+        ]
+       },
+       {
+        "when": [
+         2
+        ],
+        "fraction": [
+         1,
+         1
         ],
         "sizes_tried": [
          168,
@@ -219404,7 +219866,7 @@
    "id": 4945,
    "name": "Custom 3 box position: Y (horizontal)",
    "values": [],
-   "note": "Custom 3's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera level. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219432,7 +219894,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -219476,7 +219950,7 @@
    "id": 4947,
    "name": "Custom 3 box position: Y (vertical, grip down)",
    "values": [],
-   "note": "Custom 3's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera held grip down. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219504,7 +219978,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -219548,7 +220034,7 @@
    "id": 4949,
    "name": "Custom 3 box position: Y (vertical, grip up)",
    "values": [],
-   "note": "Custom 3's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y with the camera held grip up. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219576,7 +220062,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],
@@ -219620,7 +220118,7 @@
    "id": 5033,
    "name": "Custom 3 box position: Y (current)",
    "values": [],
-   "note": "Custom 3's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step may depend on that area's size: under Standard and under Large the three boxes moved alike, each at its default size, the only size tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
+   "note": "Custom 3's Y, written whichever way the camera is held. Written when a memory slot is registered: moving the box on the shooting screen changes no live record. With Switch V/H AF Area on AF Point + AF Area a registration writes the box's copy for the way the camera is held, its current copy and the two the boxes share; with it Off, all four copies and the shared two alike. Left and Up presses under each Custom box lower these X and Y records, the records moving with the presses, and leave the spot's point records as they are; with Vertical Display Off, the camera held either way vertically, the same presses moved them by the same amounts as level. Under AF Frame Move Amt Standard a press moved Custom 1's box 28 in X and 19 in Y, and under Large 56 in X and 38 in Y, twice Standard's both ways. A Custom area's step did not change with its size where it was tried: under Standard every box stepped as at its default size at every size tried that left it room for two whole steps; under Large only each box's default size was tried. Under Tracking: Custom 1, Custom 2 and Custom 3 the same presses moved the same records the same way: a Tracking area keeps its box's place in the plain box's records.",
    "in_sets": true,
    "size": 4,
    "count": 1,
@@ -219648,7 +220146,19 @@
       "pictures": [
        {
         "when": [
-         0,
+         0
+        ],
+        "fraction": [
+         1,
+         1
+        ],
+        "sizes_range": [
+         32,
+         396
+        ]
+       },
+       {
+        "when": [
          1,
          3
         ],

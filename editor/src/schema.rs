@@ -224,13 +224,16 @@ pub struct FrameLimit {
 
 /// The picture a box's rule uses for some values of the frame's `by` (`when`): the part of the grid's span it covers on
 /// the limit's axis, centred (`fraction`, [numerator, denominator]), the grid stretched over it, and the sizes the rule
-/// was proved at for those values (`sizes_tried`, empty: not said).
+/// was proved at for those values (`sizes_tried`, empty: not said), or the range of sizes it was proved across
+/// (`sizes_range`, both ends and sizes between tried: every size in it counts as tried).
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 pub struct FramePicture {
     pub when: Vec<i64>,
     pub fraction: (i64, i64),
     #[serde(default)]
     pub sizes_tried: Vec<i64>,
+    #[serde(default)]
+    pub sizes_range: Option<(i64, i64)>,
 }
 
 /// One main option of a setting's `option_tree`: as the camera names it, and either one stored value or the choices on
@@ -1696,7 +1699,8 @@ impl Schema {
                 if let Some((lo, hi)) = l.inside {
                     let pictures_fit = match (&codes, l.grid) {
                         (Some(_), Some(g)) => g > 0 && !l.pictures.is_empty() && l.sizes_tried.is_empty() && 0.0 <= lo && hi <= g as f64
-                            && l.pictures.iter().all(|p| named(&p.when) && 0 < p.fraction.0 && p.fraction.0 <= p.fraction.1),
+                            && l.pictures.iter().all(|p| named(&p.when) && 0 < p.fraction.0 && p.fraction.0 <= p.fraction.1
+                                && p.sizes_range.is_none_or(|(a, b)| a <= b && p.sizes_tried.is_empty())),
                         (None, None) => l.pictures.is_empty(),
                         _ => false,
                     };
@@ -2026,13 +2030,17 @@ mod tests {
         assert_eq!([0, 1, 2, 3].map(|c| m(y, c)), [Some((72, 408)), Some((72, 408)), Some((41, 439)), Some((72, 408))]);
         assert!(spot.limits.iter().all(|l| l.areas.contains(&"Spot: M".to_string()) == l.areas.contains(&"Tracking: Spot M".to_string())));
         let boxed = by("set:0x1333").frame.as_ref().expect("Custom 1's level X");
-        let pic = |when: Vec<i64>, fraction: (i64, i64)| FramePicture { when, fraction, sizes_tried: vec![168, 402] };
+        // at 3:2 the rule proved across every width, at the other ratios at the default sizes only
+        let pic = |when: Vec<i64>, fraction: (i64, i64)| FramePicture { when, fraction, sizes_tried: vec![168, 402], sizes_range: None };
+        let across = FramePicture { when: vec![0], fraction: (1, 1), sizes_tried: vec![], sizes_range: Some((28, 548)) };
         assert_eq!(boxed.limits, vec![FrameLimit { areas: vec!["Custom 1".into(), "Tracking: Custom 1".into()], when: vec![], range: None,
             inside: Some((46.25, 593.75)), size: Some("set:0x14b6".into()), sizes_tried: vec![], grid: Some(640),
-            pictures: vec![pic(vec![0, 2], (1, 1)), pic(vec![1], (8, 9)), pic(vec![3], (2, 3))] }]);
+            pictures: vec![across, pic(vec![1], (8, 9)), pic(vec![2], (1, 1)), pic(vec![3], (2, 3))] }]);
+        // the size records: each box's width 28 to 548 and height 32 to 396
+        assert_eq!([by("set:0x14b6").range, by("set:0x14b4").range, by("set:0x148a").range], [Some((28, 548)), Some((32, 396)), Some((28, 548))]);
         let in_use = by("set:0x1329").frame.as_ref().expect("the box in use's Y");
         assert_eq!((in_use.axis.as_str(), in_use.limits[0].size.as_deref(), in_use.limits[0].areas.len()), ("y", Some("set:0x1488"), 6));
-        assert_eq!(in_use.limits[0].pictures.iter().map(|p| (p.when.clone(), p.fraction)).collect::<Vec<_>>(), vec![(vec![0, 1, 3], (1, 1)), (vec![2], (27, 32))]);
+        assert_eq!(in_use.limits[0].pictures.iter().map(|p| (p.when.clone(), p.fraction)).collect::<Vec<_>>(), vec![(vec![0], (1, 1)), (vec![1, 3], (1, 1)), (vec![2], (27, 32))]);
         let up = by("set:0x01c2").frame.as_ref().expect("the spot's grip-up X");
         assert_eq!((up.with.as_str(), m(up, 0)), ("set:0x01c8", Some((80, 560))));
         let up_box = by("set:0x133d").frame.as_ref().expect("Custom 1's grip-up Y");

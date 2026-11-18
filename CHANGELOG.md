@@ -62,6 +62,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   at all four aspect ratios and grip down and grip up at 3:2; the editor does not use it yet. A new hand table,
   `FRAME_TRAVEL`, records the same for any camera (docs/DATA_CONTRACTS.md); `FRAME_STEPS` holds every area's step
   under Standard and Large, and AF Frame Move Amt's note no longer calls Large's step twice Standard's.
+- **The a1 II's Custom box sizes are measured:** each box's width runs 28 to 548 and its height 32 to 396, which the
+  definition's range now says, a click 16 across or 12 up and down, and the notes no longer give the wrong steps of
+  the first test. The travel rule holds at every size tried at 3:2, so the definition counts it proved across the
+  whole range there, and at the default sizes only at the other aspect ratios.
 - **The a1 II's Zone and Custom box position copies, and the spot size and Custom area AF Area Registration writes,
   say which way the camera was held** (horizontal, grip down, grip up or current, as the spot's do), from
   registrations made level, grip down and grip up; the Custom boxes' now show outside Expert mode, like the spot's.
