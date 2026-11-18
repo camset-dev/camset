@@ -93,18 +93,27 @@ def index_of(options: list, reading) -> int | None:
 
 def ending_option(options: list, reading) -> int | None:
     """The one option whose label ends the reading whole after at least one word before it (an icon's leftovers): the
-    reading's last words, as many as the label has, each the label's word as index_of compares a label exactly (norm,
-    and a number never a word), so digits are compared exactly and a word is never part of another ("XAVHS XAVC HS 4K"
-    is XAVC HS 4K, never XAVC S 4K; "XAVSI XAVC S-I HD" never XAVC S HD; 8K never 4K). None where no label ends the
-    reading, or two do (fail closed: "4K" and "XAVC 4K" both end "XAVES XAVC 4K")."""
+    reading's last words from a word's start, joined, as index_of compares a label exactly (norm, spaces aside, and a
+    number never a word), so letters and digits are compared exactly and the label never begins inside a word
+    ("XAVHS XAVC HS 4K" is XAVC HS 4K, never XAVC S 4K; "XAVSI XAVC S-I HD" never XAVC S HD; 8K never 4K), while a space
+    OCR lost or put inside the label is no other label ("XANCS-I XAVC S-IHD", the a1 II's lit bar on every pass of
+    kit2_breadth_fmt_XAVC_SI_HDb, 2026-11-18, is XAVC S-I HD, as index_of names "XAVC S-IHD"). None where no label ends
+    the reading, or two do (fail closed: "4K" and "XAVC 4K" both end "XAVES XAVC 4K")."""
+    end = _ending(options, reading)
+    return end[0] if end else None
+
+
+def _ending(options: list, reading) -> tuple | None:
+    """(the option, how many of the reading's words stand before its label) for ending_option's one option; None where
+    no label or two end the reading."""
     words = clean(reading).split()
-    hits = []
-    for i, o in enumerate(options):
-        want = str(o or "").split()
-        if 0 < len(want) < len(words) and all(norm(x) == norm(y) and same(x, y)
-                                              for x, y in zip(words[-len(want):], want, strict=True)):
-            hits.append(i)
-    return hits[0] if len(hits) == 1 else None
+    hits = {}
+    for k in range(len(words) - 1, 0, -1):          # the shortest ending first: the most words left before the label
+        t = " ".join(words[k:])
+        for i, o in enumerate(options):
+            if i not in hits and str(o or "").strip() and norm(t) == norm(o) and same(t, o):
+                hits[i] = k
+    return next(iter(hits.items())) if len(hits) == 1 else None
 
 
 def icon_named(options: list, reading) -> int | None:
@@ -121,10 +130,11 @@ def icon_named(options: list, reading) -> int | None:
     i = index_of(options, t)
     if i is not None:
         return i
-    i = ending_option(options, t)
-    if i is None:
+    end = _ending(options, t)
+    if end is None:
         return None
-    left = t.split()[:-len(str(options[i]).split())]
+    i, before = end
+    left = clean(t).split()[:before]                # the icon's leftovers: the words before the label
     named = {index_of(options, " ".join(part)) for k in range(1, len(left) + 1) for part in (left[:k], left[-k:])}
     return i if named <= {i, None} else None
 

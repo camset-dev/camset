@@ -154,6 +154,53 @@ def test_a_movie_format_never_names_a_near_miss():
     assert match.icon_named(RATIOS, "4:3 16:9") is None and match.icon_named(RATIOS, "16:9 16:9") == 2
 
 
+# the lit bar of each row of the Movie File Format list as bar_text read it (kit2_breadth_fmt_XAVC_SI_HDb, 00075-00080,
+# 2026-11-18): XAVC S-I HD's glued, "S-IHD", on all four passes (00077, 00083, 00089, 00095: the same picture, byte for
+# byte), so the walk went round four times and stopped; XAVC S 4K's icon read "4K"
+LIT_BARS = {"XAVC HS 8K": "XAVEHS XAVC HS 8K", "XAVC HS 4K": "XAVCHS XAVC HS 4K", "XAVC S 4K": "4K XAVC S 4K",
+            "XAVC S HD": "XAVES XAVC S HD", "XAVC S-I 4K": "XAXES- XAVC S-I 4K", "XAVC S-I HD": "XANCS-I XAVC S-IHD"}
+
+
+@pytest.mark.parametrize("label", MOVIE)
+def test_each_lit_bar_as_the_camera_read_it_names_its_own_format(label):
+    """The six lit bars as bar_text read them, XAVC S-I HD's with the space before HD lost: each names its own format.
+    The label's words are compared joined, as index_of compares a label (spaces aside), from a word's start after the
+    icon's leftovers: "XAVC S-IHD" is XAVC S-I HD."""
+    assert match.icon_named(MOVIE, LIT_BARS[label]) == MOVIE.index(label)
+
+
+def test_a_reading_with_a_space_lost_or_split_names_no_near_miss():
+    """Spaces aside, letters and digits exactly: "... XAVC S-IHD" is never XAVC S HD nor XAVC S-I 4K, "... XAVC SHD" never
+    XAVC S-I HD, "... XAVC S-I4K" never XAVC S-I HD, "... XAVC HS4K" never XAVC S 4K; the label still begins at a word's
+    start ("... XAVCS-IHD", glued to its own first word, is the label; "XAVES-XAVC S HD", glued to the icon, names none
+    by its ending); two labels that both end it still name none."""
+    assert match.icon_named(MOVIE, "XANCS-I XAVC S-IHD") == 5
+    assert match.icon_named(MOVIE, "XAVES XAVC SHD") == 3 and match.icon_named(MOVIE, "XAXES- XAVC S-I4K") == 4
+    assert match.icon_named(MOVIE, "XAVHS XAVC HS4K") == 1 and match.icon_named(MOVIE, "XAVSI XA VC S-I HD") == 5
+    assert match.icon_named(MOVIE, "XANCS-I XAVCS-IHD") == 5
+    assert match.ending_option(MOVIE, "XAVES-XAVC S HD") is None
+    assert match.icon_named(MOVIE, "XANCS-I XAVC S-IH D") == 5
+    for reading in ("XANCS-I XAVC S-IHD", "XAVES XAVC SHD", "XAXES- XAVC S-I4K", "XAVHS XAVC HS4K"):
+        assert match.icon_named(MOVIE, reading) == match.ending_option(MOVIE, reading), reading
+    assert match.icon_named(MOVIE, "XANCS-I XAVC S-IHK") is None and match.icon_named(MOVIE, "XAVES XAVC S-HD") is None
+    assert match.ending_option(["S-IHD", "XAVC S-I HD"], "XANCS-I XAVC S-IHD") is None, "two labels end the reading"
+    # the leftovers are the words before where the label begins, however many words OCR made of it
+    assert match.icon_named(MOVIE, "XAVC S HD XAVC S-IHD") is None, "its leftovers name XAVC S HD"
+    assert match.icon_named(MOVIE, "XAVC HS 8K XA VC S-I HD") is None, "its leftovers name XAVC HS 8K"
+
+
+def test_set_row_finds_the_glued_lit_bar_on_its_first_pass(ms):
+    """The walk of kit2_breadth_fmt_XAVC_SI_HDb, its bars as bar_text read them, the list on XAVC S HD: --set "File
+    Format=XAVC S-I HD" goes Down twice and chooses it on the first pass, where it went round four times and stopped."""
+    cam = ListCam(MOVIE, start=3, bar=LIT_BARS.get)
+    ms.set_row(cam, None, None, ["File Format"], "XAVC S-I HD", lambda m: None, mode="Movie")
+    assert cam.chosen == "XAVC S-I HD" and cam.presses == ["right", "down", "down", "enter"]
+    for want in MOVIE:
+        cam = ListCam(MOVIE, start=3, bar=LIT_BARS.get)
+        ms.set_row(cam, None, None, ["File Format"], want, lambda m: None, mode="Movie")
+        assert cam.chosen == want
+
+
 def maps(tmp_path, monkeypatch) -> None:
     """A made-up pass 1 map (a Stills File Format list, STILLS) and a Movie crawl's map (File Format the movie
     formats), where pass3_run and framepos_run's mode_map find them."""
