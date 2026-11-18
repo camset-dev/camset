@@ -1103,7 +1103,8 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
                 close_for_restore(cam, link, start)
             ending = end_session(link, eyes, start, end_why, tag=end_tag, show=show, expected=expected)
-        restored = ps.restored = restore_checked(run, ending, start, note, **({} if show is None else {"show": show}),
+        restored = ps.restored = restore_checked(run, ending, start, note, eyes=eyes,
+                                                 **({} if show is None else {"show": show}),
                                                  **({"expected": frozenset(expected)} if expected else {}))
     finally:
         if close_eyes:

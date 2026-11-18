@@ -3414,7 +3414,8 @@ def test_prove_run_puts_its_start_file_back_saying_the_records_by_key_alone_on_a
     with contextlib.redirect_stdout(io.StringIO()) as out:
         assert P.put_start_back(SimpleNamespace(), eyes, tmp_path / "start.DAT", True)
         assert P.put_start_back(SimpleNamespace(), eyes, tmp_path / "start.DAT")
-    assert got == [{"show": 0, "keys": True}, {}] and UNKNOWN not in out.getvalue()
+    # the run's eyes handed to the check too (it starts on the shooting screen with HDMI eyes)
+    assert got == [{"eyes": eyes, "show": 0, "keys": True}, {"eyes": eyes}] and UNKNOWN not in out.getvalue()
 
 
 def test_a_blocker_notice_keeps_its_rows_label_never_its_state_in_drive(tmp_path, monkeypatch, scope_file, capsys):

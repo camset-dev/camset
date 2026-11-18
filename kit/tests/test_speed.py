@@ -764,3 +764,119 @@ def test_the_crawl_and_prove_run_wait_after_their_download_through_the_one_wait(
     assert "wait_lock(downloaded, hdmi, clock=time)" in crawl and "lock_left" not in crawl
     assert re.search(r'here = link\.download\([^\n]*\)\n\s+downloaded = time\.monotonic\(\)', prove)
     assert "wait_lock(downloaded, eyes, clock=time, longest=5.0)" in prove and "time.sleep(5)\n" not in prove
+
+
+# ---------------------------------------------------------------- the camera after an upload, as measured
+
+
+class RestartEyes:
+    """HDMI eyes on a fake clock after an upload: the shooting screen until 1 s, the notice until 5 s, black until
+    `back_at`, then the shooting screen (`notice` False: never the notice); a grab between 6 and 8 s fails, as a feed
+    may while the camera restarts."""
+    def __init__(self, now, back_at=16.0, notice=True, name="hdmi"):
+        self.now, self.back_at, self.notice, self.name, self.grabs = now, back_at, notice, name, 0
+
+    def grab(self, tag="f", save=True):
+        self.grabs += 1
+        t = self.now[0]
+        if 6.0 <= t < 8.0:
+            raise RuntimeError("no frames from the capture dongle")
+        kind = ("shooting" if t < 1.0 else "notice" if t < 5.0 and self.notice else
+                "unknown" if t < self.back_at else "shooting")
+        return SimpleNamespace(kind=kind)
+
+
+def restart_world(monkeypatch, fails=(), opened_at=None):
+    """camkit.session on a fake clock from the upload's reply, its screen reading the fake frames' kinds; a link class
+    whose tries fail as `fails` lists them in turn ("connect": LinkError before the link opened, "download": a failure
+    once open), or, with `opened_at`, fail to connect until that time; (session, now, clock, link_class, tries, run)."""
+    from camkit import session
+    from camkit.link import LinkError
+    now = [0.0]
+    clock = SimpleNamespace(monotonic=lambda: now[0], sleep=lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(session, "screen", SimpleNamespace(read=lambda f: f))
+    monkeypatch.setattr(session, "compared", lambda start, after, say=None: [])
+    tries, plan = [], list(fails)
+
+    class Tried:
+        def __init__(self, run):
+            tries.append(round(now[0], 2))
+            now[0] += 1.0                           # a try takes its time
+            why = plan.pop(0) if plan else (None if opened_at is None or now[0] >= opened_at else "connect")
+            if why == "connect":
+                raise LinkError("camera link did not connect: fingerprint: Connect_SSH_GetFingerprintFailed",
+                                opened=False)
+            self.why = why
+
+        def __enter__(self):
+            if self.why == "download":
+                raise RuntimeError("download: refused")
+            return SimpleNamespace(download=lambda tag: "restored.DAT")
+
+        def __exit__(self, *exc):
+            return False
+    logged = []
+    run = SimpleNamespace(log=lambda kind, **f: logged.append((kind, f)))
+    return session, now, clock, Tried, tries, run, logged
+
+
+def test_the_restore_check_starts_on_the_shooting_screen_after_the_notice(monkeypatch):
+    """camkit.session.restarted with HDMI eyes: the first try waits for a frame read as the shooting screen after one
+    read as the notice (16 s here, not the shooting screen at 0.5 s before the notice, nor the failing grabs), or 20 s
+    where the notice is never seen; with OSD eyes or none, 20 s, no frame grabbed."""
+    session, now, clock, *_ = restart_world(monkeypatch)
+    assert session.restarted(RestartEyes(now), clock) == "the shooting screen after the notice"
+    assert now[0] == pytest.approx(16.0, abs=0.3)
+    now[0] = 0.0
+    assert session.restarted(RestartEyes(now, notice=False), clock) == "20 s" and now[0] == pytest.approx(20.0)
+    for eyes in (RestartEyes(now, name="osd"), None):
+        now[0] = 0.0
+        assert session.restarted(eyes, clock) == "20 s" and now[0] == pytest.approx(20.0)
+        assert eyes is None or eyes.grabs == 0
+
+
+def test_a_try_that_does_not_connect_is_tried_again_3_s_later_and_the_wait_is_logged(monkeypatch):
+    """verify_restore with HDMI eyes: the first try on the shooting screen (16 s), a try that did not connect tried
+    again 3 s after it failed, the link that opens then checked as before (its ready wait, the download, the count);
+    each wait in the run's events.jsonl with what it waited for and its seconds."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, fails=["connect", "connect"])
+    eyes = RestartEyes(now)
+    n = session.verify_restore(run, Path("start.DAT"), link_class=Tried, eyes=eyes, clock=clock, say=lambda m: None)
+    assert n == 0 and tries == [pytest.approx(16.0, abs=0.3), pytest.approx(20.0, abs=0.3), pytest.approx(24.0, abs=0.3)]
+    kinds = [(k, f.get("waited_for")) for k, f in logged]
+    assert kinds[0] == ("restore_wait", "the shooting screen after the notice")
+    assert kinds[1:3] == [("restore_wait", "the next try")] * 2 and kinds[3][0] == "restore_reconnected"
+    assert logged[3][1]["tries"] == 3 and all("seconds" in f for _, f in logged)
+    assert now[0] == pytest.approx(25.0 + 3.0, abs=0.3), "the ready wait after the link opened, as before"
+
+
+def test_without_hdmi_eyes_the_first_try_is_at_20_s_and_other_failures_wait_as_before(monkeypatch):
+    """No eyes: the first try at 20 s. A failure once the link opened (a download refused) is tried again `pause` s
+    (15) later, as before."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, fails=["download"])
+    assert session.verify_restore(run, Path("start.DAT"), link_class=Tried, clock=clock, say=lambda m: None) == 0
+    assert tries == [pytest.approx(20.0), pytest.approx(36.0)]
+    assert ("restore_wait", "the next try after a failure") in [(k, f.get("waited_for")) for k, f in logged]
+
+
+def test_a_camera_that_never_answers_is_given_up_at_the_old_deadline(monkeypatch):
+    """A link that never connects: tried every 3 s from 20 s, no try starting past the fixed wait's deadline (40 s plus
+    six tries 15 s apart: 130 s from the call), then None, said and logged; never slower than the fixed wait."""
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch, opened_at=1e9)
+    assert session.verify_restore(run, Path("start.DAT"), link_class=Tried, clock=clock, say=lambda m: None) is None
+    assert tries[0] == pytest.approx(20.0) and max(tries) <= 130.0 and len(tries) > 6
+    assert all(b - a == pytest.approx(4.0) for a, b in zip(tries, tries[1:], strict=False)), "a try 1 s, then 3 s"
+    assert logged[-1][0] == "restore_unreached" and now[0] <= 130.0 + 1.0
+    # a check given no settle (the tests' own) tries at once
+    session, now, clock, Tried, tries, run, logged = restart_world(monkeypatch)
+    assert session.verify_restore(run, Path("start.DAT"), settle=0, ready=0, link_class=Tried, clock=clock,
+                                  say=lambda m: None) == 0 and tries == [0.0]
+
+
+def test_the_runs_that_still_hold_their_hdmi_eyes_hand_them_to_the_check(monkeypatch):
+    """runner.prover_session's restore check and prove_run's (put_start_back, a session's end) pass their eyes, so an
+    HDMI run starts its check on the shooting screen; a run that has closed its eyes passes none (20 s)."""
+    runner_src = (KIT / "runner.py").read_text(encoding="utf-8")
+    prove_src = (KIT / "prove_run.py").read_text(encoding="utf-8")
+    assert "restore_checked(run, ending, start, note, eyes=eyes," in runner_src
+    assert "verify_restore(run, ref, eyes=hdmi," in prove_src and "check_restore(run, ending, start, eyes=hdmi," in prove_src

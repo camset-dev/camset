@@ -378,7 +378,8 @@ def _prover_world(monkeypatch, uploaded=True, restored=0):
     monkeypatch.setattr(runner.time, "sleep", lambda s: None)
     ending = session.Ending(Path("after.DAT"), ["a change"], uploaded)
     monkeypatch.setattr(runner.session, "finish", lambda link, start, tag="after": log["finished"].append(start) or ending)
-    monkeypatch.setattr(runner.session, "check_restore", lambda run, e, start: log["checked"].append(start) or restored)
+    monkeypatch.setattr(runner.session, "check_restore",
+                        lambda run, e, start, eyes=None: log["checked"].append(start) or restored)
     monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))      # where the shooting screen does not come, a menu page is on show
     return log
 

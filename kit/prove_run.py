@@ -640,7 +640,7 @@ def put_start_back(run, hdmi, ref: Path, withheld: bool = False) -> bool:
         print(f"the camera differs from {ref.name} in {len(ch)} records {[c.key for c in ch][:6]}: uploading it",
               flush=True)
         print(link.upload(ref), flush=True)
-    return verify_restore(run, ref, **values_withheld(withheld)) == 0
+    return verify_restore(run, ref, eyes=hdmi, **values_withheld(withheld)) == 0
 
 
 def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str:
@@ -1119,7 +1119,7 @@ def main():
                 if ending.after is None:
                     unrestored = True
                     break                                    # the camera kept refusing the download: finish said so
-            if ending.uploaded and check_restore(run, ending, start, **values_withheld(bool(network))) != 0:
+            if ending.uploaded and check_restore(run, ending, start, eyes=hdmi, **values_withheld(bool(network))) != 0:
                 print("the restore did not check out: stopping", flush=True)
                 unrestored = True
                 break

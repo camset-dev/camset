@@ -311,17 +311,70 @@ def finish(link, start: Path, tag: str = "after", say=_say, **kw) -> Ending:
     return put_back(link, ended(link, start, tag, say=say, **kw), start, say=say)
 
 
+# The camera after an upload, measured on the a1 II (runs/ILCE-1M2_fw4.00/kit2_speed_restart, 2026-11-18, 3 trials):
+# the upload answers in 0.2 s, HDMI shows the notice at about 1 s and the shooting screen again 15.1 to 17.8 s after the
+# upload's reply; a link tried while the camera restarts fails cleanly before any login (camlink: "fingerprint:
+# Connect_SSH_GetFingerprintFailed") and does no harm, and the try that opened took 9.3 to 14.1 s by itself (the
+# camera's network comes up some seconds after its screen): a link open at 29.9 to 37.9 s, against the 51 to 52 s of a
+# fixed 40 s wait. RESTART_FIRST: the latest the first try waits; RESTART_RETRY: between tries that did not connect.
+RESTART_FIRST = 20.0
+RESTART_RETRY = 3.0
+
+
+def restarted(eyes, clock=time, longest: float = RESTART_FIRST, poll: float = 0.25) -> str:
+    """Wait for the camera to come back after an upload: with HDMI eyes until a frame reads as the shooting screen
+    after one has read as the notice (the restart's), or `longest` s, whichever comes first; with OSD eyes (they need
+    the link the upload closed) or none, `longest` s. A frame that cannot be grabbed or read counts as neither. What it
+    waited for: "the shooting screen after the notice" or f"{longest:g} s"."""
+    start = clock.monotonic()
+    if getattr(eyes, "name", "") == "hdmi":
+        notice = False
+        while clock.monotonic() - start < longest:
+            try:
+                kind = screen.read(eyes.grab(save=False)).kind
+            except Exception:       # noqa: BLE001 (a feed that drops while the camera restarts: no frame)
+                kind = None
+            notice = notice or kind == "notice"
+            if notice and kind == "shooting":
+                return "the shooting screen after the notice"
+            clock.sleep(min(poll, max(longest - (clock.monotonic() - start), 0.0)))
+        return f"{longest:g} s"
+    left = longest - (clock.monotonic() - start)
+    if left > 0:
+        clock.sleep(left)
+    return f"{longest:g} s"
+
+
+def _connect_failed(e: BaseException) -> bool:
+    """A try that did not connect: the link never opened (camkit.link.LinkError opened False: camlink's "camera link
+    did not connect", the fingerprint not fetched while the camera restarts), nothing sent to the camera."""
+    return isinstance(e, LinkError) and not getattr(e, "opened", True)
+
+
 def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause: float = 15.0, link_class=Link,
-                   ready: float = 3.0, say=_say, show: int = 20, expected=frozenset(), keys: bool = False) -> int | None:
-    """After an upload the camera restarts: wait `settle` s, reconnect (`tries` times, `pause` s apart), give it
-    `ready` s more, download and count the records that differ from `start`, saying the first `show` of them (0: the
-    count only, for a run whose start file holds a value it never prints; with keys, their keys too: said_keys); None
-    when no connection came. The records `expected` names (ended) are said by key and not counted."""
-    time.sleep(settle)
-    for attempt in range(tries):
+                   ready: float = 3.0, say=_say, show: int = 20, expected=frozenset(), keys: bool = False, eyes=None,
+                   clock=time) -> int | None:
+    """After an upload the camera restarts: wait for it (restarted: with HDMI `eyes` the shooting screen back after
+    the notice, else RESTART_FIRST s, never longer than `settle`), reconnect, give it `ready` s more, download and count
+    the records that differ from `start`, saying the first `show` of them (0: the count only, for a run whose start file
+    holds a value it never prints; with keys, their keys too: said_keys); None when no connection came. A try that did
+    not connect (_connect_failed) is tried again RESTART_RETRY s later, any other failure `pause` s later, as before;
+    no try starts past the deadline the fixed wait gave (`settle` plus `tries` times `pause` from the call), so it is
+    never slower than that wait. The records `expected` names (ended) are said by key and not counted. Each wait is in
+    the run's events.jsonl ("restore_wait": what it waited for and the seconds; "restore_reconnected" or
+    "restore_unreached" with the tries and the seconds from the call)."""
+    log = getattr(run, "log", None) or (lambda kind, **f: None)
+    t0 = clock.monotonic()
+    deadline = t0 + settle + tries * pause
+    waited = restarted(eyes, clock, min(RESTART_FIRST, settle))
+    log("restore_wait", waited_for=waited, seconds=round(clock.monotonic() - t0, 3))
+    attempt = 0
+    while True:
+        attempt += 1
         try:
             with link_class(run) as link:
-                time.sleep(ready)
+                log("restore_reconnected", tries=attempt, seconds=round(clock.monotonic() - t0, 3))
+                clock.sleep(ready)
                 ch, known = _apart(compared(start, link.download("restored"), say), expected)
                 say(f"after the restore: {len(ch)} records differ from the start file{_besides(known)}")
                 for c in ch[:show]:
@@ -330,9 +383,14 @@ def verify_restore(run, start: Path, settle: float = 40.0, tries: int = 6, pause
                     said_keys(ch, say)
                 return len(ch)
         except Exception as e:
-            say(f"reconnect {attempt + 1} failed: {str(e)[:80]}")
-            time.sleep(pause)
-    return None
+            say(f"reconnect {attempt} failed: {str(e)[:80]}")
+            gap = RESTART_RETRY if _connect_failed(e) else pause
+            if clock.monotonic() + gap > deadline:
+                log("restore_unreached", tries=attempt, seconds=round(clock.monotonic() - t0, 3))
+                return None
+            log("restore_wait", waited_for="the next try" + ("" if gap == RESTART_RETRY else " after a failure"),
+                seconds=gap)
+            clock.sleep(gap)
 
 
 def check_restore(run, ending: Ending | None, start: Path, **kw) -> int | None:
