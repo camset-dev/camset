@@ -12805,7 +12805,7 @@
      3
     ]
    },
-   "note": "",
+   "note": "Time-lapse keeps a Rec Frame Rate for each movie format, each listing what its box offers there; under XAVC HS 8K the camera offers none (its box draws a dash).",
    "in_sets": true,
    "scalar": true,
    "size": 1,

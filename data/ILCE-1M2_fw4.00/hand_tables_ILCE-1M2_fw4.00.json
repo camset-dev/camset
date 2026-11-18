@@ -83,7 +83,10 @@
     },
     "global:0x1478": {"name": "Aspect Marker Disp."},
     "global:0x0240": {"name": "Rec Frame Rate (S&Q, XAVC S 4K)"},
-    "global:0x1137": {"name": "Rec Frame Rate (Time-lapse, XAVC S 4K)"},
+    "global:0x1137": {
+      "name": "Rec Frame Rate (Time-lapse, XAVC S 4K)",
+      "note": "Time-lapse keeps a Rec Frame Rate for each movie format, each listing what its box offers there; under XAVC HS 8K the camera offers none (its box draws a dash)."
+    },
     "global:0x1145": {
       "name": "Record Setting (Time-lapse, XAVC S 4K, 60p)",
       "note": "Time-lapse keeps a Record Setting for each movie format and rate, each listing what that format and rate offer: proved for XAVC S 4K, XAVC HS 4K and XAVC S HD at every rate each offers; XAVC S-I 4K, XAVC S-I HD and XAVC HS 8K not tried."
