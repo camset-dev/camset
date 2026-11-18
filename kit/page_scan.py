@@ -7,7 +7,8 @@ Presses only MENU (open at the start, close at the end), Down, and Right when th
 cursor in the group column (it steps into the rows). Never Enter. Before every press the screen must
 be a menu page with the cursor on the rows or the Main tile grid; anything else stops the scan without
 pressing. After every press the move is checked: the next row on the same page, or the first row of
-a new page (new pages get a second, longer look: they redraw more slowly). The scan ends when its
+a new page (a new page that changes the screen's kind, and every new page over OSD, gets a second, longer look: it
+can redraw more slowly). The scan ends when its
 first screen comes round again (exact pixel signature: row labels repeat across pages, so text is
 not used), on a STOP file (<run>/STOP in the camera's runs/<model>_fw<fw>/), or after --max presses.
 
@@ -123,10 +124,14 @@ class Scan:
                 break
             new_page = page != prev_page
             if new_page:
-                # page changes redraw more slowly: look again with a longer quiet window
-                f2, later = self.hdmi.settle(f, "down-late", expect_change=False, quiet=0.3, timeout=2.0)
-                if later:
-                    f, s, page = f2, screen.read(f2), page_key(f2)
+                if s.kind != prev_s.kind or getattr(self.hdmi, "name", "") == "osd":
+                    # a page change that changes the screen's kind (menu to the Main tiles) can redraw more slowly: look
+                    # again with a longer quiet window, as on every page change over OSD. Over HDMI it found a later
+                    # change once in about 800 page changes, menu to tiles (kit2_page_scan_movie_1108 record 228,
+                    # already read as tiles); on a page change that keeps the kind, never (2026-11-18)
+                    f2, later = self.hdmi.settle(f, "down-late", expect_change=False, quiet=0.3, timeout=2.0)
+                    if later:
+                        f, s, page = f2, screen.read(f2), page_key(f2)
                 pages.add(page)
             expected = (s.kind == "tiles" or prev_s.kind == "tiles" or
                         (new_page and s.row == 0) or (not new_page and s.row == (prev_s.row or 0) + 1))

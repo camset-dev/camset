@@ -447,3 +447,77 @@ def test_a_glance_is_not_saved_and_a_refresh_saves_the_glance_it_takes(tmp_path)
     from PIL import Image
     assert np.asarray(Image.open(g.path)).max() == 0, "withheld: saved black"
 
+
+
+# ---------------------------------------------------------------- G: the page scan's extra look
+
+
+class ScanReplay:
+    """Eyes replaying a page scan's saved frames in the order the scan grabbed them: each settle takes the next saved
+    frame of its tag, a late look (down-late) or a rest look (down-rest) the scan did not ask for passed over (`skipped`
+    lists them); the settle's `moved` and `timing` are the scan's own (a Down moved; a late look moved where the scan's
+    record took it)."""
+    name = "hdmi"
+
+    def __init__(self, shots, records):
+        from camkit.frames import load
+        self.load = load
+        self.queue = sorted(shots.glob("*.png"))
+        self.timing, self.skipped, self.presses = {}, [], 0
+        self.took = {r["frame"] for r in records}
+        self.timings = {r["n"]: r.get("timing") or {} for r in records}
+
+    def _next(self, tag):
+        while self.queue:
+            p = self.queue.pop(0)
+            if p.stem.split("_", 1)[1] == tag:
+                return self.load(p)
+            assert p.stem.split("_", 1)[1] in ("down-late", "down-rest"), f"passed over {p.name} for {tag}"
+            self.skipped.append(p.name)
+        raise AssertionError(f"no saved frame left for {tag}")
+
+    def grab(self, tag="f", save=True):
+        return self._next(tag)
+
+    def settle(self, before, tag="f", expect_change=None, sent_at=None, **kw):
+        f = self._next(tag)
+        if tag == "down-late":
+            return f, f.path.name in self.took
+        self.timing = self.timings.get(self.presses, {})
+        return f, True
+
+
+class ScanPresses:
+    """The page scan's camera link, counting its presses for the replay."""
+    def __init__(self, eyes):
+        self.eyes = eyes
+
+    def press(self, button, screen=None):
+        self.eyes.presses += 1
+
+
+@pytest.mark.parametrize("scan_run", ["kit2_page_scan_1118p", "kit2_page_scan_movie_1108"])
+def test_the_page_scan_over_its_saved_frames_gives_the_same_records_with_fewer_late_looks(tmp_path, scan_run):
+    """page_scan.Scan over a scan's own frames (HDMI eyes; kit2_page_scan_1118p: 274 records, 67 page changes each given
+    a late look then, none of which saw a later change; kit2_page_scan_movie_1108: the one late look that did, menu to
+    the Main tiles, record 228): the scan made the new way, a late look only where the screen's kind changes on a page
+    change (or on OSD eyes), writes the very records the camera's scan wrote, that one taken from its late look still,
+    and asks for the late look on far fewer page changes."""
+    import json
+
+    import page_scan
+    run_dir = RUNS / scan_run
+    if not (run_dir / "shots").exists():
+        pytest.skip(f"{run_dir} not present")
+    records = [json.loads(x) for x in (run_dir / "scan.jsonl").read_text(encoding="utf-8").splitlines()]
+    eyes = ScanReplay(run_dir / "shots", records)
+    scan = page_scan.Scan.__new__(page_scan.Scan)
+    scan.run, scan.link, scan.hdmi, scan.max = SimpleNamespace(dir=tmp_path, stop_requested=lambda: False), \
+        ScanPresses(eyes), eyes, 400
+    scan.out, scan.presses, scan.scan_id = tmp_path / "scan.jsonl", 0, records[0].get("scan")
+    scan.run_scan()
+    got = [json.loads(x) for x in (tmp_path / "scan.jsonl").read_text(encoding="utf-8").splitlines()]
+    assert got == records
+    changes = sum(1 for r in records if r.get("new_page"))
+    asked = changes - len([n for n in eyes.skipped if n.endswith("down-late.png")])
+    assert asked < changes // 5, f"late looks still asked: {asked} of {changes}"
