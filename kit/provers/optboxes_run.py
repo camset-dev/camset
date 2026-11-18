@@ -164,7 +164,8 @@ def press_in(cam, key: str, option: str, names: list, b: int, vals: list | None 
         why = hazard_refused(cam, b, key, names, vals)
         if why:
             raise Refused(why)
-    cam.press(key)
+    # a step whose change the settle saw needs no look again (LiveCamera.look_late), a move between boxes keeps it
+    cam.press(key, **({"seen_enough": True} if key in ("up", "down") else {}))
     in_box(cam, option, names[b] if b < len(names) else None, b)
 
 

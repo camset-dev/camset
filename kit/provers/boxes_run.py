@@ -153,12 +153,12 @@ def look_open(cam, link, path, b: int) -> tuple[list, str]:
     held = value(cam, b)
     for _ in range(40):                       # Up to one end (or once round)
         before = value(cam, b)
-        cam.press("up")
+        cam.press("up", seen_enough=True)     # a step whose change was seen needs no look again (LiveCamera.look_late)
         if value(cam, b) in (before, held):
             break
     vals = [value(cam, b)]
     for _ in range(40):
-        cam.press("down")
+        cam.press("down", seen_enough=True)
         v = value(cam, b)
         if v == vals[-1] or v == vals[0]:
             break
@@ -199,7 +199,7 @@ def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
             break
         if now not in vals:
             raise Failed(f"{path[-1]} box {b}: read {now!r}, not one of its values")
-        cam.press("down" if vals.index(now) < target else "up")
+        cam.press("down" if vals.index(now) < target else "up", seen_enough=True)
     if value(cam, b) != vals[target] or focus(cam) != b:
         raise Failed(f"{path[-1]} box {b}: {vals[target]!r} never came up")
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))

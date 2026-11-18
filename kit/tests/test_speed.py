@@ -288,3 +288,70 @@ def test_to_row_gives_the_rows_place_to_the_last_step_alone(monkeypatch):
                    at="the place")
     assert found == [("Silent Mode Settings", None), ("Target Function Settings", None),
                      ("Aperture Drive in AF", "the place")]
+
+
+# ---------------------------------------------------------------- D: a box's step whose change was seen
+
+
+def late_camera(monkeypatch, tmp_path, later_state="same"):
+    """A LiveCamera after a press whose screen reads in the state it had before (a box's value is not in the state);
+    its eyes count the looks again, and a look again reads `later_state`."""
+    from camkit.runs import Run
+    state = SimpleNamespace(kind="dialog", signature="boxes", struct="a", bits=np.zeros(4, bool))
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run("late", root=tmp_path)
+    cam.frame = SimpleNamespace(path=tmp_path / "00002_down.png", image=None)
+    cam.screen = state
+    looks = []
+
+    def grab(tag, save=True):
+        looks.append(tag)
+        return SimpleNamespace(path=tmp_path / "late.png", image=None)
+    cam.hdmi = SimpleNamespace(grab=grab, name="hdmi")
+    cam.reading = lambda f: state if later_state == "same" else SimpleNamespace(kind="dialog", signature="moved",
+                                                                                   struct="b", bits=np.ones(4, bool))
+    clock = [0.0]                       # a clock that the waits move on
+    monkeypatch.setattr(live.time, "sleep", lambda s: clock.__setitem__(0, clock[0] + s))
+    monkeypatch.setattr(live.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(live, "keep", lambda *a, **k: None)
+    return cam, state, looks
+
+
+def test_a_box_step_whose_change_was_seen_goes_without_the_look_again(monkeypatch, tmp_path):
+    """LiveCamera.look_late: with seen_enough (a box prover's step) and the settle having seen the screen change, the
+    press ends there, no look again; with no change seen it looks again as before, and without the flag (every other
+    press) it looks again as before, whether or not a change was seen."""
+    cam, before, looks = late_camera(monkeypatch, tmp_path)
+    assert cam.look_late("down", before, moved=True, seen_enough=True) is cam.frame and looks == []
+    cam.look_late("down", before, moved=False, seen_enough=True)
+    assert looks == ["down-late"]
+    cam, before, looks = late_camera(monkeypatch, tmp_path)
+    cam.look_late("down", before, moved=True)
+    assert looks == ["down-late"]
+    cam, before, looks = late_camera(monkeypatch, tmp_path, later_state="moved")
+    got = cam.look_late("down", before, moved=False, seen_enough=True)
+    assert looks == ["down-late"] and got.path.name == "late.png" and cam.screen.signature == "moved"
+
+
+def test_the_box_provers_pass_the_flag_on_a_step_alone(monkeypatch):
+    """optboxes_run's steps (Up, Down) pass seen_enough, its moves between boxes (Right, Left) do not; boxes_run's look
+    and stepping pass it on Up and Down."""
+    import boxes_run
+    import optboxes_run as O
+    sent = []
+    cam = SimpleNamespace(press=lambda key, **k: sent.append((key, k.get("seen_enough", False))),
+                          frame=SimpleNamespace(path=Path("00001_x.png")), hdmi=SimpleNamespace(name="hdmi"))
+    monkeypatch.setattr(O, "in_box", lambda *a: None)
+    for key in ("down", "up", "right", "left"):
+        O.press_in(cam, key, "Custom 1", ["Type", "Standard", "Range"], 1)
+    assert sent == [("down", True), ("up", True), ("right", False), ("left", False)]
+    sent.clear()
+    values = iter(["60p", "60p", "30p", "30p"])
+    monkeypatch.setattr(boxes_run, "dashed", lambda cam, b: False)
+    monkeypatch.setattr(boxes_run, "to_box", lambda cam, b: None)
+    monkeypatch.setattr(boxes_run, "value", lambda cam, b: next(values))
+    monkeypatch.setattr(boxes_run, "close_screen", lambda cam, link: None)
+    with contextlib.suppress(Exception):
+        boxes_run.look_open(cam, None, ["S&Q Settings", "Frame Rate"], 0)
+    assert sent and all(flag for _, flag in sent)
+

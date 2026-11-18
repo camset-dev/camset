@@ -897,8 +897,9 @@ class LiveCamera:
         self.refresh("stale")
 
     def press(self, key: str, allow=frozenset(), hold_ms=60, on_shooting=frozenset(), notice_ok: str = "",
-              require_notice: bool = False, row=None):
-        """One press, read once it settles. allow: the guarded buttons named (safety.GUARDED_INPUTS); on_shooting: the
+              require_notice: bool = False, row=None, seen_enough: bool = False):
+        """One press, read once it settles (look_late: seen_enough, a box prover's step, ends it on a change the settle
+        saw). allow: the guarded buttons named (safety.GUARDED_INPUTS); on_shooting: the
         keys named for this press on the shooting screen, where a key does what the body makes of it (decision 21):
         a caller names a key there only where pressing it there is the point. notice_ok: the run's --info-ok for the
         notice on screen, which its caller judged (proving.screens.pass_named_notice): an Enter on that notice goes when
@@ -1062,31 +1063,39 @@ class LiveCamera:
         f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
         self.frame, self.screen = f, self.reading(f)
         self.rest(f"{key}-rest")
-        f = self.frame
-        if screen.same_state(self.screen, before):
-            # looks like nothing happened: look again a little later. Live view behind a dialog that
-            # previews each option (Picture Profile) keeps changing, which can end the settle before
-            # the cursor has moved (2026-10-28). OK that applies a setting can hold the OSD image for
-            # about 3 s while the camera applies it (Drive Mode's self-timer over the OSD, 2026-11-06: the
-            # record had changed and the row page was back, the picture of it came 3.25 s after the press,
-            # where HDMI showed it in 0.2 s): OK is given OK_LATE in all, a look every half second
-            end = time.monotonic() + (OK_LATE if key == "enter" else 0.5)
-            while True:
-                time.sleep(0.5)
-                f2 = self.hdmi.grab(f"{key}-late", save=False)
-                s2 = self.reading(f2)
-                if not screen.same_state(s2, before):
-                    keep(f2, self.run.shot_path(f"{key}-late"), getattr(self, "blank", False))
-                    f, self.frame, self.screen = f2, f2, s2
-                    break
-                if time.monotonic() >= end:
-                    break
+        f = self.look_late(key, before, moved, seen_enough)
         self.screen.frame_path = f.path.name          # evidence: which saved frame this screen is
         self.presses += 1
         self._seen = self._moves()
         self.run.log("press", key=key, frame=f.path.name, screen=self.screen.kind, moved=moved,
                      timing=self.hdmi.timing)
         self._inside_after()
+
+    def look_late(self, key: str, before, moved: bool, seen_enough: bool = False):
+        """After a press settled: where its screen reads in the state it had before, look again a little later; the
+        frame the press ends on. Live view behind a dialog that previews each option (Picture Profile) keeps changing,
+        which can end the settle before the cursor has moved (2026-10-28). OK that applies a setting can hold the OSD
+        image for about 3 s while the camera applies it (Drive Mode's self-timer over the OSD, 2026-11-06: the record
+        had changed and the row page was back, the picture of it came 3.25 s after the press, where HDMI showed it in
+        0.2 s): OK is given OK_LATE in all, a look every half second. seen_enough: a box prover's step of a box's value
+        (kit/provers/optboxes_run.py, boxes_run.py), whose screen has no live view behind it and whose state does not
+        hold the value, so that every step read as nothing happened and waited 0.5 s (201 of 285 presses, 2026-11-18):
+        there a change the settle saw (`moved`) is the press's, and no look again goes; a step whose change was not
+        seen still gets it. Never the default."""
+        f = self.frame
+        if not screen.same_state(self.screen, before) or (seen_enough and moved):
+            return f
+        end = time.monotonic() + (OK_LATE if key == "enter" else 0.5)
+        while True:
+            time.sleep(0.5)
+            f2 = self.hdmi.grab(f"{key}-late", save=False)
+            s2 = self.reading(f2)
+            if not screen.same_state(s2, before):
+                keep(f2, self.run.shot_path(f"{key}-late"), getattr(self, "blank", False))
+                f, self.frame, self.screen = f2, f2, s2
+                return f
+            if time.monotonic() >= end:
+                return f
 
     def first_open_under_way(self) -> bool:
         """Whether the camera's RESTORE_BY_HAND is on disk for this run's camera (camkit.runs.restore_pending_any;
