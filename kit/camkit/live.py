@@ -355,7 +355,8 @@ class TwoBoxes:
     stepped its box to the value it proves; judged here (confirm_refused: boxes_passed) on the frame judged, by the
     screen's own shape (two_boxes_refused): its title ends with the row's name, each box's name stands above that box,
     each box reads a value, no question mark above the footer, no line where the screen draws none (the lines under the
-    boxes are its own explanation), the footer OK and no other word; then the confirmation words on what stands above
+    boxes are its own explanation), the footer drawing its Help button and its OK key and nothing else, OCR reading no
+    word in it but OK (the OK judged as drawn, 2026-11-18); then the confirmation words on what stands above
     the footer, which every consent keeps. It answers no other kind of screen, nor the trash button, and is spent by its
     press. Chosen over teaching camkit.screen a two-box kind: that kind would be trusted by every guard on every screen
     of its shape, from any caller, where this lifts one Enter on one named row's screen."""
@@ -381,15 +382,19 @@ def _compact(t) -> str:
     return re.sub(r"[^a-z0-9]", "", safety.fold(str(t or "")).lower())
 
 
-def two_boxes_refused(consent: TwoBoxes, lines) -> str:
-    """Why a screen whose OCR lines are `lines` is not `consent.row`'s own two-box screen, shaped as it is (TwoBoxes), or
-    "" when it is: its breadcrumb ends with the row's name and each box's name stands above that box (compared without
-    spaces or punctuation, so an icon OCR reads as letters before it, "Sad Rec Frame Rate", or glued on, stays the name);
-    each box reads a letter or a digit; no question mark above the footer; every line above the footer stands on the
-    breadcrumb, a box's name, a box, or under the boxes (the screen's own lines: "x5 Slow Motion", "Shooting time
-    required for 5-second movie recording."), a lone glyph (an arrow) anywhere; in the footer OK, and no other word
-    (its trash icon and help glyph read as nothing, a letter, or "?"). Fail closed: a screen OCR reads otherwise stops
-    the run before its OK."""
+def two_boxes_refused(consent: TwoBoxes, lines, image) -> str:
+    """Why a screen whose OCR lines are `lines` and whose picture is `image` is not `consent.row`'s own two-box screen,
+    shaped as it is (TwoBoxes), or "" when it is: its breadcrumb ends with the row's name and each box's name stands
+    above that box (compared without spaces or punctuation, so an icon OCR reads as letters before it, "Sad Rec Frame
+    Rate", or glued on, stays the name); each box reads a letter or a digit; no question mark above the footer; every
+    line above the footer stands on the breadcrumb, a box's name, a box, or under the boxes (the screen's own lines: "x5
+    Slow Motion", "Shooting time required for 5-second movie recording."), a lone glyph (an arrow) anywhere. Its footer:
+    OCR reads no word in it but OK (its trash icon and help glyph read as nothing, a letter, or "?"), and as drawn
+    (camkit.screen.footer_keys, the kit's own glyphs, found by pixels) it holds the Help button (trash and "?") and the
+    OK key ("● OK") and no ink besides them (footer_ink_outside: a second button, whatever OCR read of it). The OK is
+    judged as drawn, never by OCR finding it: on kit2_pass2 240268 (2026-11-18) OCR read that footer's "?" alone, the
+    OK drawn pixel for pixel as on the frames it read "• OK". Fail closed: a screen read or drawn otherwise stops the
+    run before its OK."""
     def text_at(box):
         return ocr.text_in(lines, box).strip()
     title = text_at(BOXES_TITLE)
@@ -416,7 +421,13 @@ def two_boxes_refused(consent: TwoBoxes, lines) -> str:
     others = [w for w in words if w != "ok"]
     if others:
         return f"its footer reads {others[0]!r}, not its OK alone"
-    return "" if "ok" in words else "its footer offers no OK"
+    keys = screen.footer_keys(image) if image is not None else {}
+    if "ok_key" not in keys:
+        return "its footer offers no OK (no OK key drawn in it)"
+    if "help_only" not in keys:
+        return "its footer lacks its Help button (trash and ?)"
+    stray = screen.footer_ink_outside(image, [keys["ok_key"], keys["help_only"]])
+    return f"its footer draws more than its Help button and OK (ink at {stray})" if stray else ""
 
 
 # the size editor's title, top left above the box (kit2_freesize's 00394_c4.png); its footer's words, a key's word cut
@@ -1152,7 +1163,7 @@ class LiveCamera:
         except Exception as e:
             self.refuse(key, f"{consent.name}: the screen cannot be read ({type(e).__name__}), so whether it asks cannot "
                              "be told")
-        why = two_boxes_refused(consent, lines)
+        why = two_boxes_refused(consent, lines, self.frame.image)
         said = "" if why else safety.confirmation_refused(ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)))
         if why or said:
             self.refuse(key, f"{consent.name}: {why or f'it reads as a confirmation ({said})'}: no Enter")

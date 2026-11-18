@@ -318,6 +318,44 @@ def help_glyph(image) -> str | None:
     return name if best > 0.9 else None
 
 
+# the key hints a footer may draw, each a template (glyphs/*.png): the Help (trash) button with or without its list,
+# and the control wheel's centre with OK ("● OK", cut from kit2_pass2 240268_down.png's footer, 2026-11-18, where OCR
+# read the "?" alone though the hint was drawn pixel for pixel as on frames it read "• OK")
+FOOTER_KEYS = ("help_key", "help_only", "ok_key")
+FOOTER_INK = (430, 100)         # the footer band's ink: from y 430 (under the footer's line, 424-429), grey over 100
+
+
+def footer_keys(image) -> dict:
+    """The key hints the footer draws, found by their templates (FOOTER_KEYS) in its band (y 415 on), as help_glyph finds
+    the Help button: {name: (x0, y0, x1, y1)} of each whose best match scores over 0.9, where it matched. Read by pixels,
+    so a hint OCR reads one frame and misses the next (the a1 II's "● OK", 2026-11-18) is found on both."""
+    import cv2
+    g = np.asarray(image, np.float32)
+    if g.ndim == 3:
+        g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyphs' cut
+    band, out = g[415:480, :], {}
+    for n in FOOTER_KEYS:
+        t = _template(n)
+        _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(band, t, cv2.TM_CCOEFF_NORMED))
+        if best > 0.9:
+            out[n] = (x, 415 + y, x + t.shape[1], 415 + y + t.shape[0])
+    return out
+
+
+def footer_ink_outside(image, boxes, pad: int = 2) -> tuple | None:
+    """Where the footer band (FOOTER_INK) draws ink outside `boxes` (each padded by `pad`): the stray ink's (x0, y0, x1,
+    y1), or None where it draws nothing else. A second button, a word, an icon: whatever OCR reads of it or misses."""
+    top, level = FOOTER_INK
+    g = np.asarray(image, np.float32)
+    if g.ndim == 3:
+        g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)
+    ink = g[top:480, :] > level
+    for x0, y0, x1, y1 in boxes:
+        ink[max(0, y0 - pad - top):max(0, y1 + pad - top), max(0, x0 - pad):x1 + pad] = False
+    ys, xs = np.nonzero(ink)
+    return (int(xs.min()), int(ys.min()) + top, int(xs.max()) + 1, int(ys.max()) + top + 1) if len(ys) else None
+
+
 def _sig(s, *parts):
     """Set s.signature (exact) and what tolerant matching needs (same_state): s.struct, the parts
     that must match exactly (type tags, cursor position, counts, glyphs...), and s.bits, the

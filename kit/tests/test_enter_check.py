@@ -1506,8 +1506,38 @@ TL_LINES = [("Shooting > Image Qua... > Frame Rate Settings", 0, 1, 518, 36), ("
             ("ü Interval Time", 383, 65, 184, 30), ("30р", 191, 189, 56, 37), ("1 s", 455, 189, 40, 30),
             ("Shooting time required for 5-second movie recording.", 65, 349, 510, 28),
             ("0 h 02 min 30 s", 65, 381, 150, 26), ("OK", 583, 437, 44, 30)]
+# Time-lapse Frame Rate Settings as OCR read it on kit2_pass2 240268_down.png (2026-11-18): the footer's "● OK" drawn
+# pixel for pixel as on 240079, read not at all, its help glyph's "?" alone (the run stopped: "its footer offers no OK")
+TL_268_LINES = [("Shooting > Image Qua... > Frame Rate Settings", 0, 3, 514, 36), ("t Rec Frame Rate", 127, 65, 205, 28),
+                ("tInterval Time", 381, 67, 185, 28), ("24p", 191, 189, 53, 38), ("1 s", 455, 189, 40, 30),
+                ("Shooting time required for 5-second movie recording.", 65, 349, 510, 28),
+                ("0 h 02 min 00 s", 67, 383, 146, 24), ("?", 509, 441, 13, 26)]
 FRAME_BOXES = ((100, 178, 339, 233), (356, 178, 595, 233))      # boxes_run.LAYOUTS["framerate"]
 BOXES_NAME = "Frame Rate Settings's own two-box screen: OK leaves it on the values its boxes show"
+# where the two-box screen's footer draws its keys (kit2_pass2 240268 and 240079): the Help button (trash and "?") and
+# the control wheel's centre with OK
+FOOTER_AT = {"help_only": (471, 437), "ok_key": (561, 436)}
+
+
+def footer_picture(keys=("help_only", "ok_key"), stray=None) -> np.ndarray:
+    """A two-box screen's picture as far as its footer goes: the footer's line, and the key hints `keys` drawn where the
+    camera draws them, each from the kit's own glyph (camkit/glyphs); `stray`, a block of ink (x0, y0, x1, y1) besides,
+    as a second button would draw (whatever OCR reads of it)."""
+    from PIL import Image
+    a = np.zeros((480, 640, 3), np.uint8)
+    a[:415] = 10                                    # the screen above the footer, as dark as the camera's (no black
+    x0, y0, x1, y1 = FRAME_BOXES[0]                 # frame: live.black), its lit box orange
+    a[y0:y1, x0:x1] = (170, 51, 0)
+    a[425:428, :] = 90
+    for k in keys:
+        with Image.open(Path(screen.__file__).parent / "glyphs" / f"{k}.png") as im:
+            g = np.asarray(im.convert("L"))
+        x, y = FOOTER_AT[k]
+        a[y:y + g.shape[0], x:x + g.shape[1]] = g[..., None]
+    if stray:
+        x0, y0, x1, y1 = stray
+        a[y0:y1, x0:x1] = 230
+    return a
 
 
 def ocr_lines(rows) -> list:
@@ -1515,11 +1545,13 @@ def ocr_lines(rows) -> list:
 
 
 def boxes_camera(tmp_path, monkeypatch, rows=SQ_LINES, kind="unknown", names=("Rec Frame Rate", "Frame Rate"),
-                 row="Frame Rate Settings"):
-    """A camera on a row's two-box screen (no known kind) whose OCR lines are `rows`, its Enter carrying that screen's
-    consent (TwoBoxes) for `row` and the boxes `names`."""
+                 row="Frame Rate Settings", picture=None):
+    """A camera on a row's two-box screen (no known kind) whose OCR lines are `rows` and whose picture's footer is
+    `picture` (footer_picture's, by default: the Help button and OK), its Enter carrying that screen's consent
+    (TwoBoxes) for `row` and the boxes `names`."""
     text = " ".join(r[0] for r in rows)
     cam = camera(tmp_path, monkeypatch, kind, text, "", body=" ".join(r[0] for r in rows if r[2] + r[4] / 2 < 415))
+    cam.frame.image = footer_picture() if picture is None else picture
     monkeypatch.setattr(live, "boxes_lines", lambda c: ocr_lines(rows))
     cam.answer_once = live.TwoBoxes(BOXES_NAME, row, tuple(names), FRAME_BOXES)
     return cam
@@ -1561,15 +1593,54 @@ def _with(rows, i, text):
     (_with(SQ_LINES, 3, "-"), "reads no value"),
     (_with(SQ_LINES, 9, "MENU Cancel • OK"), "'menu'"),
     (_with(SQ_LINES, 9, "Execute"), "'execute'"),
-    (SQ_LINES[:9], "offers no OK"),
+    (_with(SQ_LINES, 9, "Reset • OK"), "'reset'"),
     (SQ_LINES + [("Recording will begin", 200, 130, 240, 28)], "stands where its screen draws none")])
 def test_a_two_box_screens_consent_refuses_any_screen_not_shaped_as_that_rows(tmp_path, monkeypatch, rows, why):
     """A question mark or a confirmation's word in the lines under the boxes (or anywhere above the footer), a title that
     does not end with the row's name, a box whose name above it is another's or cannot be read, a box that reads no
-    value, a footer with any word but OK or with no OK, a line where the screen draws none: no OK."""
+    value, a footer OCR reads any word in but OK, a line where the screen draws none: no OK."""
     cam = boxes_camera(tmp_path, monkeypatch, rows)
     with pytest.raises(safety.Refused, match=why):
         cam.press("enter")
+
+
+def test_the_footers_ok_is_judged_by_its_drawn_key_not_by_ocr_finding_it(tmp_path, monkeypatch):
+    """240268 (2026-11-18): the Time-lapse screen's footer drew its Help button and "● OK" pixel for pixel as the S&Q
+    screen's that passed, and OCR read its "?" alone, so the consent refused it ("its footer offers no OK"). The OK is
+    judged by the key the footer draws (camkit.screen.footer_keys: the kit's own glyph, as help_glyph finds the Help
+    button), so that reading passes; OCR's words still refuse any other word, and the footer may draw nothing besides."""
+    cam = boxes_camera(tmp_path, monkeypatch, TL_268_LINES, names=("Rec Frame Rate", "Interval Time"))
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert [e["by"] for e in events(cam) if e["kind"] == "enter_passed"] == [BOXES_NAME]
+    for rows in (SQ_LINES, SQ_LINES[:8] + [SQ_LINES[9]], SQ_LINES[:8]):         # read "? • OK", "• OK", nothing
+        cam = boxes_camera(tmp_path, monkeypatch, rows)
+        with pytest.raises(Sent):
+            cam.press("enter")
+
+
+@pytest.mark.parametrize("picture,why", [
+    (footer_picture(keys=("help_only",)), "offers no OK"),
+    (footer_picture(keys=()), "offers no OK"),
+    (footer_picture(keys=("ok_key",)), "lacks its Help button"),
+    (footer_picture(stray=(300, 440, 380, 465)), "draws more than its Help button and OK"),
+    (footer_picture(stray=(20, 436, 140, 470)), "draws more than its Help button and OK")])
+def test_a_footer_drawn_otherwise_is_refused_whatever_ocr_read(tmp_path, monkeypatch, picture, why):
+    """The footer's keys judged as drawn, OCR reading "? • OK" all the while: no OK key drawn (a footer OCR reads OK in
+    is no OK), no Help button, or ink besides the two (a second button, a Cancel or a Reset OCR missed): no OK."""
+    cam = boxes_camera(tmp_path, monkeypatch, picture=picture)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("enter")
+
+
+def test_footer_keys_find_the_keys_where_they_are_drawn_and_the_ink_beside_them():
+    """camkit.screen.footer_keys: the Help button and the OK key, each where it is drawn; footer_ink_outside: nothing
+    beside them, or where a block beside them lies; the footer's line above the band is no ink."""
+    keys = screen.footer_keys(footer_picture())
+    assert {k: v[:2] for k, v in keys.items()} == FOOTER_AT
+    assert screen.footer_ink_outside(footer_picture(), keys.values()) is None
+    assert screen.footer_ink_outside(footer_picture(stray=(300, 440, 380, 465)), keys.values()) == (300, 440, 380, 465)
+    assert screen.footer_keys(footer_picture(keys=())) == {}
 
 
 def test_a_two_box_screens_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):

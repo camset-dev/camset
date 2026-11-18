@@ -116,11 +116,11 @@ def test_the_row_screens_consent_passes_the_hs_4k_screen_and_choose_hands_it_bef
     builds for its row (screen_consent: the row's name, the two boxes' names and where they stand), judged on the
     screen's own shape with its three lines under the boxes; choose hands it to the camera for that one OK, after it
     has stepped the box to the value it proves."""
-    from test_enter_check import SQ_LINES, ocr_lines
+    from test_enter_check import SQ_LINES, footer_picture, ocr_lines
     consent = boxes_run.screen_consent(PATH, NAMES)
     assert isinstance(consent, live.TwoBoxes) and (consent.row, consent.boxes, consent.at) == (
         "Frame Rate Settings", tuple(NAMES), tuple(BOXES))
-    assert live.two_boxes_refused(consent, ocr_lines(SQ_LINES)) == ""
+    assert live.two_boxes_refused(consent, ocr_lines(SQ_LINES), footer_picture()) == ""
     cam = at(picture("value", "value"), reads=("24p", "120fps"), name="00079_down.png")
     handed = []
     cam.press = lambda key, **k: handed.append((key, getattr(cam, "answer_once", None)))
