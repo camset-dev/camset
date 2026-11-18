@@ -86,7 +86,7 @@
     "global:0x1137": {"name": "Rec Frame Rate (Time-lapse, XAVC S 4K)"},
     "global:0x0248": {
       "name": "Frame Rate (S&Q)",
-      "note": "One record for every movie format. XAVC S HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash)."
+      "note": "One record for every movie format. XAVC S HD and XAVC S-I HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash)."
     },
     "global:0x0473": {"name": "Operation in Vertical Orientation"},
     "global:0x04d2": {
@@ -922,7 +922,11 @@
     "global:0x023e": {"like": "global:0x0240", "name": "Rec Frame Rate (S&Q, XAVC HS 4K)"},
     "global:0x0242": {"like": "global:0x0240", "name": "Rec Frame Rate (S&Q, XAVC S HD)"},
     "global:0x0244": {"like": "global:0x0240", "name": "Rec Frame Rate (S&Q, XAVC S-I 4K)"},
+    "global:0x0246": {"like": "global:0x0240", "name": "Rec Frame Rate (S&Q, XAVC S-I HD)"},
     "global:0x1135": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC HS 4K)"},
+    "global:0x1139": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S HD)"},
+    "global:0x113b": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S-I 4K)"},
+    "global:0x113d": {"like": "global:0x1137", "name": "Rec Frame Rate (Time-lapse, XAVC S-I HD)"},
     "global:0x024e": {"like": "global:0x0212", "name": "Record Setting (S&Q, XAVC HS 4K)"},
     "global:0x025c": {"like": "global:0x0220", "name": "Record Setting (S&Q, XAVC S HD)"},
     "global:0x0258": {"like": "global:0x0256", "name": "Record Setting (S&Q, XAVC S 4K, 24p)"},
@@ -1458,6 +1462,10 @@
         [30, "30"],
         [31, "31"]
       ]
+    },
+    "global:0x1135": {
+      "values": [[0, "60p"], [4, "24p"]],
+      "note": "Under XAVC HS 4K the Time-lapse Rec Frame Rate box offers 60p and 24p only, every option of it proved; the like rule had filled in the other formats' 50p, 30p and 25p, which this box never offers."
     },
     "set:0x14b4": {
       "note": "Custom 1's height, set in the box's editor (Focus Area, the box lit, SET) with the front dial: a click steps 12 from the height the box has, from 32 to 396 in Stills, an end stopping it, so the heights reached depend on where the stepping began (the default may lie on neither end's steps), and Reset in the editor puts back the default. A size change that left the box's place past its new limits moved the place onto them. In the Movie memory set registered in Movie that was read, it and its default (0x14c0) held a taller number than in Stills for the same box, as the 16:9 picture's stretch would make it, while the in-use height (0x1488) held the Stills one; the box's place there therefore gets no limits from the Stills rule. Its range there, and how the camera reads the Stills number the other Movie and S&Q memory sets hold, are not tried. Kept only in the memory sets: a slot holds the sizes it was registered with."

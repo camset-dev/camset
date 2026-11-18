@@ -351,6 +351,10 @@ enums:
       id: rec_frame_rate_0244
       doc: 'Rec Frame Rate (S&Q, XAVC S-I 4K) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
         1 of 1 settings on it proved on the camera.'
+    0x0246:
+      id: rec_frame_rate_0246
+      doc: 'Rec Frame Rate (S&Q, XAVC S-I HD) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x0248:
       id: frame_rate
       doc: Frame Rate (S&Q) [Shooting > Image Quality/Rec]. live settings; 1 of 1 settings on it proved on the camera.
@@ -2980,12 +2984,24 @@ enums:
         it proved on the camera.
     0x1135:
       id: rec_frame_rate_1135
-      doc: 'Rec Frame Rate (Time-lapse, XAVC HS 4K) [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p,
-        4 24p. live settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Rec Frame Rate (Time-lapse, XAVC HS 4K) [Shooting > Image Quality/Rec]: 0 60p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x1137:
       id: rec_frame_rate_1137
       doc: 'Rec Frame Rate (Time-lapse, XAVC S 4K) [Shooting > Image Quality/Rec]: 0 60p, 1 50p, 2 30p, 3 25p, 4
         24p. live settings; 1 of 1 settings on it proved on the camera.'
+    0x1139:
+      id: rec_frame_rate_1139
+      doc: 'Rec Frame Rate (Time-lapse, XAVC S HD) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x113b:
+      id: rec_frame_rate_113b
+      doc: 'Rec Frame Rate (Time-lapse, XAVC S-I 4K) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
+    0x113d:
+      id: rec_frame_rate_113d
+      doc: 'Rec Frame Rate (Time-lapse, XAVC S-I HD) [Shooting > Image Quality/Rec]: 0 60p, 2 30p, 4 24p. live settings;
+        1 of 1 settings on it proved on the camera.'
     0x113f:
       id: movie_interval_rec_interval_time
       doc: 'Movie Interval Rec Interval Time [Shooting > Image Quality/Rec]: 10 5s, 11 4s, 12 3s, 13 2s, 14 1s.

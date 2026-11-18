@@ -14042,7 +14042,7 @@
      13
     ]
    },
-   "note": "One record for every movie format. XAVC S HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash).",
+   "note": "One record for every movie format. XAVC S HD and XAVC S-I HD offered 240fps to 1fps, XAVC HS 4K and XAVC S-I 4K 120fps to 1fps; under XAVC HS 8K the camera offers no S&Q frame rate (its box draws a dash).",
    "in_sets": true,
    "scalar": true,
    "size": 1,
@@ -221438,16 +221438,50 @@
      "60p"
     ],
     [
-     1,
-     "50p"
+     4,
+     "24p"
+    ]
+   ],
+   "note": "Under XAVC HS 4K the Time-lapse Rec Frame Rate box offers 60p and 24p only, every option of it proved; the like rule had filled in the other formats' 50p, 30p and 25p, which this box never offers.",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    6,
+    0,
+    0
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x1139",
+   "id": 4409,
+   "name": "Rec Frame Rate (Time-lapse, XAVC S HD)",
+   "values": [
+    [
+     0,
+     "60p"
     ],
     [
      2,
      "30p"
-    ],
-    [
-     3,
-     "25p"
     ],
     [
      4,
@@ -221461,9 +221495,148 @@
    "proved": {
     "values": [
      0,
-     1,
      2,
-     3,
+     4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    6,
+    0,
+    0
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x113b",
+   "id": 4411,
+   "name": "Rec Frame Rate (Time-lapse, XAVC S-I 4K)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     4,
+     "24p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     2,
+     4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "S&Q Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    5,
+    0,
+    1
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x0246",
+   "id": 582,
+   "name": "Rec Frame Rate (S&Q, XAVC S-I HD)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     4,
+     "24p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     2,
+     4
+    ]
+   }
+  },
+  {
+   "area": "global",
+   "tab": "Shooting",
+   "group": "Image Quality/Rec",
+   "order": 9000,
+   "row": [
+    "Time-lapse Settings",
+    "Frame Rate Settings",
+    "Rec Frame Rate"
+   ],
+   "row_at": [
+    6,
+    0,
+    0
+   ],
+   "row_mode": "Movie",
+   "scalar": true,
+   "modes": "",
+   "key": "global:0x113d",
+   "id": 4413,
+   "name": "Rec Frame Rate (Time-lapse, XAVC S-I HD)",
+   "values": [
+    [
+     0,
+     "60p"
+    ],
+    [
+     2,
+     "30p"
+    ],
+    [
+     4,
+     "24p"
+    ]
+   ],
+   "note": "",
+   "in_sets": true,
+   "size": 1,
+   "count": 1,
+   "proved": {
+    "values": [
+     0,
+     2,
      4
     ]
    }
