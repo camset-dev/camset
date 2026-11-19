@@ -41,13 +41,10 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, live, paths, safety, screen, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
 from camkit.live import STALE_S  # noqa: E402
 from camkit.runs import Run  # noqa: E402
-from prove_run import to_shooting  # noqa: E402
-from runner import (EXIT_UNRESTORED, LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, end_session,  # noqa: E402
-                    mark_lap_whole, record_mode, recorded_mode, refuse_switched, restore_checked, scan_mode,
-                    scan_record, switch_for_scan, write_json)
+from runner import (LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, mark_lap_whole, prover_session,  # noqa: E402
+                    record_mode, recorded_mode, refuse_switched, scan_mode, scan_record, switch_for_scan, write_json)
 
 
 def page_key(f) -> str:
@@ -296,31 +293,22 @@ def main():
     except ValueError as e:
         sys.exit(f"page_scan: {e}")
     hdmi = eyes_from_config(run)
-    start, ending = None, None
-    try:
-        with Link(run) as link:
-            hdmi.attach(link)
-            # the scan presses only Down and one Right, but a press sent while the menu slides lands where the cursor
-            # really is (Drive Mode opened and moved, 2026-11-06): the settings are downloaded first and go back on
-            # at the end if anything moved
-            to_shooting(link, hdmi, "the start download")
-            start = link.download("before")
-            after_download(hdmi, time.monotonic(), a.mode)
-            t0 = time.monotonic()
-            try:
-                Scan(run, link, hdmi, a.max).run_scan()
-            except Exception as e:                  # a STOP at a press, a dropped link, the eyes' feed: restore all the same
-                print(f"the scan stopped: {type(e).__name__}: {e}", flush=True)
-            print(f"done in {time.monotonic() - t0:.0f} s", flush=True)
-            write_cycle(run.dir)
-            # never disconnect with anything open: MENU cancels whatever the scan stopped on (never Enter), and a
-            # dropped session could otherwise apply an open dialog
-            ending = end_session(link, hdmi, start, "the end of the scan")
-        restored = restore_checked(run, ending, start)
-    finally:
-        hdmi.close()
-    if not restored:
-        sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
+    # the session every runner runs (runner.prover_session), with no reader and no LiveCamera (the scan presses through
+    # the link itself) and its own watch of the lock after the download (after_download): the scan presses only Down
+    # and one Right, but a press sent while the menu slides lands where the cursor really is (Drive Mode opened and
+    # moved, 2026-11-06), so the settings are downloaded first and go back on at the end if anything moved. Never
+    # disconnect with anything open: the end's MENU cancels whatever the scan stopped on (never Enter), and a dropped
+    # session could otherwise apply an open dialog. A camera not known to be as the start file exits EXIT_UNRESTORED
+    with prover_session(run, hdmi, readers=False, camera=False, say_start=False,
+                        lock=lambda eyes, since: after_download(eyes, since, a.mode), end_why="the end of the scan",
+                        watch_restart=False) as s:
+        t0 = time.monotonic()
+        try:
+            Scan(run, s.link, hdmi, a.max).run_scan()
+        except Exception as e:                  # a STOP at a press, a dropped link, the eyes' feed: restore all the same
+            print(f"the scan stopped: {type(e).__name__}: {e}", flush=True)
+        print(f"done in {time.monotonic() - t0:.0f} s", flush=True)
+        write_cycle(run.dir)
 
 
 if __name__ == "__main__":

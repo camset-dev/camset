@@ -328,7 +328,7 @@ def test_the_default_scan_is_the_latest_of_this_runs_eyes_and_a_named_scan_of_ot
     monkeypatch.setenv("CAMSET_EYES", "osd")
     assert eyes_from_config(Run("eyes", root=tmp_path)).name == runner.current_eyes() == "osd"
     monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: SimpleNamespace(name="osd", close=lambda: None))
-    monkeypatch.setattr(page_scan, "Link", lambda run: (_ for _ in ()).throw(LinkError("no camera here", opened=False)))
+    monkeypatch.setattr(runner, "Link", lambda run: (_ for _ in ()).throw(LinkError("no camera here", opened=False)))
     monkeypatch.setattr(sys, "argv", ["page_scan.py", "--mode", "Stills", "--run", "kit2_page_scan_new"])
     with pytest.raises(LinkError):
         page_scan.main()

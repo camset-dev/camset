@@ -753,8 +753,10 @@ def test_a_blocker_whose_switch_failed_part_way_is_put_back(monkeypatch, capsys)
 # ---------------------------------------------------------------- page_scan: the restore after a scan that stopped
 
 def test_a_page_scan_that_stops_still_restores(monkeypatch, capsys):
-    """page_scan: an exception inside the scan (a STOP at a press, a dropped link) left the with block before finish."""
+    """page_scan: an exception inside the scan (a STOP at a press, a dropped link) left the with block before finish.
+    Its session is runner.prover_session's, whose link, reach and end are made up here."""
     import page_scan
+    import proving.nav
 
     class Stops:
         def __init__(self, *a):
@@ -764,17 +766,17 @@ def test_a_page_scan_that_stops_still_restores(monkeypatch, capsys):
             raise StopRequested("STOP file")
     ended = []
     monkeypatch.setattr(page_scan, "Scan", Stops)
-    monkeypatch.setattr(page_scan, "Link", lambda run: FakeLink(run, []))
+    monkeypatch.setattr(runner, "Link", lambda run: FakeLink(run, []))
     monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: FakeEyes())
-    monkeypatch.setattr(page_scan, "to_shooting", lambda link, eyes, why: None)
+    monkeypatch.setattr(proving.nav, "to_shooting", lambda link, eyes, why: None)
     monkeypatch.setattr(page_scan, "after_download", lambda eyes, t, mode=None: None)
-    monkeypatch.setattr(page_scan, "end_session", lambda link, eyes, start, why: ended.append(start.name)
+    monkeypatch.setattr(runner, "end_session", lambda link, eyes, start, why, **kw: ended.append(start.name)
                         or session.Ending(Path("after.DAT")))
     monkeypatch.setattr(sys, "argv", ["page_scan.py", "--run", "kit2_scan_test", "--mode", "Stills"])
     page_scan.main()
     assert ended == ["00001_before.DAT"] and "the scan stopped: StopRequested" in capsys.readouterr().out
     # a restore that did not check out ends the walk with the runners' own exit status (runner.EXIT_UNRESTORED)
-    monkeypatch.setattr(page_scan, "restore_checked", lambda run, ending, start: False)
+    monkeypatch.setattr(runner, "restore_checked", lambda run, ending, start, note=None, **kw: False)
     with pytest.raises(SystemExit) as stop:
         page_scan.main()
     assert stop.value.code == runner.EXIT_UNRESTORED
@@ -1175,7 +1177,7 @@ def test_a_page_scan_needs_its_mode_and_records_it_before_anything_is_sent(own_r
     mode is refused before the link opens."""
     import page_scan
     from conftest import TEST_CAMERA
-    monkeypatch.setattr(page_scan, "Link", lambda run: pytest.fail("no link before the mode is recorded"))
+    monkeypatch.setattr(runner, "Link", lambda run: pytest.fail("no link before the mode is recorded"))
     monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: pytest.fail("no eyes before the mode is recorded"))
     monkeypatch.setattr(sys, "argv", ["page_scan.py", "--run", "kit2_scan_mode"])
     with pytest.raises(SystemExit):
@@ -1197,7 +1199,7 @@ def scan_until_eyes(monkeypatch, *argv):
     """kit/page_scan.py's main run with `argv` up to where it would open the eyes and the link (Sent), or its refusal
     (SystemExit): what it refused or recorded before anything could be sent."""
     import page_scan
-    monkeypatch.setattr(page_scan, "Link", lambda run: pytest.fail("no link in these tests"))
+    monkeypatch.setattr(runner, "Link", lambda run: pytest.fail("no link in these tests"))
     monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: (_ for _ in ()).throw(Sent()))
     monkeypatch.setattr(sys, "argv", ["page_scan.py", *argv])
     page_scan.main()

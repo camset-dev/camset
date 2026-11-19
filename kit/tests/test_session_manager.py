@@ -24,6 +24,11 @@ import fake_camlink  # noqa: E402
 import runner  # noqa: E402
 from camkit import session  # noqa: E402
 
+# every runner a pin starts, and what one imports as it runs (mode_switch --set: boxes_run), imported here before any
+# part is made up: a module first imported while a part is made up would keep the made-up part for the tests after
+import axis_walk, boxes_run, card_actions, grid_run, help_run, mode_switch, mymenu_run, page_scan  # noqa: E402,F401,E401
+import pass3_run, prove_run, shootmode_run, table_walk  # noqa: E402,F401,E401
+
 CHANGE = SimpleNamespace(key="global:0x0001", before=0, after=1)
 
 
@@ -268,8 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/page_scan.py": 1,
-           "kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
+NOT_YET = {"kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
            "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
 
@@ -327,7 +331,6 @@ def test_no_runner_downloads_its_start_file_outside_the_session_manager():
     assert all(len(found.get(rel, ())) == 1 for rel in LEFT), {rel: found.get(rel) for rel in LEFT}
 
 def test_help_runs_session(world, monkeypatch):
-    import help_run
     world.wire(help_run).kind = "menu"
     monkeypatch.setattr(help_run, "load_scan", lambda scan: ([], {}))
     monkeypatch.setattr(help_run, "walk", lambda cam, cycle, model, done, out, a: world.say("body"))
@@ -340,7 +343,6 @@ def test_help_runs_session(world, monkeypatch):
 
 @pytest.mark.parametrize("found", [True, False])
 def test_axis_walks_session(world, monkeypatch, found):
-    import axis_walk
     world.wire(axis_walk)
     monkeypatch.setattr(axis_walk, "axis_options", lambda: {})
     monkeypatch.setattr(axis_walk, "load_scan", lambda scan: ([{"screen": "top"}] if found else [], {}))
@@ -356,7 +358,6 @@ def test_axis_walks_session(world, monkeypatch, found):
 
 @pytest.mark.parametrize("stop", [False, True])
 def test_table_walks_session(world, monkeypatch, stop):
-    import table_walk
     from camkit.link import StopRequested
     world.wire(table_walk)
     monkeypatch.setattr(table_walk, "load_scan", lambda scan: ([{"screen": "top"}], {}))
@@ -375,7 +376,6 @@ def test_table_walks_session(world, monkeypatch, stop):
 
 
 def test_page_scans_session(world, monkeypatch):
-    import page_scan
     world.wire(page_scan)
 
     class Scan:
@@ -395,7 +395,6 @@ def test_page_scans_session(world, monkeypatch):
 # ---------------------------------------------------------------- the tools and the provers
 
 def test_card_actions_session(world, monkeypatch):
-    import card_actions
     world.wire(card_actions).kind = "menu"
     monkeypatch.setattr(card_actions, "load_scan", lambda scan: ([], {}))
     monkeypatch.setattr(card_actions, "to_row", lambda *a: (_ for _ in ()).throw(RuntimeError("off the scan")))
@@ -408,7 +407,6 @@ def test_card_actions_session(world, monkeypatch):
 
 
 def test_my_menus_session(world, monkeypatch):
-    import mymenu_run
     from camkit import datafiles, definitions
     from proving.base import Failed
     world.wire(mymenu_run)
@@ -431,7 +429,6 @@ def test_my_menus_session(world, monkeypatch):
 
 @pytest.mark.parametrize("kind", ["shooting", "menu"])
 def test_prove_runs_session(world, monkeypatch, kind):
-    import prove_run
     from camkit import coverage, models
     world.wire(prove_run).kind = kind
     row = {"kind": "list", "path": ["Drive Mode"], "labels": ["Single Shooting", "Continuous Shooting"]}
@@ -456,7 +453,6 @@ def test_prove_runs_session(world, monkeypatch, kind):
 
 
 def test_pass_threes_switching_session(world, monkeypatch):
-    import pass3_run
     world.wire(pass3_run)
     monkeypatch.setattr(pass3_run, "enter_state", lambda link, hdmi, run, cycle, model, b: world.say("switch") or [])
     monkeypatch.setattr(pass3_run, "switch_took", lambda ch, moved: "")
@@ -471,7 +467,6 @@ def test_pass_threes_switching_session(world, monkeypatch):
 
 
 def test_mode_switchs_session(world, monkeypatch):
-    import mode_switch
     world.wire(mode_switch)
     monkeypatch.setattr(mode_switch, "load_scan", lambda scan: ([], {}))
     monkeypatch.setattr(mode_switch, "in_mode", lambda scan, mode: scan)
@@ -489,7 +484,6 @@ def test_mode_switchs_session(world, monkeypatch):
 
 
 def test_mode_switchs_setting_session(world, monkeypatch, own_runs):
-    import mode_switch
     from conftest import TEST_CAMERA
     world.wire(mode_switch)
     kept = own_runs / TEST_CAMERA / "kit2_switch_pin" / mode_switch.KEPT
@@ -514,7 +508,6 @@ def test_mode_switchs_setting_session(world, monkeypatch, own_runs):
 
 
 def test_shoot_modes_first_session(world, monkeypatch, tmp_path):
-    import shootmode_run
     world.wire(shootmode_run)
     start = tmp_path / "00001_start.DAT"
     shutil.copy(fake_camlink.SAMPLE, start)
@@ -529,7 +522,6 @@ def test_shoot_modes_first_session(world, monkeypatch, tmp_path):
 
 
 def test_the_grids_wait_after_its_download(world, monkeypatch, tmp_path):
-    import grid_run
     world.wire(grid_run)
     monkeypatch.setattr(grid_run, "open_grid", lambda cam, cycle, model, path: world.say("open grid"))
     monkeypatch.setattr(grid_run, "to_ok", lambda cam: None)
