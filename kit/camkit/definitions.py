@@ -425,11 +425,49 @@ def menu_tree_file(camera: str) -> Path:
     return EVIDENCE_DIR / camera / f"menu_tree_{camera}.json"
 
 
-def _dump(p: Path, doc: dict) -> None:
+# the public file's head (everything but its settings): a value on one line when it fits in this many characters with
+# its indent, else one key or element a line (public_text)
+HEAD_WIDTH = 120
+
+
+def _head_lines(x, indent: int, lead: str) -> list:
+    one = json.dumps(x)
+    if indent + len(lead) + len(one) <= HEAD_WIDTH or not isinstance(x, (dict, list)) or not x:
+        return [" " * indent + lead + one]
+    items = list(x.items()) if isinstance(x, dict) else [(None, v) for v in x]
+    out = [" " * indent + lead + ("{" if isinstance(x, dict) else "[")]
+    for i, (k, v) in enumerate(items):
+        sub = _head_lines(v, indent + 1, "" if k is None else json.dumps(k) + ": ")
+        sub[-1] += "," if i < len(items) - 1 else ""
+        out += sub
+    return out + [" " * indent + ("}" if isinstance(x, dict) else "]")]
+
+
+def public_text(pub: dict) -> str:
+    """A public definition's file as write() writes it, ASCII: one setting a line (each written compact, in its own key
+    order), and the rest (the camera section, the layouts, the menu list) with one-space indents, a value on one line
+    where it fits in HEAD_WIDTH characters, else one key or element a line. The same JSON as indent=1, about two
+    thirds of its size, and a change to a setting is a change to its one line."""
+    lines = ["{"]
+    items = list(pub.items())
+    for i, (k, v) in enumerate(items):
+        if k == "settings" and isinstance(v, list) and v:
+            sub = [f" {json.dumps(k)}: ["] + ["  " + json.dumps(s, separators=(",", ":")) + "," for s in v] + [" ]"]
+            sub[-2] = sub[-2][:-1]
+        else:
+            sub = _head_lines(v, 1, json.dumps(k) + ": ")
+        sub[-1] += "," if i < len(items) - 1 else ""
+        lines += sub
+    return "\n".join(lines + ["}"]) + "\n"
+
+
+def _dump(p: Path, doc) -> None:
+    """`doc` written to `p` through a temporary file: a file's text as it is (the public definition, public_text), or
+    a JSON document with one-space indents (the evidence file)."""
     p.parent.mkdir(parents=True, exist_ok=True)
     tmp = p.with_name(p.name + ".part")              # never a half-written contract
     with open(tmp, "w", encoding="utf-8", newline="\n") as f:
-        json.dump(doc, f, indent=1)
+        f.write(doc if isinstance(doc, str) else json.dumps(doc, indent=1))
     tmp.replace(p)
 
 
@@ -529,8 +567,8 @@ def check_write(p: Path, doc: dict, taken_out=()) -> None:
 
 
 def write(p: Path, doc: dict, taken_out=()) -> Path | None:
-    """The definition's own format (one-space indent, ASCII), written whole or not at all: its evidence into the
-    private evidence file (evidence_path; private/ made as needed) when there is any or the file is there already,
+    """The definition's own format (public_text; the evidence file one-space indented), written whole or not at all:
+    its evidence into the private evidence file (evidence_path; private/ made as needed) when there is any or the file is there already,
     first, then the public file lean (split), each through a temporary file, so a write that fails half way never
     loses this write's evidence. Before the evidence file, the marker (writing_marker) holding the sha256 of the public
     file about to be written; removed once the public file is in place, so a marker left says the write was cut short
@@ -539,18 +577,19 @@ def write(p: Path, doc: dict, taken_out=()) -> Path | None:
     of it (WouldLoseEvidence) but what the writer took out on purpose (`taken_out`, check_write)."""
     check_write(p, doc, taken_out)
     pub, evidence = split(doc)
+    pub_text = public_text(pub)
     ev = evidence_path(p)
     if not (has_evidence(evidence) or ev.exists()):
-        _dump(Path(p), pub)                          # one file: nothing to cut short between two
+        _dump(Path(p), pub_text)                     # one file: nothing to cut short between two
         return None
     marker = writing_marker(p)
     marker.parent.mkdir(parents=True, exist_ok=True)
     tmp = marker.with_name(marker.name + ".part")
-    tmp.write_text(json.dumps({"public": Path(p).name, "sha256": _sha256(json.dumps(pub, indent=1))}, indent=1) + "\n",
+    tmp.write_text(json.dumps({"public": Path(p).name, "sha256": _sha256(pub_text)}, indent=1) + "\n",
                    encoding="utf-8", newline="\n")
     tmp.replace(marker)
     _dump(ev, evidence)
-    _dump(Path(p), pub)
+    _dump(Path(p), pub_text)
     marker.unlink()
     return ev
 
@@ -654,8 +693,8 @@ def finish_write(where) -> tuple:
         if isinstance(whole, dict) and s.get("proved") != lean_proof(whole):
             s["proved"] = lean_proof(whole)
             keys.append(s["key"])
-    if _sha256(json.dumps(pub, indent=1)) == want:
-        _dump(p, pub)
+    if _sha256(public_text(pub)) == want:
+        _dump(p, public_text(pub))
         marker.unlink()
         return keys, (f"wrote {paths.shown(p)}: the proofs of {len(keys)} settings as its evidence file gives them, "
                       "which the write cut short had not written (checked against its marker); nothing else changed. "
@@ -701,5 +740,5 @@ def drop_stale(where, write: bool = True) -> list:
 
 
 def text(doc: dict) -> str:
-    """A definition's public file as write() writes it."""
-    return json.dumps(split(doc)[0], indent=1)
+    """A definition's public file as write() writes it (public_text)."""
+    return public_text(split(doc)[0])
