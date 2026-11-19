@@ -118,8 +118,15 @@ button that puts them back in order as the camera would, and Revert all flagged 
 choice. What the file already held when you opened it has no
 Revert: to be sure, read the camera and make your edits on that file. You may still go ahead with "⬆ Write anyway,
 with 3 flagged" (or "Save anyway"), but the camera may then refuse the whole file or store other values. "✔ Every
-changed value was checked on the camera and is one it takes." shows only when nothing is listed. Once a Save As has
-kept an edit, "Revert to what the camera wrote" puts back the value of the file as first opened or read.
+changed value was checked on the camera and is one it takes." shows only when nothing is listed. Some lists are proved
+partly on another setting that offers the same list: one key's functions chosen on the camera, the same list lent to
+the other keys. Their values are offered as any proved value, but the editor cannot tell which of them were chosen on
+the setting itself, so it never calls them checked on the camera: where you changed one, the all-clear reads "✔ Every
+changed value is in a list proved on the camera, and none is one it is known to refuse. Some of the settings you
+changed had part of their list proved on another setting with the same list (another key, slot or copy of the same
+kind), not on the setting itself.", and in Expert mode the setting's proof line says "partly on another setting of the
+same kind". Once a Save As has kept an edit, "Revert to what the camera wrote" puts back the value of the file as first
+opened or read.
 
 ### About, and reporting a problem
 

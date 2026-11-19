@@ -97,11 +97,17 @@ the setting's `proved`; of any other it says that it is not checked on the camer
 holding it, and Expert mode's "Offer values…" brings those back. A setting with no `proved` offers every value. A value
 is established when its scale was proved by samples on a straight line (`proved.sampled.linear`: every value of the
 list, every number of a range), or when `proved.values` lists it: the values a proof chose and those whose name has a
-source on the camera (`ESTABLISHING` in `kit/camkit/definitions.py`), never a name a hand table or a rule gives that no
-proof covers (`counted`). A value the menus never offer (`not_offered`) is left out whatever its proof. Nothing in a
-definition tells what the owner's camera held: `kit/writer/proofs.py` (`without_observed`, `without_written_with`,
-`without_held`) and `kit/pass2_report.py` (`start_lines`, `sampled_from_start`) say what each write leaves out, and
-the schema refuses those fields.
+source on the camera (`ESTABLISHING` in `kit/camkit/definitions.py`), never a name a hand table gives that no proof and
+no other setting's proof covers (`counted`, in both of the writer's passes). `proved.values` also lists a value a rule
+named from another setting's proof, one that offers the same list (a picker's slots, one array's elements, a hold and
+its live setting, a copy), where no proof chose it on this one; the setting then carries `proved.shared: true`, and
+which values are such only the private evidence says, for the one value no proof chose can be the owner's own
+([decision 25](decisions/0025-a-proof-says-when-its-list-was-lent-by-another-setting.md)). The editor offers those
+values as any proved one but never calls them checked on the camera. Every write names values afresh from that
+write's proofs and tables: a name no rule gives any more leaves the list. A value the menus never offer
+(`not_offered`) is left out whatever its proof. Nothing in a definition tells what the owner's camera held:
+`kit/writer/proofs.py` (`without_observed`, `without_written_with`, `without_held`) and `kit/pass2_report.py`
+(`start_lines`, `sampled_from_start`) say what each write leaves out, and the schema refuses those fields.
 
 ### A picker's list walked whole (`PICKER_LISTS`)
 
@@ -355,8 +361,11 @@ Each of its `facts`:
 
 **The statuses.** An entry takes the first that applies, in this order. A label the menu repeats in a tab holds no
 setting of its own and takes the first one's status (`same_label_as`); a row with values still to try carries
-`values_left`, how many, and is never settled; the private form also counts `values_inferred`, those inferred from a
-shared list (`kit/tools/coverage.py --shared` shows each list's grounds).
+`values_left`, how many, and is never settled; the private form also counts `values_inferred`, those the definition's
+writer named from another setting's proof, read from the proof's names, where the public form, which has the setting's
+mark alone (`proved.shared`), says "proved or named from a shared list" of each value the proof lists
+([decision 25](decisions/0025-a-proof-says-when-its-list-was-lent-by-another-setting.md)). `kit/tools/coverage.py
+--shared` shows each list's grounds and where its own proof lines do not bear the writer out.
 
 {{ coverage_table("rows") }}
 
