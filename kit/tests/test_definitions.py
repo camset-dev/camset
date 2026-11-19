@@ -1573,6 +1573,9 @@ def a1_run(tmp_path: Path, monkeypatch, report: list, proofs: list):
     monkeypatch.setattr(S, "RUN_ROOT", root)
     monkeypatch.setattr(S, "RUN", run)
     monkeypatch.setattr(S, "HELP", root / "kit2_help")
+    # a made-up run thins many lists and holds no start file, so the check of lists one value short (writer/listgaps.py,
+    # tested on its own in test_truthful_proofs.py) would hold every write here: set aside
+    monkeypatch.setattr(S.listgaps, "questions", lambda doc, run_root: [])
     monkeypatch.setattr(sys, "argv", ["schema_update.py", "--write"])
 
     def write(capsys):
@@ -2237,36 +2240,45 @@ def test_a_refusal_matches_its_value_whatever_the_spaces():
         assert b["value"] == 6 and dict(map(tuple, s["values"]))[6] == "Black&White", (k, b)
 
 
+def held_mark(s: dict, value) -> bool:
+    """Whether a held not-offered mark says the camera holds `value` itself (a factory value no list chooses back)."""
+    return any(m.get("value") == value and m.get("held") for m in s.get("not_offered") or [])
+
+
 def test_every_my_menu_slot_names_its_empty_place_not_proved_in_the_public_file():
     """The public file alone: in every one of My Menu's 42 slots the camera file's empty code (camera.my_menu.empty) is
-    "(empty)", but no proof chose it in any slot, so it is not among the values the proof checked and an editor offers
-    it in Expert mode only (a hand table's name no proof backs is counted, docs/decisions/0025); each slot's list, the
-    Add Item proofs' codes named in all 42, carries the mark of a list proved partly on another slot; each slot's note
-    says what shows the empty place on the camera."""
+    "(empty)"; no proof chose it in a slot, so an editor offers it outside Expert mode exactly where a held not-offered
+    mark says the camera holds it from the factory, never on a hand table's name alone (counted, docs/decisions/0025),
+    and never as the one value a list lacks (writer/listgaps.py refuses that write); each slot's list, the Add Item
+    proofs' codes named in all 42, carries the mark of a list proved partly on another slot; each slot's note says what
+    shows the empty place on the camera."""
     my = PUB["camera"]["my_menu"]
     slots = [s for s in PUB["settings"] if s.get("area") == "global" and s.get("id") in my["records"]
              and s.get("index") is not None]
     assert len(slots) == 42 and my["empty"] == 2
     for s in slots:
         assert [my["empty"], "(empty)"] in s["values"], s["key"]
-        assert my["empty"] not in lay_offered(s) and s["proved"].get("shared") is True, s["key"]
+        assert (my["empty"] in lay_offered(s)) == held_mark(s, my["empty"]), s["key"]
+        assert s["proved"].get("shared") is True, s["key"]
         assert "An empty place stores 2." in s["note"], s["key"]
 
 
 @needs_evidence
 def test_every_my_menu_slot_names_its_empty_place_counted():
     """My Menu's empty place (MY_MENU_EMPTY): in every one of the 42 slots the camera file's empty code
-    (camera.my_menu.empty) is "(empty)", named by a hand table; no proof chose it in a slot, so its name is counted
-    (docs/decisions/0025, docs/DATA_CONTRACTS.md "What the editor offers outside Expert mode") and an editor offers it
-    in Expert mode only. Each slot's note says what shows it on the camera; the Add Item proofs it rests on
-    (runs/kit2_pass2) never put an item into a place that held anything but that code."""
+    (camera.my_menu.empty) is "(empty)", named by a hand table; no proof chose it in a slot, so its name is the hand
+    table's where a held not-offered mark says the camera holds it from the factory, and counted otherwise
+    (docs/decisions/0025, docs/DATA_CONTRACTS.md "What the editor offers outside Expert mode"). Each slot's note says
+    what shows it on the camera; the Add Item proofs it rests on (runs/kit2_pass2) never put an item into a place that
+    held anything but that code."""
     empty = DOC["camera"]["my_menu"]["empty"]
     slots = [s for s in DOC["settings"] if s.get("area") == "global" and s.get("id") in DOC["camera"]["my_menu"]["records"]
              and s.get("index") is not None]
     assert len(slots) == 42 and empty == 2
     for s in slots:
         assert [empty, "(empty)"] in s["values"], s["key"]
-        assert (s.get("proved") or {}).get("names", {}).get(str(empty)) == "counted", s["key"]
+        want = "hand table" if held_mark(s, empty) else "counted"
+        assert (s.get("proved") or {}).get("names", {}).get(str(empty)) == want, s["key"]
         assert "An empty place stores 2." in s["note"], s["key"]
         assert "every place an item was added to held 2 before" in s.get("note_evidence", ""), s["key"]
         assert "runs/kit2_pass2" in s.get("note_evidence", ""), s["key"]

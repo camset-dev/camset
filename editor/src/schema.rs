@@ -2447,15 +2447,17 @@ mod tests {
         range.range = Some((0, 639));
         range.values.clear();
         assert!(range.established(321), "a range sampled on a line: every number in it");
-        // the shipped definition: every My Menu place lists "(empty)", its code named by a hand table, but no proof chose
-        // it on any place, so it is counted and offered in Expert mode only (docs/decisions/0025); and each place's list,
-        // the Add Item proofs' codes named in all 42, was proved partly on another place, which the place says
+        // the shipped definition: every My Menu place lists "(empty)", its code named by a hand table; no proof chose it
+        // on any place, so it is offered outside Expert mode exactly where a held not-offered mark says the camera holds
+        // it from the factory, never on the hand table's name alone (docs/decisions/0025); and each place's list, the Add
+        // Item proofs' codes named in all 42, was proved partly on another place, which the place says
         let shipped = embedded();
         let mm = shipped.camera.my_menu.as_ref().expect("the a1 II's My Menu");
         let places: Vec<&Setting> = shipped.settings.iter().filter(|x| x.area == "global" && mm.records.contains(&x.id) && x.index.is_some()).collect();
         assert_eq!(places.len(), 42);
-        assert!(places.iter().all(|x| x.label_for(mm.empty) == Some("(empty)") && !x.established(mm.empty) && x.offered(true).iter().any(|(v, _)| *v == mm.empty)),
-            "every My Menu place lists \"(empty)\", offered in Expert mode only");
+        assert!(places.iter().all(|x| x.label_for(mm.empty) == Some("(empty)") && x.offered(true).iter().any(|(v, _)| *v == mm.empty)
+            && x.established(mm.empty) == x.not_offered.iter().any(|n| n.value == mm.empty && n.held)),
+            "every My Menu place lists \"(empty)\", offered outside Expert mode only where a held mark says the camera holds it");
         assert!(places.iter().all(|x| x.list_shared()), "every My Menu place's list proved partly on another place");
         // every Fn Menu place offers the functions its picker lists on the camera, the codes its group's walks proved
         // (72, 72 and 33), and no code a spelling fix alone once named (a Custom Key's "Regist. Face Priority", 1008)

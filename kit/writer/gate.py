@@ -1,8 +1,10 @@
 """--write's gate: the questions pass 2's report holds that the writer does not settle (a conflict it leaves standing,
-a new record it does not add, a record not one to one, a name dispute, a carried-over value outside a hand rule), each
-to be accepted by name in the mapper's accepted file before the definition is written: private/evidence/<model>_fw<fw>/
-accepted_<model>_fw<fw>.json (camkit.datafiles.accepted_file), private whole, for each entry is a ruling on one
-mapping's report (docs/decisions/0016); the pull request carries the gate's count instead."""
+a new record it does not add, a record not one to one, a name dispute, a carried-over value outside a hand rule), and
+the public lists the writer leaves one value short (writer/listgaps.py), each to be accepted by name in the mapper's
+accepted file before the definition is written: private/evidence/<model>_fw<fw>/accepted_<model>_fw<fw>.json
+(camkit.datafiles.accepted_file), private whole, for each entry is a ruling on one mapping's report (docs/decisions/0016);
+the pull request carries the gate's count instead. A list one value short of a value a start file of the camera held is
+never accepted: --write refuses while one stands (listgaps.OneShort), --force or not."""
 import collections
 import sys
 from pathlib import Path
@@ -10,11 +12,12 @@ from pathlib import Path
 from camkit import datafiles, paths
 from runner import read_json
 
+from . import listgaps
 from .proofs import mixed
 
-# what a report holds that the writer does not settle, which a person must accept by name before --write writes
-# (accepted_file): the kinds, as the accepted file names them
-QUESTION_KINDS = ("conflict", "new", "not one to one", "name dispute", "carried over")
+# what a report holds that the writer does not settle, and a list it leaves one value short (listgaps.KIND), which a person
+# must accept by name before --write writes (accepted_file): the kinds, as the accepted file names them
+QUESTION_KINDS = ("conflict", "new", "not one to one", "name dispute", "carried over", listgaps.KIND)
 
 
 def accepted_file(camera: str) -> Path:
@@ -73,12 +76,18 @@ def gate(open_ones: list, camera: str, force: bool, write: bool = True) -> bool:
     """--write's gate: True when every open question is accepted in the camera's accepted file; otherwise each one is
     printed, and the writer stops (exit 1) unless forced, with a loud warning. An entry that answers no question is
     listed to be taken out. A carried-over value is listed without
-    its value: the value a record kept may be the camera's own setting (decision 16), so an entry names key and label."""
+    its value: the value a record kept may be the camera's own setting (decision 16), so an entry names key and label;
+    a list one value short (listgaps.KIND) is listed by its setting alone. One whose missing value a start file of the camera
+    held (start "a") no entry accepts, and --write refuses while it stands, forced or not (listgaps.OneShort)."""
     accepted = read_accepted(camera)
-    left = [q for q in open_ones if not any(accepts(a, q) for a in accepted)]
+    never = [q for q in open_ones if q["kind"] == listgaps.KIND and q.get("start") == "a"]
+    left = [q for q in open_ones if q in never or not any(accepts(a, q) for a in accepted)]
     # every entry answers a question of the report; one that no longer does is taken out, so it hides no later
     # question on the same record (docs/DATA_CONTRACTS.md): said, not refused
-    stale = [a for a in accepted if not any(accepts(a, q) for q in open_ones)]
+    stale = [a for a in accepted if not any(accepts(a, q) for q in open_ones if q not in never)]
+    short = sum(1 for q in open_ones if q["kind"] == listgaps.KIND)
+    said = f"{len(open_ones)} open questions in the report" if not short else \
+        f"{len(open_ones)} open questions, {len(open_ones) - short} in the report and {short} lists one value short"
     if stale:
         print(f"gate: {len(stale)} entries of {paths.shown(accepted_file(camera))} answer no question of this report; "
               "take them out:")
@@ -86,21 +95,27 @@ def gate(open_ones: list, camera: str, force: bool, write: bool = True) -> bool:
             print(f"  {a.get('kind', ''):15s} {a.get('key', ''):22s} "
                   + " ".join(f"{f} {a[f]!r}" for f in ("value", "label") if f in a))
     if not left:
-        print(f"gate: {len(open_ones)} open questions in the report, every one accepted in "
-              f"{paths.shown(accepted_file(camera))}")
+        print(f"gate: {said}, every one accepted in {paths.shown(accepted_file(camera))}")
         return True
-    counts = collections.Counter(q["kind"] for q in left)
+    counts = ", ".join(f"{n} {k}" for k, n in sorted(collections.Counter(q["kind"] for q in left).items()))
     print(f"\ngate: {len(left)} open questions the report holds and {paths.shown(accepted_file(camera))} does not "
-          f"accept ({', '.join(f'{n} {k}' for k, n in sorted(counts.items()))}):")
+          f"accept ({counts}):" if not short else
+          f"\ngate: {len(left)} of {said} are not accepted in {paths.shown(accepted_file(camera))} ({counts}):")
     for q in left:
-        what = " ".join(f"{f} {q[f]!r}" for f in ("value", "label", "camera") if q.get(f) is not None
-                        and not (q["kind"] == "carried over" and f == "value"))
+        what = listgaps.line(q) if q["kind"] == listgaps.KIND else \
+            " ".join(f"{f} {q[f]!r}" for f in ("value", "label", "camera") if q.get(f) is not None
+                     and not (q["kind"] == "carried over" and f == "value"))
         print(f"  {q['kind']:15s} {q['key']:22s} {q.get('row', '')[:56]:56s} {what}")
     print("Look at each in the report (report.md, the proof viewer); settle it with a proof, or add an entry "
           "{kind, key, value, label, why, date} to the accepted file (docs/DATA_CONTRACTS.md).")
+    if never:
+        print("A list one value short of a value a start file held is never accepted (decision 16): "
+              f"{listgaps.WAYS_OUT}.")
     if not write:
         print("(--write refuses until each is settled or accepted)")
         return False
+    if never:
+        raise listgaps.OneShort(listgaps.refusal(never))
     if not force:
         sys.exit("schema_update: refused to write, open questions above (--force writes anyway)")
     print("\n" + "!" * 78 + f"\n!! --force: writing with {len(left)} open questions NOT accepted; the definition holds "

@@ -535,6 +535,7 @@ def test_a_value_a_hand_table_names_is_named_not_proved(tmp_path, monkeypatch, c
     c.hand_evidence(FRAME_PROOFS={"global:0x0051": {"proved": [0], "run": "kit2_x", "date": "2026-11-12", "menu": "M"}},
                     NOT_OFFERED={"0": {"$key": "global:0x04d2", "evidence": "walked whole, 2026-11-12"}})
     c.report(ROWS)
+    c.accept({"kind": "one value short", "key": "global:0x04d2"})   # its list one short of the counted 9 (no start's)
     _, said = c.write(capsys)
     pub, ev, _ = c.written()
     by = {s["key"]: s for s in pub["settings"]}
@@ -904,6 +905,8 @@ def test_a_copy_loses_a_hand_proof_its_live_setting_no_longer_has(tmp_path, monk
              COPIES={"global:0x01d8": ["global:0x01da", "global:0x01dc"]}, COPY_MODES_UNKNOWN=["global:0x01d8"])
     c.hand_evidence(FRAME_PROOFS={"global:0x01d8": {"proved": [0], "run": "kit2_x", "date": "2026-11-12", "menu": "M"}})
     c.report(ROWS[1:])
+    # each list one short of its counted 1, no start file's value: accepted (writer/listgaps.py)
+    c.accept(*({"kind": "one value short", "key": k} for k in ("global:0x01d8", "global:0x01da", "global:0x01dc")))
     c.write(capsys)
     by, ev = published(c)
     assert by["global:0x01da"]["proved"] == {"values": [0]} and ev["global:0x01da"]["proved"]["by_hand"] is True
@@ -962,6 +965,7 @@ def test_two_marks_on_one_setting_keep_their_own_evidence(tmp_path, monkeypatch,
     c = Cam(tmp_path, monkeypatch)
     c.report(ROWS)
     c.tables(**speed(MARKS))
+    c.accept({"kind": "one value short", "key": "global:0x04d2"})   # one mark left: one short of 8, no start's value
     parts = {"0": {"$key": "global:0x04d2", "$values": [6], "evidence": "six walked whole, 2026-11-12"},
              "1": {"$key": "global:0x04d2", "$values": [8], "evidence": "eight walked whole, 2026-11-12"}}
     c.hand_evidence(NOT_OFFERED=parts)
@@ -1021,6 +1025,8 @@ def test_a_chain_of_new_like_records_is_laid_out_and_judged_sibling_first(tmp_pa
     rows = [ROWS[0], ROWS[3], {"row": "Shooting > Fluor2", "options": 2, "notices": [],
                                "records": {"global:0x0068": rec({"Fluor.: Warm White": 2, "Fluor.: Day": 5})}}]
     c.tables(PP7_VALUES=[["global:0x01d8", 9, "Ghost"]])
+    # each list one short of the counted 9, all down the chain, no start's value: accepted (writer/listgaps.py)
+    c.accept(*({"kind": "one value short", "key": k} for k in ("global:0x01d8", "global:0x0053", "global:0x0068")))
     c.report(rows[:1])
     c.write(capsys)
     c.tables(PP7_VALUES=[["global:0x01d8", 9, "Ghost"]], NEW_LIKE=like)

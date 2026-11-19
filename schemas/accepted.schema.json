@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Accepted open questions (private/evidence/<model>_fw<firmware>/accepted_<model>_fw<firmware>.json)",
- "description": "What pass 2's report holds that kit/schema_update.py --write does not settle, each looked at by a person and accepted with why: the mapper's own file, private whole, for each entry is a ruling on one mapping's report (docs/decisions/0016); the pull request carries the gate's count. --write refuses while the report holds a conflict the writer leaves standing, a new record it does not add, a record not one to one, a name dispute or a carried-over value that no entry here covers; --force writes anyway, never for a submission.",
+ "description": "What pass 2's report holds that kit/schema_update.py --write does not settle, each looked at by a person and accepted with why: the mapper's own file, private whole, for each entry is a ruling on one mapping's report (docs/decisions/0016); the pull request carries the gate's count. --write refuses while the report holds a conflict the writer leaves standing, a new record it does not add, a record not one to one, a name dispute or a carried-over value, or leaves a setting's public list one value short, that no entry here covers (--force writes anyway, never for a submission); and whatever this file or --force says, while a list stops one value short of a value a start file of the camera held.",
  "type": "object",
  "required": [
   "model",
@@ -44,9 +44,10 @@
        "new",
        "not one to one",
        "name dispute",
-       "carried over"
+       "carried over",
+       "one value short"
       ],
-      "description": "conflict: the writer kept a label against the camera's reading (a hand rule, or a reading not sure); new: a record the report proved that the writer does not add; not one to one: a label wrote two values, or two labels one value (the record is marked disputed); name dispute: the bar's OCR or the vision model read another name than the map's; carried over: a record kept the option before's value while others moved."
+      "description": "conflict: the writer kept a label against the camera's reading (a hand rule, or a reading not sure); new: a record the report proved that the writer does not add; not one to one: a label wrote two values, or two labels one value (the record is marked disputed); name dispute: the bar's OCR or the vision model read another name than the map's; carried over: a record kept the option before's value while others moved; one value short: the setting's public list stops one value short of its list, a value no start file of the camera held (kit/writer/listgaps.py), accepted by its key alone; one short of a value a start file held is never accepted."
      },
      "key": {
       "type": "string",

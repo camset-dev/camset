@@ -8,6 +8,8 @@ import json
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from camkit import ROOT, coverage, definitions  # noqa: E402
@@ -192,9 +194,87 @@ def test_both_passes_name_a_copys_values_from_its_setting():
     assert inspect.getsource(S.main).index("hand_facts.name_sources(") < inspect.getsource(S.main).index("copy_names(")
 
 
+def gap_doc() -> dict:
+    """Made-up settings on the made-up camera's records (Cam's start file holds 0 in 0x01d8, 0x01da and 0x01dc)."""
+    vals = [[0, "A"], [1, "B"], [2, "C"]]
+
+    def s(key, proved=None, **more):
+        rid = int(key.split("0x")[1][:4], 16)
+        return {"key": key, "area": "global", "id": rid, "name": f"Thing {key[-4:]}", "values": vals,
+                **({"proved": proved} if proved else {}), **more}
+    return {"settings": [
+        s("global:0x01d8", {"values": [1, 2]}),                               # short of 0, the start's: kind (a)
+        s("global:0x01da", {"values": [0, 1]}),                               # short of 2, no start's: kind (b)
+        s("global:0x01dc", {"values": [1, 2]}, not_offered=[{"value": 0, "label": "A", "held": True}]),  # a mark
+        s("global:0x0050", None, unproved_reason={"kind": "state", "why": "Kept by the camera."}),     # a reason
+        s("global:0x0051", {"values": [0]}),                                  # two short: no gap of one
+        s("global:0x0053", {"sampled": {"proofs": 3, "linear": True}})]}      # a line: every value
+
+
+def test_a_public_list_one_value_short_is_found_and_told_by_the_start_files(tmp_path, monkeypatch):
+    """writer/listgaps.py: a setting whose public proof lists every value of its list but one is a gap, of kind (a) where a
+    start file of this camera holds the missing value (how many files, never which value), (b) where none does, (c)
+    where no start file is here to tell; a value a not_offered mark names (held or not), a setting a reason covers, a
+    list two short and a scale on a line are no gap."""
+    from writer import listgaps as gaps
+    c = Cam(tmp_path, monkeypatch)
+    got = {q["key"]: q for q in gaps.questions(gap_doc(), c.root)}
+    assert set(got) == {"global:0x01d8", "global:0x01da"}
+    assert (got["global:0x01d8"]["start"], got["global:0x01d8"]["files"]) == ("a", 1)
+    assert got["global:0x01da"]["start"] == "b" and got["global:0x01da"]["kind"] == gaps.KIND
+    assert all("value" not in q for q in got.values()), "a gap names its setting, never the value"
+    none = tmp_path / "no_runs"
+    none.mkdir()
+    assert {q["start"] for q in gaps.questions(gap_doc(), none)} == {"c"}
+
+
+def test_the_gate_counts_a_gap_and_refuses_one_of_a_start_value(tmp_path, monkeypatch, capsys):
+    """The gate counts each gap as an open question: a ruling in the accepted file accepts one of kind (b) by its key,
+    never one of kind (a); a look prints them; --write refuses while one of kind (a) stands, --force or not, naming the
+    three ways out, with exit status 1 (a SystemExit with words)."""
+    from writer import listgaps as gaps
+    from writer.gate import gate
+    c = Cam(tmp_path, monkeypatch)
+    qs = gaps.questions(gap_doc(), c.root)
+    b = [q for q in qs if q["start"] == "b"]
+    c.accept({"kind": gaps.KIND, "key": "global:0x01da"}, {"kind": gaps.KIND, "key": "global:0x01d8"})
+    assert gate(b, "ILCE-7M5_fw4.00", force=False, write=True) is True
+    assert "1 lists one value short" in capsys.readouterr().out
+    assert gate(qs, "ILCE-7M5_fw4.00", force=False, write=False) is False
+    out = capsys.readouterr().out
+    assert "global:0x01d8" in out and "a start file of this camera holds the value it lacks (1 start file)" in out
+    assert "never accepted" in out
+    for force in (False, True):
+        with pytest.raises(gaps.OneShort) as e:
+            gate(qs, "ILCE-7M5_fw4.00", force=force, write=True)
+        said = str(e.value.code)
+        assert isinstance(e.value.code, str) and "global:0x01d8" in said
+        assert all(w in said for w in ("another start", "held not-offered mark", "reason")), said
+
+
+def test_both_passes_check_their_lists_one_value_short(tmp_path, monkeypatch, capsys):
+    """The plain pass, a look and a write: a list its proofs now leave one value short, the value the camera's start
+    file holds, is printed with the gate line and counted in it, and --write refuses it; the a1 II's own pass runs the
+    same check before its gate."""
+    import schema_update as S
+    from writer import listgaps as gaps
+    c = Cam(tmp_path, monkeypatch)
+    c.report(ROWS)
+    c.write(capsys)
+    c.report([{**ROWS[0], "records": {"global:0x01d8": {**ROWS[0]["records"]["global:0x01d8"],
+                                                        "proved": {"Cont. Shooting": 1}}}}] + ROWS[1:])
+    _, said = c.write(capsys, write=False)
+    assert "global:0x01d8" in said and "1 lists one value short" in said, said
+    with pytest.raises(gaps.OneShort):
+        c.write(capsys)
+    src = inspect.getsource(S.main)
+    assert "listgaps.questions(" in src and src.index("listgaps.questions(") < src.index("gate(open_ones")
+
+
 def test_a_rerun_drops_a_name_no_rule_gives_any_more(tmp_path, monkeypatch, capsys):
     """The plain pass on a definition whose proof names a value "derived" with no rule naming it this run (a rule that
-    no longer fires): the value stays in the list, named, but leaves the proof's values and the setting's mark."""
+    no longer fires): the value stays in the list, named, but leaves the proof's values and the setting's mark. Its
+    list is then one value short of a value no start file holds, which the gate counts and a ruling accepts."""
     c = Cam(tmp_path, monkeypatch)
     c.report(ROWS)
     c.write(capsys)
@@ -209,7 +289,11 @@ def test_a_rerun_drops_a_name_no_rule_gives_any_more(tmp_path, monkeypatch, caps
     whole_ev["settings"] = ev
     evfile.write_text(json.dumps(whole_ev, indent=1), encoding="utf-8")
     assert definitions.load(c.target)["settings"]           # it reads back whole
-    c.write(capsys)
+    with pytest.raises(SystemExit, match="open questions above"):
+        c.write(capsys)
+    c.accept({"kind": "one value short", "key": "global:0x01d8"})
+    _, said = c.write(capsys)
+    assert "1 lists one value short, every one accepted" in said, said
     pub, ev, _ = c.written()
     s = next(x for x in pub["settings"] if x["key"] == "global:0x01d8")
     assert [7, "Ghost"] in s["values"] and s["proved"] == {"values": [0, 1]}

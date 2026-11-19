@@ -175,7 +175,7 @@ from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
 # the hand tables, where their evidence is kept, and what the plain pass takes of them (by_lines_of, run_start and
 # like_setting are shared with it)
-from writer import hand_evidence, hand_facts, hand_tables  # noqa: E402
+from writer import hand_evidence, hand_facts, hand_tables, listgaps  # noqa: E402
 from writer.hand_facts import by_lines_of  # noqa: E402
 
 # the ILCE-1M2's hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, writer/hand_tables.py), its hand
@@ -1870,6 +1870,8 @@ def main():
     print(f"expert: {sum(1 for s in doc['settings'] if s.get('expert'))} settings shown in Expert mode only")
     names = collections.Counter(src for s in doc["settings"] for src in ((s.get("proved") or {}).get("names") or {}).values())
     print(f"names: {dict(names.most_common())}")
+    # a public list one value short, after the names and the marks: an open question; one of a start's value, a refusal
+    open_ones += listgaps.questions(doc, RUN_ROOT)
     gate(open_ones, target.stem, a.force, a.write and not a.dry_run)
     if a.write and not a.dry_run:
         # every refusal first, then the reset file, then this; a reason's day taken out on purpose is no evidence lost

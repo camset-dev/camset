@@ -13,7 +13,7 @@ from camkit import definitions, option_tree, paths
 from pass2_report import latest_run, mirrored_values, num, registration_mirrors, report_proofs
 from runner import read_json
 
-from . import hand_evidence, hand_facts, hand_tables
+from . import hand_evidence, listgaps, hand_facts, hand_tables
 from .copies import copy_names, with_copies, with_keeps_apart
 from .limits import with_limit_pairs
 from .frames import with_frames
@@ -466,7 +466,10 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
         print(f"  {k} {name[:44]:44s} {v!s:>4}: {old!r} -> {new!r}")
     # the plain pass gives every proved value the camera's label, so no conflict stands but one a hand table keeps; the
     # rest is the gate's
-    gate(questions(report, unresolved, frozenset(s["key"] for s in doc["settings"])), camera, force, write)
+    # and a public list one value short, after the names and the marks (writer/listgaps.py): an open question; one of a
+    # start's value, a refusal
+    gate(questions(report, unresolved, frozenset(s["key"] for s in doc["settings"])) + listgaps.questions(doc, run.parent),
+         camera, force, write)
     if write:
         write_definition(target, doc, accept_stale, taken_out=taken_out)   # every refusal first, the reset file, this
         print(f"wrote {target}")
