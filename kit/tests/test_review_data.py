@@ -99,3 +99,32 @@ def test_a_build_folds_each_label_once_and_builds_the_same_ledger(camera, monkey
     seen.clear()
     plain = coverage.build(CAM, src=coverage.load_sources(CAM, records=RECORDS), validity=True)
     assert len(seen) > len(set(seen)) and forms(plain) == memoised
+
+
+# ---------------------------------------------------------------- 3. a closing proof changes nothing (finding 12, B9)
+
+def test_a_block_cut_short_ends_on_no_closing_proof():
+    """Review finding 12, the ledger's side (B9, 2026-11-18): _closing_proofs took the last line of each run of number
+    field lines on one row and field for that field's closing proof, and the last line of each attempt for its own,
+    even where a failure cut the block short and the line changed records. A closing proof chooses the start value
+    again and changes nothing (the camera's volatile records aside): only such a last line is one. Shaped on the real
+    case of 2026-11-18 (made-up names and codes): a whole block of four whose last line changes nothing; a block cut
+    short after two samples; a block whose closing line failed with a leftover change; two attempts."""
+    from types import SimpleNamespace
+
+    def line(k, t, rec=None, applied=True, attempt=None, kind="fields"):
+        return {"path": ["Tango"], "kind": kind, "index": [k, t] if kind == "fields" else t, "label": f"T {t}",
+                "applied": applied, "changes": [{"key": rec, "before": 1, "after": 2}] if rec else [],
+                **({"attempt": attempt} if attempt else {})}
+    lines = [line(0, 0, "global:0x0b01"), line(0, 17, "global:0x0b01"), line(0, 33, "global:0x0b01"),
+             line(0, 1),                                                         # 4: the whole block's closing line
+             line(1, 0, "global:0x0b03"), line(1, 17, "global:0x0b03", applied=None),       # 6: cut short
+             line(0, 17, "global:0x0b01"), line(0, 1, "global:0x0b03", applied=None),       # 8: closing line failed
+             line(0, 1, "global:0x01ff"),                                        # 9: its only change volatile
+             line(None, 2, "global:0x0c00", attempt="A", kind="list"),
+             line(None, 1, "global:0x0c00", attempt="A", kind="list"),           # 11: attempt A cut short
+             line(None, 2, "global:0x0c02", attempt="B", kind="list"),
+             line(None, 0, attempt="B", kind="list")]                            # 13: attempt B's closing line
+    src = SimpleNamespace(proofs=[("kit2_pass2", i + 1, p) for i, p in enumerate(lines)],
+                          camera_file={"volatile_records": [0x01ff]})
+    assert coverage._closing_proofs(src) == {("kit2_pass2", 4), ("kit2_pass2", 9), ("kit2_pass2", 13)}

@@ -1477,23 +1477,29 @@ def _closing_proofs(src: Sources) -> set:
     never "tested, no record changes" (an attempt cut short too: its last proof may be that one), and never a valid
     proof: its value is the start file's, inferred. A number field's proofs (kind "fields", index [field, value]) carry
     no attempt: the prover chooses each field's own start value last (camkit's proving.fields), so the last line of
-    each run of lines on one row and field is that field's closing proof."""
+    each run of lines on one row and field is that field's closing proof. Either last line is one only when it changes
+    nothing (no record but the camera's volatile ones): a block cut short by a failure ends on an ordinary line, which
+    is no closing proof (review B9, 2026-11-18)."""
+    volatile = _volatile(src)
+
+    def unchanged(p):
+        return not {record_base(c.get("key")) for c in p.get("changes") or [] if isinstance(c, dict)} - volatile - {None}
     last = {}
     for run, line, p in src.proofs:
         a = p.get("attempt")
         if a:
-            last[a] = (run, line)
-    out = set(last.values())
+            last[a] = (run, line, p)
+    out = {(run, line) for run, line, p in last.values() if unchanged(p)}
     group, at = None, None
     for run, line, p in src.proofs:
         idx = p.get("index")
         key = (run, json.dumps(p.get("path")), idx[0]) if p.get("kind") == "fields" and isinstance(idx, list) \
             and len(idx) == 2 else None
-        if key != group and at is not None:
-            out.add(at)
-        group, at = key, ((run, line) if key is not None else None)
-    if at is not None:
-        out.add(at)
+        if key != group and at is not None and unchanged(at[2]):
+            out.add(at[:2])
+        group, at = key, ((run, line, p) if key is not None else None)
+    if at is not None and unchanged(at[2]):
+        out.add(at[:2])
     return out
 
 
