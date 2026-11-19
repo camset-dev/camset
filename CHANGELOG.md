@@ -166,6 +166,27 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **A run's start before its link is timed, and much shorter:** each link writes what the start took into the run's
+  `events.jsonl` (`start_budget`), and `drive.py` and `crawl_run.py` went from about 9 s of work before the link to
+  under 1 s, the page scan's screens kept in a cache signed with your own key, the coverage ledger built while the link
+  opens and the readers checked while the eyes are made.
+- **`kit/tools/upload_check.py` uploads nothing where the camera's own download shows it already holds the file,** so a
+  chain's upload steps and its end file no longer restart the camera onto what it holds; `--always` uploads all the
+  same.
+- **Every runner waits the menu's lock after a download by the one watched rule,** about 2 s with HDMI eyes in Stills
+  or Movie where 4.5 to 5 s stood, and none sleeps a second before a download any more. A key that is not MENU next
+  (afreg's Fn hold, the focus frame's moves) still waits 4.5 s, as the lock was measured for MENU alone.
+- **My Menu's picker lap asks the reader on several workers while it steps on,** and the lap it keeps is taken again
+  only in the shooting mode and with the page scan it was made with.
+- **The axis walk, the Picture Profile carousel and Creative Look's icons wait for the title strip over HDMI** instead
+  of a fixed 0.4 s.
+- **The settle's windows are one table per eyes, by key, at today's values,** and `kit/tools/settle_probe.py` measures
+  them, and the lock after a download, on the camera, read-only, with HDMI or OSD eyes.
+- **`scale_run.py` asks the vision reader where OCR misreads the number drawn over a picture slider** (Aspect Marker
+  Level's 8 read as "00"). The marker's number stands only when the reader reads it too, and the proof line then keeps
+  OCR's reading as `ocr_outvoted`.
+- **The coverage to-do sends a row no look lap chooses in, once it has been looked at, to the owner's hand** instead
+  of back to another look.
 - **No reader credits a line the camera did not apply, and an option a list draws grey is never chosen:** the list and
   side-list provers write such an option greyed, with the camera's Help as its reason and no key pressed. The ledger,
   the report, the writer, the proof viewer and `replay_proofs` never credit a line with `"applied": false`, an old
