@@ -9,8 +9,9 @@ own menu), so every proof ends by uploading the start file again, and the next p
 
 First a look per family (Right until the title comes round), then one proof per family and mode:
 the row, Right, Down to the family, Right to the mode, OK, a settings download, a diff with the start,
-the start file back on. The memory-recall modes (MR, M1-M4) are left out: recalling a memory rewrites
-dozens of settings. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as "axis" proofs, one row per family
+the start file back on. Only the five exposure modes are ever chosen: the memory-recall modes (MR, M1-M4)
+are left out, since recalling a memory rewrites dozens of settings, and so is any entry whose title reads as no
+exposure mode (choosable, title_mode). Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as "axis" proofs, one row per family
 ("Shoot Mode / Movie"), plus one "dialog" proof per family holding only the records every mode of the
 family wrote alike (the family's own). Tagged with the context "Mode Dial Control Set = Set with Menu".
 """
@@ -22,7 +23,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, paths  # noqa: E402
+from camkit import camset, ocr, paths, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
@@ -46,17 +47,39 @@ def lines(cam):
     return ocr.read([cam.frame.path])[cam.frame.path]
 
 
-def mode_name(cam) -> str:
-    """The mode the orange title names (an icon before it reads as letters: "A Manual Exposure")."""
-    time.sleep(0.3)
-    cam.refresh("reread")
-    t = ocr.text_in(lines(cam), TITLE)
+def memory_recall(text) -> bool:
+    """Whether a title reads as a memory-recall entry ("MR Cam.Set1", "MR Cam. Set M2"), whatever case and look-alike
+    letters the reader gave it: "MR" at its start, an icon read as signs before it, or "Cam. Set" anywhere (2026-11-18:
+    "Mr Cam. Set M1", and "Mr Cam.Set MЗ" with a Cyrillic Ze for the 3)."""
+    t = safety.fold(text).casefold()
+    return bool(re.match(r"^\W*mr", t) or re.search(r"cam\W*set", t))
+
+
+def title_mode(text) -> str:
+    """The mode a title read names: a memory-recall entry as "MR ...", before any exposure mode it may hold too; one of
+    NAMES where the title holds it (an icon before it reads as letters: "A Manual Exposure"); else the title as read."""
+    t = str(text or "").strip()
+    if memory_recall(t):
+        return "MR " + re.sub(r"^\W*m\s*r\s*", "", safety.fold(t), flags=re.I).strip()
     k = option_key(t)
     for n in NAMES:
         if option_key(n) in k:
             return n
-    m = re.search(r"MR.*", t)
-    return ("MR " + re.sub(r"^MR\s*", "", m.group(0))).strip() if m else t.strip()
+    return t
+
+
+def choosable(modes: list) -> list:
+    """The places of a family's modes a proof may choose: those whose title is one of the five exposure modes (NAMES),
+    never another, whatever it reads as: a memory recall rewrites dozens of settings, and a title read wrong is no
+    choice (fail closed)."""
+    return [m for m, name in enumerate(modes) if name in NAMES]
+
+
+def mode_name(cam) -> str:
+    """The mode the orange title names (title_mode)."""
+    time.sleep(0.3)
+    cam.refresh("reread")
+    return title_mode(ocr.text_in(lines(cam), TITLE))
 
 
 def open_row(cam, cycle, model):
@@ -127,7 +150,7 @@ def main():
         for f in fams:
             print(f"{FAMILIES[f]}: {modes[f]}", flush=True)
         for f in fams:
-            todo = [m for m in range(len(modes[f])) if not modes[f][m].startswith("MR")]
+            todo = choosable(modes[f])
             if f == 0:                                 # stills: its remembered mode is the start's; last
                 todo = [m for m in todo if m != 0] + [0]
             recs = []
@@ -145,7 +168,7 @@ def main():
                         for _ in range(m):
                             cam.press("right")
                         got = mode_name(cam)
-                        if got != modes[f][m]:
+                        if got != modes[f][m] or got not in NAMES:          # never OK on any other entry
                             close_screen(cam, link)
                             raise Failed(f"{FAMILIES[f]}: the title reads {got!r}, not {modes[f][m]!r}")
                         chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)

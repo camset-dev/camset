@@ -311,3 +311,24 @@ def test_the_frames_pass_the_tables_recognition_and_the_dials_check(ms):
     assert tables.dial_table(button.read().kind, ms.text(button)) and button.read().focus == "button"
     with pytest.raises(Failed, match="the lit cell is not the Shooting Mode Dial"):
         tables.on_dial_cell(button, "Shooting Mode Dial")
+
+
+# ---------------------------------------------------------------- kit/provers/shootmode_run.py: the Shoot Mode chooser
+
+# the titles the reader gave the memory-recall entries on 2026-11-18 (kit2_pass2): a lower-case r, a Cyrillic Ze for the
+# 3; the prover chose both, and only the camera's own refusal ("No File.") stopped them
+STRAY = ["Mr Cam. Set M1", "Mr Cam.Set MЗ"]
+
+
+def test_the_shoot_mode_prover_chooses_only_the_five_exposure_modes():
+    """A memory-recall entry rewrites dozens of settings: it reads as one whatever the case and the look-alike letters
+    the reader gives it, before any exposure mode its title may also hold, and the prover chooses only an entry whose
+    title is one of the five exposure modes, never another (fail closed: a title read wrong is no choice)."""
+    import shootmode_run as sm
+    for t in STRAY + ["MR Cam.Set1", "MRCam.Set2", "mr cam. set m2 Manual Exposure", "МR Cam. Set M4"]:
+        assert sm.memory_recall(t) and sm.title_mode(t).startswith("MR"), t
+        assert sm.title_mode(t) not in sm.NAMES, t
+    assert sm.title_mode("A Manual Exposure") == "Manual Exposure" and not sm.memory_recall("Program Auto")
+    modes = ["Intelligent Auto", "Program Auto", "Aperture Priority", "Shutter Priority", "Manual Exposure",
+             "MR Cam.Set1", *STRAY, "Manual Exposur3", ""]
+    assert sm.choosable(modes) == [0, 1, 2, 3, 4]
