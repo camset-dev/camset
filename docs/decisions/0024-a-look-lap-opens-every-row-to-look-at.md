@@ -1,9 +1,15 @@
 # 24. A look lap opens every row to look at
 
-- **Date:** 2026-11-15
+- **Date:** 2026-11-15; changed 2026-11-19
 - **Status:** accepted
-- **Rule:** A `--network` run looks at any row but what never opens, what acts as it opens and an unseen format,
-  delete or reset, and chooses only what a decision names.
+- **Never broken:** 9th in AGENTS.md's list
+- **Rule:** A look lap, a run of `kit/drive.py` or `kit/crawl_run.py` given `--network`, may open any row to look at, no
+  decision naming it, with up, down and MENU alone, asking local readers only and keeping no screen's text; never what
+  never opens (a firmware update, what loads, the sensor's, shutter's or lens's motion, Initialize, the Screen Reader);
+  a row whose opening acts, or a format, delete or reset this body has not been seen to open, only by the owner's own
+  run; a row not yet seen opened only under the first-open procedure. It chooses an option only where a dated owner
+  decision names it. The body's serial number screen opens only on a look lap, which saves its frames black, or by the
+  owner's route, which does so unless its decision says `"values": "logged"`.
 
 ## Context
 
@@ -19,6 +25,8 @@ show it opened. A row not yet seen opened goes under the first-open procedure. I
 chooses only an option a dated owner decision names, asks local readers only and keeps no screen's text; what the
 owner route blanks is saved black. Ordinary runs refuse what they refused, judging the row, never a known value beside
 it (`safety.row_judged`).
+
+Before 2026-11-19 AGENTS.md and the playbook's rule 3 each stated the rule by hand beside a shorter Rule line.
 
 ## Consequences
 

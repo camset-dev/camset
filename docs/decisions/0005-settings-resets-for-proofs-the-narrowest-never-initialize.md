@@ -1,9 +1,16 @@
 # 5. Settings resets for proofs: the narrowest, never Initialize
 
-- **Date:** 2026-11-01; changed 2026-11-13
+- **Date:** 2026-11-01; changed 2026-11-13 and 2026-11-19
 - **Status:** accepted
-- **Rule:** For a proof, the narrowest reset, the file put back after; Reset Network Set. and SSID/PW Reset only as an
-  owner decision's last press; Initialize never.
+- **Never broken:** 4th in AGENTS.md's list
+- **Rule:** Never Initialize, Reset Network Set. or SSID/PW Reset; a reset for a proof only the narrowest, only if the
+  owner allows it, with their file put back after. The one exception is a camera whose owner has written a dated owner
+  decision in its reviewed scope (so far the maintainer's a1 II): with `"link_loss": true` it lets Reset Network Set. or
+  SSID/PW Reset be a `kit/drive.py --owner --confirm` run's last press, once the person at the terminal has typed the
+  row's name (never an agent for them: [decision 4](0004-never-delete-or-format-the-cards.md)), `RESTORE_BY_HAND.json`
+  written before it; the run exits 6 when that press only brought up the reset's question, cancelled with MENU and the
+  start file restored, and otherwise, unless the link still answered and the restore checked out, exits 5, and then no
+  link opens until `kit/tools/upload_check.py` has put its start file back. Initialize never.
 
 ## Context
 
@@ -72,6 +79,8 @@ file is per camera key: one under another camera's key is that camera's and hold
 no end file, and stops after status 6 as after status 4. The maintainer, the a1 II's owner, decided this for their own
 camera on 2026-11-13.
 
+Before 2026-11-19 the Rule line did not say that a reset for a proof needs the owner's leave, and AGENTS.md and the
+playbook's rule 2 each stated the rule by hand.
 Before 2026-11-13 Initialize and Reset Network Set. were never pressed, whatever was decided.
 
 ## Consequences

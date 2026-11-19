@@ -427,6 +427,11 @@ DECISIONS_END = "<!-- end of the table -->"
 
 STATUS_CHARS = 60          # the decisions table's Status column: at most this many characters, of whole clauses
 RULE_CHARS = 160           # a record's Rule line, the table's "The rule" column: one plain sentence of at most this many
+# the Rule line of a rule that is never broken (a record marked "- **Never broken:** 7th in AGENTS.md's list"): the
+# whole rule as an agent obeys it, its exceptions as narrow as they are, which AGENTS.md lists and the table shows
+# whole; mechanism (exit statuses, record ids, how a guard reads the screen) goes into the record's Decision
+NEVER_BROKEN_CHARS = 1000
+NEVER_BROKEN = re.compile(r"(\d+)(st|nd|rd|th) in AGENTS\.md's list")
 
 
 def status_cell(said: str) -> str:
@@ -449,22 +454,74 @@ def status_cell(said: str) -> str:
     return cell + "…" if clauses else ""
 
 
-def header_line(text: str, name: str) -> str:
+def header_line(text: str, name: str, links: bool = False) -> str:
     """A record's header line '- **<name>:** ...' as one line (it may run on, indented, until a blank line or the
-    next '- ' line), its links' text without their targets; "" when the record has none."""
+    next '- ' line), its links' text without their targets unless `links`; "" when the record has none."""
     m = re.search(rf"^- \*\*{name}:\*\*(.*?)(?:\n\s*\n|\n- )", text, re.M | re.S)
-    return re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", " ".join((m.group(1) if m else "").split()))
+    line = " ".join((m.group(1) if m else "").split())
+    return line if links else re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", line)
+
+
+def ordinal(n: int) -> str:
+    """1st, 2nd, 3rd, 4th, ... 11th, 12th, 13th, ... 21st."""
+    return f"{n}{'th' if 10 <= n % 100 <= 20 else {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th')}"
+
+
+def never_broken(text: str, where: str):
+    """The place a record's '- **Never broken:**' line gives its rule in AGENTS.md's list of rules that are never broken
+    (7 for "7th in AGENTS.md's list"), or None when the record has no such line. A line that gives no place that way
+    stops the build: a rule is never left out of the list unseen."""
+    if not re.search(r"^- \*\*Never broken:\*\*", text, re.M):
+        return None
+    said = header_line(text, "Never broken")
+    m = NEVER_BROKEN.fullmatch(said)
+    if not m or int(m.group(1)) < 1 or ordinal(int(m.group(1))) != m.group(1) + m.group(2):
+        raise SystemExit(f"{where}: its Never broken line reads {said!r}: give its rule's place in AGENTS.md's list of "
+                         f"rules that are never broken, as '- **Never broken:** 7th in AGENTS.md's list'")
+    return int(m.group(1))
+
+
+def records() -> list:
+    """(path, text, its path from the clone's root) of every record in docs/decisions/, in number order."""
+    return [(p, p.read_text(encoding="utf-8"), p.relative_to(ROOT).as_posix())
+            for p in sorted((DOCS / "decisions").glob("[0-9][0-9][0-9][0-9]-*.md"), key=lambda p: p.name)]
+
+
+def never_broken_rules() -> list:
+    """(place, number, file name, rule) of every record marked '- **Never broken:**', in the order of the places the
+    marks give, the rule its Rule line with its links as written. The places must be 1 to N, each taken once, and no
+    withdrawn record takes one: anything else stops the build, saying which records and how to mend them."""
+    out, taken = [], {}
+    for p, text, where in records():
+        place = never_broken(text, where)
+        if place is None:
+            continue
+        if header_line(text, "Status").startswith("withdrawn"):
+            raise SystemExit(f"{where} is withdrawn and marked Never broken: a withdrawn decision is no rule; take its "
+                             f"Never broken line out and give the places after it one less")
+        if place in taken:
+            raise SystemExit(f"{taken[place]} and {where} both take the {ordinal(place)} place in AGENTS.md's list of "
+                             f"rules that are never broken: give each its own place")
+        taken[place] = where
+        head = re.search(r"^# (\d+)\. ", text, re.M)
+        out.append((place, int(head.group(1)) if head else 0, p.name, header_line(text, "Rule", links=True)))
+    places = sorted(taken)
+    if places != list(range(1, len(places) + 1)):
+        gap = next(n for n in range(1, len(places) + 1) if n not in taken)
+        said = ", ".join(map(str, places[:-1])) + f" and {places[-1]}" if len(places) > 1 else str(places[0])
+        raise SystemExit(f"AGENTS.md's list of rules that are never broken has no {ordinal(gap)} rule: the marked records "
+                         f"take places {said}; give them 1 to {len(places)}")
+    return sorted(out)
 
 
 def decision_rows() -> list:
     """(number, title, file name, rule, date, status) of every record in docs/decisions/, from its own heading, Date
     line, Rule line and Status line; a record whose Status says it was carried out later says so beside its date. The
-    rule is the Rule line as written, one plain sentence of at most RULE_CHARS characters (a record without one, or
-    with a longer one, stops the build); the status is the Status line as status_cell shortens it."""
+    rule is the Rule line as written, one plain sentence of at most RULE_CHARS characters, or, for a rule that is never
+    broken (never_broken), the whole rule, of at most NEVER_BROKEN_CHARS (a record without one, or with a longer one,
+    stops the build); the status is the Status line as status_cell shortens it."""
     out = []
-    for p in sorted((DOCS / "decisions").glob("[0-9][0-9][0-9][0-9]-*.md"), key=lambda p: p.name):
-        text = p.read_text(encoding="utf-8")
-        where = p.relative_to(ROOT).as_posix()
+    for p, text, where in records():
         head = re.search(r"^# (\d+)\. (.+)$", text, re.M)
         date = re.search(r"^- \*\*Date:\*\* (.+)$", text, re.M)
         if not head or not date:
@@ -473,7 +530,12 @@ def decision_rows() -> list:
         if not rule:
             raise SystemExit(f"{where} needs a '- **Rule:**' line beside its Date and Status: the decision in one plain "
                              f"sentence, which the decisions table shows")
-        if len(rule) > RULE_CHARS:
+        if never_broken(text, where) is not None:
+            if len(rule) > NEVER_BROKEN_CHARS:
+                raise SystemExit(f"{where}: its Rule line, a rule that is never broken, is {len(rule)} characters, and "
+                                 f"AGENTS.md takes at most {NEVER_BROKEN_CHARS}: say the rule an agent obeys, its "
+                                 f"exceptions as narrow, and move how the kit holds to it into the record's Decision")
+        elif len(rule) > RULE_CHARS:
             raise SystemExit(f"{where}: its Rule line is {len(rule)} characters, and the decisions table takes at most "
                              f"{RULE_CHARS}: say the decision in one shorter sentence (the record says the rest)")
         said = header_line(text, "Status")

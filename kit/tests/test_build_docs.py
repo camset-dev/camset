@@ -227,11 +227,14 @@ def test_the_decisions_table_has_each_records_rule_in_a_sentence(docs_tree):
 
 
 def test_every_decision_record_says_its_rule_in_one_short_sentence():
-    """The real records: each has its Rule line, within RULE_CHARS, and the table shows it."""
+    """The real records: each has its Rule line, within RULE_CHARS, and the table shows it; a rule that is never broken
+    is the whole rule, within NEVER_BROKEN_CHARS (kit/tests/test_generated_rules.py)."""
     rows = build_docs.decision_rows()
+    whole = {n for _, n, _, _ in build_docs.never_broken_rules()}
     assert len(rows) >= 22 and [r[0] for r in rows] == list(range(1, len(rows) + 1))
     for n, _title, _name, rule, _when, _said in rows:
-        assert 0 < len(rule) <= build_docs.RULE_CHARS and rule.endswith("."), n
+        limit = build_docs.NEVER_BROKEN_CHARS if n in whole else build_docs.RULE_CHARS
+        assert 0 < len(rule) <= limit and rule.endswith("."), n
 
 
 def test_the_nav_lists_every_model_page(docs_tree):

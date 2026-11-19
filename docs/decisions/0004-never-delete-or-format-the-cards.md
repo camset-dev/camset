@@ -1,9 +1,14 @@
 # 4. Never delete or format the cards
 
-- **Date:** 2026-11-01; changed 2026-11-13
+- **Date:** 2026-11-01; changed 2026-11-13 and 2026-11-19
 - **Status:** accepted
-- **Rule:** No Format or Delete row is opened or confirmed remotely unless a dated owner decision names it by its path;
-  only a --confirm run's last press confirms it.
+- **Never broken:** 3rd in AGENTS.md's list
+- **Rule:** Never format or delete a card. The one exception is a camera whose owner has written a dated owner decision
+  in its reviewed scope (so far the maintainer's a1 II): it names the row by its path, and only a
+  `kit/drive.py --owner --confirm` run's armed last press opens or confirms it, after the person at the terminal has
+  typed the row's name (asked before every `--owner --confirm` run; no flag answers it; only `"unattended": true` in the
+  decision waives it). That question stops a careless agent, not a determined one: a program driving a pseudo-terminal
+  can answer it, so the owner types the answer themselves, and an agent never answers it for them.
 
 ## Context
 
@@ -56,6 +61,9 @@ question only by saying `"unattended": true` beside its `"confirm"` (or beside a
 as decision 7 says. `kit/tools/card_actions.py` keeps its own `--allow` route and
 refuses Format and Delete as before. The maintainer, the a1 II's owner, decided this for their own camera on 2026-11-13.
 
+Before 2026-11-19 the Rule line said only that no Format or Delete row is opened or confirmed remotely unless a dated
+owner decision names it by its path, a --confirm run's last press alone confirming it, and AGENTS.md and the playbook's
+rules 2 and 3 each stated the rule by hand.
 Before 2026-11-13 no decision opened a Format or Delete row.
 
 ## Consequences

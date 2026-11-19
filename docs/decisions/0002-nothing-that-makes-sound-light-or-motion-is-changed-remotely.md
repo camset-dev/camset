@@ -1,9 +1,14 @@
 # 2. Nothing that makes sound, light or motion is changed remotely
 
-- **Date:** 2026-10 (first kit); changed 2026-11-15
+- **Date:** 2026-10 (first kit); changed 2026-11-15 and 2026-11-19
 - **Status:** accepted
-- **Rule:** Settings that make sound, light or motion change by hand only, one harmless change at a time; the one
-  picture for Playback waits for the owner's typed word.
+- **Never broken:** 1st in AGENTS.md's list
+- **Rule:** Nothing that makes sound, light or motion is changed remotely (beeps, audio signals, volume, the AF
+  illuminator, tally and other lamps, flash, modelling light, video light, the lens motor of Pre-AF and Eye-Start AF,
+  Shutter When Pwr OFF's curtain, SteadyShot; the Screen Reader only as
+  [decision 3](0003-the-screen-reader-only-with-headphones-in.md) says): these change by the owner's hand. The one
+  picture for the Playback rows is taken only on the owner's word, which they type themselves at their own terminal to
+  `kit/tools/take_picture.py`, never an agent for them.
 
 ## Context
 
@@ -19,6 +24,8 @@ on or the flash on, after the owner has typed their word at their own terminal t
 move or light and what the kit could not read; the answer is kept dated in the camera's reviewed scope, and the picture
 stays on the card.
 
+Before 2026-11-19 the Rule line said these change by hand only, one harmless change at a time, and AGENTS.md and the
+playbook's rule 1 each stated the rule by hand.
 Before 2026-11-15 the kit never released the shutter.
 
 ## Consequences

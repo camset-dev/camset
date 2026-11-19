@@ -1,9 +1,16 @@
 # 9. Credentials are never read or stored
 
-- **Date:** 2026-10 (first kit); changed 2026-11-05, 2026-11-13, 2026-11-14 and 2026-11-15
+- **Date:** 2026-10 (first kit); changed 2026-11-05, 2026-11-13, 2026-11-14, 2026-11-15 and 2026-11-19
 - **Status:** accepted
-- **Rule:** The login lives only in a file the owner writes; the kit never types a password, and opens a credentials
-  screen only on a look lap or by a dated owner decision.
+- **Never broken:** 10th in AGENTS.md's list
+- **Rule:** Credentials are never typed, read, OCR'd, screenshotted or stored: the user name and password live only in
+  `~/.config/camset/network.json`, which the owner writes (mode 600 on macOS and Linux), never committed, and nothing is
+  ever typed on the camera, a keyboard or an entry screen getting MENU alone. A credentials screen such as Access
+  Authen. Info is opened only on a look lap, MENU alone pressed there and its frames saved black, nothing read or
+  stored. The one exception is a camera whose owner has written a dated owner decision in its reviewed scope (so far the
+  maintainer's a1 II): it may open a credentials screen for `kit/drive.py --owner`, nothing ever typed, its frames saved
+  black unless it says `"values": "logged"`, which keeps its frames as they are in the run's `shots/` and their text in
+  its `drive.jsonl`, never in the console, the proof viewer or a packed copy.
 
 ## Context
 
@@ -75,6 +82,7 @@ trusts: the fingerprint (SSH host key) each camera showed at its first successfu
 and its address. A login goes only to a camera whose fingerprint matches; the editor's Forget removes the trust with
 the login. The maintainer, the a1 II's owner, decided the owner decision's part for their own camera on 2026-11-13.
 
+Before 2026-11-19 AGENTS.md and the playbook's rule 4 each stated the rule by hand beside a shorter Rule line.
 Before 2026-11-15 no run opened a credentials screen but one a dated owner decision named. Before 2026-11-14 such a
 run folder took the person's umask (folders 0755 and files 0644 as a rule, readable by other
 users of the computer), left `_live.png` at its top, and the console showed a logged screen's field names without the

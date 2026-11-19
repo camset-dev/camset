@@ -1,9 +1,15 @@
 # 21. On the shooting screen, no key but MENU unless it is named
 
-- **Date:** 2026-11-10
+- **Date:** 2026-11-10; changed 2026-11-19
 - **Status:** accepted
-- **Rule:** On the shooting screen no key but MENU goes out unless the run names that key for that press, since there a
-  key does whatever the body assigns to it.
+- **Never broken:** 7th in AGENTS.md's list
+- **Rule:** No key but MENU on the shooting screen, where a key does what the body makes of it (a Custom Key, the focus
+  frame, a dial's change to the live exposure, which no file puts back), unless the run names the key for that press (in
+  a prover's own code, where that press is its point, or with `kit/drive.py --on-shooting KEY`, the owner's word), and
+  none but MENU with no screen read, named or not. A named key's change is not put back by the run's restore: the run
+  names and presses the keys that undo it. A screen read as the shooting screen while the camera says it is in Playback
+  is the playback view: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or
+  Delete.
 
 ## Context
 
@@ -34,6 +40,8 @@ refused by drive.py's older check of an unread row, left a frame moved, put back
 named key there). A screen read as the shooting screen while the camera says it is in Playback is the playback view,
 not the shooting screen: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or
 Delete (`camkit.session.playback_kind`, `proving.nav.leave_playback`, 2026-11-15).
+
+Before 2026-11-19 AGENTS.md and the playbook's rule 14 each stated the rule by hand beside a shorter Rule line.
 
 ## Consequences
 

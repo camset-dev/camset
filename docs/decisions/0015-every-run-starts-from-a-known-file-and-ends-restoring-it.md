@@ -1,9 +1,16 @@
 # 15. Every run starts from a known file and ends restoring it
 
-- **Date:** 2026-10 (first kit)
+- **Date:** 2026-10 (first kit); changed 2026-11-19
 - **Status:** accepted
-- **Rule:** A run saves the camera's settings first and restores them at its end, checking nothing differs; it is
-  stopped with a STOP file, never killed with a dialog open.
+- **Never broken:** 12th in AGENTS.md's list
+- **Rule:** Every run starts from a known file and ends restoring it: it downloads its start file first and, at its end,
+  uploads it, waits for the camera's restart, downloads again and checks the records match, and live state the file does
+  not hold is put back by hand and checked; a session ends with the owner's own file back, never a run's changes left on
+  the camera. A run is stopped with its STOP file (a file named `STOP` in the run's folder,
+  `runs/<model>_fw<fw>/<run>/STOP`, which the run checks; `kit/camkit/runs.py` names wider ones; see the playbook's
+  [section 10](../REMAPPING_PLAYBOOK.md#10-recovering-from-a-stopped-run)) or, once its link is open, one Ctrl-C, after
+  which it cancels and restores (a second Ctrl-C stops it at once, which is not safe); a run is never killed, nor the
+  camera disconnected, with a dialog open: a dropped session can apply it.
 
 ## Context
 
@@ -15,6 +22,8 @@ shows.
 
 A run downloads a start file first and, at its end, uploads it and checks that 0 records differ; live state the file
 does not hold is put back by hand and checked.
+
+Before 2026-11-19 AGENTS.md and the playbook's rules 5 and 6 each stated the rule by hand beside a shorter Rule line.
 
 ## Consequences
 
