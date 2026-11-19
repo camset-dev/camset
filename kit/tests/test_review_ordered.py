@@ -28,8 +28,8 @@ CAM = "ILCE-0X0_fw1.00"             # a made-up camera
 LOWERS = ("global:0x0b65", "global:0x0b69", "global:0x0b6d")
 UPPERS = ("global:0x0b63", "global:0x0b67", "global:0x0b6b")
 # the a1 II's pairs as its hand table names them: ISO Range Limit, both directions proved; ISO AUTO's Minimum and
-# Maximum, and each mode's copies of the two, a Minimum chosen above the Maximum proved to raise it, the other way not
-# tried
+# Maximum, and each mode's copies of the two, a Minimum chosen above the Maximum proved to raise it, and a Maximum
+# chosen below the Minimum proved to pull it down for the live and stills pairs (Stills mode), not tried in Movie mode
 A1_PAIRS = {
     "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": True, "upper_moves_lower": True},
     "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": True, "upper_moves_lower": True},
@@ -268,9 +268,12 @@ def a1_written(tmp_path_factory):
         mp.setattr(definitions, "DATA", tmp / "data")
         _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
         mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
-        mp.setattr(S, "LIMIT_PAIRS", {k: e if k == UNSHOWN else {**e, "evidence": {
-            f: "made up" for f in ("lower_moves_upper", "upper_moves_lower") if e.get(f)}}
-            for k, e in S.LIMIT_PAIRS.items()})
+        # the clone's own hand evidence may already show every direction (the a1 II's does since 2026-11-19): the
+        # unshown pair's is taken off, so the test does not depend on what the private overlay holds
+        mp.setattr(S, "LIMIT_PAIRS", {k: {f: v for f, v in e.items() if f != "evidence"} if k == UNSHOWN else
+                                      {**e, "evidence": {f: "made up" for f in ("lower_moves_upper", "upper_moves_lower")
+                                                         if e.get(f)}}
+                                      for k, e in S.LIMIT_PAIRS.items()})
         mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
         said = io.StringIO()
         with contextlib.redirect_stdout(said):

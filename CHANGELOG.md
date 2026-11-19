@@ -158,6 +158,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The private hand evidence records what proved each direction of a limit pair** (`LIMIT_PAIRS`, its `"evidence"`
+  by direction): where that file is present, a direction the hand table marks is written with `moves_it` only where
+  its evidence is given, and the writer says so otherwise.
+- **Smaller fixes:** the proof viewer shows the page an option opens in the definition's order (Zebra Level's Custom
+  boxes: Type, Standard, Range, Lower Limit), and `framepos_run.py` records a press as refused only where it never
+  went, any other link error stopping the run as a lost link does, the restore running as before. CONTRIBUTING says
+  the kit's whole suite runs once in the clone that holds `private/` and `runs/` before a kit change lands, a test that
+  needs the owner's config asking for it with the `owner_config` fixture.
 - **Every prover judges what an OK did in one shared step:** `prove_run.py`, the axis, bracket, scale, portrait,
   two-box, option-boxes, grid and Shoot Mode provers and pass 3's switch write a choice the camera refused as
   `"applied": false` with its notice, closed with MENU, where several credited the label with the value kept before,
