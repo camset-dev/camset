@@ -622,6 +622,18 @@ def load_scan(scan, mode: str | None = None) -> tuple[list, dict]:
     if latest:
         print(f"page scan: {scan.name} (the camera's latest {recorded_mode(scan)} mode scan"
               f"{f' made in {AUTO}' if scan_auto(scan) else ''}; --scan names another)", flush=True)
+    from camkit import paths
+    root = paths.run_root(required=False)
+    named = scan.name if root is not None and scan.resolve().parent == root.resolve() else paths.shown(scan)
+    if not (scan / "scan_rekeyed.json").is_file():
+        sys.exit(f"The page scan {paths.shown(scan)} holds no whole lap (scan_rekeyed.json), so no menu page can be "
+                 "found by it. Nothing was sent to the camera. Let kit/page_scan.py finish its lap, then build its page "
+                 f"model (kit/page_model.py --vlm {named}), or name another scan with --scan <run>.")
+    if not (scan / "model.json").is_file():
+        sys.exit(f"The page scan {paths.shown(scan)} has no page model yet (model.json), so its menu pages cannot be "
+                 "told apart. Nothing was sent to the camera. Build it with\n"
+                 f"  .venv/bin/python kit/page_model.py --vlm {named}\n"
+                 f"(on Windows: .venv\\Scripts\\python kit\\page_model.py --vlm {named}), then run this again.")
     with open(scan / "scan_rekeyed.json", encoding="utf-8") as f:
         cycle = json.load(f)[:-1]
     with open(scan / "model.json", encoding="utf-8") as f:

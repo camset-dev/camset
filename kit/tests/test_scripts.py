@@ -979,6 +979,20 @@ def test_the_page_scan_loads_with_each_position_read_again(tmp_path):
     assert all(p["screen"].kind == p["kind"] and "signature" in p for p in cycle)
 
 
+def test_a_page_scan_with_no_page_model_yet_stops_in_plain_words(tmp_path):
+    """A scan just made, its page model not built yet (or its lap not written): load_scan stops before anything is sent
+    to the camera, saying what to run (kit/page_model.py --vlm <scan>), never with a traceback."""
+    (tmp_path / "scan_rekeyed.json").write_text(json.dumps([{"frame": "00001_down.png", "page": "p1"}]),
+                                                encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        runner.load_scan(tmp_path)
+    said = str(e.value)
+    assert "kit/page_model.py --vlm" in said and str(tmp_path.name) in said and "Nothing was sent" in said
+    (tmp_path / "scan_rekeyed.json").unlink()
+    with pytest.raises(SystemExit, match="kit/page_scan.py"):
+        runner.load_scan(tmp_path)
+
+
 def test_the_proofs_file_closes_and_tags_each_line(tmp_path):
     run = types.SimpleNamespace(dir=tmp_path)
     with runner.proofs_file(run, "Movie mode") as out:
