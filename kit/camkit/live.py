@@ -783,6 +783,13 @@ def leave_notice(cam) -> str:
 
 
 OK_LATE = 4.0           # how long OK gets to show when the camera is busy applying what it chose (seconds)
+# a frame older than this is looked at afresh before a press or a dial is judged on it and measured from it
+# (LiveCamera._recent). HDMI gives a frame every 16.7 ms (59.94 fps) and a press takes about 65 ms; a press's settle ends
+# on a fresh grab, and the caller's own reading before the next press (OCR, about 0.1-0.3 s a frame) leaves it younger
+# than this, so the normal path takes no extra grab. The camera changes with nothing sent on its own time: a menu drawn
+# 0.2-0.46 s after MENU (kit2_speed_lock_mv), the saving notice gone about 2 s after a download's reply; any sleep,
+# lock wait or reader's call between a read and a press (0.5 s and more) gets its fresh look
+STALE_S = 0.5
 # a frame this dark on average shows no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
 BLACK = 6.0
 
@@ -898,6 +905,23 @@ class LiveCamera:
         self.run.log("screen_stale", key=key, frame=self.frame.path.name, moves=self._moves())
         self.refresh("stale")
 
+    def _recent(self, key: str):
+        """The frame a press (or a dial) is judged on, and its settle measures "moved" from, looked at afresh when it is
+        older than STALE_S: the screen can change with nothing sent (a menu drawn late, a notice gone, the camera
+        leaving the menu by itself), so after a caller's sleep or a reader's call the screen read last may no longer be
+        on show. 2026-11-18 (kit2_pass2 250526-250527): a MENU sent 4.7 s after the last read was judged, and settled,
+        against that frame, a menu page that had opened meanwhile; the MENU closed it, the settle took the old menu
+        page for its result, and the next Left reached the shooting screen. A frame younger than STALE_S, as every
+        press's own settle leaves one, takes no extra grab. A frame that carries no capture time is left as it is."""
+        t = getattr(self.frame, "t", None)
+        if not isinstance(t, (int, float)) or t <= 0:
+            return
+        age = time.monotonic() - t
+        if age <= STALE_S:
+            return
+        self.run.log("frame_stale", key=key, frame=getattr(self.frame.path, "name", None), age=round(age, 3))
+        self.refresh("fresh")
+
     def press(self, key: str, allow=frozenset(), hold_ms=60, on_shooting=frozenset(), notice_ok: str = "",
               require_notice: bool = False, row=None, seen_enough: bool = False):
         """One press, read once it settles (look_late: seen_enough, a box prover's step, ends it on a change the settle
@@ -926,6 +950,7 @@ class LiveCamera:
         # gone out: only then can the lock end (_inside_after)
         closes = getattr(self, "network_open", None) is not None and safety.canonical_input(key) in CLOSES
         self._fresh(key)                    # the screen the press is judged on is never one the camera has left
+        self._recent(key)                   # nor one seen longer ago than STALE_S, nor measured from such a frame
         if safety.canonical_input(key) in safety.ENTER_KEYS | safety.TRASH_KEYS:
             # an Enter or a trash button: the screen looked at again, and that frame the one every check below judges
             # (look_before); a screen changed since its caller read it is refused (safety.ScreenChanged)
@@ -1622,6 +1647,7 @@ class LiveCamera:
             self.refuse(name, f"a row a network decision opened ({self.network_open['row']!r}) is open: no dial is "
                               "turned there, which could choose or commit an option (docs/decisions/0008)")
         self._fresh(name)
+        self._recent(name)
         self.link.dial(name, steps, screen=self.judged_screen(name), on_shooting=on_shooting)
         time.sleep(0.6)
         return self.refresh("dial")

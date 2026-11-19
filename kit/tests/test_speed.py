@@ -1082,6 +1082,69 @@ def test_a_menu_that_opens_late_after_the_shooting_screens_redraw_gets_no_second
     assert [k for k, t in cam.pressed] == ["menu"] and not cam.leaks
 
 
+class StaleEyes:
+    """HDMI eyes whose every grab is a fresh frame showing `shown` (a kind); settle records the frame it was given
+    (the press's reference) and ends on a frame of the press's result (kind "after")."""
+    name = "hdmi"
+
+    def __init__(self, shown):
+        self.shown, self.grabs, self.settled_from, self.timing = shown, [], [], {}
+
+    def grab(self, tag, save=True, shown=None):
+        self.grabs.append(tag)
+        import time
+        return SimpleNamespace(image=None, t=time.monotonic(), path=Path(f"{len(self.grabs):05d}_{tag}.png"),
+                               shown=shown or self.shown)
+
+    def settle(self, before, tag, expect_change=None, sent_at=None, **k):
+        self.settled_from.append(before)
+        return self.grab(tag, shown="after"), True
+
+
+def stale_camera(tmp_path, held, shown, age):
+    """A LiveCamera whose frame, `age` s old, read as `held`, while the camera now shows `shown`; its link records the
+    screen each press was judged on."""
+    import time
+    from camkit import live
+    from camkit.runs import Run
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run("stale", root=tmp_path)
+    cam.hdmi = StaleEyes(shown)
+    cam.frame = SimpleNamespace(image=None, t=time.monotonic() - age, path=tmp_path / "00000_old.png", shown=held)
+    cam.reading = lambda f: SimpleNamespace(kind=f.shown, focus="rows", signature=f.path.name)
+    cam.screen = cam.reading(cam.frame)
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    cam.may_open, cam.presses, cam._seen = frozenset(), 0, 0
+    judged = []
+    cam.link = SimpleNamespace(moves=0, menus=0,
+                               press=lambda key, hold, screen=None, **k: judged.append((key, screen.kind)),
+                               dial=lambda name, steps, screen=None, **k: judged.append((name, screen.kind)))
+    return cam, judged
+
+
+def test_a_press_is_judged_and_measured_on_a_frame_no_older_than_stale_s(tmp_path, monkeypatch):
+    """Decision 21's safety fix of 2026-11-18: a frame older than live.STALE_S is looked at afresh before a press is
+    judged and sent, so the screen the guards judge is the one on show (a menu read 4.7 s before that a MENU had since
+    closed is the shooting screen now, where the link lets no unnamed key out) and settle's "moved" is measured from
+    just before the press; a dial alike. A frame younger than that takes no extra grab (a press's normal path)."""
+    import json
+    from camkit import live
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    cam, judged = stale_camera(tmp_path, "menu", "shooting", 4.7)
+    cam.press("left")
+    assert judged == [("left", "shooting")] and cam.hdmi.grabs[0] == "fresh"
+    assert cam.hdmi.settled_from[0].path.name.endswith("_fresh.png")
+    assert any(e["kind"] == "frame_stale" for e in map(json.loads, (cam.run.dir / "events.jsonl").read_text(
+        encoding="utf-8").splitlines()))
+    cam, judged = stale_camera(tmp_path, "menu", "shooting", live.STALE_S / 4)
+    cam.press("left")
+    assert judged == [("left", "menu")] and "fresh" not in cam.hdmi.grabs
+    cam, judged = stale_camera(tmp_path, "menu", "shooting", 2.0)
+    cam.dial("front", 1)
+    assert judged == [("front", "shooting")] and cam.hdmi.grabs[0] == "fresh"
+    assert 0.2 <= live.STALE_S <= 1.0
+
+
 def test_no_menu_goes_from_the_shooting_screen_without_a_fresh_look_before_it():
     """A source check, so the blind pattern does not come back: a MENU pressed where the lines just above judged the
     screen as the shooting screen, with no fresh look among them (a refresh, a watched check, the helper), as
