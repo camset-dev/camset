@@ -12,7 +12,10 @@ A pull request here is one of two kinds:
   to a kit file (the never-open list in `kit/camkit/safety.py`). Then write the definition afresh:
   `kit/pass2_report.py --no-schema`, `kit/schema_update.py --write`, then both again without `--no-schema`.
 - **Code and docs:** the editor (`editor/`), the kit (`kit/`) and the docs site (`docs/`). The commands are in the
-  README, [Develop](README.md#develop).
+  README, [Develop](README.md#develop). The kit's tests that read the owner's frames, evidence and config skip in a
+  fresh clone, in CI and in an agent's worktree, so before a kit change lands the whole suite is run once in the clone
+  that holds `private/` and `runs/`. A test that needs the owner's config on purpose asks for it with the
+  `owner_config` fixture (`kit/tests/conftest.py`).
 
 Everyone taking part keeps to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
