@@ -555,3 +555,24 @@ def test_target_of_takes_the_row_named_exactly_and_never_one_of_two_it_only_read
     cycle, model = page_world("Shutter Type", "SDrive Mode")
     assert crawl_run.target_of(cycle, model, "Drive Mode") == (1, True, "")         # its bar read after travel
     assert crawl_run.target_of(cycle, model, "Shutter Type") == (0, False, "")
+
+
+# ------------------------------------------------------------------------------------------------ B11
+
+def test_the_ocr_cache_keeps_the_frames_used_last_and_a_long_batch_still_reads_whole(monkeypatch, tmp_path):
+    """camkit.ocr kept every frame's reading for the life of the process (a night's run: tens of thousands); it keeps
+    the CACHE_MAX used last, and a batch longer than that still gives every frame its own lines."""
+    from camkit import ocr
+    recent = ocr.Recent(2)
+    recent["a"], recent["b"] = 1, 2
+    assert recent["a"] == 1
+    recent["c"] = 3
+    assert list(recent) == ["a", "c"]                    # "b", used least lately, went
+    monkeypatch.setattr(ocr, "_cache", ocr.Recent(2))
+    monkeypatch.setattr(ocr, "_rapidocr", lambda p: [{"text": p.name, "conf": 1.0, "x": 0, "y": 0, "w": 1, "h": 1}])
+    frames = []
+    for i in range(5):
+        frames.append(tmp_path / f"{i:05d}.png")
+        frames[-1].write_bytes(f"frame {i}".encode())
+    got = ocr.read(frames, eng="rapidocr")
+    assert [got[p][0].text for p in frames] == [p.name for p in frames] and len(ocr._cache) == 2

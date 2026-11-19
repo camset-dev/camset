@@ -7,8 +7,10 @@ Two engines, chosen by CAMSET_OCR or private/config.json "ocr":
   (`pip install rapidocr_onnxruntime`), ~0.2 s an image. Measured against Apple Vision on the
   a1 II's menu pages in docs/PORTING.md.
 Both give lines in reading order with pixel boxes from the top left. Results are cached by file
-content and engine.
+content and engine, the CACHE_MAX used last (a night's run reads tens of thousands of frames, and
+before 2026-11-18 the cache kept every one).
 """
+import collections
 import hashlib
 import json
 import os
@@ -20,7 +22,30 @@ from pathlib import Path
 from . import KIT, built, config
 
 OCR_BIN = built(KIT / "ocr" / "build", "ocr")
-_cache: dict[str, list] = {}
+CACHE_MAX = 4096           # frames whose readings the process keeps (a few KB each)
+
+
+class Recent(collections.OrderedDict):
+    """A dict that keeps its `most` entries used last: reading one or setting it makes it the newest, and setting one
+    past `most` drops the oldest."""
+
+    def __init__(self, most: int):
+        super().__init__()
+        self.most = most
+
+    def __getitem__(self, key):
+        value = super().__getitem__(key)
+        self.move_to_end(key)
+        return value
+
+    def __setitem__(self, key, value):
+        super().__setitem__(key, value)
+        self.move_to_end(key)
+        while len(self) > self.most:
+            self.popitem(last=False)
+
+
+_cache: Recent = Recent(CACHE_MAX)
 _rapid = None
 
 
@@ -90,19 +115,20 @@ def read(paths, eng: str | None = None) -> dict[Path, list[Line]]:
     paths = [Path(p) for p in paths]
     eng = eng or engine()
     keys = {p: _key(p, eng) for p in paths}
-    todo = [p for p in paths if keys[p] not in _cache]
+    have = {keys[p]: _cache[keys[p]] for p in paths if keys[p] in _cache}     # this call's, whatever the cache drops
+    todo = [p for p in paths if keys[p] not in have]
     if todo and eng == "rapidocr":
         for p in todo:
-            _cache[keys[p]] = _rapidocr(p)
+            have[keys[p]] = _cache[keys[p]] = _rapidocr(p)
     elif todo:
         out = subprocess.run([str(OCR_BIN), *map(str, todo)], capture_output=True, text=True,
                              encoding="utf-8", check=True).stdout
         found, failed = _apple_lines(out, todo)
         for p, lines in found.items():
-            _cache[keys[p]] = lines
+            have[keys[p]] = _cache[keys[p]] = lines
         if failed:
             raise RuntimeError(failed)
-    return {p: [Line(**ln) for ln in _cache[keys[p]]] for p in paths}
+    return {p: [Line(**ln) for ln in have[keys[p]]] for p in paths}
 
 
 def _apple_lines(out: str, todo: list) -> tuple:
