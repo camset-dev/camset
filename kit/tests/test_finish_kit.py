@@ -1152,3 +1152,61 @@ def test_the_bar_of_this_morning_read_by_this_computers_ocr_is_the_row():
     lit = drive.highlighted(f.image, f.path)
     assert drive.lit_refused(lit, [], [FRING], __import__("camkit.first_open").first_open.Seen(), set(), None,
                              {"function ring(lens)": ["-"]}, None) == ("", (FRING,)), lit
+
+
+# ---------------------------------------------------------------- 10. the first open of an icon row in a submenu
+
+def test_the_first_opens_check_takes_a_submenu_bar_lit_refused_tied_to_the_row():
+    assert drive.first_open_tied(VARSH_LIT, VARSH[:-1], VARSH, ["Var. Shutter", varsh_bar()], tuple(VARSH))
+    assert not drive.reads_row_spaced(VARSH_LIT, VARSH[-1]), "the label check alone refuses it, as before"
+
+
+@pytest.mark.parametrize("case", ["no bar read", "another frame's bar", "the reader reads otherwise",
+                                  "another row reads the label", "lit_refused named no row", "lit_refused named another",
+                                  "another page", "a page not placed", "a one-label path"])
+def test_the_first_opens_check_takes_no_wider_than_lit_refuseds_submenu_rule(case):
+    lit, depth, path, labels, row = VARSH_LIT, VARSH[:-1], VARSH, [varsh_bar()], tuple(VARSH)
+    if case == "no bar read":
+        labels = ["Var. Shutter Set.", VARSH_LIT]
+    elif case == "another frame's bar":
+        labels = [varsh_bar(lit="fVar. Shutter")]
+    elif case == "the reader reads otherwise":
+        labels = [varsh_bar(readings=(VARSH_LIT, VARSH_LIT))]
+    elif case == "another row reads the label":
+        labels = [varsh_bar(others=(*VARSH_OTHERS, "Var. Shutter Set."))]
+    elif case == "lit_refused named no row":
+        row = None
+    elif case == "lit_refused named another":
+        row = ("Anti-flicker Set.", "Var. Shutter")
+    elif case == "another page":
+        depth = ["Drive Mode"]
+    elif case == "a page not placed":
+        depth = None
+    elif case == "a one-label path":
+        path, depth, row = ["Var. Shutter Set."], [], ("Var. Shutter Set.",)
+    assert not drive.first_open_tied(lit, depth, path, labels, row), case
+
+
+def test_drive_makes_the_first_open_of_an_icon_row_in_a_submenu_under_the_link_loss_procedure(tmp_path, monkeypatch,
+                                                                                              statement_scope):
+    """`--path "Anti-flicker Set." --path "Var. Shutter Set." --press right` on a body that has opened Anti-flicker Set.
+    but not the row: the bar "fVar. Shutter Set.", tied by the submenu page read live, opens as the row's first open,
+    RESTORE_BY_HAND written before its Right, the start file checked after; without the bar read, refused as before."""
+    from conftest import TEST_CAMERA
+    from test_first_open import BLANK, drive_run, look, looks_of
+    from camkit.runs import restore_pending
+    statement_scope(BLANK)
+    looks_of(TEST_CAMERA, look(["Anti-flicker Set."]))
+    monkeypatch.setattr(drive, "submenu_bar", lambda cam, rows: varsh_bar())
+    code, pressed, line, said = drive_run(tmp_path / "a", monkeypatch, path=tuple(VARSH), lit=VARSH_LIT,
+                                          states=[("submenu", VARSH_LIT)], live=READER["varsh"])
+    assert pressed == [("menu", False), ("right", True)] and line["first_open"] is True, said
+    assert "opens as any row from now on" in said and not restore_pending(tmp_path / "a")
+    monkeypatch.setattr(drive, "submenu_bar", lambda cam, rows: None)
+    code, pressed, line, said = drive_run(tmp_path / "b", monkeypatch, path=tuple(VARSH), lit=VARSH_LIT,
+                                          states=[("submenu", VARSH_LIT)], live=READER["varsh"])
+    assert pressed == [("menu", False)] and "right refused" in said, said
+    monkeypatch.setattr(drive, "submenu_bar", lambda cam, rows: varsh_bar(readings=(VARSH_LIT, VARSH_LIT)))
+    code, pressed, line, said = drive_run(tmp_path / "c", monkeypatch, path=tuple(VARSH), lit=VARSH_LIT,
+                                          states=[("submenu", VARSH_LIT)], live=READER["varsh"])
+    assert pressed == [("menu", False)] and "right refused" in said, said

@@ -148,7 +148,9 @@ local readers only, and its folder is marked so no batch tool asks any reader ab
 (camkit.vlm.NO_READER_MARKER). Nothing is typed: a keyboard or an entry screen takes MENU alone.
 A run (never an --owner one) that opens a --path's last row this camera has not been seen to open (camkit.first_open)
 makes that row's first open: only with the owner's blank-cards statement (camkit.statements), only with --press right
-alone and every row above it seen, and its Right goes as an armed press that may drop the link does (RESTORE_BY_HAND
+alone and every row above it seen, on a lit bar that reads that row (its label, spacing aside: spaced_end; or a bar
+lit_refused tied to it, by its icon read as a letter on a one-label path, icon_reading, or by a submenu page read live,
+first_open_tied), and its Right goes as an armed press that may drop the link does (RESTORE_BY_HAND
 first, one read after it, MENU and the remote restore); the screen that read finds is one the kit reads where its kind
 is one of safety.FIRST_OPEN_KINDS, the armed press's kinds and the other option screens MENU leaves (a slider, number
 fields, a table...), for a first open alone (a screen of no known kind, a black frame or no text still keeps the marker,
@@ -986,6 +988,18 @@ def submenu_bar(cam, rows) -> SubmenuBar | None:
         return None
 
 
+def first_open_tied(lit: str, depth, path: list, labels, opening_row) -> bool:
+    """Whether the first open's check (the lit bar is the row whose first open the run makes) takes the bar `lit` for
+    the --path's last row by lit_refused's submenu rule and its evidence, no wider: lit_refused named the --path's row
+    (`opening_row`), the run is on that row's own submenu page (`depth`, the labels above it, path[:-1]; a path of two
+    labels at least), and the page's labels read live for that judgment (`labels`, shown_labels') hold the bar read on
+    its own frame, which submenu_tied ties to the row ("fVar. Shutter Set.", its icon read as a letter, 2026-11-19).
+    The first open then goes under the link-loss procedure as any other."""
+    bar = next((k for k in labels or () if isinstance(k, SubmenuBar)), None)
+    return (bar is not None and len(path) > 1 and depth is not None and list(depth) == list(path[:-1])
+            and opening_row is not None and list(opening_row) == list(path) and submenu_tied(lit, path[-1], bar))
+
+
 def scan_row(cycle, model, j) -> dict | None:
     """The page model's row at the page scan's position `j` (where crawl_run.go_to went), or None where it has none."""
     if isinstance(j, bool) or not isinstance(j, int) or j < 0:
@@ -1777,6 +1791,7 @@ def main():
                     # the owner row (--owner): what this press is there, judged here on this reading before the camera
                     # judges it on its own (LiveCamera): its opening, or a press inside it
                     owner_what, owner_opens, opening_row, kind_before = "", None, None, cam.read().kind
+                    live_labels = []        # the page's labels read live for lit_refused (shown_labels), its bar among them
                     if owner_info and inside and inside.get("owner"):
                         why, owner_what = owner_press_decision(key, inside, owner_info,
                                                                lit if key in ENTERS else "", t, kind_now(), last,
@@ -1799,8 +1814,8 @@ def main():
                         # opens only as the --path's own last row (first_open_or_exit), never reached by the presses
                         decided = (safety.network_lifted_row(lit, cam_network, bool(address), values, readings, known)
                                    if a.network and lit else None)
-                        why, opening_row = lit_refused(lit, depth, a.path, seen,
-                                                       known_rows | set(shown_labels(cam, cycle, model)), decided,
+                        live_labels = shown_labels(cam, cycle, model)
+                        why, opening_row = lit_refused(lit, depth, a.path, seen, known_rows | set(live_labels), decided,
                                                        row_vals, gone_to if i == 0 else None)
                     else:
                         why = ""
@@ -1877,8 +1892,10 @@ def main():
                     # press that may drop the link
                     first_now = bool(first_label) and key in RIGHTS and not inside
                     # the bar read with the row's icon as a letter or two, which lit_refused tied to the --path's row
-                    # (icon_reading), is that row too
-                    tied = bool(gone_to) and i == 0 and opening_row is not None and list(opening_row) == list(a.path)
+                    # (icon_reading), is that row too; and so is a submenu row's bar lit_refused tied to it by the page
+                    # read live on the bar's own frame (first_open_tied: submenu_tied, kit2_fin_look_varsh)
+                    tied = (bool(gone_to) and i == 0 and opening_row is not None and list(opening_row) == list(a.path)) \
+                        or first_open_tied(lit, depth, a.path, live_labels, opening_row)
                     if first_now and not (owner_opens or opens or look_bar or reads_row_spaced(lit, first_label) or tied):
                         print(f"{key} refused: the lit row does not read {first_label!r}, whose first open this run makes; "
                               "cancelling", flush=True)
