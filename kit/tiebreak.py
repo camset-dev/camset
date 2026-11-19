@@ -1,5 +1,6 @@
-"""A third reader (omlx) for the options pass 1's OCR and vLLM read differently; kit/pass1_map.py then
-takes the majority of three.
+"""The third reader (the "third" role, camkit.vlm.role) for the options pass 1's OCR and second reader read
+differently; kit/pass1_map.py then takes the majority of three. In tiebreak.jsonl the second reader's reading is kept
+under "vllm" and the third's under "omlx", whatever readers play the roles (the names of the servers that first did).
 
     .venv/bin/python -u kit/tiebreak.py kit2_crawl_movie          # a run in the camera's runs/<model>_fw<fw>/
 

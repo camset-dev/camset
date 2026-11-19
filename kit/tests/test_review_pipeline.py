@@ -618,6 +618,23 @@ def test_the_axis_seek_asks_no_reader_where_ocr_plainly_names_another_option(mon
     assert asked == ["cam"]
 
 
+# ------------------------------------------------------------------------------------------------ the roles, not servers
+
+def test_the_pass1_tools_say_the_roles_they_ask_not_the_maintainers_servers():
+    """tiebreak.py, pass1_labels.py and pass1_map.py named the maintainer's own servers as if they were the roles
+    ("A third reader (omlx)", "Apple OCR", "+ vLLM"): they say the roles the code asks, the servers' names left only as
+    the data keys they still are."""
+    import re
+
+    import pass1_labels
+    import pass1_map
+    import tiebreak
+    for mod, role in ((tiebreak, "third reader"), (pass1_labels, "second reader"), (pass1_map, "second reader")):
+        doc = " ".join(mod.__doc__.split())
+        assert role in doc, mod.__name__
+        assert not re.search(r"Apple OCR|\(omlx\)|\+ vLLM|omlx as a third|asks vLLM|the VLMs?\b", doc), mod.__name__
+
+
 # ------------------------------------------------------------------------------------------------ B11
 
 def test_the_ocr_cache_keeps_the_frames_used_last_and_a_long_batch_still_reads_whole(monkeypatch, tmp_path):

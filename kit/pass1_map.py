@@ -10,13 +10,14 @@ it writes owner-only (camkit.runs.private_if_marked). A crawl run with --skip-se
 rows the coverage ledger had settled, so its map has holes: it is refused for kit2_pass1's map, and --own says so. A row
 a crawl only skipped as not seen opened on this body (camkit.first_open.SKIPPED) keeps the mapping made before of it.
 
-Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + vLLM) and, if present,
-<run>/tiebreak.jsonl (omlx as a third reader where those two disagreed) and <run>/checked_labels.json
-({frame: label} read by eye, which wins). Rules, from the readings of
+Inputs: <run>/options.jsonl (kit/pass1_labels.py: OCR under the cursor + the second reader) and, if present,
+<run>/tiebreak.jsonl (kit/tiebreak.py: the third reader where those two disagreed) and <run>/checked_labels.json
+({frame: label} read by eye, which wins). The sources and the review list name the second reader "vllm" and the third
+"omlx", whatever readers play those roles (the servers that first did). Rules, from the readings of
 2026-10-28:
-  - carousels (dialog): OCR of the orange line under the title wins; the VLMs tend to read the
+  - carousels (dialog): OCR of the orange line under the title wins; the vision readers tend to read the
     option's icon ("BRK WB") instead of its name ("White Balance Bracket: Lo"); likewise grids, whose
-    subtitle names the selected cell ("Tracking: Spot M"; the VLM said "M");
+    subtitle names the selected cell ("Tracking: Spot M"; the vision reader said "M");
   - lists, checklists, side lists: the two readers when they agree, else the majority of three;
   - the cursor on OK/Cancel is a button, not an option;
   - star ratings, and anything without a majority, go on the review list.

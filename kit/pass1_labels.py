@@ -3,10 +3,11 @@
     .venv/bin/python kit/pass1_labels.py [kit2_pass1]          # a run in the camera's runs/<model>_fw<fw>/, or a path
 
 For each row in <run>/rows.jsonl with option frames (lists, carousels, checklists, grids, number
-fields), reads the text under the cursor with Apple OCR, cropped where the pixel reader puts the
-cursor (primary: the VLM took the saved radio item for the highlighted one, 2026-10-28), and asks
-vLLM (8 in parallel; cached by image) the same question as a second opinion ("agreed"). Writes
-<run>/options.jsonl: one line per option with its row path, index, frame and both readings.
+fields), reads the text under the cursor with OCR (the configured engine, camkit.ocr), cropped where the pixel reader
+puts the cursor (primary: the vision reader took the saved radio item for the highlighted one, 2026-10-28), and asks
+the second reader (the "second" role, camkit.vlm.role; its "parallel" questions at once, 8 by default; cached by image)
+the same question as a second opinion ("agreed"). Writes <run>/options.jsonl: one line per option with its row path,
+index, frame and both readings (the second reader's under "vlm").
 
 A run folder a --network run marked (camkit.vlm.LOCAL_MARKER: its frames may show what a network or identity row
 holds) is read with a local reader only (camkit.vlm.local_only_runs), and the tool stops before it reads a frame when
