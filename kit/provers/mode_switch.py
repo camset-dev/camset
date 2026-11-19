@@ -15,7 +15,8 @@ a memory rewrites dozens of settings.
 
 The switch is a run of its own, bracketed as every run is (decision 15): the start file is downloaded first, and
    --keep     leaves the camera in the new mode, the start file's name kept in kit2_pass2/mode_switch.json; the
-              prove runs that follow (--eyes osd-all) take the camera as they find it and put that back;
+              prove runs that follow (--eyes osd-all) take the camera as they find it and put that back. Refused
+              while a switch waits in any run folder (one kept switch at a time);
    --restore  uploads the kept start file (the camera restarts in its own mode, the dial's say restored) and
               checks it took, then forgets the switch. The start file is the camera's settings from before the
               switch: whatever was changed on the camera since is undone too;
@@ -50,7 +51,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, match, ocr, safety  # noqa: E402
+from camkit import camset, match, ocr, paths, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
@@ -65,7 +66,7 @@ from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_t
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
-                    scan_position, shown_mode, switch_advice, switch_left, write_json)
+                    scan_position, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
 
 BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"
@@ -591,6 +592,15 @@ def main():
         sys.exit("--to names the mode (Movie, S&Q Motion, Time-lapse, Stills, or P/A/S/M), or --restore")
     if kept.exists():
         sys.exit(f"A switch is still waiting in {kept}; nothing was sent to the camera.\n{switch_advice(kept)}")
+    if a.keep:
+        # a second kept switch, in another run folder, would leave the kit's record saying the camera is in two modes,
+        # and every run would then refuse to start (runner.refuse_switched): one waits at a time, whatever its folder
+        for folder, left in switch_waiting():
+            f = folder / KEPT
+            where = f"{left} mode" if left else "a mode its record does not name"
+            sys.exit(f"A switch is still waiting in {paths.shown(f)} (it left the camera in {where}): a second kept "
+                     "switch would leave the kit's record naming two modes, and every run would then refuse to start. "
+                     f"Nothing was sent to the camera.\n{switch_advice(f)}")
     if a.to in MODES:
         family, mode = 0, MODES[a.to]
     elif a.to in FAMILIES:

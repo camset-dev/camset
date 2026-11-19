@@ -427,3 +427,31 @@ def test_page_scans_presses_are_judged_on_a_frame_no_older_than_stale_s(tmp_path
     fresh = cam2.frame("new", 0.0)
     scan2.press("menu", fresh, "menu-close")                       # a frame young enough: no extra look
     assert cam2.grabs == ["down-fresh"] and cam2.sent == [("menu", "shooting")]
+
+
+# ---------------------------------------------------------------- finding 23: a second kept mode switch
+
+
+def test_a_kept_switch_is_refused_while_another_waits_in_any_run_folder(own_runs, monkeypatch):
+    """Finding 23: mode_switch.py --keep looked for a waiting switch in its own run folder only, so a second one kept in
+    another folder was accepted, and every runner then refused to start (runner.refuse_switched: the kit's record says
+    the camera is in two modes). Now --keep stops before anything is sent while a switch waits in any run folder,
+    naming it and the way out (--forget or --restore, runner.switch_advice)."""
+    import runner
+    from conftest import TEST_CAMERA
+    sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "provers"))
+    import mode_switch
+    other = own_runs / TEST_CAMERA / "kit2_other" / runner.SWITCH_KEPT
+    other.parent.mkdir(parents=True)
+    runner.write_json(other, {"start": "00001_before.DAT", "to": "Movie", "scan_mode": "Movie", "from": "Stills"})
+    monkeypatch.setattr(mode_switch, "load_scan", lambda scan: ([], {}))
+    monkeypatch.setattr(mode_switch, "check_readers", lambda: None)
+    monkeypatch.setattr(mode_switch, "eyes_from_config", lambda run: pytest.fail("the eyes opened"))
+    monkeypatch.setattr(mode_switch, "Link", lambda run: pytest.fail("the link opened"))
+    monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--to", "S&Q Motion", "--keep", "--in", "Movie",
+                                      "--run", "kit2_pass2"])
+    with pytest.raises(SystemExit) as stop:
+        mode_switch.main()
+    said = str(stop.value.code)
+    assert "kit2_other" in said and "Nothing was sent to the camera" in said
+    assert "--forget" in said and "--restore --run kit2_other" in said
