@@ -632,3 +632,66 @@ def test_boxes_record_a_refused_value_as_refused(monkeypatch):
     with pytest.raises(B.Failed, match=r"Rec Frame Rate = 24p: the camera refused it after OK \(its notice on "
                                        r"\d+_enter.png\)$"):
         B.set_value(cam, None, [], {}, path, names, "Rec Frame Rate", "24p")
+
+
+class ZebraCam(Shots):
+    """Zebra Level's Custom 1 with its row of boxes: the box stepped to `target` (step_to, faked) is kept with OK, which
+    goes back to the menu row; OK with a value in `refuse` brings the camera's refusal."""
+
+    def __init__(self, refuse=()):
+        super().__init__()
+        self.target, self.refuse, self.answer_once = None, set(refuse), None
+
+    def open(self):
+        self.kind = "dialog"
+        self.shot("right")
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key == "enter" and self.target in self.refuse:
+            self.refused_here()
+        elif key in ("enter", "menu"):
+            self.kind, self.text = "menu", ""
+        self.shot(key)
+
+
+ZEBRA = {"types": {"Std+Range": ["Type", "Standard", "Range"]},
+         "boxes": {"Type": {"values": ["Std+Range", "Lower Limit"], "held": "Std+Range", "wraps": True},
+                   "Standard": {"values": ["69", "70", "71"], "held": "70", "type": "Std+Range"},
+                   "Range": {"values": ["±4", "±5", "±6"], "held": "±5", "type": "Std+Range"}}}
+
+
+def optboxes_world(monkeypatch, cam):
+    """optboxes_run's seams on a ZebraCam: the option and its boxes reached, the box stepped and read as asked, the OK
+    judge passing; the downloads made up."""
+    import optboxes_run as O
+    reads(monkeypatch, lambda f: cam.text)
+    no_diffs(monkeypatch, O)
+    for name, value in (("open_option", lambda c, cycle, model, row, option: c.open()),
+                        ("enter_box", lambda c, index, names, option: None),
+                        ("step_to", lambda c, b, vals, target, names, option: setattr(c, "target", target)),
+                        ("in_box", lambda c, option, name, b: None), ("ok_refused", lambda c, consent, read=None: ""),
+                        ("value_read", lambda c, b, like, fits=None, always=False, need="":
+                         O.BoxRead(like, like, like, "made up", "both")),
+                        ("to_shooting", lambda link, hdmi, why: None), ("wait_lock", lambda *a, **k: None)):
+        monkeypatch.setattr(O, name, value)
+    return O
+
+
+def test_optboxes_record_a_refused_value_as_refused(monkeypatch):
+    """optboxes_run kept each value with OK and wrote "applied": true whatever came up, a refusal crediting the label
+    with its base's value; now the screen after OK goes through the step: the refused value's line says "applied":
+    false with the notice, closed with MENU; a base whose OK the camera refuses proves nothing."""
+    cam = ZebraCam(refuse={"±4"})
+    O = optboxes_world(monkeypatch, cam)
+    out = io.StringIO()
+    O.prove(cam, downloads(), None, [], {}, "Zebra Level", "Custom 1", ZEBRA, "Range", Path("00001_before.DAT"), out)
+    lines = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
+        ("±4", False, REFUSAL), ("±6", True, None), ("±5", True, None)]
+    assert "notice" not in lines[1] and cam.presses.count("menu") == 1
+    cam = ZebraCam(refuse={"Std+Range"})
+    O = optboxes_world(monkeypatch, cam)
+    with pytest.raises(O.Failed, match=r"the base: the camera refused Zebra Level > Custom 1 > Type = Std\+Range"):
+        O.prove(cam, downloads(), None, [], {}, "Zebra Level", "Custom 1", ZEBRA, "Range", Path("00001_before.DAT"),
+                io.StringIO())

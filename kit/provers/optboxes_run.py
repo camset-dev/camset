@@ -45,7 +45,9 @@ option, the word above the lit box is the box's, it is lit on the value, the foo
 the camera's own Enter guard judges it again (a dialog; read as no known kind, by the OptionBoxes consent). A download
 and its diff make a proof line in boxes_run's shape (path row > option > box, kind "list", its index among the probe's
 values, "sampled"), into kit2_pass2/proofs.jsonl with --context; a value whose records did not move is kept with no
-changes and said "not proved", never credited. The session puts the start file back at the end.
+changes and said "not proved", never credited. The screen after OK is read by proving.commit.after_ok: a value whose OK
+the camera refuses is written "applied": false with its notice, and a base it refuses stops the run. The session puts
+the start file back at the end.
 
 HAZARD (the a1 II, 2026-11-18): the one screen "Standard lit at 30, Range ±5" stalls the camera's remote link while
 the kit reads the screen through it (OSD eyes): no step goes onto it there (step_to refuses in plain words), the probe
@@ -76,6 +78,7 @@ from boxes_run import lines as boxes_lines  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, option_key, to_shooting  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from proving.screens import box_answer, word_answer  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, scan_position)
@@ -540,8 +543,10 @@ def values_for(name: str, vals: list, held: str, range_held: str | None = None, 
 def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx: int, vals: list, target: str) -> dict:
     """Box `idx` (of the row `names`) stepped to `target` and kept with OK, judged first on the screen's own shape
     (ok_refused) and on the box's value as OCR and the second reader read it (value_read, the reader always asked:
-    the value kept decides the proof), then a settings download; {"chosen_frame", "row_frame", "shown", "vlm",
-    "vlm_reader", "read_by", "stand_in", "dat"}."""
+    the value kept decides the proof), then what the camera did with the OK (proving.commit.after_ok: a refusal or a
+    notice closed with MENU, never OK; no information screen taken, the boxes reading as no known kind), then a
+    settings download; {"chosen_frame", "row_frame", "shown", "vlm", "vlm_reader", "read_by", "stand_in", "dat",
+    "outcome"}."""
     open_option(cam, cycle, model, row, option)
     enter_box(cam, idx, names, option)
     step_to(cam, idx, vals, target, names, option)
@@ -559,12 +564,22 @@ def keep(cam, link, hdmi, cycle, model, row: str, option: str, names: list, idx:
     cam.answer_once = consent           # read as a dialog the camera's own guard judges it; as no known kind, this does
     cam.press("enter")
     row_frame = getattr(cam.frame.path, "name", "")
+    got = after_ok(cam, f"{row} > {option} > {names[idx]}", label=target, info=False)
     to_shooting(link, hdmi, "the download after OK")
     # no wait first: camlink waits up to 5 s for the camera to allow a settings download
     dat = link.download(f"{names[idx]}-{vals.index(target)}".replace(" ", "-"))
     wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {"chosen_frame": chosen, "row_frame": row_frame, "shown": read.ocr, "vlm": read.vlm, "vlm_reader": read.reader,
-            "read_by": read.by, "stand_in": read.stand_in, "dat": dat}
+            "read_by": read.by, "stand_in": read.stand_in, "dat": dat, "outcome": got}
+
+
+def kept_base(got: dict, what: str, chose: str) -> Path:
+    """The download a base was made of (keep's), or Failed where the camera refused its OK: no base, nothing proved
+    from it (`what` names the base, `chose` the choice its OK went on)."""
+    if not got["outcome"].applied:
+        raise Failed(f"{what}: the camera refused {chose} after OK (its notice on {got['outcome'].notice['frame']}): no "
+                     "base, nothing proved from it")
+    return got["dat"]
 
 
 def ok_refused(cam, consent, read: str | None = None) -> str:
@@ -583,7 +598,8 @@ def prove(cam, link, hdmi, cycle, model, row: str, option: str, probed: dict, on
     first = next(iter(types.values()))[0]
     theld, tvals = boxes[first]["held"], boxes[first]["values"]
     names_held = types[theld]
-    base = keep(cam, link, hdmi, cycle, model, row, option, names_held, 0, tvals, theld)["dat"]
+    base = kept_base(keep(cam, link, hdmi, cycle, model, row, option, names_held, 0, tvals, theld), "the base",
+                     f"{row} > {option} > {first} = {theld}")
     moved = _diff(start, base)
     print(f"base: {row} on {option}, its boxes as they stand ({len(moved)} records moved from the start file: "
           f"{', '.join(c.key for c in moved) or 'none'}); every proof below is compared with it", flush=True)
@@ -598,31 +614,36 @@ def prove(cam, link, hdmi, cycle, model, row: str, option: str, probed: dict, on
         names = types[t]
         idx, b_base = names.index(name), base
         if t != theld:
-            b_base = keep(cam, link, hdmi, cycle, model, row, option, names_held, 0, tvals, t)["dat"]
+            b_base = kept_base(keep(cam, link, hdmi, cycle, model, row, option, names_held, 0, tvals, t),
+                               f"{name}'s base", f"{row} > {option} > {first} = {t}")
             print(f"{name}: from a base with {first} on {t}", flush=True)
         range_held = boxes.get(other, {}).get("held")
         if osd and name == HAZARD["box"] and other in names and range_held == its:
             ovals = boxes[other]["values"]
             off = ovals[ovals.index(its) + 1] if ovals.index(its) + 1 < len(ovals) else ovals[ovals.index(its) - 1]
-            b_base = keep(cam, link, hdmi, cycle, model, row, option, names, names.index(other), ovals, off)["dat"]
+            b_base = kept_base(keep(cam, link, hdmi, cycle, model, row, option, names, names.index(other), ovals, off),
+                               f"{name}'s base", f"{row} > {option} > {other} = {off}")
             range_held = off
             print(f"{name}: from a base with {other} on {off} (OSD eyes: {name} {HAZARD['value']} with {other} at {its} "
                   "stalls the camera's remote link)", flush=True)
         vals = info["values"]
         for target in values_for(name, vals, info["held"], range_held, info.get("wraps", False)):
             got = keep(cam, link, hdmi, cycle, model, row, option, names, idx, vals, target)
-            ch = _diff(b_base, got["dat"])
+            ch, done = _diff(b_base, got["dat"]), got["outcome"]
             out.write(json.dumps({"path": [row, option, name], "kind": "list", "index": vals.index(target),
                                   "label": target, "shown": got["shown"], "vlm": got["vlm"],
                                   "vlm_reader": got["vlm_reader"], "read_by": got["read_by"],
                                   **({"vlm_stand_in": True} if got["stand_in"] else {}),
                                   "chosen_frame": got["chosen_frame"],
                                   "row_frame": got["row_frame"], "dat": got["dat"].name, "base": b_base.name,
-                                  "applied": True, "boxes": True, "sampled": True, "changes": changes_of(ch)}) + "\n")
+                                  **({"notice": done.notice} if done.notice else {}), "applied": done.applied,
+                                  "boxes": True, "sampled": True, "changes": changes_of(ch)}) + "\n")
             out.flush()
             if got["stand_in"]:
                 print(f"  {name} = {target}: read by {got['vlm_reader']!r}, standing in for the second reader", flush=True)
-            if ch:
+            if not done.applied:
+                print(f"  {name} = {target}: refused by the camera, not proved", flush=True)
+            elif ch:
                 print(f"  {name} = {target}: {len(ch)} records {[(c.key, c.before, c.after) for c in ch][:4]}", flush=True)
             elif target != info["held"]:
                 print(f"  {name} = {target}: not proved: no record moved from its base", flush=True)

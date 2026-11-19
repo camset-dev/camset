@@ -421,6 +421,9 @@ class Cam:
     def close(self):
         self.open, self.lit, self.edit = False, None, None
 
+    def read(self):                 # the screen after OK, which the prover reads (proving.commit): the menu row
+        return SimpleNamespace(kind="dialog" if self.open else "menu")
+
     def records(self):
         out = {"global:0x0379": self.LIST.index(self.level)}
         for o, base in (("Custom 1", 0x0dde), ("Custom 2", 0x0de6)):
