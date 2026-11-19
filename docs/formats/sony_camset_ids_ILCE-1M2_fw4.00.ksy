@@ -3054,8 +3054,8 @@ enums:
         on it proved on the camera.'
     0x1145:
       id: record_setting_1145
-      doc: 'Record Setting (Time-lapse, XAVC S 4K, 60p) [Shooting > Image Quality/Rec]: 6 200M 422 10bit, 9 150M
-        420 8bit. live settings; 1 of 1 settings on it proved on the camera.'
+      doc: 'Record Setting (Time-lapse, XAVC S 4K, 60p) [Shooting > Image Quality/Rec]: 6 200M 4:2:2 10bit, 9 150M
+        4:2:0 8bit. live settings; 1 of 1 settings on it proved on the camera.'
     0x1147:
       id: record_setting_1147
       doc: 'Record Setting (Time-lapse, XAVC S 4K, 30p) [Shooting > Image Quality/Rec]: 10 140M 4:2:2 10bit, 14

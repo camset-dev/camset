@@ -55,6 +55,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Zebra Level Custom boxes are listed as the camera draws them, Type first,** and Time-lapse's Record
+  Setting under XAVC S 4K 60p names 200M 4:2:2 10bit and 150M 4:2:0 8bit as the camera does. A memory set shows the
+  exposure mode last registered once, in its own record.
 - **The a1 II's Exposure Comp. has a stills and a movie copy, as White Balance does:** the movie copy is new, with
   what Different Set for Still/Mv's Exposure Comp. box does to the pair, and the slider's own copy moves to Expert
   mode. ISO's movie copies gain the values the Stills menu writes into them, ISO Range Limit's limits say how they

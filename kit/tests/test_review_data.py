@@ -298,15 +298,17 @@ def test_a_live_setting_whose_record_a_sets_own_setting_describes_is_kept_out_of
 
 def test_the_a1_pass_keeps_0x0b8d_out_of_the_memory_sets(tmp_path, monkeypatch, capsys):
     """The ILCE-1M2's pass applies it: on a made-up run, the committed definition's global:0x0b8d is kept out of the
-    sets (said), its sets' own setting set:0x0b8d as it is."""
-    from test_definitions import A1_PROOFS, A1_REPORT, a1_run
+    sets (said where the committed definition still had it in them; written so since 2026-11-19), its sets' own
+    setting set:0x0b8d as it is."""
+    from test_definitions import A1_PROOFS, A1_REPORT, DOC, a1_run
+    was_in = next(s for s in DOC["settings"] if s["key"] == "global:0x0b8d").get("in_sets")
     S, _target, _write = a1_run(tmp_path, monkeypatch, A1_REPORT, A1_PROOFS)
     got = []
     real = S.from_data
     monkeypatch.setattr(S, "from_data", lambda doc: got.append(real(doc)) or got[-1])
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])
     S.main()
-    assert "global:0x0b8d" in capsys.readouterr().out
+    assert ("global:0x0b8d" in capsys.readouterr().out) == bool(was_in)
     by = {s["key"]: s for s in got[-1]["settings"]}
     assert by["global:0x0b8d"]["in_sets"] is False and by["set:0x0b8d"]["in_sets"] is True
 
