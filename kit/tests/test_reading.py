@@ -188,10 +188,11 @@ def test_what_page_model_key_text_will_change_once_it_takes_canonical():
     at all; it mends the angle quote and the apostrophe. Repointed at canonical, a Cyrillic or Greek letter keys as
     its Latin twin."""
     import page_model
-    for t in (f"Shooting {RSAQUO} Menu", f"Don{RSQUO}t show", "SAF Frame Move Amt"):
+    # every dash is a hyphen to key_text since 2026-11-18 (a minus read as a dash keeps its sign: review, finding 13)
+    for t in (f"Shooting {RSAQUO} Menu", f"Don{RSQUO}t show", "SAF Frame Move Amt", f"Pre{EN_DASH}AF"):
         assert page_model.key_text(canonical(t)) == page_model.key_text(t), t
     changes = {f"{CYR_ES_CAP}.Temp./Filter": "C.Temp./Filter", f"F{CYR_O}cus Area": "Focus Area",
-               f"{GREEK_IOTA_CAP}SO AUTO": "ISO AUTO", f"Pre{EN_DASH}AF": "Pre-AF", FULLWIDTH_FORMAT: "FORMAT"}
+               f"{GREEK_IOTA_CAP}SO AUTO": "ISO AUTO", FULLWIDTH_FORMAT: "FORMAT"}
     for t, latin in changes.items():
         assert page_model.key_text(t) != page_model.key_text(latin), t
         assert page_model.key_text(canonical(t)) == page_model.key_text(latin), t

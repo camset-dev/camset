@@ -19,7 +19,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import jsonl, paths, runs, safety, vlm  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
-from page_model import same_text  # noqa: E402
+from page_model import same_option  # noqa: E402
 
 
 def main():
@@ -47,7 +47,7 @@ def main():
         except Exception as e:
             a = {"_error": str(e)[:80]}
         o, v, m = x["ocr"], str((x["vlm"] or {}).get("selected") or ""), str(a.get("selected") or "")
-        winner = o if m and same_text(m, o) else v if m and same_text(m, v) else None
+        winner = o if m and same_option(m, o) else v if m and same_option(m, v) else None
         jsonl.append(run / "tiebreak.jsonl", {"frame": x["frame"], "path": x["path"], "index": x["index"],
                                               "ocr": o, "vllm": v, "omlx": m, "winner": winner})
         print(i, x["frame"], repr(o[:24]), repr(v[:24]), repr(m[:24]), "->", repr(winner), flush=True)

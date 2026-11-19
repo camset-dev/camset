@@ -34,7 +34,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import config, ocr, paths, safety  # noqa: E402
+from camkit import config, match, ocr, paths, safety  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from camkit.screen import MENU_ROW_PITCH, MENU_ROW_TOP  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, cache_key, cached, local_only_runs, make_reader, readers, role  # noqa: E402
@@ -101,21 +101,123 @@ def cached_vlm(image: bytes, kind: str) -> dict:
     return out
 
 
+# An icon OCR reads in front of a label, which key_text leaves out: the marks before its first letter, digit or bracket,
+# but a sign right before a digit, which is the number's own ("+0.3 EV", "-1 EV", OCR's double dagger for the
+# plus-minus); then a word of one letter, of two capitals or of two small letters, before a capital or a bracket ("S
+# Focus Area", "MR Camera Set. Memory", "ni Shoe Audio Set."), or one small letter glued before a capital ("vDisplay").
+# A word with a digit ("1 Sec", "10 Sec. 3 Img.") or of a capital and a small letter ("Tv", "Av", "Lo", "Hi") is the
+# label's own. A letter outside A-Z in front is a mark, as before (OCR's Cyrillic С of "С.Temp./Filter"). These
+# rules are this module's: until 2026-11-18 it borrowed the guards' safety.clean_label, which drops any sign and any word
+# of one or two characters on purpose, and merged +0.3 EV with -0.3 EV, "1 Sec" with "2 Sec" and Av with Tv (review,
+# finding 13). An icon read as a digit or as a capital and a small letter ("8 Exposure Comp.", "Px Proxy Settings")
+# cannot be told from a word of the label's own: such a reading is a doubt, which each caller asks the reader about
+_ICON_MARKS = re.compile(r"^(?:(?![+\-±‡]\d)[^A-Za-z0-9(])+")
+_ICON_WORD = re.compile(r"^(?:[A-Za-z]|[A-Z]{2}|[a-z]{2})\s+(?=[A-Z(])|^[a-z](?=[A-Z])")
+_DASHES = str.maketrans(dict.fromkeys("−–—‐‑﹣－", "-"))
+# a sign before a lone zero is the plus-minus the camera draws there, however it is read ("+0.0", "-0", "+-0", OCR's
+# double dagger)
+_SIGN_ZERO = re.compile(r"^(?:\+-|-\+|[+\-±‡])\s*(?=0(?:\.0+)?(?![\d.]))")
+
+
+def icon_cut(s) -> str:
+    """A label or a reading without the icon OCR read in front of it (_ICON_MARKS, then _ICON_WORD), every dash a
+    hyphen first. Case kept."""
+    t = _ICON_MARKS.sub("", str(s or "").strip().translate(_DASHES))
+    return _ICON_WORD.sub("", t).strip()
+
+
+def _key(t: str) -> str:
+    t = _SIGN_ZERO.sub("±", t.strip()).lower().replace("›", ">").replace("’", "'")
+    t = re.sub(r"(?<=\d)\.(?=\d)", "p", t)                  # a decimal point between digits stays
+    return re.sub(r"[\s.]+", "", t.translate(str.maketrans("l1|0", "iiio")))    # OCR look-alikes
+
+
 def key_text(s) -> str:
-    """Compare labels/values without icon noise, case, spacing or punctuation variants."""
-    t = safety.clean_label(str(s or ""))
-    t = t.replace("›", ">").replace("’", "'").translate(str.maketrans("l1|0", "iiio"))   # OCR look-alikes
-    return re.sub(r"[\s.]+", "", t)
+    """Compare labels/values without icon noise (icon_cut), case, spacing, stops or OCR look-alikes, a number's sign
+    and decimal point and every word but an icon kept: no two options of one setting of the a1 II's definition fold to
+    one key (kit/tests/test_review_pipeline.py)."""
+    return _key(icon_cut(s))
 
 
 def same_text(a, b) -> bool:
-    """Equal, or equal but for a 1-2 character prefix: OCR reads a row's icon as letters glued to the
-    label ("SAF Frame Move Amt" for "AF Frame Move Amt")."""
+    """Two readings of one row label (or two labels): equal (key_text); or equal but for one or two letters in front of
+    one of them, an icon OCR read as letters, that end where a word starts: a capital or a bracket glued after them
+    ("vdFor viewfinder"; one digit glued before a capital too: "9Lo(E-Shutter)"), or a space after one letter, two
+    capitals or two small letters ("S after still img crt"),
+    never letters a small letter follows (Uncompressed is not Compressed), nor a digit or a sign ("15 images/s" is not
+    "5 images/s"), what is left four characters or more; or equal but for a run of short words in front of one of them
+    (_short_words: "9 Focus Area Limit", "Px Proxy Settings"). A number, a sign, a decimal point and every word of both
+    are compared ("1 Sec" is not "2 Sec", +0.3 EV not -0.3 EV). Options of one list compare by same_option."""
+    return _same(a, b, words=True)
+
+
+def same_option(a, b) -> bool:
+    """same_text for two options of one list, or two readings of one option: an icon read as a lone word of a capital
+    and a small letter in front of one of them is never left out ("Tv Auto/Manual Switch" and "Auto/Manual Switch" are
+    two options of one Fn Menu list), so no two options of one setting of the a1 II's definition are one
+    (kit/tests/test_review_pipeline.py); a reading with such an icon ("Px Proxy Settings") is a doubt, which the caller
+    asks the third reader or the reader about. Rows keep same_text, where that icon is common ("Sc Power Save by
+    Monitor") and keeps_lead guards a row's own short word."""
+    return _same(a, b, words=False)
+
+
+def _same(a, b, words: bool) -> bool:
     ka, kb = key_text(a), key_text(b)
     if not ka or not kb:
         return False
-    short, long_ = sorted((ka, kb), key=len)
-    return ka == kb or (len(long_) - len(short) <= 2 and long_.endswith(short) and len(short) >= 4)
+    return ka == kb or _glued(a, kb) or _glued(b, ka) or _short_words(a, kb, words) or _short_words(b, ka, words)
+
+
+def _short_words(text, other: str, words: bool = True) -> bool:
+    """`text` is `other` (a key_text) but for an icon OCR read as a run of short words in front of it (camkit.match.ICON:
+    "9 Focus Area Limit", "sa R0 Shoot Mode", "R (› Focal Length", "Px Proxy Settings"); with words False never a lone
+    word of a capital and a small letter (Tv, Av: a word of a label's own as often as an icon); and a run holding a digit
+    only once, before a label of two words or more that starts with a capital and holds no digit itself (a number before
+    a unit is the label's own: "Sec" is not "2 Sec", nor "Images" "9 Images")."""
+    t = _ICON_MARKS.sub("", str(text or "").strip().translate(_DASHES))
+    m = match.ICON.match(t)
+    if not m:
+        return False
+    run = m.group(0).split()
+    for n in range(1, len(run) + 1):
+        lead = run[:n]
+        rest = re.sub(rf"^(?:\S{{1,2}}\s+){{{n}}}", "", t)
+        if not rest or _key(rest) != other:
+            continue
+        if n == 1 and not words and re.fullmatch(r"[A-Z][a-z]", lead[0]):
+            return False
+        digits = [w for w in lead if re.search(r"\d", w)]
+        # two numbers are a number of the label's own ("1 / 2 This Image")
+        return not digits or (len(digits) == 1 and len(rest.split()) >= 2 and rest[:1].isupper()
+                              and not re.search(r"\d", rest))
+    return False
+
+
+def _glued(text, other: str) -> bool:
+    """`text` is `other` (a key_text) but for one or two letters in front of it at a word's start (same_text)."""
+    t = icon_cut(text)
+    if len(other) < 4:
+        return False
+    if t[:1].isdigit() and t[1:2].isupper() and _key(t[1:]) == other:
+        return True                          # an icon read as one digit glued before a capital ("9Lo(E-Shutter)")
+    letters = 0
+    for i, c in enumerate(t):
+        if c == " " and letters:
+            continue
+        if not c.isalpha() or letters == 2:
+            return False
+        letters += 1
+        head, rest = t[:i + 1].replace(" ", ""), t[i + 1:]
+        if not rest:
+            return False
+        if rest[0] == " ":
+            if len(head) == 2 and not (head.isupper() or head.islower()):
+                continue
+        elif not (rest.lstrip(".")[:1].isupper() or rest[0] == "("):        # "C.Temp./Filter": a stop between
+            continue
+        if _key(rest) == other:
+            return True
+    return False
 
 
 def vote(readings: dict) -> tuple:

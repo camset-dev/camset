@@ -16,7 +16,7 @@ import numpy as np
 from camkit import match, ocr, safety, screen
 from camkit.live import info_ok_hint, info_ok_text, leave_notice
 from camkit.vlm import PROMPTS, ask_role
-from page_model import key_text, same_text
+from page_model import key_text, same_option, same_text
 from runner import INFO_OK_SLACK, info_ok_for, joined, notice_words
 
 from .base import Blocked, Failed
@@ -152,7 +152,7 @@ def carousel_text(cam) -> str:
 
 
 def _matches(t: str, labels) -> list:
-    """The labels a reading names: by option_key, then without a radio circle read in front, then by same_text. A
+    """The labels a reading names: by option_key, then without a radio circle read in front, then by same_option. A
     reading that may have lost the decimal point telling two labels apart (match.lost_point: "13\\"" beside 1.3" and
     13") names both, a doubt each caller takes as no one option (the reader asked, else no choice), as before
     option_key kept the point."""
@@ -163,7 +163,7 @@ def _matches(t: str, labels) -> list:
         t2 = re.sub(r"^[oO0]\s*", "", t)
         hits = [i for i, l in enumerate(labels) if t2 != t and option_key(l) == option_key(t2)]
     if not hits:        # an icon read as letters in front ("SAF..."); never between near-twins (0.7 / 0.07 s)
-        hits = [i for i, l in enumerate(labels) if same_text(t, l)]
+        hits = [i for i, l in enumerate(labels) if same_option(t, l)]
     return hits
 
 

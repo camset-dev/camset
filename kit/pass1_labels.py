@@ -28,7 +28,7 @@ from camkit import jsonl, ocr, paths, runs, safety, screen, vlm  # noqa: E402
 from camkit.frames import load  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, make_reader, readers, role  # noqa: E402
 from runner import OcrUnavailable, read_frames  # noqa: E402
-from page_model import same_text  # noqa: E402
+from page_model import same_option  # noqa: E402
 
 
 def rows_with_frames(rows, path=()):
@@ -144,7 +144,7 @@ def main():
         vsel = str(v.get("selected") or "") if isinstance(v, dict) else ""
         if kind == "fields" and isinstance(v, dict) and isinstance(v.get("fields"), list):
             vsel = " | ".join(str(x) for x in v["fields"])
-        agree = (bool(o) and bool(vsel) and same_text(o, vsel)) or bool(stars)
+        agree = (bool(o) and bool(vsel) and same_option(o, vsel)) or bool(stars)
         why = unread.get(shots / fr)
         return {"path": list(path), "kind": kind, "index": idx, "frame": fr, "label": o or vsel,
                 "agreed": agree and why is None, "vlm": v, "ocr": o[:200], **({"ocr_unread": why} if why else {}),

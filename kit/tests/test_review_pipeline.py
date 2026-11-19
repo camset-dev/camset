@@ -580,9 +580,12 @@ def test_target_of_takes_the_row_named_exactly_and_never_one_of_two_it_only_read
     cycle, model = page_world("Av Auto/Manual Switch", "Tv Auto/Manual Switch")
     assert crawl_run.target_of(cycle, model, "Tv Auto/Manual Switch") == (1, False, "")
     assert crawl_run.target_of(cycle, model, "Av Auto/Manual Switch") == (0, False, "")
-    target, _, why = crawl_run.target_of(cycle, model, "Auto/Manual Switch")
-    assert target is None and "2 rows with other labels read as it ('Av Auto/Manual Switch', 'Tv Auto/Manual " \
-        "Switch'): none is gone to" in why
+    # same_text no longer takes either for "Auto/Manual Switch" (finding 13): no row; two rows read as one label only
+    # through an icon left out are none
+    assert crawl_run.target_of(cycle, model, "Auto/Manual Switch")[0] is None
+    cycle, model = page_world("S Focus Area", "R Focus Area")
+    target, _, why = crawl_run.target_of(cycle, model, "Focus Area")
+    assert target is None and "2 rows with other labels read as it ('R Focus Area', 'S Focus Area'): none is gone to" in why
     cycle, model = page_world("Shutter Type", "SDrive Mode")
     assert crawl_run.target_of(cycle, model, "Drive Mode") == (1, True, "")         # its bar read after travel
     assert crawl_run.target_of(cycle, model, "Shutter Type") == (0, False, "")
@@ -793,3 +796,35 @@ def test_a_reading_that_lost_the_point_telling_two_options_apart_is_a_doubt():
     assert _matches('15"', shutter) == [0] and not match.lost_point('15"', shutter)
     assert _matches('13"', ['15"', '13"', '10"']) == [1]                       # no twin: the reading is the option
     assert not match.lost_point("F1.1", ["F1.1", "F11"]) and match.lost_point("F11", ["F1.1", "F11"])
+
+
+def test_page_model_folds_no_two_options_of_one_setting_together():
+    """page_model.key_text and same_text borrowed the guards' safety.clean_label, which drops any leading sign and any
+    word of one or two characters: +0.3 EV was -0.3 EV, "1 Sec" "2 Sec", "9 Images" "30 Images", Tv Auto/Manual
+    Switch Auto/Manual Switch (393 and 420 pairs of options of one setting of the a1 II's definition), and same_text's
+    glued-letters rule took "15 images/s" for "5 images/s" and Compressed for Uncompressed. No two options of one
+    setting may fold together now (key_text, and same_option, which every comparison of options uses: proving.screens.
+    _matches, pass 1's agreement, the tie-break); the tolerance they are for stays (an icon read as a letter, two
+    capitals or a run of short words in front, one or two letters glued on, marks, case, spacing, a stop, OCR's l and 1,
+    the plus-minus zero). same_text, for rows, also leaves out an icon read as a lone word of a capital and a small
+    letter ("Px Proxy Settings", "Sc Power Save by Monitor" on the a1 II's scans), the one shape a label's own word has
+    too: of options of one setting it takes only Fn Menu's Tv Auto/Manual Switch for Auto/Manual Switch, listed here, and
+    the test fails on any new pair."""
+    import page_model as P
+    assert merged(lambda a, b: P.key_text(a) == P.key_text(b)) == []
+    assert merged(P.same_option) == []
+    assert {(a, b) for _, a, b in merged(P.same_text)} == {("Auto/Manual Switch", "Tv Auto/Manual Switch")}
+    for a, b in (("S Focus Area", "Focus Area"), ("MR Camera Set. Memory", "Camera Set. Memory"),
+                 ("SAF Frame Move Amt", "SAF Frame Move Amt"), ("S after still img crt", "after still img crt"),
+                 ("& Priority Set in AWB", "Priority Set in AWB"), ("5 lmg.", "5 Img."), ("Sec.", "sec"),
+                 ("Lo(E-Shutter)", "Lo (E-Shutter)"), ("‡0.0 EV", "+0.0 EV"), ("±0", "-0"),
+                 ("−0.3 EV", "-0.3 EV"), ("vDisplay", "Display"), ("9 Focus Area Limit", "Focus Area Limit"),
+                 ("sa R0 Shoot Mode", "Shoot Mode"), ("8 Exposure Comp.", "Exposure Comp.")):
+        assert P.same_text(a, b) and P.same_option(a, b), (a, b)
+    assert P.same_text("Px Proxy Settings", "Proxy Settings") and not P.same_option("Px Proxy Settings", "Proxy Settings")
+    for a, b in (("+0.3 EV", "-0.3 EV"), ("1 Sec", "2 Sec"), ("Tv Auto/Manual Switch", "Av Auto/Manual Switch"),
+                 ("Uncompressed", "Compressed"), ("15 images/s", "5 images/s"), ("0.03 seconds", "0.3 seconds"),
+                 ("Hi (E-Shutter)", "Lo (E-Shutter)"), ("Sec", "2 Sec"), ("Images", "9 Images"), ("4", "-4"),
+                 ("1 / 2 This Image", "This Image")):
+        assert not P.same_text(a, b) and not P.same_option(a, b), (a, b)
+    assert not P.same_option("Tv Auto/Manual Switch", "Auto/Manual Switch")
