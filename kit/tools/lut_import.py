@@ -3,13 +3,14 @@ camera's Manage User LUTs rows (Movie > Exposure/Color > Color/Tone), by Sony's 
 allowed it on 2026-11-19 for .cube files under their own private/lut/.
 
     .venv/bin/python -u kit/tools/lut_import.py private/lut/<pack>/<name>.cube
-    .venv/bin/python -u kit/tools/lut_import.py FILE.cube [--place 16] [--run kit2_lut]
+    .venv/bin/python -u kit/tools/lut_import.py FILE.cube [--run kit2_lut]
 
 One session, as every run of the kit has (docs/decisions/0015): the link alone, as kit/tools/upload_check.py opens it,
 no eyes and no reader, and no key pressed nor anything answered on the camera's screen.
  1. The file is checked before anything connects (camkit.link.lut_refused): a .cube file under the clone's own
     private/lut/ (where its path really ends, never through a link), a name Sony's reference takes, under 3,000,000
-    bytes, a .cube LUT's text; and the place, 16 unless --place names another user place (1-16). Refused, nothing sent.
+    bytes, a .cube LUT's text. It goes into user place 16, the one place docs/decisions/0026 allows. Refused, nothing
+    sent.
  2. The start file is downloaded first. The camera saves its settings only on the shooting screen with a card in: a
     refused download is said, and the run ends there, nothing changed.
  3. BaseLookImportOperationEnableStatus is read and printed. Where it does not read Enable (1), or cannot be read,
@@ -151,18 +152,16 @@ def newest(run, tag: str) -> Path | None:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("file", help="the .cube file, under the clone's own private/lut/")
-    ap.add_argument("--place", type=int, default=LUT_PLACE,
-                    help=f"the user place it goes into, 1-16 (default {LUT_PLACE}, the last)")
     ap.add_argument("--run", default="kit2_lut", help="the run folder, in the camera's runs/<model>_fw<fw>/")
     a = ap.parse_args()
     lut = given_path(a.file)
-    why = lut_refused(lut, a.place)
+    why = lut_refused(lut)
     if why:
         print(f"nothing was sent: {why}", flush=True)
         return 1
     run = Run(a.run)
     record = {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "file": lut.resolve().name, "sha256": provenance.sha256(lut),
-              "place": a.place}
+              "place": LUT_PLACE}
     status, called, result, start, after, changes, ending = None, False, None, None, None, [], None
     code = 0
     try:
@@ -184,9 +183,9 @@ def main() -> int:
                 code = EXIT_INCOMPLETE
             else:
                 try:
-                    r = link.import_lut(lut, a.place)
+                    r = link.import_lut(lut)
                     called, result = True, r.get("result")
-                    print(f"{LUT_OK}: {record['file']} is in user place {a.place} (the camera answered in "
+                    print(f"{LUT_OK}: {record['file']} is in user place {LUT_PLACE} (the camera answered in "
                           f"{r.get('ms')} ms)", flush=True)
                 except LutNotImported as e:
                     called, result = e.called, e.reply.get("result") or e.reply.get("cause")
@@ -251,12 +250,12 @@ def main() -> int:
         elif n == 0:
             print(f"the restore put back all {len(keys)} records the import changed", flush=True)
     if called and result == LUT_OK:
-        print(f"the LUT stays in user place {a.place} until the owner deletes it on the camera by hand ({WHERE}); the "
+        print(f"the LUT stays in user place {LUT_PLACE} until the owner deletes it on the camera by hand ({WHERE}); the "
               "kit deletes nothing", flush=True)
         if after is not None:
             print("to keep this finding in the coverage ledger (the looks file: the records' keys alone, no value), run "
                   "these two once the lines above read right:", flush=True)
-            for line in record_commands(start, after, a.place, bool(keys)):
+            for line in record_commands(start, after, LUT_PLACE, bool(keys)):
                 print(f"   {line}", flush=True)
     record.update(enable_status=status, called=called, result=result, start=start.name if start else None,
                   after=after.name if after else None, records_changed=keys, not_back=not_back, exit=code)

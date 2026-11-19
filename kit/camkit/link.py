@@ -20,10 +20,10 @@ set); the shutter released only on a link opened for kit/tools/take_picture.py, 
 (PICTURE_ONLY); an upload only of the camera's own download (camkit.provenance), with that download's SHA-256 on the
 line, which
 camlink checks the bytes it reads against, so a file swapped in after the check is never sent ("hash_mismatch"), and
-a link opens only to a camlink that says so in its ready line ("upload_sha256"); a user LUT (import_lut, the owner's
-approval of 2026-11-19) only a .cube file under the clone's own private/lut/ (LUT_DIR, lut_refused), by its real path,
-into a user place, with its bytes' SHA-256 on the line, which camlink checks the bytes it reads against, and never on a
-link opened for the picture; before anything that changes the
+a link opens only to a camlink that says so in its ready line ("upload_sha256"); a user LUT (import_lut,
+docs/decisions/0026) only a .cube file under the clone's own private/lut/ (LUT_DIR, lut_refused), by its real path,
+into user place 16 alone, with its bytes' SHA-256 on the line, which camlink checks the bytes it reads against, and
+never on a link opened for the picture; before anything that changes the
 camera (press, dial, set, setstr), the STOP file; and while the SDK reports a network error on the remote link, nothing
 at all until it recovers (_net_wait). A command the kit does not send is refused. camlink refuses the never
 buttons, an unallowed guarded button and the never-set properties itself too (kit/common/never_touch.h, written from
@@ -249,18 +249,17 @@ OLD_HELPER = ("the camera helper ({helper}) is older than the kit and does not k
               "with  python3 kit/setup.py  and run this again. Nothing was sent to the camera.")
 USAGE = "usage: camlink"            # how camlink's usage line starts (kit/link/camlink.cpp main, on stderr)
 
-# A user LUT into the camera (import_lut: camlink's importlut, Sony's ImportLUTFile), as the owner allowed it on
-# 2026-11-19: only a .cube file under the clone's own private/lut/, into the last user place unless the caller names
-# another. The file's rules are camlink's own (kit/common/lut_file.h), checked here first: Sony's API reference takes a
-# name of 63 characters at most with its extension, not starting with a period, of single-byte letters, digits, spaces
-# and the signs below, and less than 3 MB, read as 3,000,000 bytes, the stricter reading; the kit takes ".cube" alone
-# and a .cube LUT's text (a LUT_3D_SIZE or LUT_1D_SIZE line), so that no other file renamed .cube goes
+# A user LUT into the camera (import_lut: camlink's importlut, Sony's ImportLUTFile), as docs/decisions/0026 allows it:
+# only a .cube file under the clone's own private/lut/, into user place 16 alone. The file's rules are camlink's own
+# (kit/common/lut_file.h), checked here first: Sony's API reference takes a name of 63 characters at most with its
+# extension, not starting with a period, of single-byte letters, digits, spaces and the signs below, and less than 3 MB,
+# read as 3,000,000 bytes, the stricter reading; the kit takes ".cube" alone and a .cube LUT's text (a LUT_3D_SIZE or
+# LUT_1D_SIZE line), so that no other file renamed .cube goes
 LUT_DIR = ROOT / "private" / "lut"
 LUT_SUFFIX = ".cube"
 LUT_MAX_BYTES = 3_000_000           # a file this size or larger is refused
 LUT_MAX_NAME = 63
-LUT_PLACES = range(1, 17)           # the user base looks, CrBaseLookNumber 1-16
-LUT_PLACE = 16                      # the last user place: the one the owner allowed
+LUT_PLACE = 16                      # the one user place decision 26 allows (CrBaseLookNumber_16)
 LUT_NAME = re.compile(r"[A-Za-z0-9 #$%&'()+,\-.;=@\[\]^`{}~_]+")
 LUT_SIZE_LINE = re.compile(rb"^[ \t]*LUT_[13]D_SIZE[ \t]+\d", re.M)
 LUT_OK = "ImportLUTFile_Result_OK"  # the camera's one answer that says the LUT went in (camlink's "result")
@@ -278,15 +277,13 @@ def _cube_text(data: bytes) -> bool:
     return bool(LUT_SIZE_LINE.search(data.replace(b"\r\n", b"\n").replace(b"\r", b"\n")))
 
 
-def lut_refused(path, place=LUT_PLACE, folder=None) -> str:
-    """Why `path` may not go to the camera as a user LUT into user place `place`, "" when it may: a place 1-16 (an int);
-    the file not a link, and where its path really ends (".." and a folder that is a link followed) inside the clone's
-    own LUT folder (`folder`, LUT_DIR by default), a regular file whose name ends ".cube", of 63 characters at most,
-    not starting with a period, of the characters Sony's reference takes, under 3,000,000 bytes, a .cube LUT's text.
-    camlink checks the same again before the SDK is asked (kit/common/lut_file.h), and reads the file once."""
+def lut_refused(path, folder=None) -> str:
+    """Why `path` may not go to the camera as a user LUT, "" when it may: the file not a link, and where its path really
+    ends (".." and a folder that is a link followed) inside the clone's own LUT folder (`folder`, LUT_DIR by default), a
+    regular file whose name ends ".cube", of 63 characters at most, not starting with a period, of the characters Sony's
+    reference takes, under 3,000,000 bytes, a .cube LUT's text. camlink checks the same again before the SDK is asked
+    (kit/common/lut_file.h), against the clone's folder it was built with, and reads the file once."""
     folder = Path(LUT_DIR if folder is None else folder)
-    if isinstance(place, bool) or not isinstance(place, int) or place not in LUT_PLACES:
-        return f"place {place!r} is no user place (an int, 1 to 16; {LUT_PLACE}, the last, unless another is named)"
     p = Path(path)
     try:
         top = folder.resolve(strict=True)
@@ -864,14 +861,18 @@ class Link:
 
     @staticmethod
     def _lut_checked(args: list):
-        """An importlut line only as import_lut writes it: PATH PLACE SHA256, the path a file lut_refused takes, named by
-        its real path (what camlink gives the SDK is what was checked here), the place 1-16 in plain digits, and the
-        SHA-256 that of the file's bytes now, which camlink checks the bytes it reads against. Raises safety.Refused."""
-        if len(args) != 3 or not re.fullmatch(r"[1-9]\d?", args[1]) or not SHA256.fullmatch(args[2]):
-            raise safety.Refused(f"importlut takes PATH PLACE SHA256 (as Link.import_lut writes it), not "
+        """An importlut line only as import_lut writes it: PATH 16 SHA256, the path a file lut_refused takes, named by
+        its real path (what camlink copies for the SDK is what was checked here), user place 16 written so and no other
+        (docs/decisions/0026), and the SHA-256 that of the file's bytes now, which camlink checks the bytes it reads
+        against. Raises safety.Refused."""
+        if len(args) != 3 or not SHA256.fullmatch(args[2]):
+            raise safety.Refused(f"importlut takes PATH {LUT_PLACE} SHA256 (as Link.import_lut writes it), not "
                                  f"{' '.join(args)!r}")
+        if args[1] != str(LUT_PLACE):
+            raise safety.Refused(f"importlut goes into user place {LUT_PLACE} alone (docs/decisions/0026), not "
+                                 f"place {args[1]!r}")
         path = Path(args[0])
-        why = lut_refused(path, int(args[1]))
+        why = lut_refused(path)
         if why:
             raise safety.Refused(why)
         if not path.is_absolute() or path != path.resolve():
@@ -1099,12 +1100,12 @@ class Link:
             raise LinkError(why)
         return r
 
-    def import_lut(self, path, place: int = LUT_PLACE) -> dict:
-        """One user LUT (a .cube look-up table) into user place `place` of the camera (16, the last, unless the caller
-        names another of 1-16): camlink's importlut, which calls Sony's ImportLUTFile, as the owner allowed it on
-        2026-11-19 for .cube files under their own private/lut/. Returns camlink's answer when the camera said the LUT
-        went in (ImportLUTFile_Result_OK, for the bytes the kit checked); raises LutNotImported, with camlink's answer
-        and whether the SDK was asked, for any other, and safety.Refused for a file or place it does not send.
+    def import_lut(self, path) -> dict:
+        """One user LUT (a .cube look-up table) into user place 16 of the camera, the one place docs/decisions/0026
+        allows: camlink's importlut, which calls Sony's ImportLUTFile. Returns camlink's answer when the camera said the
+        LUT went in (ImportLUTFile_Result_OK, for the bytes the kit checked); raises LutNotImported, with camlink's
+        answer and whether the SDK was asked, for any other, and safety.Refused for a file it does not send. The owner's
+        word for the run is the caller's to carry (kit/tools/lut_import.py's --allow).
 
         A look-up table is not a settings file, and this is not Link.upload by another door: upload sends back only a
         settings file the camera itself wrote, its bytes one of the camera's downloads (docs/decisions/0006: a settings
@@ -1113,14 +1114,15 @@ class Link:
         documents ImportLUTFile for the purpose. So it goes through checks of its own, none of upload's: lut_refused
         here (the clone's own LUT folder, LUT_DIR, where the path really ends, never through a link; ".cube"; the name
         and size Sony's reference takes; a .cube LUT's text), then the guard on the line (_lut_checked) and camlink's
-        own (kit/common/lut_file.h: the same again, the file read once with the SHA-256 sent, then the camera's state:
-        the import enabled, not recording, the place not one it lists as holding a LUT). The run's events.jsonl keeps
-        the file's name, size, SHA-256 and place ("lut_import"), never its content. No key is pressed. A LUT in the
-        camera is state no settings file puts back: it stays in its place until the owner deletes it there by hand."""
-        why = lut_refused(path, place)
+        own (kit/common/lut_file.h: the same again against the clone's folder it was built with, the file read once
+        with the SHA-256 sent, then the camera's state: the import enabled, not recording, place 16 not one it lists as
+        holding a LUT), and camlink gives the SDK a copy of the bytes it checked, never the file. The run's events.jsonl
+        keeps the file's name, size, SHA-256 and place ("lut_import"), never its content. No key is pressed. A LUT in
+        the camera is state no settings file puts back: it stays there until the owner deletes it by hand."""
+        place = LUT_PLACE
+        why = lut_refused(path)
         if why:
-            self.run.log("lut_refused", file=Path(path).name, place=place if isinstance(place, int) else repr(place),
-                         why=why)
+            self.run.log("lut_refused", file=Path(path).name, place=place, why=why)
             raise safety.Refused(why)
         real = Path(path).resolve()
         digest = provenance.sha256(real)

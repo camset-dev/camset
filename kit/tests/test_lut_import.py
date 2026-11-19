@@ -120,30 +120,32 @@ def test_camlink_says_its_import_command_and_its_answers():
 # ---------------------------------------------------------------- Link.import_lut
 
 def test_a_lut_goes_by_its_real_path_into_place_16_with_its_hash(luts):
-    """The one line that goes out: the file's real path, quoted, place 16 unless named, and the SHA-256 of its bytes,
-    which camlink checks the bytes it reads against. The run's log keeps the file's name, size, place and hash, never
-    its content; the camera's answer comes back as it is."""
+    """The one line that goes out: the file's real path, quoted, place 16, and the SHA-256 of its bytes, which camlink
+    checks the bytes it reads against. The run's log keeps the file's name, size, place and hash, never its content;
+    the camera's answer comes back as it is."""
     run, log, folder, lut = luts
     digest = hashlib.sha256(CUBE.encode()).hexdigest()
     with opened(run) as link:
         r = link.import_lut(folder / "Look Pack" / ".." / "Look Pack" / NAME)
         assert r["ok"] and r["result"] == L.LUT_OK and r["place"] == 16 and r["sha256"] == digest
-        assert link.import_lut(lut, place=3)["place"] == 3
     sent = received(log)
-    assert sent[0] == f"@1 importlut {quoted(lut.resolve())} 16 {digest}\n".encode()
-    assert sent[1] == f"@2 importlut {quoted(lut.resolve())} 3 {digest}\n".encode()
+    assert sent == [f"@1 importlut {quoted(lut.resolve())} 16 {digest}\n".encode(), b"quit\n"]
     kept = [e for e in events(run) if e["kind"] == "lut_import"]
-    assert [(e["file"], e["sha256"], e["bytes"], e["place"]) for e in kept] == [(NAME, digest, len(CUBE), 16),
-                                                                               (NAME, digest, len(CUBE), 3)]
+    assert [(e["file"], e["sha256"], e["bytes"], e["place"]) for e in kept] == [(NAME, digest, len(CUBE), 16)]
     assert "LUT_3D_SIZE" not in (run.dir / "events.jsonl").read_text(encoding="utf-8")
 
 
-def test_the_place_is_a_user_place(luts):
+def test_place_16_alone(luts):
+    """The owner approved user place 16 alone (docs/decisions/0026): Link.import_lut takes no place, and a line naming
+    another, however written, is refused before a byte goes out."""
+    import inspect
     run, log, _, lut = luts
+    assert list(inspect.signature(Link.import_lut).parameters) == ["self", "path"] and L.LUT_PLACE == 16
+    digest = hashlib.sha256(CUBE.encode()).hexdigest()
     with opened(run) as link:
-        for place in (0, 17, -1, 256, True, "16", 16.0, None):
-            with pytest.raises(safety.Refused, match="no user place"):
-                link.import_lut(lut, place=place)
+        for place in ("1", "3", "15", "17", "0", "016", "0x10", "-16", "16.0"):
+            with pytest.raises(safety.Refused, match="16"):
+                link.call(f"importlut {quoted(lut.resolve())} {place} {digest}")
     assert not [raw for raw in received(log) if b"importlut" in raw]
 
 
@@ -198,7 +200,7 @@ def test_a_line_written_by_hand_goes_through_the_same_guard(luts):
     with opened(run) as link:
         for line in (f"importlut {quoted(real)} 16", f"importlut {quoted(real)} 16 {'0' * 64}",
                      f"importlut {quoted(folder / 'Look Pack' / '..' / 'Look Pack' / NAME)} 16 {digest}",
-                     f"importlut {quoted(other)} 16 {digest}", f"importlut {quoted(real)} 17 {digest}",
+                     f"importlut {quoted(other)} 16 {digest}", f"importlut {quoted(real)} 15 {digest}",
                      f"importlut {quoted(real)} 016 {digest}", f"importlut {quoted(real)} x {digest}",
                      f"importlut {quoted(real)} 16 {digest} more", "importlut"):
             with pytest.raises(safety.Refused):
@@ -271,8 +273,9 @@ def test_a_lut_is_no_settings_file_and_never_an_upload(luts):
         link.upload(lut)
     assert not [raw for raw in received(log) if b"upload" in raw]
     doc = " ".join(Link.import_lut.__doc__.split())
-    for words in ("no settings file", "docs/decisions/0006", "from a card", "ImportLUTFile"):
+    for words in ("no settings file", "docs/decisions/0006", "docs/decisions/0026", "from a card", "ImportLUTFile"):
         assert words in doc, words
+    assert "2026-11-19" not in doc                       # the record is cited, not the day (the review, MINE 2)
 
 
 # ---------------------------------------------------------------- kit/tools/lut_import.py
@@ -339,7 +342,8 @@ def stand_in(monkeypatch, cam: Camera):
                 raise LinkError(f"get {name}: unknown property {name}")
             return {"ok": True, "current": cam.status}
 
-        def import_lut(self, path, place=16):
+        def import_lut(self, path):
+            place = 16
             cam.sent.append(f"importlut {Path(path).name} {place}")
             if isinstance(cam.imports, BaseException):
                 cam.imported = getattr(cam.imports, "called", False)
@@ -448,16 +452,19 @@ def test_a_restore_that_does_not_check_out_exits_unrestored(monkeypatch, luts, c
 
 
 def test_nothing_is_sent_for_a_file_or_place_the_kit_does_not_import(monkeypatch, luts, capsys, tmp_path):
-    """A file outside the clone's LUT folder, or a place that is no user place: refused before any link opens, exit 1;
-    a camera that refuses the start download: said, nothing imported, exit 1."""
+    """A file outside the clone's LUT folder: refused before any link opens, exit 1; the tool takes no other place than
+    16 (no --place: argparse stops it, exit 2); a camera that refuses the start download: said, nothing imported,
+    exit 1."""
     cam = Camera()
     outside = made(tmp_path / "elsewhere", NAME)
     T = stand_in(monkeypatch, cam)
     monkeypatch.setattr(sys, "argv", ["lut_import.py", str(outside)])
     assert T.main() == 1
-    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(luts[3]), "--place", "17"])
-    assert T.main() == 1
-    assert cam.sent == [] and capsys.readouterr().out.count("nothing was sent") == 2
+    assert capsys.readouterr().out.count("nothing was sent") == 1
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(luts[3]), "--place", "15"])
+    with pytest.raises(SystemExit) as e:
+        T.main()
+    assert e.value.code == 2 and cam.sent == []
     cam = Camera(start_refused=True)
     assert tool(monkeypatch, luts, cam) == 1
     assert cam.sent == ["open", "download start", "close"]
@@ -521,9 +528,9 @@ def test_the_finding_is_kept_in_the_coverage_ledger_by_the_record_commands_it_pr
     assert first[first.index("--option") + 1] == "User16"
     assert second[second.index("--path") + 1] == "Exposure/Color > Color/Tone > Manage User LUTs"
     assert "--option" not in second
-    assert tool(monkeypatch, luts, Camera(after=()), "--place", "3") == 0
+    assert tool(monkeypatch, luts, Camera(after=())) == 0
     lines = [x for x in capsys.readouterr().out.splitlines() if "kit/tools/coverage.py --record" in x]
-    assert len(lines) == 2 and all("--did choose" in x for x in lines) and "--option User3" in lines[0]
+    assert len(lines) == 2 and all("--did choose" in x for x in lines) and "--option User16" in lines[0]
     reply = {"ok": False, "cause": "import_unconfirmed", "called": True, "error": "no answer within 120 s"}
     assert tool(monkeypatch, luts, Camera(imports=LutNotImported("not confirmed", reply))) == 8
     assert "coverage.py --record" not in capsys.readouterr().out
@@ -554,8 +561,3 @@ def test_the_printed_record_command_writes_a_look_with_keys_alone(monkeypatch, l
     assert lk["records_changed"] == [key(SETS_BACK), key(STAYS)]
     assert "ImportLUTFile" in lk["note"] and " -> " not in json.dumps(lk)
 
-
-def test_another_place_is_named_with_place(monkeypatch, luts):
-    cam = Camera()
-    assert tool(monkeypatch, luts, cam, "--place", "3") == 0
-    assert f"importlut {NAME} 3" in cam.sent
