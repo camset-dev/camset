@@ -158,6 +158,17 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **Every prover judges what an OK did in one shared step:** `prove_run.py`, the axis, bracket, scale, portrait,
+  two-box, option-boxes, grid and Shoot Mode provers and pass 3's switch write a choice the camera refused as
+  `"applied": false` with its notice, closed with MENU, where several credited the label with the value kept before,
+  and an information notice no longer counts as a refusal. A panel's slider (Monitor Brightness, Viewfinder Bright.)
+  takes its OK again, by a consent judged on the panel's own shape, and pass 3's walk and proofs take the page scan
+  the run was given.
+- **Labels that differ by a point, a sign, a number or a short word are no longer one option:** 1.3" and 13", F1.1
+  and F11, +0.3 and -0.3 EV, 1 Sec and 2 Sec stay apart, and a reading that cannot tell two options apart is a doubt,
+  so the reader is asked again or nothing is chosen. A pass-1 label read with a mark before it (a radio ring read as
+  "0 1 (Fast)") no longer matches the screen: correct it by eye in the crawl's `checked_labels.json` and make its map
+  again with `kit/pass1_map.py <crawl> --own`.
 - **The definition says which two settings the camera keeps in order (`at_most`, `at_least`):** the hand tables name
   the pairs (`LIMIT_PAIRS`), and both writer passes put each on its two settings where they list the same values and
   sit in the same sets, a camera download holding a pair out of order stopping the write. On the a1 II these are ISO
