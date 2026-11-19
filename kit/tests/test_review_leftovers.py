@@ -1,14 +1,18 @@
 """Leftovers of the engineering review of 2026-11-18's fixes, each closed in a file its neighbour's fix did not own:
-the hand evidence's part for the limit pairs (LIMIT_PAIRS). Made-up cameras, settings, keys and words; no camera, no
+the hand evidence's part for the limit pairs (LIMIT_PAIRS); the proof viewer's option pages in the definition's order;
+framepos's presses that went, never recorded as refused. Made-up cameras, settings, keys and words; no camera, no
 private file."""
 import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from camkit import safety  # noqa: E402
+from camkit.link import CameraRefused, Disconnected, LinkError, NetworkError  # noqa: E402
 from writer import hand_evidence  # noqa: E402
 # imported before any test points the kit at a data folder of its own: it binds the a1 II's tables as it is imported
 import schema_update  # noqa: E402,F401
@@ -129,3 +133,83 @@ def test_the_viewer_shows_an_options_page_in_the_definitions_order(monkeypatch):
     monkeypatch.setattr(pv, "RUN_ROOT", None)
     look = next(x for x, _ in pv.menu_nodes(pv.menu(d, pv.records(d, {}), Path("."))) if x["l"] == "Look")
     assert look["subs"] == [{"name": "A", "keys": ["global:0x0003", "global:0x0004"]}]
+
+
+# ---------------------------------------------------------------- 3. framepos: a press that went is no refusal
+
+SHOOTING = {"kind": "shooting"}
+# what a press raises when the key may have gone: a screen not read after it (camkit.live), a dropped session, the
+# SDK's network error, a reply that never came
+GONE = [LinkError("ms_left: the press went, and its screen could not be read afterwards (LinkError: no OSD image)"),
+        Disconnected("disconnected"), NetworkError("the camera's remote link reported a network error"),
+        LinkError("press ms_left: no reply")]
+GONE_IDS = ["unread", "disconnected", "network", "no reply"]
+
+
+@pytest.mark.parametrize("error", [CameraRefused("press ms_left 60: button not accepted"),
+                                   safety.Refused("a made-up guard's refusal")], ids=["camera", "guard"])
+def test_a_shooting_press_refused_before_it_went_is_recorded_refused(error):
+    """framepos_run.press_moves: a press the camera refused (CameraRefused) or the kit's guards (safety.Refused),
+    neither of which went, is recorded "refused", not counted, and the moves go on."""
+    import framepos_run as F
+    from test_framepos import Cam
+    cam = Cam(SHOOTING, [error, SHOOTING])
+    sent, done = [], []
+    F.press_moves(cam, [["ms_left", 2]], sent, done)
+    assert done == [["ms_left", 1]] and cam.pressed == ["ms_left"] * 2
+    assert sent[0]["refused"].startswith(type(error).__name__) and "refused" not in sent[1]
+
+
+@pytest.mark.parametrize("error", GONE, ids=GONE_IDS)
+def test_a_shooting_press_that_may_have_gone_stops_the_run(error):
+    """framepos_run.press_moves: any other link error of a press (the press went and its screen could not be read, a
+    dropped session, a network error, no reply) is no refusal: nothing more is pressed and it reaches the run, which
+    stops as on a lost link (its session's end restores), `done` holding the presses taken before it."""
+    import framepos_run as F
+    from test_framepos import Cam
+    cam = Cam(SHOOTING, [SHOOTING, error, SHOOTING])
+    sent, done = [], []
+    with pytest.raises(type(error)):
+        F.press_moves(cam, [["ms_left", 3]], sent, done)
+    assert cam.pressed == ["ms_left"] * 2 and done == [["ms_left", 1]]
+    assert not [x for x in sent if "refused" in x]
+
+
+class PushCam:
+    """A made-up camera for framepos_run.push: always on the shooting screen; its link press number n raises
+    errors[n]."""
+
+    def __init__(self, errors: dict):
+        self.errors, self.presses, self.refreshed = errors, 0, []
+        self.hdmi = SimpleNamespace(grab=lambda save=True: None)
+        self.link = SimpleNamespace(press=self.link_press)
+        self.frame = SimpleNamespace(path=Path("00001_frame.png"))
+
+    def reading(self, f):
+        return SimpleNamespace(kind="shooting")
+
+    def refresh(self, tag):
+        self.refreshed.append(tag)
+
+    def link_press(self, key, on_shooting=frozenset(), screen=None):
+        self.presses += 1
+        if self.presses in self.errors:
+            raise self.errors[self.presses]
+
+
+def test_a_pushed_press_the_camera_refused_is_a_press_lost():
+    """framepos_run.push: a press the camera refused (CameraRefused) did nothing: not counted, and the push goes on."""
+    import framepos_run as F
+    cam = PushCam({2: CameraRefused("press ms_left: button not accepted")})
+    assert F.push(cam, [["ms_left", 3]], gap=0) == [["ms_left", 2]] and cam.presses == 3
+
+
+@pytest.mark.parametrize("error", GONE, ids=GONE_IDS)
+def test_a_pushed_press_that_may_have_gone_stops_the_run(error):
+    """framepos_run.push: any other link error of a press is no press lost: nothing more is pushed and it reaches the
+    run, which stops as on a lost link."""
+    import framepos_run as F
+    cam = PushCam({2: error})
+    with pytest.raises(type(error)):
+        F.push(cam, [["ms_left", 3]], gap=0)
+    assert cam.presses == 2

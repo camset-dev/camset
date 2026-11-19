@@ -1377,11 +1377,14 @@ def press_moves(cam, moves: list, sent: list, done: list, grip: str | None = Non
     """The multi-selector's presses on the shooting screen, each named for it (on_shooting: the link sends no key but
     MENU there unnamed, decision 21) and each read, filling `sent` ({"key", "frame", "screen"}, and
     "refused" or "notice" when so) and `done` ([key, presses taken], one per move) as they go, so a caller whose area
-    fails knows what was taken. A press the link refuses, or one a notice answers (waited out, NOTICE_S), is recorded
-    and not counted; a screen that is not the shooting screen before a press, or a notice that stays, fails the area.
+    fails knows what was taken. A press refused before it went (the camera's "not accepted", CameraRefused, or the
+    kit's guards, safety.Refused), or one a notice answers (waited out, NOTICE_S), is recorded and not counted; any
+    other link error of a press (it went and its screen could not be read, a dropped session, a network error, no
+    reply) is no refusal and goes up, the run stopping as on a lost link; a screen that is not the shooting screen
+    before a press, or a notice that stays, fails the area.
     With a grip the screen's kind is judged as level and a notice's words are read upright (afreg_run.shooting_words,
     `run`'s upright folder); a failure says the check cannot be made on the turned screen (turned_check)."""
-    from camkit.link import LinkError
+    from camkit.link import CameraRefused
     from prove_run import Failed
     for key, n in moves:
         done.append([key, 0])
@@ -1391,7 +1394,7 @@ def press_moves(cam, moves: list, sent: list, done: list, grip: str | None = Non
                              + turned_check(grip, "the check that a press goes out on the shooting screen"))
             try:
                 cam.press(key, on_shooting=key)     # named: the shooting screen is where this press moves the frame
-            except (LinkError, safety.Refused) as e:
+            except (CameraRefused, safety.Refused) as e:      # not gone; any other LinkError may have gone: up
                 sent.append({"key": key, "refused": f"{type(e).__name__}: {e}"[:200]})
                 continue
             rec = {"key": key, "frame": cam.frame.path.name, "screen": cam.read().kind}
@@ -1631,8 +1634,10 @@ def push(cam, moves: list, turned: str | None = None, gap: float = PUSH_GAP) -> 
     the link, named for the shooting screen and judged there on that screen (Link.press, decision 21), `gap` s apart,
     none waited on to settle: a press that meets an edge moves nothing, and where the frame went is read from the next
     registration. A screen not read as the shooting screen stops the push before its press (Failed), a guard's refusal
-    too; a press the camera refused is a press lost, which the next registration shows. Returns [[key, presses sent]]."""
-    from camkit.link import LinkError
+    too; a press the camera refused (CameraRefused) is a press lost, which the next registration shows; any other link
+    error of a press (no reply, a dropped session, a network error) goes up, the run stopping as on a lost link.
+    Returns [[key, presses sent]]."""
+    from camkit.link import CameraRefused
     from prove_run import Failed
     sent = []
     for key, n in moves:
@@ -1648,7 +1653,7 @@ def push(cam, moves: list, turned: str | None = None, gap: float = PUSH_GAP) -> 
             except safety.Refused as e:
                 cam.refresh("push-refused")
                 raise Failed(f"{WORDS[key]} refused by the kit's guards ({e})") from None
-            except LinkError:
+            except CameraRefused:                   # the camera did nothing; any other LinkError may have gone: up
                 continue
             sent[-1][1] += 1
             time.sleep(gap)

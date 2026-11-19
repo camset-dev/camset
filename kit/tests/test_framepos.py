@@ -16,7 +16,6 @@ sys.path.insert(0, str(ROOT / "kit"))
 sys.path.insert(1, str(ROOT / "kit" / "provers"))
 import framepos_run as F  # noqa: E402
 from camkit import definitions, paths  # noqa: E402
-from camkit.link import LinkError  # noqa: E402
 from writer import hand_tables  # noqa: E402
 
 LABELS = ["Wide", "Zone", "Center Fix", "Spot: XL", "Spot: L", "Spot: M", "Spot: S", "Spot: XS", "Expand Spot",
@@ -496,11 +495,13 @@ CAMS = []                           # the made-up camera a test made last, whose
 
 
 def test_moves_count_only_the_presses_the_camera_took(quick):
-    """A press the link refuses, or one a notice answers (waited out), is recorded and not counted; a failure part way
-    leaves `done` saying what was taken, so the put-back owes exactly that."""
+    """A press the camera refuses (CameraRefused, as the link raises its "not accepted"), or one a notice answers
+    (waited out), is recorded and not counted; a failure part way leaves `done` saying what was taken, so the put-back
+    owes exactly that."""
+    from camkit.link import CameraRefused
     from prove_run import Failed
     shooting = {"kind": "shooting"}
-    cam = Cam(shooting, [shooting, LinkError("press ms_left 60: button not accepted"),
+    cam = Cam(shooting, [shooting, CameraRefused("press ms_left 60: button not accepted"),
                          {"kind": "notice", "text": "Invalid operation", "then": "shooting"}, shooting, shooting])
     sent, done = [], []
     F.press_moves(cam, LEFT_UP, sent, done)
