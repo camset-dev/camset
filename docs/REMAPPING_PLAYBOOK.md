@@ -140,7 +140,7 @@ Whether the kit can drive the body at all, `kit/tools/body_check.py` says (`QUIC
 over, and bodies with the 2021-and-later menu share the same screens. **Prove again:** record ids, counts and value
 codes (the a1 II's `data/ILCE-1M2_fw4.00/`, definition and page, `docs/models/ILCE-1M2_fw4.00.md`, are at most a hint
 of where to look: Recall Custom holds, for one, keep values the hold's screen never shows); each mode's menu pages, rows
-and labels; screen geometry and templates where the UI differs (section 16, step 4); which settings Camera Settings
+and labels; screen geometry and templates where the UI differs (section 16, step 2); which settings Camera Settings
 Reset leaves alone, which records a file cannot set, and which the camera writes only once.
 
 ## 3. The file
@@ -148,7 +148,7 @@ Reset leaves alone, which records a file cannot set, and which the camera writes
 The layout is the camera file's container block ([the container block](DATA_CONTRACTS.md#the-container-block-file)),
 which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 
-- **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 5).
+- **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 3).
 - **Records a file cannot set:** upload a download and download again; what does not match was never loaded.
 - **First-use records,** 0 until their feature is used.
 - **Copies and linked records:** one choice often writes two to seven records; the report names each by its own row.
@@ -609,28 +609,26 @@ After the owner's Initialize, before the next run (after Reset Network Set., the
 
 ## 16. New model: first day
 
-1. **Read the model and firmware** with the SDK (`SoftwareVersion`), and take the layout fingerprint of a downloaded
-   file (`kit/tools/identify.py`).
-2. **Read the model's whole Help Guide,** every page: each item's options, the modes it appears in, what greys it out,
+After QUICKSTART's step 6, on a layout `kit/tools/identify.py --camera` did not call KNOWN (QUICKSTART's step 4 has
+read the model, the firmware and the layout, started the camera's runs folder and drafted the camera file's `file`
+block):
+
+1. **Read the model's whole Help Guide,** every page: each item's options, the modes it appears in, what greys it out,
    the default and reset lists, and what Save/Load Settings leaves out. Keep your notes from it in your `private/`
    (decisions 13 and 18: Sony's text is never published), to plan, never as proof. Only its menu list goes in `data/`:
    `help_guide_menu_<model>_fw<fw>.jsonl`, one line per item with its tab, group, name and modes.
-3. **Keep the model's results apart,** in its own `data/<model>_fw<fw>/` folder and definition. When no known container
-   block reads its files, correct `kit/tools/identify.py`'s draft into the camera file's `file` (`data/<model>_fw<fw>/camera_<model>_fw<fw>.json`) by hand before anything
-   else. A second body's runs get their own folder, which `kit/tools/identify.py --camera` starts: name the camera in
-   `private/config.json` (`"camera"`, with `"cameras"` listing both bodies) or pass `--camera` to each command.
-4. **Check the screens.** Run `kit/tools/selftest.py`, open one screen of each type by hand while
-   `kit/tools/hdmi_watch.py` records, and score the readers on those frames; recalibrate the HDMI crop and recut
-   templates where they miss.
-5. **Download twice with nothing changed, and once after turning the camera,** to find the volatile records, and write
-   them into the camera file (`volatile_records`) before Phase 1, or every row fails its last diff. Upload the download
-   back and download again to find the records a file cannot set.
-6. **Find the records that hold an owner's own data and the live mode record,** each body's own ids, and write them into
-   the camera file. `personal_records`: as
-   [DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records) says, each change made by
+2. **Check the screens.** Open one screen of each type by hand while `kit/tools/hdmi_watch.py` records, and score the
+   readers on those frames; recalibrate the HDMI crop and recut templates where they miss.
+3. **Download twice with nothing changed, and once after turning the camera,** to find the volatile records, and write
+   them into the camera file (`volatile_records`) before the first crawl, or every row fails its last diff.
+4. **Upload the download back and download again** to find the records a file cannot set.
+5. **Find the records that hold an owner's own data,** this body's own ids, and write them into the camera file
+   (`personal_records`), as
+   [DATA_CONTRACTS](DATA_CONTRACTS.md#records-that-hold-an-owners-own-data-personal_records) says: each change made by
    the owner's own hand and asked first; the bytes the diff prints are the owner's: copy them nowhere, not into notes,
-   the camera file or a message. `live_mode`: download once in each position of the Still/Movie/S&Q switch (the owner's
-   hand); the live record whose value follows the mode is it.
+   the camera file or a message.
+6. **Find the live mode record** and write it into the camera file (`live_mode`): download once in each position of
+   the Still/Movie/S&Q switch (the owner's hand); the live record whose value follows the mode is it.
 7. **Blank cards, then one picture.** Ask the owner to put in cards that hold nothing they want kept and to leave them
    in for the whole mapping, then to run `kit/tools/owner_statement.py cards` in their own terminal: only they answer
    it. A row the kit has not yet seen opened on this body opens only with that statement, under `RESTORE_BY_HAND`
@@ -638,7 +636,8 @@ After the owner's Initialize, before the next run (after Reset Network Set., the
    statement, `drive.py` takes `--press right` alone for it, named as the `--path`'s last row, never reached by its
    presses), and Format and Delete stay refused. Then, with the owner
    at their terminal, `kit/tools/take_picture.py` puts one picture on the card for the Playback rows (decision 2).
-8. **Then Phase 1.** How long the work takes is in section 11.
+8. **Then QUICKSTART's steps 7 to 9,** the first proved setting, **and Phase 1** (section 7). How long the work takes
+   is in section 11.
 9. **Read the camera's own help** for every row (`kit/help_run.py`) and every option
    (`prove_run --help-text`) once Phase 1's maps exist: C4 opens it where the footer draws the help
    button, and the kit sends it on no other screen (decision 7, rule 13). Then

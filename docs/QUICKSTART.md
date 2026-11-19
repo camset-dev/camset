@@ -156,8 +156,9 @@ camera is ILCE-7M4_fw2.00"). Then one of three:
 
 - **KNOWN ... definition ..., model page ...:** this body and firmware are mapped. Read its model page in
   `docs/models/` before going on.
-- **Same model, different layout:** a firmware update moved records; treat the old definition as hints only.
-- **UNKNOWN layout:** a new model or firmware. Follow the playbook's "New model: first day".
+- **Same model, different layout** (a firmware update moved records: the old definition is a hint only), or
+  **UNKNOWN layout** (a new model or firmware): after step 6, do the playbook's
+  [section 16](REMAPPING_PLAYBOOK.md#16-new-model-first-day), "New model: first day", then come back for steps 7 to 9.
 
 When no known container block reads the file, identify.py prints a draft block: correct it into the camera's
 `data/<model>_fw<fw>/camera_<model>_fw<fw>.json` ("file"; [the container block](DATA_CONTRACTS.md#the-container-block-file))

@@ -68,12 +68,15 @@ what to search for yourself).
 
 ## Order of work
 
-1. [docs/QUICKSTART.md](docs/QUICKSTART.md), from step 0: ask which camera, how it connects and whether there is a
+1. [docs/QUICKSTART.md](docs/QUICKSTART.md), steps 0 to 3: ask which camera, how it connects and whether there is a
    capture dongle; once the person has put Sony's SDK zip into `kit/sdk/`, run `python3 kit/setup.py`, then check the
    body.
 2. The playbook's [section 1](docs/REMAPPING_PLAYBOOK.md#1-rules-that-are-never-broken), the rules, before QUICKSTART
    step 4, the first command that opens the camera's link.
-3. [The playbook](docs/REMAPPING_PLAYBOOK.md) for everything after: its section 16, "New model: first day", first, then sections 2 to 15 as the work reaches them.
+3. QUICKSTART steps 4 to 6; then, on a layout `identify.py` does not call KNOWN, the playbook's
+   [section 16](docs/REMAPPING_PLAYBOOK.md#16-new-model-first-day), "New model: first day".
+4. QUICKSTART steps 7 to 9, the first proved setting; then [the playbook](docs/REMAPPING_PLAYBOOK.md) from section 7's
+   Phase 1, its other sections as the work reaches them.
 
 ## Where things go
 
