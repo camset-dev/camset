@@ -309,3 +309,119 @@ def test_the_a1_pass_keeps_0x0b8d_out_of_the_memory_sets(tmp_path, monkeypatch, 
     assert "global:0x0b8d" in capsys.readouterr().out
     by = {s["key"]: s for s in got[-1]["settings"]}
     assert by["global:0x0b8d"]["in_sets"] is False and by["set:0x0b8d"]["in_sets"] is True
+
+
+# ---------------------------------------------------------------- 7. one rebuild command
+
+def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True):
+    """kit/rebuild.py with each step a stand-in (python -c) that logs its name and prints as the real one does: the
+    write changes the evidence stand-in on its first `changes` runs; `fail` names a step that refuses; cargo there or
+    not, the bless a stand-in that rewrites a golden menu stand-in. Returns (the module, the log, the golden menu)."""
+    import rebuild
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    log, count = tmp_path / "steps.txt", tmp_path / "writes.txt"
+    defn, ev, reset, menu = (tmp_path / n for n in ("def.json", "ev.json", "reset.json", "menu.json"))
+    for f in (defn, ev, menu):
+        f.write_text("0", encoding="utf-8")
+
+    def logged(name, body):
+        return (f"import os, sys\nfrom pathlib import Path\n"
+                f"open({str(log)!r}, 'a', encoding='utf-8').write({name!r} + '\\n')\n{body}")
+    write = (f"c = Path({str(count)!r})\nn = int(c.read_text(encoding='utf-8')) + 1 if c.exists() else 1\n"
+             f"c.write_text(str(n), encoding='utf-8')\n"
+             f"if n <= {changes}:\n    Path({str(ev)!r}).write_text(str(n), encoding='utf-8')\n"
+             "print('gate: 0 open questions in the report, every one accepted in x')\n"
+             "print('wrote editor/definitions/TEST-CAM_fw9.99.json')")
+    bodies = {"report": "print('12 rows proved, 30 options')",
+              "look": "print('gate: 2 open questions in the report, every one accepted in x')",
+              "write": write, "docs": "print('wrote docs/formats/sony_camset_ids_TEST-CAM_fw9.99.ksy')",
+              "leads": "print('written: private/evidence/TEST-CAM_fw9.99/leads_TEST-CAM_fw9.99.json')",
+              "coverage": "print('written: data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json')"}
+    if fail:
+        bodies[fail] = "print('nothing written: a made-up refusal, in the step own words'); sys.exit(3)"
+    monkeypatch.setattr(rebuild, "argv", lambda step, cam: [sys.executable, "-c", logged(step, bodies[step])])
+    monkeypatch.setattr(rebuild, "settled_files", lambda cam: [defn, ev, reset])
+    monkeypatch.setattr(rebuild, "golden", lambda cam: menu)
+    monkeypatch.setattr(rebuild, "BLESS", [sys.executable, "-c", logged(
+        "bless", f"assert os.environ['CAMSET_BLESS'] == '1' and Path.cwd().name == 'editor'\n"
+                 f"Path({str(menu)!r}).write_text('blessed', encoding='utf-8')")])
+    monkeypatch.setattr(rebuild.shutil, "which", lambda name: "/made/up/cargo" if cargo else None)
+    return rebuild, log, menu
+
+
+def _ran(log) -> list:
+    return log.read_text(encoding="utf-8").split() if log.exists() else []
+
+
+def test_the_rebuild_is_a_look_by_default(tmp_path, monkeypatch, capsys):
+    """Review 2026-11-18, item 7: kit/rebuild.py --camera X, without --write: the report and the writer as a look (its
+    gate line), nothing else run and nothing written."""
+    rebuild, log, menu = _stand_ins(tmp_path, monkeypatch)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py"])
+    rebuild.main()
+    out = capsys.readouterr().out
+    assert _ran(log) == ["report", "look"] and "gate: 2 open questions" in out and "A look" in out
+    assert "--write" in out and menu.read_text(encoding="utf-8") == "0"
+
+
+def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_blesses(tmp_path, monkeypatch, capsys):
+    """With --write: the report, the write again until it changes nothing (here the first two change the evidence, the
+    third does not: three writes, said), the docs, the leads, the ledger and the golden menu's bless (CAMSET_BLESS=1,
+    in editor/), then what was written, each file once."""
+    rebuild, log, menu = _stand_ins(tmp_path, monkeypatch, changes=2)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+    rebuild.main()
+    out = capsys.readouterr().out
+    assert _ran(log) == ["report", "write", "write", "write", "docs", "leads", "coverage", "bless"]
+    assert "settled in 3 writes: write 3 changed nothing" in out and menu.read_text(encoding="utf-8") == "blessed"
+    tail = out[out.index("written ("):]
+    for f in ("editor/definitions/TEST-CAM_fw9.99.json", "docs/formats/sony_camset_ids_TEST-CAM_fw9.99.ksy",
+              "private/evidence/TEST-CAM_fw9.99/leads_TEST-CAM_fw9.99.json",
+              "data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json", str(menu), str(tmp_path / "ev.json")):
+        assert tail.count(f) == 1, f
+    assert str(tmp_path / "def.json") not in tail, "a file no write changed is not listed"
+
+
+def test_one_write_that_changes_nothing_is_enough(tmp_path, monkeypatch, capsys):
+    rebuild, log, _menu = _stand_ins(tmp_path, monkeypatch, changes=0)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+    rebuild.main()
+    assert _ran(log).count("write") == 1 and "settled in 1 write: the first changed nothing" in capsys.readouterr().out
+
+
+def test_the_rebuild_stops_on_a_write_that_never_settles(tmp_path, monkeypatch, capsys):
+    """A write that still changes the definition or its evidence at the third run stops the rebuild, in plain words,
+    before the docs."""
+    import pytest
+    rebuild, log, _menu = _stand_ins(tmp_path, monkeypatch, changes=5)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+    with pytest.raises(SystemExit) as e:
+        rebuild.main()
+    assert e.value.code == 1 and _ran(log) == ["report", "write", "write", "write"]
+    assert "still changed at write 3" in capsys.readouterr().out
+
+
+def test_the_rebuild_stops_at_the_first_step_that_refuses_in_its_own_words(tmp_path, monkeypatch, capsys):
+    """A step that fails stops the rebuild with its exit status, its own words shown and quoted, the step named;
+    nothing after it runs."""
+    import pytest
+    for fail, ran in (("report", ["report"]), ("write", ["report", "write"]),
+                      ("leads", ["report", "write", "write", "docs", "leads"])):
+        rebuild, log, menu = _stand_ins(tmp_path / fail, monkeypatch, fail=fail)
+        monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+        with pytest.raises(SystemExit) as e:
+            rebuild.main()
+        out = capsys.readouterr().out
+        assert e.value.code == 3 and _ran(log) == ran, fail
+        assert "rebuild stopped at step" in out and "a made-up refusal, in the step own words" in out
+        assert "nothing after it ran" in out and menu.read_text(encoding="utf-8") == "0"
+
+
+def test_without_cargo_the_rebuild_says_the_bless_command(tmp_path, monkeypatch, capsys):
+    rebuild, log, menu = _stand_ins(tmp_path, monkeypatch, cargo=False)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+    rebuild.main()
+    out = capsys.readouterr().out
+    assert "bless" not in _ran(log) and rebuild.BLESS_SAID in out and "cargo is not on this computer" in out
+    assert menu.read_text(encoding="utf-8") == "0"
+    assert rebuild.BLESS_SAID == "cd editor && CAMSET_BLESS=1 cargo test --release the_default_menu_is_the_golden_one"
