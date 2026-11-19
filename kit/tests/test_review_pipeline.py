@@ -528,3 +528,30 @@ def test_every_question_refuses_a_black_frame_and_a_reader_down_costs_one_timeou
     vlm.forget()
     assert not vlm.reader_down("second")
     assert vlm.ask_role.__doc__ and "BlackFrame" in vlm.ask_role.__doc__
+
+
+# ------------------------------------------------------------------------------------------------ B5
+
+def page_world(*labels):
+    """A page scan of one Exposure/Color page whose rows the page model reads as `labels`, the cycle one position per
+    row."""
+    model = {"p": {"key": "p", "breadcrumb": "Exposure/Color > Exposure", "rows": [{"label": x} for x in labels]}}
+    cycle = [{"kind": "menu", "page": "p", "row": i} for i in range(len(labels))]
+    return cycle, model
+
+
+def test_target_of_takes_the_row_named_exactly_and_never_one_of_two_it_only_reads_as_the_label():
+    """crawl_run.target_of took the first of several rows page_model.same_text reads as the label, which leaves out a
+    leading word of one or two letters: "Tv Auto/Manual Switch" went to the Av row when that came first. Now a row
+    whose page model label is the label itself is taken; rows only read as it that bear two labels are none; one only
+    read as it is found by another reading, so go_to reads its lit bar after travel."""
+    import crawl_run
+    cycle, model = page_world("Av Auto/Manual Switch", "Tv Auto/Manual Switch")
+    assert crawl_run.target_of(cycle, model, "Tv Auto/Manual Switch") == (1, False, "")
+    assert crawl_run.target_of(cycle, model, "Av Auto/Manual Switch") == (0, False, "")
+    target, _, why = crawl_run.target_of(cycle, model, "Auto/Manual Switch")
+    assert target is None and "2 rows with other labels read as it ('Av Auto/Manual Switch', 'Tv Auto/Manual " \
+        "Switch'): none is gone to" in why
+    cycle, model = page_world("Shutter Type", "SDrive Mode")
+    assert crawl_run.target_of(cycle, model, "Drive Mode") == (1, True, "")         # its bar read after travel
+    assert crawl_run.target_of(cycle, model, "Shutter Type") == (0, False, "")

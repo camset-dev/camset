@@ -2912,8 +2912,10 @@ def test_go_to_finds_a_row_by_any_of_its_readings_or_its_icon_glued_on(monkeypat
         assert "no row labelled 'Wired LAN Connect'" in capsys.readouterr().out
     # exactly one row may read so: two rows of two pages, none is gone to
     assert find("Wired LAN", both, twice=True) is None and "2 rows read as it" in capsys.readouterr().out
-    # the old rule first, as ever: a prefix of one or two letters, no check of the bar on arrival
-    assert find("Wired LAN", {"label": "SDrive Mode"}, "Drive Mode", bar="something else") == 3
+    # the old rule first, as ever: a prefix of one or two letters; since 2026-11-18 (review, B5) its bar is read on
+    # arrival, as any row found by another reading
+    assert find("Wired LAN", {"label": "SDrive Mode"}, "Drive Mode", bar="Drive Mode") == 3
+    assert find("Wired LAN", {"label": "SDrive Mode"}, "Drive Mode", bar="something else") is None
     assert crawl_run.row_named(both, "Wired LAN Connect", "") and not crawl_run.row_named(ocr_only, "Wired LAN Connect", "")
 
 

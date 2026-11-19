@@ -181,8 +181,11 @@ def group_closed(cam, name: str, known=()) -> str | None:
 
 def target_of(cycle, model, label, place=None) -> tuple:
     """(position, by another reading, why): the cycle position of the row labelled `label` that go_to steps to, whether
-    it was found by another reading of the row (row_named), and, where there is none, why (position None). place:
-    go_to's."""
+    it was found by another reading of the row (row_named, or a page model label that only page_model.same_text takes
+    for it: go_to then reads the lit bar after travel), and, where there is none, why (position None). place: go_to's.
+    Of the rows same_text finds, one whose page model label is `label` itself (safety.plain) is taken first ("Tv
+    Auto/Manual Switch" is never its Av twin, which same_text also takes for it); where none is and they bear two labels,
+    none is gone to (review 2026-11-18, B5)."""
     from page_model import same_text
     tabs = ("Shooting", "Exposure/Color", "Focus", "Network", "Setup")
 
@@ -207,7 +210,20 @@ def target_of(cycle, model, label, place=None) -> tuple:
     if fallback and len({(cycle[i]["page"], cycle[i]["row"]) for i in (real or matches)}) > 1:
         return None, fallback, (f"no row labelled {label!r} in the page model, and {len(real or matches)} rows read as "
                                 "it: none is gone to")
-    target = (real or matches or [None])[0]
+    pool = real or matches
+    if not fallback and pool:
+        def named(i):
+            return model[cycle[i]["page"]]["rows"][cycle[i]["row"]]["label"]
+        exact = [i for i in pool if safety.plain(named(i)) == safety.plain(label)]
+        if exact:
+            pool = exact
+        else:
+            labels = sorted({named(i) for i in pool})
+            if len({safety.plain(x) for x in labels}) > 1:
+                return None, True, (f"no row labelled {label!r} in the page model, and {len(labels)} rows with other "
+                                    f"labels read as it ({', '.join(repr(x) for x in labels[:4])}): none is gone to")
+            fallback = True              # a reading of the row only: its lit bar is read after travel (go_to)
+    target = (pool or [None])[0]
     return target, fallback, "" if target is not None else f"no row labelled {label!r} in the page model"
 
 
