@@ -1,6 +1,6 @@
 # 18. One public codebase, with a private overlay
 
-- **Date:** 2026-11-03; changed 2026-11-11
+- **Date:** 2026-11-03; changed 2026-11-11 and 2026-11-19
 - **Status:** accepted
 - **Rule:** All the code lives in one public repository; what must not be published is data, kept in `private/`, a
   repository of its own beside the code and ignored by it.
@@ -15,11 +15,12 @@ list of what to strip.
 
 The internal version is the same checkout with `private/` present, and nothing in the programs tells the two apart
 but whether its files are there (the internal macOS app is built with `CAMSET_INTERNAL=1`, into a folder of its own,
-never in CI). The code looks in five places there:
+never in CI). The code looks in six places there:
 `private/config.json`, `private/help/` (the camera's own help text), `private/camsets/` (real settings files),
-`private/data/` (from one's own SDK and camera) and `private/evidence/` (a mapping's evidence).
+`private/data/` (from one's own SDK and camera), `private/evidence/` (a mapping's evidence) and `private/lut/` (the user
+LUTs `kit/tools/lut_import.py` may import, [decision 26](0026-a-user-lut-reaches-the-camera-only-through-the-kit-s-import-tool.md)).
 
-Before 0.2.0 (2026-11-11) `private/evidence/` was not among them.
+Before 2026-11-19 `private/lut/` was not among them; before 0.2.0 (2026-11-11), `private/evidence/`.
 
 ## Consequences
 

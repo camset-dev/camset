@@ -172,7 +172,7 @@ def test_the_real_list_is_current_and_its_links_lead_somewhere():
 
 # ---------------------------------------------------------------- the real records
 
-ORDER =[2, 3, 4, 5, 6, 7, 21, 8, 24, 9, 10, 15, 16]          # AGENTS.md's order on 2026-11-19, kept by the marks
+ORDER =[2, 3, 4, 5, 6, 7, 21, 8, 24, 9, 10, 15, 16, 26]      # AGENTS.md's order on 2026-11-19, kept by the marks
 
 # what each rule must go on saying, whatever its wording: the prohibitions and the narrow exceptions as AGENTS.md held
 # them before its list was generated. A safety rule changes only with the maintainer's decision (docs/decisions/0001):
@@ -190,7 +190,7 @@ MUST_SAY = {
         "`kit/drive.py --owner --confirm` run's last press", "typed the row's name", "never an agent for them",
         "`RESTORE_BY_HAND.json`", "no link opens until `kit/tools/upload_check.py` has put its start file back",
         "Initialize never."],
-    6: ["No hand-made settings files", "never by editing a file", "uploads only files that camera wrote",
+    6: ["No hand-made settings files", "never by editing a file", "uploads only settings files that camera wrote",
         "checked by its bytes", "never writes a file through it"],
     7: ["C4 only as guarded Help", "on a menu or option screen whose footer draws the help button", "never in Playback",
         "with a picture displayed", "nor on the shooting screen",
@@ -217,9 +217,15 @@ MUST_SAY = {
         "nothing ever typed", "`\"values\": \"logged\"`", "never in the console, the proof viewer or a packed copy"],
     10: ["The camera is free for tests", "physical actions", "visual checks", "menu routes are tried first"],
     15: ["Every run starts from a known file and ends restoring it", "STOP file", "a run is never killed",
-         "nor the camera disconnected", "with a dialog open"],
+         "nor the camera disconnected", "with a dialog open",
+         "never a run's changes left on the camera but a user LUT, which stays until the owner deletes it by hand"],
     16: ["The owner's values never reach a definition, the data files or the docs", "names and value meanings only",
          "stay in the mapper's private evidence", "is not planned"],
+    26: ["A user LUT reaches the camera only through `kit/tools/lut_import.py`", "on the owner's word for that run",
+         "a `.cube` file from that clone's `private/lut/`", "Sony's documented ImportLUTFile", "into an empty user place",
+         "one the camera does not list as holding a LUT", "never as a settings file",
+         "never through Manage User LUTs' Import on the camera's menu, which no run opens",
+         "it stays on the camera until the owner deletes it there by hand", "On every camera the default is no"],
 }
 
 
@@ -233,15 +239,16 @@ PINNED = {
     3: ("The camera's Screen Reader is changed remotely only", "98160dfbfddf43f1"),
     4: ("Never format or delete a card. The one", "a573426477dbc3df"),
     5: ("Never Initialize, Reset Network Set. or SSID/PW Reset;", "25aaf3b24d351a15"),
-    6: ("No hand-made settings files: the kit, and whoever", "1b296585c7a77428"),
+    6: ("No hand-made settings files: the kit, and whoever", "ee726173be6f7386"),
     7: ("C4 only as guarded Help, on a menu", "9959409b5807e95c"),
     21: ("No key but MENU on the shooting screen,", "e43aeb27a3b9e609"),
     8: ("USB settings, language, NTSC/PAL, area and date, and", "491de25eee2aa3b7"),
     24: ("A look lap, a run of `kit/drive.py` or", "b97c4f8318819e6f"),
     9: ("Credentials are never typed, read, OCR'd, screenshotted or", "c646458046751346"),
     10: ("The camera is free for tests, which run", "20b96a6faaa7d4ff"),
-    15: ("Every run starts from a known file and", "64431308393734b7"),
+    15: ("Every run starts from a known file and", "c7b674b8bf12dddd"),
     16: ("The owner's values never reach a definition, the", "0c97dcd1abcccd27"),
+    26: ("A user LUT reaches the camera only through", "cbb752f2d07bd8eb"),
 }
 
 

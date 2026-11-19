@@ -107,14 +107,17 @@ your owner, and the default is no.
 10. **The owner's values** ([decision 16](decisions/0016-the-owner-s-values-never-reach-the-schema-or-the-docs.md)). The
     value a row held at the start of a run is filled from a sibling record's labels, so a gap cannot reveal it.
 11. **Asking the owner** ([decision 10](decisions/0010-the-camera-is-free-for-tests.md); how, section 9).
-12. **Uploads: only files the camera wrote** ([decision 6](decisions/0006-no-hand-made-settings-files.md)). A file
-    edited by hand once put the a1 II into a restart loop
+12. **Uploads: only settings files the camera wrote** ([decision 6](decisions/0006-no-hand-made-settings-files.md)). A
+    file edited by hand once put the a1 II into a restart loop
     ([what ended it](EDITOR.md#if-the-camera-restarts-over-and-over)).
 13. **C4** ([decision 7](decisions/0007-the-c4-key-only-where-it-is-safe.md)). (The a1 II's owner also allowed Focus
     Area's SET and a Creative Look panel's Reset (`drive.py --c4-press`), and a Custom box editor's Reset
     (`kit/provers/boxsize_run.py --allow "Custom box Reset"`), each only when the run names it; ask yours.)
 14. **The shooting screen: no key but MENU**
     ([decision 21](decisions/0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md)).
+15. **A user LUT** ([decision 26](decisions/0026-a-user-lut-reaches-the-camera-only-through-the-kit-s-import-tool.md)).
+    `kit/tools/lut_import.py` carries no flag for your owner's word: run it only when they gave it for that run. (The
+    a1 II's owner allowed one import into User16 on 2026-11-19; ask yours: the default is no.)
 
 ## 2. What carries over to a new model, and what does not
 
@@ -133,9 +136,9 @@ which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 - **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 3).
 - **Records a file cannot set:** upload a download and download again; what does not match was never loaded.
 - **A user LUT,** which the kit can put on a camera and no settings file takes off: `kit/tools/lut_import.py` imports
-  one `.cube` file from `private/lut/` into a user place (Sony's ImportLUTFile; the a1 II's owner allowed it on
-  2026-11-19, ask yours), prints the records it changed and, after its restore, those that did not go back. The LUT
-  stays until the owner deletes it on the camera by hand (Manage User LUTs).
+  one `.cube` file from `private/lut/` into an empty user place (Sony's ImportLUTFile; on your owner's word alone, rule
+  15), prints the records it changed and, after its restore, those that did not go back. The LUT stays until the owner
+  deletes it on the camera by hand (Manage User LUTs).
 - **First-use records,** 0 until their feature is used.
 - **Copies and linked records:** one choice often writes two to seven records; the report names each by its own row.
 - **Arrays** of per-slot values (Picture Profiles, Creative Looks, Fn and Custom Key slots, the memory tables), keyed

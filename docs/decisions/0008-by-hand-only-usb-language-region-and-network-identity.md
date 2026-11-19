@@ -120,7 +120,8 @@ stops the run before anything connects.
 A dated owner decision, `{"date": "YYYY-MM-DD", "lifts": "owner", "rows": [...], "why": "..."}`, may name any row of
 the never-open list but these, whatever it says: a firmware update and the Version screen; anything that loads a file
 or settings from a card or the camera's memory (Save/Load Settings' Load, Recall Camera Setting, Import Root
-Certificate, IPTC Information's Register IPTC Info, Manage User LUTs' Import: decision 6); Initialize, an item of Setting Reset's dialog whose Enter nobody has seen (decision 5); and
+Certificate, IPTC Information's Register IPTC Info, Manage User LUTs' Import: decision 6; the kit's own import of a
+user LUT opens no row, and is [decision 26](0026-a-user-lut-reaches-the-camera-only-through-the-kit-s-import-tool.md)'s); Initialize, an item of Setting Reset's dialog whose Enter nobody has seen (decision 5); and
 the rows of sound, light or motion and the Screen Reader (Cleaning Mode, Pixel Mapping, Anti-dust and Preset Focus/Zoom
 among them), which keep their own routes (decisions 2 and 3). Only `kit/drive.py --owner` uses it, for the row its
 `--path` ends on, one per run; the crawl and the proofs never open such a row. A row whose name the kit knows in more
