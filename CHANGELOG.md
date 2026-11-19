@@ -55,6 +55,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **A setting whose list was proved partly on another setting of the same kind is never called checked on the
+  camera** (its definition's `proved.shared`): it still offers every listed value, and its proof line, the Exposure
+  page and the Write and Before saving windows say what is true of the list.
 - **The a1 II's ISO AUTO Maximum set below the Minimum pulls the Minimum down,** as the camera did in Stills mode:
   the editor no longer calls that untried for the setting and its stills copy, and still does for the movie copy.
 - **The a1 II's ISO Range Limit is proved value by value, its lower end named "ISO Range Limit (lower)",** and its two
@@ -158,6 +161,49 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **No reader credits a line the camera did not apply, and an option a list draws grey is never chosen:** the list and
+  side-list provers write such an option greyed, with the camera's Help as its reason and no key pressed. The ledger,
+  the report, the writer, the proof viewer and `replay_proofs` never credit a line with `"applied": false`, an old
+  refused line carrying the diff of the option before it among them.
+- **A side list's put-back the camera will not let back ends its attempt** (a Picture Profile's Color Mode proved with
+  its Gamma on HLG, which greys the value it held): pass 2's report no longer leaves the attempt's lines out, and its
+  failure re-arms no older failure of the same row.
+- **"Nothing changed" credits a record only from a session whose lines move it:** a session made with Different Set
+  for Still/Mv's box ticked, where a Stills choice leaves the movie copy alone, no longer names the copy's start value
+  after one of its options (the a1 II's ISO AUTO Minimum and Exposure Comp. movie copies).
+- **A put-back never takes the place of the line that proved its option:** a later line that only puts its session's
+  start back no longer hides an earlier line of the same option that wrote (the a1 II's Exposure Comp. +2.7 EV on its
+  movie copy).
+- **A value the setting's `video_system_values` lists under the other video system is no list one value short,** as
+  a not-offered mark is none (the a1 II's USB Streaming output rate under PAL).
+- **A refusal takes the place of an applied line that only repeated the line before it,** so a code is no longer named
+  twice from such a line ("BT.2020 / S-Gamut3" on Color Mode, "Flash Off / Rear Sync." on Flash Mode).
+- **The ledger's private form infers a view-only readout's value** ("inferred from a shared list") where a proof chose
+  it on the setting of the readout's row whose codes it holds (the a1 II's ISO in use), never proved and never in the
+  definition.
+- **Every write checks for a public list one value short** (`kit/writer/listgaps.py`): the gate line counts each, and
+  `--write` refuses one whose missing value a start file of the camera held until a proof, a held not-offered mark or
+  an unproved reason closes it; one no start file held is accepted by a ruling of kind "one value short".
+- **A public proof marks a setting once where part of its list was named from another setting's proof**
+  (`proved.shared`, decision 25): the writer names values afresh at every write, counts a name only a hand table gives
+  and lets a copy take its setting's established values. The coverage ledger reads the writer's inference instead of a
+  rule of its own (decision 23).
+- **Every runner's session goes through one session manager,** whose start is the one place a start file is
+  downloaded, the lock after it a watched wait where a fixed 5 s stood; `drive.py`, `crawl_run.py` and
+  `take_picture.py` keep their own.
+- **`kit/tools/chain.py` stops at the first step that fails;** a step marked `go_on_after_error = true` lets it go on
+  only after an error the kit gives no meaning.
+- **Cont. Play for Interval and Zoom act as they open,** so a look lap leaves them to the owner's own run, and the
+  ledger counts both actions. A plain crawl keeps what a row's notice names (a blocking row's
+  label, equipment or a remote session, never a value).
+- **An owner decision's `"values": "logged"` no longer keeps the serial number screen's frames:** that screen is always
+  saved black, as decision 8's body now says too.
+- **Smaller fixes:** a notice or shooting screen over a dark scene is no longer taken for a black frame, so a capped
+  lens's notice no longer ends a first open with `RESTORE_BY_HAND`, while a blanked HDMI frame stays black. `drive.py`
+  takes the `--path`'s own row inside a submenu (its first open too) where the page read live ties the lit bar to it,
+  and one read with a space before its bracket, and `--stepped` records that a look stepped its row's value; "Select
+  media card." reads as boxed options, and a slider drawn over a picture as a slider, its number read off its marker
+  on the scale's ticks.
 - **The private hand evidence records what proved each direction of a limit pair** (`LIMIT_PAIRS`, its `"evidence"`
   by direction): where that file is present, a direction the hand table marks is written with `moves_it` only where
   its evidence is given, and the writer says so otherwise.
@@ -388,6 +434,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The docs
 
+- AGENTS.md's rules that are never broken are written by `kit/tools/build_docs.py` from the decision records marked
+  Never broken, each rule's whole text pinned by a test; the playbook's section 1 keeps how an owner allows more.
 - Three pages are folded into others: updating a clone into CONTRIBUTING, camera support into the quick start,
   where each fact lives into decision 14.
 - The docs site uses the system's own fonts and no longer loads any from Google, so Google does not see its visitors;
