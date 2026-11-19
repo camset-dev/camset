@@ -896,14 +896,39 @@ MENU_PAGES = ("menu", "submenu", "tiles")
 MENU_POLL = 0.05       # s between two looks while a MENU from the shooting screen is watched (menu_watch, menu_check)
 # times a press is judged again from the top after the reader named its lit row on a frame by then stale (lit_by_reader)
 REJUDGES = 2
-# a frame this dark on average shows no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
+# a frame this dark on average may show no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
 BLACK = 6.0
+# what the camera draws to be read, its text, glyphs and box lines, is at least this grey (white text 200-250 over HDMI,
+# 221 over its own picture) or orange; a blanked frame and its noise reach it in no 2 x 2 block of pixels. A frame with
+# at least INK_MIN such blocks shows something to read whatever the scene behind it: the a1 II's "Added." alone, the
+# smallest notice the runs hold, has 400 (kit2_pass2 223037, mean 1.0); "Lens: Invalid with this lens." over a capped
+# lens 3,128 (kit2_fin_look_zring1 00028, mean 4.1, taken for black on 2026-11-19)
+INK = 128
+INK_MIN = 100
+
+
+def dark(frame) -> bool:
+    """The frame's picture is this dark on average (BLACK), whatever is drawn on it; a frame without a picture is not.
+    LiveCamera.judged_screen asks the camera's own picture about a screen of no known kind on such a frame."""
+    image = getattr(frame, "image", None)
+    return isinstance(image, np.ndarray) and image.size > 0 and float(image.mean()) <= BLACK
+
+
+def drawn(image) -> bool:
+    """Whether the camera drew something to read on the picture `image`: at least INK_MIN 2 x 2 blocks of pixels each at
+    INK grey or brighter, or orange (camkit.screen's planes). Noise, a pixel here and there, makes no such block."""
+    a = np.asarray(image)
+    lit = (screen._grey(a) >= INK) | screen._orange(a) if a.ndim == 3 and a.shape[2] >= 3 else a.reshape(a.shape[:2]) >= INK
+    solid = lit[:-1, :-1] & lit[1:, :-1] & lit[:-1, 1:] & lit[1:, 1:]
+    return int(solid.sum()) >= INK_MIN
 
 
 def black(frame) -> bool:
-    """The frame shows nothing to read: its picture this dark on average (BLACK). A frame without a picture is not."""
-    image = getattr(frame, "image", None)
-    return isinstance(image, np.ndarray) and image.size > 0 and float(image.mean()) <= BLACK
+    """The frame shows nothing to read: its picture this dark on average (dark) with nothing drawn on it (drawn), as
+    HDMI blanked shows (Auto Framing in Movie mode). A notice or a shooting screen over a dark scene is not black: its
+    text is drawn (2026-11-19, a capped lens's notice taken for black ended a first open with RESTORE_BY_HAND). A frame
+    without a picture is not."""
+    return dark(frame) and not drawn(frame.image)
 
 
 def osd_kind(link, folder=None) -> str:
@@ -1814,12 +1839,12 @@ class LiveCamera:
 
     def judged_screen(self, key: str):
         """The screen a press or turn of `key` is judged on at the link: the screen read last, except a screen read as
-        no known kind whose frame is black (HDMI blanked), which the camera's own picture of it decides (osd_kind):
-        judged as the shooting screen when that reads as one (decision 21); Refused, for every key but MENU, when that
+        no known kind whose frame is dark (HDMI blanked; dark, not black, so one with something drawn on it is asked
+        about too), which the camera's own picture of it decides (osd_kind): judged as the shooting screen when that reads as one (decision 21); Refused, for every key but MENU, when that
         picture cannot be read either, since a key pressed unseen may land on the shooting screen. Only ever adds a
         refusal: any other reading of the picture keeps the screen read last."""
         if safety.canonical_input(key) in safety.SHOOTING_FREE or getattr(self.screen, "kind", None) != "unknown" \
-                or not black(self.frame):
+                or not dark(self.frame):
             return self.screen
         kind = self.osd_seen()
         self.run.log("black_frame_osd", key=key, frame=self.frame.path.name, osd=kind or None)
