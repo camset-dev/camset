@@ -98,14 +98,23 @@ def test_camlink_says_its_import_command_and_its_answers():
     the SDK for nothing else that sends a file (no settings upload by another door, no firmware, nothing that deletes)."""
     src = (ROOT / "kit" / "link" / "camlink.cpp").read_text(encoding="utf-8")
     head = src.split("#include", 1)[0]
-    for word in ("importlut PATH PLACE [SHA256]", "not_a_lut", "import_disabled", "import_refused", "import_unconfirmed",
-                 "ImportLUTFile_Result_OK"):
+    for word in ("importlut PATH 16 SHA256", "not_a_lut", "import_disabled", "import_refused", "import_unconfirmed",
+                 "ImportLUTFile_Result_OK", "docs/decisions/0026"):
         assert word in head, word
     assert src.count("SCRSDK::ImportLUTFile(") == 1
     body = src.split("static void cmdImportLut", 1)[1].split("\n}\n", 1)[0]
     for call in ("UploadSettingFile", "DownloadSettingFile", "SetDeviceProperty", "DeleteUserBaseLook_All", "Firmware",
                  "SendCommand"):
         assert call not in body, call
+    # the decisions are lut_file.h's, tested there: camlink reads, asks plan(), sends the copy's path, asks judge()
+    assert "lut_file::plan(" in body and "lut_file::judge(" in body
+    assert "crPath(plan.copy.path)" in body and "crPath(plan.file" not in body and "u8path(path))" not in body.split(
+        "lut_file::plan(", 1)[1].split(";", 1)[1]
+    for refusal in ("placeProblem", "check(", "enableProblem", "recordingProblem", "placeHeld", "stateRefusal"):
+        assert f"lut_file::{refusal}" not in body, refusal                      # made in plan(), never beside it
+    # the clone's own LUT folder is built in (MEDIUM 1): camlink's CAMSET_LUT_DIR, from this clone's private/lut
+    cmake = (ROOT / "kit" / "link" / "CMakeLists.txt").read_text(encoding="utf-8")
+    assert "CAMSET_LUT_DIR" in cmake and "../../private/lut" in cmake and "fs::u8path(CAMSET_LUT_DIR)" in body
 
 
 # ---------------------------------------------------------------- Link.import_lut

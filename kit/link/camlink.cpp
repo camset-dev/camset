@@ -44,11 +44,12 @@
 // would not save its settings: no card, a menu open), "not_a_settings_file" (an upload that is no settings file,
 // kit/common/settings_file.h: never sent), "hash_mismatch" (an upload whose bytes are not the ones the SHA-256 on its
 // line names: never sent) and "upload_refused" (the camera would not take the file); importlut's (below) "not_a_lut"
-// (a file kit/common/lut_file.h refuses: never sent), "import_disabled" (BaseLookImportOperationEnableStatus does not
-// read Enable, or cannot be read: the SDK not asked), "import_refused" (the camera recording, the place one it lists as
-// holding a LUT, either property unreadable, the SDK refusing the call, or the camera answering anything but
-// ImportLUTFile_Result_OK) and "import_unconfirmed" (no answer within 120 s, or the session dropped meanwhile: whether
-// the LUT went in is not known). Once connected:
+// (a file kit/common/lut_file.h refuses, or no copy of it could be made: never sent), "refused" (a place but 16, or no
+// SHA-256 named), "import_disabled" (BaseLookImportOperationEnableStatus does not read Enable, or cannot be read: the
+// SDK not asked), "import_refused" (the camera recording, the place one it lists as holding a LUT or a list no reading
+// explains, a property unreadable, the SDK refusing the call, or the camera answering anything but
+// ImportLUTFile_Result_OK) and "import_unconfirmed" (no answer within 120 s, the session dropped meanwhile, or the
+// camera's OK as it dropped: whether the LUT went in is not known). Once connected:
 //   {"ok": true, "ready": <model>, "connection": "lan A.B.C.D" or "usb", "mac", "neighbour_mac", "login", "login_under",
 //    "upload_sha256": true}
 //   upload_sha256  always true: upload takes the SHA-256 the kit checked the file by (below). The kit refuses to open a
@@ -97,24 +98,27 @@
 //                                         _camlink_upload_<pid>.DAT), removed however the command ends (the kit's
 //                                         download pickers skip the name, should a crash leave one). The reply
 //                                         carries their sha256.
-//   importlut PATH PLACE [SHA256]         a user LUT (a .cube file) into user base look PLACE, 1-16 (Sony's
-//                                         ImportLUTFile; the owner allowed it on 2026-11-19 for .cube files under
-//                                         their private/lut/, the kit sending place 16 unless told another). Before
-//                                         the SDK is asked (kit/common/lut_file.h): PATH (quoted, or a word) under a
-//                                         folder private/lut/ where it really ends, the file itself no link, ".cube",
-//                                         a name Sony's reference takes (63 characters at most), under 3,000,000
-//                                         bytes, a .cube LUT's text, read once and, when SHA256 is given (the kit
-//                                         gives the hash it logged), with those bytes ("hash_mismatch"); then
-//                                         BaseLookImportOperationEnableStatus must read Enable, RecordingState Not
-//                                         Recording, and PLACE be none of the user LUTs the camera offers to delete
-//                                         (DeleteUserBaseLook's values, read, never set). The SDK gets the file's real
-//                                         path, and the camera's answer comes as an OnWarning, waited for 120 s (Sony
-//                                         documents no time): {"ok": true, "result": "ImportLUTFile_Result_OK",
-//                                         "warning", "file", "bytes", "sha256", "place", "called": true,
-//                                         "enable_status", "recording_state", "delete_list", "ms"} on that answer
-//                                         alone; anything else is "ok": false with its "cause", "called" (whether the
-//                                         SDK was asked) and what was read. No key is pressed, and nothing on the
-//                                         camera's screen is answered.
+//   importlut PATH 16 SHA256              a user LUT (a .cube file) into user place 16 (Sony's ImportLUTFile;
+//                                         docs/decisions/0026), all three arguments needed. Before the SDK is asked
+//                                         (kit/common/lut_file.h plan, which decides and is tested there): PLACE 16;
+//                                         PATH (quoted, or a word) strictly under the clone's own private/lut/, built
+//                                         in from kit/link/CMakeLists.txt (CAMSET_LUT_DIR) and there, where the path
+//                                         really ends, the file itself no link, ".cube", a name Sony's reference takes
+//                                         (63 characters at most), under 3,000,000 bytes, a .cube LUT's text, read
+//                                         once with SHA256's bytes ("hash_mismatch"); then BaseLookImportOperation-
+//                                         EnableStatus must read Enable, RecordingState Not Recording, and the place
+//                                         be none of the user LUTs the camera offers to delete (DeleteUserBaseLook's
+//                                         values, read, never set), a value no reading of that list explains refused.
+//                                         The SDK gets the path of a copy of the bytes checked, the same name in a
+//                                         fresh folder of the system's temporary one only this user can open (0700),
+//                                         never the file itself; the copy goes once the camera has answered, or, with
+//                                         no answer (the import may still read it), when camlink exits. The answer
+//                                         comes as an OnWarning, waited for 120 s (Sony documents no time): {"ok":
+//                                         true, "result": "ImportLUTFile_Result_OK", "warning", "file", "bytes",
+//                                         "sha256", "place", "called": true, "enable_status", "recording_state",
+//                                         "delete_list", "ms"} on that answer alone (lut_file.h judge); anything else
+//                                         is "ok": false with its "cause", "called" (whether the SDK was asked) and
+//                                         what was read. No key is pressed, and nothing on the screen is answered.
 //   release                               --picture only, once: the shutter released (Sony's Release command, down,
 //                                         35 ms, up, as its sample sends it; the up tried for about 2 s)
 //   ping                                  connection state
@@ -212,8 +216,8 @@ static std::atomic<CrInt32u> g_lutWarning{0};
 // lut_file.h needs none of the SDK's headers, so its numbers are tied to the SDK's names here
 static_assert(lut_file::kEnable == SCRSDK::CrBaseLookImportOperation_Enable, "lut_file.h's Enable is the SDK's");
 static_assert(lut_file::kNotRecording == SCRSDK::CrMovie_Recording_State_Not_Recording, "lut_file.h's Not Recording");
-static_assert(lut_file::kFirstPlace == SCRSDK::CrBaseLookNumber_1 && lut_file::kLastPlace == SCRSDK::CrBaseLookNumber_16,
-              "lut_file.h's user places are the SDK's CrBaseLookNumber");
+static_assert(lut_file::kFirstUser == SCRSDK::CrBaseLookNumber_1 && lut_file::kLastUser == SCRSDK::CrBaseLookNumber_16 &&
+              lut_file::kPlace == SCRSDK::CrBaseLookNumber_16, "lut_file.h's user places are the SDK's CrBaseLookNumber");
 static_assert(lut_file::kDeleteAll == SCRSDK::CrDeleteUserBaseLook_All &&
               lut_file::kDeleteNone == SCRSDK::CrDeleteUserBaseLook_Invalid, "lut_file.h's DeleteUserBaseLook values");
 
@@ -630,62 +634,82 @@ static void notImported(const std::string& why, const std::string& cause, bool c
     reply(o);
 }
 
-// A user LUT into user base look `placeText` (the header): every check made before the SDK is asked anything, the
-// file's own first (kit/common/lut_file.h: never sent when one fails), then the camera's state, each property read
-// and none set; then Sony's ImportLUTFile with the file's real path, and the camera's answer waited for. Success is
-// said only on ImportLUTFile_Result_OK; no answer, or a dropped session, is "import_unconfirmed", never a success.
+// The clone's own LUT folder, the only one importlut takes a file from (docs/decisions/0026): kit/link/CMakeLists.txt
+// builds it in from this clone's private/lut; a camlink built otherwise has none, and refuses every import
+#ifndef CAMSET_LUT_DIR
+#define CAMSET_LUT_DIR ""
+#endif
+
+// Copies whose import may still be reading them (no answer from the camera, lut_file::judge's keepCopy): removed when
+// camlink exits, never while the SDK may open them
+static std::vector<lut_file::Copy> g_keptCopies;
+
+static void removeKeptCopies() {
+    for (lut_file::Copy& c : g_keptCopies)
+        if (const std::string why = lut_file::removeCopy(&c); !why.empty())
+            note("the LUT copy " + c.dir.u8string() + " could not be removed (" + why + "); delete it by hand");
+    g_keptCopies.clear();
+}
+
+// A user LUT into user place 16 (the header). camlink only reads here: the three properties, when lut_file::plan asks
+// for them (after the place and the file pass), and the camera's answer. plan() decides every refusal and writes the
+// copy of the checked bytes the SDK is given (kit/common/lut_file.h, tested there); judge() reads the answer: a success
+// only on ImportLUTFile_Result_OK, an OK as the session dropped, no answer or a dropped session "import_unconfirmed".
 static void cmdImportLut(const std::string& path, const std::string& placeText, const std::string& expected) {
     long long place = 0;
     if (!sdk_values::parse(placeText, &place)) return replyError("bad arguments: PLACE is not a number: " + placeText);
-    if (const std::string why = lut_file::placeProblem(place); !why.empty())
-        return notImported("not imported: " + why, "refused", false, Obj());
-    const lut_file::Checked f = lut_file::check(fs::u8path(path), expected);
-    if (!f.problem.empty()) return notImported(f.problem, f.cause, false, Obj());
-    Obj read = Obj().s("file", f.name).i("bytes", static_cast<long long>(f.bytes)).s("sha256", f.sha256).i("place", place);
-    SCRSDK::CrDeviceProperty p;
-    // Sony's reference: the import goes only while BaseLookImportOperationEnableStatus reads Enable
-    const bool enableRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_BaseLookImportOperationEnableStatus, &p);
-    const long long enable = enableRead ? sdk_values::current(p) : -1;
-    if (enableRead) read.i("enable_status", enable);
-    if (const std::string why = lut_file::enableProblem(enableRead, enable); !why.empty())
-        return notImported("not imported: " + why, "import_disabled", false, read);
-    // what the reference leaves open (lut_file.h): the camera recording, a place that already holds a LUT
-    const bool recRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_RecordingState, &p);
-    const long long recording = recRead ? sdk_values::current(p) : -1;
-    if (recRead) read.i("recording_state", recording);
-    if (const std::string why = lut_file::recordingProblem(recRead, recording); !why.empty())
-        return notImported("not imported: " + why, "import_refused", false, read);
-    const bool listRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_DeleteUserBaseLook, &p);
-    const std::vector<long long> deletable = listRead ? sdk_session::packedValues(p) : std::vector<long long>();
-    if (listRead) read.list("delete_list", deletable);
-    if (const std::string why = lut_file::placeHeld(listRead, deletable, place); !why.empty())
-        return notImported("not imported: " + why, "import_refused", false, read);
-    sdk_session::CrString file = sdk_session::crPath(f.path);
+    auto readCamera = []() {
+        lut_file::CameraState s;
+        SCRSDK::CrDeviceProperty p;
+        if ((s.enableRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_BaseLookImportOperationEnableStatus, &p)))
+            s.enable = sdk_values::current(p);
+        if ((s.recordingRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_RecordingState, &p)))
+            s.recording = sdk_values::current(p);
+        if ((s.listRead = sdk_session::fetch(g_dev, SCRSDK::CrDeviceProperty_DeleteUserBaseLook, &p)))
+            s.listed = sdk_session::packedValues(p);
+        return s;
+    };
+    std::error_code ec;
+    const fs::path copies = fs::temp_directory_path(ec);
+    lut_file::Plan plan = lut_file::plan(place, fs::u8path(path), expected, fs::u8path(CAMSET_LUT_DIR), readCamera, copies);
+    Obj read;
+    if (plan.file.problem.empty() && !plan.file.name.empty())
+        read.s("file", plan.file.name).i("bytes", static_cast<long long>(plan.file.bytes)).s("sha256", plan.file.sha256)
+            .i("place", place);
+    if (plan.stateRead) {
+        if (plan.state.enableRead) read.i("enable_status", plan.state.enable);
+        if (plan.state.recordingRead) read.i("recording_state", plan.state.recording);
+        if (plan.state.listRead) read.list("delete_list", plan.state.listed);
+    }
+    if (!plan.problem.empty()) return notImported(plan.problem, plan.cause, false, read);
+    sdk_session::CrString file = sdk_session::crPath(plan.copy.path);   // the copy of the checked bytes, never the file
     g_lutWarning = 0;
     g_wait.arm("importlut");
     const auto t0 = Clock::now();
     if (const SCRSDK::CrError err = SCRSDK::ImportLUTFile(g_dev, file.data(), static_cast<SCRSDK::CrBaseLookNumber>(place))) {
         g_wait.arm("");
+        lut_file::removeCopy(&plan.copy);
         return notImported("not imported: the SDK refused the call (" + CrErrorString(err) + ")", "import_refused", true,
                            read.i("ms", msSince(t0)));
     }
     std::string detail;
     const CallbackWait::Ended ended = g_wait.wait(kImportWait, &detail);
+    // an OK the camera sent just as a dropped session ended the wait: looked for a moment longer, so it is said
+    for (int k = 0; k < 10 && ended == CallbackWait::Ended::failed && !g_lutWarning; ++k) std::this_thread::sleep_for(50ms);
     const CrInt32u w = g_lutWarning;
     read.i("ms", msSince(t0));
     if (w) read.s("result", errorText(w)).i("warning", w);
-    if (ended == CallbackWait::Ended::ok && w == SCRSDK::CrWarning_ImportLUTFile_Result_OK) {
+    const lut_file::Answer a = lut_file::judge(ended, w == SCRSDK::CrWarning_ImportLUTFile_Result_OK, w ? errorText(w) : "",
+                                               detail, std::chrono::duration_cast<std::chrono::seconds>(kImportWait).count());
+    if (a.keepCopy) g_keptCopies.push_back(plan.copy);
+    else if (const std::string why = lut_file::removeCopy(&plan.copy); !why.empty())
+        note("the LUT copy " + plan.copy.dir.u8string() + " could not be removed (" + why + "); delete it by hand");
+    if (a.ok) {
         Obj done = Obj().b("ok", true).b("called", true);
         done.body += "," + read.body;
         return reply(done);
     }
-    if (ended == CallbackWait::Ended::timedOut)
-        return notImported("no answer from the camera within 120 s: whether the LUT went in is not known (look at the "
-                           "camera's user LUTs)", "import_unconfirmed", true, read);
-    if (!w)
-        return notImported("the camera's session ended while it imported (" + detail + "): whether the LUT went in is "
-                           "not known", "import_unconfirmed", true, read);
-    notImported("not imported: the camera answered " + errorText(w), "import_refused", true, read);
+    notImported(a.why, a.cause, true, read);
 }
 
 // One command line's command, its arguments still in `in` (kit/link/protocol.h). A malformed argument throws, and
@@ -842,5 +866,6 @@ int main(int argc, char** argv) {
     serve();
     const int sig = g_signal;
     disconnect();
+    removeKeptCopies();                                 // the SDK is released: no import reads a LUT copy any more
     return sig ? 128 + sig : 0;
 }

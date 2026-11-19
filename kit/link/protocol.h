@@ -112,20 +112,18 @@ inline std::string pathAndHash(std::istream& in, std::string& hash) {
     return line;
 }
 
-// importlut's arguments, PATH PLACE [SHA256]: the path, returned (a word, or "quoted" when it holds a space, as the kit
+// importlut's arguments, PATH PLACE SHA256: the path, returned (a word, or "quoted" when it holds a space, as the kit
 // always sends it), into `place` the user place's number as written, and into `hash` the SHA-256 the kit checked the
-// file's bytes by ("" when none is given: a line typed by hand), which camlink checks the bytes it reads against
-// (kit/common/lut_file.h). A path or place missing, a word after the place that is no SHA-256, or anything after the
-// hash throws.
+// file's bytes by, which camlink checks the bytes it reads against (kit/common/lut_file.h). Every argument is needed,
+// a line typed by hand too: a path, place or hash missing, a word after the place that is no SHA-256, or anything after
+// the hash throws.
 inline std::string lutArgs(std::istream& in, std::string& place, std::string& hash) {
     std::string path, extra;
     place.clear();
     hash.clear();
-    if (!word(in, path) || !word(in, place)) throw std::runtime_error("importlut PATH PLACE [SHA256]");
-    if (word(in, hash)) {
-        if (!isSha256(hash)) throw std::runtime_error("not a SHA-256 (64 hex digits) after the place: " + hash);
-        if (word(in, extra)) throw std::runtime_error("text after the SHA-256: " + extra);
-    }
+    if (!word(in, path) || !word(in, place) || !word(in, hash)) throw std::runtime_error("importlut PATH PLACE SHA256");
+    if (!isSha256(hash)) throw std::runtime_error("not a SHA-256 (64 hex digits) after the place: " + hash);
+    if (word(in, extra)) throw std::runtime_error("text after the SHA-256: " + extra);
     return path;
 }
 
