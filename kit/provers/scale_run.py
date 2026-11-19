@@ -34,7 +34,11 @@ two frames may be the reader's: open_row); the value is the number in the middle
 its "selected", or its "value" where "selected" holds no digit), one question a frame, and its answer counts only when
 it is a number (single digits on the volume scales: OCR read some and gave nothing for others, 2026-11-09); every
 proof line says which of the two read the value chosen ("read_by": "ocr" or "reader"). A frame neither reads a number
-on stops the row, naming the frame: two such frames in a row are never the number that stopped changing. Both readings
+on stops the row, naming the frame: two such frames in a row are never the number that stopped changing. A slider
+drawn over a picture (Aspect Marker Level with HDMI Info. Display Off: camkit.screen's picture_slider, 2026-11-19) is
+read by its marker instead, its place on the scale's own ticks and numbers, cross-checked with the number drawn where
+OCR reads it alone, and stops the row where they disagree or the scale cannot be read whole (picture_value): OCR over
+the photograph read its 12 as "92", and the reader is not asked; its lines say "read_by": "marker". Both readings
 are cleaned alike (every dash a minus sign) and compared by key ("+2" and "2", "±0" and "0", "80%" and "80" one
 number; pass2_report's scale_clean and scale_key), the labels kept as first read. A number only the reader read never
 decides alone, for the reader can read the next number (kit/pass2_report.py, name_of), and no end of the scale stands
@@ -102,7 +106,10 @@ PANEL_SLIDER = (88, 136, 553, 272)
 
 _said: dict = {}            # {frame path: the reader's whole answer}: one question a frame, however often it is read
 _by_reader: set = set()     # the frames whose number the reader gave, OCR having read none
+_by_marker: set = set()     # the frames whose number the marker on a picture slider's scale gave (picture_value)
+_why: dict = {}             # {frame path: why a picture slider's number was not read there}, which number() says
 _number_box = VALUE         # where the row being proved draws its number: VALUE, or PANEL_VALUE (open_row sets it)
+PAD = 40                    # the margin round a part of the frame OCR reads alone (masked_lines)
 
 
 def text(cam, box) -> str:
@@ -167,26 +174,134 @@ def reader_value(cam) -> str:
     return v
 
 
+def masked_lines(mask, box) -> list:
+    """OCR's lines on the part `box` (x0, y0, x1, y1) of the frame, only what `mask` (a boolean picture of that size)
+    marks drawn, white on black with PAD round it, in the frame's coordinates: the picture behind left out, which OCR
+    reads into the digits (Aspect Marker Level's orange 12 read "92" on the whole frame, 2026-11-19). Written to a file
+    of this process's own for OCR, removed once read."""
+    import os
+    import tempfile
+
+    import numpy as np
+    from PIL import Image
+    x0, y0, x1, y1 = box
+    a = np.zeros((y1 - y0 + 2 * PAD, x1 - x0 + 2 * PAD), np.uint8)
+    a[PAD:PAD + y1 - y0, PAD:PAD + x1 - x0] = np.where(mask, 255, 0)
+    p = Path(tempfile.gettempdir()) / f"camkit_scale_{os.getpid()}.png"
+    Image.fromarray(a).save(p)
+    try:
+        lines = ocr.read([p])[p]
+    finally:
+        p.unlink(missing_ok=True)
+    return [ocr.Line(ln.text, ln.conf, ln.x - PAD + x0, ln.y - PAD + y0, ln.w, ln.h) for ln in lines]
+
+
+def picture_of(cam) -> dict | None:
+    """The scale as camkit.screen found it where the screen on show is a slider drawn over a picture (its
+    "picture_slider": Aspect Marker Level with HDMI Info. Display Off, 2026-11-19), else None."""
+    s = cam.read()
+    pic = (getattr(s, "features", None) or {}).get("picture_slider")
+    return pic if getattr(s, "kind", None) == "slider" and pic else None
+
+
+def picture_value(cam, pic) -> tuple[str, str]:
+    """(the number under the marker of a slider drawn over a picture, ""), or ("", why none). The marker's place on the
+    scale's own ticks, and the scale's numbers on their places: every tick and number on the ticks' grid (pic["grid"],
+    camkit.screen.PIC_TOL), one mark on each place from the low end to the high end, nothing else on the line, a number
+    drawn at both ends, the marker within them; the numbers drawn on the scale read by OCR alone on the line, the ticks
+    and the picture left out (masked_lines), each a line of its own whose box lies on one number's place, two at least,
+    whole numbers stepping evenly up to the right (Apple's OCR drops the lone 0 at the low end and reads 5, 10 and 15,
+    which give it). The number under the marker is the one its place takes on that step, the ends' numbers so given.
+    Then the number drawn in orange where the screen draws it (pic["value"]), read by OCR alone: where it reads a
+    number, it must be the marker's (by key), else no number. Any of it missing, and no number: never a guess."""
+    import numpy as np
+
+    from camkit import screen
+    origin, pitch = pic["grid"]
+
+    def place(x):
+        k = (x - origin) / pitch
+        return round(k) if abs(k - round(k)) * pitch <= screen.PIC_TOL else None
+    if pic["strays"]:
+        return "", "something other than ticks and numbers is drawn on the scale's line"
+    groups = {place((a + b) / 2): (a, b) for a, b in pic["numbers"]}
+    ticks = [place(t) for t in pic["ticks"]]
+    if None in groups or None in ticks or len(groups) != len(pic["numbers"]):
+        return "", "a number on the scale stands off the ticks' grid"
+    marks = sorted([*ticks, *groups])
+    lo, hi = marks[0], marks[-1]
+    if marks != list(range(lo, hi + 1)):
+        return "", "the ticks and numbers do not fill the scale, one on each place (one hidden or doubled)"
+    if lo not in groups or hi not in groups:
+        return "", "the scale has no number drawn at each end"
+    m = place(pic["marker"])
+    if m is None or not lo <= m <= hi:
+        return "", "the marker stands off the scale"
+    g = screen._grey(cam.frame.image) > 150
+    cy = pic["line"]
+    box = (int(groups[lo][0]) - 8, cy - 16, int(groups[hi][1]) + 8, cy + 16)
+    keep = np.zeros(g.shape, bool)
+    for a, b in groups.values():                # the numbers alone: the ticks between them left out
+        keep[cy - 16:cy + 16, int(a) - 1:int(b) + 2] = True
+    read: dict = {}
+    for ln in masked_lines((g & keep)[box[1]:box[3], box[0]:box[2]], box):
+        n = one_number(ln.text)
+        on = [p for p, (a, b) in groups.items() if a - pitch / 2 <= ln.x and ln.x + ln.w <= b + pitch / 2
+              and abs(ln.x + ln.w / 2 - (a + b) / 2) <= pitch / 2]
+        if not n or len(on) != 1:
+            continue                            # no number, or a line across two numbers ("05"): no reading of one
+        if not re.fullmatch(r"-?\d+", key(n)) or read.get(on[0], n) != n:
+            return "", f"the scale's number at its place {on[0] - lo} reads {n!r}, no whole number or two ways"
+        read[on[0]] = n
+    if len(read) < 2:
+        return "", f"OCR read {len(read)} of the scale's numbers on their places, and two are needed"
+    (pa, na), (pb, nb) = min(read.items()), max(read.items())
+    step, rest = divmod(int(key(nb)) - int(key(na)), pb - pa)
+    if step <= 0 or rest or any(int(key(n)) != int(key(na)) + step * (p - pa) for p, n in read.items()):
+        return "", f"the scale's numbers read {[read[p] for p in sorted(read)]}, not whole numbers stepping evenly up"
+    v = str(int(key(na)) + step * (m - pa))
+    vx0, vy0, vx1, vy1 = pic["value"]
+    o = screen._orange(cam.frame.image)
+    said = one_number(" ".join(ln.text for ln in masked_lines(o[vy0:vy1, vx0:vx1], pic["value"])))
+    if said and key(said) != key(v):
+        return "", f"the marker stands on {v!r} on the scale, but the number drawn reads {said!r} by OCR"
+    return v, ""
+
+
 def value(cam) -> str:
-    """The number on the frame on screen: OCR's, else the reader's (2026-11-09); "" when neither reads one."""
-    return ocr_value(cam) or reader_value(cam)
+    """The number on the frame on screen: on a slider drawn over a picture the marker's (picture_value: OCR reads
+    the number over a picture wrongly, and the reader is not asked), else OCR's, else the reader's (2026-11-09); ""
+    when none reads one. A frame's marks are its reading's alone (a frame read again is judged afresh)."""
+    _by_marker.discard(cam.frame.path)
+    _why.pop(cam.frame.path, None)
+    pic = picture_of(cam)
+    if pic is None:
+        return ocr_value(cam) or reader_value(cam)
+    v, why = picture_value(cam, pic)
+    if v:
+        _by_marker.add(cam.frame.path)
+    else:
+        _why[cam.frame.path] = why
+    return v
 
 
 def read_by(cam) -> str:
-    """Which gave the number on the frame on screen: "reader", or "ocr"."""
-    return "reader" if cam.frame.path in _by_reader else "ocr"
+    """Which gave the number on the frame on screen: "reader", "marker" (a slider over a picture), or "ocr"."""
+    p = cam.frame.path
+    return "reader" if p in _by_reader else "marker" if p in _by_marker else "ocr"
 
 
 def number(cam, link, path) -> str:
     """value(cam), never "": a frame neither OCR nor the reader reads a number on stops the row, its screen closed
     first and the frame named (2026-11-09: two empty readings in a row, at two different numbers, ended a look as if
-    the number had stopped changing)."""
+    the number had stopped changing); on a slider over a picture, a frame its marker gives no number on, saying why."""
     v = value(cam)
     if v:
         return v
-    frame = cam.frame.path.name
+    frame, why = cam.frame.path.name, _why.get(cam.frame.path)
     close_screen(cam, link)
-    raise Failed(f"{path[-1]}: no number read on the scale on frame {frame}, by OCR or the reader")
+    raise Failed(f"{path[-1]}: no number read on the scale on frame {frame}, "
+                 + (f"by its marker: {why}" if why else "by OCR or the reader"))
 
 
 class Reading(NamedTuple):
@@ -322,7 +437,9 @@ def open_row(cam, cycle, model, path, panel=False):
     if option_key(path[-1]) not in option_key(title) or not ok:
         raise Failed(f"Right on {path[-1]!r} did not open its scale (title {title!r}, footer {foot!r})")
     if not value(cam):
-        raise Failed(f"{path[-1]}: no number read on the scale on frame {cam.frame.path.name}, by OCR or the reader")
+        why = _why.get(cam.frame.path)
+        raise Failed(f"{path[-1]}: no number read on the scale on frame {cam.frame.path.name}, "
+                     + (f"by its marker: {why}" if why else "by OCR or the reader"))
 
 
 def ends(cam, link, cycle, model, path, panel=False) -> tuple[list, str]:

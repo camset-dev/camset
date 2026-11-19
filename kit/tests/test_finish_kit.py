@@ -649,3 +649,221 @@ def test_a_plain_crawls_row_and_look_carry_the_blocker_and_a_look_laps_rows_as_b
     lap = visit(notices=notices, look=True)
     assert lap.kind == "notice" and lap.notice == ""          # its notice met (the lap's way back aside), nothing kept
     assert visit().notice == "", "no reader of the screen given: nothing kept, as before"
+
+
+# ================================================================ the second round of 2026-11-19
+# ---------------------------------------------------------------- 7. the scale prover reads a slider over a picture
+
+def scale_run_module():
+    sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "provers"))
+    import scale_run
+    return scale_run
+
+
+def scale_ocr(numbers=(5, 10, 15), drawn=None, value_lines=None):
+    """masked_lines as OCR reads a slider over a picture once the picture is left out: on the scale's line, each of
+    `numbers` alone on its place (Apple's OCR drops the lone 0 at the low end, 2026-11-19), or `drawn` (a list of (text,
+    x0, x1) lines); at the number drawn in orange, `value_lines(box)` (none: nothing read)."""
+    from camkit.ocr import Line
+
+    def lines(mask, box):
+        if box[1] <= CY <= box[3]:
+            got = drawn if drawn is not None else [(str(n), FIRST + PITCH * n - 8, FIRST + PITCH * n + 8) for n in numbers]
+            return [Line(t, 1.0, x0, CY - 13, x1 - x0, 27) for t, x0, x1 in got]
+        return [Line(t, 1.0, box[0], box[1], box[2] - box[0], box[3] - box[1]) for t in (value_lines or (lambda b: []))(box)]
+    return lines
+
+
+def picture_cam(a, name="00001_slider.png"):
+    f = frame_of(a, name)
+    s = kind_of(a)
+    return SimpleNamespace(frame=f, read=lambda: s)
+
+
+@pytest.mark.parametrize("at", [0, 7, 15])
+@pytest.mark.parametrize("ocr_reads_it", [False, True])
+def test_a_slider_over_a_picture_reads_its_number_from_the_marker(monkeypatch, at, ocr_reads_it):
+    """The marker's place on the scale's own ticks, the scale's numbers read on their places (5, 10 and 15: the 0 at the
+    low end dropped, as Apple's OCR drops it), and the number drawn in orange, where OCR reads it, the same."""
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=(lambda b: [str(at)]) if ocr_reads_it else None))
+    cam = picture_cam(picture_slider(at))
+    assert S.value(cam) == str(at) and S.read_by(cam) == "marker"
+    assert S.reading(cam, None, ["Aspect Marker Level"]) == S.Reading(str(at), cam.frame.path.name, False)
+
+
+@pytest.mark.parametrize("case, kw, why", [
+    ("the number drawn read otherwise", dict(value_lines=lambda b: ["92"]), "the number drawn reads '92' by OCR"),
+    ("one number read", dict(numbers=(15,)), "OCR read 1 of the scale's numbers"),
+    ("none read", dict(numbers=()), "OCR read 0 of the scale's numbers"),
+    ("numbers stepping unevenly", dict(drawn=[("5", 257, 273), ("10", 367, 383), ("16", 477, 493)]), "stepping evenly"),
+    ("numbers falling", dict(drawn=[("15", 257, 273), ("10", 367, 383)]), "stepping evenly"),
+    ("a number read two ways", dict(drawn=[("5", 257, 273), ("6", 259, 271), ("15", 477, 493)]), "two ways"),
+    ("a number that is no whole number", dict(drawn=[("5", 257, 273), ("10.5", 367, 383)]), "no whole number"),
+], ids=lambda v: v if isinstance(v, str) and len(v) < 40 else "")
+def test_a_slider_over_a_picture_gives_no_number_where_its_readings_do_not_hold(monkeypatch, case, kw, why):
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(**kw))
+    cam = picture_cam(picture_slider(12))
+    assert S.value(cam) == "" and why in S._why[cam.frame.path], (case, S._why.get(cam.frame.path))
+
+
+def test_a_line_across_two_numbers_is_no_reading_of_either(monkeypatch):
+    """OCR reading "05" across the 0 and the 5 gives neither; 10 and 15 still give the scale."""
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=[("05", 147, 273), ("10", 367, 383), ("15", 477, 493)]))
+    assert S.value(picture_cam(picture_slider(3))) == "3"
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=[("05", 147, 273), ("15", 477, 493)]))
+    assert S.value(picture_cam(picture_slider(3))) == ""
+
+
+def hide(a, xs):
+    """The ticks at `xs` painted over with the field's colour, as a picture as light as they are would hide them."""
+    for x in xs:
+        a[CY - 7:CY + 7, x - 2:x + 2] = (40, 90, 25)
+    return a
+
+
+def _tick_at(v):
+    a = np.zeros((480, 640, 3), np.uint8)
+    x = FIRST + PITCH * v
+    a[CY - 6:CY + 6, x - 1:x + 1] = 221
+    return a
+
+
+def _blob_on_line():
+    a = np.zeros((480, 640, 3), np.uint8)
+    a[CY - 4:CY + 4, FIRST + PITCH * 6 + 7:FIRST + PITCH * 6 + 15] = 230
+    return a
+
+
+@pytest.mark.parametrize("case, a, why", [
+    ("a tick hidden", lambda: hide(picture_slider(12), [FIRST + PITCH * 8]), "one on each place"),
+    ("a tick beyond the high end's number", lambda: picture_slider(12) | _tick_at(16), "no number drawn at each end"),
+    ("a mark on the line that is neither", lambda: picture_slider(12) | _blob_on_line(), "other than ticks and numbers"),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_a_scale_that_could_be_misplaced_gives_no_number(monkeypatch, case, a, why):
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", scale_ocr())
+    cam = picture_cam(a())
+    assert cam.read().kind == "slider", case
+    assert S.value(cam) == "" and why in S._why[cam.frame.path], (case, S._why.get(cam.frame.path))
+
+
+def test_number_stops_the_row_saying_why_the_marker_gave_none(monkeypatch):
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["92"]))
+    closed = []
+    monkeypatch.setattr(S, "close_screen", lambda cam, link: closed.append(1))
+    cam = picture_cam(picture_slider(12), "00007_right.png")
+    with pytest.raises(S.Failed, match=r"no number read on the scale on frame 00007_right\.png, by its marker: the "
+                                       r"marker stands on '12' on the scale, but the number drawn reads '92' by OCR"):
+        S.number(cam, None, ["Aspect Marker Level"])
+    assert closed == [1]
+
+
+def test_a_slider_with_its_footer_rule_is_still_read_by_ocr_in_its_box(monkeypatch):
+    """The marker is read only on a slider over a picture: elsewhere OCR's number in the value box, as before."""
+    from camkit.ocr import Line
+    S = scale_run_module()
+    monkeypatch.setattr(S, "masked_lines", lambda mask, box: pytest.fail("no masked reading off a picture slider"))
+    monkeypatch.setattr(S.ocr, "read", lambda paths: {p: [Line("3", 1.0, 311, 287, 18, 29)] for p in paths})
+    monkeypatch.setattr(S, "_number_box", S.VALUE)
+    cam = SimpleNamespace(frame=frame_of(picture_slider(footer_rule=True)),
+                          read=lambda: kind_of(picture_slider(footer_rule=True)))
+    assert S.picture_of(cam) is None and S.value(cam) == "3" and S.read_by(cam) == "ocr"
+
+
+@pytest.fixture
+def scale_main(monkeypatch, tmp_path):
+    """test_scale_run's drive: scale_run.main() on a made-up slider, its proofs in a run folder of its own."""
+    import test_scale_run
+    return test_scale_run.drive.__wrapped__(monkeypatch, tmp_path)
+
+
+def picture_slider_cam(held, top=15):
+    """test_scale_run's Slider, each scale frame Aspect Marker Level over a picture at the place it shows."""
+    import test_scale_run
+    from camkit.frames import Frame
+    cache: dict = {}
+
+    class PictureSlider(test_scale_run.Slider):
+        def shoot(self):
+            super().shoot()
+            at = self.truth[self.frame.path]
+            self.frame = frame_of(picture_slider(at) if at is not None else blank(), self.frame.path.name)
+
+        def read(self):
+            at = self.truth.get(self.frame.path)
+            if self.screen != "scale" or at is None or self.lit == "setup":
+                return super().read()
+            if at not in cache:
+                cache[at] = screen.read(Frame(image=picture_slider(at), t=0.0))
+            return cache[at]
+    return PictureSlider(held, top)
+
+
+@pytest.mark.parametrize("held", [0, 7, 12, 15])
+def test_main_proves_a_slider_over_a_picture_by_its_marker_with_its_checks(monkeypatch, scale_main, held):
+    """scale_run.main() on Aspect Marker Level over a picture: the look reads 0 to 15, every OK lands on the value its
+    line names, each line read by the marker, the put-back back on the held value with nothing changed, the row's
+    attempt finished. OCR reads no number in the old box, as on the camera."""
+    S = scale_run_module()
+    cam = picture_slider_cam(held)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: [str(cam.truth[cam.frame.path])]
+                                                     if cam.truth[cam.frame.path] >= 10 else []))
+    got = scale_main(held, set(), lambda place, i: str(place), cam=cam)
+    assert "stopped" not in got.out, got.out
+    assert f"Made-up Scale: {[str(v) for v in range(16)]}, held '{held}'" in got.out
+    want = [i for i in range(16) if i != held] + [held]
+    assert got.cam.oks == want and [ln["label"] for ln in got.lines] == [str(i) for i in want]
+    assert got.shown == want and {ln["read_by"] for ln in got.lines} == {"marker"}
+    assert got.lines[-1]["changes"] == [] and len(got.attempts) == 1 and got.counted == got.lines
+
+
+def test_main_stops_a_slider_over_a_picture_whose_number_reads_otherwise(monkeypatch, scale_main):
+    """The number drawn read otherwise than the marker's on one frame of the look: the row stops, no OK, no line."""
+    S = scale_run_module()
+    cam = picture_slider_cam(12)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["92"] if cam.truth[cam.frame.path] == 9
+                                                     else []))
+    got = scale_main(12, set(), lambda place, i: str(place), cam=cam)
+    assert "the marker stands on '9' on the scale, but the number drawn reads '92' by OCR" in got.out
+    assert got.cam.oks == [] and got.lines == [] and got.attempts == []
+
+
+AM_LEVEL = [A1 / "kit2_pass2" / "shots" / "259951_right.png",
+            A1 / "kit2_fin_crawl_amdisp_off" / "shots" / "00028_right.png"]
+
+
+def real_picture_cam(path):
+    f = load(need(path))
+    s = screen.read(f)
+    return SimpleNamespace(frame=f, read=lambda: s)
+
+
+@pytest.mark.parametrize("path", AM_LEVEL, ids=["pass2", "crawl"])
+def test_the_aspect_marker_level_frames_read_12_by_their_marker(monkeypatch, path):
+    """The frames the prover stopped on (2026-11-19): the scale's numbers on places 0, 5, 10 and 15 of a grid from x 155,
+    22 px a step, the marker on place 12; with what Apple's OCR read alone on the line (5, 10, 15) and on the orange
+    digits (12), the number is 12; with the number read "92" (OCR's reading of it over the photograph), none."""
+    S = scale_run_module()
+    cam = real_picture_cam(path)
+    pic = S.picture_of(cam)
+    assert pic and pic["strays"] == 0 and len(pic["numbers"]) == 4 and pic["grid"] == (177.0, 22.0)
+    drawn = [("5", 254, 271), ("10", 356, 393), ("15", 466, 501)]
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=drawn, value_lines=lambda b: ["12"]))
+    assert S.value(cam) == "12" and S.read_by(cam) == "marker"
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=drawn, value_lines=lambda b: ["92"]))
+    assert S.value(cam) == "" and "reads '92'" in S._why[cam.frame.path]
+
+
+@pytest.mark.parametrize("path", AM_LEVEL, ids=["pass2", "crawl"])
+def test_the_aspect_marker_level_frames_read_12_with_this_computers_ocr(path):
+    """Opt-in (skipped without the runs or this computer's OCR): the real OCR on the masked line and digits."""
+    from camkit import ocr
+    S = scale_run_module()
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    cam = real_picture_cam(path)
+    assert S.value(cam) == "12" and S.read_by(cam) == "marker", S._why.get(cam.frame.path)

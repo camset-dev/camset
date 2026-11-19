@@ -194,6 +194,7 @@ OPTION_SIDE, OPTION_SIDE_TOL, OPTION_SIDE_PAD, OPTION_SIDE_ABOVE = (376, 615), 4
 # whose foot is 8-40 px above that line and whose middle is on the ticks' grid (PIC_TOL); the value orange digits 20-34
 # px tall on one line 50-130 px above that line, centred within PIC_MID px of x 320
 PIC_TICKS, PIC_TOL, PIC_MID = 6, 3, 30
+PIC_DIGIT_H = (18, 30)      # the scale's numbers on its line: marks this tall (27 px there), read by scale_run
 
 
 @dataclass
@@ -530,7 +531,10 @@ def features(a: np.ndarray) -> dict:
 
 def _picture_slider(a, g, o) -> dict | None:
     """A slider drawn over a picture (PIC_TICKS: its parts there), or None: {"marker": the marker's middle x, "value":
-    the value's box (x0, y0, x1, y1)}. All of: the − and + alone, mirrored (_bare_signs); the scale's ticks on their
+    the value's box (x0, y0, x1, y1), and the scale as found, which kit/provers/scale_run.py reads the number from:
+    "line" its y, "ticks" each tick's middle x, "grid" (the first tick's x, the pitch), "numbers" the (x0, x1) of each
+    group of digit-tall marks on the line (PIC_DIGIT_H; marks closer than half a pitch one group), "strays" how many
+    marks there are neither}. All of: the − and + alone, mirrored (_bare_signs); the scale's ticks on their
     line, evenly a whole number of pitches apart; exactly one orange marker on that grid above the line; orange digits
     on one line above the marker, centred on the screen, and nothing else orange from the value's line down to the
     scale's between the − and the +; the footer's OK key (footer_keys, a template a picture does not match). A
@@ -543,7 +547,11 @@ def _picture_slider(a, g, o) -> dict | None:
     cy, x0, x1 = sy + sh // 2, sx + sw + 4, 640 - sx - sw - 20        # clear of the + (wider than the −)
     band = (g[cy - 15:cy + 15, x0:x1] > 150).astype(np.uint8)
     _, _, st, _ = cv2.connectedComponentsWithStats(band, connectivity=8)
-    ticks = sorted(x0 + x + w / 2 for x, y, w, h, area in st[1:] if 1 <= w <= 4 and 8 <= h <= 16 and area >= 0.7 * w * h)
+
+    def tick(w, h, area) -> bool:
+        return 1 <= w <= 4 and 8 <= h <= 16 and area >= 0.7 * w * h
+    ticks = sorted(x0 + x + w / 2 for x, y, w, h, area in st[1:] if tick(w, h, area))
+    others = sorted((x0 + int(x), x0 + int(x + w), int(h)) for x, y, w, h, area in st[1:] if not tick(w, h, area))
     if len(ticks) < PIC_TICKS:
         return None
     pitch = min(b - a_ for a_, b in zip(ticks, ticks[1:]))       # noqa: B905 (each tick with the next)
@@ -572,7 +580,18 @@ def _picture_slider(a, g, o) -> dict | None:
     if abs((vx0 + vx1) / 2 - 320) > PIC_MID:
         return None
     vy0, vy1 = min(c[1] for c in digits), max(c[1] + c[3] for c in digits)
-    return {"marker": int(mark[0] + mark[2] // 2), "value": (vx0 - 4, vy0 - 4, vx1 + 4, vy1 + 4)}
+    numbers: list = []
+    for bx0, bx1, h in others:
+        if not PIC_DIGIT_H[0] <= h <= PIC_DIGIT_H[1]:
+            continue
+        if numbers and bx0 - numbers[-1][1] <= pitch / 2:
+            numbers[-1] = (numbers[-1][0], max(numbers[-1][1], bx1))
+        else:
+            numbers.append((bx0, bx1))
+    strays = sum(not PIC_DIGIT_H[0] <= h <= PIC_DIGIT_H[1] for _, _, h in others)
+    return {"marker": int(mark[0] + mark[2] // 2), "value": (vx0 - 4, vy0 - 4, vx1 + 4, vy1 + 4), "line": int(cy),
+            "ticks": tuple(float(t) for t in ticks), "grid": (float(ticks[0]), float(pitch)), "numbers": tuple(numbers),
+            "strays": int(strays)}
 
 
 def _option_boxes(a, g, o) -> tuple | None:
