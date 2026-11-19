@@ -314,9 +314,13 @@ def test_the_default_scan_is_the_latest_of_this_runs_eyes_and_a_named_scan_of_ot
     with pytest.raises(SystemExit, match="made with OSD eyes"):
         runner.scan_dir(runner.in_mode(str(osd), "Stills"))
     # a scan from before scans recorded their eyes: taken as before (by its lap's time), named or by default, and said
+    # once by the run that loads it (load_scan), never by a lookup alone (scan_dir: camkit.coverage asks it too, and
+    # the camera run of 2026-11-19 said the line twice)
     capsys.readouterr()
     old = whole_scan(root, "kit2_page_scan_old", 3_000)
     assert runner.latest_scan("Stills") == old and runner.scan_dir(runner.in_mode(str(old), "Stills")) == old
+    assert "records no eyes" not in capsys.readouterr().out
+    assert runner.load_scan(runner.in_mode(str(old), "Stills")) == ([], {})
     assert capsys.readouterr().out.count("records no eyes") == 1
     # page_scan.py records the eyes it scans with, before its first press: the ones camkit.frames opens by that rule
     import page_scan

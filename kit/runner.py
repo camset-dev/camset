@@ -612,8 +612,8 @@ def scan_dir(scan, mode: str | None = None, eyes: str | None = None) -> Path:
     waiting_auto), stopping in plain words when it has none (no_scan_message). mode: the runner's, else the one --scan
     carries (ScanArg). With a mode, a named scan that records another stops, and so does any scan while the kit's record
     says the camera was left in another mode (refuse_switched). A named scan made with other eyes than this run's
-    (`eyes`, else current_eyes) stops; one that records no eyes (made before scans recorded them) is taken as before,
-    said in one line. LATEST_SCAN with no mode stops in plain words."""
+    (`eyes`, else current_eyes) stops; one that records no eyes (made before scans recorded them) is taken as before
+    (load_scan says so, once). LATEST_SCAN with no mode stops in plain words."""
     from camkit import paths
     mode = scan_mode(mode) if mode else getattr(scan, "mode", None)
     eyes = eyes or current_eyes()
@@ -640,9 +640,6 @@ def scan_dir(scan, mode: str | None = None, eyes: str | None = None) -> Path:
         got = latest_scan(mode, auto=auto, eyes=eyes)
         if got is None:
             sys.exit(no_scan_message(mode, auto=auto, eyes=eyes))
-    if recorded_eyes(got) is None:
-        print(f"page scan {got.name}: it records no eyes (made before scans recorded them), so it is taken as before; "
-              f"it works only if it was made with this run's {EYES_SAID[eyes]}", flush=True)
     return got
 
 
@@ -661,12 +658,16 @@ def load_scan(scan, mode: str | None = None, eyes: str | None = None) -> tuple[l
     """The page scan's Down cycle (scan_rekeyed.json without its last record, which is the start again) with each
     position's screen read by the current reader rather than the one at scan time, and the page model by key. scan:
     a folder, or LATEST_SCAN (scan_dir: the latest of the runner's mode, `mode` or the one --scan carries, and of the
-    run's eyes, `eyes` or current_eyes), which is said."""
+    run's eyes, `eyes` or current_eyes), which is said; a scan that records no eyes is said once, here (scan_dir alone,
+    which other code asks too, says nothing of it)."""
     latest, scan = scan == LATEST_SCAN, scan_dir(scan, mode, eyes)
     session.MODE = recorded_mode(scan)      # the mode the menu's lock after a download goes by (session.wait_lock)
     if latest:
         print(f"page scan: {scan.name} (the camera's latest {recorded_mode(scan)} mode scan"
               f"{f' made in {AUTO}' if scan_auto(scan) else ''}; --scan names another)", flush=True)
+    if recorded_eyes(scan) is None:
+        print(f"page scan {scan.name}: it records no eyes (made before scans recorded them), so it is taken as before; "
+              f"it works only if it was made with this run's {EYES_SAID[eyes or current_eyes()]}", flush=True)
     from camkit import paths
     root = paths.run_root(required=False)
     named = scan.name if root is not None and scan.resolve().parent == root.resolve() else paths.shown(scan)
