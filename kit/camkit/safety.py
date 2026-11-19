@@ -2543,10 +2543,11 @@ ROW_PAGES = frozenset({"menu", "submenu"})             # the pages an opening pr
 CONFIRM_BUTTONS = frozenset({"enter", "ok", "execute", "yes"})          # with the action's own name (confirm_buttons)
 
 # What loads settings or a file from a card or the camera's memory: never pressed whatever is decided (decision 6: only
-# files the camera wrote go back, checked by their bytes). Save/Load Settings may be named, to look and to Save; its
-# Load never ("save/load" is the row's name, not a load). IPTC Information's Register IPTC Info reads a preset from the
-# card (2026-11-14, a fourth review); Manage User LUTs' Import, Import Root Certificate and Recall Camera Setting are
-# caught by their words; nothing else on the a1 II's menu reads a file from a card. Each word judged where a word may
+# settings files the camera wrote go back, checked by their bytes). Save/Load Settings may be named, to look and to
+# Save; its Load never ("save/load" is the row's name, not a load). IPTC Information's Register IPTC Info reads a preset
+# from the card (2026-11-14, a fourth review); Manage User LUTs' Import, Import Root Certificate and Recall Camera
+# Setting are caught by their words; nothing else on the a1 II's menu reads a file from a card. The menu's Import stays
+# refused: a user LUT reaches the camera only through kit/tools/lut_import.py, which opens no row (decision 26). Each word judged where a word may
 # start, whatever follows it ("RecallCamera Setting", and "Re call Camera Setting" with its spaces taken out: 2026-11-14,
 # a review), so "Download", "Upload" and "important" are none
 _LOADS = (r"(?<!save/)(?<!save /)(?<![a-z])load|(?<![a-z])recall|(?<![a-z])import(?!ant)|"

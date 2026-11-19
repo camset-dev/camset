@@ -33,7 +33,7 @@ Contents (text files, and the ASCII strings in binary ones):
   XMP's dc:creator and dc:rights).
 - No path under private/ but the places the docs tell everyone to use (docs/decisions/0018): private/ itself,
   private/config.json, and what is under private/help/, private/camsets/, private/data/, private/evidence/ and
-  private/lut/ (the user LUTs kit/tools/lut_import.py imports, 2026-11-19); any other, a comment's
+  private/lut/ (the user LUTs kit/tools/lut_import.py imports, docs/decisions/0026); any other, a comment's
   too, is refused with its line (the maintainers' own folders stay out of the public files). A path with backslashes
   counts when it reads as one: another backslash or slash after its first name, or a file name with an extension
   (private\\help\\help_x.json, private\\config.json), never an escape before a word (private\\nThe). Only macOS's own
@@ -173,7 +173,7 @@ SDK_FILE_RE = re.compile(
 NEVER_TRACKED = ("private/", "runs/", "kit/sdk/")
 # the places in private/ a public file may name (docs/decisions/0018), by the first name after private/: the kit's
 # settings and the folders the docs tell everyone to use (lut: the user LUTs kit/tools/lut_import.py imports, the only
-# folder it takes them from, since 2026-11-19); private/ alone names none. Any other (the maintainers' own notes, an
+# folder it takes them from, docs/decisions/0026); private/ alone names none. Any other (the maintainers' own notes, an
 # archive, a person's folder) is refused
 PRIVATE_OK = ("config.json", "help", "camsets", "data", "evidence", "lut")
 PRIVATE_OK_WORDS = ("private/, private/config.json, private/help/, private/camsets/, private/data/, private/evidence/ "
