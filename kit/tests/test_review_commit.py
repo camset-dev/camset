@@ -325,6 +325,75 @@ def test_pass3s_switch_reads_the_screen_after_ok_through_the_step(monkeypatch):
     assert cam.presses == ["menu", "right", "enter", "menu"]
 
 
+def pass3_world(monkeypatch, tmp_path, calls):
+    """pass3_run.run_blockers with no camera: a link that downloads made-up files, the switch made (enter_state), its
+    check passed, the restore checked; every step's command (crawl_run, the labels, the map, prove_run) kept in
+    `calls`, none run."""
+    import pass3_run
+    from camkit import models
+
+    class Link:
+        def __init__(self, run):
+            pass
+
+        def __enter__(self):
+            return SimpleNamespace(download=lambda tag: tmp_path / f"00001_{tag}.DAT")
+
+        def __exit__(self, *exc):
+            return False
+    for name, value in (("Link", Link), ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda link: None,
+                                                                                        close=lambda: None)),
+                        ("to_shooting", lambda link, eyes, why: None), ("enter_state", lambda *a: []),
+                        ("restore", lambda run, start: 0), ("step", lambda args, log: calls.append(args[1:]) or 0)):
+        monkeypatch.setattr(pass3_run, name, value)
+    monkeypatch.setattr(pass3_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(pass3_run.camset, "read", lambda p: SimpleNamespace(model=models.A1II, get=lambda *a: None))
+    monkeypatch.setattr(pass3_run.camset, "diff", lambda a, b: [])
+    return pass3_run
+
+
+def test_pass3s_walk_and_proofs_take_the_scan_the_run_was_given(monkeypatch, tmp_path):
+    """pass3_run --scan drove the blocker's switch alone: the walk (kit/crawl_run.py) and the proofs (kit/prove_run.py)
+    it starts took their own default scan (kit2_page_scan: another state of the camera, other eyes) unless the blocker
+    named one, and the run of 2026-11-19 stopped there ("the menu opened on a page the scan does not match", exit 8).
+    Now they take the run's scan, a blocker's own where it names one; the labels and the map read no scan; the steps
+    inherit the run's eyes (their environment and config are the run's)."""
+    from camkit import paths
+    calls = []
+    pass3_run = pass3_world(monkeypatch, tmp_path, calls)
+    given = str(paths.run_root(required=False) / "kit2_page_scan_1118p")
+    walk = {"row": ["Shutter Type"], "to": "Mechanical Shutter", "walk": "Long Exposure NR"}
+    prove = {"row": ["Shutter Type"], "to": "Mechanical Shutter", "prove": ["Long Exposure NR"], "context": "made up"}
+    own = {"row": ["Drive Mode"], "to": "Continuous Shooting", "walk": "Pre-Capture Settings", "scan": "kit2_own_scan"}
+    assert pass3_run.run_blockers("run", [], {}, [walk, prove, own], None, scan=given) is True
+    scans = [(c[c.index("-u") + 1] if "-u" in c else c[0], c[c.index("--scan") + 1] if "--scan" in c else None)
+             for c in calls]
+    mine = str(pass3_run.RUN_ROOT / "kit2_own_scan")
+    assert scans == [("kit/crawl_run.py", given), ("kit/pass1_labels.py", None), ("kit/tiebreak.py", None),
+                     ("kit/pass1_map.py", None), ("kit/prove_run.py", given),
+                     ("kit/prove_run.py", given),
+                     ("kit/crawl_run.py", mine), ("kit/pass1_labels.py", None), ("kit/tiebreak.py", None),
+                     ("kit/pass1_map.py", None), ("kit/prove_run.py", mine)]
+    assert pass3_run.with_run_scan(walk, None) is walk and pass3_run.with_run_scan(own, given) is own
+
+
+def test_pass3s_main_hands_its_scan_to_the_blockers(monkeypatch, tmp_path):
+    """main: the scan --scan names is the one the switch navigates by and the one run_blockers hands the walk."""
+    import pass3_run
+    from camkit import models, paths
+    got = {}
+    given = paths.run_root(required=False) / "kit2_page_scan_1118p"
+    for name, value in (("load_scan", lambda scan: got.setdefault("loaded", scan) and ([], {})),
+                        ("check_readers", lambda: None), ("P3", tmp_path),
+                        ("run_blockers", lambda run, cycle, model, chosen, log, scan=None:
+                         got.update(chosen=[b["row"] for b in chosen], scan=scan) or True)):
+        monkeypatch.setattr(pass3_run, name, value)
+    monkeypatch.setattr(pass3_run.models, "current", lambda: models.A1II)
+    monkeypatch.setattr(sys, "argv", ["pass3_run.py", "--only", "Shutter Type", "--scan", str(given)])
+    pass3_run.main()
+    assert got == {"loaded": str(given), "chosen": [["Shutter Type"]], "scan": str(given)}
+
+
 # ------------------------------------------------------------------------------------------------ the provers
 
 class Shots:

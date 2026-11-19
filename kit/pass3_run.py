@@ -10,7 +10,8 @@ is in the camera's runs/<model>_fw<fw>/ (camkit.paths), and so are the BLOCKERS'
      the same way), download again; a notice after OK that refuses, a question after it, or a download that
      differs from the start in no record of a switched row (the definition's records of that row) stops the
      blocker there, nothing walked, and the start file goes back on;
-  2. walk the opened row as pass 1 does (kit/crawl_run.py, into kit2_pass3);
+  2. walk the opened row as pass 1 does (kit/crawl_run.py, into kit2_pass3), by the run's --scan (and eyes) unless the
+     blocker names a scan of its own, as the proofs in step 4 are;
   3. read its labels and build that run's map (kit/pass1_labels.py; kit/tiebreak.py, the third reader
      where the first two differ; kit/pass1_map.py --own, that run's map only, not pass 1's map_all.json);
   4. prove its rows (kit/prove_run.py --map kit2_pass3/map.json): their base is the switched
@@ -369,6 +370,20 @@ def enter_state(link, hdmi, run, cycle, model, b) -> list:
     return moved
 
 
+def with_run_scan(b: dict, scan) -> dict:
+    """The blocker as its walk and proofs take it: its own "scan" where it names one (a Movie scan, an OSD scan), else
+    the run's (--scan, `scan`), so kit/crawl_run.py and kit/prove_run.py navigate by the scan the run was given and never
+    by their default (before 2026-11-19 they did: kit2_page_scan, of another state of the camera and other eyes, and the
+    walk stopped on the first page); `b` itself where there is nothing to add. Their eyes are the run's: they inherit its
+    environment (CAMSET_EYES) and config."""
+    return b if b.get("scan") or not scan else {**b, "scan": str(scan)}
+
+
+def scan_of(b: dict) -> list:
+    """The --scan arguments of a blocker's walk and proofs: its "scan" (a run in the camera's runs, or a path), or none."""
+    return ["--scan", str(RUN_ROOT / b["scan"])] if b.get("scan") else []
+
+
 def walk_and_prove(b, log) -> int:
     """A blocker's rows walked and proved in its state, each a step of its own (kit/crawl_run.py one row per
     "walk"; the labels, kit/pass1_labels.py; the third reader, kit/tiebreak.py, for the options the first two read
@@ -377,7 +392,7 @@ def walk_and_prove(b, log) -> int:
     scan into a run folder of its own (Movie mode's file formats, 2026-10-30) and name the rows to prove: --rows
     proves every option again. The exit of the first walk, labels or map step that failed (no proof then), else 0."""
     folder = RUN_ROOT / b.get("run", P3.name)
-    scan_args = ["--scan", str(RUN_ROOT / b["scan"])] if b.get("scan") else []
+    scan_args = scan_of(b)
     rc = 0
     for row in [b["walk"]] if isinstance(b["walk"], str) else b["walk"]:
         rc = rc or step([PY, "-u", "kit/crawl_run.py", "--run", folder.name, "--start-label", row,
@@ -418,16 +433,17 @@ def main():
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     run = Run("kit2_pass3")
     with open(P3 / "pass3.log", "a", encoding="utf-8") as log:
-        restored = run_blockers(run, cycle, model, chosen, log)
+        restored = run_blockers(run, cycle, model, chosen, log, scan=a.scan)
     if not restored:
         sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
 
 
-def run_blockers(run, cycle, model, chosen, log) -> bool:
-    """Each blocker in turn: into its state (enter_state), its rows walked and proved there, the start file back on.
-    Stops at the first restore that does not check out, and then returns False; True when the camera is as the last
-    blocker's start file at the end (a STOP included, once its restore checked out)."""
-    for b in chosen:
+def run_blockers(run, cycle, model, chosen, log, scan=None) -> bool:
+    """Each blocker in turn: into its state (enter_state), its rows walked and proved there, by the run's scan (`scan`)
+    unless it names its own (with_run_scan), the start file back on. Stops at the first restore that does not check
+    out, and then returns False; True when the camera is as the last blocker's start file at the end (a STOP included,
+    once its restore checked out)."""
+    for b in (with_run_scan(b, scan) for b in chosen):
         name = " > ".join(b["row"]) + f" = {b['to']}"
         print(f"== {name}: " + (f"walk {b['walk']!r}" if b.get("walk") else f"prove {b['prove']}"), flush=True)
         hdmi = eyes_from_config(run)
@@ -487,7 +503,7 @@ def run_blockers(run, cycle, model, chosen, log) -> bool:
         hdmi.close()
         time.sleep(3)
         if b.get("prove"):                  # rows already mapped: prove them again in the switched state
-            args = [PY, "-u", "kit/prove_run.py", "--context", b["context"]]
+            args = [PY, "-u", "kit/prove_run.py", "--context", b["context"]] + scan_of(b)
             for row in b["prove"]:
                 args += ["--rows", row]
             step(args, log)
