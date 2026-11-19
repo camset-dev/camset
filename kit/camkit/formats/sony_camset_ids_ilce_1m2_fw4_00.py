@@ -363,7 +363,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         rec_media_dur_hdmi_output = 1170
         movie_hdmi_output_resolution = 1171
         r_4k_output_set = 1172
-        movie_hdmi_output_raw = 1173
+        raw_output = 1173
         raw_output_setting = 1174
         movie_hdmi_output_time_code = 1176
         rec_control = 1177
@@ -591,6 +591,7 @@ class SonyCamsetIdsIlce1m2Fw400(KaitaiStruct):
         picture_profile_0e12 = 3602
         picture_profile_0e14 = 3604
         exposure_comp_0e16 = 3606
+        exposure_comp_0e18 = 3608
         dial_wheel_separate_m_mode_and_other_modes = 3625
         copy_of_screen_reader_speed = 3639
         spot_size_memory = 3676

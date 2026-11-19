@@ -20,7 +20,7 @@
     },
     "global:0x0e10": {
       "name": "White Balance (movie)",
-      "note": "Movie mode's copy of White Balance: a White Balance choice in Movie mode writes it with the one in use (0x0367); one in Stills mode writes it too while Different Set for Still/Mv's White Balance box (0x0187) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Auto."
+      "note": "Movie mode's copy of White Balance: a White Balance choice in Movie mode writes it with the one in use (0x0367); one in Stills mode writes it too while Different Set for Still/Mv's White Balance box (0x0187) is not ticked, and leaves it while the box is ticked. Unticking that box on the camera sets it to Auto. Movie mode's own White Balance list offers no Flash, but this record takes Flash from a Stills choice while that box is not ticked."
     },
     "global:0x0e12": {
       "name": "Picture Profile (stills)",
@@ -41,12 +41,20 @@
     "global:0x0dfc": {"name": "ISO Auto Range Limit Min (stills)"},
     "global:0x0e02": {"name": "ISO AUTO Max (stills)"},
     "global:0x0e16": {
-      "name": "Exposure Comp. (copy 1)",
-      "note": "A copy the camera keeps of Exposure Comp.: equal to it in every file seen."
+      "name": "Exposure Comp. (stills)",
+      "note": "The stills copy of Exposure Comp.: Exposure Comp. set in Stills mode writes it with the one in use (0x0340); set in Movie mode it writes it too while Different Set for Still/Mv's Exposure Comp. box (0x0185) is not ticked, and leaves it while the box is ticked."
+    },
+    "global:0x0e18": {
+      "name": "Exposure Comp. (movie)",
+      "note": "Movie mode's copy of Exposure Comp.: Exposure Comp. set in Movie mode writes it with the one in use (0x0340); set in Stills mode it writes it too while Different Set for Still/Mv's Exposure Comp. box (0x0185) is not ticked, and leaves it while the box is ticked."
     },
     "global:0x13d6": {
-      "name": "Exposure Comp. (copy 2)",
-      "note": "Follows Exposure Comp. when a value is set. It also keeps the slider's position when MENU cancels the screen, so it can differ from Exposure Comp."
+      "name": "Exposure Comp. (slider copy)",
+      "note": "The slider's own copy of Exposure Comp. (0x0340): the camera keeps it equal to Exposure Comp., writing it each time Exposure Comp. is set, in Stills and Movie mode, with Different Set for Still/Mv's Exposure Comp. box (0x0185) ticked or not. A file can hold the two apart after the slider was moved and MENU cancelled the screen: it then keeps the slider's position."
+    },
+    "global:0x0185": {
+      "name": "Different Set for Still/Mv: Exposure Comp.",
+      "note": "One checkbox of this menu row. Ticked, Exposure Comp. is kept apart for stills and movies: a value set writes the one in use (0x0340) and only the copy of the mode it is set in, the stills copy (0x0e16) in Stills mode, the movie copy (0x0e18) in Movie mode. Not ticked, a value set in either mode writes the one in use and both copies. On the camera, ticking the box writes nothing but the box. Not proved yet: what unticking the box sets with the two copies apart; S&Q and Time-lapse; and what the camera does on loading a file whose box was changed."
     },
     "global:0x0e04": {
       "name": "ISO AUTO Max (movie)",
@@ -66,17 +74,36 @@
     },
     "global:0x13e2": {"name": "Exposure mode (S&Q Motion)"},
     "global:0x13fd": {"name": "Drive Mode Limit: Single Shooting"},
-    "global:0x0b65": {"name": "ISO Range Limit"},
-    "global:0x0b69": {"name": "ISO Range Limit"},
-    "global:0x0b6d": {"name": "ISO Range Limit"},
-    "global:0x0b63": {"name": "ISO Range Limit (upper)"},
-    "global:0x0b67": {"name": "ISO Range Limit (upper)"},
-    "global:0x0b6b": {"name": "ISO Range Limit (upper)"},
+    "global:0x0b65": {
+      "name": "ISO Range Limit",
+      "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
+    },
+    "global:0x0b69": {
+      "name": "ISO Range Limit",
+      "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
+    },
+    "global:0x0b6d": {
+      "name": "ISO Range Limit",
+      "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
+    },
+    "global:0x0b63": {
+      "name": "ISO Range Limit (upper)",
+      "note": "ISO Range Limit's upper limit. Setting the lower limit above it pushes it up to the lower limit's value, and it stays there when the lower limit comes back down; setting it below the lower limit pulls the lower limit down to its value."
+    },
+    "global:0x0b67": {
+      "name": "ISO Range Limit (upper)",
+      "note": "ISO Range Limit's upper limit. Setting the lower limit above it pushes it up to the lower limit's value, and it stays there when the lower limit comes back down; setting it below the lower limit pulls the lower limit down to its value."
+    },
+    "global:0x0b6b": {
+      "name": "ISO Range Limit (upper)",
+      "note": "ISO Range Limit's upper limit. Setting the lower limit above it pushes it up to the lower limit's value, and it stays there when the lower limit comes back down; setting it below the lower limit pulls the lower limit down to its value."
+    },
     "global:0x01b0": {"name": "Focus Area Limit: Tracking: Zone"},
     "global:0x04e6": {"name": "Finder DISP Mode"},
     "set:0x11ad": {"name": "Memory slot exposure mode (stills registration)"},
     "global:0x0170": {"name": "S&Q Motion or Time-lapse active"},
     "global:0x0b95": {"name": "WB Color Temp. (C.Temp./Filter, movie)"},
+    "global:0x1476": {"name": "Aspect Marker Level", "tab": "Shooting", "group": "Marker Display"},
     "global:0x1479": {
       "name": "Unknown (beside Aspect Marker Level)",
       "note": "Not Aspect Marker Level (0x1476), nor another marker type's level, nor Movie mode's Aspect Marker, whose row is one list, Off and the ratios, writing 0x0326: none of them writes it."
@@ -195,12 +222,12 @@
     },
     "global:0x122e": {"name": "Wi-Fi Connect"},
     "global:0x0495": {
-      "name": "Movie HDMI Output RAW",
+      "name": "RAW Output",
       "note": "Greyed even with Log Shooting On and Rec. Media dur HDMI Output On (\"This function is currently disabled.\"): probably needs a RAW recorder on HDMI."
     },
     "global:0x0496": {
       "name": "RAW Output Setting",
-      "note": "Greyed even with Log Shooting On and Rec. Media dur HDMI Output On (\"This function is currently disabled.\"): probably needs a RAW recorder on HDMI."
+      "note": "Greyed while RAW Output (0x0495) is Off: opening it says \"This operation or setting not available as follows RAW Output Off\". RAW Output itself is greyed, probably until a RAW recorder is on HDMI."
     },
     "global:0x02d9": {"name": "Silent Mode target: Auto Pixel Mapping"},
     "global:0x04e0": {"name": "Spot size when Spot was last left"},
@@ -233,25 +260,25 @@
       "name": "AF point copy: X",
       "range": [0, 639],
       "unit": "px",
-      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Opening Focus Magnifier writes it: in Movie and S&Q mode it wrote the centre over the value a reset leaves. Files saved from the camera's menu hold the position last set there; moving the point in a remote session does not update it. Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
     },
     "global:0x0f26": {
       "name": "AF point copy: Y",
       "range": [0, 479],
       "unit": "px",
-      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Opening Focus Magnifier writes it: in Movie and S&Q mode it wrote the centre over the value a reset leaves. Files saved from the camera's menu hold the position last set there; moving the point in a remote session does not update it. Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
     },
     "global:0x0f28": {
       "name": "AF point copy 2: X",
       "range": [0, 639],
       "unit": "px",
-      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Opening Focus Magnifier writes it: in Movie and S&Q mode it wrote the centre over the value a reset leaves. Files saved from the camera's menu hold the position last set there; moving the point in a remote session does not update it. Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
     },
     "global:0x0f2a": {
       "name": "AF point copy 2: Y",
       "range": [0, 479],
       "unit": "px",
-      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Files saved from the camera's menu hold the position last set there, while every remote download holds the centre; moving the point in a remote session does not update it, so the camera writes it only at certain events (menu save, memory registration). Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
+      "note": "Focus frame position on the 640x480 grid (320,240 = centre). Opening Focus Magnifier writes it: in Movie and S&Q mode it wrote the centre over the value a reset leaves. Files saved from the camera's menu hold the position last set there; moving the point in a remote session does not update it. Memory sets hold their own copy. It follows none of the registrations tried. View-only until an upload test."
     },
     "global:0x018b": {
       "name": "Network block (holds a Cnct. while Power OFF flag)",
@@ -966,6 +993,7 @@
     "global:0x0b6b": {"like": "global:0x0b6d", "name": "ISO Range Limit (upper)"},
     "global:0x04d0": {"like": "global:0x04ce", "name": "Interval (16 shots)"},
     "global:0x0e10": {"like": "global:0x0e0e", "name": "White Balance (movie)"},
+    "global:0x0e18": {"like": "global:0x0e16", "name": "Exposure Comp. (movie)"},
     "global:0x0e14": {"like": "global:0x0e12", "name": "Picture Profile (movie)"},
     "global:0x0dfe": {"like": "global:0x0dfa", "name": "ISO Auto Range Limit Min (movie)"},
     "global:0x13e3": {"like": "global:0x13e2", "name": "Exposure mode (time-lapse)"},
@@ -2555,7 +2583,9 @@
     "Reg. AF AreatAF On": "Reg. AF Area+AF On",
     "Subject Reccgnition AF": "Subject Recognition AF",
     "Tracking On E + A5": "Tracking On (frame icon) + AF On",
-    "ErAspect Marker Disp.": "Aspect Marker Disp."
+    "ErAspect Marker Disp.": "Aspect Marker Disp.",
+    "(Focal Length": "Focal Length",
+    "Fixed Speed Nt": "Fixed Speed REC"
   },
   "GROUP_NAMES": {
     "DCnct./Remote Sht.": "Cnct./Remote Sht.",
@@ -2845,7 +2875,7 @@
       "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
       "held": true,
       "named_by": "global:0x0334",
-      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until the minimum is changed, but the menu's list starts at ISO 100, so it cannot be chosen again.",
+      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until a Minimum or a Maximum is chosen (choosing a Maximum rewrites it to the lowest Minimum the list offers), but the menu's list starts at ISO 100, so it cannot be chosen again.",
       "menu": "ISO > ISO AUTO Minimum"
     },
     {
@@ -2854,7 +2884,7 @@
       "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
       "held": true,
       "named_by": "global:0x0334",
-      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until the minimum is changed, but the menu's list starts at ISO 100, so it cannot be chosen again.",
+      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until a Minimum or a Maximum is chosen (choosing a Maximum rewrites it to the lowest Minimum the list offers), but the menu's list starts at ISO 100, so it cannot be chosen again.",
       "menu": "ISO > ISO AUTO Minimum"
     },
     {
@@ -2884,13 +2914,6 @@
       "walk": "^Movie Settings > Rec Frame Rate \\[Movie mode, (?:PAL, )?File Format XAVC S-I HD[,\\]]",
       "why": "With XAVC S-I HD the camera's Rec Frame Rate list offers 60p, 30p and 24p (50p and 25p on PAL), not 120p.",
       "menu": "Movie Settings > Rec Frame Rate"
-    },
-    {
-      "key": "global:0x0e10",
-      "values": [9],
-      "walk": "^White Balance \\[(?:Movie mode|S&Q mode(?: \\([^)]*\\))?)\\]$",
-      "why": "Movie mode's White Balance list has no Flash: its 14 options, in Movie mode and in S&Q, leave it out.",
-      "menu": "White Balance [Movie mode]"
     },
     {
       "key": "global:0x0431",
@@ -3208,7 +3231,7 @@
     "global:0x0367": ["global:0x0e0e", "global:0x0e10"],
     "global:0x0dfa": ["global:0x0dfc", "global:0x0dfe"],
     "global:0x0e00": ["global:0x0e02", "global:0x0e04"],
-    "global:0x0340": ["global:0x0e16", "global:0x13d6"],
+    "global:0x0340": ["global:0x0e16", "global:0x0e18"],
     "global:0x0b91": ["global:0x0b93", "global:0x0b95"],
     "global:0x0c4d": ["global:0x0e99", "global:0x0e9b"],
     "global:0x0c4f": ["global:0x0e9d", "global:0x0e9f"],
@@ -3237,10 +3260,11 @@
     "set:0x0f38": ["set:0x0f3a", "set:0x0f3c"]
   },
   "COPY_MODES": [["Stills"], ["Movie", "S&Q", "Time-lapse"]],
-  "COPY_MODES_UNKNOWN": ["global:0x0340", "set:0x0f2c", "set:0x0f32", "set:0x0f38"],
+  "COPY_MODES_UNKNOWN": ["set:0x0f2c", "set:0x0f32", "set:0x0f38"],
   "KEEPS_APART": {
     "global:0x0187": [{"setting": "global:0x0367", "apart": [1], "untick_sets": 0}],
-    "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}]
+    "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}],
+    "global:0x0185": [{"setting": "global:0x0340", "apart": [1]}]
   },
   "UNPROVED": {
     "global:0x1672": [
@@ -3289,24 +3313,24 @@
       "A stamp the camera writes when a Recall Custom hold is registered, not a value a menu chooses."
     ],
     "global:0x0f24": [
-      "camera_only",
+      "state",
       null,
-      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+      "A place the camera writes itself, which no menu choice sets: opening Focus Magnifier wrote the centre of the grid over the value a reset leaves (in Movie and S&Q mode), files saved from the camera's menu hold the place last set there, and moving the focus frame in a remote session leaves it. Whether moving the magnified area writes another place was not tried."
     ],
     "global:0x0f26": [
-      "camera_only",
+      "state",
       null,
-      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+      "A place the camera writes itself, which no menu choice sets: opening Focus Magnifier wrote the centre of the grid over the value a reset leaves (in Movie and S&Q mode), files saved from the camera's menu hold the place last set there, and moving the focus frame in a remote session leaves it. Whether moving the magnified area writes another place was not tried."
     ],
     "global:0x0f28": [
-      "camera_only",
+      "state",
       null,
-      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+      "A place the camera writes itself, which no menu choice sets: opening Focus Magnifier wrote the centre of the grid over the value a reset leaves (in Movie and S&Q mode), files saved from the camera's menu hold the place last set there, and moving the focus frame in a remote session leaves it. Whether moving the magnified area writes another place was not tried."
     ],
     "global:0x0f2a": [
-      "camera_only",
+      "state",
       null,
-      "The camera writes it only on its own saves, a settings file saved from its menu or a memory registration: moving the focus frame leaves it, and a file taken over a remote connection never shows it changed, so no remote proof can reach it."
+      "A place the camera writes itself, which no menu choice sets: opening Focus Magnifier wrote the centre of the grid over the value a reset leaves (in Movie and S&Q mode), files saved from the camera's menu hold the place last set there, and moving the focus frame in a remote session leaves it. Whether moving the magnified area writes another place was not tried."
     ],
     "global:0x0495": [
       "equipment",

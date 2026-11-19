@@ -1373,9 +1373,9 @@ enums:
       doc: '4K Output Set. (HDMI Only) [Setup > External Output]: 0 60p 10bit, 2 30p 10bit, 4 24p 10bit. live settings;
         1 of 1 settings on it proved on the camera.'
     0x0495:
-      id: movie_hdmi_output_raw
-      doc: 'Movie HDMI Output RAW [Setup > External Output]: 0 On, 1 Off. live settings; 0 of 1 settings on it proved
-        on the camera.'
+      id: raw_output
+      doc: 'RAW Output [Setup > External Output]: 0 On, 1 Off. live settings; 0 of 1 settings on it proved on the
+        camera.'
     0x0496:
       id: raw_output_setting
       doc: 'RAW Output Setting [Setup > External Output]: 0 60p, 2 30p, 4 24p. live settings; 0 of 1 settings on
@@ -2252,7 +2252,11 @@ enums:
         the camera.
     0x0e16:
       id: exposure_comp_0e16
-      doc: Exposure Comp. (copy 1) [Exposure/Color > Exposure Comp.]. live settings; 1 of 1 settings on it proved
+      doc: Exposure Comp. (stills) [Exposure/Color > Exposure Comp.]. live settings; 1 of 1 settings on it proved
+        on the camera.
+    0x0e18:
+      id: exposure_comp_0e18
+      doc: Exposure Comp. (movie) [Exposure/Color > Exposure Comp.]. live settings; 1 of 1 settings on it proved
         on the camera.
     0x0e29:
       id: dial_wheel_separate_m_mode_and_other_modes
@@ -3608,8 +3612,8 @@ enums:
         1 of 1 settings on it proved on the camera.'
     0x13d6:
       id: exposure_comp_13d6
-      doc: Exposure Comp. (copy 2) [Exposure/Color > Exposure Comp.]. live settings; 1 of 1 settings on it proved
-        on the camera.
+      doc: Exposure Comp. (slider copy) [Exposure/Color > Exposure Comp.]. live settings; 1 of 1 settings on it
+        proved on the camera.
     0x13e0:
       id: exposure_mode_alternate_numbering
       doc: 'Exposure mode, alternate numbering [Shooting > Shooting Mode]: 0 Intelligent Auto, 2 P, 3 A, 4 S, 5
@@ -3706,8 +3710,7 @@ enums:
         settings; 1 of 1 settings on it proved on the camera.'
     0x1476:
       id: aspect_marker_level
-      doc: Aspect Marker Level [Playback > Playback Option]. live settings; 1 of 1 settings on it proved on the
-        camera.
+      doc: Aspect Marker Level [Shooting > Marker Display]. live settings; 1 of 1 settings on it proved on the camera.
     0x1478:
       id: aspect_marker_disp
       doc: 'Aspect Marker Disp. [Playback > Playback Option]: 0 On, 1 Off. live settings; 1 of 1 settings on it

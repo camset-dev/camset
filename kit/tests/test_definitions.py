@@ -786,18 +786,20 @@ def test_keeps_apart_is_checked_against_the_cameras_downloads(tmp_path, capsys):
 
 
 def test_the_shipped_hand_tables_keep_apart_only_what_was_proved():
-    """The a1 II's KEEPS_APART names the two Different Set for Still/Mv boxes whose effect on the copies was proved
-    (White Balance's and Picture Profile's), each keeping its COPIES family apart while ticked and unticking to 0; with
-    the hand evidence (made up here) with_keeps_apart takes both onto a copy of the shipped definition as they stand,
-    and without it neither: the other five boxes get nothing."""
+    """The a1 II's KEEPS_APART names the three Different Set for Still/Mv boxes whose effect on the copies was proved
+    (White Balance's and Picture Profile's, each keeping its COPIES family apart while ticked and unticking to 0, and
+    Exposure Comp.'s, apart while ticked, its untick not proved, 2026-11-18); with the hand evidence (made up here)
+    with_keeps_apart takes all three onto a copy of the shipped definition as they stand, and without it none: the other
+    four boxes get nothing."""
     from writer.copies import with_keeps_apart
     public = hand_tables.load(A1, evidence=False).KEEPS_APART
     assert public == {"global:0x0187": [{"setting": "global:0x0367", "apart": [1], "untick_sets": 0}],
-                      "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}]}
+                      "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}],
+                      "global:0x0185": [{"setting": "global:0x0340", "apart": [1]}]}
     doc = json.loads(json.dumps(DOC))
     assert with_keeps_apart(doc, public) == 0
     proved = {k: [{**e, **PROVED} for e in es] for k, es in public.items()}
-    assert with_keeps_apart(doc, proved) == 2
+    assert with_keeps_apart(doc, proved) == 3
     assert {s["key"]: s["keeps_apart"] for s in doc["settings"] if "keeps_apart" in s} == public
 
 
@@ -1199,9 +1201,10 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     #   2026-11-15): copies on no camera row, named for the way the camera is held since 2026-11-16
     # - 3 the Zone's place for each way of holding the camera: of each three records a registration writes alike, the
     #   first named for its hold and shown, the other two its copies (COPIES), 2026-11-17
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3   # + the live copy
-    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3
+    # + 1 Exposure Comp.'s slider copy (0x13d6), no copy of the stills and movie pair, "(slider copy)", 2026-11-18
+    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1   # + the live copy
+    assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3 + 1
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
     one = next(s for s in DOC["settings"] if s.get("expert"))
@@ -2387,7 +2390,7 @@ def test_a_value_shown_by_its_icon_or_without_its_unit_takes_the_cameras_words_i
 def test_a_value_shown_by_its_icon_or_without_its_unit_takes_the_cameras_words():
     """icon_word: an icon's capitals and the words they stand for ("X.FINE Extra fine", "STD Standard") are the words;
     "RAW Compressed" is a name. The shipped JPEG/HEIF Quality records read Extra fine/Fine/Standard/Light, the S&Q rate
-    120fps beside 60fps, and the movie mode record's M Manual Exposure beside Program Auto (derived)."""
+    120fps beside 60fps, and the movie mode record's M Manual Exposure, read off the Shoot Mode list (one reader)."""
     import schema_update as S
     assert S.icon_word("X.FINE Extra fine") == ("X.FINE", "Extra fine") and S.clean("STD Standard") == "Standard"
     assert S.icon_word("RAW Compressed") is None and S.icon_word("AF ON") is None
@@ -2395,7 +2398,7 @@ def test_a_value_shown_by_its_icon_or_without_its_unit_takes_the_cameras_words()
         assert [lab for _, lab in DOC_BY[k]["values"]] == ["Extra fine", "Fine", "Standard", "Light"], k
     assert dict(DOC_BY["global:0x0248"]["values"])[2] == "120fps"
     assert dict(DOC_BY["global:0x13e1"]["values"])[5] == "Manual Exposure"
-    assert DOC_BY["global:0x13e1"]["proved"]["names"]["5"] == "derived"
+    assert DOC_BY["global:0x13e1"]["proved"]["names"]["5"] == "one reader"
     assert dict(DOC_BY["global:0x01f2"]["values"])[2] == "HEIF"
 
 
@@ -2707,13 +2710,14 @@ def test_a_value_is_marked_not_offered_only_where_its_evidence_holds(tmp_path):
 
 
 def test_the_shipped_marks_of_values_the_menus_never_offer_in_the_public_file():
-    """The public file alone: the a1 II's not_offered marks, 60 in all, ISO AUTO Minimum's factory ISO 64 held, twice, and
+    """The public file alone: the a1 II's not_offered marks, 59 in all, ISO AUTO Minimum's factory ISO 64 held, twice, and
     Proxy Rec. Settings' reset value held;
     each says why in plain words and on which menu, each value is one of its setting's, and an editor offers none of
     the values a mark says the menus never offer (each a value no proof checked)."""
     marks = [(s, m) for s in PUB["settings"] for m in s.get("not_offered") or []]
     # + the Proxy value a reset writes (Proxy Rec. Settings' 3), held, 2026-11-15
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (60, 3)
+    # - Movie White Balance's Flash: the movie copy takes it from a Stills choice, 2026-11-18
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 3)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         assert "evidence" not in m, s["key"]
@@ -2726,13 +2730,14 @@ def test_the_shipped_marks_of_values_the_menus_never_offer_in_the_public_file():
 @needs_evidence
 def test_the_shipped_marks_of_values_the_menus_never_offer():
     """The a1 II's not_offered (the unseen-values plan, route 3): the stills dials' Audio Rec Level and Follow Custom,
-    the movie dials' Flash Comp., My Dial's Follow Custom, ISO AUTO's ISO 50/64/80, four Rec Frame Rates and Movie
-    White Balance's Flash, with the values a picker's walked list never offers 57 in all, and ISO AUTO Minimum's factory ISO 64, held, twice,
+    the movie dials' Flash Comp., My Dial's Follow Custom, ISO AUTO's ISO 50/64/80 and four Rec Frame Rates, with the
+    values a picker's walked list never offers 56 in all, and ISO AUTO Minimum's factory ISO 64, held, twice,
     and Proxy Rec. Settings' reset value, held. No mark is a value a proof
     wrote, each says why in plain words, and each value is one of its setting's."""
     marks = [(s, m) for s in DOC["settings"] for m in s.get("not_offered") or []]
     # + the Proxy value a reset writes (Proxy Rec. Settings' 3, named by a hand table, not the ISO table), held, 2026-11-15
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (60, 3)
+    # - Movie White Balance's Flash: the movie copy takes it from a Stills choice, 2026-11-18
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 3)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         if not m.get("held"):

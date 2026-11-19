@@ -5606,6 +5606,9 @@
   "global:0x0e16": {
    "help": "Makes the picture brighter (plus) or darker (minus) than the meter would set, for scenes that fool it such as snow or a dark stage."
   },
+  "global:0x0e18": {
+   "help": "Makes the picture brighter (plus) or darker (minus) than the meter would set, for scenes that fool it such as snow or a dark stage."
+  },
   "global:0x0e29": {
    "help": "Lets the dials and wheel do different things in M mode than in the other exposure modes."
   },

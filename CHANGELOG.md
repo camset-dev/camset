@@ -55,6 +55,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's Exposure Comp. has a stills and a movie copy, as White Balance does:** the movie copy is new, with
+  what Different Set for Still/Mv's Exposure Comp. box does to the pair, and the slider's own copy moves to Expert
+  mode. ISO's movie copies gain the values the Stills menu writes into them, ISO Range Limit's limits say how they
+  push each other, RAW Output sits on its row and the movie Custom Keys spell Focal Length and Fixed Speed REC.
 - **The a1 II's Zebra Level Custom 1 and Custom 2 boxes are settings of their own:** Type, Standard 0 to 109, Range
   ±1 to ±10 and Lower Limit 50+ to 109+, each number proved at its ends and a few values between, the rest on their
   line. The boxes a Type does not draw show greyed, their numbers kept, as the camera leaves them out.

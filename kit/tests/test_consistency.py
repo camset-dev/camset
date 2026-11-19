@@ -192,7 +192,7 @@ TWINS = {
 # Subject Recog in AF, Regist. Face Priority, Protect, SteadyShot, Sbj Recog Frm Disp.) is no repeat any more: each
 # setting holds only the codes its own picker's walked list offers (PICKER_LISTS), so only one of the two.
 REPEATS = {
-    "Custom Key (Movie)": {"AEL hold", "AEL toggle", "Record Setting", "Fixed Speed STBY"},
+    "Custom Key (Movie)": {"AEL hold", "AEL toggle", "Record Setting", "Fixed Speed STBY", "Fixed Speed REC"},
     "Custom Key (Still)": {"Fixed Speed REC", "Fixed Speed STBY"},
     "Fn Menu (Playback)": {"FTP Trans. (This Img.)"},
 }

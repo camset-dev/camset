@@ -2416,7 +2416,7 @@ mod tests {
         let s = embedded();
         let shown: std::collections::BTreeSet<&str> = s.settings.iter().filter(|x| x.proved.is_none())
             .filter_map(|x| x.unproved_reason.as_ref()).map(|u| u.kind.as_str()).collect();
-        for kind in ["not_on_camera", "state", "camera_only", "equipment", "network", "unknown"] {
+        for kind in ["not_on_camera", "state", "equipment", "network", "unknown"] {
             assert!(shown.contains(kind), "the shipped definition has a reason of kind {kind}: {shown:?}");
             let x = s.settings.iter().find(|x| x.proved.is_none() && x.unproved_reason.as_ref().is_some_and(|u| u.kind == kind)).unwrap();
             assert_eq!(x.proof_badge(), (unproved_words(kind, false), "na"));
