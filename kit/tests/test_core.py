@@ -1432,6 +1432,10 @@ class _At:
         from camkit.frames import load
         self.frame = load(need(path))
 
+    def read(self):
+        from camkit import screen
+        return screen.read(self.frame)
+
 
 def test_scale_value_leaves_out_the_arrow():
     # 2026-10-30: the ◂ beside AF Subj. Shift Sensitivity's 5 read as "1", and "15" stopped the run
