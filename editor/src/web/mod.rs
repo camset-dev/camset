@@ -218,7 +218,7 @@ impl App {
             "restore" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 let odd = linked.iter().filter(|l| l.copy_of.is_some() && !self.shape_ok_in(l, target) && self.put_back_value(l, target).is_some()).count();
                 let Some((words, acts)) = self.put_back_choice(&linked, target) else {
@@ -262,7 +262,7 @@ impl App {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 let Some(rule) = linked[0].inactive_when.clone() else { return WebReply::error(400, "This setting is not greyed out.") };
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 // a refusal (the record view only outside Expert mode, a file left other than the camera keeps it) is
                 // said, as every handler that changes the file says it, and the status keeps the reason
@@ -481,7 +481,7 @@ impl App {
             // rows to …"), every record of each row, as one edit
             "copy" | "copy_rows" => {
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 let to = &body["to"];
                 let dsts: Option<Vec<Col>> = if to.get(0).is_some_and(Value::is_array) {
@@ -535,7 +535,7 @@ impl App {
             // rows the page's search and tab give, as the window's buttons work over its own
             "merge" => {
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 let col = |k: &str| self.col_from_json(&body[k]);
                 let (Some(tb), Some(ta), Some(tbb)) = (col("base"), col("a"), col("b")) else {
@@ -666,6 +666,8 @@ impl App {
                     "source": self.schema.origin.word(), "chosen": d.override_def.is_some() })),
                 "saved": saved,
                 "editable": self.editable(),
+                // why it is view only, its real cause in the window's words (`view_only_why`), else null
+                "view_only": (!self.editable()).then(|| self.view_only_why(true)),
                 "changes": d.changes().len(),
                 // the edits are the ones the camera confirmed, not saved to the file: what the question before they would
                 // be lost starts with (`on_camera_words`), else null
@@ -1298,7 +1300,7 @@ impl App {
         let cur = self.doc.as_ref().and_then(|d| d.value(target, s.slot()));
         let refuse = |app: &Self, status: u16, why: &str| WebReply::refused(status, why, json!({ "row": app.web_row(target, &linked), "value": cur }));
         if !self.editable() {
-            return refuse(self, 409, "View only: this firmware has not been checked yet, so editing is off.");
+            return refuse(self, 409, &self.view_only_why(true));
         }
         // from the compare: the cell's column, which must be the set changed in file A; file B and the base only compare
         if let Some(c) = body.get("col").filter(|c| !c.is_null()) {
@@ -1892,7 +1894,7 @@ impl App {
     /// edits. Only a request that says `shown: true` copies just the rows its search `q` and `tab` leave.
     fn web_recall(&mut self, recall: bool, body: &Value, from: &str) -> WebReply {
         if !self.editable() {
-            return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+            return WebReply::error(409, &self.view_only_why(true));
         }
         let Some(m) = body["memory"].as_u64().map(|m| m as usize).filter(|m| self.dial_sets().contains(m)) else {
             return WebReply::error(400, "Not one of the mode dial's memories.");
@@ -1936,7 +1938,7 @@ impl App {
             return WebReply::error(404, "No such setting in the memories.");
         };
         if !self.editable() {
-            return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+            return WebReply::error(409, &self.view_only_why(true));
         }
         self.rows_set.take();
         let actions = self.copy_row(&linked, Col::a(a), Col::a(b));
@@ -2099,7 +2101,7 @@ impl App {
                 };
                 // the rule every edit keeps, checked here rather than left to whoever asks
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 // a switch that keeps copies apart, put back to a value that does not: the window's question first
                 if let Err(e) = self.web_untick_apply(acts, body) {
@@ -2149,7 +2151,7 @@ impl App {
                     return WebReply::error(404, "No such setting.");
                 };
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 if !self.web_has_mymenu() {
                     return WebReply::error(409, &format!("This file has no {} records", self.schema.camera.text.my_menu_name()));
@@ -2180,7 +2182,7 @@ impl App {
             "mymenu_slot" => {
                 let name = self.schema.camera.text.my_menu_name().to_string();
                 if !self.editable() {
-                    return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
+                    return WebReply::error(409, &self.view_only_why(true));
                 }
                 if !self.web_has_mymenu() {
                     return WebReply::error(409, &format!("This file has no {name} records"));

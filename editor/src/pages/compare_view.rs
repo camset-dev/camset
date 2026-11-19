@@ -572,7 +572,7 @@ impl App {
                                 if ui.button(words).clicked() { actions.extend(fix); ui.close_menu(); }
                             }
                         }
-                        if !editable { ui.label("This firmware has not been checked yet; editing is off."); }
+                        if !editable { ui.label(self.view_only_why(false)); }
                     });
                 }
                 if on_cursor {

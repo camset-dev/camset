@@ -188,6 +188,38 @@ impl App {
         !d.unchecked_ok && !self.layout_checked(d) && d.edited.model() == self.schema.model && d.edited.checksums_ok()
     }
 
+    /// Why file A cannot be edited (`editable` false), in plain words, the cause and then what the person can do: what
+    /// the window and the page say wherever editing is off, and what refuses an edit. A file whose header checksum fails
+    /// is never edited and never offered "Edit anyway…"; a firmware not checked is, where `offers_edit_anyway` says so,
+    /// in the desktop app (`page`: the words for the page, which has no such button).
+    pub(crate) fn view_only_why(&self, page: bool) -> String {
+        match self.foreign_a() {
+            Some(model) => self.foreign_words(&model),
+            None => format!("View only: {}", self.view_only_cause(page)),
+        }
+    }
+
+    /// The cause in `view_only_why`, to follow "View only: " or "this file is view only, as ": what is wrong, then
+    /// what the person can do.
+    pub(crate) fn view_only_cause(&self, page: bool) -> String {
+        let Some(d) = &self.doc else { return "no file is open. Read the camera or open a settings file first.".into() };
+        if let Some(model) = self.foreign_model(&d.edited) {
+            return format!("no camera definition describes its camera ({model}), so its settings cannot be named and nothing can be changed. \"Describe for support…\" saves how its file is laid out, without its values.");
+        }
+        if !d.edited.checksums_ok() {
+            return format!("this file's {} does not match, so the file may be damaged (or its camera definition may not describe it), and the editor never changes such a file. Read the camera again, or open another copy of this file: the one the camera saved on its card, or one from Backups.", Self::header_checksum_name(&d.edited));
+        }
+        if !self.schema.model.is_empty() && d.edited.model() != self.schema.model {
+            return format!("this file is from a {}, and the camera definition in use is for the {}, so editing is off. Open it with a definition for the {}.", d.edited.model(), self.schema.model, d.edited.model());
+        }
+        let anyway = match (self.offers_edit_anyway(d), page) {
+            (false, _) => "",
+            (true, false) => " \"Edit anyway…\" next to the file name turns it on.",
+            (true, true) => " \"Edit anyway…\" next to the file name in the desktop app turns it on.",
+        };
+        format!("this camera's firmware has not been checked yet, so editing is off.{anyway}")
+    }
+
     /// Why setting `s` is view only in set `section` outside Expert mode: what the window and the page say beside it,
     /// in plain words (the cause, then what to do), and its hover. None when it may be changed there, and always in
     /// Expert mode. Outside it, a setting is changed only where a proof on the camera stands for it: a setting no proof

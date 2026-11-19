@@ -464,7 +464,7 @@ impl App {
         let Some(doc) = &self.doc else { return };
         // the rule Save As is offered by (`can_save_as`), checked here rather than left to whoever asks for the save
         if !self.editable() {
-            self.status = "Not saved: this file is view only, as its firmware has not been checked yet (or the file looks damaged). \"Edit anyway…\" next to the file name turns editing on for a firmware not checked.".into();
+            self.status = format!("Not saved: this file is view only, as {}", self.view_only_cause(false));
             return;
         }
         // the file the edits came from, however the dialog names it, is never written over (a file Save As made is)

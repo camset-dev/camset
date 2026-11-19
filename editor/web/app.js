@@ -790,7 +790,7 @@ function render() {
   // Write greyed out says why when tapped (a touch screen shows no hover text)
   const why = !f ? "Read the camera or open a file first: there is nothing to write yet."
     : f.source === "sample" ? "The sample is not your camera's file, so it cannot be written to a camera."
-      : !f.editable ? "This file's firmware has not been checked yet, so it is view only and is not written to a camera."
+      : !f.editable ? `${f.view_only || "This file is view only."} It is not written to a camera.`
         : busy ? "The camera link is busy." : "";
   greyOut($("b-send"), why);
   $("b-send").title = why || "Write this file to the camera after an acceptance check. The camera's settings are read and kept first; the camera restarts";
@@ -2795,7 +2795,7 @@ function cmpCellMenu(j, r, ci) {
   items.push(...open);
   if (cell.edited) items.push(["Revert", null, () => act("revert", { target: c.section, key: r.key })]);
   if (cell.put_back) items.push([cell.put_back, null, () => act("restore", { target: c.section, key: r.key })]);
-  if (!j.editable) items.push("This firmware has not been checked yet; editing is off.");
+  if (!j.editable) items.push((state && state.file && state.file.view_only) || "This file is view only.");
   return items;
 }
 

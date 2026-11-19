@@ -396,7 +396,7 @@ impl App {
             return Some(format!("This file is from a {}, and the camera definition is for the {}, so it is not written to a camera from here.", d.edited.model(), self.schema.model));
         }
         if !self.editable() {
-            return Some("This file is view only: its firmware has not been checked yet, so it is not written to a camera. \"Edit anyway…\" next to the file name turns editing on for it.".into());
+            return Some(format!("This file is view only, so it is not written to a camera: {}", self.view_only_cause(false)));
         }
         if self.camera_job.is_some() {
             return Some("The camera link is busy: wait for the current camera action to finish, then try again.".into());
@@ -1235,6 +1235,39 @@ pub(crate) mod safety_tests {
         assert!(app.do_send().is_err() && app.sent.is_none());
         let app = opened(&dir, "CAMSET03.DAT", &camera_file());
         assert_eq!(app.send_blocked(), None);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// A file whose header checksum fails (its trailer holds, so it opens) is view only: everywhere that says so names
+    /// that cause and what to do (the Write window, a change from the page, the page's file line, Save As), never
+    /// "firmware not checked" nor "Edit anyway…", which is never offered for it. A firmware not checked keeps its own
+    /// words, with Edit anyway, in the window's words and the page's.
+    #[test]
+    fn a_damaged_header_says_why_it_is_view_only() {
+        use crate::web::tests::answer;
+        let dir = scratch("damaged_header");
+        let mut bytes = camera_file();
+        bytes[0x39] ^= 0xff;
+        let mut app = opened(&dir, "CAMSET07.DAT", &bytes);
+        let d = app.doc.as_ref().unwrap();
+        assert!(!d.edited.checksums_ok() && !app.editable() && !app.offers_edit_anyway(d));
+        let damaged = |w: &str| w.contains("may be damaged") && w.contains("header checksum") && !w.contains("firmware") && !w.contains("Edit anyway");
+        let blocked = app.send_blocked().unwrap();
+        assert!(damaged(&blocked), "{blocked}");
+        let (s, v) = changeable(&app);
+        let r = answer(&mut app, "set", serde_json::json!({ "target": 0, "key": s.key, "value": v }));
+        let j: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+        assert!(r.status == 409 && damaged(j["error"].as_str().unwrap()), "{j}");
+        let st: serde_json::Value = serde_json::from_slice(&answer(&mut app, "state", serde_json::json!({})).body).unwrap();
+        assert!(damaged(st["file"]["view_only"].as_str().unwrap_or_default()), "{}", st["file"]);
+        app.save_to(dir.join("CAMSET08.DAT"));
+        assert!(app.status.starts_with("Not saved") && damaged(&app.status), "{}", app.status);
+        // a firmware not checked: its own cause, and Edit anyway (the page: in the desktop app)
+        let mut app = opened(&dir, "OLD.DAT", &other_firmware().to_bytes());
+        let blocked = app.send_blocked().unwrap();
+        assert!(blocked.contains("firmware has not been checked") && blocked.contains("\"Edit anyway…\" next to the file name"), "{blocked}");
+        let st: serde_json::Value = serde_json::from_slice(&answer(&mut app, "state", serde_json::json!({})).body).unwrap();
+        assert!(st["file"]["view_only"].as_str().is_some_and(|w| w.contains("firmware has not been checked") && w.contains("in the desktop app")), "{}", st["file"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

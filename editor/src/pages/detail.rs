@@ -420,7 +420,7 @@ impl App {
         if let Some(model) = &foreign {
             ui.label(RichText::new(self.foreign_words(model)).color(tone::bad(ui.visuals())));
         } else if !editable {
-            ui.label(RichText::new("View only: this firmware has not been checked yet, so editing is off.").color(tone::bad(ui.visuals())));
+            ui.add(egui::Label::new(RichText::new(self.view_only_why(false)).color(tone::bad(ui.visuals()))).wrap());
         }
         // a setting no menu of the camera writes: view only outside Expert mode, and why (`locked_why`)
         let locked = linked.iter().find_map(|l| self.locked_why(l, self.target));

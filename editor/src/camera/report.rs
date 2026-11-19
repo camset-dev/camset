@@ -305,7 +305,8 @@ impl App {
                 _ => lines.push((format!("The file's time ({ts}) could not be compared with this computer's clock."), true)),
             }
             if !d.edited.header_checksum_ok() { ok = false; lines.push((format!("The file looks damaged ({checksum_name} does not match)."), true)); }
-            if !self.schema.camera.knows(&d.edited) { lines.push(("This camera's firmware has not been checked yet, so editing is off; \"Edit anyway…\" next to the file name turns it on.".into(), true)); }
+            // a damaged file is said above; any other cause of view only in its own words (`view_only_why`)
+            if d.edited.header_checksum_ok() && !self.editable() { lines.push((self.view_only_why(false), true)); }
         }
         self.status = format!("Read from {} over {link} at {}", if name.is_empty() { "the camera" } else { &name }, when_words(&now));
         self.link_state = LinkState::Up { at: now.clone() };
