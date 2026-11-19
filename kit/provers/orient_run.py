@@ -42,7 +42,7 @@ from PIL import Image  # noqa: E402
 from pass3_run import labels_of  # noqa: E402
 from prove_run import (AXES, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
                        vlm_option)
-from proving.base import wait_lock  # noqa: E402
+from proving.base import LOCK_S, wait_lock  # noqa: E402
 from proving.commit import REFUSED_WORDS, after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
@@ -163,10 +163,12 @@ def choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, i, v=None) 
     got = after_ok(cam, row, label=opt, info=False, read=lambda c: notice_text(c, k, shots))
     to_shooting(link, hdmi, "the download after OK")
     dat = link.download(f"{row}-{'axis-' if v is not None else ''}{v if v is not None else i}")    # camlink waits for it
-    # the menu's lock after it (camkit.session.wait_lock); held vertically, frames that read as no shooting screen keep
-    # it at LOCK_S, as before
-    wait_lock(time.monotonic(), hdmi, clock=time)
-    return {"shown": opt, "vlm": seen_vlm, "chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "outcome": got}
+    downloaded = time.monotonic()
+    # the menu's lock after it, for the next MENU (camkit.session.wait_lock); held vertically, frames that read as no
+    # shooting screen keep it at LOCK_S, as before. A key that is not MENU next waits the floor itself (af_point)
+    wait_lock(downloaded, hdmi, clock=time)
+    return {"shown": opt, "vlm": seen_vlm, "chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "outcome": got,
+            "downloaded": downloaded}
 
 
 def notice_text(cam, k: int, shots: Path) -> str:
@@ -183,12 +185,15 @@ def notice_text(cam, k: int, shots: Path) -> str:
 def af_point(cam, link, hdmi, run, cycle, model, row, k, labels, axes, grip):
     """Spot under the cursor, then the multi-selector on the shooting screen (it moves the AF point
     in Spot; on the shooting screen the control wheel's keys do what they are assigned, so only the
-    multi-selector is pressed), then a download diffed against the one after Spot was chosen."""
+    multi-selector is pressed), then a download diffed against the one after Spot was chosen. Before the first move the
+    lock after Spot's download is waited with LOCK_S for its floor: the watched lock was measured for MENU alone, and a
+    move the camera drops there would be counted all the same (camkit.session's comment above LOCK_S)."""
     spot = next(n for n, lab in enumerate(labels) if axis_of(lab, axes) == "Spot")
     got = choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, spot)
     if not got["outcome"].applied:
         raise Failed(f"{row}: the camera refused Spot (its notice closed with MENU): no AF point to move")
     base = got["dat"]
+    wait_lock(got["downloaded"], hdmi, clock=time, floor=LOCK_S)        # keys that are not MENU next
     cam.refresh("af-point-start")
     frames = [cam.frame.path.name]
     presses = ["ms_left"] * 4 + ["ms_up"] * 3

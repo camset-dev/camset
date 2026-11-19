@@ -831,26 +831,27 @@ def shooting_words(cam, run, grip: str | None) -> str:
 
 def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
     """After a download the camera says "Saving to the connected device..." and locks the menu a moment (proving.nav
-    .after_download waits so before a MENU): the same wait before the hold, by the one rule every wait after a download
-    goes by (camkit.session.lock_over on what the looks see: with HDMI eyes in a mode measured, over at the shooting
-    screen after the notice, the looks every 0.1 s from the download's reply at `done_at`; else once LOCK_S has passed,
-    the looks from 1 s every 0.4 s, as always), then the shooting screen with no message's words read on it. Held
+    .after_download waits so before a MENU): the wait before the hold, or framepos_run's multi-selector moves, by the one
+    rule every wait after a download goes by (camkit.session.lock_over on what the looks see, from the download's reply
+    at `done_at`), with LOCK_S for its floor whatever the eyes: the watched lock was measured for MENU alone, and a key
+    the camera drops here is counted all the same (a put-back one move too many) or writes a false "NOT applied"
+    proof; then the shooting screen with no message's words read on it. Held
     vertically (grip, which kit/provers/framepos_run.py's --grip passes) the message is looked for on the frame made
     upright too (shooting_words), and a portrait shooting screen whose upright reading holds no text cannot show it
     gone: it is waited on, and after 25 s the run stops saying so."""
     from camkit.live import text_of
     from prove_run import Failed
-    from proving.base import LockSeen, lock_log, lock_measured, lock_over
+    from proving.base import LOCK_S, LockSeen, lock_log, lock_measured, lock_over
     eyes = getattr(cam, "hdmi", None)
     measured = lock_measured(eyes)
-    time.sleep(0.0 if measured else 1.0)
+    time.sleep(1.0)
     seen = LockSeen()
     while True:
         s = cam.refresh("before-hold")
         waited = time.monotonic() - done_at
         seen.see(s.kind)
         unread = False
-        why = lock_over(waited, seen, eyes) if s.kind == "shooting" else ""
+        why = lock_over(waited, seen, eyes, floor=LOCK_S) if s.kind == "shooting" else ""   # a key, not MENU
         if why:
             up = shooting_words(cam, run, grip) if grip else ""
             unread = bool(grip) and not up.strip()

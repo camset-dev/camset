@@ -53,7 +53,10 @@ WAIT_LIMIT = 900        # s a run waits for a screen before it gives up: a run n
 # and LOCK_HDMI_S has passed (2.0 measured good, plus 0.4). A save that takes longer keeps its notice up, and the wait
 # goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. S&Q is not measured, nor the OSD picture,
 # which lags: there, and where the mode is not known, LOCK_S as before. A MENU that is not taken all the same is caught
-# by the callers' own guarded retry.
+# by the callers' own guarded retry. The watched rule is MENU's alone until another key is measured: a wait before any
+# other key on the shooting screen (afreg_run's Fn hold, framepos_run's and orient_run's multi-selector moves) keeps
+# LOCK_S as its floor (lock_over's and wait_lock's floor), since a key the camera drops silently there is counted all
+# the same (a put-back one move too many, the focus frame a step off, which no file puts back) or proves nothing.
 LOCK_S = 4.5
 LOCK_HDMI_S = 2.4
 LOCK_NOTICE_LIMIT = 25.0    # s a wait goes on while the notice stays on show (proving.nav.after_download's limit)
@@ -88,14 +91,17 @@ class LockSeen:
             self.after_notice = self.after_notice or self.notice
 
 
-def lock_over(waited: float, seen: LockSeen, eyes=None, mode=None, longest: float = LOCK_S) -> str:
+def lock_over(waited: float, seen: LockSeen, eyes=None, mode=None, longest: float = LOCK_S, floor: float = 0.0) -> str:
     """Whether the menu's lock after a download is over, `waited` s after the download's reply, given what the looks
     have `seen` since: what ended it, or "" while it lasts. With HDMI eyes in a mode measured (lock_measured): the
     shooting screen or a menu page after the notice ends it at once; the notice on show keeps it, past `longest`, up to
     LOCK_NOTICE_LIMIT; the shooting screen seen with no notice ends it once LOCK_HDMI_S has passed. In every case
-    `longest`, the wait the caller made before (LOCK_S), ends it once passed. The one rule every wait after a download
-    goes by (wait_lock, and the callers that look at the screen themselves: proving.nav.after_download,
-    kit/page_scan.py)."""
+    `longest`, the wait the caller made before (LOCK_S), ends it once passed. Never before `floor` s: a wait before a
+    key that is not MENU gives floor=LOCK_S (the comment above LOCK_S). The one rule every wait after a download goes by
+    (wait_lock, and the callers that look at the screen themselves: proving.nav.after_download, kit/page_scan.py,
+    afreg_run.ready_to_hold)."""
+    if waited < floor:
+        return ""
     measured = lock_measured(eyes, mode)
     if measured and seen.after_notice:
         return "the shooting screen after the notice"
@@ -117,12 +123,15 @@ def lock_log(eyes, why: str, waited: float) -> None:
             log("lock_wait", ended=why, seconds=round(waited, 3))
 
 
-def wait_lock(since: float, eyes=None, mode=None, clock=time, longest: float = LOCK_S, poll: float = 0.05) -> str:
+def wait_lock(since: float, eyes=None, mode=None, clock=time, longest: float = LOCK_S, poll: float = 0.05,
+              floor: float = 0.0) -> str:
     """Wait out the menu's lock after a download whose reply came at `since` (clock.monotonic(); clock: the caller's
-    time module): lock_over's rule. Where it can end early (lock_measured), frames are grabbed unsaved every `poll` s
-    and each one's kind seen (LockSeen; a frame that cannot be grabbed or read is none); else it sleeps what is left of
-    `longest`. Logs the wait (lock_log) and returns what ended it."""
+    time module): lock_over's rule, never ending before `floor` s (LOCK_S before a key that is not MENU). Where it can
+    end early (lock_measured), frames are grabbed unsaved every `poll` s and each one's kind seen (LockSeen; a frame
+    that cannot be grabbed or read is none); else it sleeps what is left of `longest`. Logs the wait (lock_log) and
+    returns what ended it."""
     if not lock_measured(eyes, mode):
+        longest = max(longest, floor)
         left = longest - (clock.monotonic() - since)
         if left > 0:
             clock.sleep(left)
@@ -137,7 +146,7 @@ def wait_lock(since: float, eyes=None, mode=None, clock=time, longest: float = L
             kind = None
         seen.see(kind)
         waited = clock.monotonic() - since
-        why = lock_over(waited, seen, eyes, mode, longest)
+        why = lock_over(waited, seen, eyes, mode, longest, floor)
         if why:
             lock_log(eyes, why, waited)
             return why

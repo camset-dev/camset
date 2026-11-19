@@ -1983,12 +1983,14 @@ def test_mymenus_way_back_to_the_picker_waits_the_lock_by_the_one_rule(monkeypat
     assert got == [(12.5, eyes)]
 
 
-@pytest.mark.parametrize("name,mode,ends", [("hdmi", "Stills", 1.0), ("osd", "Stills", 4.6), ("hdmi", "S&Q", 4.6)])
-def test_afregs_wait_before_a_hold_ends_once_the_notice_has_gone(monkeypatch, name, mode, ends):
-    """afreg_run.ready_to_hold (framepos_run's too): the lock by camkit.session.lock_over on what its looks see, so
-    with HDMI eyes in a mode measured it ends at the first look on the shooting screen after the notice (1.0 s), with
-    OSD eyes or in S&Q at the first look past LOCK_S as before; and never while the words of the download's message
-    ("Saving to the connected device...") can still be read on the shooting screen."""
+@pytest.mark.parametrize("name,mode,ends", [("hdmi", "Stills", 4.5), ("osd", "Stills", 4.6), ("hdmi", "S&Q", 4.6)])
+def test_afregs_wait_before_a_hold_keeps_lock_s_whatever_the_eyes(monkeypatch, name, mode, ends):
+    """afreg_run.ready_to_hold (framepos_run's too) goes before a key that is not MENU (afreg's Fn hold, framepos's
+    multi-selector moves), and the watched lock was measured for MENU alone: a key the camera drops silently there is
+    counted all the same (the put-back then sends one move too many, the focus frame ends a step off) or writes a false
+    "NOT applied" proof. So its wait keeps LOCK_S as its floor (camkit.session.lock_over's floor), with HDMI eyes in
+    Stills too, where MENU's wait would end at the notice's end (1.0 s here); and never ends while the words of the
+    download's message ("Saving to the connected device...") can still be read on the shooting screen."""
     import afreg_run
     from camkit import live, session
     now = [0.0]
@@ -2006,11 +2008,64 @@ def test_afregs_wait_before_a_hold_ends_once_the_notice_has_gone(monkeypatch, na
     cam = SimpleNamespace(hdmi=eyes, glance=glance, refresh=lambda tag, frame=None: SimpleNamespace(
         kind=frame.kind if frame is not None else eyes.kind()), frame=SimpleNamespace(path=SimpleNamespace(name="f")))
     afreg_run.ready_to_hold(cam, 0.0)
-    assert now[0] == pytest.approx(ends, abs=0.11)
+    assert now[0] >= session.LOCK_S and now[0] == pytest.approx(ends, abs=0.11)
     if name == "hdmi" and mode == "Stills":
-        now[0], saying["until"] = 0.0, 1.5             # the message's words still read on the shooting screen
+        now[0], saying["until"] = 0.0, 5.0             # the message's words still read on the shooting screen
         afreg_run.ready_to_hold(cam, 0.0)
-        assert now[0] == pytest.approx(1.5, abs=0.11)
+        assert now[0] == pytest.approx(5.0, abs=0.11)
+
+
+def test_a_wait_before_a_key_that_is_not_menu_has_lock_s_for_its_floor(monkeypatch):
+    """camkit.session.lock_over and wait_lock take a floor: with HDMI eyes in Stills the shooting screen after the notice
+    ends MENU's wait at once (1.97 s), but a wait with floor=LOCK_S (before any other key) goes on to LOCK_S, and a
+    notice still on show past it keeps it, as the rule's own deadline does."""
+    session, now, clock = lock_clock(monkeypatch)
+    monkeypatch.setattr(session, "MODE", "Stills")
+    assert session.wait_lock(0.0, LockEyes(now), clock=clock) == "the shooting screen after the notice"
+    assert now[0] == pytest.approx(1.97, abs=0.06)
+    now[0] = 0.0
+    session.wait_lock(0.0, LockEyes(now), clock=clock, floor=session.LOCK_S)
+    assert session.LOCK_S <= now[0] <= session.LOCK_S + 0.06
+    now[0] = 0.0
+    session.wait_lock(0.0, LockEyes(now, timeline=[("notice", 6.0)]), clock=clock, floor=session.LOCK_S)
+    assert now[0] == pytest.approx(6.0, abs=0.06)
+    seen = session.LockSeen()
+    for k in ("notice", "shooting"):
+        seen.see(k)
+    hdmi = SimpleNamespace(name="hdmi")
+    assert session.lock_over(2.0, seen, hdmi, "Stills") and not session.lock_over(2.0, seen, hdmi, "Stills",
+                                                                                    floor=session.LOCK_S)
+
+
+def test_orients_af_point_waits_lock_s_before_its_moves_on_the_shooting_screen(monkeypatch, tmp_path):
+    """orient_run.af_point presses the multi-selector on the shooting screen after Spot's download: the wait before
+    those moves has LOCK_S for its floor, from that download's reply, whatever the eyes (the watched lock is MENU's)."""
+    import orient_run
+    waits, pressed = [], []
+    monkeypatch.setattr(orient_run, "choose", lambda *a, **k: {"outcome": SimpleNamespace(applied=True),
+                                                                "dat": tmp_path / "spot.DAT", "downloaded": 12.0})
+    monkeypatch.setattr(orient_run, "wait_lock", lambda since, eyes, clock=None, floor=0.0, **k: waits.append(
+        (since, floor, len(pressed))))
+    monkeypatch.setattr(orient_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(orient_run.camset, "read", lambda p: None)
+    monkeypatch.setattr(orient_run.camset, "diff", lambda a, b: [])
+
+    class Cam:
+        frame = SimpleNamespace(path=SimpleNamespace(name="f.png"))
+
+        def refresh(self, tag):
+            return self.read()
+
+        def read(self):
+            return SimpleNamespace(kind="shooting")
+
+        def press(self, key, **k):
+            pressed.append(key)
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT")
+    run = SimpleNamespace(dir=tmp_path)
+    orient_run.af_point(Cam(), link, SimpleNamespace(name="hdmi"), run, None, None, "Focus Area", 1,
+                        ["Spot: S"], {"Spot": {"values": []}}, "down")
+    assert waits[0] == (12.0, orient_run.LOCK_S, 0), "the floor waited before the first move"
 
 
 def test_the_waits_between_sessions_and_fills_are_the_lock_rule_or_gone():
