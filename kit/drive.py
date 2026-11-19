@@ -574,6 +574,29 @@ def reads_row(lit: str, label: str) -> bool:
     return bool(want) and seen.startswith(want) and not seen[len(want):len(want) + 1].isalnum()
 
 
+def spaced_end(lit: str, label: str) -> int | None:
+    """Where the row `label` ends in the lit bar's text `lit` (as safety.plain writes it) when the bar reads the label
+    but for its spacing, else None: OCR put a space before a bracket ("Function Ring (Lens)" for the page scan's and the
+    definition's Function Ring(Lens), kit2_fin_look_fring2, 2026-11-19), and the kit compares labels with their spacing
+    left out (page_model.key_text, which the page scan and crawl_run.go_to find a row by; camkit.match.key; safety's
+    run-together reading, _sources). Only the spacing: the bar's text up to that place, every space taken out, is the
+    label's so taken out, case folded as plain folds it, every other letter, sign and stop compared as it is; and the
+    label ends where a word does in the bar as read (no letter or digit after it: a value may follow)."""
+    seen, want = safety.plain(lit or ""), re.sub(r"\s+", "", safety.plain(label or ""))
+    if not want:
+        return None
+    for k in range(len(seen), 0, -1):
+        if not seen[k:k + 1].isalnum() and re.sub(r"\s+", "", seen[:k]) == want:
+            return k
+    return None
+
+
+def reads_row_spaced(lit: str, label: str) -> bool:
+    """reads_row, or the bar reads the row but for its spacing (spaced_end): the first open's check that the lit bar
+    is its row, as lit_refused takes the --path's own row."""
+    return reads_row(lit, label) or spaced_end(lit, label) is not None
+
+
 def title_refused(kind: str, text: str, parent: str, lead=()) -> str:
     """Why the screen (its kind and whole text as read) is not the submenu page the row `parent` opened, or "": a submenu
     page whose text begins with the parent's label as its title, alone or after a breadcrumb of the labels above it
@@ -742,14 +765,22 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     if depth is None:
         return f"the menu page shown is not one the run can place, so the lit row cannot be judged: {named}", None
     row = (*depth, decided) if decided else seen.lit_row(depth, lit, {*known, path[-1]})
+    own = (*depth, path[-1])
+    end = None              # where the --path's own row, read but for its spacing, ends in the lit text (spaced_end)
+    if not decided and list(depth) == list(path[:-1]) and (row is None or first_open.key(row) != first_open.key(own)):
+        # on the --path's own page, the bar reads its row but for a space OCR put before a bracket ("Function Ring
+        # (Lens)"), and no longer row of the longest-label rule: that row, the words past it judged below as ever
+        k = spaced_end(lit, path[-1])
+        spaceless = len(re.sub(r"\s+", "", first_open.key(row)[-1])) if row is not None else -1
+        if k is not None and len(re.sub(r"\s+", "", safety.plain(path[-1]))) > spaceless:
+            row, end = own, k
     why = f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}" if row is None else ""
     if row is not None and not decided:
         label = first_open.key(row)[-1]
-        rest = safety.plain(lit)[len(label):].strip()
+        rest = safety.plain(lit)[len(label) if end is None else end:].strip()
         if rest and rest not in {safety.plain(v) for v in (values or {}).get(label, ())}:
             why = (f"the lit row reads {lit.strip()!r}, which runs on past the row {row[-1]!r} with words that are no "
                    f"value of it: {named}")
-    own = (*depth, path[-1])
     if why and not decided and gone_to and list(depth) == list(path[:-1]) \
             and (row is None or first_open.key(row) == first_open.key(own) or in_icon(lit, row)):
         # the navigated row's own reading the bar starts with (icon_reading), the words past it none or a value of it
@@ -1796,7 +1827,7 @@ def main():
                                                            named_notes, words=not private)
                     # this press is the --path's own first open on this body (first_open_or_exit), its RESTORE_BY_HAND
                     # written just before it goes: a look lap opens that never-open row under the procedure
-                    first_intent = bool(first_label) and key in RIGHTS and not inside and reads_row(lit, first_label)
+                    first_intent = bool(first_label) and key in RIGHTS and not inside and reads_row_spaced(lit, first_label)
                     # on a look lap the camera is told the row a press opens only where it is the --path's last row:
                     # its label, whether its whole path is seen opened, whether its first open is under way
                     # (camkit.live.bar_is_row); any other opening press names no row (docs/decisions/0024)
@@ -1848,7 +1879,7 @@ def main():
                     # the bar read with the row's icon as a letter or two, which lit_refused tied to the --path's row
                     # (icon_reading), is that row too
                     tied = bool(gone_to) and i == 0 and opening_row is not None and list(opening_row) == list(a.path)
-                    if first_now and not (owner_opens or opens or look_bar or reads_row(lit, first_label) or tied):
+                    if first_now and not (owner_opens or opens or look_bar or reads_row_spaced(lit, first_label) or tied):
                         print(f"{key} refused: the lit row does not read {first_label!r}, whose first open this run makes; "
                               "cancelling", flush=True)
                         run.log("press_refused", key=key, frame=cam.frame.path.name, why="not the first open's row")

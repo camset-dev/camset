@@ -1059,3 +1059,96 @@ def test_drive_stepped_lets_no_press_through_that_was_refused_without_it(tmp_pat
     states = [MENU_PAGE, ("unknown", "", LIVE), ("unknown", "", LIVE.replace("256.0", "257.4")), MENU_PAGE]
     pressed, line, said = stepped_run(tmp_path / "plain", monkeypatch, ["right", "up", "menu"], states, stepped=False)
     assert pressed == ["menu", "right", "up", "menu"] and "stepped" not in line and "stepped" not in said
+
+
+# ---------------------------------------------------------------- 9. a label read with a space before its bracket
+
+FRING = "Function Ring(Lens)"
+
+
+def fring_judged(lit, path=(FRING,), depth=None, known=(), values=None, seen=None):
+    from camkit import first_open
+    return drive.lit_refused(lit, list(path[:-1]) if depth is None else depth, list(path), seen or first_open.Seen(),
+                             set(known), None, values or {}, None)
+
+
+@pytest.mark.parametrize("lit", ["Function Ring (Lens)", "Function  Ring (Lens)", "Function Ring ( Lens )",
+                                 "Function Ring(Lens)", "function ring (lens)"])
+def test_the_paths_own_row_read_with_a_space_before_its_bracket_is_that_row(lit):
+    assert fring_judged(lit) == ("", (FRING,)), lit
+    assert drive.reads_row_spaced(lit, FRING), lit
+
+
+def test_a_value_after_the_spaced_label_is_judged_as_before():
+    values = {"function ring(lens)": ["Off", "On"]}
+    assert fring_judged("Function Ring (Lens) On", values=values) == ("", (FRING,))
+    why, row = fring_judged("Function Ring (Lens) Zoom", values=values)
+    assert row is None and "runs on past the row" in why
+
+
+@pytest.mark.parametrize("case, lit, path, depth, known", [
+    ("the path names Function Ring alone", "Function Ring (Lens)", ("Function Ring",), None, ()),
+    ("a longer row read", "Function Ring (Lens) Set.", (FRING,), None, ()),
+    ("a digit glued after it", "Function Ring (Lens)2", (FRING,), None, ()),
+    ("another letter", "Function Rings (Lens)", (FRING,), None, ()),
+    ("another sign", "Function Ring (Lens.)", (FRING,), None, ()),
+    ("a stop before the bracket", "Function Ring. (Lens)", (FRING,), None, ()),
+    ("another page", "Function Ring (Lens)", ("Dial Customize", FRING), ["Other"], ()),
+    ("another row of the page, not the path's", "Function Ring (Lens)", ("Zoom",), None, (FRING,)),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_what_merely_starts_alike_stays_refused(case, lit, path, depth, known):
+    why, row = fring_judged(lit, path, depth, known)
+    assert why and row is None, (case, why)
+    if case not in ("the path names Function Ring alone", "a longer row read", "another page",
+                    "another row of the page, not the path's"):
+        assert not drive.reads_row_spaced(lit, path[-1]), case
+
+
+def test_a_longer_row_the_bar_reads_plainly_stays_that_row():
+    """The longest-label rule first: a known row the bar reads exactly and longer than the --path's label keeps it."""
+    from camkit import first_open
+    seen = first_open.Seen({("function ring (lens) x",)})
+    why, row = fring_judged("Function Ring (Lens) X", known={"Function Ring (Lens) X"}, seen=seen)
+    assert (why, row) == ("", ("function ring (lens) x",))
+
+
+@pytest.fixture
+def statement_scope(own_runs, monkeypatch):
+    import test_first_open
+    return test_first_open.scope.__wrapped__(own_runs, monkeypatch)
+
+
+def test_drive_makes_the_first_open_of_a_row_read_with_a_space_before_its_bracket(tmp_path, monkeypatch,
+                                                                                 statement_scope):
+    """kit2_fin_look_fring2 (2026-11-19): `--path "Function Ring(Lens)" --press right`, the bar read "Function Ring
+    (Lens)", now opens as that row's first open (RESTORE_BY_HAND written before its Right); a bar reading Function Ring
+    alone, or another row, is still refused."""
+    from test_first_open import BLANK, drive_run
+    statement_scope(BLANK)
+    code, pressed, line, said = drive_run(tmp_path / "a", monkeypatch, path=(FRING,), lit="Function Ring (Lens)",
+                                          shown=(FRING,))
+    assert pressed == [("menu", False), ("right", True)] and line["first_open"] is True, said
+    for lit in ("Function Ring", "Function Ring (Lens) Set.", "Zoom Ring Rotate"):
+        code, pressed, line, said = drive_run(tmp_path / lit.replace(" ", "_"), monkeypatch, path=(FRING,), lit=lit,
+                                              shown=(FRING,))
+        assert pressed == [("menu", False)] and "right refused" in said, (lit, said)
+
+
+def test_the_refusal_of_this_morning_is_lifted():
+    """The lit text the run refused (its events.jsonl, kit2_fin_look_fring2): the --path's row now."""
+    import json
+    events = need(A1 / "kit2_fin_look_fring2" / "events.jsonl").read_text(encoding="utf-8").splitlines()
+    why = next(json.loads(x)["why"] for x in events if '"press_refused"' in x)
+    lit = why.split("'")[1]
+    assert lit == "Function Ring (Lens)" and fring_judged(lit) == ("", (FRING,)) and drive.reads_row_spaced(lit, FRING)
+
+
+def test_the_bar_of_this_morning_read_by_this_computers_ocr_is_the_row():
+    """Opt-in (skipped without the runs or this computer's OCR): the frame the Right was refused on."""
+    from camkit import ocr
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    f = load(need(A1 / "kit2_fin_look_fring2" / "shots" / "00008_down.png"))
+    lit = drive.highlighted(f.image, f.path)
+    assert drive.lit_refused(lit, [], [FRING], __import__("camkit.first_open").first_open.Seen(), set(), None,
+                             {"function ring(lens)": ["-"]}, None) == ("", (FRING,)), lit
