@@ -272,9 +272,6 @@ LEFT = {
                                  "take_picture.py itself",
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
-# runners not moved yet: each one's own commit takes it off
-NOT_YET = {}
-
 
 def kit_sources():
     for p in sorted(KIT.rglob("*.py")):
@@ -324,10 +321,11 @@ def test_no_runner_downloads_its_start_file_outside_the_session_manager():
             if isinstance(node, ast.Call) and called(node) == "download" and \
                     any(literal_tags(a) & tags for a in node.args):
                 found.setdefault(rel, []).append(node.lineno)
-    assert set(found) <= set(LEFT) | set(NOT_YET), \
-        {rel: lines for rel, lines in found.items() if rel not in LEFT and rel not in NOT_YET}
-    assert {rel: len(lines) for rel, lines in found.items() if rel in NOT_YET} == NOT_YET
+    assert set(found) <= set(LEFT), {rel: lines for rel, lines in found.items() if rel not in LEFT}
     assert all(len(found.get(rel, ())) == 1 for rel in LEFT), {rel: found.get(rel) for rel in LEFT}
+
+
+# ---------------------------------------------------------------- the walkers
 
 def test_help_runs_session(world, monkeypatch):
     world.wire(help_run).kind = "menu"
@@ -422,8 +420,8 @@ def test_my_menus_session(world, monkeypatch):
     run_main(monkeypatch, mymenu_run, "--allow", "Add Item")
     assert world.said == [
         "check readers", "link", "attach", "to_shooting: the start download", "download before",
-        "lock wait (4.5 s at most)", "camera {'may_open': ['Add Item']}", "menu", "close", "to_shooting: the end of the fill", "finish after []",
-        "link closed", "check []", "eyes closed"]
+        "lock wait (4.5 s at most)", "camera {'may_open': ['Add Item']}", "menu", "close",
+        "to_shooting: the end of the fill", "finish after []", "link closed", "check []", "eyes closed"]
 
 
 def prove_world(world, monkeypatch, kind="shooting", body=None, rows=1, status="done"):
