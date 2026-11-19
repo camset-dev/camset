@@ -27,6 +27,15 @@ no eyes and no reader, and no key pressed nor anything answered on the camera's 
     count and said by key. Those that did not go back are the LUT's own state, which no settings file puts back:
     expected, said, not an error. The LUT stays in its user place until the owner deletes it on the camera by hand
     (Manage User LUTs); the kit deletes nothing.
+ 7. Once the camera took the LUT, the two kit/tools/coverage.py --record commands that keep the finding in the
+    coverage ledger, for Manage User LUTs and its Import/Edit (Movie, Exposure/Color > Color/Tone), with this run's
+    start download and the one after the import: run them as printed, once the output reads right. They write one look
+    each into the looks file (private/evidence/<model>_fw<fw>/, the mapper's own), the records that changed by key
+    alone, never a value: --did act when records changed, which the ledger counts as a hand check that changed a record
+    ("proved by hand"; its public form says only that the row changed a record), --did choose when none did ("tested,
+    no record changes", private). The looks file's "by" says "hand", the one its vocabulary has for a change made
+    outside the kit's walks; the note says it was this tool. No proof line is written: a proof's values would reach the
+    definition, and a LUT's records may hold its name (docs/decisions/0016).
 
 The run's events.jsonl keeps every command and answer (the LUT's name, size and SHA-256, never its content), and its
 lut_import.jsonl one line per run: the file's name and SHA-256, the place, the enable status, the camera's answer, the
@@ -39,12 +48,15 @@ camera is on its start file again; 7 (EXIT_REFUSED) when the kit's guards refuse
 at all (the file or the place refused, no link, the start download refused).
 """
 import argparse
+import os
+import shlex
+import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, definitions, jsonl, provenance, safety  # noqa: E402
+from camkit import ROOT, definitions, jsonl, paths, provenance, safety  # noqa: E402
 from camkit.link import LUT_OK, LUT_PLACE, Link, LinkError, LutNotImported, StopRequested, lut_refused  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.session import Ending, compared, put_back, verify_restore  # noqa: E402
@@ -107,6 +119,27 @@ def change_line(c, names: dict) -> str:
         return (f"   {c.key} ({name}) [{len(idx)} of {len(c.before)} elements differ] " +
                 ", ".join(f"[{i}] {c.before[i]!r} -> {c.after[i]!r}" for i in idx[:ELEMENTS_SAID]) + more)
     return f"   {c.key} ({name}): {c.before!r} -> {c.after!r}"
+
+
+LEDGER_ROWS = ("Exposure/Color > Color/Tone > Manage User LUTs > Import/Edit", "Exposure/Color > Color/Tone > Manage User LUTs")
+NOTE = ("a user LUT imported through Sony's ImportLUTFile by kit/tools/lut_import.py, not by hand, as the owner allowed "
+        "it on 2026-11-19")
+
+
+def record_commands(start: Path, after: Path, place: int, changed: bool) -> list:
+    """The kit/tools/coverage.py --record commands that keep this run's finding in the coverage ledger (the module
+    docstring's step 7): one for Import/Edit, with the place as its option (User<place>, as the camera's table names
+    it), one for Manage User LUTs; --did act when records changed, choose when none did."""
+    windows = os.name == "nt"
+    out = []
+    for row in LEDGER_ROWS:
+        words = [".venv\\Scripts\\python" if windows else ".venv/bin/python", "kit/tools/coverage.py", "--record",
+                 "--mode", "Movie", "--path", row, "--did", "act" if changed else "choose"]
+        if row.endswith("Import/Edit"):
+            words += ["--option", f"User{place}"]
+        words += ["--start", paths.shown(start), "--end", paths.shown(after), "--note", NOTE]
+        out.append(subprocess.list2cmdline(words) if windows else shlex.join(words))
+    return out
 
 
 def newest(run, tag: str) -> Path | None:
@@ -220,6 +253,11 @@ def main() -> int:
     if called and result == LUT_OK:
         print(f"the LUT stays in user place {a.place} until the owner deletes it on the camera by hand ({WHERE}); the "
               "kit deletes nothing", flush=True)
+        if after is not None:
+            print("to keep this finding in the coverage ledger (the looks file: the records' keys alone, no value), run "
+                  "these two once the lines above read right:", flush=True)
+            for line in record_commands(start, after, a.place, bool(keys)):
+                print(f"   {line}", flush=True)
     record.update(enable_status=status, called=called, result=result, start=start.name if start else None,
                   after=after.name if after else None, records_changed=keys, not_back=not_back, exit=code)
     jsonl.append(run.dir / "lut_import.jsonl", record)

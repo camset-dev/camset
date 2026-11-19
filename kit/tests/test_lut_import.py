@@ -321,6 +321,7 @@ def stand_in(monkeypatch, cam: Camera):
                 raise LinkError("download: camera does not allow a settings download now")
             p = self.run.dat / f"{self.run.dat_name(tag)}.DAT"
             p.write_bytes(changed(*cam.after) if cam.imported and tag != "start" else SAMPLE.read_bytes())
+            provenance.record(p, self.run.root, run=self.run.dir.name)          # a camera download, as Link's are
             return p
 
         def get(self, name):
@@ -489,6 +490,60 @@ def test_the_whole_run_through_the_link_and_the_stand_in_camlink(monkeypatch, lu
     assert verbs[1] == b"get" and verbs.count(b"importlut") == 1 and verbs.count(b"upload") == 1
     out = capsys.readouterr().out
     assert f"did not go back: {key(STAYS)}" in out and "after the restore: 0 records differ" in out
+
+
+def test_the_finding_is_kept_in_the_coverage_ledger_by_the_record_commands_it_prints(monkeypatch, luts, capsys):
+    """Once the camera took the LUT, the tool prints the two kit/tools/coverage.py --record commands that keep the
+    finding in the looks file for Manage User LUTs and its Import/Edit (Movie, Exposure/Color, Color/Tone), with the
+    run's start download and the one after the import, both the camera's own: records changed, --did act (a hand
+    check that changed a record: "proved by hand"); none changed, --did choose ("tested, no record changes"). Never
+    for an import the camera did not confirm. The commands run as printed: coverage.py's record() takes them."""
+    import shlex
+    assert tool(monkeypatch, luts, Camera()) == 0
+    out = capsys.readouterr().out
+    lines = [x.strip() for x in out.splitlines() if "kit/tools/coverage.py --record" in x]
+    assert len(lines) == 2
+    first, second = (shlex.split(x) for x in lines)
+    for words in (first, second):
+        assert words[words.index("--mode") + 1] == "Movie" and words[words.index("--did") + 1] == "act"
+        assert words[words.index("--start") + 1].endswith("_start.DAT")
+        assert words[words.index("--end") + 1].endswith("_after-lut.DAT")
+    assert first[first.index("--path") + 1] == "Exposure/Color > Color/Tone > Manage User LUTs > Import/Edit"
+    assert first[first.index("--option") + 1] == "User16"
+    assert second[second.index("--path") + 1] == "Exposure/Color > Color/Tone > Manage User LUTs"
+    assert "--option" not in second
+    assert tool(monkeypatch, luts, Camera(after=()), "--place", "3") == 0
+    lines = [x for x in capsys.readouterr().out.splitlines() if "kit/tools/coverage.py --record" in x]
+    assert len(lines) == 2 and all("--did choose" in x for x in lines) and "--option User3" in lines[0]
+    reply = {"ok": False, "cause": "import_unconfirmed", "called": True, "error": "no answer within 120 s"}
+    assert tool(monkeypatch, luts, Camera(imports=LutNotImported("not confirmed", reply))) == 8
+    assert "coverage.py --record" not in capsys.readouterr().out
+
+
+def test_the_printed_record_command_writes_a_look_with_keys_alone(monkeypatch, luts, capsys):
+    """The first printed command, run through kit/tools/coverage.py's own record(), writes one look by hand into the
+    test's own looks file: the row, did act, the option, the records that changed by key alone, never a value."""
+    import runpy
+    import shlex
+    from camkit import coverage as ledger, paths
+    assert tool(monkeypatch, luts, Camera()) == 0
+    line = next(x.strip() for x in capsys.readouterr().out.splitlines() if "coverage.py --record" in x)
+    words = shlex.split(line)
+    assert words[:2] == [".venv/bin/python", "kit/tools/coverage.py"]
+    # the made-up camera has no definition: the ledger stood in by one that knows the tab and finds no row (record()
+    # says so and records the look all the same)
+    monkeypatch.setattr(ledger, "build", lambda camera, public=True: type("Led", (), {
+        "src": type("Src", (), {"definition": {"tabs": ["Exposure/Color"]}})(), "find": lambda self, *a: []})())
+    monkeypatch.setattr(sys, "argv", ["coverage.py", *words[2:]])
+    runpy.run_path(str(ROOT / "kit" / "tools" / "coverage.py"), run_name="__main__")
+    camera = paths.camera()[0]
+    looks = [json.loads(x) for x in ledger.looks_file(camera).read_text(encoding="utf-8").splitlines()]
+    assert len(looks) == 1
+    lk = looks[0]
+    assert (lk["by"], lk["did"], lk["result"], lk["option"], lk["mode"]) == ("hand", "act", "changed", "User16", "Movie")
+    assert (lk["tab"], lk["group"], lk["path"]) == ("Exposure/Color", "Color/Tone", ["Manage User LUTs", "Import/Edit"])
+    assert lk["records_changed"] == [key(SETS_BACK), key(STAYS)]
+    assert "ImportLUTFile" in lk["note"] and " -> " not in json.dumps(lk)
 
 
 def test_another_place_is_named_with_place(monkeypatch, luts):
