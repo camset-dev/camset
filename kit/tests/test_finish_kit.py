@@ -1771,3 +1771,81 @@ def test_replay_counts_a_line_the_camera_did_not_apply_apart(tmp_path):
     (tmp_path / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (OLD_REFUSED, GREY_LINE)),
                                            encoding="utf-8")
     assert replay_proofs.replay(tmp_path) == ([], [], [], 2, 0)
+
+
+# ---------------------------------------------------------------- 14. the ledger knows a row whose opening acts
+
+def with_zoom_rows(camera):
+    """The made-up camera's menu with a group Zoom of four rows: Zoom (its opening is the zoom itself), Zoom Range,
+    Zoom Ring Rotate and Clear Image Zoom."""
+    import json
+    doc = json.loads(camera.defn.read_text(encoding="utf-8"))
+    n = len(doc["menu"])
+    doc["menu"] += [{"tab": "Shooting", "group": "Zoom", "label": lab, "order": n + i}
+                    for i, lab in enumerate(["Zoom", "Zoom Range", "Zoom Ring Rotate", "Clear Image Zoom"])]
+    camera.defn.write_text(json.dumps(doc), encoding="utf-8")
+
+
+def test_the_ledger_takes_a_row_on_the_acts_on_open_list_for_an_action(ledger_camera):
+    """Zoom, on safety's acts-on-open list and not on the never-open list: "action, nothing to map", inferred from its
+    class, in the private form and the public one, even where a look saw it greyed; its class and opener stay None
+    (rule_class, openers), and the to-do leaves it out."""
+    import test_coverage as T
+    from camkit import coverage
+    with_zoom_rows(ledger_camera)
+    T.add_looks(ledger_camera, T.look(["Zoom"], tab="Shooting", screen="notice", result="greyed",
+                                      blocker={"row": "Zoom Range"}))
+    led = T.ledger()
+    e = T.row(led, "Zoom", group="Zoom")
+    assert (e["status"], e.get("inferred"), e["rule"], e["opener"]) == ("action, nothing to map", "class", None, None)
+    pub = {tuple(r["path"]): r for r in coverage.public_doc(led)["rows"]}[("Zoom",)]
+    assert pub["status"] == "action, nothing to map" and pub["inferred"] == "class" and "rule" not in pub
+    assert not [x for x in coverage.todo(led) if x["entry"]["path"] == ["Zoom"]]
+    assert coverage.rule_class("Zoom") is None and coverage.openers("Zoom") == [] and safety.never_open("Zoom") is None
+
+
+def test_the_rows_of_the_zoom_group_and_the_other_statuses_stay_as_they_were(ledger_camera):
+    import test_coverage as T
+    with_zoom_rows(ledger_camera)
+    led = T.ledger()
+    for label in ("Zoom Range", "Zoom Ring Rotate", "Clear Image Zoom"):
+        e = T.row(led, label, group="Zoom")
+        assert e["status"] == "not yet tried" and "inferred" not in e, label
+    # an action of the never-open list and a row a look saw act keep their statuses and classes
+    assert T.row(led, "Setting Reset")["status"] == "action, nothing to map"
+    assert T.row(led, "Setting Reset")["rule"] == "action"
+
+
+def test_a_row_on_the_acts_on_open_list_with_a_setting_placed_on_it_is_no_action(ledger_camera):
+    """The status is an action's only where no setting is placed on the row, as for the never-open list's actions."""
+    import json
+
+    import test_coverage as T
+    doc = json.loads(ledger_camera.defn.read_text(encoding="utf-8"))
+    for s in doc["settings"]:
+        if s["key"] == "global:0x0101":                    # Bravo's setting, placed on a row named Zoom instead
+            s["row"] = ["Zoom"]
+    doc["menu"].append({"tab": "Shooting", "group": "Zoom", "label": "Zoom", "order": len(doc["menu"])})
+    ledger_camera.defn.write_text(json.dumps(doc), encoding="utf-8")
+    assert T.row(T.ledger(), "Zoom", group="Zoom")["status"] != "action, nothing to map"
+
+
+def test_the_a1_iis_public_build_says_zoom_is_an_action_and_only_that_changes():
+    """The a1 II's committed public sources (data/, editor/definitions/: in every clone): its public build's Zoom row is
+    an action, inferred from its class; every other row of the committed form as it was. The committed form is written
+    by the data rebuild, never by hand (kit/tools/coverage.py --write)."""
+    import json
+
+    from camkit import ROOT, coverage
+    cam = paths.A1II
+    committed = ROOT / "data" / cam / f"coverage_{cam}.json"
+    if not committed.exists():
+        pytest.skip("no committed public form")
+    built = json.loads(coverage.public_build_text(cam, committed.parent))
+    old = json.loads(committed.read_text(encoding="utf-8"))
+    rows = {(r["mode"], r["tab"], r["group"], tuple(r["path"]), r.get("nth", 0)): r for r in built["rows"]}
+    zoom = rows[("Stills", "Shooting", "Zoom", ("Zoom",), 0)]
+    assert zoom["status"] == "action, nothing to map" and zoom["inferred"] == "class"
+    changed = [r for r in old["rows"] if rows.get((r["mode"], r["tab"], r["group"], tuple(r["path"]), r.get("nth", 0)))
+               != r]
+    assert all(r["path"] == ["Zoom"] for r in changed), changed

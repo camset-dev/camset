@@ -100,8 +100,8 @@ STATUSES = (
                            "row's path, and no record differ; or its class is a screen of the camera's addresses or its "
                            "serial number. Its field names are kept, never its values. Taken before an action, so an "
                            "information screen the never-open list counts among actions is one."),
-    ("action, nothing to map", "The row acts (safety's action class, or a look saw it act) and no setting is placed "
-                               "on it."),
+    ("action, nothing to map", "The row acts (safety's action class, a row whose own opening acts on safety's "
+                               "acts-on-open list, or a look saw it act) and no setting is placed on it."),
     ("tested, no record changes", "Private only: an option was chosen while the row was active, then a camera download "
                                   "was diffed against the run's start: no record but the volatile ones differed. It "
                                   "cites a look or a proof line; a network row's proof that changed nothing never "
@@ -1685,6 +1685,9 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
     # records); any other never-open row a look lap opens, and is not yet tried (docs/decisions/0024)
     if rule:
         closed = next((lab for lab in e["path"] if rule_class(lab) and safety.look_lap_refused(lab, False)), None)
+    # a row whose own opening acts (safety.acts_on_open) that the never-open list does not name, its class None: an
+    # action all the same (Shooting > Zoom > Zoom, the zoom itself; "Zoom" on that list would close the group Zoom)
+    acts = rule is None and bool(e["path"]) and bool(safety.acts_on_open(e["path"][-1]))
     e["rule"], e["opener"] = rule, opener
     if never_choose:
         e["never_choose"] = True
@@ -1728,7 +1731,7 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
             e["fields"] = list(dict.fromkeys(x for c in fx["info"] for x in c.get("fields") or []))
         else:
             e["inferred"] = "class"
-    elif not ss and (rule in ("action", "card action") or fx.get("acted")):
+    elif not ss and (rule in ("action", "card action") or acts or fx.get("acted")):
         status = "action, nothing to map"
         cites = fx.get("acted") or []
         if not cites:

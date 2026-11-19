@@ -134,7 +134,7 @@
   {"mode": "Stills", "tab": "Shooting", "group": "Image Stabilization", "path": ["SteadyShot"], "status": "proved", "rule": "motion", "opener": ["--network", "--allow", "motion"]},
   {"mode": "Stills", "tab": "Shooting", "group": "Image Stabilization", "path": ["SteadyShot Adjust."], "status": "proved", "rule": "motion", "opener": ["--network", "--allow", "motion"]},
   {"mode": "Stills", "tab": "Shooting", "group": "Image Stabilization", "path": ["Focal Length"], "status": "proved"},
-  {"mode": "Stills", "tab": "Shooting", "group": "Zoom", "path": ["Zoom"], "status": "not yet tried"},
+  {"mode": "Stills", "tab": "Shooting", "group": "Zoom", "path": ["Zoom"], "status": "action, nothing to map", "inferred": "class"},
   {"mode": "Stills", "tab": "Shooting", "group": "Zoom", "path": ["Zoom Range"], "status": "proved"},
   {"mode": "Stills", "tab": "Shooting", "group": "Zoom", "path": ["Custom Key Z. Speed"], "status": "proved"},
   {"mode": "Stills", "tab": "Shooting", "group": "Zoom", "path": ["Custom Key Z. Speed", "Fixed Speed REC"], "status": "proved"},
