@@ -17,6 +17,7 @@ sys.path.insert(0, str(ROOT / "kit"))
 sys.path.insert(1, str(ROOT / "kit" / "provers"))
 from camkit import paths, screen  # noqa: E402
 from camkit.frames import Frame, load  # noqa: E402
+from test_definitions import needs_evidence  # noqa: E402
 
 A1 = paths.a1ii_root()
 ORANGE = (200, 80, 20)
@@ -637,3 +638,69 @@ def test_fields_and_their_label(labels, values, fields, label):
     got = F.fields_of(labels, values)
     assert fields is None or got == fields
     assert F.together(got) == label
+
+
+# ------------------------------------------------------------------------------------- the review of 2026-11-19
+
+CTX = "Drive Mode dial on BRK"
+
+
+def shaped(option, box_, place, field, value, label, changes, final=False, attempt="kit2_pass2-a", n=1, **extra):
+    """A carousel-fields line as kit/provers/carousel_fields_run.py writes it on the camera (kit2_pass2, 2026-11-19)."""
+    other = {"Exposure Value": "Number of Shots", "Number of Shots": "Exposure Value"}
+    fields = sorted([{"label": field, "value": value}, {"label": other.get(field, "Step Width"), "value": "3 Images"}],
+                    key=lambda f: f["label"] != "Exposure Value")
+    return {"path": [*ROW, option], "kind": "list", "via": "a carousel option's own fields", "index": [box_, place],
+            "field": field, "value": value, "label": label, "fields": fields, "box": value, "read_by": "both",
+            "shown": value, "box_vlm": value, "box_reader": "vllm", "chosen_frame": f"{263000 + n}_up.png",
+            "row_frame": f"{263001 + n}_enter.png", "dat": f"{263002 + n:06d}_Bracket-Type-{box_}-{place}.DAT",
+            "base": "262990_Bracket-Type-Cont.-Bracket-base.DAT", "applied": True, "final": final,
+            **({"whole": True} if final else {}), "attempt": attempt,
+            "changes": [{"key": k, "before": b, "after": a} for k, b, a in changes], "context": CTX, **extra}
+
+
+def cont_lines() -> list:
+    return [shaped("Cont. Bracket", 0, 1, "Exposure Value", "0.5EV", "0.5 EV 3 Img.", [("global:0x13f9", 3, 9)], n=1),
+            shaped("Cont. Bracket", 0, 0, "Exposure Value", "0.3EV", "0.3 EV 3 Img.", [], True, n=4),
+            shaped("Cont. Bracket", 1, 1, "Number of Shots", "5 Images", "0.3 EV 5 Img.", [("global:0x13f9", 3, 4)],
+                   attempt="kit2_pass2-b", n=7),
+            shaped("Cont. Bracket", 1, 0, "Number of Shots", "3 Images", "0.3 EV 3 Img.", [], True, attempt="kit2_pass2-b",
+                   n=10)]
+
+
+def test_schema_updates_refused_options_take_carousel_fields_lines(tmp_path):
+    """schema_update.blocked keyed a line by its index, and a carousel-fields line's index is a list [box, place]: the
+    whole pass stopped on TypeError, with or without --write. A line the camera did not keep ("kept") is no refusal of
+    the menu's either."""
+    import schema_update as S
+    run = tmp_path / "kit2_pass2"
+    run.mkdir()
+    refused = shaped("Cont. Bracket", 1, 3, "Number of Shots", "9 Images", "0.3 EV 9 Img.", [], n=13,
+                     notice={"text": "Not available as follows Drive Mode", "frame": "x.png"})
+    refused["applied"] = False
+    kept = shaped("Focus Bracket", 3, 7, "Number of Shots", "0", "4(Standard) | 0", [("global:0x10aa", 3, 2)], n=16,
+                  asked="0", kept="2")
+    kept["applied"] = False
+    run.joinpath("proofs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in cont_lines() + [refused, kept]),
+                                            encoding="utf-8")
+    got = S.blocked(run)
+    assert dict(got) == {"Bracket Settings > Bracket Type > Cont. Bracket": [
+        ("0.3 EV 9 Img.", "Not available as follows Drive Mode")]}, "the refusal alone; the value kept as 2 is none"
+
+
+@needs_evidence
+def test_the_a1_pass_looks_over_carousel_fields_lines(tmp_path, monkeypatch, capsys):
+    """schema_update's full pass for the a1 II, as a look (no --write), over a report and proofs holding Cont. Bracket's
+    carousel-fields lines as the camera wrote them: the whole writer reads them, nothing stops."""
+    import test_definitions as D
+    report = D.A1_REPORT + [{"row": f"Bracket Settings > Bracket Type > Cont. Bracket [{CTX}]", "options": 4,
+                             "kinds": ["list"], "notices": [], "records": {"global:0x13f9": {
+                                 "verdict": "new", "schema_name": None, "linear": None, "notes": [],
+                                 "proved": {"0.5 EV 3 Img.": 9, "0.3 EV 3 Img.": 3, "0.3 EV 5 Img.": 4},
+                                 "names": {"0.5 EV 3 Img.": "two readers", "0.3 EV 3 Img.": "two readers",
+                                           "0.3 EV 5 Img.": "two readers"},
+                                 "sampled_from_start": True, "sample_proofs": 2}}}]
+    S, target, write = D.a1_run(tmp_path, monkeypatch, report, D.A1_PROOFS + cont_lines())
+    monkeypatch.setattr(sys, "argv", ["schema_update.py"])
+    said = write(capsys)
+    assert "Traceback" not in said and f"wrote {target}" not in said

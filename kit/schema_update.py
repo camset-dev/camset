@@ -251,14 +251,17 @@ def focus_area_names(schema_by_key) -> dict:
 def blocked(run: Path) -> dict:
     """record-independent: row name -> [(label, reason)] of options the menu refused and that no
     later proof of the same option applied. A value the SDK's setter refused (kit/provers/sdk_run.py, "via" "SDK ...")
-    is no menu's refusal: the menu may offer it all the same."""
+    is no menu's refusal: the menu may offer it all the same; nor is a value the camera did not keep but put another in
+    its place ("kept": kit/provers/carousel_fields_run.py's number of shots 000, kept as 2). An index that is a list (a
+    carousel option's fields' [box, place]) is keyed as a tuple, as pass2_report.option_key keys it."""
     last = {}
     for r in jsonl.read(run / "proofs.jsonl"):
         if r["kind"] in ("list", "dialog", "sidelist"):
-            last[(" > ".join(r["path"]), r["index"])] = r
+            idx = tuple(r["index"]) if isinstance(r.get("index"), list) else r.get("index")
+            last[(" > ".join(r["path"]), idx)] = r
     out = collections.defaultdict(list)
     for (row, _), r in last.items():
-        if r.get("applied") is False and not str(r.get("via") or "").startswith("SDK "):
+        if r.get("applied") is False and not str(r.get("via") or "").startswith("SDK ") and "kept" not in r:
             why = re.sub(r"\s+", " ", (r.get("notice") or {}).get("text") or "").replace(" •OK", "").strip()
             why = plain_reason(why)
             b = r.get("blocker") if isinstance(r.get("blocker"), dict) else {}
