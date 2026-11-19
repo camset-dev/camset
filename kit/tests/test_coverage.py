@@ -1385,6 +1385,32 @@ def test_the_proofs_validity_repeats_and_bundles(camera):
     assert all("c" in c["missing"] for c in led.proof_checks if c["path"] == ["Foxtrot"])
 
 
+def test_a_fields_last_proof_puts_its_start_value_back_and_tests_nothing(camera):
+    """A two-field row (ISO Range Limit's lower and upper fields) is proved field by field, each field's start value
+    chosen last to put it back, which changes nothing by design and carries no attempt: it is that field's closing
+    proof, so its value is "tested, no record changes" on no record of the row; a value the camera kept mid-field
+    (no change, not the field's last line) still is."""
+    iso = ((2, "ISO 50"), (3, "ISO 64"), (4, "ISO 80"))
+    low = setting("global:0x0150", "Sierra (lower)", ["Sierra"], iso, tab="Setup", group="G2")
+    high = setting("global:0x0151", "Sierra (upper)", ["Sierra"], iso, tab="Setup", group="G2")
+
+    def field(k, t, label, key=None, before=None, after=None):
+        return {"path": ["Sierra"], "kind": "fields", "index": [k, t], "label": label, "value": label, "shown": label,
+                "vlm": label, "applied": True,
+                "changes": [{"key": key, "before": before, "after": after}] if key else []}
+    proofs = [field(0, 1, "ISO 64", "global:0x0150", 2, 3), field(0, 2, "ISO 80"), field(0, 0, "ISO 50"),
+              field(1, 0, "ISO 50", "global:0x0151", 4, 2), field(1, 1, "ISO 64", "global:0x0151", 4, 3),
+              field(1, 2, "ISO 80")]
+    with extra_settings(camera, low, high):
+        write_proofs(camera, "kit2_pass2", proofs)
+        led = ledger(validity=True)
+        vals = {o["key"]: o["values"] for o in led.options}
+        assert vals["global:0x0150"][2] == "not yet tried" and vals["global:0x0151"][2] == "not yet tried"
+        assert vals["global:0x0150"][4] == "tested, no record changes"           # line 2: kept mid-field
+        states = {c["line"]: c["state"] for c in led.proof_checks if c["path"] == ["Sierra"]}
+        assert states[3] == "inferred" and states[6] == "inferred" and states[2] != "inferred"
+
+
 def test_two_readings_agree_only_whole_and_only_when_independent():
     """"On" is not "Continuous", "ISO 100" not "ISO 1000", "1/250" not "1/2500"; pass 1's map label is no reading;
     the OCR reading beside an OCR engine's vote is not two readings, two engines' votes are."""

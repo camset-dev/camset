@@ -1389,13 +1389,26 @@ def _crawl_fact(f, led, run, line, r, crumb, parent, labels):
 def _closing_proofs(src: Sources) -> set:
     """(run, line) of each attempt's last proof: the saved option chosen again, which changes nothing by design, so
     never "tested, no record changes" (an attempt cut short too: its last proof may be that one), and never a valid
-    proof: its value is the start file's, inferred."""
+    proof: its value is the start file's, inferred. A number field's proofs (kind "fields", index [field, value]) carry
+    no attempt: the prover chooses each field's own start value last (camkit's proving.fields), so the last line of
+    each run of lines on one row and field is that field's closing proof."""
     last = {}
     for run, line, p in src.proofs:
         a = p.get("attempt")
         if a:
             last[a] = (run, line)
-    return set(last.values())
+    out = set(last.values())
+    group, at = None, None
+    for run, line, p in src.proofs:
+        idx = p.get("index")
+        key = (run, json.dumps(p.get("path")), idx[0]) if p.get("kind") == "fields" and isinstance(idx, list) \
+            and len(idx) == 2 else None
+        if key != group and at is not None:
+            out.add(at)
+        group, at = key, ((run, line) if key is not None else None)
+    if at is not None:
+        out.add(at)
+    return out
 
 
 def _row_settings(led: Ledger, e: dict) -> list:
