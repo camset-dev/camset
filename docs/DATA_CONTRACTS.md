@@ -356,8 +356,7 @@ evidence; a byte field, `<record>@<offset>`, is two bytes, as the editor reads o
 
 **What a run does with it.** Before it presses on a row, `kit/drive.py`, `kit/crawl_run.py` and `kit/prove_run.py` ask
 the ledger and by default only print its answer; only `--skip-settled` makes the crawl and the prover leave a settled
-row out, and `kit/drive.py` never does. A crawl given `--skip-settled` has holes in its map, so a crawl meant to build
-pass 1's map must not skip.
+row out, and `kit/drive.py` never does.
 
 **A proof is made once.** A proof is valid when the conditions marked required hold, read from what `proofs.jsonl`
 already holds:
