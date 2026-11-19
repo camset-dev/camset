@@ -73,15 +73,24 @@ OTHER_MODE = "Movie"
 # ---------------------------------------------------------------- the statuses, in the order of precedence
 
 STATUSES = (
-    ("proved", "The definition's proved establishes it: an option's value is in proved.values, or its setting's scale "
-               "is proved on one line (sampled.linear true); a row, when every setting placed on it is proved. A row "
-               "whose setting has no row of its own but is tied to it (its proof went through it, or its name is the "
-               "row's) keeps this status, flagged placement_missing."),
+    ("proved", "The definition's proved establishes it: an option's value is one its proof lists and no rule named "
+               "from another setting's proof (privately read from the whole proof: chosen on the setting; publicly "
+               "from a proof whose setting carries no proved.shared mark), or its setting's scale is proved on one "
+               "line (sampled.linear true); a row, when every setting placed on it is proved. A row whose setting has "
+               "no row of its own but is tied to it (its proof went through it, or its name is the row's) keeps this "
+               "status, flagged placement_missing."),
+    ("proved or named from a shared list", "Options only, where a proof is read lean (the public form, or a "
+                                           "definition read without its evidence): its setting's proof lists the value "
+                                           "and says some of the values it lists were named from another setting's "
+                                           "proof (proved.shared), never which, so whether this one was chosen on the "
+                                           "setting or inferred is not said; the private form, which reads the proof's "
+                                           "names, says which (docs/decisions/0025)."),
     ("proved by hand", "A hand-table fact with hand evidence: the owner set it by hand and the kit diffed the camera's "
                        "downloads before and after (a FRAME_PROOFS entry the definition does not carry yet, or a hand "
                        "look that changed records)."),
     ("sampled", "A number scale proved by samples not on one line (sampled.linear null): its values are derived, not "
-                "all chosen. A row, when every setting placed on it is proved or sampled, one at least sampled."),
+                "all chosen (privately those its proof names \"sampled\", publicly those it lists). A row, when every "
+                "setting placed on it is proved or sampled, one at least sampled."),
     ("not offered", "Options only: a not_offered mark, the camera's menu never offers the value."),
     ("not in the settings file (Sony)", "Sony's Save/Load exclusion list names the row or a row above it (the camera "
                                         "file's save_load_excluded), or the file's header holds it (header_rows); "
@@ -104,13 +113,14 @@ STATUSES = (
                           "kind than equipment (state, camera_only, not_on_camera, network, unknown): the reason says "
                           "why no menu choice proves it."),
     ("inferred from a shared list", "Options only, private only, never proved: no proof chose the value on this "
-                                    "setting, but it is proved on another setting of a shared list (settings that list "
-                                    "the same values, on one row or as one array record's elements, none a readout: "
-                                    "kit/tools/coverage.py --shared), this setting's own record shows two of its values "
-                                    "as the list names them (proved, or a proof line's reading), and no proof of the "
-                                    "list reads that value as another. It takes the place of greyed in state, closed by "
-                                    "rule or not yet tried, whose citations the private form keeps beside the setting "
-                                    "it was proved on."),
+                                    "setting, and the definition's writer named it from another setting's proof (a "
+                                    "shared list: a picker's slots, one array's elements, a hold and its live setting, "
+                                    "a copy; the whole proof's name source \"derived\", camkit.definitions.inferred, "
+                                    "docs/decisions/0025). It takes the place of greyed in state, closed by rule or not "
+                                    "yet tried, whose citations the private form keeps beside the setting of its shared "
+                                    "list it was proved on, where the ledger's own grouping finds one "
+                                    "(kit/tools/coverage.py --shared, which also says where that list's own proof "
+                                    "lines do not bear the writer out)."),
     ("greyed in state", "Greyed or refused by a notice. Public only from the definition's inactive_when (inferred: "
                         "inactive_when, the blocker the row it names); privately also from a look line, a crawl row, a "
                         "proof or failure line, or the latest page scan's greyed flag, the blocker the row (and option) "
@@ -128,14 +138,21 @@ STATUSES = (
 )
 STATUS_NAMES = tuple(n for n, _ in STATUSES)
 RANK = {n: i for i, n in enumerate(STATUS_NAMES)}
-# a value of a shared list proved on another of its settings (_infer_shared), and the statuses it takes the place of
+# a value the writer named from another setting's proof that no proof chose on its own (camkit.definitions.inferred),
+# and the statuses it takes the place of
 INFERRED = "inferred from a shared list"
 INFERABLE = ("greyed in state", "closed by rule", "not yet tried")
-# how many values a setting's own record must show as its shared list names them before the rest are inferred
+# a value a proof read lean lists, whose setting says some of its listed values were named from another setting's
+# proof (proved.shared): proved or inferred, the lean proof does not say which
+PROVED_OR_SHARED = "proved or named from a shared list"
+# how many values a setting's own record shows as its shared list names them, below which kit/tools/coverage.py
+# --shared says the list's own proof lines do not bear the writer's inference out (it decides nothing)
 SHARED_OWN = 2
 # what settled() counts settled (a run given --skip-settled leaves it out): an answer that holds whatever the camera's
 # state, on a row with no value still to try (values_left)
-SETTLED = frozenset(STATUS_NAMES[:8] + ("no proof possible", INFERRED))
+SETTLED = frozenset(("proved", PROVED_OR_SHARED, "proved by hand", "sampled", "not offered",
+                     "not in the settings file (Sony)", "information screen", "action, nothing to map",
+                     "tested, no record changes", "no proof possible", INFERRED))
 # what kit/tools/coverage.py --todo lists, with the next step each needs (and every row with values_left)
 TODO = ("needs equipment", "greyed in state", "kit cannot read", "closed by rule", "not yet tried")
 # the statuses of a setting's value still to try: values_left counts them on a row, and such a row is never settled
@@ -854,7 +871,7 @@ def _build(camera, src, public, validity) -> Ledger:
     facts = _facts(led, src, by_key)
     _row_statuses(led, facts, by_key, src)
     _option_statuses(led, settings, facts, src)
-    _infer_shared(led)
+    _cite_shared(led)
     _values_left(led)
     _record_statuses(led, settings, src, facts)
     if validity:
@@ -1755,11 +1772,8 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
     frame = src.hand.get("FRAME_PROOFS") or {}
     for s in settings:
         p = s.get("proved") if isinstance(s.get("proved"), dict) else None
-        checked = set((p or {}).get("values") or [])
         linear = bool(p and (p.get("sampled") or {}).get("linear") is True)
-        sampled = bool(p and "sampled" in p and not linear)
-        # a scale off its line: the values its proof lists are derived from samples (sampled), the others unknown
-        proved, derived = (set(), checked) if sampled else (checked, set())
+        proved, by_sample, inferred, either = proof_values(p)
         offered_not = {x.get("value") for x in s.get("not_offered") or [] if isinstance(x, dict)}
         hand = {v for v, _ in (frame.get(s["key"]) or {}).get("values") or []} if isinstance(frame.get(s["key"]), dict) \
             else set()
@@ -1772,9 +1786,11 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
             fx = facts.by_option.get((s["key"], v), {})
             if v in proved or linear:
                 st = "proved"
+            elif v in either:
+                st = PROVED_OR_SHARED
             elif v in hand or fx.get("hand_changed"):
                 st = "proved by hand"
-            elif v in derived:
+            elif v in by_sample:
                 st = "sampled"
             elif v in offered_not:
                 st = "not offered"
@@ -1794,10 +1810,32 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
                 st = "closed by rule"
             else:
                 st = "not yet tried"
-            values[v] = st
+            values[v] = INFERRED if st in INFERABLE and v in inferred else st
         if values:
             led.options.append({"key": s["key"], "path": row, "mode": s.get("row_mode") or MENU_MODE,
                                 "values": values, "cites": cites})
+
+
+def proof_values(p: dict | None) -> tuple:
+    """(proved, sampled, inferred, either): a setting's proof's values as the ledger reads them, the one reading for
+    both forms (docs/decisions/0025). A whole proof (the private build, its names there) says value by value: proved,
+    those its lean form lists that no rule named from another setting's proof nor a sample between its points (chosen
+    on the setting, or a held value a hand table names); sampled, those named "sampled"; inferred, those the writer named
+    from a shared list (camkit.definitions.inferred). A proof read lean (the public build) says what the public file
+    says: its listed values proved, or sampled for a scale off its line, or, where the setting carries the mark
+    (proved.shared), either (proved or inferred, the file does not say which)."""
+    if not p:
+        return set(), set(), set(), set()
+    listed = set(definitions.lean_proof(p).get("values") or [])
+    off_line = "sampled" in p and (p.get("sampled") or {}).get("linear") is not True
+    if p.get("names"):
+        chosen = set(p.get("values") or [])
+        by_sample = {int(v) for v, src in p["names"].items() if src == "sampled"} - chosen
+        inferred = definitions.inferred(p)
+        return listed - by_sample - inferred, by_sample, inferred, set()
+    if p.get("shared"):
+        return set(), set(), set(), listed
+    return (set(), listed, set(), set()) if off_line else (listed, set(), set(), set())
 
 
 def _values_left(led: Ledger) -> None:
@@ -1821,33 +1859,47 @@ def _values_left(led: Ledger) -> None:
                 e[k] = first[k]
 
 
-def _infer_shared(led: Ledger) -> None:
-    """In the full build (the proof lines are this computer's): a value of a setting of a shared list (shared_lists)
-    whose status is one of INFERABLE becomes inferred from a shared list when another setting of the list is proved on
-    it, this setting's own record shows SHARED_OWN of the list's values as the list names them (own_values) and no proof
-    of this setting contradicts the list, and no proof of the list names that value or writes it against its reading.
-    Its citations keep what it was (a notice that greyed it, its blocker) after the setting it was proved on; the
-    option carries the list's other settings and its own grounds (shared_list). The public build infers nothing."""
+def _cite_shared(led: Ledger) -> None:
+    """In the full build (the proof lines are this computer's): a value the writer named from a shared list (INFERRED,
+    _option_statuses, from the definition's names: the ledger infers nothing itself, docs/decisions/0025) cites the
+    setting of its shared list (shared_lists) it is proved on, before what it was (a notice that greyed it, its
+    blocker), where the ledger's grouping finds one; the option carries the list's other settings and its own grounds
+    (shared_list). The list's own check (unborne) is said by kit/tools/coverage.py --shared and decides nothing."""
     if not led.src.private:
         return
     opts = {o["key"]: o for o in led.options}
     for x in shared_lists(led):
-        blocked = {c["wrote"] for c in x["contradictions"]} | ({c["reads_as"] for c in x["contradictions"]} - {None})
-        wrong = {c["key"] for c in x["contradictions"]}
         for k in x["keys"]:
-            if k in wrong or len(own_values(x, k)) < SHARED_OWN:
-                continue
             o, done = opts[k], False
             for v, st in o["values"].items():
                 on = [t for t in x["proved"].get(v, []) if t != k]
-                if st in INFERABLE and v not in blocked and on:
-                    o["values"][v] = INFERRED
+                if st == INFERRED and on:
                     o["cites"][v] = [{"proved_on": on[0]}] + list(o["cites"].get(v) or [])
                     done = True
             if done:
                 own = x["own"][k]
                 o["shared_list"] = {"with": [t for t in x["keys"] if t != k], "own_proved": len(own["proved"]),
                                     "own_proofs": [{"proof": c["proof"], "run": c["run"]} for c in own["proofs"]]}
+
+
+def unborne(led: Ledger, x: dict) -> list:
+    """[(key, how many values inferred, why)] of the settings of a shared list (shared_lists) whose values the writer
+    named from the list (INFERRED) where the list's own proof lines do not bear that out: a line of the setting's own
+    reads a value as another than it wrote (a contradiction), or its own record shows fewer than SHARED_OWN of the
+    list's values as the list names them. The ledger's check beside the writer's rule, said, deciding nothing."""
+    opts = {o["key"]: o for o in led.options}
+    wrong = {c["key"] for c in x["contradictions"]}
+    out = []
+    for k in x["keys"]:
+        n = sum(1 for st in opts[k]["values"].values() if st == INFERRED)
+        if not n:
+            continue
+        if k in wrong:
+            out.append((k, n, "a proof line of its own reads a value as another"))
+        elif len(own_values(x, k)) < SHARED_OWN:
+            out.append((k, n, f"its own record shows {len(own_values(x, k))} of the list's values (the check asks "
+                              f"{SHARED_OWN})"))
+    return out
 
 
 # ---------------------------------------------------------------- shared lists (one picker's slots, one table of codes)
@@ -1866,8 +1918,8 @@ def shared_lists(led: Ledger) -> list:
     values], "proofs": [{"proof", "run", "value"}: its own proof lines that agree with the list]}}, "contradictions":
     [{"key", "proof", "run", "wrote", "reads_as"}], "never_proved": [values none is proved on, that a setting still has
     to try], "no_own": [keys with a value still to try whose own record shows no value]}; the proof lines where this
-    computer holds the runs (_list_proofs). Kept on the ledger: its statuses before any value is inferred
-    (_infer_shared)."""
+    computer holds the runs (_list_proofs). Kept on the ledger (_cite_shared, unborne and shared_view read it). The
+    lists are the ledger's own grouping, a view beside the writer's inference, which decides (docs/decisions/0025)."""
     if getattr(led, "_shared", None) is not None:
         return led._shared
     by_key = {s["key"]: s for s in led.src.definition.get("settings") or []}
@@ -2003,8 +2055,11 @@ def _list_proofs(led: Ledger, lists: list) -> None:
 
 def shared_view(led: Ledger) -> list:
     """The lines kit/tools/coverage.py --shared prints: each shared list (its row, settings, values, how many are proved
-    on some setting of it, how many settings show values of their own, its contradictions), then the values no setting
-    of its list is proved on and the settings whose own record shows no value, the camera work each needs."""
+    on some setting of it, how many settings show values of their own, its contradictions, and the settings whose
+    values the writer named from it where its own proof lines do not bear that out, unborne), then the values no setting
+    of its list is proved on and the settings whose own record shows no value, the camera work each needs, and last the
+    values the writer named from another setting on settings the ledger groups in no list (its rule beside the
+    ledger's grouping, docs/decisions/0025)."""
     lists = shared_lists(led)
     by_key = {s["key"]: s for s in led.src.definition.get("settings") or []}
     opts = {o["key"]: o for o in led.options}
@@ -2033,6 +2088,9 @@ def shared_view(led: Ledger) -> list:
             out.append(f"      {c['key']} {by_key[c['key']]['name']}: proof {c['run']} line {c['proof']} wrote "
                        f"{name.get(c['wrote'], c['wrote'])!r} but reads as "
                        f"{name.get(c['reads_as']) if c['reads_as'] is not None else 'a value the list does not hold'!r}")
+        for k, n, why in unborne(led, x):
+            out.append(f"      {k} {by_key[k]['name']}: {n} values the writer named from this list, not borne out by "
+                       f"the list's own proof lines: {why}")
     out.append(f"  ({quiet} other lists: every value proved, or settled without inference, on every setting)")
     never = [(x, v) for x in lists for v in x["never_proved"]]
     out.append(f"values no setting of their list is proved on: {len(never)}")
@@ -2044,6 +2102,16 @@ def shared_view(led: Ledger) -> list:
     out.append(f"settings whose own record shows no value of their list: {len(none)}")
     for x, k in none:
         out.append(f"  {k} {by_key[k]['name']} ({place(x)})")
+    # the writer's lists the ledger's grouping does not draw (a hold's bracket copy, a copy of another array): its rule
+    # beside the ledger's, said
+    grouped = {k for x in lists for k in x["keys"]}
+    apart = [(o["key"], sum(1 for st in o["values"].values() if st == INFERRED)) for o in led.options
+             if o["key"] not in grouped]
+    apart = [(k, n) for k, n in apart if n]
+    out.append(f"values the writer named from another setting, on settings in no shared list above: "
+               f"{sum(n for _, n in apart)}")
+    for k, n in apart:
+        out.append(f"  {k} {by_key[k]['name']}: {n}")
     return out
 
 

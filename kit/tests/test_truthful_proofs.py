@@ -9,7 +9,10 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, definitions  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from camkit import ROOT, coverage, definitions  # noqa: E402
+from test_coverage import CAM, SETTINGS, extra_settings, ledger, write_proofs  # noqa: E402
+from test_coverage import camera  # noqa: E402, F401  (the made-up camera's fixture)
 from test_plain_hand_tables import ROWS, Cam  # noqa: E402
 
 SCHEMA = json.loads((ROOT / "schemas" / "definition.schema.json").read_text(encoding="utf-8"))
@@ -141,3 +144,70 @@ def test_a_rerun_drops_a_name_no_rule_gives_any_more(tmp_path, monkeypatch, caps
     s = next(x for x in pub["settings"] if x["key"] == "global:0x01d8")
     assert [7, "Ghost"] in s["values"] and s["proved"] == {"values": [0, 1]}
     assert "7" not in ev["global:0x01d8"]["proved"]["names"]
+
+
+# ---------------------------------------------------------------- the ledger reads the writer's result
+
+def test_the_private_form_says_value_by_value_and_the_public_no_more_than_the_mark(camera):  # noqa: F811 (the fixture)
+    """November slot 2 as the test camera holds it (test_coverage's fixture, the writer's result: 10 and 11 chosen on
+    it, 12 to 14 named from slot 1's proof). Privately the values the writer named from a shared list are inferred, the
+    chosen ones proved; publicly, where the definition says only that some of the listed values were named so, every
+    listed value of the marked setting is "proved or named from a shared list", and an unmarked setting's are proved,
+    as privately. Inferred never reaches the public form; the public form passes its checks and its schema."""
+    import jsonschema
+    priv = {o["key"]: o["values"] for o in ledger().options}
+    inf = coverage.INFERRED
+    assert priv["global:0x0121"] == {10: "proved", 11: "proved", 12: inf, 13: inf, 14: inf}
+    assert priv["global:0x0120"] == {v: "proved" for v in (10, 11, 12, 13, 14)}
+    pub = coverage.public_doc(ledger(public=True))
+    by = {o["key"]: o["statuses"] for o in pub["options"]}
+    assert by["global:0x0121"] == {coverage.PROVED_OR_SHARED: [10, 11, 12, 13, 14]}
+    assert by["global:0x0120"] == {"proved": [10, 11, 12, 13, 14]}
+    assert not [o for o in pub["options"] if inf in o["statuses"]] and f'"{inf}"' not in coverage.text(pub)
+    assert not coverage.public_problems(pub, camera=CAM)
+    schema = json.loads((ROOT / "schemas" / "coverage.schema.json").read_text(encoding="utf-8"))
+    jsonschema.Draft202012Validator(schema).validate(pub)
+    assert coverage.public_doc(ledger())["options"] == pub["options"], "the private build's public form is the same"
+
+
+def test_the_writers_inference_stands_where_the_lists_own_lines_do_not_bear_it_out(camera, monkeypatch, capsys):  # noqa: F811 (the fixture)
+    """The ledger's shared-list check (a setting's own proof lines showing two values as the list names them, no line
+    reading a value as another) decides nothing any more: a value the writer named from the list is inferred though a
+    line of the setting's own contradicts the list, and kit/tools/coverage.py --shared says where the check does not
+    bear the writer out."""
+    import coverage as tool
+    contra = {"path": ["November"], "kind": "table", "opens": "picker", "label": "Ant", "shown": "Dog", "vlm": "Dog",
+              "changes": [{"key": "global:0x0121", "before": 10, "after": 11}]}
+    write_proofs(camera, "kit2_pass2", [contra])
+    led = ledger()
+    assert {o["key"]: o for o in led.options}["global:0x0121"]["values"][12] == coverage.INFERRED
+    lines = coverage.shared_view(led)
+    assert any("global:0x0121" in x and "not borne out" in x for x in lines), lines
+    coverage.forget()
+    monkeypatch.setattr(sys, "argv", ["coverage.py", "--shared"])
+    tool.main()
+    assert "not borne out" in capsys.readouterr().out
+
+
+def test_a_sample_is_sampled_in_both_forms(camera):  # noqa: F811 (the fixture)
+    """A scale proved by samples off its line: its values between are "sampled" in the private form, read from the
+    whole proof's names, as in the public one, read from its lean values (review 2026-11-18, B4: the whole proof of a
+    sample lists no values, so the private form gave none of its values "sampled")."""
+    k = "global:0x0102"
+    i = next(n for n, x in enumerate(SETTINGS) if x["key"] == k)
+    whole = {"run": "kit2_pass2", "sampled": {"proofs": 3, "linear": None}, "names": {"0": "sampled", "10": "sampled"}}
+    with extra_settings(camera, evidence={k: {"proved": whole}}):
+        assert SETTINGS[i]["proved"] == definitions.lean_proof(whole)
+        priv = {o["key"]: o["values"] for o in ledger().options}[k]
+        pub = {o["key"]: o["values"] for o in ledger(public=True).options}[k]
+        assert priv == pub == {0: "sampled", 10: "sampled", 20: "not yet tried"}
+
+
+def test_a_status_list_names_the_new_public_status_once():
+    """The public status of a marked setting's listed values is one of the ledger's statuses, a value's (the coverage
+    schema's option vocabulary), settled as proved and inferred are; inferred stays private."""
+    assert coverage.PROVED_OR_SHARED in coverage.STATUS_NAMES
+    schema = json.loads((ROOT / "schemas" / "coverage.schema.json").read_text(encoding="utf-8"))
+    assert coverage.PROVED_OR_SHARED in schema["$defs"]["option_status"]["enum"]
+    assert coverage.INFERRED in coverage.NEVER_PUBLIC and coverage.PROVED_OR_SHARED not in coverage.NEVER_PUBLIC
+    assert {coverage.PROVED_OR_SHARED, coverage.INFERRED, "proved"} <= coverage.SETTLED

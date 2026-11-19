@@ -70,7 +70,7 @@
     "closed by rule",
     "not yet tried"
    ],
-   "description": "A row's status in the public form: every status but those a state seen, a kit's failure or the proof lines give (tested, no record changes; kit cannot read; inferred from a shared list), which the private form alone holds."
+   "description": "A row's status in the public form: every status but those a state seen or a kit's failure gives (tested, no record changes; kit cannot read) and those of a value alone (inferred from a shared list, which the private form alone holds; proved or named from a shared list)."
   },
   "key": {
    "type": "string",
@@ -277,6 +277,7 @@
   "option_status": {
    "enum": [
     "proved",
+    "proved or named from a shared list",
     "proved by hand",
     "sampled",
     "not offered",
@@ -286,7 +287,7 @@
     "closed by rule",
     "not yet tried"
    ],
-   "description": "A value's status in the public form: never one a state seen or the proof lines give (tested, no record changes; greyed in state; inferred from a shared list)."
+   "description": "A value's status in the public form: never one a state seen gives (tested, no record changes; greyed in state), nor one only a proof's names say (inferred from a shared list: the public definition marks a setting some of whose listed values were named from another setting's proof, never which, so those values are proved or named from a shared list, docs/decisions/0025)."
   }
  }
 }

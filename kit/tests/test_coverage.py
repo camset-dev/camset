@@ -43,7 +43,9 @@ MENU = [("Shooting", "G1", "Alpha"), ("Shooting", "G1", "Bravo"), ("Shooting", "
         ("Shooting", "G1", "Juliet"), ("Shooting", "G1", "Kilo"), ("Shooting", "G3", "Alpha"),
         ("Network", "G4", "Display Wi-Fi Info."), ("Setup", "G2", "Setting Reset"), ("Setup", "G2", "IP Address Setting"),
         ("Setup", "G2", "Display Serial Number"), ("Setup", "G2", "Version"), ("Setup", "G2", "November")]
-# one picker's list: November's slots store one table of codes (a shared list), slot 1 proved whole, slot 2 on two
+# one picker's list: November's slots store one table of codes (a shared list), slot 1 proved whole, slot 2 on two,
+# its other three named from slot 1's proof by the writer ("derived", docs/decisions/0025): its public proof lists all
+# five and is marked shared, its evidence (BASE_EVIDENCE) says which two were chosen on it
 PICK = ((10, "Ant"), (11, "Bee"), (12, "Cat"), (13, "Dog"), (14, "Elk"))
 SETTINGS = [
     setting("global:0x0100", "Alpha", ["Alpha"], ((0, "Off"), (1, "On"), (2, "Auto")), in_sets=True,
@@ -62,8 +64,11 @@ SETTINGS = [
     setting("global:0x0120", "November slot 1", ["November"], PICK, tab="Setup", group="G2",
             proved={"values": [10, 11, 12, 13, 14]}),
     setting("global:0x0121", "November slot 2", ["November"], PICK, tab="Setup", group="G2",
-            proved={"values": [10, 11]}),
+            proved={"values": [10, 11, 12, 13, 14], "shared": True}),
 ]
+# the definition's private evidence: November slot 2's whole proof, as the writer leaves it
+BASE_EVIDENCE = {"global:0x0121": {"proved": {"run": "kit2_pass2", "values": [10, 11], "names": {
+    "10": "two readers", "11": "two readers", "12": "derived", "13": "derived", "14": "derived"}}}}
 RECORDS = {f"global:0x{i:04x}": (1, 1) for i in (0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107,
                                                   0x0108, 0x0120, 0x0121, 0x0200, 0x0201, 0x0202)}
 RECORDS.update({"global:0x0300": (320, 1), "set:0x0100": (1, 1)})
@@ -98,6 +103,7 @@ def camera(tmp_path, monkeypatch):
            "menu": [{"tab": t, "group": g, "label": lab, "order": i} for i, (t, g, lab) in enumerate(MENU)],
            "camera": {"model": "TEST-CAM", "section_counts": [1, 1], "tab_colors": {}}}
     (ddir / f"{CAM}.json").write_text(json.dumps(doc), encoding="utf-8")
+    (ddir / f"{CAM}.evidence.json").write_text(json.dumps({"settings": BASE_EVIDENCE}), encoding="utf-8")
     data = tmp_path / "data" / CAM
     data.mkdir(parents=True)
     (data / f"camera_{CAM}.json").write_text(json.dumps({
@@ -179,7 +185,8 @@ def test_every_row_option_and_record_has_exactly_one_status(camera):
 
 def test_the_made_up_camera_gives_each_status(camera):
     """Every row and option status at least once in the full (private) build, every record status once, each where the
-    fixture puts it."""
+    fixture puts it; but "proved or named from a shared list", which a proof read lean gives (the public build), and
+    the private build reads every proof whole where its evidence is there."""
     led = ledger()
     want = {("Alpha",): "proved", ("Alpha", "Sub"): "proved", ("Bravo",): "proved by hand", ("Charlie",): "sampled",
             ("Delta",): "not in the settings file (Sony)", ("Echo",): "information screen",
@@ -190,7 +197,8 @@ def test_the_made_up_camera_gives_each_status(camera):
     for path, status in want.items():
         assert row(led, *path)["status"] == status, path
     seen = {e["status"] for e in led.rows} | {st for o in led.options for st in o["values"].values()}
-    assert seen == set(coverage.STATUS_NAMES)
+    assert seen == set(coverage.STATUS_NAMES) - {coverage.PROVED_OR_SHARED}
+    assert coverage.PROVED_OR_SHARED in {st for o in ledger(public=True).options for st in o["values"].values()}
     assert {r["status"] for r in led.records} == set(coverage.RECORD_NAMES)
     alpha2 = row(led, "Alpha", group="G3")
     assert alpha2["nth"] == 1 and alpha2["same_label_as"] == "G1" and alpha2["status"] == "proved"
@@ -520,8 +528,9 @@ def test_check_public_refuses_a_public_form_with_private_keys(camera, tmp_path, 
 
 def test_the_a1_ii_public_form_agrees_with_its_definition():
     """The committed form (data/ILCE-1M2_fw4.00/coverage_ILCE-1M2_fw4.00.json): its schema, no private key, no word
-    outside its vocabulary, every value it calls proved or not offered is so in the definition and the other way round,
-    every top row and record of the definition's file is in it once. A definition written since needs
+    outside its vocabulary, every value it calls proved (or, of a setting whose list was proved partly on another
+    setting, proved or named from a shared list) or not offered is so in the definition and the other way round, every
+    top row and record of the definition's file is in it once. A definition written since needs
     kit/tools/coverage.py --write."""
     import jsonschema
     f = coverage.public_file(A1)
@@ -540,6 +549,9 @@ def test_the_a1_ii_public_form_agrees_with_its_definition():
         p = s.get("proved") or {}
         linear = (p.get("sampled") or {}).get("linear") is True
         proved = {v for v, _ in s["values"]} if linear else (set() if "sampled" in p else set(p.get("values") or []))
+        if p.get("shared") and not linear:      # the setting's mark: its listed values, never one of them "proved"
+            proved = set()
+            assert set(st.get(coverage.PROVED_OR_SHARED, [])) == set(p.get("values") or []), s["key"] + again
         assert set(st.get("proved", [])) == proved, s["key"] + again
         marks = {x["value"] for x in s.get("not_offered") or []} - proved - set(p.get("values") or [])
         assert set(st.get("not offered", [])) == marks, s["key"] + again
@@ -1086,18 +1098,18 @@ def test_no_proof_possible_needs_every_setting_known(camera):
 
 @contextlib.contextmanager
 def extra_settings(camera, *settings, evidence=None):
-    """The made-up camera with more settings (and, given, the private evidence of its definition: {key: {field}})."""
+    """The made-up camera with more settings (and, given, more of the private evidence of its definition: {key:
+    {field}}, beside BASE_EVIDENCE), put back as it was after."""
     SETTINGS.extend(settings)
     ev = camera.defn.with_name(camera.defn.stem + ".evidence.json")
     try:
         camera.doc["settings"] = SETTINGS
         camera.defn.write_text(json.dumps(camera.doc), encoding="utf-8")
-        if evidence:
-            ev.write_text(json.dumps({"settings": evidence}), encoding="utf-8")
+        ev.write_text(json.dumps({"settings": {**BASE_EVIDENCE, **(evidence or {})}}), encoding="utf-8")
         yield
     finally:
         del SETTINGS[len(SETTINGS) - len(settings):]
-        ev.unlink(missing_ok=True)
+        ev.write_text(json.dumps({"settings": BASE_EVIDENCE}), encoding="utf-8")
 
 
 def pick_proof(key, before, after, *reads, label=None, path=("November",)):
@@ -1211,10 +1223,32 @@ def test_an_array_records_elements_listing_the_same_values_are_one_list(camera):
 INFERRED = "inferred from a shared list"
 
 
-def test_a_value_proved_on_another_setting_of_its_list_is_inferred(camera):
-    """November slot 2's own record shows two values as the list names them (its proofs): the values slot 1 is proved
-    on count inferred, settled, never proved; the private form names the setting each was proved on and the slot's own
-    grounds; the public form, built from the public sources, holds no inference and keeps them still to try."""
+def writers(settings, names: dict, sampled: dict = None) -> tuple:
+    """(the settings with their proofs as the writer leaves them public, their evidence): for each key in `names`, its
+    whole proof the values chosen on it (those named by a reading) and the values a rule named from another setting
+    ("derived"), or a count of samples (`sampled`, a from_start one where given), its public proof that proof's lean
+    form (definitions.lean_proof: the mark where a value is inferred)."""
+    out, evidence = [], {}
+    for s in settings:
+        got = names.get(s["key"])
+        if got is None:
+            out.append(s)
+            continue
+        whole = {"run": "kit2_pass2", "names": {str(v): src for v, src in got.items()}}
+        if s["key"] in (sampled or {}):
+            whole["sampled"] = sampled[s["key"]]
+        else:
+            whole["values"] = sorted(v for v, src in got.items() if src != "derived")
+        evidence[s["key"]] = {"proved": whole}
+        out.append({**s, "proved": definitions.lean_proof(whole)})
+    return out, evidence
+
+
+def test_a_value_the_writer_named_from_another_setting_is_inferred_privately(camera):
+    """November slot 2, as the writer leaves it (10 and 11 chosen on it, 12 to 14 named from slot 1's proof): the
+    private form, which reads the whole proof, counts those three inferred, settled, never proved, and names the
+    setting of its shared list each was proved on and the slot's own grounds; the public form, which has the marked
+    lean proof alone, says of all five "proved or named from a shared list", none still to try, none inferred."""
     led = ledger()
     assert coverage.settled(["November"], camera=CAM, ledger=led).skip
     assert coverage.settled(["November"], "Cat", camera=CAM, ledger=led).skip
@@ -1225,28 +1259,33 @@ def test_a_value_proved_on_another_setting_of_its_list_is_inferred(camera):
     assert ("November",) not in [tuple(x["entry"]["path"]) for x in coverage.todo(led)]
     assert any("values_inferred: 3" in x for x in coverage.row_view(led, "November"))
     pub = coverage.public_doc(led)
-    assert {o["key"]: o for o in pub["options"]}["global:0x0121"]["statuses"] == {"proved": [10, 11],
-                                                                                 "not yet tried": [12, 13, 14]}
-    assert {tuple(r["path"]): r for r in pub["rows"]}[("November",)]["values_left"] == 3
-    assert INFERRED not in coverage.text(pub) and not coverage.public_problems(pub, camera=CAM)
-    assert coverage.public_problems(json.loads(coverage.text(pub).replace('"not yet tried": [12', f'"{INFERRED}": [12')),
-                                    camera=CAM)
+    assert {o["key"]: o for o in pub["options"]}["global:0x0121"]["statuses"] == {
+        coverage.PROVED_OR_SHARED: [10, 11, 12, 13, 14]}
+    assert "values_left" not in {tuple(r["path"]): r for r in pub["rows"]}[("November",)]
+    assert f'"{INFERRED}"' not in coverage.text(pub) and not coverage.public_problems(pub, camera=CAM)
+    assert coverage.public_problems(json.loads(coverage.text(pub).replace(f'"{coverage.PROVED_OR_SHARED}": [10',
+                                                                          f'"{INFERRED}": [10')), camera=CAM)
 
 
-def test_an_inference_needs_values_of_its_own_and_no_contradiction(camera, monkeypatch, capsys):
-    """Slot 3 (proved by samples, no value in its proof) infers from its two own proof lines; slot 4, one of whose
-    proofs reads as another value than it wrote, infers nothing, and the two values that proof names stay to try on
-    every slot; a copy, a readout, a setting alone in its list and one with no value of its own infer nothing; a value
-    no setting is proved on stays to try."""
+def test_the_ledger_infers_nothing_by_its_own_rule(camera, monkeypatch, capsys):
+    """The ledger reads the writer's inference and makes none of its own (docs/decisions/0025): slot 3 (sampled from
+    the option it held) and slot 4, each with the values the writer named from slot 1, are inferred there, slot 4 too,
+    though a proof line of its own reads a value as another than it wrote, which kit/tools/coverage.py --shared says
+    (slot 3's own two lines bear the list out, so of it nothing is said); a copy, a readout, a setting alone in its list
+    and one with no value of its own, which the writer named nothing on, infer nothing."""
     import coverage as tool
-    with extra_settings(camera, *SLOTS):
+    picker = {"proofs": 2, "linear": None, "from_start": True}
+    slots, evidence = writers(SLOTS, {"global:0x0122": {10: "derived", 12: "derived", 14: "derived"},
+                                      "global:0x0124": {v: "derived" for v, _ in PICK}},
+                              {"global:0x0122": picker, "global:0x0124": picker})
+    with extra_settings(camera, *slots, evidence=evidence):
         write_proofs(camera, "kit2_pass2", SLOT_PROOFS)
         led = ledger()
         vals = {o["key"]: o["values"] for o in led.options}
         nyt = "not yet tried"
         assert vals["global:0x0122"] == {10: INFERRED, 11: nyt, 12: INFERRED, 13: nyt, 14: INFERRED}
-        assert vals["global:0x0121"] == {10: "proved", 11: "proved", 12: INFERRED, 13: nyt, 14: INFERRED}
-        assert set(vals["global:0x0124"].values()) == {nyt}
+        assert vals["global:0x0124"] == {v: INFERRED for v, _ in PICK}
+        assert vals["global:0x0121"] == {10: "proved", 11: "proved", 12: INFERRED, 13: INFERRED, 14: INFERRED}
         assert vals["global:0x0125"] == {10: "proved", 11: nyt, 12: nyt, 13: nyt, 14: nyt}     # a copy
         assert vals["global:0x0126"] == {10: "proved", 11: nyt, 12: nyt, 13: nyt, 14: nyt}     # a readout
         assert vals["global:0x0128"] == {10: "proved", 11: "proved", 12: nyt, 13: nyt, 14: nyt}  # alone on its row
@@ -1254,22 +1293,30 @@ def test_an_inference_needs_values_of_its_own_and_no_contradiction(camera, monke
         priv = {o["key"]: o for o in coverage.private_doc(led)["options"]}
         assert priv["global:0x0122"]["shared_list"]["own_proofs"] == [{"proof": 1, "run": "kit2_pass2"},
                                                                       {"proof": 2, "run": "kit2_pass2"}]
-        assert "shared_list" not in priv["global:0x0124"]
+        lines = coverage.shared_view(led)
+        assert any("global:0x0124" in x and "not borne out" in x and "reads a value as another" in x for x in lines)
+        assert not any("global:0x0122" in x and "not borne out" in x for x in lines)
         nov = row(led, "November")
-        assert nov["values_inferred"] == 5 and nov["values_left"] == 16
+        assert nov["values_inferred"] == 11 and nov["values_left"] == 10
         coverage.forget()
         monkeypatch.setattr(sys, "argv", ["coverage.py", "--todo"])
         tool.main()
-        assert "November: sampled; 5 values inferred from a shared list; 16 values still to try" in capsys.readouterr().out
+        assert "November: sampled; 11 values inferred from a shared list; 10 values still to try" in \
+            capsys.readouterr().out
 
 
 def test_a_greyed_value_is_inferred_from_another_element_and_keeps_why(camera):
-    """A profile's value the camera greys in a state (refused with a notice naming the row that greys it) is inferred
-    from another element of its array that is proved on it, the notice still cited; a copy the camera writes with
-    another setting (scalar false) keeps it greyed, so that option is no settled one."""
+    """A profile's value the camera greys in a state (refused with a notice naming the row that greys it), which the
+    writer named from another element of its array that is proved on it, is inferred, the notice still cited after
+    that element; a copy the camera writes with another setting (scalar false), on which the writer named nothing,
+    keeps it greyed, so that option is no settled one."""
     refused = {"path": ["Quebec", "Two", "Mode"], "kind": "list", "label": "Ant", "applied": False,
                "notice": {"text": "This function is not available as follows: Bravo"}, "changes": []}
-    with extra_settings(camera, *ARRAY):
+    array, evidence = writers(ARRAY, {
+        "global:0x0130[1]": {10: "derived", 11: "derived", 12: "derived", 13: "two readers", 14: "two readers"},
+        "global:0x0130[0]": {10: "two readers", 11: "two readers", 12: "two readers", 13: "derived", 14: "derived"},
+        "global:0x0131[1]": {10: "derived", 11: "derived", 12: "derived", 13: "two readers", 14: "two readers"}})
+    with extra_settings(camera, *array, evidence=evidence):
         write_proofs(camera, "kit2_pass2", [refused])
         led = ledger()
         vals = {o["key"]: o["values"] for o in led.options}
