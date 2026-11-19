@@ -77,6 +77,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(1, str(Path(__file__).resolve().parent))
 sys.path.insert(2, str(Path(__file__).resolve().parents[1] / "tools"))
 from camkit import camset, definitions, match, paths, safety  # noqa: E402
+from camkit.not_by_file import NOT_BY_FILE  # noqa: E402
 from runner import (LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, read_json,  # noqa: E402
                     scan_dir, write_json)
 import set_twins  # noqa: E402
@@ -91,11 +92,9 @@ TABS = ("1", "2", "3", "M1", "M2", "M3", "M4")
 TAB_X, TAB_STEP, TAB_STRIP, TAB_WIDTH, TAB_HEIGHT, TAB_SLACK = 248, 60, 80, (40, 60), (28, 60), 15
 SLOT_SCREEN = re.compile(r"\bmemory\b", re.I)
 NOT_STILLS = re.compile(r"movie|s\s*&\s*q|time-?\s?lapse", re.I)
-# The records of a slot no settings file sets (an upload leaves them as the last registration wrote them), by model:
-# its filled mark, its registration family, the exposure mode it was registered in (kit2_small_1109: 00159_restored.DAT
-# and 00289_restored.DAT differ from the files before the registrations in these alone). And the filled mark's code
+# The records of a slot no settings file sets are camkit.not_by_file's NOT_BY_FILE, by model; the first, its filled
+# mark, and the mark's code
 FILLED_MARK = {"ILCE-1M2": (0x023c, 4)}
-NOT_BY_FILE = {"ILCE-1M2": (0x023c, 0x11ab, 0x11ad)}
 
 
 # ---------------------------------------------------------------- the plan (no camera)

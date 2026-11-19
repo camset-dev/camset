@@ -41,6 +41,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, definitions, paths, provenance  # noqa: E402
 from camkit.link import Link  # noqa: E402
+from camkit.not_by_file import NOT_BY_FILE  # noqa: E402
 from camkit.runs import RESTORE_BY_HAND, Run, clear_restore_by_hand, restore_pending_any  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
 from exit_status import EXIT_UNRESTORED  # noqa: E402
@@ -123,25 +124,20 @@ def read_noted(*files) -> list:
 # The records a settings file never sets back, by model (the module docstring's list): Recall Custom's registration
 # working copy (0x18cb, its fourth slot: kit/proving/tables.py) and 0x1126, which only Camera Settings Reset and
 # Initialize change (data/<model>_fw<fw>/hand_tables_<model>_fw<fw>.json); and the memory slots' registration records,
-# memreg_run's NOT_BY_FILE in each of Memory 1-3 (kit/provers/memreg_run.py). A restore by hand after an Initialize
-# leaves them as it wrote them
+# camkit.not_by_file's NOT_BY_FILE in each of Memory 1-3. A restore by hand after an Initialize leaves them as it wrote
+# them
 KNOWN_LEFT = {"ILCE-1M2": ("global:0x18cb", "global:0x1126")}
 MEMORY_SECTIONS = (1, 2, 3)
 
 
 def known_left(f: Path) -> frozenset:
-    """The keys of the records a settings file never sets back, for the model of the file `f` (KNOWN_LEFT and memreg_run's
+    """The keys of the records a settings file never sets back, for the model of the file `f` (KNOWN_LEFT and
     NOT_BY_FILE); empty for a model none names, or a file that cannot be read."""
     try:
         model = camset.read(f).model
     except Exception:
         return frozenset()
     keys = set(KNOWN_LEFT.get(model, ()))
-    try:
-        sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "provers"))
-        from memreg_run import NOT_BY_FILE
-    except Exception:
-        NOT_BY_FILE = {}
     keys |= {f"set{n}:0x{rid:04x}" for n in MEMORY_SECTIONS for rid in NOT_BY_FILE.get(model, ())}
     return frozenset(keys)
 

@@ -89,6 +89,22 @@ def test_an_upload_the_camera_never_answered_after_exits_unrestored(monkeypatch,
     assert "the camera did not answer after its restart" in capsys.readouterr().out
 
 
+def test_the_records_no_file_sets_back_come_from_a_library_and_no_import_error_is_hidden(monkeypatch):
+    """Track 5's 10: known_left put kit/provers on sys.path at every call to import memreg_run's NOT_BY_FILE, and took
+    any import error for "no such records". The constant is a library's now (camkit.not_by_file), memreg_run's the
+    same object: the path stays as it was, and a prover that does not import changes nothing here."""
+    from tools import upload_check as U
+    before = list(sys.path)
+    monkeypatch.setitem(sys.modules, "memreg_run", None)          # the prover cannot be imported
+    got = U.known_left(SAMPLE)
+    assert {"global:0x18cb", "global:0x1126", "set1:0x023c", "set2:0x11ab", "set3:0x11ad"} <= got
+    assert sys.path == before
+    import camkit.not_by_file
+    monkeypatch.delitem(sys.modules, "memreg_run")
+    import memreg_run
+    assert memreg_run.NOT_BY_FILE is camkit.not_by_file.NOT_BY_FILE
+
+
 def test_the_command_line_exits_with_the_uploads_status(monkeypatch, own_runs):
     """upload_check.py run as a program (its __main__ guard), the camkit seams it takes stood in: exit 4."""
     import camkit.link
