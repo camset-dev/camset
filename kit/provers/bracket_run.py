@@ -11,7 +11,9 @@ and once wrote five records (2026-10-28): so Right is never pressed with the foc
 field, and a > lit by mistake is left with Left. Up/Down change the focused field.
 One visit: the option, the step, the images, both fields read back as wanted, OK, a settings
 download and a diff. The option is chosen once with its fields unchanged before the base download,
-so only the bracket record moves between proofs. The start file goes back on at the end.
+so only the bracket record moves between proofs. The screen after OK is read by proving.commit.after_ok: a setting the
+camera refuses (Bracket greyed by another setting) is written "applied": false with its notice, and a base it refuses
+stops the run. The start file goes back on at the end.
 Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl, path ["Drive Mode", option], labelled "1.0 EV 5 Img."
 ("0.3 EV 2 Img. +" for the two-image brackets) as the schema names them.
 """
@@ -28,6 +30,7 @@ from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, carousel_text, to_shooting  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, scan_position, write_json)
 
@@ -197,15 +200,18 @@ def look(cam, cycle, model, option: str) -> dict:
     return out
 
 
-def commit(cam, option: str):
-    """OK, from a field: once to leave the field if the dialog stays, then OK on the carousel."""
+def commit(cam, option: str, label: str | None = None):
+    """OK, from a field: once to leave the field if the dialog stays, then OK on the carousel. Returns what the camera
+    did with it (proving.commit.after_ok, on the screen once the carousel is gone: a refusal closed with MENU, never OK;
+    `label` the setting's, for its messages). Before 2026-11-19 any screen but the carousel was taken for the setting
+    kept, and the line said "applied": true."""
     for _ in range(2):
         t = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
         if safety.confirmation(t):
             raise Failed(f"the screen reads like a confirmation ({safety.confirmation(t)})")
         cam.press("enter")
         if match.key(title(cam)) != match.key(option):
-            return
+            return after_ok(cam, f"Drive Mode > {option}", label=label)
         if focus(cam) is not None:
             raise Failed(f"OK left the cursor on the {focus(cam)} box ({cam.frame.path.name})")
     raise Failed(f"OK left the Drive Mode carousel open ({cam.frame.path.name})")
@@ -245,7 +251,9 @@ def main():
         # the option once, its fields as they are: the base
         open_carousel(cam, cycle, model, a.option)
         held = (step_of(fields(cam)["step"]), images_of(fields(cam)["images"]))
-        commit(cam, a.option)
+        if not commit(cam, a.option).applied:
+            raise Failed(f"{a.option}: the camera refused it as its fields stood (its notice closed with MENU): no "
+                         "base to prove from, nothing proved")
         to_shooting(link, hdmi, "the base download")
         time.sleep(1)
         base = link.download(f"bracket-{a.option.split()[0].lower()}-base")
@@ -266,7 +274,7 @@ def main():
             if step_of(f["step"]) != st or images_of(f["images"]) != c:
                 raise Failed(f"the fields read {f} before OK, not {label(st, c)!r}")
             chosen = cam.frame.path.name
-            commit(cam, a.option)
+            got = commit(cam, a.option, label(st, c))
             to_shooting(link, hdmi, "the download after OK")
             time.sleep(1)
             dat = link.download(f"bracket-{a.option.split()[0].lower()}-{i}")
@@ -274,7 +282,8 @@ def main():
             ch = camset.diff(bc, camset.read(dat))
             rec = {"path": ["Drive Mode", a.option], "kind": "list", "index": i, "label": label(st, c),
                    "fields": f"{f['step']} | {f['images']}", "via": "the option's step and images fields",
-                   "chosen_frame": chosen, "dat": dat.name, "base": base.name, "applied": True,
+                   "chosen_frame": chosen, "dat": dat.name, "base": base.name,
+                   **({"notice": got.notice} if got.notice else {}), "applied": got.applied,
                    "final": (st, c) == held,
                    "changes": changes_of(ch)}
             out.write(json.dumps(rec) + "\n")

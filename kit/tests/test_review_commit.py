@@ -2,6 +2,7 @@
 proving.commit.after_ok, says what the camera did with a choice, and prove_row, prove_axis_row, pass 3's switch and the
 provers that pressed OK and wrote "applied" however the camera answered decide "applied" through it. No camera: fakes,
 and the a1 II's saved frames where this clone has them (skipped without them)."""
+import contextlib
 import io
 import json
 import sys
@@ -322,3 +323,119 @@ def test_pass3s_switch_reads_the_screen_after_ok_through_the_step(monkeypatch):
     with pytest.raises(Failed, match=r"Shutter Type: after OK on 'Mechanical Shutter' the screen is list"):
         pass3_run.switch(None, None, None, [{"screen": None}], {}, BLOCKER)
     assert cam.presses == ["menu", "right", "enter", "menu"]
+
+
+# ------------------------------------------------------------------------------------------------ the provers
+
+class Shots:
+    """What every made-up camera below shares: each press shows a new frame and is recorded; `kind` and `text` are the
+    screen on show and what OCR reads on it."""
+
+    def __init__(self):
+        self.kind, self.text, self.presses, self.n = "menu", "", [], 1
+        self.frame = SimpleNamespace(path=Path("00001_start.png"), image=None)
+
+    def shot(self, key):
+        self.n += 1
+        self.frame = SimpleNamespace(path=Path(f"{self.n:05d}_{key}.png"), image=None)
+
+    def read(self):
+        return SimpleNamespace(kind=self.kind)
+
+    def refresh(self, tag):
+        self.shot(tag)
+
+    def refused_here(self):
+        """The camera's refusal on show (OK on a value it refuses)."""
+        self.kind, self.text = "notice", REFUSAL
+
+
+@contextlib.contextmanager
+def session_of(cam, link):
+    """runner.prover_session as the provers use it, with no link: the camera and link given, a made-up start file."""
+    yield SimpleNamespace(cam=cam, link=link, start=Path("00001_before.DAT"))
+
+
+def downloads():
+    """A link whose downloads are numbered made-up files; camset.read and diff are faked by each test."""
+    got = []
+    return SimpleNamespace(download=lambda tag: got.append(tag) or Path(f"{len(got) + 1:05d}_{tag}.DAT"), got=got)
+
+
+def proof_lines() -> list:
+    """The proofs a prover wrote in this test's runs (CAMSET_RUNS): kit2_pass2/proofs.jsonl of the made-up camera."""
+    from camkit.runs import Run
+    f = Run("kit2_pass2").dir / "proofs.jsonl"
+    return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
+
+
+def no_diffs(monkeypatch, module):
+    monkeypatch.setattr(module.camset, "read", lambda p: SimpleNamespace(path=p))
+    monkeypatch.setattr(module.camset, "diff", lambda a, b: [])
+
+
+class BracketCam(Shots):
+    """Drive Mode's carousel on Cont. Bracket with its step and images fields, holding 1.0 EV 5 Img.; OK on a setting
+    in `refuse` brings the camera's refusal (Bracket greyed by another setting), which MENU closes with the menu;
+    another OK keeps the setting and goes back to the menu page."""
+
+    def __init__(self, refuse=()):
+        super().__init__()
+        self.saved, self.refuse = (1.0, (5, "")), set(refuse)
+        self.now = list(self.saved)
+
+    def open(self):
+        self.kind, self.now = "dialog", list(self.saved)
+
+    def fields(self):
+        st, (n, sign) = self.now
+        return {"step": f"{st:.1f}EV", "images": f"{n} Images{' ' + sign if sign else ''}", "next": ""}
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        self.shot(key)
+        if key == "enter" and tuple(self.now) in self.refuse:
+            self.refused_here()
+        elif key == "enter":
+            self.kind, self.saved = "menu", tuple(self.now)
+        elif key == "menu":
+            self.kind, self.text = "shooting", ""
+
+
+def bracket_world(monkeypatch, cam, link):
+    """bracket_run's seams on a BracketCam: the look's lists given, the fields read and set on the made-up carousel."""
+    import bracket_run as B
+    reads(monkeypatch, lambda f: cam.text)
+    no_diffs(monkeypatch, B)
+    for name, value in (("load_scan", lambda scan: ([], {})), ("eyes_from_config", lambda run: None),
+                        ("prover_session", lambda run, hdmi, **kw: session_of(cam, link)),
+                        ("look", lambda c, cycle, model, option: {1.0: [(5, ""), (3, "")], 0.3: [(3, "")]}),
+                        ("close_screen", lambda c, link: None), ("open_carousel", lambda c, cycle, model, o: c.open()),
+                        ("right_to", lambda c, field: None),
+                        ("set_field", lambda c, field, want, read: c.now.__setitem__(field == "images", want)),
+                        ("fields", lambda c: c.fields()), ("focus", lambda c: None),
+                        ("title", lambda c: "Cont. Bracket" if c.kind == "dialog" else "Shooting"),
+                        ("to_shooting", lambda link, hdmi, why: None)):
+        monkeypatch.setattr(B, name, value)
+    monkeypatch.setattr(B.time, "sleep", lambda s: None)
+    monkeypatch.setattr(sys, "argv", ["bracket_run.py", "--option", "Cont. Bracket", "--scan", "made-up"])
+    return B
+
+
+def test_bracket_records_a_refused_setting_as_refused(monkeypatch):
+    """bracket_run took any title change after OK for the setting kept and wrote "applied": true, a refusal crediting
+    the label with the base's value; now the screen after OK is read by the step: the refused setting's line says
+    "applied": false with the camera's notice, closed with MENU before the download, and the others are as before. A
+    base whose OK is refused proves nothing."""
+    cam, link = BracketCam(refuse={(0.3, (3, ""))}), downloads()
+    B = bracket_world(monkeypatch, cam, link)
+    B.main()
+    lines = proof_lines()
+    assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
+        ("0.3 EV 3 Img.", False, REFUSAL), ("1.0 EV 5 Img.", True, None), ("1.0 EV 3 Img.", True, None)]
+    assert "notice" not in lines[1] and cam.presses.count("menu") == 1 and cam.saved == (1.0, (3, ""))
+    cam, link = BracketCam(refuse={(1.0, (5, ""))}), downloads()
+    B = bracket_world(monkeypatch, cam, link)
+    with pytest.raises(B.Failed, match=r"Cont. Bracket: the camera refused it as its fields stood"):
+        B.main()
+    assert len(proof_lines()) == 3 and link.got == []
