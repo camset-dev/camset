@@ -32,7 +32,7 @@ check could not clear).
 import time
 from pathlib import Path
 
-from . import coverage, jsonl, paths, safety
+from . import budget, coverage, jsonl, paths, safety
 from .link import StopRequested
 from .runs import clear_restore_by_hand, mark_restore_by_hand
 
@@ -122,6 +122,7 @@ def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
             _crawl_rows(sub, k, opened, greyed)
 
 
+@budget.timed("rows seen opened")
 def seen_record(camera: str | None = None) -> Seen:
     """The rows seen opened on the camera `camera` (by default the one the kit works on), from its own records (the
     module's docstring); none for a camera with no records yet, a new body."""

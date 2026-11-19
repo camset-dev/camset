@@ -58,8 +58,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from camkit import KIT
 from camkit import link as camlink
-from camkit import live, safety, screen, session
+from camkit import budget, live, safety, screen, session
 from camkit.frames import eyes_default, load
 from camkit.link import Link, StopRequested
 from camkit.live import LiveCamera, body_of, close, lit_text, lone_of, text_of, withheld_on
@@ -683,14 +684,77 @@ def load_scan(scan, mode: str | None = None, eyes: str | None = None) -> tuple[l
                  "told apart. Nothing was sent to the camera. Build it with\n"
                  f"  .venv/bin/python kit/page_model.py --vlm {named}\n"
                  f"(on Windows: .venv\\Scripts\\python kit\\page_model.py --vlm {named}), then run this again.")
-    with open(scan / "scan_rekeyed.json", encoding="utf-8") as f:
-        cycle = json.load(f)[:-1]
-    with open(scan / "model.json", encoding="utf-8") as f:
-        model = {p["key"]: p for p in json.load(f)}
-    for pos in cycle:
-        sc = screen.read(load(scan / "shots" / pos["frame"]))
-        pos.update(signature=sc.signature, kind=sc.kind, row=sc.row, screen=sc)
+    with budget.phase("page scan"):
+        with open(scan / "scan_rekeyed.json", encoding="utf-8") as f:
+            cycle = json.load(f)[:-1]
+        with open(scan / "model.json", encoding="utf-8") as f:
+            model = {p["key"]: p for p in json.load(f)}
+        for pos, sc in zip(cycle, scan_screens(scan, cycle), strict=True):
+            pos.update(signature=sc.signature, kind=sc.kind, row=sc.row, screen=sc)
     return cycle, model
+
+
+SCAN_READS = "scan_reads"       # runs/<model>_fw<fw>/_cache/scan_reads/: each page scan's screens as the kit reads them
+SCAN_READS_FORMAT = b"scan_reads 1"
+
+
+def kit_digest() -> str:
+    """A hash of every file of kit/camkit (its code, its glyphs, its formats), with the Python and numpy that run it: what
+    reads a screen. A cache kept under it is of this kit alone."""
+    import hashlib
+
+    import numpy
+    h = hashlib.sha256(f"{sys.version}\0{numpy.__version__}".encode())
+    top = KIT / "camkit"
+    for p in sorted(top.rglob("*")):
+        if p.is_file() and "__pycache__" not in p.parts:
+            h.update(p.relative_to(top).as_posix().encode() + b"\0" + p.read_bytes() + b"\0")
+    return h.hexdigest()
+
+
+def scan_screens(scan: Path, cycle: list) -> list:
+    """The screens of the page scan's positions (camkit.screen.read of each one's saved frame), read by the kit as it is
+    now: from the camera's cache (SCAN_READS) where it holds them for these very frames read by this very kit (a hash of
+    the frames' bytes and kit_digest), else read afresh and kept there. A scan's 273 frames took 3.2 s to load and read
+    at every run's start (0.9 s to load, 2.4 s to read, 2026-11-19), the same frames each time. A frame changed, a kit
+    file changed, or a cache that cannot be read is read afresh; a cache that cannot be written changes nothing. Noted
+    "cached" or "read" (camkit.budget)."""
+    import hashlib
+    import pickle
+    from camkit import paths
+    h = hashlib.sha256(SCAN_READS_FORMAT + b"\0" + kit_digest().encode())
+    try:
+        for pos in cycle:
+            h.update(str(pos["frame"]).encode() + b"\0" + (scan / "shots" / pos["frame"]).read_bytes())
+        key = h.hexdigest()
+    except OSError:
+        key = None              # a frame that cannot be read: no cache, the reading below says what is wrong
+    root = paths.run_root(required=False)
+    kept = (root / "_cache" / SCAN_READS / f"{hashlib.sha256(str(Path(scan).resolve()).encode()).hexdigest()[:16]}"
+            ".pickle") if root is not None and key is not None else None
+    if kept is not None:
+        try:
+            got_key, screens = pickle.loads(kept.read_bytes())
+            if got_key == key and len(screens) == len(cycle):
+                budget.note("page scan", "cached")
+                return screens
+        except Exception:       # noqa: BLE001 (no cache, or one that cannot be read: read afresh)
+            pass
+    screens = [screen.read(load(scan / "shots" / pos["frame"])) for pos in cycle]
+    budget.note("page scan", "read")
+    if kept is not None:
+        tmp = None
+        try:
+            kept.parent.mkdir(parents=True, exist_ok=True)
+            with tempfile.NamedTemporaryFile(dir=kept.parent, delete=False, suffix=".tmp") as f:
+                tmp = f.name
+                f.write(pickle.dumps((key, screens), protocol=pickle.HIGHEST_PROTOCOL))
+            os.replace(tmp, kept)
+        except (OSError, pickle.PicklingError):
+            if tmp is not None:
+                with contextlib.suppress(OSError):
+                    os.unlink(tmp)
+    return screens
 
 
 def scan_position(cam, cycle) -> int | None:

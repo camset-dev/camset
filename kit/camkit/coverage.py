@@ -55,14 +55,16 @@ place of one that did. Nothing is settled when the ledger cannot be built (no de
 first run on a camera) or is stale, and the run says so in one line. A ledger error never breaks a run: each gate says
 it in one line and changes nothing.
 """
+import contextlib
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
 from pathlib import Path
 
-from . import ROOT, definitions, jsonl, match, paths, safety
+from . import ROOT, budget, definitions, jsonl, match, paths, safety
 
 FORMAT = 1
 # the mode the definition's menu was walked in (pass 1 runs in Stills: runner.SCAN_MODES' first); a setting's
@@ -2921,12 +2923,40 @@ def _option_status(led: Ledger, e: dict, option) -> str | None:
 
 
 _LEDGERS = {}
+# one build at a time in a process: a caller asking while warm's build is under way waits for it, and no build is made
+# twice; the threads warm started, which forget waits for
+_BUILDING = threading.Lock()
+_WARMING: list = []
+
+
+def warm(camera: str = None) -> None:
+    """The camera's ledger (ledger_for) built now on a thread of its own, named "ledger", while a run's start goes on
+    (its eyes, its readers' check, its link opening): the run's gate, asking ledger_for later, waits there for this
+    build (_BUILDING) instead of making its own. A one-press look spent 17.4 s before its link opened, the ledger 5.3 s
+    of it measured offline (2026-11-19). Python runs one thread at a time, so it gains while the start waits (the link's
+    open, about 6 s, the readers' answers), not against the page scan's reading. Nothing it raises reaches the run: the
+    gate builds again and says why. Timed as "ledger (background)" (camkit.budget)."""
+    camera = camera or (paths.camera() or (None,))[0]
+    if not camera:
+        return
+
+    def build_it():
+        with contextlib.suppress(Exception, SystemExit), budget.phase("ledger (background)"):
+            ledger_for(camera)
+    th = threading.Thread(target=build_it, name="ledger", daemon=True)
+    _WARMING.append(th)
+    th.start()
 
 
 def ledger_for(camera: str, why_not: list = None) -> Ledger | None:
     """The camera's ledger for settled(), built once a process, or None when it cannot be built: no definition, or no
     looks file yet (the first run on a camera: nothing is settled until a look has been recorded). `why_not` gets the
-    reason."""
+    reason. A build under way on another thread (warm) is waited for, not made again."""
+    with _BUILDING:
+        return _ledger_for(camera, why_not)
+
+
+def _ledger_for(camera: str, why_not: list = None) -> Ledger | None:
     why_not = why_not if why_not is not None else []
     if camera in _LEDGERS and not _LEDGERS[camera].stale():
         return _LEDGERS[camera]
@@ -2951,7 +2981,10 @@ def ledger_for(camera: str, why_not: list = None) -> Ledger | None:
 
 
 def forget() -> None:
-    """The ledgers and definitions this process read, dropped (a test's camera never reaches the next test)."""
+    """The ledgers and definitions this process read, dropped (a test's camera never reaches the next test), once the
+    builds warm started have ended."""
+    while _WARMING:
+        _WARMING.pop().join(120)
     _LEDGERS.clear()
     _PUBLIC.clear()
 
@@ -3029,9 +3062,11 @@ def _mode_of(scan) -> str | None:
 
 
 class DriveGate:
-    """kit/drive.py's: before anything connects, what the ledger says of the --path is printed in one line, and the
-    run goes on whatever it says (drive.py never skips). After the run, one look line from what the run's drive.jsonl
-    gained. Neither ever breaks the run nor changes its exit status."""
+    """kit/drive.py's: made before anything connects, its ledger then built on a thread of its own (warm); once the
+    link is open, what the ledger says of the --path is printed in one line (say), and the run goes on whatever it says
+    (drive.py never skips, so nothing waits on the line: it came before the link opened until 2026-11-19, the build's
+    5 s with it). After the run, one look line from what the run's drive.jsonl gained. None of them ever breaks the run
+    nor changes its exit status."""
 
     def __init__(self, a):
         self.camera = self.run_dir = self.log = self.mode = None
@@ -3044,8 +3079,18 @@ class DriveGate:
             self.path, self.mode = list(a.path), _mode_of(getattr(a, "scan", None))
             self.private = bool(getattr(a, "network", False) or getattr(a, "owner", False))
             if self.camera is not None:
-                # drive.py never skips: the row's status alone, no download read and no git asked (judge=False)
-                v = settled(self.path, None, self.mode, camera=self.camera, judge=False)
+                warm(self.camera)
+        except (Exception, SystemExit) as e:    # noqa: BLE001
+            _failed("drive.py's gate", e)
+
+    def say(self) -> None:
+        """What the ledger says of the --path, in one line, once the build warm began has ended (timed as "ledger
+        waited", camkit.budget); never raises."""
+        try:
+            if self.camera is not None:
+                with budget.phase("ledger waited"):
+                    # drive.py never skips: the row's status alone, no download read and no git asked (judge=False)
+                    v = settled(self.path, None, self.mode, camera=self.camera, judge=False)
                 _say(v.reason + ("; drive.py goes on (it never skips)" if v.skip else ""))
         except (Exception, SystemExit) as e:    # noqa: BLE001
             _failed("drive.py's gate", e)
@@ -3212,7 +3257,8 @@ class CrawlGate:
             self.private = bool(getattr(a, "network", False))
             self.start_sha = _sha(start)
             why = []
-            self.led = ledger_for(self.camera, why)
+            with budget.phase("ledger waited"):         # the build warm began before the link opened, if it did
+                self.led = ledger_for(self.camera, why)
             if self.led is None:
                 _say(f"no coverage ledger ({'; '.join(why)}): nothing is settled, no row is skipped")
             elif self.skipping:

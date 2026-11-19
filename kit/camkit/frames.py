@@ -27,7 +27,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from . import config
+from . import budget, config
 
 W, H = 640, 480
 
@@ -236,6 +236,7 @@ def eyes_default() -> str:
     return c.get("eyes", "hdmi" if c else "osd")
 
 
+@budget.timed("eyes")
 def eyes_from_config(run):
     """The kit's eyes as CAMSET_EYES or private/config.json "eyes" says: "hdmi" (the capture dongle) or "osd"
     (the camera's own screen through the SDK; attach the link once a session opens); see eyes_default."""

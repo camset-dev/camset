@@ -691,13 +691,16 @@ def test_prove_filter_judges_each_planned_option_and_only_list_and_dialog_jobs(c
 # ---------------------------------------------------------------- 3, 9, 10: the gates
 
 def test_the_drive_gate_never_skips_and_records_its_look(camera, capsys):
-    """drive.py's gate prints what the ledger says and goes on, settled or not (no exit before connecting); after the
-    run it records one look."""
+    """drive.py's gate, made as the run starts, prints nothing then (its ledger is built meanwhile); once the link is
+    open (say) it prints what the ledger says and goes on, settled or not; after the run it records one look."""
     a = SimpleNamespace(path=["Alpha"], run="kit2_drive_t", scan=None, network=False, owner=False)
-    coverage.drive_gate(a)
+    gate = coverage.drive_gate(a)
+    assert "coverage:" not in capsys.readouterr().out
+    gate.say()
     out = capsys.readouterr().out
     assert "coverage: settled: Alpha: proved" in out and "drive.py goes on (it never skips)" in out
     gate = coverage.drive_gate(SimpleNamespace(**{**vars(a), "path": ["Kilo"]}))
+    gate.say()
     assert "coverage: Kilo: not yet tried" in capsys.readouterr().out
     (camera.runs / "kit2_drive_t").mkdir(parents=True)
     (camera.runs / "kit2_drive_t" / "drive.jsonl").write_text(json.dumps({
@@ -720,6 +723,7 @@ def test_no_ledger_says_so_and_skips_nothing(camera, capsys):
     coverage.forget()
     gate = coverage.drive_gate(SimpleNamespace(path=["Alpha"], run="kit2_drive_t", scan=None, network=False,
                                                owner=False))
+    gate.say()
     assert "no coverage ledger" in capsys.readouterr().out and gate.camera == CAM
     a = SimpleNamespace(skip_settled=True, scan=None, start=None)
     assert coverage.prove_filter([{"path": ["Alpha"], "kind": "list", "labels": ["On"]}], a) == \
@@ -735,6 +739,7 @@ def test_a_ledger_error_never_breaks_a_run(camera, monkeypatch, capsys):
     monkeypatch.setattr(coverage, "settled", boom)
     gate = coverage.drive_gate(SimpleNamespace(path=["Alpha"], run="kit2_drive_t", scan=None, network=False,
                                                owner=False))
+    gate.say()
     assert "the ledger failed (RuntimeError: broken ledger)" in capsys.readouterr().out
     monkeypatch.setattr(coverage, "drive_look", boom)
     (camera.runs / "kit2_drive_t").mkdir(parents=True)

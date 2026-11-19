@@ -190,7 +190,7 @@ from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import match, ocr, safety, screen  # noqa: E402
-from camkit import coverage, first_open  # noqa: E402
+from camkit import budget, coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
 from camkit.live import (WITHHELD_ROW, LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_found,  # noqa: E402
@@ -1419,6 +1419,7 @@ def unfinished_line(a, ok: bool, before: Path, network=None, address=None, owner
 
 
 def main():
+    budget.main_started()       # the start's phases, timed into events.jsonl as the link opens (camkit.budget)
     ap = argparse.ArgumentParser()
     ap.add_argument("--path", action="append", required=True, help="top-level row label, then submenu labels")
     ap.add_argument("--press", action="append", default=[], help="key, or key:regex the screen must match first; enter!:regex is Enter vouched by the "
@@ -1526,7 +1527,6 @@ def main():
     # the --path's last row when this camera has not been seen to open it: a look under the link-loss procedure
     seen = None if a.owner else first_open.seen_record()       # the rows this camera has been seen to open
     first_label = first_open_or_exit(a, seen)
-    ledger = coverage.drive_gate(a)     # what the coverage ledger says of the --path, printed; drive.py never skips
     on_shooting = frozenset(safety.canonical_input(k) for k in a.on_shooting)
     cam_network = camera_network(network, address)
     # a row a network decision opened, while it is open: {"row", "class", "address", "identity", "from": the screen it
@@ -1559,6 +1559,10 @@ def main():
         here = page_labels(cam.read(), cycle, model) if hide and not inside else []
         return shown_screen(cam, a.grip, t, hide, labels, told, logged, kind, names, by_row, here)
     cycle, model = scan if scan is not None else load_scan(a.scan)
+    # what the coverage ledger says of the --path, built from here on a thread of its own (after the page scan, whose
+    # reading it would only slow: one thread runs at a time) and printed once the link is open (DriveGate.say); drive.py
+    # never skips
+    ledger = coverage.drive_gate(a)
     # the row labels the kit knows, against which a lit bar a press is about to open is read (lit_refused)
     known_rows = (known_labels(model) | row_labels(definition())) if seen is not None else set()
     row_vals = ({safety.plain(k): v for k, v in row_values(model).items()} if seen is not None else {})
@@ -1613,8 +1617,14 @@ def main():
         print(f"the owner waived the terminal question for {owner_entry!r} in the decision (\"unattended\": true)",
               flush=True)
         run.log("owner_question", row=owner_label, waived=True)
-    check_readers()     # no reader listed: stop before the link opens, nothing pressed
-    hdmi = eyes_from_config(run)
+    # no reader listed: stop before the link opens, nothing pressed. The check asks each reader over the network, so it
+    # goes on beside the eyes being made, and is joined (what it raised raised there) before the link opens
+    readers = budget.beside("readers check", check_readers)
+    try:
+        hdmi = eyes_from_config(run)
+    except BaseException:
+        readers()           # what the readers' check raised comes first, as when it ran before the eyes
+        raise
     log = open(run.dir / "drive.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     if on_shooting:
         # the owner's word, said where the run's evidence is
@@ -1636,11 +1646,14 @@ def main():
     first_went = False
     unreached = None        # the --path label the scan did not reach (NotReached): the run exits EXIT_INCOMPLETE
     try:
+        readers()           # the readers' check answered, or the run stops here, the eyes closed below
         with Link(run) as link:
             why = first_open.other_body(link, run.root.name)
             if why:
                 sys.exit(f"{why}: nothing was sent to the camera")
             hdmi.attach(link)
+            ledger.say()            # the ledger's word, built while the link opened
+            budget.report(run)      # and what waiting for it took (camkit.budget)
             if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
                 link.press("menu", cleanup=True)
                 time.sleep(1.0)

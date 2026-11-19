@@ -1522,3 +1522,235 @@ def test_a_second_reading_of_the_same_carousel_frame_is_the_first_ones(monkeypat
     prove_run.axis_title(cam)
     prove_run.axis_title(cam)
     assert len(cam.calls) == 3 and len(read) == 2, "the OCR of the same frame is OCR's own cache; no second wait"
+
+
+# ---------------------------------------------------------------- I: a run's start before its link opens
+
+
+def test_work_beside_the_start_is_joined_with_its_answer_or_what_it_raised():
+    """camkit.budget.beside: the work runs on a thread of its own (named as its phase) while the caller goes on; join()
+    gives what it returned, or raises in the caller's thread what it raised, a SystemExit among them (the readers'
+    check stops a run so), and the caller's wait for it is timed."""
+    import threading
+
+    from camkit import budget
+    assert budget.beside("readers check", lambda: threading.current_thread().name)() == "readers check"
+
+    def stop():
+        raise SystemExit("no reader listed")
+    join = budget.beside("readers check", stop)
+    with pytest.raises(SystemExit, match="no reader listed"):
+        join()
+    assert set(budget.taken()["phases"]) == {"readers check waited"}
+
+
+def test_the_link_open_writes_what_the_start_took_before_it(tmp_path, monkeypatch):
+    """The first link a run opens writes its start's budget into events.jsonl ("start_budget", right after
+    "link_open"): each phase timed before it (the imports, the page scan and a note of its cache, the link's own open);
+    the next link writes only what was timed since."""
+    import json
+
+    import fake_camlink
+    from camkit import budget
+    from camkit.link import Link
+    from camkit.runs import Run
+    monkeypatch.delenv("CAMSET_USB", raising=False)
+    budget.main_started()
+    with budget.phase("page scan"):
+        pass
+    budget.note("page scan", "cached")
+    run = Run("started", root=tmp_path)
+    for _ in range(2):
+        with Link(run, ip="192.0.2.10", binary=fake_camlink.COMMAND, catch_signals=False):
+            pass
+    lines = [json.loads(x) for x in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
+    kinds = [e["kind"] for e in lines]
+    first, second = [e for e in lines if e["kind"] == "start_budget"]
+    assert kinds[kinds.index("link_open") + 1] == "start_budget"
+    assert set(first["phases"]) == {"imports", "page scan", "link open"} and first["notes"] == {"page scan": "cached"}
+    assert all(isinstance(v, float) and v >= 0 for v in first["phases"].values())
+    assert set(second["phases"]) == {"link open"} and "notes" not in second
+
+
+def test_the_ledger_is_built_once_on_its_own_thread_and_the_gate_waits_for_it(tmp_path, monkeypatch):
+    """camkit.coverage.warm builds the camera's ledger on a thread of its own while a run's start goes on; a gate asking
+    ledger_for meanwhile waits for that build rather than making its own, and gets the same ledger."""
+    import threading
+
+    from camkit import coverage
+    there = tmp_path / "there.json"
+    there.write_text("{}", encoding="utf-8")
+    monkeypatch.setattr(coverage.definitions, "path", lambda camera: there)
+    monkeypatch.setattr(coverage, "looks_file", lambda camera: there)
+    led, calls, building, release = SimpleNamespace(stale=lambda: False), [], threading.Event(), threading.Event()
+
+    def build(camera, **k):
+        calls.append(threading.current_thread().name)
+        building.set()
+        assert release.wait(5)
+        return led
+    monkeypatch.setattr(coverage, "build", build)
+    coverage.warm("TEST-CAM_fw9.99")
+    assert building.wait(5)
+    threading.Timer(0.2, release.set).start()
+    assert coverage.ledger_for("TEST-CAM_fw9.99") is led
+    assert calls == ["ledger"]
+
+
+class StartEyes:
+    """A run's eyes for the start-order tests: making them is noted (and lets a readers' check waiting for them go on),
+    and so is closing them."""
+    def __init__(self, events, made):
+        self.events = events
+        events.append("eyes")
+        made.set()
+
+    def attach(self, link):
+        pass
+
+    def grab(self, save=False):
+        return None
+
+    def close(self):
+        self.events.append("eyes closed")
+
+
+class StartLink:
+    """A link for the start-order tests: opening it is noted, and its start download stops the run there."""
+    class Downloaded(Exception):
+        pass
+
+    def __init__(self, events):
+        self.events = events
+
+    def __call__(self, run, **k):
+        return self
+
+    def __enter__(self):
+        self.events.append("link")
+        return SimpleNamespace(call=lambda *a, **k: {"ok": True, "props": []}, press=lambda *a, **k: None,
+                               download=self.download)
+
+    def __exit__(self, *exc):
+        return False
+
+    def download(self, tag):
+        self.events.append("download")
+        raise self.Downloaded()
+
+
+def start_run(which, tmp_path, monkeypatch, readers):
+    """drive.main() or crawl_run.main() as far as its start download, its seams faked, `readers(events, made)` standing
+    in for the readers' check: (the events in order, what the run raised)."""
+    import threading
+
+    import crawl_run
+    import drive
+    from camkit import coverage
+    from camkit.runs import Run
+    mod = drive if which == "drive" else crawl_run
+    events, made = [], threading.Event()
+    link = StartLink(events)
+    for name, value in (("load_scan", lambda *a, **k: ([], {})), ("Run", lambda name, **k: Run(name, root=tmp_path)),
+                        ("check_readers", lambda: readers(events, made)),
+                        ("eyes_from_config", lambda run: StartEyes(events, made)), ("Link", link),
+                        ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
+                        ("wait_for", lambda *a, **k: None),
+                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))):
+        monkeypatch.setattr(mod, name, value)
+    monkeypatch.setattr(coverage, "settled", lambda *a, **k: events.append("gate") or coverage.Verdict(False, "x"))
+    monkeypatch.setattr(coverage, "crawl_gate", lambda *a, **k: events.append("gate"))
+    argv = ["drive.py", "--path", "Drive Mode", "--press", "down"] if which == "drive" else ["crawl_run.py"]
+    monkeypatch.setattr(sys, "argv", argv)
+    try:
+        mod.main()
+    except BaseException as e:      # noqa: BLE001 (what the run raised is the result)
+        return events, e
+    return events, None
+
+
+@pytest.mark.parametrize("which", ["drive", "crawl"])
+def test_the_readers_are_checked_beside_the_eyes_and_the_link_opens_only_after(tmp_path, monkeypatch, which):
+    """drive.py's and crawl_run.py's start: the readers' check runs on a thread of its own while the eyes are made (it
+    waits here until they are, which a check made in line before them never could), the link opens only once it has
+    answered, and the coverage ledger's word, built meanwhile, comes once the link is open, before the start download
+    (crawl_run's gate came after it, and still does: it needs the start file)."""
+    import threading
+
+    def readers(events, made):
+        events.append(("readers", threading.current_thread().name, made.wait(5)))
+        events.append("readers answered")
+    events, raised = start_run(which, tmp_path, monkeypatch, readers)
+    assert isinstance(raised, StartLink.Downloaded), raised
+    assert ("readers", "readers check", True) in events
+    order = [e for e in events if isinstance(e, str)]
+    assert order.index("eyes") < order.index("readers answered") < order.index("link") < order.index("download")
+    if which == "drive":
+        assert order.index("link") < order.index("gate") < order.index("download")
+    assert order[-1] == "eyes closed"
+
+
+@pytest.mark.parametrize("which", ["drive", "crawl"])
+def test_a_readers_check_that_stops_the_run_stops_it_before_the_link_with_the_eyes_closed(tmp_path, monkeypatch, which):
+    """No reader listed (camkit.vlm.check_readers' ConfigMissing): the run stops with its words before the link opens,
+    nothing pressed or downloaded, and the eyes made meanwhile are closed."""
+    from camkit import ConfigMissing
+
+    def readers(events, made):
+        raise ConfigMissing("no reader is listed in private/config.json")
+    events, raised = start_run(which, tmp_path, monkeypatch, readers)
+    assert isinstance(raised, ConfigMissing) and "no reader is listed" in str(raised.code)
+    assert "link" not in events and "download" not in events and events[-1] == "eyes closed"
+
+
+def tiny_scan(tmp_path, n=3):
+    """A page scan of `n` positions made from kit2_page_scan_1118p's saved frames (its model.json as it is), in the
+    test's own folder; skipped where the run is not here."""
+    import json
+    import shutil
+    src = RUNS / "kit2_page_scan_1118p"
+    if not (src / "scan_rekeyed.json").exists():
+        pytest.skip(f"{src} not present")
+    cycle = json.loads((src / "scan_rekeyed.json").read_text(encoding="utf-8"))[:n]
+    scan = tmp_path / "kit2_page_scan_tiny"
+    (scan / "shots").mkdir(parents=True)
+    for pos in cycle:
+        shutil.copy(src / "shots" / pos["frame"], scan / "shots" / pos["frame"])
+    (scan / "scan_rekeyed.json").write_text(json.dumps(cycle + cycle[:1]), encoding="utf-8")
+    shutil.copy(src / "model.json", scan / "model.json")
+    return scan, cycle
+
+
+def same_screen(a, b) -> bool:
+    """Two screens read alike, field by field (their pictures by value)."""
+    return vars(a).keys() == vars(b).keys() and all(
+        np.array_equal(x, y) if isinstance(x, np.ndarray) else x == y for x, y in ((vars(a)[k], vars(b)[k]) for k in vars(a)))
+
+
+def test_a_page_scans_screens_are_read_once_and_kept_until_a_frame_or_the_kit_changes(tmp_path, monkeypatch):
+    """runner.load_scan reads each position's saved frame with the kit's screen reader once and keeps the screens in the
+    camera's cache (runs/<model>_fw<fw>/_cache/scan_reads/): the next run's cycle is the same, field by field, with
+    nothing read; a frame changed, the kit's code changed, or a cache that cannot be read is read afresh."""
+    import runner
+    from camkit import paths
+    scan, cycle = tiny_scan(tmp_path)
+    real, reads = runner.screen.read, []
+    monkeypatch.setattr(runner.screen, "read", lambda f: reads.append(1) or real(f))
+    first, model = runner.load_scan(scan)
+    assert len(reads) == len(cycle) and len(first) == len(cycle)
+    again, model2 = runner.load_scan(scan)
+    assert len(reads) == len(cycle) and model2 == model
+    for a, b in zip(first, again, strict=True):
+        assert (a["signature"], a["kind"], a["row"]) == (b["signature"], b["kind"], b["row"])
+        assert same_screen(a["screen"], b["screen"])
+    shots = scan / "shots"
+    (shots / cycle[0]["frame"]).write_bytes((shots / cycle[1]["frame"]).read_bytes())
+    changed, _ = runner.load_scan(scan)
+    assert len(reads) == 2 * len(cycle) and same_screen(changed[0]["screen"], changed[1]["screen"])
+    monkeypatch.setattr(runner, "kit_digest", lambda: "another kit")
+    runner.load_scan(scan)
+    assert len(reads) == 3 * len(cycle)
+    for p in (paths.run_root() / "_cache" / runner.SCAN_READS).iterdir():
+        p.write_bytes(b"not a cache")
+    runner.load_scan(scan)
+    assert len(reads) == 4 * len(cycle)

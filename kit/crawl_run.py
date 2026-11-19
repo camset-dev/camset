@@ -90,7 +90,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import match, ocr, safety, screen  # noqa: E402
-from camkit import coverage, first_open  # noqa: E402
+from camkit import budget, coverage, first_open  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
@@ -752,6 +752,7 @@ def show(row: dict, depth: int = 0):
 
 
 def main():
+    budget.main_started()       # the start's phases, timed into events.jsonl as the link opens (camkit.budget)
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=None, help="stop after opening this many rows")
     ap.add_argument("--start-label", default=None, help="step to this top-level row first (the short way round)")
@@ -780,6 +781,9 @@ def main():
     # before anything connects; a row is named by a label the definition or the page model knows
     named = info_ok_or_exit(a.info_ok, labels=known_labels(model) | row_labels(definition())) if a.info_ok else {}
     run = Run(a.run)
+    # the coverage ledger built from here on a thread of its own, while the start waits on the readers and the link;
+    # crawl_gate, after the start download, waits for it
+    coverage.warm(run.root.name)
     if a.network:
         run.make_private()                # owner-only from here (camkit.runs), checked at the end (seal)
     network = network_settings_or_exit(run) if a.network else {}
@@ -799,11 +803,18 @@ def main():
     said = unseen_line(cycle, model, seen, skip_why, a, network)
     if said:
         print(said, flush=True)
-    check_readers()     # no reader listed: stop before the link opens, nothing pressed
-    hdmi = eyes_from_config(run)
+    # no reader listed: stop before the link opens, nothing pressed. The check asks each reader over the network, so it
+    # goes on beside the eyes being made, and is joined (what it raised raised there) before the link opens
+    readers = budget.beside("readers check", check_readers)
+    try:
+        hdmi = eyes_from_config(run)
+    except BaseException:
+        readers()           # what the readers' check raised comes first, as when it ran before the eyes
+        raise
     results = open(run.dir / "rows.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     ending, refused, complete, first = None, False, False, None
     try:
+        readers()           # the readers' check answered, or the run stops here, the eyes closed below
         with Link(run) as link:
             why = first_open.other_body(link, run.root.name)
             if why:
@@ -817,6 +828,7 @@ def main():
             downloaded = time.monotonic()
             print(f"settings saved: {before.name}", flush=True)
             ledger = coverage.crawl_gate(run, a, before)    # the ledger's word on each row; --skip-settled skips
+            budget.report(run)                              # what waiting for the ledger took (camkit.budget)
             # a look lap writes a row's name as rows.jsonl keeps it, the name it keeps or its placeholder (kept_label,
             # row_names: the definition's rows among them, a value or not)
             names = {safety.plain(x) for x in row_names(model, network)} if look else None

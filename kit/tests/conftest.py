@@ -162,6 +162,25 @@ def own_umask():
 
 
 @pytest.fixture(autouse=True)
+def fresh_budget():
+    """camkit.budget's start phases cleared before and after every test (taken), and the ledgers being built in the
+    background waited for (camkit.coverage.forget), so no test's start budget or ledger reaches another's. Only once
+    some test has imported them."""
+    import sys
+
+    def forget():
+        b = sys.modules.get("camkit.budget")
+        if b is not None:
+            b.taken()
+    forget()
+    yield
+    cov = sys.modules.get("camkit.coverage")
+    if cov is not None:
+        cov.forget()
+    forget()
+
+
+@pytest.fixture(autouse=True)
 def fresh_readers():
     """camkit.vlm's state for one run cleared before and after every test (vlm.forget: the start check's verdict, the
     readers it skipped, the stand-ins, the failures said and the run they are logged in), so that no test's run

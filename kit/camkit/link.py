@@ -54,7 +54,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import LINK_BIN, STARTED, ConfigMissing, config, paths, provenance, safety
+from . import LINK_BIN, STARTED, ConfigMissing, budget, config, paths, provenance, safety
 from .runs import RESTORE_BY_HAND, Run, restore_pending_any
 
 
@@ -380,6 +380,7 @@ class Link:
         if self.catch_signals:
             _catch_signals(self.run)
         # bytes both ways (see the module docstring); buffered, and every command is flushed
+        opening = time.monotonic()
         self.proc = subprocess.Popen(self.args, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                      stderr=subprocess.PIPE, **own_group)
         self.output_ended = False
@@ -393,6 +394,9 @@ class Link:
         except LinkError as e:
             raise LinkError(self._not_ready(str(e)), opened=False) from None
         self.run.log("link_open", args=self.args[1:], reply=first, process_started=round(STARTED, 3))
+        # what the start took before this link opened, and its own open, timed (camkit.budget): one line
+        budget.add("link open", time.monotonic() - opening)
+        budget.report(self.run)
         if not first.get("ok"):
             self.proc.wait(5)
             raise LinkError(f"camera link did not connect: {first.get('error')}", opened=False)

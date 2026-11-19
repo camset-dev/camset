@@ -40,7 +40,7 @@ import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import ConfigMissing, config, paths
+from . import ConfigMissing, budget, config, paths
 
 CACHE = None          # the answers' folder when set (the tests); else the camera's, cache_dir()
 
@@ -340,6 +340,7 @@ def malformed(listed, roles=None) -> str:
     return ""
 
 
+@budget.timed("readers check")
 def check_readers() -> list:
     """The start check of a camera run, called by every run that asks a reader (each one that builds a LiveCamera, and
     runner.prover_session for the provers) before it opens the link; the Checks (start_check). In order: the readers
