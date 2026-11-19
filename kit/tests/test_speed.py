@@ -2771,6 +2771,27 @@ def test_right_is_judged_on_a_fresh_look_and_not_on_the_frame_its_settle_ended_o
     assert events_of(cam, "screen_changed_before_press") and events_of(cam, "press_refused")
 
 
+def test_a_fresh_frame_of_the_same_state_but_another_picture_is_the_one_the_bar_is_read_on(tmp_path, monkeypatch):
+    """The look before Right's own point: a fresh frame of the caller's screen state with its lit box in the same place
+    but another picture (the lit row's long label scrolled meanwhile: the state leaves that label out, camkit.screen) is
+    made the frame judged (saved as "right-judged"), and the never-open check reads the bar on it, not on the frame the
+    settle ended on; no settle goes before the press."""
+    from camkit import live
+    whole = probe_frame("shots/00006_right.png").image             # the rows focused, the bar on row 6
+    (x0, y0, x1, y1) = live.lit_box(whole)
+    scrolled = whole.copy()
+    band = scrolled[y0 + 6:y1 - 6, 145:420]
+    scrolled[y0 + 6:y1 - 6, 145:420] = np.roll(band, -40, axis=1)  # the label moved left inside the bar
+    assert not np.array_equal(scrolled, whole)
+    assert screen.same_state(screen.read(probe_frame("shots/00006_right.png")),
+                             screen.read(SimpleNamespace(image=scrolled)))
+    assert live.same_box(live.lit_box(scrolled), (x0, y0, x1, y1))
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, whole, [scrolled])
+    cam.press("right")
+    assert sent == [("right", "menu", "rows")] and read_on[-1].endswith("_right-judged.png")
+    assert cam.pressed_from.image is scrolled and cam.hdmi.settled == ["right"]
+
+
 def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_settled_frame(tmp_path, monkeypatch):
     """A settle that ended while the page was still being drawn: the fresh frame differs from it, so the screen is
     settled once more. A settled frame at the caller's place (screen.same_position: the same page, breadcrumb and
