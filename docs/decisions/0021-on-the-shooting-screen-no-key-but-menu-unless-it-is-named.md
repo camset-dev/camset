@@ -4,12 +4,12 @@
 - **Status:** accepted
 - **Never broken:** 7th in AGENTS.md's list
 - **Rule:** No key but MENU on the shooting screen, where a key does what the body makes of it (a Custom Key, the focus
-  frame, a dial's change to the live exposure, which no file puts back), unless the run names the key for that press (in
-  a prover's own code, where that press is its point, or with `kit/drive.py --on-shooting KEY`, the owner's word), and
-  none but MENU with no screen read, named or not. A named key's change is not put back by the run's restore: the run
-  names and presses the keys that undo it. A screen read as the shooting screen while the camera says it is in Playback
-  is the playback view: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or
-  Delete.
+  frame, a dial's change to the live exposure, which no file puts back), unless the run names the key for that press:
+  with `kit/drive.py --on-shooting KEY`, on the owner's word, or in a prover's own code where that press is its point,
+  and then only on a body where it is known what that key does there (on another body, its owner's word first); and none
+  but MENU with no screen read, named or not. A named key's change is not put back by the run's restore: the run names
+  and presses the keys that undo it. A screen read as the shooting screen while the camera says it is in Playback is the
+  playback view: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or Delete.
 
 ## Context
 
@@ -41,7 +41,10 @@ named key there). A screen read as the shooting screen while the camera says it 
 not the shooting screen: there no key goes out but MENU, and the Playback button once, only to get back; never C4 or
 Delete (`camkit.session.playback_kind`, `proving.nav.leave_playback`, 2026-11-15).
 
-Before 2026-11-19 AGENTS.md and the playbook's rule 14 each stated the rule by hand beside a shorter Rule line.
+Before 2026-11-19 the Rule line said only that no key but MENU goes out unless the run names that key for that press,
+and AGENTS.md and the playbook's rule 14 each stated the rule by hand; the playbook gave the owner's word for
+`drive.py --on-shooting KEY`, and the Consequences below kept a prover for another body to the keys it knows there,
+which the Rule line now says.
 
 ## Consequences
 

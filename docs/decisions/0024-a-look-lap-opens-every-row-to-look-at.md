@@ -8,8 +8,8 @@
   never opens (a firmware update, what loads, the sensor's, shutter's or lens's motion, Initialize, the Screen Reader);
   a row whose opening acts, or a format, delete or reset this body has not been seen to open, only by the owner's own
   run; a row not yet seen opened only under the first-open procedure. It chooses an option only where a dated owner
-  decision names it. The body's serial number screen opens only on a look lap, which saves its frames black, or by the
-  owner's route, which does so unless its decision says `"values": "logged"`.
+  decision names it. The body's serial number screen opens only on a look lap or the owner route, which save its frames
+  black.
 
 ## Context
 

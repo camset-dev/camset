@@ -6,9 +6,12 @@
 - **Rule:** USB settings, language, NTSC/PAL, area and date, and the camera's network identity and connection settings
   (Wired LAN, Wi-Fi, Bluetooth, access authentication, FTP server) are changed by the owner's hand: no `--allow` opens
   one of them, whatever the owner said, and an option in one is chosen remotely only where the owner's dated decision
-  names it, never in Language, NTSC/PAL or Area/Date/Time, nor in a row whose choice drops a link, starts a connection
-  or a pairing, or changes what no file puts back. Auto Power OFF Temp. is changed by the owner's hand too, unless a run
-  names that row with `--allow`, the owner's word.
+  names it, never in Language, NTSC/PAL or Area/Date/Time. In a row whose choice drops a link, starts a connection or a
+  pairing, or changes what no file puts back, a `--network` run (a look lap) never chooses; a dated owner decision in
+  the camera's reviewed scope chooses there only with `"link_loss": true`, as the armed last press of a
+  `kit/drive.py --owner --confirm` run, after the person at the terminal has typed the row's name, never an agent for
+  them. Auto Power OFF Temp. is changed by the owner's hand too, unless a run names that row with `--allow`, the owner's
+  word.
 
 ## Context
 
@@ -173,7 +176,10 @@ frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the con
 The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
 decides for theirs, and the default stays by hand (the playbook's rule 3).
 
-Before 2026-11-19 AGENTS.md and the playbook's rule 3 each stated the rule by hand beside a shorter Rule line.
+Before 2026-11-19 AGENTS.md and the playbook's rule 3 each stated the rule by hand beside a shorter Rule line; the
+playbook's rule said that a `--network` run never chooses in a row whose choice drops a link, starts a connection or a
+pairing, or changes what no file puts back, which the Rule line now says beside the one way an owner decision reaches
+such a row, as this Decision gives it.
 Before 2026-11-15 a run given `--network` opened only the rows a dated network decision named, and stopped where none
 named one. Before 2026-11-14 IP Address Setting and the region and USB rows (USB Connection Mode, USB LUN Setting, USB Power
 Supply, Language, NTSC/PAL, Area/Date/Time) were liftable to look at, listed as rows whose opening starts or ends

@@ -3,9 +3,10 @@
 - **Date:** 2026-11-01 to 2026-11-03; changed 2026-11-06, 2026-11-11, 2026-11-17 and 2026-11-19
 - **Status:** accepted
 - **Never broken:** 6th in AGENTS.md's list
-- **Rule:** C4 only as guarded Help, on a menu or option screen whose footer draws the help button: never in Playback,
-  by its screen or by the camera's own operating mode, nor with a picture displayed, where it deletes, nor on the
-  shooting screen, where it does whatever the body assigns to it; C1-C3 and C5-C7 never.
+- **Rule:** C4 only as guarded Help, on a menu or option screen whose footer draws the help button: never in Playback or
+  with a picture displayed, where it deletes, nor on the shooting screen, where it does whatever the body assigns to it;
+  where the body lists its operating mode, C4 also needs the camera to give one that is not Playback, and it never goes
+  where that mode, or whether the body lists it, cannot be read; C1-C3 and C5-C7 never.
 
 ## Context
 
@@ -30,8 +31,9 @@ Delete and Format stay never-opened actions ([decision 4](0004-never-delete-or-f
 are never sent.
 
 Before 2026-11-19 the Rule line also let C4 go as a per-run go-ahead on panel and editor screens on any camera, and
-AGENTS.md, which stated the rule by hand, put guarded Help on panel screens too; the playbook's rule 13 said it as it
-now stands.
+AGENTS.md, which stated the rule by hand, put guarded Help on panel screens too; the playbook's rule 13 named the
+screens as they now stand and needed a mode that is not Playback where the body lists one, and only `Link.c4_refused`
+said, by refusing it, that C4 never goes where that mode, or whether it is listed, cannot be read.
 Before 2026-11-06 C4 also needed a recorded yes in `private/config.json` on each new body (added 2026-11-05) and
 `Link.press` did not judge the screen itself; before 0.2.0 (2026-11-11) Focus Area's SET and a Creative Look's Reset
 needed no word per run; the record also named the multi-selector's centre among the keys never sent (never so: it is a
