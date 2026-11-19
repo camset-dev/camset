@@ -98,3 +98,34 @@ def test_the_plain_pass_holds_a_marked_direction_to_its_evidence(tmp_path, monke
     assert by["global:0x0b65"]["at_most"] == {"setting": "global:0x0b63"}
     assert ("written without moves_it" in said) is (evidence == {})
     assert SAID not in text and SAID not in json.dumps(private)
+
+
+# ---------------------------------------------------------------- 2. the proof viewer's option pages
+
+def test_the_viewer_shows_an_options_page_in_the_definitions_order(monkeypatch):
+    """A row whose option opens a page of boxes the definition places in the order the camera draws them (a probe's,
+    placement.box_orders: "Depth" before "Strength", as Zebra Level > Custom 1's Type before Standard), the settings
+    listed the other way in the definition: the proof viewer's subsection for that option lists them as the
+    definition places them (row_at), by placement's own order of the page (page_orders), not as the file lists them.
+    A made-up camera's menu tree and settings."""
+    import proof_viewer as pv
+    from camkit import placement
+    from test_placement import PAGES
+
+    def s(key, name, menus, values=(), id_=1):
+        return {"key": key, "area": "global", "id": id_, "name": name, "tab": "Color", "group": "Color/Tone",
+                "order": 9000, "values": [list(v) for v in values],
+                "proved": {"run": "kit2_pass2", "date": "2026-10-29", "menu": list(menus)}}
+    d = {"model": "TEST", "tabs": ["Color"], "layouts": [{"model": "TEST", "firmware": "1.00"}], "camera": {},
+         "menu": [{"tab": "Color", "group": "Color/Tone", "label": x, "order": i} for i, x in enumerate(["Tone", "Profile", "Look"])],
+         "settings": [s("global:0x0002", "Look", ["Look"], [[0, "A"], [1, "B"]], 2),
+                      s("global:0x0004", "Look > A > Strength", ["Look > A > Strength"], id_=4),
+                      s("global:0x0003", "Look > A > Depth", ["Look > A > Depth"], id_=3)]}
+    placed = placement.settings(d, PAGES, {("look", "a"): ["Depth", "Strength"]})       # as a probe read the boxes
+    for x in d["settings"]:
+        x.update(placed.get(x["key"], {}))
+    assert [x.get("row_at") for x in d["settings"][1:]] == [[2, 0, 1], [2, 0, 0]]        # Depth first, listed last
+    monkeypatch.setattr(pv.datafiles, "load_menu_tree", lambda cam: PAGES)
+    monkeypatch.setattr(pv, "RUN_ROOT", None)
+    look = next(x for x, _ in pv.menu_nodes(pv.menu(d, pv.records(d, {}), Path("."))) if x["l"] == "Look")
+    assert look["subs"] == [{"name": "A", "keys": ["global:0x0003", "global:0x0004"]}]

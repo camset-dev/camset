@@ -525,6 +525,18 @@ def option_page(r: dict, row: dict) -> bool:
     return bool(opt) and opt in path[1:] and norm(path[path.index(opt, 1) - 1]) == norm(row["l"])
 
 
+def page_place(r: dict, pages: dict) -> int:
+    """Where a record on the page an option opens (option_page) stands among the page's rows, in the order the
+    definition places them (`pages`: placement.page_orders, its row_at, which the camera's drawn order set where a probe
+    read it: Zebra Level > Custom 1's Type first); after them all where the page does not list its row."""
+    path, opt = r["rp"], r["uo"]
+    i = path.index(opt, 1)
+    rows = [norm(x) for x in pages.get((norm(str(path[i - 1]).translate(placement.LOOKALIKES)),
+                                        norm(opt.translate(placement.LOOKALIKES))), [])]
+    mine = norm(str(path[i + 1])) if i + 1 < len(path) else None
+    return rows.index(mine) if mine in rows else len(rows)
+
+
 def menu(doc, recs, here: Path) -> list:
     """The camera's tabs, groups and rows (the menu tree), every record hung on the row its proof went through
     (placement.grown, as the definition places it: a row in another tab where its own tab has none, the sub-rows its
@@ -547,6 +559,7 @@ def menu(doc, recs, here: Path) -> list:
 
     other = collections.defaultdict(list)          # tab -> {group name: [keys]} the menu does not list
     fams = collections.defaultdict(dict)           # family row id -> {sub: [keys]}
+    pages, placed = placement.page_orders(doc), {}  # each option page's rows as the definition places them; by key
     for r in recs:
         t = by_tab.get(r["t"])
         if r.get("fam"):
@@ -562,14 +575,19 @@ def menu(doc, recs, here: Path) -> list:
         g = None if hit else cam_tree.hang(r["t"], menus, r["cg"], r["n"])[1]
         if hit and option_page(r, hit):
             # on the page an option of the row opens, as the definition places it (placement.option_page: Zebra
-            # Level's Custom 1 boxes): the row's subsection for that option, as a family's profile is
+            # Level's Custom 1 boxes): the row's subsection for that option, as a family's profile is, in the order the
+            # definition places the page's rows (page_place, sorted below), not the order it lists the settings in
             fams[hit["id"]].setdefault(r["uo"], (999, []))[1].append(r["k"])
+            placed[r["k"]] = page_place(r, pages)
         elif hit:
             hit["recs"].append(r["k"])
         elif g:
             g["extra"].append(r["k"])
         else:
             other[r["t"]].append(r)
+    for subs in fams.values():
+        for _, keys in subs.values():
+            keys.sort(key=lambda k: placed.get(k, -1))          # an option page's rows in their places; a family's as read
     mode_rows(cam_tree, modes, tabs)
     for t in tabs:
         for g in t["groups"]:
