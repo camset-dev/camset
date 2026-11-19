@@ -30,7 +30,12 @@ a child, so the empty value cannot say it), as a camlink that did not check the 
 drops on it as camlink's OnDisconnected drops it: {"event": "disconnected"} on stderr (unless
 $FAKE_CAMLINK_DISCONNECT_SILENT is set), and from then every command but ping, that one included, is answered
 {"ok": false, "error": "disconnected"}, ping with "connected": false. Started with --picture it answers release once and
-refuses every press but menu, every dial and every property set, and without it refuses release, as camlink does.
+refuses every press but menu, every dial, every property set and importlut, and without it refuses release, as camlink
+does. importlut PATH PLACE [SHA256] reads the file once, as camlink does: one that cannot be read gets "not_a_lut", one
+whose bytes do not have the SHA256 given "hash_mismatch" (both "called": false); else camlink's answer to the camera's
+ImportLUTFile_Result_OK, with $FAKE_CAMLINK_IMPORTLUT (a JSON object) merged over it, a key whose value is null taken
+out, as another answer of camlink's or an older camlink's would be. $FAKE_CAMLINK_DOWNLOADS (a JSON object
+{suffix: file}) gives a download whose NAME ends in a suffix that file instead of the sample.
 
 Start it as COMMAND does: with -X utf8, since it imports camkit, which on Windows needs Python's UTF-8 mode, and a
 "-X utf8" given to the test run is not passed on to the processes it starts (PYTHONUTF8=1 is).
@@ -117,12 +122,17 @@ def main():
             dst = Path(args[0]) / f"{args[1]}.DAT"
             dst.parent.mkdir(parents=True, exist_ok=True)
             after = os.environ.get("FAKE_CAMLINK_AFTER")
-            shutil.copy(after if after and args[1].endswith("_after") else SAMPLE, dst)
+            given = next((f for suffix, f in json.loads(os.environ.get("FAKE_CAMLINK_DOWNLOADS") or "{}").items()
+                          if args[1].endswith(suffix)), None)
+            shutil.copy(given or (after if after and args[1].endswith("_after") else SAMPLE), dst)
             reply.update(path=str(dst), bytes=dst.stat().st_size)
         elif cmd == "osd":
             reply.update(path=args[0])
         elif cmd == "upload":
             reply.update(upload(*args))
+        elif cmd == "importlut":
+            reply.update(importlut(*args))
+            reply = {k: v for k, v in reply.items() if v is not None}
         elif cmd == "props":
             props = json.loads(os.environ.get("FAKE_CAMLINK_PROPS") or "[]")
             # camlink's cmdProps: the list and its count, or its one error when the SDK's read fails
@@ -145,7 +155,28 @@ def picture_refused(cmd, args, picture: bool, released: bool) -> str:
         return ("" if picture and not released else "release is answered only by a camlink started with --picture, once")
     if picture and (cmd in ("dial", "set", "setstr") or (cmd == "press" and args[:1] != ["menu"])):
         return "a camlink started with --picture presses no button but menu, turns no dial and sets no property"
+    if picture and cmd == "importlut":
+        return "a camlink started with --picture imports nothing"
     return ""
+
+
+def importlut(path="", place="0", expected=""):
+    """camlink's cmdImportLut without a camera: the file read once, its bytes' SHA-256 compared with the one given, then
+    the camera's ImportLUTFile_Result_OK as camlink answers it, $FAKE_CAMLINK_IMPORTLUT merged over that."""
+    try:
+        data = Path(path).read_bytes()
+    except OSError:
+        return {"ok": False, "cause": "not_a_lut", "called": False, "error": f"not imported: {path}: it cannot be read"}
+    digest = hashlib.sha256(data).hexdigest()
+    if expected and expected.lower() != digest:
+        return {"ok": False, "cause": "hash_mismatch", "called": False,
+                "error": f"not imported: {path}: these are not the bytes whose SHA-256 the command named (theirs is "
+                         f"{digest}, not {expected.lower()}): the file was written after the kit checked it"}
+    answer = {"result": "ImportLUTFile_Result_OK", "warning": 131139, "file": Path(path).name, "bytes": len(data),
+              "sha256": digest, "place": int(place), "called": True, "enable_status": 1, "recording_state": 0,
+              "delete_list": [], "ms": 1200}
+    answer.update(json.loads(os.environ.get("FAKE_CAMLINK_IMPORTLUT") or "{}"))
+    return answer
 
 
 def upload(path, expected=""):
