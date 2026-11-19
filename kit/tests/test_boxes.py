@@ -239,3 +239,64 @@ def test_a_run_on_a_dashed_screen_writes_its_lines_tagged_and_exits_0(monkeypatc
     lines = [json.loads(x) for x in (tmp_path / "failures.jsonl").read_text(encoding="utf-8").splitlines()]
     assert [(r["path"][-1], r["blocked"], r["context"]) for r in lines] == [
         (n, boxes_run.NOT_OFFERED, "Movie mode, made up") for n in NAMES]
+
+
+# ---------------------------------------------------------------- the arrows a lit box draws, read glued to its value
+
+# ISO AUTO Minimum's values (Movie mode), and OCR's readings of the lit box over HDMI on kit2_pass2 248934 and 248980
+# (2026-11-18): the box's Up arrow above the value read as a caret glued in front of it, on some frames only
+ISO_VALS = ["ISO100", "ISO125", "ISO160", "ISO200", "ISO250", "ISO320", "ISO400", "ISO500", "ISO640"]
+
+
+class WalkCam:
+    """A two-box screen whose box 0 walks `vals` (Down one on, Up one back, stopping at the ends), OCR reading the value
+    as `glued[(value, look)]` on its look-th frame of a step (a fresh frame, no press, a look more), else as it is."""
+    def __init__(self, vals, at=0, glued=None):
+        self.vals, self.i, self.glued, self.looks, self.presses = list(vals), at, dict(glued or {}), 0, []
+        self.frame = SimpleNamespace(image=picture("value", "value"), path=Path("00001_right.png"))
+
+    @property
+    def lines(self):
+        v = self.vals[self.i]
+        t = self.glued.get((v, self.looks), v)
+        return [ocr.Line(t, 1.0, BOXES[0][0] + 80, BOXES[0][1] + 10, 60, 36)]
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        self.looks = 0
+        if key == "down":
+            self.i = min(self.i + 1, len(self.vals) - 1)
+        elif key == "up":
+            self.i = max(self.i - 1, 0)
+
+    def refresh(self, tag):
+        self.looks += 1
+
+
+def test_an_arrow_read_glued_to_a_boxs_value_is_left_off_only_where_a_value_is_left(seen):
+    """The lit box draws an arrow above and below its value, which OCR reads glued to it at an end ("^ISO500"): left off
+    only where what is left is exactly one of the box's values, never a guess; in the look, where the values are not
+    known yet, the box is read again on a fresh frame (no press) until no arrow sign is left at an end."""
+    assert boxes_run.box_value("^ISO200", ISO_VALS) == "ISO200"
+    assert boxes_run.box_value("ISO200v", ISO_VALS) == "ISO200" and boxes_run.box_value("vISO200^", ISO_VALS) == "ISO200"
+    assert boxes_run.box_value("∧ISO640", ISO_VALS) == "ISO640"            # LOGICAL AND, the arrow's other reading
+    assert boxes_run.box_value("^ISO999", ISO_VALS) == "^ISO999"                 # no value left: as read
+    assert boxes_run.box_value("A24p", ["A24p", "24p"]) == "A24p"                # a value as read stays itself
+    assert boxes_run.box_value("vAv", ["Av", "vA"]) == "vAv"                     # two values left: none taken
+    cam = WalkCam(ISO_VALS, glued={("ISO500", 0): "^ISO500"})
+    vals, held = boxes_run.look(cam, None, None, None, ["ISO"], 0)
+    assert vals == ISO_VALS and held == "ISO100" and "^ISO500" not in vals
+    stuck = WalkCam(ISO_VALS, glued={("ISO500", k): "^ISO500" for k in range(9)})
+    with pytest.raises(boxes_run.Failed, match=r"'\^ISO500'.*arrow"):
+        boxes_run.look(stuck, None, None, None, ["ISO"], 0)
+
+
+def test_the_proving_pass_takes_the_value_with_the_arrow_left_off(seen, monkeypatch):
+    """step_ok on kit2_pass2 248980's reading: the box on ISO200, read "^ISO200", is ISO200 (one of its values once the
+    arrow is left off), stepped to and left with OK, where it stopped the run on 2026-11-18; the second reader's reading
+    is kept beside OCR's as before."""
+    cam = WalkCam(ISO_VALS, at=3, glued={("ISO200", 0): "^ISO200", ("ISO250", 0): "^ISO250"})
+    monkeypatch.setattr(boxes_run, "focus", lambda c: 0)
+    monkeypatch.setattr(boxes_run, "vlm_option", lambda c: "ISO 250")
+    got = boxes_run.step_ok(cam, None, None, ["ISO"], 0, ISO_VALS, 4, ["ISO AUTO Minimum", "ISO AUTO Maximum"])
+    assert cam.presses == ["down", "enter"] and boxes_run.settled(got["vlm"]) == "ISO 250"

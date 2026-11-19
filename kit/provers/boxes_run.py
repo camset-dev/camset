@@ -9,8 +9,10 @@ box's values, OK leaves (S&Q and Time-lapse Frame Rate Settings, Movie mode, 202
 The pixel reader does not know these screens, so this reads them by OCR: the breadcrumb must end in
 the row's label, and the footer must draw its OK key (camkit.screen.footer_keys, by pixels: OCR drops it
 as often as not) before anything but an arrow is pressed. The box under
-the cursor is the orange one; each box's value is the text inside it. The box names are given on the
-command line, as read off the camera's frame (OCR reads their icons as letters: "sad Rec Frame Rate").
+the cursor is the orange one; each box's value is the text inside it (read_box: the arrows a lit box draws round its
+value, which OCR reads glued to it over HDMI, go only where a value of the box is left, or on a fresh frame). The box
+names are given on the command line, as read off the camera's frame (OCR reads their icons as letters: "sad Rec Frame
+Rate").
 First a look per box: Up until the value stops changing or comes round, then Down the same way (its
 values in Down order), MENU. Then, as kit/prove_run.py does, per box: each value against the start,
 the one held last; every choice is the row, Right, Left/Right to the box, Up/Down until the value is
@@ -85,6 +87,49 @@ def value(cam, b: int) -> str:
     return re.sub(r"\s+", "", ocr.text_in(lines(cam), BOXES[b]).translate(LOOKALIKE))
 
 
+# the arrows a lit box draws above and below its value (its Up and Down), as OCR reads them glued to the value at an end
+# over HDMI: "^ISO500", "^ISO200" (kit2_pass2 248934, 248975, 248980: Movie, ISO AUTO Minimum, 2026-11-18, on some frames
+# only, never on the dark box); the signs they read as, and the letters they look like
+ARROW_SIGNS = "^˄˅∧∨⌃⌄↑↓▲▼△▽"   # ^ ˄ ˅ ∧ ∨ ⌃ ⌄ ↑ ↓ ▲ ▼ △ ▽
+ARROW_LETTERS = "vVAΛ"                                                              # and a Greek capital lambda
+FRESH = 3              # fresh frames a box is read again on while its reading keeps an arrow's sign at an end
+
+
+def box_value(raw: str, vals) -> str:
+    """A box's reading as one of its values `vals`: as read where it is one; else with an arrow read glued at its start,
+    its end or both (ARROW_SIGNS, ARROW_LETTERS) left off, where that leaves exactly one of them; else as read. Never a
+    guess: what is left must be a value the box's own look read."""
+    if raw in vals:
+        return raw
+    marks = ARROW_SIGNS + ARROW_LETTERS
+    cuts = [raw[a:len(raw) - z] for a in (0, 1) for z in (0, 1) if (a or z)
+            and (not a or raw[:1] in marks) and (not z or raw[-1:] in marks) and len(raw) > a + z]
+    hits = list(dict.fromkeys(t for t in cuts if t in vals))
+    return hits[0] if len(hits) == 1 else raw
+
+
+def arrow_signed(t: str) -> bool:
+    """Whether a reading keeps an arrow's sign at an end: no value of a box starts or ends so."""
+    return bool(t) and (t[0] in ARROW_SIGNS or t[-1] in ARROW_SIGNS)
+
+
+def read_box(cam, b: int, vals=None, row: str = "") -> str:
+    """Box b's value: OCR's reading (value), as one of the box's values `vals` where they are known (box_value: the
+    proving pass), and while it keeps an arrow's sign at an end, read again on up to FRESH fresh frames, no press: the
+    first reading without one (in the look, where the values are not known yet, the only way the arrow goes). Still
+    signed after them: Failed, naming the reading; no value is guessed."""
+    for k in range(FRESH + 1):
+        raw = value(cam, b)
+        got = box_value(raw, vals) if vals else raw
+        if not arrow_signed(got):
+            return got
+        if k < FRESH and hasattr(cam, "refresh"):
+            cam.refresh("reread")
+        else:
+            break
+    raise Failed(f"{row} box {b}: read {raw!r} on {k + 1} frames, an arrow's sign at its end: not one value")
+
+
 def dashed(cam, b: int) -> bool:
     """Whether box b draws a dash: OCR reads no letter or digit in it (the dash read as nothing, or as "-"), and its ink,
     the pixels off the box's own colour (orange when lit, dark when not; its border left out), is there and no more than
@@ -151,16 +196,17 @@ def look_open(cam, link, path, b: int) -> tuple[list, str]:
         close_screen(cam, link)
         raise NotOffered(frame)
     to_box(cam, b)
-    held = value(cam, b)
+    row = path[-1]
+    held = read_box(cam, b, row=row)
     for _ in range(40):                       # Up to one end (or once round)
-        before = value(cam, b)
+        before = read_box(cam, b, row=row)
         cam.press("up", seen_enough=True)     # a step whose change was seen needs no look again (LiveCamera.look_late)
-        if value(cam, b) in (before, held):
+        if read_box(cam, b, row=row) in (before, held):
             break
-    vals = [value(cam, b)]
+    vals = [read_box(cam, b, row=row)]
     for _ in range(40):
         cam.press("down", seen_enough=True)
-        v = value(cam, b)
+        v = read_box(cam, b, row=row)
         if v == vals[-1] or v == vals[0]:
             break
         vals.append(v)
@@ -194,13 +240,13 @@ def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
     open_row(cam, cycle, model, path)
     to_box(cam, b)
     for _ in range(len(vals) + 1):
-        now = value(cam, b)
+        now = read_box(cam, b, vals, path[-1])
         if now == vals[target]:
             break
         if now not in vals:
             raise Failed(f"{path[-1]} box {b}: read {now!r}, not one of its values")
         cam.press("down" if vals.index(now) < target else "up", seen_enough=True)
-    if value(cam, b) != vals[target] or focus(cam) != b:
+    if read_box(cam, b, vals, path[-1]) != vals[target] or focus(cam) != b:
         raise Failed(f"{path[-1]} box {b}: {vals[target]!r} never came up")
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if safety.confirmation(full):
