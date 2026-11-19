@@ -2678,10 +2678,11 @@ def test_the_lock_probe_sends_one_menu_per_trial_and_closes_only_a_menu_that_ope
 PROBE_LR = "kit2_probe_hdmi_lr"         # settle_probe's Left and Right on a menu page, HDMI eyes (2026-11-19)
 
 
-def probe_frame(name):
-    """A frame of the Left/Right probe's run (its shots/ or late/ folder), skipped where the run is not here."""
+def probe_frame(name, run=PROBE_LR):
+    """A frame of a probe's run (the Left/Right probe's by default; its shots/ or late/ folder), skipped where the run
+    is not here."""
     from camkit.frames import load
-    path = RUNS / PROBE_LR / name
+    path = RUNS / run / name
     if not path.exists():
         pytest.skip(f"{path} not present")
     return load(path)
@@ -2784,7 +2785,7 @@ def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_s
     cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [whole])
     assert not screen.same_state(cam.read(), screen.read(probe_frame("shots/00006_right.png")))
     cam.press("right")
-    assert sent == [("right", "menu", "rows")] and len(read_on) == 1 and read_on[0].endswith("_right-again.png")
+    assert sent == [("right", "menu", "rows")] and read_on[-1].endswith("_right-again.png") and "00001_held.png" in read_on
     assert cam.hdmi.settled == ["right-again", "right"]
     assert [e["same"] for e in events_of(cam, "right_settled")] == [True]
     half, whole = (probe_frame(f"late/{n}").image for n in ("0007_left_0.30s_after.png", "0007_left_0.33s_after.png"))
@@ -2792,6 +2793,35 @@ def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_s
     with pytest.raises(safety.ScreenChanged):
         cam.press("right")
     assert sent == [] and read_on == []
+
+
+def test_a_right_on_a_submenu_page_still_being_drawn_goes_on_the_row_the_caller_read(tmp_path, monkeypatch):
+    """On a submenu page, whose state holds every row's picture, a Right whose caller read the page while a row was
+    still being drawn (HDMI: a submenu's own redraw after the Right into it outlasted the settle 21 times in 19,124,
+    2026-11-19) is settled once more and goes where the settled page lights the row the caller read lit (its page,
+    cursor row, lit box and lit label: live.same_row), the bar read on the settled frame; where the settled page lights
+    another row, or its lit label reads otherwise, it is refused, nothing sent. On the probe's frames inside Bracket
+    Settings (kit2_probe_hdmi_sub2: row 0 lit, then row 3)."""
+    from camkit import live, safety
+    sub = "kit2_probe_hdmi_sub2"
+    whole, other = (probe_frame(f"shots/{n}", sub).image for n in ("00006_right.png", "00007_up.png"))
+    late = whole.copy()
+    late[230:240, 300:440] = 255            # a stroke on an unlit row, drawn late
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [whole])
+    assert cam.read().kind == "submenu" and cam.read().row == 0
+    assert not screen.same_state(cam.read(), screen.read(probe_frame("shots/00006_right.png", sub)))
+    cam.press("right")
+    assert sent == [("right", "submenu", "rows")] and read_on[-1].endswith("_right-again.png")
+    assert [e["same"] for e in events_of(cam, "right_settled")] == [True]
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [other])
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and cam.read().row == 3
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [whole])
+    monkeypatch.setattr(live, "lit_text", lambda image, path: "Bracket Type" if image is late else "Self-timer")
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == []
 
 
 def test_the_fresh_look_before_right_waits_for_nothing_with_osd_eyes(tmp_path, monkeypatch):

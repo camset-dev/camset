@@ -834,6 +834,28 @@ def boxes_alike(a, b) -> bool:
     return (x is None and y is None) or same_box(x, y)
 
 
+def same_row(a, fa, b, fb) -> bool:
+    """Whether two readings of a menu or submenu page (`a` on frame `fa`, `b` on frame `fb`) light the same row, as the
+    walkers judge a row (proving.screens.same_place, at_label): the same kind, focus, cursor row and group, the
+    breadcrumb and n/N counter alike (Screen.page, within screen.SAME_TOL cells), the lit box in one place
+    (boxes_alike), and the lit bar's label read alike on both (lit_text, folded and cleaned as the guards compare
+    labels: safety.clean_label), never empty. What the other rows show is not compared: a page whose rows were still
+    being drawn when the caller read it lights the same row once they are drawn (a submenu's own redraw after the Right
+    into it, 21 times in 19,124 HDMI presses, 2026-11-19)."""
+    if getattr(a, "kind", None) not in ROW_SCREENS or getattr(a, "kind", None) != getattr(b, "kind", None):
+        return False
+    if any(getattr(a, k, None) != getattr(b, k, None) for k in ("focus", "row", "group")):
+        return False
+    pa, pb = getattr(a, "page", None), getattr(b, "page", None)
+    if not (isinstance(pa, np.ndarray) and isinstance(pb, np.ndarray) and pa.size and pa.shape == pb.shape
+            and int(np.count_nonzero(pa != pb)) <= screen.SAME_TOL):
+        return False
+    if not boxes_alike(fa.image, fb.image):
+        return False
+    la, lb = (safety.clean_label(safety.fold(lit_text(f.image, f.path))) for f in (fa, fb))
+    return bool(la) and la == lb
+
+
 def step_place(s, key) -> str | None:
     """The screen a step goes out on, as the settle's windows name it (camkit.frames: MENU_ROWS, SUBMENU_ROWS, MENU), or
     None: Up or Down with the cursor in a menu page's rows (its focus "rows") or a submenu page's, where a row not greyed
@@ -1671,9 +1693,10 @@ class LiveCamera:
         (screen.same_state) with its lit box in the same place (boxes_alike) is the frame judged (judge_fresh; the
         caller's own where the picture is the very same, pixel for pixel). Any other on such a page, or a fresh frame of
         another kind than the caller's, or a menu or submenu page where the caller's was none, gets the screen settled once
-        more and read: a settled frame at the caller's place (screen.same_position, the same focus, the lit box where it
-        was; a row's label drawn late moves no place) is the one judged; any other is refused, that frame the camera's
-        (safety.ScreenChanged), since the caller chose the press on the screen it read. On a menu or submenu page a frame
+        more and read: a settled frame lighting the row the caller read lit (same_row: its page, place, lit box and lit
+        label, whatever the other rows show, so a page still being drawn when the caller read it passes once drawn) is
+        the one judged, once; any other is refused, that frame the camera's (safety.ScreenChanged), since the caller chose
+        the press on the screen it read. On a menu or submenu page a frame
         that cannot be grabbed, read or settled is a refusal; elsewhere a look that fails leaves the press as it was
         before this look, no bar being judged there. A picture that moves by itself: on a menu or submenu page only the
         lit row's long label scrolls, which the state leaves out (camkit.screen); elsewhere (a carousel over a live view,
@@ -1702,8 +1725,8 @@ class LiveCamera:
         try:
             f, _ = self.hdmi.settle(fresh, f"{key}-again", expect_change=False)
             s = self.reading(f)
-            here = (screen.same_position(s, judged) and getattr(s, "focus", None) == getattr(judged, "focus", None)
-                    and (not rows or boxes_alike(f.image, held.image)))
+            here = same_row(s, f, judged, held) if rows else (
+                screen.same_position(s, judged) and getattr(s, "focus", None) == getattr(judged, "focus", None))
         except Exception as e:
             self.refuse(key, f"the screen could not be settled and read before the press ({type(e).__name__})")
         self.frame, self.screen = f, s
