@@ -418,6 +418,9 @@ class Link:
         self._out = queue.Queue()
         self._seq = 0             # the last request id sent ("@N"; camlink's reply echoes it)
         self.model = None
+        # "lan" or "usb", the first word of camlink's ready reply's "connection" ("lan A.B.C.D"), "" before it says: the
+        # windows measured over one kind of link apply over that kind alone (camkit.frames.link_connection)
+        self.connection = ""
         self.events = []          # SDK events (disconnects, warnings) as they arrive
         self.moves = 0            # commands sent that can change the screen (MOVES), LiveCamera's own among them
         # when the last of them was answered (time.monotonic(); None before any): an OSD frame is no older than the kit's
@@ -490,6 +493,7 @@ class Link:
             self.close()
             raise LinkError(OLD_CAMLINK, opened=False)
         self.model = first.get("ready")
+        self.connection = (str(first.get("connection") or "").split() or [""])[0].lower()
         self._mode_listed, self._props_failed = None, False     # learnt afresh for every link opened
         return self
 

@@ -131,6 +131,17 @@ OSD_QUIET = {
 # (walk_fields, walk_to_end), a Right is a row with "no response" or no panel (camkit.crawl), and a Down on a submenu
 # page sends the crawl's next Right, while the picture lags, onto the row under the cursor judged on the one above it
 OSD_LATE = {k: 6.0 for k in STEPS}
+# the links OSD_QUIET's windows by screen were measured over: every probe above ran on the wired LAN (link_open's
+# "connection", kit/tools/settle_probe.py connection_of), and the picture's renewal follows the link (OsdSource), so
+# over any other link, or one whose kind cannot be read, a step keeps its key's window until the probe has run there
+OSD_MEASURED_LINKS = frozenset({"lan"})
+
+
+def link_connection(link) -> str:
+    """The kind of link `link` is, as camlink's ready reply said when it opened (camkit.link.Link.connection): "lan" or
+    "usb", "" where it said nothing or there is no link."""
+    c = getattr(link, "connection", "")
+    return c if isinstance(c, str) else ""
 
 
 def window(table: dict, key, default: float, on=None) -> float:
@@ -228,8 +239,10 @@ class OsdSource:
         When a change is expected but nothing has moved yet, keep waiting for up to `timeout`
         (slow redraws); a no-op is declared only after a longer quiet window. Both by the press's key (`tag`:
         OSD_QUIET, OSD_LATE; the class's QUIET and LATE for any other) and the screen it went out on (`on`, where
-        camkit.live.step_place names one)."""
+        camkit.live.step_place names one, over a link of a kind those windows were measured over: OSD_MEASURED_LINKS)."""
         start = time.monotonic()
+        if link_connection(getattr(self, "link", None)) not in OSD_MEASURED_LINKS:
+            on = None                       # a link not measured: the key's window
         quiet = max(quiet, window(OSD_QUIET, tag, self.QUIET, on))
         late = window(OSD_LATE, tag, self.LATE, on)
         timeout = max(timeout, quiet + late)

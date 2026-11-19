@@ -587,11 +587,13 @@ def test_the_link_open_line_says_when_the_runs_process_started(tmp_path, monkeyp
 class LockEyes:
     """Eyes on a fake clock after a download: the screen reads as each (kind, until) of `timeline` in turn, then as
     the shooting screen; by default the shooting screen until 0.3 s (before the notice comes), the notice until
-    `ready_at` s, then the shooting screen. `grabs` counts the frames grabbed; `run` keeps the logged lines."""
-    def __init__(self, now, ready_at=1.97, name="hdmi", timeline=None):
+    `ready_at` s, then the shooting screen. `grabs` counts the frames grabbed; `run` keeps the logged lines; `link` the
+    link the eyes see through, of the kind `connection` (camlink's ready reply: "lan" where the OSD lock was measured)."""
+    def __init__(self, now, ready_at=1.97, name="hdmi", timeline=None, connection="lan"):
         self.now, self.name, self.grabs, self.logged = now, name, 0, []
         self.timeline = timeline if timeline is not None else [("shooting", 0.3), ("notice", ready_at)]
         self.run = SimpleNamespace(log=lambda kind, **f: self.logged.append((kind, f)))
+        self.link = SimpleNamespace(connection=connection)
 
     def kind(self):
         return next((k for k, until in self.timeline if self.now[0] < until), "shooting")
@@ -632,22 +634,29 @@ def test_with_hdmi_eyes_in_stills_the_lock_ends_on_the_shooting_screen_after_the
     assert eyes.logged == [("lock_wait", {"ended": why, "seconds": pytest.approx(ends, abs=0.06)})]
 
 
-@pytest.mark.parametrize("eyes_name,mode", [("osd", "Movie"), ("osd", "S&Q"), ("osd", None), ("hdmi", "S&Q"),
-                                            ("hdmi", None)])
-def test_osd_eyes_out_of_stills_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode):
-    """OSD eyes in a mode other than Stills (their picture lags; only Stills was measured), S&Q (not measured) and a run
-    that cannot tell its mode keep LOCK_S, no frame looked at, the notice or not; a caller's own longer wait (prove_run's
-    5 s) is never cut short."""
+@pytest.mark.parametrize("eyes_name,mode,connection", [
+    ("osd", "Movie", "lan"), ("osd", "S&Q", "lan"), ("osd", None, "lan"), ("hdmi", "S&Q", "lan"), ("hdmi", None, "lan"),
+    ("osd", "Stills", "usb"), ("osd", "Stills", "")])
+def test_osd_eyes_out_of_stills_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode, connection):
+    """OSD eyes in a mode other than Stills (their picture lags; only Stills was measured), or in Stills over a link not
+    measured (USB, or one whose kind cannot be read: kit2_probe_osd_lock ran on the wired LAN), S&Q (not measured) and a
+    run that cannot tell its mode keep LOCK_S, no frame looked at, the notice or not; a caller's own longer wait
+    (prove_run's 5 s) is never cut short."""
     session, now, clock = lock_clock(monkeypatch)
     monkeypatch.setattr(session, "MODE", mode)
-    eyes = LockEyes(now, 0.5, name=eyes_name)
+    eyes = LockEyes(now, 0.5, name=eyes_name, connection=connection)
     assert session.wait_lock(0.0, eyes, clock=clock) == "4.5 s" and now[0] == pytest.approx(4.5) and eyes.grabs == 0
     now[0] = 0.0
     session.wait_lock(0.0, None, "Stills", clock=clock, longest=5.0)
     assert now[0] == pytest.approx(5.0)
     assert session.lock_measured(SimpleNamespace(name="hdmi"), "Stills") and not session.lock_measured(None, "Stills")
-    assert session.lock_measured(SimpleNamespace(name="osd"), "Stills")
-    assert not session.lock_measured(SimpleNamespace(name="osd"), "Movie")
+    lan = SimpleNamespace(connection="lan")
+    assert session.lock_measured(SimpleNamespace(name="osd", link=lan), "Stills")
+    assert not session.lock_measured(SimpleNamespace(name="osd", link=lan), "Movie")
+    # measured over the wired LAN alone: over USB, or a link whose kind cannot be read, LOCK_S until measured there
+    for link in (SimpleNamespace(connection="usb"), SimpleNamespace(connection=""), SimpleNamespace(), None):
+        assert not session.lock_measured(SimpleNamespace(name="osd", link=link), "Stills")
+    assert session.lock_measured(SimpleNamespace(name="hdmi", link=None), "Stills")    # HDMI needs no link's word
 
 
 @pytest.mark.parametrize("timeline,ends,why", [
@@ -696,7 +705,10 @@ def test_lock_over_is_the_old_rule_or_what_the_eyes_saw():
     assert not session.lock_over(6.0, seen("notice"), hdmi, "Stills") and session.lock_over(6.0, seen("notice"), hdmi)
     assert session.lock_over(2.4, seen("shooting"), hdmi, "Stills") and not session.lock_over(2.3, seen("shooting"),
                                                                                               hdmi, "Stills")
-    osd = SimpleNamespace(name="osd")             # the camera's own picture: Stills measured, the notice then the screen
+    # the camera's own picture over the LAN: Stills measured, the notice then the screen; over USB not measured
+    osd = SimpleNamespace(name="osd", link=SimpleNamespace(connection="lan"))
+    usb = SimpleNamespace(name="osd", link=SimpleNamespace(connection="usb"))
+    assert not session.lock_over(2.1, seen("shooting", "notice", "shooting"), usb, "Stills")
     assert session.lock_over(2.1, seen("shooting", "notice", "shooting"), osd, "Stills")
     assert not session.lock_over(2.1, seen("shooting", "notice", "shooting"), osd, "Movie")
     assert not session.lock_over(4.4, seen("shooting"), osd, "Stills") and session.lock_over(4.6, seen("shooting"), osd,
@@ -704,7 +716,7 @@ def test_lock_over_is_the_old_rule_or_what_the_eyes_saw():
     assert session.lock_over(4.6, seen("notice"), osd, "Stills") == "4.5 s"       # no notice waited past LOCK_S
 
 
-def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills", timeline=None):
+def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills", timeline=None, connection="lan"):
     """proving.nav.after_download on a fake clock: the camera's screen as LockEyes' timeline (by default the
     shooting screen until 0.3 s, the notice until `ready_at`, then the shooting screen); (when it ended, the keys
     pressed, the lines logged)."""
@@ -715,7 +727,7 @@ def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills", timelin
     monkeypatch.setattr(nav.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
     monkeypatch.setattr(session, "MODE", mode)
     pressed = []
-    eyes = LockEyes(now, ready_at, name=name, timeline=timeline)
+    eyes = LockEyes(now, ready_at, name=name, timeline=timeline, connection=connection)
 
     def glance(tag):
         kind = eyes.kind()
@@ -730,9 +742,9 @@ def test_after_download_ends_on_the_shooting_screen_after_the_notice_with_hdmi_i
     """proving.nav.after_download: with HDMI eyes in Stills, its looks every 0.1 s from the reply, it ends at the
     first look on the shooting screen after the notice (2.0 s, the notice gone at 1.97 s), a notice on show 6 s waited
     out, and with no notice seen the shooting screen once 2.4 s have passed; so in Movie (kit2_speed_lock_mv); OSD eyes
-    in Stills at the first look on the shooting screen after the notice (kit2_probe_osd_lock), with no notice seen past
-    LOCK_S; OSD eyes in Movie and S&Q at the first look past LOCK_S, 4.6 s, as before; MENU after it every time, one
-    line logged."""
+    in Stills over the LAN at the first look on the shooting screen after the notice (kit2_probe_osd_lock), with no
+    notice seen past LOCK_S; OSD eyes in Movie and S&Q, or over USB, at the first look past LOCK_S, 4.6 s, as before;
+    MENU after it every time, one line logged."""
     end, pressed, logged = after_download_on(monkeypatch, 1.97)
     assert end == pytest.approx(2.0, abs=0.01) and pressed == ["menu"]
     assert [f["ended"] for k, f in logged] == ["the shooting screen after the notice"]
@@ -743,21 +755,23 @@ def test_after_download_ends_on_the_shooting_screen_after_the_notice_with_hdmi_i
     assert [f["ended"] for k, f in logged] == ["the shooting screen after the notice"]
     assert after_download_on(monkeypatch, 2.1, name="osd", timeline=[])[0] == pytest.approx(4.6)
     assert after_download_on(monkeypatch, 2.1, name="osd", mode="Movie")[0] == pytest.approx(4.6)
+    assert after_download_on(monkeypatch, 2.1, name="osd", connection="usb")[0] == pytest.approx(4.6)     # not measured
     assert after_download_on(monkeypatch, 1.84, mode="Movie")[0] == pytest.approx(1.9, abs=0.01)
     assert after_download_on(monkeypatch, 1.97, mode="S&Q")[0] == pytest.approx(4.6)
 
 
 def test_the_page_scans_wait_after_its_download_goes_by_its_mode(monkeypatch):
     """page_scan.after_download: the shooting screen after the notice in Stills and Movie over HDMI (1.97 s), and in
-    Stills over the camera's own picture; LOCK_S in S&Q, and in Movie with OSD eyes."""
+    Stills over the camera's own picture on the LAN; LOCK_S in S&Q, in Movie with OSD eyes, and over USB."""
     import page_scan
-    for name, mode, ends in (("hdmi", "Stills", 1.97), ("hdmi", "Movie", 1.97), ("hdmi", "S&Q", 4.5),
-                             ("osd", "Stills", 1.97), ("osd", "Movie", 4.5)):
+    for name, mode, ends, link in (("hdmi", "Stills", 1.97, "lan"), ("hdmi", "Movie", 1.97, "lan"),
+                                   ("hdmi", "S&Q", 4.5, "lan"), ("osd", "Stills", 1.97, "lan"), ("osd", "Movie", 4.5, "lan"),
+                                   ("osd", "Stills", 4.5, "usb")):
         now = [0.0]
         monkeypatch.setattr(page_scan.time, "monotonic", lambda now=now: now[0])
         monkeypatch.setattr(page_scan.time, "sleep", lambda s, now=now: now.__setitem__(0, now[0] + s))
         monkeypatch.setattr(page_scan.screen, "read", lambda f: f)
-        eyes = LockEyes(now, 1.97, name=name)
+        eyes = LockEyes(now, 1.97, name=name, connection=link)
         page_scan.after_download(eyes, 0.0, mode)
         assert now[0] == pytest.approx(ends, abs=0.41) and now[0] >= ends - 1e-9, (name, mode)
 
@@ -2392,8 +2406,9 @@ def test_a_step_names_the_screen_it_goes_out_on_only_where_its_window_was_measur
     assert live.step_place(set_memory, "up") is None                # only the greyed row above: Up turns the page
 
 
-def osd_settle_on(monkeypatch, changes_at, on, tag="down", quiet=0.2):
-    """OsdSource.settle on a fake clock whose picture changes at each of `changes_at` s; when it ended."""
+def osd_settle_on(monkeypatch, changes_at, on, tag="down", quiet=0.2, connection="lan"):
+    """OsdSource.settle on a fake clock whose picture changes at each of `changes_at` s, over a link of the kind
+    `connection` (camlink's ready reply; None: no link); when it ended."""
     from camkit import frames
     now = [0.0]
     monkeypatch.setattr(frames.time, "monotonic", lambda: now[0])
@@ -2401,6 +2416,7 @@ def osd_settle_on(monkeypatch, changes_at, on, tag="down", quiet=0.2):
     monkeypatch.setattr(frames.Frame, "save", lambda self, path, withheld=False: path)
     src = frames.OsdSource.__new__(frames.OsdSource)
     src.run = SimpleNamespace(shot_path=lambda tag: Path("/dev/null"))
+    src.link = None if connection is None else SimpleNamespace(connection=connection)
 
     def peek():
         n = sum(1 for t in changes_at if now[0] >= t)
@@ -2417,14 +2433,35 @@ def test_the_osd_settle_takes_the_window_of_the_screen_the_step_went_out_on(monk
     """OsdSource.settle given the screen a step went out on (`on`, camkit.live.step_place): an Up or Down on a page's
     rows ends 0.25 s after its picture changed (0.75 s with no screen named, as before: the page scan names none); a
     Left on a menu page 0.45 s; a redraw in stages 0.28 s apart (the probe's longest on Left and Right) is waited out; a
-    caller's own quiet stays a floor under the table's, as before."""
+    caller's own quiet stays a floor under the table's, as before. Only over the wired LAN, where settle_probe measured
+    them (frames.OSD_MEASURED_LINKS): over USB, or a link whose kind cannot be read, every step keeps 0.75 s."""
     from camkit import frames
     rows, menu = frames.MENU_ROWS, frames.MENU
+    assert {"lan"} == frames.OSD_MEASURED_LINKS
+    for link in ("usb", "", None):
+        assert osd_settle_on(monkeypatch, [0.25], rows, connection=link) == pytest.approx(0.25 + 0.75, abs=0.06)
+        assert osd_settle_on(monkeypatch, [0.25], menu, "left", connection=link) == pytest.approx(1.0, abs=0.06)
     assert osd_settle_on(monkeypatch, [0.25], rows) == pytest.approx(0.25 + 0.25, abs=0.06)
     assert osd_settle_on(monkeypatch, [0.25], None) == pytest.approx(0.25 + 0.75, abs=0.06)
     assert osd_settle_on(monkeypatch, [0.25, 0.53], menu, "left") == pytest.approx(0.53 + 0.45, abs=0.06)
     assert osd_settle_on(monkeypatch, [0.25], rows, quiet=0.5) == pytest.approx(0.25 + 0.5, abs=0.06)
     assert osd_settle_on(monkeypatch, [0.25], rows, "down-rest", quiet=0.5) == pytest.approx(0.25 + 0.75, abs=0.06)
+
+
+def test_a_link_knows_the_kind_of_connection_it_opened(tmp_path):
+    """camkit.link.Link.connection: "lan" or "usb", the first word of camlink's ready reply's "connection" ("lan
+    192.0.2.10" from the stand-in camlink), "" before a link opens; what frames.link_connection reads, so that the OSD
+    windows and lock measured over the LAN apply over the LAN alone."""
+    import fake_camlink
+    from camkit import frames
+    from camkit.link import Link
+    from camkit.runs import Run
+    run = Run("kit2_connection", root=tmp_path)
+    link = Link(run, ip="192.0.2.10", binary=fake_camlink.COMMAND, catch_signals=False)
+    assert link.connection == "" and frames.link_connection(link) == ""
+    with link:
+        assert link.connection == "lan" and frames.link_connection(link) == "lan"
+    assert frames.link_connection(None) == "" and frames.link_connection(SimpleNamespace(connection=3)) == ""
 
 
 def test_a_live_press_hands_its_settle_the_screen_it_went_out_on(tmp_path, monkeypatch):

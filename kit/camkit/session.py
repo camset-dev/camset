@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from . import camset, screen
-from .frames import load
+from .frames import link_connection, load
 from .link import Link, LinkError, StopRequested
 
 WAIT_LIMIT = 900        # s a run waits for a screen before it gives up: a run nobody watches must not hold the camera
@@ -54,8 +54,8 @@ WAIT_LIMIT = 900        # s a run waits for a screen before it gives up: a run n
 # goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. With OSD eyes (the camera's own picture
 # over the link, which lags the screen), Stills alone was measured (runs/ILCE-1M2_fw4.00/kit2_probe_osd_lock, 2026-11-19:
 # Stills, wired LAN, 20 trials): the notice was seen gone 2.02 to 2.26 s after the download's reply, and MENU sent 0,
-# 0.1, 0.2 or 0.4 s after the first frame read as the shooting screen after it opened the menu 20 times of 20. There the
-# wait ends on that frame alone: never on the shooting screen with no notice seen (a picture that lags or froze can show
+# 0.1, 0.2 or 0.4 s after the first frame read as the shooting screen after it opened the menu 20 times of 20. There,
+# over a LAN link alone (LOCK_LINKS: the picture's renewal follows the link), the wait ends on that frame alone: never on the shooting screen with no notice seen (a picture that lags or froze can show
 # the one from before the download while the notice is up), nor is a notice on show waited past LOCK_S. S&Q, Movie with
 # OSD eyes, and a mode not known keep LOCK_S as before. A MENU that is not taken all the same is caught by the callers'
 # own guarded retry. The watched rule is MENU's alone until another key is measured: a wait before any
@@ -67,6 +67,9 @@ LOCK_HDMI_S = 2.4
 LOCK_NOTICE_LIMIT = 25.0    # s a wait goes on while the notice stays on show (proving.nav.after_download's limit)
 # the shooting modes the watched lock was measured in, by the eyes' name (runner.SCAN_MODES' spelling, as MODE holds it)
 LOCK_MEASURED = {"hdmi": frozenset({"Stills", "Movie"}), "osd": frozenset({"Stills"})}
+# eyes that see through the link were measured over these kinds of link alone (kit2_probe_osd_lock: the wired LAN);
+# over any other, or one whose kind cannot be read, LOCK_S until the probe has run there (camkit.frames.link_connection)
+LOCK_LINKS = {"osd": frozenset({"lan"})}
 LOCK_READY = ("shooting", "menu", "submenu", "tiles")       # the screens whose sight says the notice has gone
 LOCK_NOTICE = "notice"                                      # the saving notice's kind (camkit.screen)
 # the shooting mode the camera is in by the kit's own record: the one the run's page scan was made in (runner.load_scan
@@ -78,8 +81,12 @@ MODE = None
 
 def lock_measured(eyes, mode=None) -> bool:
     """Whether the watched lock applies: eyes in a shooting mode it was measured in with them (LOCK_MEASURED; `mode`,
-    else MODE)."""
-    return (MODE if mode is None else mode) in LOCK_MEASURED.get(getattr(eyes, "name", None), ())
+    else MODE), and, for eyes that see through the link, over a kind of link it was measured over (LOCK_LINKS: the
+    eyes' link, Link.connection)."""
+    name = getattr(eyes, "name", None)
+    if (MODE if mode is None else mode) not in LOCK_MEASURED.get(name, ()):
+        return False
+    return name not in LOCK_LINKS or link_connection(getattr(eyes, "link", None)) in LOCK_LINKS[name]
 
 
 class LockSeen:
