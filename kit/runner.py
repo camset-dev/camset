@@ -814,9 +814,11 @@ def restoring(what: str = "the restore", withhold: bool = False):
         raise SystemExit(EXIT_UNRESTORED) from e
     except Exception as e:
         if camlink.SENT == 0 and eyes_failed(e):
-            raise SystemExit(f"{what} did not start: the kit's eyes could not be opened: {said(e)}. Nothing was sent to "
-                             "the camera, so it is as it was before this run: put right what that says, then run this "
-                             "again.") from e
+            # said in the run's own terms, not the wrapper's (`what`, "putting the start file back", read as a restore
+            # that failed): the run did not start
+            raise SystemExit(f"The run did not start: the kit's eyes could not be opened: {said(e)}. Nothing was sent "
+                             "to the camera, so it is as it was before this run: put right what that says, then run "
+                             "this again.") from e
         print(f"{what} did not finish ({said(f'{type(e).__name__}: {e}')}): the camera may not be on its start file",
               flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e

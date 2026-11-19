@@ -599,7 +599,8 @@ def test_eyes_that_cannot_open_before_any_command_are_no_unrestored_camera(tmp_p
         prove_run.put_start_back(run, dongle_that_sends_nothing(run), start)
     said = str(stop.value.code)
     assert stop.value.code not in (runner.EXIT_UNRESTORED, runner.EXIT_RESTORE_BY_HAND, 0, None)
-    assert "did not start" in said and "Nothing was sent to the camera" in said
+    assert said.startswith("The run did not start: the kit's eyes could not be opened") and "Nothing was sent" in said
+    assert "putting the start file back" not in said            # the wrapper's label read as a restore that failed
     assert "does not offer 1920x1080 at 59.94 fps" in said and "3840x2160 at 29.97 fps" in said
     assert "may not be on its start file" not in capsys.readouterr().out and lk.proc.stdin.sent == []
     # one command gone (a press the camera took), then the same failure: the camera may have changed, exit 4 as ever
