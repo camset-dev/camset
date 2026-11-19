@@ -1,8 +1,13 @@
 """The Bracket Type carousel (the a1 II's Shooting > Drive Mode > Bracket Settings > Bracket Type, open only with the drive
-mode dial on BRK): the pixel reader tells a carousel option's lit field from the option lit. The camera's frames these
-read are found by their own path (camkit.paths.a1ii_root()), and those tests skip without them."""
+mode dial on BRK): the pixel reader tells a carousel option's lit field from the option lit; the axis walk and the axis
+proofs take the BRK crawl's own map; kit/provers/carousel_fields_run.py proves an option's fields one value a download
+on a made-up carousel, and kit/pass2_report.py credits its lines. The camera's frames some read are found by their own
+path (camkit.paths.a1ii_root()), and those tests skip without them."""
+import contextlib
+import json
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -282,3 +287,353 @@ def test_an_axis_proof_on_a_submenu_row(monkeypatch):
              [(c["key"], c["before"], c["after"]) for c in r["changes"]]) for r in out] == [
         (ROW, "axis", "White Balance Bracket", 1, WB[1], False, [("option", 0, 3), ("axis", 0, 1)]),
         (ROW, "axis", "White Balance Bracket", 0, WB[0], True, [])]
+
+
+# ------------------------------------------------------------------------------------- B: a carousel option's fields
+
+def box(label, values, held, wraps=False):
+    return {"label": label, "values": values, "held": values.index(held), "wraps": wraps}
+
+
+# Cont. Bracket's boxes as the camera drew them (kit2_fin_brtype_cont): its step stops at 0.3EV, the lowest; made-up ends
+CONT_BOXES = [box("Exposure Value", ["0.3EV", "0.5EV", "0.7EV", "1.0EV"], "0.3EV"),
+              box("Number of Shots", ["2 Images", "3 Images", "5 Images"], "3 Images")]
+# Focus Bracket's: Step Width, then the number of shots in three digit boxes, each coming round (made-up spans)
+FOCUS_BOXES = [box("Step Width", ["3", "4(Standard)", "5"], "4(Standard)"),
+               box("Number of Shots", ["0", "1"], "0", wraps=True), box("Number of Shots", ["0", "1", "2"], "0", wraps=True),
+               box("Number of Shots", ["1", "2", "3", "4"], "3", wraps=True)]
+
+
+class FieldsCam:
+    """Bracket Type in its submenu on the camera's default file (Cont. Bracket chosen): Right on the row opens the
+    carousel on the option chosen, Up and Down move between options; Right on Cont. Bracket or Focus Bracket lights its
+    first box, Right the next (never past the last: the camera's answer there was never seen, so it fails the test), Up
+    and Down step the lit box (stopping at its ends, or coming round), MENU in the boxes goes back to the option, Enter
+    chooses the option with what its boxes hold and goes back to the row. Each press and fresh look is a new frame. The
+    records: Bracket Type, Cont. Bracket's step and count in one (a made-up code), its step alone in a made-up record,
+    Focus Bracket's Step Width and its number."""
+
+    def __init__(self, same_text=()):
+        self.spec = {0: CONT_BOXES, 2: FOCUS_BOXES}
+        self.at = {o: [b["held"] for b in bs] for o, bs in self.spec.items()}
+        self.saved, self.where, self.opt, self.field, self.edit = 0, "shooting", 0, None, []
+        self.keys, self.n, self.closes, self.lost = [], 0, [], None
+        self.same_text = set(same_text)       # values the readers read alike ("2 Images" for two of them)
+        self.shoot("start")
+
+    def shoot(self, tag):
+        self.n += 1
+        self.frame = SimpleNamespace(path=Path(f"{self.n:05d}_{tag}.png"), image=None)
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        boxes = self.spec.get(self.opt, [])
+        if self.where == "row" and key == "right":
+            self.where, self.opt, self.field = "dialog", self.saved, None
+            self.edit = list(self.at.get(self.saved, []))
+        elif self.where == "dialog" and self.field is None and key in ("up", "down"):
+            self.opt = (self.opt + (1 if key == "down" else -1)) % len(OPTIONS)
+            self.edit = list(self.at.get(self.opt, []))
+        elif self.where == "dialog" and key == "right" and boxes:
+            if self.field is not None and self.field + 1 >= len(boxes):
+                raise AssertionError("Right on the last box")
+            self.field = 0 if self.field is None else self.field + 1
+        elif self.where == "dialog" and self.field is not None and key in ("up", "down"):
+            b, n = boxes[self.field], len(boxes[self.field]["values"])
+            i = self.edit[self.field] + (1 if key == "up" else -1)
+            self.edit[self.field] = i % n if b["wraps"] else max(0, min(n - 1, i))
+        elif self.where == "dialog" and key == "enter":
+            self.saved, self.where, self.field = self.opt, "row", None
+            if boxes:
+                self.at[self.opt] = list(self.edit)
+        elif self.where == "dialog" and key == "menu":
+            if self.field is not None:
+                self.field = None
+            else:
+                self.where = "row"
+        else:
+            raise AssertionError(f"{key} on the {self.where} in the made-up camera")
+        if self.lost is not None and self.keys.count(self.lost[0]) == self.lost[1]:
+            self.where = "lost"                  # the screen stops reading as the carousel
+        self.shoot(key)
+
+    def refresh(self, tag):
+        self.shoot(tag)
+
+    def read(self):
+        kind = {"shooting": "shooting", "menu": "menu", "row": "submenu", "dialog": "dialog", "lost": "unknown"}
+        n = len(self.spec.get(self.opt, [])) if self.where == "dialog" and self.field is not None else 0
+        return SimpleNamespace(kind=kind[self.where], field=self.field if self.where == "dialog" else None,
+                               boxes=[(150 + 100 * i, 240 + 100 * i) for i in range(n)], bar=(351, 406) if n else None)
+
+    def value(self, k):
+        b = self.spec[self.opt][k]
+        v = b["values"][self.edit[k]]
+        return "2 Images" if v in self.same_text else v
+
+    def records(self) -> dict:
+        ev, img = self.at[0]
+        step, *digits = self.at[2]
+        number = int("".join(b["values"][i] for b, i in zip(FOCUS_BOXES[1:], digits, strict=True)))
+        return {"global:0x02bf": self.saved, "global:0x13f9": 10 * ev + img + 1, "global:0x9001": ev,
+                "global:0x9002": step, "global:0x9003": number}
+
+
+def fields_world(monkeypatch, own_runs, cam):
+    """kit/provers/carousel_fields_run.py's seams on a FieldsCam: the screen's readings from the made-up camera (the lit
+    box's value, the name above it, the title, each box's picture), the way to the row, the session and the downloads
+    (each holds the records as the camera holds them then)."""
+    import carousel_fields_run as F
+    root = brk_root(own_runs, monkeypatch)
+    lit = lambda c: c.where == "dialog" and c.field is not None    # noqa: E731
+    downloads = []
+
+    def download(tag):
+        downloads.append(tag)
+        return SimpleNamespace(name=f"{len(downloads) + 1:05d}_{tag}.DAT", values=cam.records())
+
+    def diff(a, b):
+        return [SimpleNamespace(key=k, before=a.values[k], after=b.values[k]) for k in a.values if a.values[k] != b.values[k]]
+
+    @contextlib.contextmanager
+    def session(run, eyes, **kw):
+        s = SimpleNamespace(cam=cam, link=link, start=SimpleNamespace(name="00001_before.DAT", values=cam.records()))
+        try:
+            yield s
+        except Exception as e:                    # runner.prover_session: said, closed, then the restore
+            print(f"stopped: {type(e).__name__}: {e}", flush=True)
+            cam.closes.append(cam.frame.path.name)
+            cam.where = "shooting"
+
+    def enter_any(c, path, start, at=None):
+        assert c.where == "menu" and path == ROW
+        c.where = "row"
+
+    def to_shooting(link_, eyes, why):
+        cam.where, cam.field = "shooting", None
+
+    def close_screen(c, link_):
+        c.closes.append(c.frame.path.name)
+        c.where, c.field = "shooting", None
+    link = SimpleNamespace(download=download)
+    for name, value in (
+            ("title_reads", lambda c, labels: labels[c.opt] if c.where == "dialog" else None),
+            ("lit_read", lambda c, always: F.BoxRead(c.value(c.field), c.value(c.field), c.value(c.field), "made-up", "both")
+             if lit(c) else (_ for _ in ()).throw(F.Failed("no box lit"))),
+            ("word_read", lambda c: c.spec[c.opt][c.field]["label"]),
+            ("box_pic", lambda c, k: (c.opt, k, c.edit[k], c.field == k) if lit(c) and k < len(c.edit) else None),
+            ("same_pic", lambda a, b: a is not None and a == b),
+            ("menu_from_shooting", lambda c, **k: setattr(c, "where", "menu")), ("scan_position", lambda c, cycle: 0),
+            ("go_to", lambda c, cycle, model, j, row: 0), ("enter_any", enter_any),
+            ("place", lambda c: c.read().kind), ("same_place", lambda a, b, tol=2: a == b),
+            ("close_screen", close_screen), ("to_shooting", to_shooting), ("wait_lock", lambda since, eyes, clock: None),
+            ("camset", SimpleNamespace(read=lambda d: d, diff=diff)), ("prover_session", session),
+            ("load_scan", lambda scan: ([], {})), ("eyes_from_config", lambda run: None)):
+        monkeypatch.setattr(F, name, value)
+    return F, root, downloads
+
+
+def fields_lines() -> list:
+    from camkit.runs import Run
+    f = Run("kit2_pass2").dir / "proofs.jsonl"
+    return [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines()] if f.exists() else []
+
+
+def brief(lines) -> list:
+    return [(x["index"], x["field"], x["value"], x["label"], x["final"],
+             {c["key"]: (c["before"], c["after"]) for c in x["changes"]}) for x in lines]
+
+
+def run_fields(F, root, *extra):
+    F.main(["--row", "Bracket Settings > Bracket Type", "--option", extra[0], "--map", str(root / BRK_MAP),
+            "--context", "Drive Mode dial on BRK", "--scan", "made-up", *extra[1:]])
+
+
+def test_cont_brackets_fields_one_value_a_download(own_runs, monkeypatch, capsys):
+    """Cont. Bracket: the look reads its two boxes, then Exposure Value Up from 0.3EV to its top end (one more Up
+    changes nothing: no Enter, closed), Down from 0.3EV (its low end at once), and 0.3EV put back; then Number of Shots
+    Up to 5 Images (its end), Down to 2 Images (its end), 3 Images put back. One value a download, each line naming the
+    field changed, both fields as drawn and their label in the bracket lists' words; the put-backs change nothing."""
+    cam = FieldsCam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket")
+    out = capsys.readouterr().out
+    assert "box 0: Exposure Value = '0.3EV'" in out and "together '0.3 EV 3 Img.'" in out
+    lines = fields_lines()
+    assert brief(lines) == [
+        ([0, 1], "Exposure Value", "0.5EV", "0.5 EV 3 Img.", False, {"global:0x13f9": (2, 12), "global:0x9001": (0, 1)}),
+        ([0, 2], "Exposure Value", "0.7EV", "0.7 EV 3 Img.", False, {"global:0x13f9": (2, 22), "global:0x9001": (0, 2)}),
+        ([0, 3], "Exposure Value", "1.0EV", "1.0 EV 3 Img.", False, {"global:0x13f9": (2, 32), "global:0x9001": (0, 3)}),
+        ([0, 0], "Exposure Value", "0.3EV", "0.3 EV 3 Img.", True, {}),
+        ([1, 1], "Number of Shots", "5 Images", "0.3 EV 5 Img.", False, {"global:0x13f9": (2, 3)}),
+        ([1, -1], "Number of Shots", "2 Images", "0.3 EV 2 Img.", False, {"global:0x13f9": (2, 1)}),
+        ([1, 0], "Number of Shots", "3 Images", "0.3 EV 3 Img.", True, {})]
+    first = lines[0]
+    assert first["path"] == [*ROW, "Cont. Bracket"] and first["kind"] == "list" and first["via"] == F.VIA
+    assert first["fields"] == [{"label": "Exposure Value", "value": "0.5EV"}, {"label": "Number of Shots", "value": "3 Images"}]
+    assert first["context"] == "Drive Mode dial on BRK" and first["base"] == "00002_Bracket-Type-Cont.-Bracket-base.DAT"
+    assert first["read_by"] == "both" and first["applied"] is True and len({x["attempt"] for x in lines}) == 2
+    assert len(downloads) == 1 + len(lines), "one download a value, and the base"
+    assert "Up ['0.5EV', '0.7EV', '1.0EV']; Down []" in out and "Up ['5 Images']; Down ['2 Images']" in out
+    assert cam.at[0] == [0, 1] and cam.saved == 0
+
+
+def test_the_report_credits_a_record_of_both_fields_and_one_of_one(own_runs, monkeypatch, capsys):
+    """kit/pass2_report.py on those lines: the record both fields' lines move is credited value by value with both
+    fields together, in the Drive Mode bracket lists' words (the put-backs give the value held, the record's before);
+    the record only Exposure Value's lines move with that field's value as drawn."""
+    import pass2_report as R
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket")
+    rows = R.rows_of(root / "kit2_pass2", fields_lines())
+    name = "Bracket Settings > Bracket Type > Cont. Bracket [Drive Mode dial on BRK]"
+    assert list(rows) == [name]
+    sources = {}
+    got = R.values_of(rows[name], sources=sources)
+    assert got == {"global:0x13f9": {"0.5 EV 3 Img.": 12, "0.7 EV 3 Img.": 22, "1.0 EV 3 Img.": 32, "0.3 EV 3 Img.": 2,
+                                     "0.3 EV 5 Img.": 3, "0.3 EV 2 Img.": 1},
+                   "global:0x9001": {"0.5EV": 1, "0.7EV": 2, "1.0EV": 3, "0.3EV": 0}}
+    assert set(sources["global:0x13f9"].values()) == {"two readers"}
+    # each field walked from what the other held: 0x13f9's values cross at the pair held, which the definition must not
+    # tell (decision 16), so it counts them; the step's own record, walked whole, lists its values
+    assert R.option_fields_sampled(rows[name]) == {"global:0x13f9"}
+
+
+def test_a_walk_the_deadline_cuts_credits_no_value_held(own_runs, monkeypatch, capsys):
+    """--most 2: Exposure Value Up to 0.7EV, then the deadline; Down finds its low end; 0.3EV put back, its line saying the
+    walk was not whole. The report credits 0.5EV and 0.7EV, never the value held, and marks the record sampled."""
+    import pass2_report as R
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--box", "0", "--most", "2")
+    lines = fields_lines()
+    assert [(x["index"], x["value"], x["final"], x.get("whole")) for x in lines] == [
+        ([0, 1], "0.5EV", False, None), ([0, 2], "0.7EV", False, None), ([0, 0], "0.3EV", True, False)]
+    assert "the deadline (--most): its top end not reached" in capsys.readouterr().out
+    opts = R.rows_of(root / "kit2_pass2", lines)["Bracket Settings > Bracket Type > Cont. Bracket [Drive Mode dial on BRK]"]
+    assert R.values_of(opts) == {"global:0x13f9": {"0.5EV": 12, "0.7EV": 22}, "global:0x9001": {"0.5EV": 1, "0.7EV": 2}}
+    assert R.option_fields_sampled(opts) == {"global:0x13f9", "global:0x9001"}
+
+
+def test_focus_brackets_digits_make_one_number(own_runs, monkeypatch, capsys):
+    """Focus Bracket: Step Width, then the number of shots in three digit boxes, one field; each digit box walked Up
+    until it comes round to the digit it held, which is then the put-back (no Down: it never stopped); each line's value
+    the number the three digits make, the label both fields joined as drawn. The report credits Step Width's record and
+    the number's record each with its own field's values."""
+    import pass2_report as R
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket")
+    lines = fields_lines()
+    assert [(x["index"], x["value"], x["label"], x["final"]) for x in lines] == [
+        ([0, 1], "5", "5 | 3", False), ([0, -1], "3", "3 | 3", False), ([0, 0], "4(Standard)", "4(Standard) | 3", True),
+        ([1, 1], "103", "4(Standard) | 103", False), ([1, 0], "3", "4(Standard) | 3", True),
+        ([2, 1], "13", "4(Standard) | 13", False), ([2, 2], "23", "4(Standard) | 23", False),
+        ([2, 0], "3", "4(Standard) | 3", True),
+        ([3, 1], "4", "4(Standard) | 4", False), ([3, 2], "1", "4(Standard) | 1", False),
+        ([3, 3], "2", "4(Standard) | 2", False), ([3, 0], "3", "4(Standard) | 3", True)]
+    assert all(x["field"] == "Number of Shots" for x in lines[3:])
+    assert all(c["key"] != "global:0x02bf" for x in lines for c in x["changes"]), "the option's own record: the base's"
+    assert all(x["base"] == "00002_Bracket-Type-Focus-Bracket-base.DAT" for x in lines)
+    got = R.values_of(R.rows_of(root / "kit2_pass2", lines)[
+        "Bracket Settings > Bracket Type > Focus Bracket [Drive Mode dial on BRK]"])
+    assert got == {"global:0x9002": {"5": 2, "3": 0, "4(Standard)": 1},
+                   "global:0x9003": {"103": 103, "3": 3, "13": 13, "23": 23, "4": 4, "1": 1, "2": 2}}
+
+
+def test_a_screen_that_stops_reading_as_the_box_stops_the_row_before_the_next_key(own_runs, monkeypatch, capsys):
+    """The screen reads as no known kind after the second Up: the row stops there, no key after it but the close's MENU,
+    no Enter on it, the run exits as a failure once the session has restored."""
+    import boxes_run
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.lost = ("up", 2)
+    with pytest.raises(SystemExit) as stop:
+        run_fields(F, root, "Cont. Bracket")
+    assert stop.value.code == boxes_run.EXIT_INCOMPLETE
+    out = capsys.readouterr().out
+    assert "after Up on box 0: the screen reads as unknown, not the carousel" in out
+    assert cam.keys[-1] == "up" and cam.keys.count("up") == 2 and cam.closes[-1] == cam.frame.path.name
+    assert [x["index"] for x in fields_lines()] == [[0, 1]], "the one value chosen before it"
+
+
+def test_the_fields_are_entered_only_on_the_option_named_and_never_past_the_last_box(own_runs, monkeypatch):
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.where, cam.opt = "dialog", 1                                   # Single Bracket lit, not Cont. Bracket
+    with pytest.raises(F.Failed, match=r"Cont\. Bracket: no Right into its boxes: its title names 'Single Bracket'"):
+        F.into_box(cam, "Cont. Bracket", OPTIONS, 0, 2)
+    assert cam.keys == []
+    cam.opt, cam.field = 0, 1                                          # a box lit: not the option
+    with pytest.raises(F.Failed, match="box 1 is lit, not the option"):
+        F.into_box(cam, "Cont. Bracket", OPTIONS, 0, 2)
+    cam.field = None
+    with pytest.raises(F.Failed, match="no Right to box 2: box 1 of 2 is lit"):
+        F.into_box(cam, "Cont. Bracket", OPTIONS, 2, 2)
+    assert cam.keys == ["right", "right"] and cam.field == 1
+
+
+def test_enter_goes_only_on_the_value_read_and_a_value_read_twice_stops_the_row(own_runs, monkeypatch):
+    """Enter on a box that no longer reads the value meant is refused, nothing pressed. Two values the readers read
+    alike (a pair of 2 Images told apart only by an icon) stop the walk before any Enter on the second."""
+    cam = FieldsCam(same_text={"2 Images", "5 Images"})
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.where, cam.opt, cam.field, cam.edit = "dialog", 0, 1, [0, 1]
+    with pytest.raises(F.Failed, match="no Enter: box 1 no longer reads '5 Images'"):
+        F.enter(cam, "Cont. Bracket", OPTIONS, 1, 2, "5 Images")
+    assert "enter" not in cam.keys
+    cam.where, cam.field = "shooting", None
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--box", "1")
+    lines = fields_lines()
+    assert [x["value"] for x in lines] == ["2 Images"], "5 Images (read '2 Images') chosen, the next read alike refused"
+
+
+@pytest.mark.parametrize("ocr_text, said, always, got", [
+    ("3 Images", None, False, ("3 Images", "ocr")),             # plain: OCR alone, no reader asked
+    ("0.,ЗEV", "0.3EV", False, ("0.3EV", "reader")),           # OCR unsure (a Cyrillic Ze for the 3): the reader's
+    ("0", "0", True, ("0", "reader")),                          # a lone digit is no plain reading
+    ("5 Images", "5 Images", True, ("5 Images", "both")),       # a value a proof rides on: the reader always, agreeing
+    ("5 mages", "5 Images", True, ("5 Images", "both")),        # OCR's dropped letter (kit2_fin_brtype_cont_img 00008)
+    ("5 Images", "7 Images", True, "OCR read '5 Images' and the second reader '7 Images'"),
+    ("0.", None, True, "did not answer")])
+def test_the_lit_box_is_read_by_ocr_and_the_reader_where_ocr_is_unsure(monkeypatch, ocr_text, said, always, got):
+    import carousel_fields_run as F
+    from camkit.ocr import Line
+    cam = SimpleNamespace(frame=SimpleNamespace(path=Path("00009_up.png"), image=None),
+                          read=lambda: SimpleNamespace(kind="dialog", field=0, boxes=[(137, 345)], bar=(351, 406)))
+    asked = []
+    monkeypatch.setattr(F, "lines", lambda c: [Line(ocr_text, 1.0, 180, 360, 120, 30)])
+    monkeypatch.setattr(F, "box_answer", lambda c: asked.append(1) or (said, "made-up", False))
+    monkeypatch.setattr(F.time, "sleep", lambda s: None)
+    if isinstance(got, str):
+        with pytest.raises(F.Failed, match=got):
+            F.lit_read(cam, always)
+        return
+    r = F.lit_read(cam, always)
+    assert (r.text, r.by) == got and r.ocr == ocr_text
+    assert bool(asked) == (got[1] != "ocr")
+
+
+@pytest.mark.parametrize("a, b, same", [("0.5EV", "0.5 EV", True), ("5 mages", "5 Images", True),
+                                        ("4 (Standard)", "4(Standard)", True), ("2 Images +", "2 Images −", False),
+                                        ("0.3EV", "0.5EV", False), ("0", "0", True), ("1", "10", False)])
+def test_two_readings_of_a_value_are_one_by_its_number(a, b, same):
+    import carousel_fields_run as F
+    assert (F.key(a) == F.key(b)) is same
+
+
+@pytest.mark.parametrize("labels, values, fields, label", [
+    (["Exposure Value", "Number of Shots"], ["0.5EV", "3 Images"],
+     [{"label": "Exposure Value", "value": "0.5EV"}, {"label": "Number of Shots", "value": "3 Images"}], "0.5 EV 3 Img."),
+    (["Exposure Value", "Number of Shots"], ["1.0EV", "2 Images +"], None, "1.0 EV 2 Img. +"),
+    (["Step Width", "Number of Shots", "Number of Shots", "Number of Shots"], ["10", "2", "9", "9"],
+     [{"label": "Step Width", "value": "10"}, {"label": "Number of Shots", "value": "299"}], "10 | 299"),
+    (["Step Width", "Number of Shots", "Number of Shots", "Number of Shots"], ["4(Standard)", "0", "0", "1"], None,
+     "4(Standard) | 1")])
+def test_fields_and_their_label(labels, values, fields, label):
+    import carousel_fields_run as F
+    got = F.fields_of(labels, values)
+    assert fields is None or got == fields
+    assert F.together(got) == label

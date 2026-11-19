@@ -29,7 +29,11 @@ unticked on its own (filter_run.py --untick) is its item's row in the state "box
 A list that offered one option only is proved by its display (prove_run's "proof": "display"): the label read off
 the screen writes the value its row's records held, a seen value like any other, its name backed by the readers that
 read it as any option's is. A row of boxes (a proof line's "boxes": boxes_run's, optboxes_run's) says so ("boxes"),
-and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among them (num).
+and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among them (num). A carousel option's own
+fields (kit/provers/carousel_fields_run.py: Bracket Type's Cont. Bracket) are its row "ROW > OPTION", a record two
+fields' lines move credited with both fields together ("0.5 EV 3 Img."), one only one field's lines move with that
+field's value as drawn (option_fields_values); a record whose values would tell the pair held is marked
+"sampled_from_start" (option_fields_sampled).
 
 A registration mirror line ("kind": "registration mirror": kit/provers/memreg_run.py's, a live setting chosen in its
 menu and a memory slot registered to see the slot's copy take it; kit/provers/framepos_run.py --zone-grid's, a frame's
@@ -1439,6 +1443,70 @@ def axis_values(opts: dict, own: dict | None = None, names: dict | None = None,
     return out
 
 
+# a carousel option's own fields (kit/provers/carousel_fields_run.py's lines, "via" this: its VIA)
+OPTION_FIELDS = "a carousel option's own fields"
+FIELD_READERS = {"both": "two readers", "votes": "two readers", "ocr": "one reader (ocr)", "reader": "vision model"}
+
+
+def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
+    """record key -> {label: value} for a carousel option's fields (OPTION_FIELDS: Bracket Type's Cont. Bracket, with the
+    drive mode dial on BRK). Each line changed one field ("field", its name as drawn) and says how every field read
+    after it ("label", all of them together, "0.5 EV 3 Img." for a step and a count, as the Drive Mode bracket lists
+    word them) and how its own field read ("value", "0.5EV"). A record the lines of two fields or more moved holds them
+    together: each value is credited to the line's "label". A record only one field's lines moved holds that field
+    alone: its value is credited to the line's "value", from that field's lines only. A field's put-back ("final")
+    changes nothing: its value is the record's before in its own session (its base), as a list's own start is, but only
+    where its walk was whole ("whole" not False): in a walk the deadline cut short the value held would stand out, as a
+    list walked in part keeps its start uncredited (start_lines, docs/decisions/0016). A line the camera refused (its
+    changes already none) and any other line that left the record as it was are no value of it. sources (key ->
+    {label: source}): who read the box ("read_by": two readers, OCR, or the vision model alone)."""
+    lines = sorted((o for o in opts.values() if o.get("applied") is not False), key=lambda o: dat_number(o.get("dat")))
+    out = {}
+    for key in sorted({c["key"] for o in lines for c in o["changes"]}):
+        moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
+        both = len(moved_by) > 1
+        befores = {}
+        for o in lines:
+            for c in o["changes"]:
+                if c["key"] == key:
+                    befores.setdefault(o.get("base"), c["before"])
+        vals, src = {}, {}
+        for o in lines:
+            if not both and o.get("field") not in moved_by:
+                continue
+            after = next((c["after"] for c in o["changes"] if c["key"] == key), None)
+            if after is None and (not o.get("final") or o.get("whole") is False):
+                continue
+            if after is None:
+                after = befores.get(o.get("base"))
+                after = base_value(o.get("base"), key) if after is None else after
+                if after is None:
+                    continue
+            lab = str(o.get("label") if both else o.get("value"))
+            vals[lab] = after
+            src[lab] = FIELD_READERS.get(o.get("read_by"), "one reader (ocr)")
+        out[key] = vals
+        if sources is not None:
+            sources[key] = src
+    return out
+
+
+def option_fields_sampled(opts: dict) -> set:
+    """The records of a carousel option's fields row (OPTION_FIELDS) whose proved values tell the value the row held
+    (docs/decisions/0016), which main marks "sampled_from_start" as a table sampled from its start is (the definition
+    counts their proofs and lists none of their values): a record two fields' lines move (each field is walked from what
+    the other held, so the values proved cross at the pair held), and a record a field moved whose walk the deadline cut
+    short (its put-back "whole": false: the values proved stand round the one held)."""
+    lines = [o for o in opts.values() if o.get("via") == OPTION_FIELDS and o.get("applied") is not False]
+    cut = {o.get("field") for o in lines if o.get("final") and o.get("whole") is False}
+    out = set()
+    for key in {c["key"] for o in lines for c in o["changes"]}:
+        fields = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
+        if len(fields) > 1 or fields & cut:
+            out.add(key)
+    return out
+
+
 def held_axis_value(tests: list, final: dict | None, key: str, seen: dict, main_keys: frozenset | None):
     """The value the axis held when its proofs began, for the last visit's label (axis_values): the record's value
     before in the visits of the last visit's own attempt (its base file), when they agree, else the value that base
@@ -1622,6 +1690,8 @@ def values_of(opts: dict, elsewhere: frozenset = frozenset(), names: dict | None
     # refused says what the camera kept, its own diff
     opts = {i: {**o, "changes": [] if o.get("applied") is False and o["kind"] != "fields" else
                 [c for c in element_changes(o) if c["key"] not in side_kept(o)]} for i, o in opts.items()}
+    if any(o.get("via") == OPTION_FIELDS for o in opts.values()):
+        return option_fields_values(opts, sources)
     screens = screen_records(opts, carried | kept_over)
     if screens:
         opts = {i: {**o, "changes": [c for c in o["changes"] if c["key"] not in screens]} for i, o in opts.items()}
@@ -1941,6 +2011,7 @@ def main():
         # the kinds of proof the row holds (list, axis, wbgrid...): the writer takes a grid's records as sampled scales
         from_start = sampled_from_start(opts)
         samples += from_start
+        crossed = option_fields_sampled(opts)     # a carousel option's fields: the records that would tell the pair held
         # the options proved: a line the camera refused, or an option drawn grey never tried, is none (credited); they
         # are listed apart, greyed or refused, with what named the blocker
         not_applied = [o for o in opts.values() if not credited(o)]
@@ -2002,7 +2073,7 @@ def main():
                 # the labels taken from "nothing changed" (values_of), for a person reading this report (it stays in
                 # the camera's runs/): kit/schema_update.py writes nothing of them, as one is the row's start
                 entry["records"][key]["inferred"] = inferred[key]
-            if from_start:
+            if from_start or key in crossed:
                 entry["records"][key]["sampled_from_start"] = True     # a count in the definition, never these values
                 # how many proofs: the lines that chose an option for its own sake, never a put-back ("planned": false)
                 entry["records"][key]["sample_proofs"] = sum(1 for o in opts.values() if o.get("planned") is not False
