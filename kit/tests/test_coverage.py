@@ -1399,6 +1399,18 @@ def test_two_readings_agree_only_whole_and_only_when_independent():
 
 # ---------------------------------------------------------------- what is left, the public sources, the tool
 
+def test_a_look_counts_only_the_records_no_setting_maps(camera):
+    """"A look saw N records change" names the records no setting covers (a lead to map), never one a setting already
+    maps, its memory sets' copy included: a settled row whose look changed only mapped records leaves the to-do list."""
+    add_looks(camera, look(["Alpha"], result="changed", records_changed=["global:0x0100", "set2:0x0100", "global:0x0200"]),
+              look(["Bravo"], result="changed", records_changed=["global:0x0101"]))
+    led = ledger()
+    assert row(led, "Alpha")["changed_in_looks"] == ["global:0x0200"]
+    assert "changed_in_looks" not in row(led, "Bravo") and "cites_changed" not in row(led, "Bravo")
+    left = [tuple(x["entry"]["path"]) for x in coverage.todo(led)]
+    assert ("Alpha",) in left and ("Bravo",) not in left
+
+
 def test_todo_lists_what_is_left_by_need_and_yield(camera):
     led = ledger()
     items = coverage.todo(led)

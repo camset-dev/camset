@@ -1506,8 +1506,9 @@ def _row_statuses(led: Ledger, facts: Facts, by_key: dict, src: Sources) -> None
     for e in led.rows:
         if len(e["path"]) == 1:
             firsts.setdefault((e["mode"], e["tab"], plain(e["path"][0])), e)
+    covered = set(records_covered(list(by_key.values())))
     for e in led.rows:
-        _one_row(e, facts.of(e), by_key, sony, header, frame)
+        _one_row(e, facts.of(e), by_key, sony, header, frame, covered)
     for e in led.rows:                # a label the menu repeats in a tab: the first one holds the settings
         first = firsts.get((e["mode"], e["tab"], plain(e["path"][0])))
         if len(e["path"]) == 1 and e["nth"] and first is not None and _row_settings(led, first) \
@@ -1518,7 +1519,10 @@ def _row_statuses(led: Ledger, facts: Facts, by_key: dict, src: Sources) -> None
             e.pop("cites", None)
 
 
-def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: dict) -> None:
+def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: dict, covered: set = None) -> None:
+    """The row's status from its settings and facts (the first of STATUSES that applies), and what the private form
+    cites: among them the records a look saw change that no setting covers (`covered`, records_covered's keys; a
+    record a setting maps is no lead)."""
     keys = list(dict.fromkeys(e["settings"] + e["tied"] + e.get("through", [])))
     ss = [by_key[k] for k in keys if k in by_key]
     states = [setting_state(s) for s in ss]
@@ -1619,8 +1623,11 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
     if cites:
         e["cites"] = cites
     if fx.get("changed"):
-        e["changed_in_looks"] = sorted({k for c in fx["changed"] for k in c.get("records") or []})
-        e.setdefault("cites_changed", fx["changed"])
+        covered = set(records_covered(list(by_key.values()))) if covered is None else covered
+        new = sorted({k for c in fx["changed"] for k in c.get("records") or [] if record_base(k) not in covered})
+        if new:
+            e["changed_in_looks"] = new
+            e.setdefault("cites_changed", fx["changed"])
     if fx.get("looked"):
         e["looked"] = len(fx["looked"])
         opts = [o for c in fx["looked"] for o in c.get("options") or []]
@@ -3215,7 +3222,7 @@ def counts(led: Ledger, public: bool = False) -> dict:
 def needs_of(e: dict) -> str:
     """What the next step on an entry left to do needs (NEEDS): equipment, a kit fix, an owner decision (the opener a
     closed row names), the owner's hand (a row nothing opens, a blocker only the owner's hand changes), a remote proof
-    (a row with a setting no proof established, or one a look saw change records) or a remote look."""
+    (a row with a setting no proof established, or one a look saw change records no setting maps) or a remote look."""
     st = e.get("status")
     if e.get("changed_in_looks"):
         return "remote-proof"
@@ -3264,10 +3271,10 @@ def _neighbours(led: Ledger) -> dict:
 
 def todo(led: Ledger, tab: str = None, mode: str = None, needs: str = None) -> list:
     """What is left ([{entry, needs, next, yield, near}]): the rows in TODO statuses, the rows with values still to try
-    (values_left, whatever their own status) and those a look saw change records, filtered by tab, mode and what the
-    next step needs, sorted by expected yield: the unmapped records next to the row (weighted by how the leads class
-    them: a record seen to change counts three), the records a look saw change, whether the row has settings, less the
-    cost of the step."""
+    (values_left, whatever their own status) and those a look saw change records no setting maps, filtered by tab, mode
+    and what the next step needs, sorted by expected yield: the unmapped records next to the row (weighted by how the
+    leads class them: a record seen to change counts three), the records a look saw change, whether the row has
+    settings, less the cost of the step."""
     near = _neighbours(led)
     leads = {}
     for part in ("live", "sets"):
