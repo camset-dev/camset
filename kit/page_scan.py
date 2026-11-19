@@ -4,7 +4,9 @@
     .venv/bin/python -u kit/page_scan.py --mode Movie --run kit2_page_scan_movie
 
 Presses only MENU (open at the start, close at the end), Down, and Right when the pixels show the
-cursor in the group column (it steps into the rows). Never Enter. Before every press the screen must
+cursor in the group column (it steps into the rows), that Right judged as every opening press is (camkit.live: the lit
+bar read and refused when it must not be opened). Never Enter. Every press is judged on a frame no older than
+camkit.live.STALE_S (Scan.fresh). Before every press the screen must
 be a menu page with the cursor on the rows or the Main tile grid; anything else stops the scan without
 pressing. After every press the move is checked: the next row on the same page, or the first row of
 a new page (a new page that changes the screen's kind, and every new page over OSD, gets a second, longer look: it
@@ -37,9 +39,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import jsonl, paths, screen, session  # noqa: E402
+from camkit import jsonl, live, paths, safety, screen, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
+from camkit.live import STALE_S  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from prove_run import to_shooting  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, end_session,  # noqa: E402
@@ -65,6 +68,7 @@ class Scan:
         self.scan_id = scan_record(run.dir).get(SCAN_ID)
 
     def press(self, button, before, tag):
+        before = self.fresh(button, before, tag)
         t = time.monotonic()
         # the screen the press is made on goes with it: on the shooting screen only MENU goes out (decision 21)
         self.link.press(button, screen=screen.read(before))
@@ -72,6 +76,45 @@ class Scan:
         f, moved = self.hdmi.settle(before, tag, expect_change=True, sent_at=t)
         timing = dict(self.hdmi.timing)
         return f, moved, timing
+
+    def fresh(self, button, before, tag):
+        """The frame a press is judged on, and its settle measures "moved" from: `before`, or where it is older than
+        camkit.live.STALE_S (the screen can change with nothing sent: a menu closing by itself, a notice gone), one
+        fresh grab, as LiveCamera._recent takes it. A Down whose fresh look is no longer the screen state `before` read
+        as is not sent (safety.ScreenChanged). The settle before every press ends on a fresh frame, so a scan step
+        normally takes no extra grab: the check is the frame's age alone."""
+        t = getattr(before, "t", None)
+        if not isinstance(t, (int, float)) or t <= 0 or time.monotonic() - t <= STALE_S:
+            return before
+        f = self.hdmi.grab(f"{tag}-fresh")
+        self.run.log("frame_stale", key=button, frame=getattr(getattr(before, "path", None), "name", None),
+                     age=round(time.monotonic() - t, 3))
+        if button != "menu" and not screen.same_state(screen.read(f), screen.read(before)):
+            raise safety.ScreenChanged(f"{button}: the screen changed since it was read ({screen.read(f).kind} now): "
+                                       "nothing pressed")
+        return f
+
+    def into_rows(self, f):
+        """The one Right that steps from the group column into the page's rows, from frame `f`, judged as every
+        opening press is (camkit.live.LiveCamera's: on a frame no older than STALE_S, the lit bar read and refused when
+        the never-open check refuses it, live.open_refused, or when a bar is drawn and OCR reads nothing in it, since
+        the check cannot judge a row it cannot read; this scan asks no reader), never straight to the link: a focus
+        misread would open the lit row (Create New Folder acts on opening), on the first program a new body runs. The
+        group column is judged on that same frame. Returns the frame and screen after it, or None when refused (said,
+        logged as "press_refused")."""
+        f = self.fresh("right", f, "into-rows")
+        s = screen.read(f)
+        if not (s.kind == "menu" and s.focus == "groups"):
+            return f, s                         # moved meanwhile: the caller judges it afresh (ok_to_press)
+        lit = live.lit_text(f.image, f.path)
+        why = live.UNREAD if not lit.strip() and live.lit_box(f.image) is not None else live.open_refused(lit)
+        if why:
+            self.run.log("press_refused", key="right", frame=f.path.name, why=why)
+            print(f"STOPPED before scanning: right refused on {f.path.name}: {why}; nothing more pressed. Move the "
+                  "menu's cursor by hand onto another group, or onto a row of a menu page, then scan again", flush=True)
+            return None
+        f, _, _ = self.press("right", f, "into-rows")
+        return f, screen.read(f)
 
     def at_rest(self, f, s, tag):
         """A menu page caught while it slides (opening, or a page change) reads as a menu with no focus: look
@@ -101,8 +144,11 @@ class Scan:
             print(f"MENU -> {s.kind} focus {s.focus} ({timing})", flush=True)
         f, s = self.at_rest(f, s, "menu-rest")
         if s.kind == "menu" and s.focus == "groups":
-            f, _, _ = self.press("right", f, "into-rows")
-            s = screen.read(f)
+            stepped = self.into_rows(f)
+            if stepped is None:
+                self.close()
+                return
+            f, s = stepped
             f, s = self.at_rest(f, s, "rows-rest")
         if not ok_to_press(s):
             print(f"STOPPED before scanning: screen is {s.kind} (focus {s.focus}); nothing more pressed", flush=True)

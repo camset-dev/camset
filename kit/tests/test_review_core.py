@@ -329,3 +329,101 @@ def test_the_default_scan_is_the_latest_of_this_runs_eyes_and_a_named_scan_of_ot
     with pytest.raises(LinkError):
         page_scan.main()
     assert runner.scan_record(root / "kit2_page_scan_new")["eyes"] == "osd"
+
+
+# ---------------------------------------------------------------- finding 17: page_scan's Right and its fresh frames
+
+
+class ScanCamera:
+    """A made-up camera for kit/page_scan.py's Scan: `screens` in turn ({kind, focus, row}), each settled frame the
+    next one after a press; a frame is `age` s old when handed over (its capture time), every grab a fresh one. The link
+    keeps what it is sent, with the screen each press was judged on."""
+    name = "hdmi"
+
+    def __init__(self, tmp_path, screens, age=0.0):
+        self.tmp, self.screens, self.at, self.age, self.n = tmp_path, list(screens), 0, age, 0
+        self.timing, self.sent, self.grabs = {}, [], []
+        self.moves, self.moved_at, self.menus = 0, None, 0
+
+    def frame(self, tag, age):
+        import time
+        self.n += 1
+        path = self.tmp / f"{self.n:05d}_{tag}.png"
+        Image.fromarray(np.full((480, 640, 3), GREY, np.uint8)).save(path)
+        return SimpleNamespace(image=np.full((480, 640, 3), GREY, np.uint8), t=time.monotonic() - age, path=path,
+                               screen=self.screens[self.at])
+
+    def grab(self, tag="f", save=True):
+        self.grabs.append(tag)
+        return self.frame(tag, 0.0)
+
+    def settle(self, before, tag="f", expect_change=None, sent_at=None, **kw):
+        return self.frame(tag, self.age), True
+
+    def press(self, button, hold_ms=60, screen=None, **kw):          # the link's
+        self.sent.append((button, getattr(screen, "kind", screen)))
+        self.moves += 1
+        self.at = min(self.at + 1, len(self.screens) - 1)
+        return {"ok": True}
+
+
+def scan_on(tmp_path, monkeypatch, screens, lit="Image Quality/Rec", age=0.0):
+    """page_scan.Scan over ScanCamera, the screen read from each frame's made-up state and the lit bar read `lit`."""
+    import page_scan
+    from camkit import screen as screen_mod
+
+    def read(f):
+        st = getattr(f, "screen", {"kind": "unknown"})
+        return SimpleNamespace(kind=st["kind"], focus=st.get("focus"), row=st.get("row"), field=None,
+                               count=st.get("count", 5), slots=None, signature=f"{st['kind']}{st.get('row')}",
+                               page=st.get("page", "p"))
+    monkeypatch.setattr(screen_mod, "read", read)
+    monkeypatch.setattr(page_scan, "page_key", lambda f: getattr(f, "screen", {}).get("page", "p"))
+    monkeypatch.setattr(screen_mod, "same_state", lambda a, b: (a.kind, a.row) == (b.kind, b.row))
+    monkeypatch.setattr(live, "lit_text", lambda image, path: lit)
+    cam = ScanCamera(tmp_path, screens, age)
+    run = Run("kit2_page_scan_t", root=tmp_path)
+    return page_scan.Scan(run, cam, cam, 3), cam
+
+
+GROUPS = {"kind": "menu", "focus": "groups", "row": 0}
+
+
+def rows(n, page="p"):
+    return {"kind": "menu", "focus": "rows", "row": n, "page": page}
+
+
+def test_page_scans_right_into_the_rows_is_judged_as_any_opening_press(tmp_path, monkeypatch, capsys):
+    """Finding 17: the scan's one Right "into the rows" (the menu opened with its cursor in the group column) went
+    straight to the link, past the never-open check every other opening press meets, on the first program a new body
+    runs: a focus misread would open the lit row. Now it is judged as LiveCamera judges an opening press: the lit bar
+    read first, and a bar that must not be opened (here Format) refused, nothing sent but the scan's closing MENU."""
+    scan, cam = scan_on(tmp_path, monkeypatch, [GROUPS, rows(0)], lit="Format")
+    scan.run_scan()
+    assert [k for k, _ in cam.sent] == ["menu"], cam.sent           # the close's MENU alone, never the Right
+    assert "never opened" in capsys.readouterr().out
+    scan, cam = scan_on(tmp_path / "ok", monkeypatch, [GROUPS, rows(0), rows(1), rows(2), rows(0)])
+    (tmp_path / "ok").mkdir(exist_ok=True)
+    scan.run_scan()
+    assert cam.sent[0] == ("right", "menu") and [k for k, _ in cam.sent[1:]].count("down") >= 1
+
+
+def test_page_scans_presses_are_judged_on_a_frame_no_older_than_stale_s(tmp_path, monkeypatch):
+    """Finding 17: a press is judged on a frame no older than live.STALE_S (the screen can change with nothing sent):
+    a Down whose frame is older gets one fresh look first, judged and measured from that; where the fresh look is no
+    longer the menu page it was read as, nothing is sent."""
+    import page_scan
+    scan, cam = scan_on(tmp_path, monkeypatch, [rows(0), rows(1)], age=live.STALE_S + 1)
+    before = cam.frame("old", live.STALE_S + 1)
+    scan.press("down", before, "down")
+    assert cam.grabs == ["down-fresh"] and cam.sent == [("down", "menu")]
+    cam2 = ScanCamera(tmp_path, [rows(0)], 0.0)
+    scan2 = page_scan.Scan(scan.run, cam2, cam2, 3)
+    old = cam2.frame("old", live.STALE_S + 1)
+    cam2.screens[0] = {"kind": "shooting"}                         # the menu closed by itself meanwhile
+    with pytest.raises(Exception, match="changed"):
+        scan2.press("down", old, "down")
+    assert cam2.sent == []
+    fresh = cam2.frame("new", 0.0)
+    scan2.press("menu", fresh, "menu-close")                       # a frame young enough: no extra look
+    assert cam2.grabs == ["down-fresh"] and cam2.sent == [("menu", "shooting")]
