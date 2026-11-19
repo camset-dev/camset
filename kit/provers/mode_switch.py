@@ -66,7 +66,7 @@ from proving.tables import (DIAL_ROW, cell_value, dial_cell, dial_option, dial_t
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, SHOWN_EXPOSURES, SHOWN_MODES, SWITCH_KEPT, add_in_argument,  # noqa: E402
                     add_info_ok_argument, close_screen, end_session, forget_refused, in_mode, load_scan,
                     menu_from_shooting, notes_named_or_exit, read_json, restore_checked, restoring, scan_arg, scan_mode,
-                    scan_position, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
+                    scan_position, session_start, shown_mode, switch_advice, switch_left, switch_waiting, write_json)
 from shootmode_run import FAMILIES, mode_name  # noqa: E402
 
 BY_MENU, BY_DIAL = "Set with Menu", "Set with Dial"
@@ -543,9 +543,10 @@ def main():
         try:
             with Link(run) as link:
                 hdmi.attach(link)
-                to_shooting(link, hdmi, "the download before the settings")
-                before = last = link.download("before-set")
-                time.sleep(5)
+                # the session's start (runner.session_start): the shooting screen, the download, the menu's lock waited
+                # out; the session leaves its settings for the waiting switch's --restore
+                before = last = session_start(link, hdmi, "the download before the settings", "before-set",
+                                              reach=to_shooting, say=False)
                 cam = LiveCamera(link, hdmi, run, may_open=MAY_OPEN)
                 try:
                     for path, option, box in plan:
@@ -618,9 +619,9 @@ def main():
     try:
         with Link(run) as link:
             hdmi.attach(link)
-            to_shooting(link, hdmi, "the start download")
-            start = link.download("before")
-            time.sleep(5)
+            # the session's start (runner.session_start): the shooting screen, the start download, the menu's lock
+            # waited out; the session ends in the switch kept, or with the start file uploaded, its own
+            start = session_start(link, hdmi, reach=to_shooting, say=False)
             cam = LiveCamera(link, hdmi, run, may_open=MAY_OPEN)
             try:
                 open_menu(cam)

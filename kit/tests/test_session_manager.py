@@ -273,7 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
+NOT_YET = {"kit/provers/shootmode_run.py": 1}
 
 
 def kit_sources():
@@ -516,8 +516,8 @@ def test_mode_switchs_session(world, monkeypatch):
     monkeypatch.setattr(mode_switch.camset, "diff", lambda a, b: [CHANGE])
     run_main(monkeypatch, mode_switch, "--to", "Movie", "--run", "kit2_switch_pin")
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the start download", "download before", "sleep 5",
-        "camera {'may_open': ['Accessibility']}", "open menu", "dial by menu", "close screen", "sleep 1", "open menu",
+        "check readers", "link", "attach", "to_shooting: the start download", "download before",
+        "lock wait (5 s at most)", "camera {'may_open': ['Accessibility']}", "open menu", "dial by menu", "close screen", "sleep 1", "open menu",
         "shoot mode", "close screen", "to_shooting: the download after the switch", "sleep 2", "download mode-Movie",
         "upload 00001_before.DAT", "link closed", "eyes closed", "verify"]
 
@@ -541,7 +541,7 @@ def test_mode_switchs_setting_session(world, monkeypatch, own_runs):
     run_main(monkeypatch, mode_switch, "--set", "Made-up Row=On", "--run", "kit2_switch_pin")
     assert world.said == [
         "check readers", "link", "attach", "to_shooting: the download before the settings", "download before-set",
-        "sleep 5", "camera {'may_open': ['Accessibility']}", "open menu", "set row", "close screen", "sleep 1",
+        "lock wait (5 s at most)", "camera {'may_open': ['Accessibility']}", "open menu", "set row", "close screen", "sleep 1",
         "close screen", "to_shooting: the download after the settings", "sleep 2", "download after-set",
         "link closed", "eyes closed"]
 

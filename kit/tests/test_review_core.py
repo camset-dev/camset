@@ -539,6 +539,7 @@ def test_the_lock_rule_follows_the_mode_a_switch_leaves_the_camera_in(own_runs, 
         session.MODE = "Stills"                 # as runner.load_scan sets it, from the scan's record
         return [], {}
     monkeypatch.setattr(session, "MODE", None)
+    monkeypatch.setattr(session, "wait_lock", lambda *a, **k: "made up")      # the start's wait (runner.session_start)
     for name, value in (("load_scan", load_scan), ("check_readers", lambda: None),
                         ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda link: None, close=lambda: None)),
                         ("Link", FakeLink), ("LiveCamera", lambda *a, **k: SimpleNamespace()),
