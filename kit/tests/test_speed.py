@@ -811,15 +811,18 @@ def test_the_crawl_the_first_open_check_afreg_and_prove_run_go_through_the_one_w
 
 def test_the_crawl_and_prove_run_wait_after_their_download_through_the_one_wait():
     """crawl_run's wait after its start download and prove_run's after a session's download (5 s before, its longest
-    still) are camkit.session.wait_lock with the run's eyes, measured from the download's reply (their mains need a
-    camera: read off their source)."""
+    still: runner.session_start's settle) are camkit.session.wait_lock with the run's eyes, measured from the
+    download's reply (their mains need a camera: read off their source)."""
     import re
     crawl = (KIT / "crawl_run.py").read_text(encoding="utf-8")
     prove = (KIT / "prove_run.py").read_text(encoding="utf-8")
+    start = (KIT / "runner.py").read_text(encoding="utf-8").split("def session_start", 1)[1].split("\ndef ", 1)[0]
     assert re.search(r'before = link\.download\("before"\)\n\s+downloaded = time\.monotonic\(\)', crawl)
     assert "wait_lock(downloaded, hdmi, clock=time)" in crawl and "lock_left" not in crawl
-    assert re.search(r'here = link\.download\([^\n]*\)\n\s+downloaded = time\.monotonic\(\)', prove)
-    assert "wait_lock(downloaded, eyes, clock=time, longest=5.0)" in prove and "time.sleep(5)\n" not in prove
+    assert re.search(r'here = session_start\(link, eyes, [^\n]*\n[^\n]*settle=5\.0', prove)
+    assert "time.sleep(5)\n" not in prove
+    assert re.search(r'start = link\.download\(tag\)\n\s+since = time\.monotonic\(\)', start)
+    assert "session.wait_lock(since, eyes, clock=time, longest=settle)" in start and "time.sleep(" not in start
 
 
 # ---------------------------------------------------------------- the camera after an upload, as measured

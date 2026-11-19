@@ -103,7 +103,7 @@ from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, a
                     changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
                     log_network_decided, menu_from_shooting, network_decided_or_exit, network_readings, network_values,
                     read_json, restoring, row_values, values_withheld)
-from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels  # noqa: E402
+from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels, session_start  # noqa: E402
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
@@ -611,6 +611,36 @@ class OsdEyes(OsdSource):
         pass
 
 
+def menu_closed_then_shooting(link, eyes, why: str) -> None:
+    """A proof session's way to the shooting screen for its start download: MENU, a cleanup press, on a menu page or
+    the Main tiles, a second for the menu to close (to_shooting would press MENU again on a menu still closing), then
+    MENU until the shooting screen (to_shooting)."""
+    if screen.read(eyes.grab(save=False)).kind in ("menu", "tiles"):
+        link.press("menu", cleanup=True)
+        time.sleep(1.0)
+    to_shooting(link, eyes, why)
+
+
+class NotThisStart(Exception):
+    """A session's download the run does not start from (start_refused): said, and the run stops before anything is
+    pressed; `unrestored` where the camera is no longer on the run's start file."""
+
+    def __init__(self, said: str, unrestored: bool = False):
+        super().__init__(said)
+        self.unrestored = unrestored
+
+
+def start_refused(here: Path, start: Path | None, body: str) -> None:
+    """NotThisStart for a session's download `here` the run may not go on from: the run's first (no `start` yet) from
+    a camera of another body than the one the jobs were made for, or a later session's that differs from `start`."""
+    if start is None:
+        model = camset.read(here).model
+        if model != body:
+            raise NotThisStart(f"the camera is a {model}, the jobs were made for a {body}: stopping")
+    elif camset.diff(camset.read(start), camset.read(here)):
+        raise NotThisStart("a new session does not start from the start file's settings: stopping", unrestored=True)
+
+
 def end_rows(link, eyes, start: Path, reach, withheld: bool | None = None):
     """A proof session's end (runner.end_session: the shooting screen, the download, the start file put back when anything
     differs); withheld (a --network run, whose decided rows main() gives proving.jobs.NETWORK, unless said): the records
@@ -1075,24 +1105,20 @@ def main():
             with Link(run) as link:
                 hdmi.attach(link)
                 eyes = OsdEyes(link, run) if a.eyes == "osd-all" else hdmi
-                if screen.read(eyes.grab(save=False)).kind in ("menu", "tiles"):
-                    link.press("menu", cleanup=True)
-                    time.sleep(1.0)
-                to_shooting(link, eyes, "the settings download")
-                here = link.download("before" if start is None else "session")
-                downloaded = time.monotonic()
-                if start is None:
-                    start = here
-                    print(f"start file: {start.name}", flush=True)
-                    if camset.read(start).model != body:
-                        print(f"the camera is a {camset.read(start).model}, the jobs were made for a {body}: stopping",
-                              flush=True)
-                        break
-                elif camset.diff(camset.read(start), camset.read(here)):
-                    print("a new session does not start from the start file's settings: stopping", flush=True)
-                    unrestored = True
+                first = start is None
+                try:
+                    # the session's start (runner.session_start): the shooting screen, the download (the run's start
+                    # file, said; a later session's, which must match it), then the menu's lock waited out from the
+                    # download's reply (camkit.session.wait_lock, 5 s the longest, as before)
+                    here = session_start(link, eyes, "the settings download", "before" if first else "session",
+                                         reach=menu_closed_then_shooting, say=first, settle=5.0,
+                                         prepare=lambda here, start=start: start_refused(here, start, body))
+                except NotThisStart as e:
+                    print(e, flush=True)
+                    unrestored = unrestored or e.unrestored
                     break
-                wait_lock(downloaded, eyes, clock=time, longest=5.0)     # the menu's lock (camkit.session.wait_lock)
+                if first:
+                    start = here
                 left = len(pending)
                 try:
                     status = session(link, eyes, run, cycle, model, pending, start, out, failures)

@@ -273,7 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/prove_run.py": 1, "kit/pass3_run.py": 1,
+NOT_YET = {"kit/pass3_run.py": 1,
            "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
 
@@ -427,29 +427,69 @@ def test_my_menus_session(world, monkeypatch):
         "link closed", "check []", "eyes closed"]
 
 
-@pytest.mark.parametrize("kind", ["shooting", "menu"])
-def test_prove_runs_session(world, monkeypatch, kind):
+def prove_world(world, monkeypatch, kind="shooting", body=None, rows=1, status="done"):
+    """prove_run's main over the made-up parts: `rows` list rows to prove, each session's body proving one row and
+    returning `status` (all of them for "done"), the jobs made for `body` (the a1 II's by default). The tables and
+    settings main() changes in place (another body's empties the a1 II's label tables) are the test's own copies."""
+    import proving.jobs
+    import proving.sidelists
     from camkit import coverage, models
+    for name in ("LABELS", "ICON_ROWS", "DISP_MODES", "CYCLE", "MODEL", "FIRST"):
+        monkeypatch.setattr(prove_run, name, type(getattr(prove_run, name))(getattr(prove_run, name)))
+    for module, name in ((prove_run, "CONTEXT"), (prove_run, "LOOKS"), (proving.jobs, "HELP_TEXT"),
+                         (proving.jobs, "OSD_ROWS"), (proving.sidelists, "SPREAD")):
+        monkeypatch.setattr(module, name, getattr(module, name))
     world.wire(prove_run).kind = kind
-    row = {"kind": "list", "path": ["Drive Mode"], "labels": ["Single Shooting", "Continuous Shooting"]}
-    monkeypatch.setattr(prove_run.models, "current", lambda root: models.A1II)
-    monkeypatch.setattr(prove_run, "jobs", lambda scope=None: [dict(row)])
+    jobs = [{"kind": "list", "path": [f"Row {i}"], "labels": ["A", "B"]} for i in range(rows)]
+    monkeypatch.setattr(prove_run.models, "current", lambda root: body or models.A1II)
+    monkeypatch.setattr(prove_run, "jobs", lambda scope=None: [dict(j) for j in jobs])
     monkeypatch.setattr(prove_run, "axis_jobs", lambda scope=None: [])
     monkeypatch.setattr(prove_run, "load_scan", lambda scan, **k: ([], {}))
     monkeypatch.setattr(coverage, "prove_filter", lambda todo, a, planned: todo)
     monkeypatch.setattr(coverage, "prove_looks", lambda *a, **k: coverage.NO_LOOKS)
 
-    def body(link, eyes, run, cycle, model, pending, start, out, failures):
+    def session(link, eyes, run, cycle, model, pending, start, out, failures):
         world.say("body")
-        pending.clear()
-        return "done"
-    monkeypatch.setattr(prove_run, "session", body)
+        if status == "done":
+            pending.clear()
+        else:
+            pending.pop(0)
+        return status
+    monkeypatch.setattr(prove_run, "session", session)
+
+
+@pytest.mark.parametrize("kind", ["shooting", "menu"])
+def test_prove_runs_session(world, monkeypatch, kind):
+    prove_world(world, monkeypatch, kind)
     run_main(monkeypatch, prove_run)
     menu = ["press menu (cleanup)", "sleep 1"] if kind == "menu" else []
     assert world.said == [
         "check readers", "link", "attach", *menu, "to_shooting: the settings download", "download before",
         "lock wait (5 s at most)", "body", "to_shooting: the settings download after the rows", "finish after []",
         "link closed", "check ['eyes']", "eyes closed"]
+
+
+def test_prove_run_stops_on_a_start_from_another_body_before_any_wait(world, monkeypatch, capsys):
+    prove_world(world, monkeypatch, body="ILCE-7M4")
+    run_main(monkeypatch, prove_run)
+    assert world.said == ["check readers", "link", "attach", "to_shooting: the settings download", "download before",
+                          "link closed", "eyes closed"]
+    assert "the camera is a ILCE-1M2, the jobs were made for a ILCE-7M4: stopping" in capsys.readouterr().out
+
+
+def test_prove_run_stops_on_a_later_session_off_its_start_file_before_any_wait(world, monkeypatch, capsys):
+    from camkit import camset
+    prove_world(world, monkeypatch, rows=2, status="failed")
+    monkeypatch.setattr(camset, "diff", lambda a, b: [CHANGE])
+    with pytest.raises(SystemExit) as stop:
+        run_main(monkeypatch, prove_run)
+    assert stop.value.code == runner.EXIT_UNRESTORED
+    assert world.said == [
+        "check readers", "link", "attach", "to_shooting: the settings download", "download before",
+        "lock wait (5 s at most)", "body", "to_shooting: the settings download after the rows", "finish after []",
+        "link closed", "check ['eyes']",
+        "link", "attach", "to_shooting: the settings download", "download session", "link closed", "eyes closed"]
+    assert "a new session does not start from the start file's settings: stopping" in capsys.readouterr().out
 
 
 def test_pass_threes_switching_session(world, monkeypatch):
