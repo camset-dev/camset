@@ -91,8 +91,9 @@ def show_todo(led, a) -> None:
         near = f"; {len(x['near'])} unmapped records beside it" if x["near"] else ""
         seen = f"; a look saw {len(e['changed_in_looks'])} records change" if e.get("changed_in_looks") else ""
         left = f"; {e['values_left']} values still to try" if e.get("values_left") else ""
+        inferred = f"; {e['values_inferred']} values inferred from a shared list" if e.get("values_inferred") else ""
         print(f"{x['yield']:4d}  {e['mode']} > {e['tab']} > {e['group']} > {' > '.join(e['path'])}: {e['status']}"
-              f"{left}{near}{seen}\n      needs {x['needs']}: {x['next']}")
+              f"{inferred}{left}{near}{seen}\n      needs {x['needs']}: {x['next']}")
 
 
 def record(a, camera: str) -> None:

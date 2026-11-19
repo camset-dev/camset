@@ -205,6 +205,11 @@ def test_the_made_up_camera_gives_each_status(camera):
     assert lang["rule"] == "identity/by hand" and lang["opener"]
     alpha = {o["key"]: o for o in led.options}["global:0x0100"]["values"]
     assert alpha == {0: "proved", 1: "proved", 2: "not offered"}
+    inferred = "inferred from a shared list"
+    assert {o["key"]: o for o in led.options}["global:0x0121"]["values"] == {10: "proved", 11: "proved", 12: inferred,
+                                                                            13: inferred, 14: inferred}
+    nov = row(led, "November")
+    assert nov["status"] == "proved" and nov["values_inferred"] == 3 and not nov.get("values_left")
     assert {o["key"]: o for o in led.options}["global:0x0102"]["values"] == {0: "sampled", 10: "sampled",
                                                                             20: "not yet tried"}
     assert {o["key"]: o for o in led.options}["global:0x0103"]["values"] == {0: "not yet tried",
@@ -1110,7 +1115,8 @@ SLOTS = (setting("global:0x0122", "November slot 3", ["November"], PICK, tab="Se
                  proved={"sampled": {"linear": None}}),
          setting("global:0x0125", "November slot 1 (movie)", ["November"], PICK, tab="Setup", group="G2",
                  copy_of="global:0x0120", proved={"values": [10]}),
-         setting("global:0x0126", "November readout", ["November"], PICK, tab="Setup", group="G2", scalar=False),
+         setting("global:0x0126", "November readout", ["November"], PICK, tab="Setup", group="G2", scalar=False,
+                 proved={"values": [10]}),
          setting("global:0x0127", "November short", ["November"], PICK[:2], tab="Setup", group="G2",
                  proved={"values": [10, 11]}),
          setting("global:0x0128", "Oscar", ["Oscar"], PICK, tab="Setup", group="G2", proved={"values": [10, 11]}),
@@ -1200,6 +1206,79 @@ def test_an_array_records_elements_listing_the_same_values_are_one_list(camera):
         assert not any(k.startswith("global:0x0132") for ks in lists for k in ks)
         q = lists[("global:0x0130[0]", "global:0x0130[1]")]
         assert len(q["rows"]) == 2 and q["proved"][14] == ["global:0x0130[1]"] and q["never_proved"] == []
+
+
+INFERRED = "inferred from a shared list"
+
+
+def test_a_value_proved_on_another_setting_of_its_list_is_inferred(camera):
+    """November slot 2's own record shows two values as the list names them (its proofs): the values slot 1 is proved
+    on count inferred, settled, never proved; the private form names the setting each was proved on and the slot's own
+    grounds; the public form, built from the public sources, holds no inference and keeps them still to try."""
+    led = ledger()
+    assert coverage.settled(["November"], camera=CAM, ledger=led).skip
+    assert coverage.settled(["November"], "Cat", camera=CAM, ledger=led).skip
+    priv = {o["key"]: o for o in coverage.private_doc(led)["options"]}["global:0x0121"]
+    assert priv["statuses"] == {"proved": [10, 11], INFERRED: [12, 13, 14]}
+    assert priv["cites"]["12"] == [{"proved_on": "global:0x0120"}]
+    assert priv["shared_list"] == {"with": ["global:0x0120"], "own_proved": 2, "own_proofs": []}
+    assert ("November",) not in [tuple(x["entry"]["path"]) for x in coverage.todo(led)]
+    assert any("values_inferred: 3" in x for x in coverage.row_view(led, "November"))
+    pub = coverage.public_doc(led)
+    assert {o["key"]: o for o in pub["options"]}["global:0x0121"]["statuses"] == {"proved": [10, 11],
+                                                                                 "not yet tried": [12, 13, 14]}
+    assert {tuple(r["path"]): r for r in pub["rows"]}[("November",)]["values_left"] == 3
+    assert INFERRED not in coverage.text(pub) and not coverage.public_problems(pub, camera=CAM)
+    assert coverage.public_problems(json.loads(coverage.text(pub).replace('"not yet tried": [12', f'"{INFERRED}": [12')),
+                                    camera=CAM)
+
+
+def test_an_inference_needs_values_of_its_own_and_no_contradiction(camera, monkeypatch, capsys):
+    """Slot 3 (proved by samples, no value in its proof) infers from its two own proof lines; slot 4, one of whose
+    proofs reads as another value than it wrote, infers nothing, and the two values that proof names stay to try on
+    every slot; a copy, a readout, a setting alone in its list and one with no value of its own infer nothing; a value
+    no setting is proved on stays to try."""
+    import coverage as tool
+    with extra_settings(camera, *SLOTS):
+        write_proofs(camera, "kit2_pass2", SLOT_PROOFS)
+        led = ledger()
+        vals = {o["key"]: o["values"] for o in led.options}
+        nyt = "not yet tried"
+        assert vals["global:0x0122"] == {10: INFERRED, 11: nyt, 12: INFERRED, 13: nyt, 14: INFERRED}
+        assert vals["global:0x0121"] == {10: "proved", 11: "proved", 12: INFERRED, 13: nyt, 14: INFERRED}
+        assert set(vals["global:0x0124"].values()) == {nyt}
+        assert vals["global:0x0125"] == {10: "proved", 11: nyt, 12: nyt, 13: nyt, 14: nyt}     # a copy
+        assert vals["global:0x0126"] == {10: "proved", 11: nyt, 12: nyt, 13: nyt, 14: nyt}     # a readout
+        assert vals["global:0x0128"] == {10: "proved", 11: "proved", 12: nyt, 13: nyt, 14: nyt}  # alone on its row
+        assert vals["global:0x0129"][2] == nyt and set(vals["global:0x012a"].values()) == {nyt}
+        priv = {o["key"]: o for o in coverage.private_doc(led)["options"]}
+        assert priv["global:0x0122"]["shared_list"]["own_proofs"] == [{"proof": 1, "run": "kit2_pass2"},
+                                                                      {"proof": 2, "run": "kit2_pass2"}]
+        assert "shared_list" not in priv["global:0x0124"]
+        nov = row(led, "November")
+        assert nov["values_inferred"] == 5 and nov["values_left"] == 16
+        coverage.forget()
+        monkeypatch.setattr(sys, "argv", ["coverage.py", "--todo"])
+        tool.main()
+        assert "November: sampled; 5 values inferred from a shared list; 16 values still to try" in capsys.readouterr().out
+
+
+def test_a_greyed_value_is_inferred_from_another_element_and_keeps_why(camera):
+    """A profile's value the camera greys in a state (refused with a notice naming the row that greys it) is inferred
+    from another element of its array that is proved on it, the notice still cited; a copy the camera writes with
+    another setting (scalar false) keeps it greyed, so that option is no settled one."""
+    refused = {"path": ["Quebec", "Two", "Mode"], "kind": "list", "label": "Ant", "applied": False,
+               "notice": {"text": "This function is not available as follows: Bravo"}, "changes": []}
+    with extra_settings(camera, *ARRAY):
+        write_proofs(camera, "kit2_pass2", [refused])
+        led = ledger()
+        vals = {o["key"]: o["values"] for o in led.options}
+        assert vals["global:0x0130[1]"] == {10: INFERRED, 11: INFERRED, 12: INFERRED, 13: "proved", 14: "proved"}
+        assert vals["global:0x0130[0]"][13] == INFERRED and vals["global:0x0131[1]"][10] == INFERRED
+        assert vals["global:0x0132[1]"][10] == "greyed in state"
+        cites = {o["key"]: o for o in led.options}["global:0x0130[1]"]["cites"][10]
+        assert cites[0] == {"proved_on": "global:0x0130[0]"} and cites[1]["blocker"] == {"row": "Bravo"}
+        assert not coverage.settled(["Quebec", "Two", "Mode"], "Ant", camera=CAM, ledger=led).skip
 
 
 def test_the_tool_prints_the_shared_lists(camera, monkeypatch, capsys):

@@ -103,6 +103,14 @@ STATUSES = (
     ("no proof possible", "Every setting placed on it is proved or carries an unproved_reason, one at least of another "
                           "kind than equipment (state, camera_only, not_on_camera, network, unknown): the reason says "
                           "why no menu choice proves it."),
+    ("inferred from a shared list", "Options only, private only, never proved: no proof chose the value on this "
+                                    "setting, but it is proved on another setting of a shared list (settings that list "
+                                    "the same values, on one row or as one array record's elements, none a readout: "
+                                    "kit/tools/coverage.py --shared), this setting's own record shows two of its values "
+                                    "as the list names them (proved, or a proof line's reading), and no proof of the "
+                                    "list reads that value as another. It takes the place of greyed in state, closed by "
+                                    "rule or not yet tried, whose citations the private form keeps beside the setting "
+                                    "it was proved on."),
     ("greyed in state", "Greyed or refused by a notice. Public only from the definition's inactive_when (inferred: "
                         "inactive_when, the blocker the row it names); privately also from a look line, a crawl row, a "
                         "proof or failure line, or the latest page scan's greyed flag, the blocker the row (and option) "
@@ -120,15 +128,21 @@ STATUSES = (
 )
 STATUS_NAMES = tuple(n for n, _ in STATUSES)
 RANK = {n: i for i, n in enumerate(STATUS_NAMES)}
+# a value of a shared list proved on another of its settings (_infer_shared), and the statuses it takes the place of
+INFERRED = "inferred from a shared list"
+INFERABLE = ("greyed in state", "closed by rule", "not yet tried")
+# how many values a setting's own record must show as its shared list names them before the rest are inferred
+SHARED_OWN = 2
 # what settled() counts settled (a run given --skip-settled leaves it out): an answer that holds whatever the camera's
 # state, on a row with no value still to try (values_left)
-SETTLED = frozenset(STATUS_NAMES[:8] + ("no proof possible",))
+SETTLED = frozenset(STATUS_NAMES[:8] + ("no proof possible", INFERRED))
 # what kit/tools/coverage.py --todo lists, with the next step each needs (and every row with values_left)
 TODO = ("needs equipment", "greyed in state", "kit cannot read", "closed by rule", "not yet tried")
 # the statuses of a setting's value still to try: values_left counts them on a row, and such a row is never settled
 LEFT = ("greyed in state", "kit cannot read", "not yet tried")
-# what the public form never holds (public_problems refuses it there): a state seen, a kit's failure
-NEVER_PUBLIC = ("tested, no record changes", "kit cannot read")
+# what the public form never holds (public_problems refuses it there): a state seen, a kit's failure, an inference
+# from the proof lines (the public build has none)
+NEVER_PUBLIC = ("tested, no record changes", "kit cannot read", INFERRED)
 
 RECORD_STATUSES = (
     ("proved", "Every setting on the record is proved (an element no proof can reach, with its unproved_reason, "
@@ -785,6 +799,7 @@ def build(camera: str = None, *, src: Sources = None, public: bool = False, vali
     facts = _facts(led, src, by_key)
     _row_statuses(led, facts, by_key, src)
     _option_statuses(led, settings, facts, src)
+    _infer_shared(led)
     _values_left(led)
     _record_statuses(led, settings, src, facts)
     if validity:
@@ -1640,17 +1655,50 @@ def _values_left(led: Ledger) -> None:
     """Each row's values_left, once the values have their statuses: how many values of the settings placed on it (or
     tied to it) are still to try (LEFT: not yet tried, greyed in state, kit cannot read). A row with any is never
     settled, whatever its own status says of its settings (a setting proved on a few of its values is "proved"); a
-    label the menu repeats takes the first one's."""
+    label the menu repeats takes the first one's. values_inferred beside it counts those inferred from a shared list
+    (the private form's)."""
     by_key = {o["key"]: o for o in led.options}
     for e in led.rows:
-        n = sum(1 for k in _row_settings(led, e) for st in (by_key.get(k) or {}).get("values", {}).values()
-                if st in LEFT)
+        sts = [st for k in _row_settings(led, e) for st in (by_key.get(k) or {}).get("values", {}).values()]
+        n = sum(1 for st in sts if st in LEFT)
         if n:
             e["values_left"] = n
+        if INFERRED in sts:
+            e["values_inferred"] = sts.count(INFERRED)
     for e in led.rows:
         first = e.get("_first")
-        if first is not None and first.get("values_left"):
-            e["values_left"] = first["values_left"]
+        for k in ("values_left", "values_inferred"):
+            if first is not None and first.get(k):
+                e[k] = first[k]
+
+
+def _infer_shared(led: Ledger) -> None:
+    """In the full build (the proof lines are this computer's): a value of a setting of a shared list (shared_lists)
+    whose status is one of INFERABLE becomes inferred from a shared list when another setting of the list is proved on
+    it, this setting's own record shows SHARED_OWN of the list's values as the list names them (own_values) and no proof
+    of this setting contradicts the list, and no proof of the list names that value or writes it against its reading.
+    Its citations keep what it was (a notice that greyed it, its blocker) after the setting it was proved on; the
+    option carries the list's other settings and its own grounds (shared_list). The public build infers nothing."""
+    if not led.src.private:
+        return
+    opts = {o["key"]: o for o in led.options}
+    for x in shared_lists(led):
+        blocked = {c["wrote"] for c in x["contradictions"]} | ({c["reads_as"] for c in x["contradictions"]} - {None})
+        wrong = {c["key"] for c in x["contradictions"]}
+        for k in x["keys"]:
+            if k in wrong or len(own_values(x, k)) < SHARED_OWN:
+                continue
+            o, done = opts[k], False
+            for v, st in o["values"].items():
+                on = [t for t in x["proved"].get(v, []) if t != k]
+                if st in INFERABLE and v not in blocked and on:
+                    o["values"][v] = INFERRED
+                    o["cites"][v] = [{"proved_on": on[0]}] + list(o["cites"].get(v) or [])
+                    done = True
+            if done:
+                own = x["own"][k]
+                o["shared_list"] = {"with": [t for t in x["keys"] if t != k], "own_proved": len(own["proved"]),
+                                    "own_proofs": [{"proof": c["proof"], "run": c["run"]} for c in own["proofs"]]}
 
 
 # ---------------------------------------------------------------- shared lists (one picker's slots, one table of codes)
@@ -1818,25 +1866,25 @@ def shared_view(led: Ledger) -> list:
         return where + (f" and {len(x['rows']) - 1} more rows" if len(x["rows"]) > 1 else "") + \
             f" ({x['keys'][0]}, {by_key[x['keys'][0]]['name']}, ...)"
     out = [f"{len(lists)} shared list{'s' if len(lists) != 1 else ''} (settings listing the same values on one row, "
-           f"or one array record's elements), {sum(len(x['keys']) for x in lists)} settings; each with a value still "
-           "to try on one of its settings:"]
+           f"or one array record's elements), {sum(len(x['keys']) for x in lists)} settings; each with a value "
+           "inferred or still to try on one of its settings:"]
     quiet = 0
     for x in lists:
         sts = [opts[k]["values"].get(v) for k in x["keys"] for v, _ in x["values"]]
-        if not any(st in LEFT for st in sts) and not x["contradictions"] and not x["no_own"]:
+        if not any(st in LEFT or st == INFERRED for st in sts) and not x["contradictions"] and not x["no_own"]:
             quiet += 1
             continue
         own = [len(own_values(x, k)) for k in x["keys"]]
         out.append(f"  {place(x)}: {len(x['keys'])} settings, {len(x['values'])} values; proved on some setting: "
                    f"{len(x['proved'])}; settings showing values of their own: {sum(1 for n in own if n)} (from "
-                   f"{min(own)} to {max(own)} each); still to try: {sum(1 for st in sts if st in LEFT)}; "
-                   f"contradictions: {len(x['contradictions'])}")
+                   f"{min(own)} to {max(own)} each); inferred: {sts.count(INFERRED)}; still to try: "
+                   f"{sum(1 for st in sts if st in LEFT)}; contradictions: {len(x['contradictions'])}")
         for c in x["contradictions"]:
             name = dict((v, n) for v, n in x["values"])
             out.append(f"      {c['key']} {by_key[c['key']]['name']}: proof {c['run']} line {c['proof']} wrote "
                        f"{name.get(c['wrote'], c['wrote'])!r} but reads as "
                        f"{name.get(c['reads_as']) if c['reads_as'] is not None else 'a value the list does not hold'!r}")
-    out.append(f"  ({quiet} other lists: every value proved, or settled otherwise, on every setting)")
+    out.append(f"  ({quiet} other lists: every value proved, or settled without inference, on every setting)")
     never = [(x, v) for x in lists for v in x["never_proved"]]
     out.append(f"values no setting of their list is proved on: {len(never)}")
     for x in lists:
@@ -2095,8 +2143,8 @@ def _validity(led: Ledger, by_key: dict, src: Sources) -> None:
 ROW_PUBLIC = ("mode", "tab", "group", "path", "nth", "status", "same_label_as", "rule", "opener", "never_choose",
               "placement_missing", "blocker", "equipment", "fields", "reason", "confirmed", "header", "sony_note",
               "inferred", "values_left")
-ROW_PRIVATE = ROW_PUBLIC + ("source", "cites", "kit_message", "kit", "changed_in_looks", "cites_changed", "looked",
-                            "options_seen", "proofs")
+ROW_PRIVATE = ROW_PUBLIC + ("values_inferred", "source", "cites", "kit_message", "kit", "changed_in_looks",
+                            "cites_changed", "looked", "options_seen", "proofs")
 # a blocker's keys the public form holds: the row an inactive_when names, never an option (the state it stood in)
 PUBLIC_BLOCKER_KEYS = ("row",)
 ABOUT = ("What is settled about this camera's menus and file, generated by kit/tools/coverage.py --write from the "
@@ -2167,6 +2215,8 @@ def private_doc(led: Ledger) -> dict:
         valid = {str(v): led.option_validity[(o["key"], v)] for v in o["values"] if (o["key"], v) in led.option_validity}
         if valid:
             x["validity"] = valid
+        if o.get("shared_list"):
+            x["shared_list"] = o["shared_list"]
     doc["records"] = [dict(r) for r in led.records]
     doc["unresolved_looks"] = led.unresolved
     doc["proofs"] = led.proof_summary
@@ -2279,7 +2329,7 @@ def vocabulary_problems(doc, vocab: Vocab | None, camera: str) -> list:
                 bad(w, "reason", x)
         st = r.get("status")
         if st in NEVER_PUBLIC:
-            out.append(f"{w}: the status {st!r} is a state seen or a kit's failure, never public")
+            out.append(f"{w}: the status {st!r} rests on what this computer's runs hold, never public")
         if st == "greyed in state" and r.get("inferred") != "inactive_when":
             out.append(f"{w}: \"greyed in state\" in public is the definition's inactive_when alone")
     for i, o in enumerate(doc.get("options") or []):
@@ -2287,7 +2337,7 @@ def vocabulary_problems(doc, vocab: Vocab | None, camera: str) -> list:
             continue
         for st in o.get("statuses") or {}:
             if st in NEVER_PUBLIC or st == "greyed in state":
-                out.append(f"options[{i}]: the status {st!r} is a state seen, never public")
+                out.append(f"options[{i}]: the status {st!r} rests on what this computer's runs hold, never public")
     for i, r in enumerate(doc.get("records") or []):
         for x in (r.get("kind") or []) if isinstance(r, dict) else []:
             if x not in vocab.kinds:
@@ -3231,7 +3281,8 @@ def row_view(led: Ledger, label: str, public: bool = False) -> list:
         if e.get("rule"):
             out.append(f"   rule: {e['rule']}; opens with {', '.join(e.get('opener') or [])}"
                        + ("; no option is ever chosen" if e.get("never_choose") else ""))
-        for k in ("blocker", "equipment", "fields", "reason", "placement_missing", "inferred", "values_left"):
+        for k in ("blocker", "equipment", "fields", "reason", "placement_missing", "inferred", "values_left",
+                  "values_inferred"):
             if e.get(k):
                 out.append(f"   {k}: {e[k]}")
         if e.get("confirmed"):
