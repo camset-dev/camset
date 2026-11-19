@@ -501,7 +501,7 @@ def run_blockers(run, cycle, model, chosen, log, scan=None) -> bool:
             print("stopping: the camera may still be switched", flush=True)
             return False
         hdmi.close()
-        time.sleep(3)
+        time.sleep(3)       # between this link's close and the next program's (its start waits its own): not the lock
         if b.get("prove"):                  # rows already mapped: prove them again in the switched state
             args = [PY, "-u", "kit/prove_run.py", "--context", b["context"]] + scan_of(b)
             for row in b["prove"]:
@@ -511,7 +511,7 @@ def run_blockers(run, cycle, model, chosen, log, scan=None) -> bool:
             rc = walk_and_prove(b, log)
             if rc != 0:
                 print(f"   the walk or the labels failed (exit {rc}); see {P3 / 'pass3.log'}", flush=True)
-        time.sleep(3)
+        time.sleep(3)       # between the last program's link and the restore's (it waits its own): not the lock
         if restore(run, start) != 0:
             print("the restore did not check out: stopping", flush=True)
             return False

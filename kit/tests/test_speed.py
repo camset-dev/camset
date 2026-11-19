@@ -1958,11 +1958,82 @@ def test_no_runner_sleeps_a_fixed_lock_after_a_download_nor_a_bare_second_before
     assert len(files) > 60
     for p in files:
         text = p.read_text(encoding="utf-8")
-        assert "time.sleep(LOCK_S)" not in text and "< LOCK_S:" not in text, p.name
+        assert not fixed_waits_after_downloads(text), (p.name, fixed_waits_after_downloads(text))
         lines = text.splitlines()
         for i, line in enumerate(lines):
             if "link.download(" in line and i and re.fullmatch(r"\s*time\.sleep\((1|1\.0)\)", lines[i - 1]):
                 pytest.fail(f"{p.name}:{i}: a bare second slept before a download")
+
+
+def fixed_waits_after_downloads(text: str, after: int = 8) -> list:
+    """The line numbers where a source waits a fixed lock after a settings download: a sleep of a number of 1 s or more,
+    or of LOCK_S by any name it is bound to (imported as, assigned, an attribute: prove_run.LOCK_S), in the `after`
+    statements following one that downloads, in the same block, unless its line says it is "not the lock" (pass3_run's
+    3 s between a session's close and the next program's start) or the next statement downloads (a wait before that
+    download); and any loop whose test compares with such a name (a wait of its own on LOCK_S)."""
+    import ast
+    tree = ast.parse(text)
+    lines = text.splitlines()
+    bound = {"LOCK_S"}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom):
+            bound |= {a.asname or a.name for a in node.names if a.name == "LOCK_S"}
+        if isinstance(node, ast.Assign) and isinstance(node.value, (ast.Name, ast.Attribute)) and \
+                getattr(node.value, "id", getattr(node.value, "attr", None)) == "LOCK_S":
+            bound |= {t.id for t in node.targets if isinstance(t, ast.Name)}
+
+    def lock(n) -> bool:
+        return (isinstance(n, ast.Name) and n.id in bound) or (isinstance(n, ast.Attribute) and n.attr in bound)
+
+    def fixed(call) -> bool:
+        if not call.args or "not the lock" in lines[call.lineno - 1]:
+            return False
+        x = call.args[0]
+        return (isinstance(x, ast.Constant) and isinstance(x.value, (int, float)) and x.value >= 1) or \
+            any(lock(n) for n in ast.walk(x))
+
+    defs = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Lambda)
+
+    def walk(node):                             # a statement's own nodes, never a function defined inside it
+        yield node
+        for child in ast.iter_child_nodes(node):
+            if not isinstance(child, defs):
+                yield from walk(child)
+
+    def calls(node, name):
+        return [c for c in walk(node) if isinstance(c, ast.Call)
+                and getattr(c.func, "attr", getattr(c.func, "id", None)) == name]
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.While) and any(lock(n) for n in ast.walk(node.test)):
+            found.append(node.lineno)
+        for block in (getattr(node, f, None) for f in ("body", "orelse", "finalbody")):
+            if not isinstance(block, list):
+                continue
+            for i, stmt in enumerate(block):
+                if isinstance(stmt, ast.stmt) and not isinstance(stmt, defs) and calls(stmt, "download"):
+                    for k in range(i + 1, min(i + 1 + after, len(block))):
+                        s = block[k]
+                        if isinstance(s, defs) or (k + 1 < len(block) and calls(block[k + 1], "download")):
+                            continue            # a wait before the next download (mode_switch's after a mode change)
+                        found += [c.lineno for c in calls(s, "sleep") if fixed(c)]
+    return sorted(set(found))
+
+
+def test_the_fixed_wait_guard_catches_a_number_or_any_name_of_lock_s():
+    """The guard above, on made-up sources: a number slept after a download, LOCK_S by another name or as an attribute,
+    a name assigned from it, a loop on it; never wait_lock, a short pause, or a sleep before the download."""
+    caught = ["dat = link.download('x')\ntime.sleep(4.5)\n",
+              "import prove_run\ndat = link.download('x')\ntime.sleep(prove_run.LOCK_S)\n",
+              "from prove_run import LOCK_S as LOCK\ndat = link.download('x')\nn = 1\ntime.sleep(LOCK)\n",
+              "from prove_run import LOCK_S\nlock = LOCK_S\ndat = link.download('x')\ntime.sleep(lock)\n",
+              "from prove_run import LOCK_S\nwhile time.monotonic() - done < LOCK_S:\n    time.sleep(0.3)\n"]
+    for src in caught:
+        assert fixed_waits_after_downloads(src), src
+    for src in ("dat = link.download('x')\nwait_lock(time.monotonic(), hdmi, clock=time)\n",
+                "dat = link.download('x')\ntime.sleep(0.4)\n", "time.sleep(2)\ndat = link.download('x')\n",
+                "dat = link.download('x')\ntime.sleep(3)  # before the next program's link: not the lock\n"):
+        assert not fixed_waits_after_downloads(src), src
 
 
 def test_drive_waits_the_lock_after_its_start_download_and_no_second_after_closing_a_menu(tmp_path, monkeypatch):
@@ -2116,12 +2187,16 @@ def test_the_waits_between_sessions_and_fills_are_the_lock_rule_or_gone():
     """customshoot_run and customshoot_values put the hold's working copy back in a session of their own: its first
     MENU waits the menu's lock from the end of the session before (wait_lock, measured from when it closed), not 4 s then
     5 s; mymenu_run's next fill starts at once (its session's start waits for the shooting screen and its own lock: the
-    10 s between fills waited for nothing the kit could name)."""
+    10 s between fills waited for nothing the kit could name). Their mains need a camera, so read off their source: from
+    the end of the session before to the put-back's first press, and from the end of a fill to the next, no sleep of
+    any length or name."""
     for name in ("customshoot_run.py", "customshoot_values.py"):
         text = (KIT / "provers" / name).read_text(encoding="utf-8")
-        assert "time.sleep(4)" not in text and "time.sleep(5)" not in text, name
-        assert "wait_lock(ended, hdmi, clock=time)" in text, name
-    assert "time.sleep(10)" not in (KIT / "provers" / "mymenu_run.py").read_text(encoding="utf-8")
+        between = text.split("ended = time.monotonic()", 1)[1].split("cancel_hold(", 1)[0]
+        assert "sleep(" not in between and "wait_lock(ended, hdmi, clock=time)" in between, name
+    text = (KIT / "provers" / "mymenu_run.py").read_text(encoding="utf-8")
+    between = text.split("if lap_only or items is None", 1)[1].split('say(f"finished:', 1)[0]
+    assert "sleep(" not in between and "My Menu emptied by the start file" in between
 
 
 # ---------------------------------------------------------------- K: a lap's readings on workers

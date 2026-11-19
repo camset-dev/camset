@@ -718,6 +718,20 @@ def test_the_drive_gate_never_skips_and_records_its_look(camera, capsys):
     assert not gate.after()                                                        # no new result line: no look
 
 
+def test_a_ledger_warm_began_is_the_one_the_gates_get_built_once(camera, monkeypatch):
+    """camkit.coverage.warm builds the made-up camera's real ledger on its own thread; ledger_for asked while it builds
+    and again after gets that very ledger, built once (the lock in ledger_for), its rows those of a build in line."""
+    builds = []
+    real = coverage._build
+    monkeypatch.setattr(coverage, "_build", lambda *a, **k: builds.append(1) or real(*a, **k))
+    coverage.forget()
+    coverage.warm(CAM)
+    first = coverage.ledger_for(CAM)
+    second = coverage.ledger_for(CAM)
+    assert first is second and builds == [1]
+    assert [e["status"] for e in first.rows] == [e["status"] for e in ledger().rows] and first.rows
+
+
 def test_no_ledger_says_so_and_skips_nothing(camera, capsys):
     camera.looks.unlink()
     coverage.forget()
