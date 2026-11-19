@@ -51,7 +51,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, match, ocr, paths, safety  # noqa: E402
+from camkit import camset, match, ocr, paths, safety, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera, lit_text, open_refused  # noqa: E402
@@ -629,6 +629,9 @@ def main():
                 time.sleep(1.0)
                 open_menu(cam)
                 title = shoot_mode(cam, cycle, model, family, mode, say)
+                # the camera's mode is the switch's from here: the menu's lock after a download goes by it
+                # (camkit.session.MODE, which runner.load_scan set to the mode the run started in)
+                session.MODE = switched_mode(a.to)
             finally:
                 close_screen(cam, link)
             to_shooting(link, hdmi, "the download after the switch")
@@ -651,6 +654,7 @@ def main():
             say(f"restoring the start file {start.name} (the camera restarts)")
             switched = True
             link.upload(start)
+            session.MODE = a.in_mode or "Stills"        # the start file's mode again (the lock's rule with it)
     except Exception as e:      # a Failed switch, and anything else after it (a press refused, the feed, a STOP)
         if switched:            # the switch was made and shown; the upload that puts the start file back failed
             say(f"the switch to {a.to} was made; putting the start file back failed: {type(e).__name__}: {e}")
@@ -663,6 +667,7 @@ def main():
                     hdmi.attach(link)
                     # the start file goes back when anything differs from it, even if the shooting screen does not come
                     ending = end_session(link, hdmi, start, "the restore after a stop", tag="check")
+                session.MODE = a.in_mode or "Stills"    # back on the start file, or as it was: the start's mode
                 if ending.after is not None and not ending.uploaded:
                     say("the camera is as it was")
                     sys.exit(1 if switch_failed else 0)     # as it was; exit 1 when the switch did not happen

@@ -499,3 +499,58 @@ def test_a_failed_look_between_two_tries_of_the_close_is_one_more_try(monkeypatc
             return self.read()
     live.close(Cam(), SimpleNamespace(press=lambda *a, **k: None))
     assert looks["n"] >= 3 and "no OSD image" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("keep", [True, False], ids=["kept", "put-back"])
+def test_the_lock_rule_follows_the_mode_a_switch_leaves_the_camera_in(own_runs, tmp_path, monkeypatch, keep):
+    """Track 1 B8: the mode the menu's lock after a download goes by (camkit.session.MODE) was set only as a side effect
+    of loading a scan, so a run that changed the camera's shooting mode kept the old mode's rule (the measured one in
+    a mode never measured: S&Q). mode_switch.py, the kit's run that changes it, now sets it to the mode it left the
+    camera in, and back to the mode it started in once it has put the start file back."""
+    import runner
+    from camkit import session
+    sys.path.insert(1, str(Path(__file__).resolve().parents[1] / "provers"))
+    import mode_switch
+    seen = {}
+
+    class FakeLink:
+        def __init__(self, run):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def download(self, tag):
+            seen[tag] = session.MODE            # the rule a lock wait after this download would go by
+            return tmp_path / f"{tag}.DAT"
+
+        def upload(self, path):
+            seen["upload"] = session.MODE
+            return {"ok": True}
+
+    def load_scan(scan):
+        session.MODE = "Stills"                 # as runner.load_scan sets it, from the scan's record
+        return [], {}
+    monkeypatch.setattr(session, "MODE", None)
+    for name, value in (("load_scan", load_scan), ("check_readers", lambda: None),
+                        ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda link: None, close=lambda: None)),
+                        ("Link", FakeLink), ("LiveCamera", lambda *a, **k: SimpleNamespace()),
+                        ("open_menu", lambda cam: None), ("dial_by_menu", lambda *a: None),
+                        ("close_screen", lambda cam, link: None), ("shoot_mode", lambda *a: "S&Q Motion"),
+                        ("to_shooting", lambda *a: None), ("time", SimpleNamespace(sleep=lambda s: None,
+                                                                                  strftime=lambda f: "now")),
+                        ("verify_restore", lambda run, start: 0)):
+        monkeypatch.setattr(mode_switch, name, value)
+    monkeypatch.setattr(mode_switch.camset, "read", lambda p: p)
+    monkeypatch.setattr(mode_switch.camset, "diff", lambda a, b: [SimpleNamespace(key="set1:0x0001", before=0, after=1)])
+    monkeypatch.setattr(sys, "argv", ["mode_switch.py", "--to", "S&Q Motion", *(["--keep"] if keep else []),
+                                      "--run", f"kit2_switch_{keep}"])
+    mode_switch.main()
+    assert seen["mode-S-Q-Motion"] == "S&Q"                         # the download right after the switch
+    if keep:
+        assert session.MODE == "S&Q" and runner.switch_waiting()
+    else:
+        assert seen["upload"] == "S&Q" and session.MODE == "Stills"

@@ -60,8 +60,10 @@ LOCK_NOTICE_LIMIT = 25.0    # s a wait goes on while the notice stays on show (p
 LOCK_MEASURED = frozenset({"Stills", "Movie"})             # runner.SCAN_MODES' spelling, as session.MODE holds it
 LOCK_READY = ("shooting", "menu", "submenu", "tiles")       # the screens whose sight says the notice has gone
 LOCK_NOTICE = "notice"                                      # the saving notice's kind (camkit.screen)
-# the shooting mode the run's page scan was made in (runner.load_scan sets it; kit/page_scan.py its --mode): the mode
-# lock_measured goes by when a caller names none; None, not known, keeps LOCK_S
+# the shooting mode the camera is in by the kit's own record: the one the run's page scan was made in (runner.load_scan
+# sets it; kit/page_scan.py its --mode), and, where a run changes it, the one it left the camera in (kit/provers/
+# mode_switch.py, and back once its start file is put back): the mode lock_measured goes by when a caller names none;
+# None, not known, keeps LOCK_S
 MODE = None
 
 
