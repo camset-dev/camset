@@ -25,9 +25,11 @@ Settings > Camera support & web page > Add definition… in the editor.
 
 ## Rules that are never broken
 
-The playbook's [section 1](docs/REMAPPING_PLAYBOOK.md#1-rules-that-are-never-broken) holds them as the defaults for
-someone else's camera, stricter where the maintainer allowed more on their own, and the kit's own rules beside them.
-When a rule and progress conflict, stop and ask the owner.
+Each rule below is its decision record's Rule line, written here by `kit/tools/build_docs.py`; the record says why and
+how the kit holds to it. They are the defaults for every camera. How an owner allows more on their own camera, what the
+maintainer allowed on theirs, and the kit's own rules beside these are in the playbook's
+[section 1](docs/REMAPPING_PLAYBOOK.md#1-rules-that-are-never-broken); never assume an allowance: ask the owner, and
+the default is no. When a rule and progress conflict, stop and ask the owner.
 
 <!-- the rules: written by kit/tools/build_docs.py from the records in docs/decisions/ marked "Never broken", each its record's Rule line; edit those -->
 
