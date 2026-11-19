@@ -24,6 +24,15 @@ pub(crate) struct MyMenuItem {
 }
 
 impl App {
+    /// A setting's hover in the My Menu page's groups: its name and where it is kept (`where_kept`), and its note in
+    /// Expert mode only (`Setting::note_shown`: the mapping team's words).
+    pub(crate) fn mymenu_row_hover(&self, s: &Setting) -> String {
+        match s.note_shown(self.prefs.expert) {
+            note if note.is_empty() => self.where_kept(s),
+            note => format!("{}\n{note}", self.where_kept(s)),
+        }
+    }
+
     /// My Menu: one array record per page in the live settings (camera.my_menu).
     pub(crate) fn mymenu_pages(&self) -> Option<Vec<Vec<i64>>> {
         let mm = self.schema.camera.my_menu.as_ref().filter(|m| !m.records.is_empty())?;
@@ -483,8 +492,7 @@ impl App {
                         let here = self.group.as_deref() == Some(group.as_str()) && self.item.as_deref() == Some(s.name.as_str());
                         let mut text = RichText::new(if edited { format!("{EDIT_MARK} {}", self.setting_title(s)) } else { self.setting_title(s) });
                         if edited { text = text.color(tone::edit(ui.visuals())).strong(); }
-                        let hover = if s.note.is_empty() { self.where_kept(s) } else { format!("{}\n{}", self.where_kept(s), s.note) };
-                        let r = ui.selectable_label(here, text).on_hover_text(hover);
+                        let r = ui.selectable_label(here, text).on_hover_text(self.mymenu_row_hover(s));
                         let key = format!("{group}\n{}", s.name);
                         if here && ui.data(|d| d.get_temp::<String>(scrolled)).as_ref() != Some(&key) {
                             r.scroll_to_me(Some(egui::Align::Center));
@@ -529,6 +537,19 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hover of a setting in the My Menu page's groups: its name and where it is kept, and the mapping team's note
+    /// in Expert mode only, as everywhere else (`note_words`).
+    #[test]
+    fn a_rows_hover_has_the_note_in_expert_mode_only() {
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let s = app.schema.settings.iter().find(|s| s.note.len() > 20).cloned().expect("a setting with a note");
+        let hover = app.mymenu_row_hover(&s);
+        assert!(hover.starts_with(&s.name) && !hover.contains(&s.note), "{hover}");
+        app.prefs.expert = true;
+        assert!(app.mymenu_row_hover(&s).ends_with(&s.note));
+    }
 
     /// "Add to My Menu" from a setting stops at the number of items the camera takes (`my_menu.max_items`), also when
     /// that is fewer than its pages' places, as a place's own "Add here…" does (`mymenu_set`).
