@@ -1210,3 +1210,15 @@ def test_drive_makes_the_first_open_of_an_icon_row_in_a_submenu_under_the_link_l
     code, pressed, line, said = drive_run(tmp_path / "c", monkeypatch, path=tuple(VARSH), lit=VARSH_LIT,
                                           states=[("submenu", VARSH_LIT)], live=READER["varsh"])
     assert pressed == [("menu", False)] and "right refused" in said, said
+
+
+# ---------------------------------------------------------------- 12. the rules' defaults are the decisions' Rule lines
+
+def test_no_comment_says_the_playbooks_rules_hold_a_default():
+    """Since 3613360 the by-hand default is decision 8's Rule line (AGENTS.md's list), the serial number screen's
+    decision 24's; the playbook's section 1, rules 1-4, holds how an owner allows more."""
+    import re
+    kit = Path(__file__).resolve().parents[1]
+    for f in (kit / "camkit" / "safety.py", kit / "tests" / "test_guards.py"):
+        text = " ".join(f.read_text(encoding="utf-8").replace("#", " ").split())
+        assert not re.search(r"playbook's rules? (?:3|1-4)\b(?! how)", text), f.name

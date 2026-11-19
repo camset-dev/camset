@@ -1167,7 +1167,7 @@ def test_the_rows_an_owner_may_still_allow_stay_allowed():
     assert live.open_refused("Audio Signal Volume  3", {"Audio Signal Volume"}) == ""
 
 
-# Wi-Fi and Bluetooth rows that no pattern caught though the playbook's rule 3 names them, and the screens that show
+# Wi-Fi and Bluetooth rows that no pattern caught though decision 8's Rule line names them, and the screens that show
 # the camera's MAC and IP addresses and its Bluetooth device address (a review, 2026-11-13): the a1 II's labels as it
 # draws them, then as a reader returns them (a capital I for an l, zeros, "rn" or "n" for "m", 1, l or | for i or l, 8
 # for B, a letter dropped, a space dropped or put in, Addr. for Address, Freq. for Frequency, Remote for Rmt, Cyrillic

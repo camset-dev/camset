@@ -147,8 +147,9 @@ MIN_HOLD_MS = 20
 
 # Camera properties never set through the SDK (the link's set and setstr, camlink's and the camera helper's own), by
 # the SDK's property name (CrDeviceProperty.h, "CrDeviceProperty_" left off), each a regular expression searched in
-# the name as written, written so that Python and C++ (ECMAScript) read it alike. The playbook's rules 1-4 and
-# decisions 2-9 name what they cover; a name the SDK's table does not hold is never set either.
+# the name as written, written so that Python and C++ (ECMAScript) read it alike. Decisions 2-9's Rule lines
+# (AGENTS.md's list) name what they cover, the playbook's section 1, rules 1-4, how an owner allows more; a name the
+# SDK's table does not hold is never set either.
 # The case counts (2026-11-08): the SDK's names are CamelCase and every pattern starts with its capital, so a pattern
 # matches where a word of the name starts. Matched with case ignored, 23 of the a1 II's 475 names were refused by
 # accident inside other words: FocusBracket* ("usB"), ContinuousShooting* and FlickerLessShooting* ("sSh"),
@@ -452,10 +453,10 @@ _NEVER_CHOOSE = [
 # it for a run given --network (network_lifted). never_open names them last (NETWORK), only when no other class of the
 # list matches any reading, so a misread that also looks like credentials, an action or an identity row keeps that
 # reason. The patterns were found on 2026-11-13 (a review): Wi-Fi Connect, Bluetooth Function and Airplane Mode were
-# identity rows before, and Bluetooth Rmt Ctrl and Wi-Fi Frequency Band were on no list though the playbook's rule 3
-# names them. Each pattern takes the slips a reader makes in its row's own words (a space dropped or put in; 1, l or |
-# for i or l; 0 for o; rn or n for m; 8 for B; a letter dropped; Addr. for Address) and names those words only, so the
-# group names (Wi-Fi, Bluetooth, Wired LAN) and the other Display rows are walked as before.
+# identity rows before, and Bluetooth Rmt Ctrl and Wi-Fi Frequency Band were on no list though decision 8's Rule line
+# (AGENTS.md's list) names them. Each pattern takes the slips a reader makes in its row's own words (a space dropped or
+# put in; 1, l or | for i or l; 0 for o; rn or n for m; 8 for B; a letter dropped; Addr. for Address) and names those
+# words only, so the group names (Wi-Fi, Bluetooth, Wired LAN) and the other Display rows are walked as before.
 _NETWORK_SETTINGS = [
     _WIFI + r"connect", r"bluetooth function", r"airplane mode",
     r"[b8]lue\s?t[o0]{1,2}th\s?r(?:m|n|rn)t", r"bluetooth\s?remote\s?c(?:trl|ontrol)", _WIFI + r"freq",
@@ -2528,9 +2529,10 @@ BLANKED = frozenset({LIFT_CREDENTIALS, LIFT_SERIAL, LIFT_FIXED})
 
 def blanked(cls, logged) -> bool:
     """Whether an owner row of class `cls` is blanked (BLANKED: its frames saved black from its opening, no text read,
-    MENU alone), its decision saying "values": "logged" or not (`logged`): the body's serial number screen always (the
-    playbook's rule 3: it opens only on a look lap or the owner route, which save its frames black; nobody decided its
-    values may be logged); a credentials row or a closed identity row unless its values are logged (decision 9)."""
+    MENU alone), its decision saying "values": "logged" or not (`logged`): the body's serial number screen always
+    (decision 24's Rule line: it opens only on a look lap or the owner route, which save its frames black; nobody
+    decided its values may be logged); a credentials row or a closed identity row unless its values are logged
+    (decision 9)."""
     return cls == LIFT_SERIAL or (cls in BLANKED and not logged)
 # the only keys that go out inside an owner row, each in its own spelling (name_refused): up and down read it, MENU
 # leaves it, Enter is judged (owner_enter); never ms_enter, Right, Left, a dial or C4
