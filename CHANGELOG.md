@@ -133,6 +133,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   and no proof reads one otherwise (`kit/tools/coverage.py --shared` shows the grounds, `--todo` counts them apart). A
   row a proof went through now holds the setting it proved, so a setting the camera shows under two pages is proved
   under both.
+- **The ledger's to-do list counts what is really left:** each value once on its setting's row, a look's changed
+  records only where no setting maps them, no "(withheld)" row another crawl names, no field's closing proof as a test,
+  and a row below one Sony's Save/Load list excludes as not in the file either.
 - **`kit/schema_update.py` takes `optboxes_run.py`'s boxes:** a box's numbers as the camera draws them (Zebra's
   "±5", "100+") are numbers proved by samples on their line, never listed, and once a `RECORD_FIXES` range is
   there every number of it is named as drawn. A `RECORD_FIXES` entry can also give a setting's `inactive_when`, the

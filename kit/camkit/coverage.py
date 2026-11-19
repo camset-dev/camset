@@ -83,9 +83,9 @@ STATUSES = (
     ("sampled", "A number scale proved by samples not on one line (sampled.linear null): its values are derived, not "
                 "all chosen. A row, when every setting placed on it is proved or sampled, one at least sampled."),
     ("not offered", "Options only: a not_offered mark, the camera's menu never offers the value."),
-    ("not in the settings file (Sony)", "Sony's Save/Load exclusion list names the row (the camera file's "
-                                        "save_load_excluded), or the file's header holds it (header_rows); confirmed "
-                                        "when a look or a hand check also showed no record differ."),
+    ("not in the settings file (Sony)", "Sony's Save/Load exclusion list names the row or a row above it (the camera "
+                                        "file's save_load_excluded), or the file's header holds it (header_rows); "
+                                        "confirmed when a look or a hand check also showed no record differ."),
     ("information screen", "Opening it shows information only: a look saw a screen of a classified read-only kind (a "
                            "notice) whose field names hold one of safety's address field names or a label outside the "
                            "row's path, and no record differ; or its class is a screen of the camera's addresses or its "
@@ -717,6 +717,15 @@ def equipment_in(text) -> str | None:
     for rx, what in safety.NOTICE_EQUIPMENT:
         if rx.search(str(text or "")):
             return what
+    return None
+
+
+def excluded_under(path: tuple, sony: dict, header: set) -> tuple | None:
+    """The row of Sony's Save/Load list (or of the file's header) that a row's path is, or is below, the nearest one;
+    None for none: a row below a row the list leaves out of the settings file is left out with it."""
+    for n in range(len(path), 0, -1):
+        if path[:n] in sony or path[:n] in header:
+            return path[:n]
     return None
 
 
@@ -1608,12 +1617,14 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
         cites = fx.get("hand_changed") or []
     elif ss and all(x in ("proved", "sampled") for x in states):
         status = "sampled"
-    elif path_t in sony or path_t in header:
+    elif excluded_under(path_t, sony, header):
+        # the row the list names, or a row below it (FTP Transfer Func., "its own file", and its rows)
+        under = excluded_under(path_t, sony, header)
         status = "not in the settings file (Sony)"
-        if path_t in header and path_t not in sony:
+        if under in header and under not in sony:
             e["header"] = True
-        if sony.get(path_t):
-            e["sony_note"] = sony[path_t]
+        if sony.get(under):
+            e["sony_note"] = sony[under]
         if fx.get("no_change_any"):
             e["confirmed"] = True
             cites = fx["no_change_any"]
@@ -1701,7 +1712,7 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
         state = setting_state(s)
         row = s.get("row") or []
         closed = next((rule_class(x) for x in row if rule_class(x)), None)
-        in_sony = tuple(row[:1]) in sony or tuple(row) in sony
+        in_sony = bool(excluded_under(tuple(row), sony, set()))
         values, cites = {}, {}
         for v, _lab in s.get("values") or []:
             fx = facts.by_option.get((s["key"], v), {})

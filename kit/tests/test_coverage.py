@@ -1486,6 +1486,26 @@ def test_a_withheld_label_named_by_a_sibling_crawl_is_no_row(camera):
         assert not any(u.get("path") == ["Uniform", "(withheld)"] for u in led.unresolved)
 
 
+def test_a_row_under_a_row_the_makers_list_excludes_is_not_in_the_file_either(camera):
+    """Sony's Save/Load list names a row (Delta, "its own file"; Kilo > Inner): each row below it takes "not in the
+    settings file (Sony)" with the list's note, whatever a look found there (greyed, the kit failing), and so do the
+    values of a setting placed below it; a row proved stays proved."""
+    cam = json.loads((camera.data / f"camera_{CAM}.json").read_text(encoding="utf-8"))
+    cam["save_load_excluded"]["rows"].append({"row": "Kilo > Inner"})
+    (camera.data / f"camera_{CAM}.json").write_text(json.dumps(cam), encoding="utf-8")
+    leaf = setting("global:0x0180", "Kilo leaf", ["Kilo", "Inner", "Leaf"], ONOFF)
+    with extra_settings(camera, leaf):
+        add_looks(camera, look(["Delta", "Inner"], result="greyed", screen="notice", blocker={"row": "Alpha"}),
+                  look(["Delta", "Inner", "Deep"], result="kit_failed", kit_message="unknown screen"))
+        led = ledger()
+        sony = "not in the settings file (Sony)"
+        for path in (("Delta", "Inner"), ("Delta", "Inner", "Deep"), ("Kilo", "Inner", "Leaf")):
+            assert row(led, *path)["status"] == sony, path
+        assert row(led, "Delta", "Inner")["sony_note"] == "its own file"
+        assert row(led, "Kilo")["status"] != sony
+        assert set({o["key"]: o for o in led.options}["global:0x0180"]["values"].values()) == {sony}
+
+
 def test_todo_lists_what_is_left_by_need_and_yield(camera):
     led = ledger()
     items = coverage.todo(led)
