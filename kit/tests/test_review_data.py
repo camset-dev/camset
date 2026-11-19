@@ -324,8 +324,11 @@ def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True, bodies_o
     tmp_path.mkdir(parents=True, exist_ok=True)
     log, count = tmp_path / "steps.txt", tmp_path / "writes.txt"
     defn, ev, reset, menu = (tmp_path / n for n in ("def.json", "ev.json", "reset.json", "menu.json"))
+    gen, leads, cov = (tmp_path / n for n in ("gen.ksy", "leads.json", "coverage.json"))
     for f in (defn, ev, menu):
         f.write_text("0", encoding="utf-8")
+    gen.write_text("same", encoding="utf-8")
+    cov.write_text("old", encoding="utf-8")
 
     def logged(name, body):
         return (f"import os, sys\nfrom pathlib import Path\n"
@@ -334,17 +337,19 @@ def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True, bodies_o
              f"c.write_text(str(n), encoding='utf-8')\n"
              f"if n <= {changes}:\n    Path({str(ev)!r}).write_text(str(n), encoding='utf-8')\n"
              "print('gate: 0 open questions in the report, every one accepted in x')\n"
-             "print('wrote editor/definitions/TEST-CAM_fw9.99.json')")
+             f"print('wrote ' + {str(defn)!r})")
     bodies = {"report": "print('12 rows proved, 30 options')",
               "look": "print('gate: 2 open questions in the report, every one accepted in x')",
-              "write": write, "docs": "print('wrote docs/formats/sony_camset_ids_TEST-CAM_fw9.99.ksy')",
-              "leads": "print('written: private/evidence/TEST-CAM_fw9.99/leads_TEST-CAM_fw9.99.json')",
-              "coverage": "print('written: data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json')"}
+              "write": write,
+              "docs": f"Path({str(gen)!r}).write_text('same', encoding='utf-8'); print('wrote ' + {str(gen)!r})",
+              "leads": f"Path({str(leads)!r}).write_text('x', encoding='utf-8'); print('written: ' + {str(leads)!r})",
+              "coverage": f"Path({str(cov)!r}).write_text('new', encoding='utf-8'); print('written: ' + {str(cov)!r})"}
     if fail:
         bodies[fail] = "print('nothing written: a made-up refusal, in the step own words'); sys.exit(3)"
     bodies.update(bodies_over(tmp_path) if bodies_over else {})
     monkeypatch.setattr(rebuild, "argv", lambda step, cam: [sys.executable, "-c", logged(step, bodies[step])])
     monkeypatch.setattr(rebuild, "settled_files", lambda cam: [defn, ev, reset])
+    monkeypatch.setattr(rebuild, "universe", lambda cam: sorted(tmp_path.iterdir()))
     monkeypatch.setattr(rebuild, "golden", lambda cam: menu)
     monkeypatch.setattr(rebuild, "BLESS", [sys.executable, "-c", logged(
         "bless", f"assert os.environ['CAMSET_BLESS'] == '1' and Path.cwd().name == 'editor'\n"
@@ -371,7 +376,9 @@ def test_the_rebuild_is_a_look_by_default(tmp_path, monkeypatch, capsys):
 def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_blesses(tmp_path, monkeypatch, capsys):
     """With --write: the report, the write again until it changes nothing (here the first two change the evidence, the
     third does not: three writes, said), the docs, the leads, the ledger and the golden menu's bless (CAMSET_BLESS=1,
-    in editor/), then what was written, each file once."""
+    in editor/), then what was written: each file once, only those whose bytes changed (the evidence the writes
+    changed, a new leads file, the ledger, the golden menu), and in one line how many the steps wrote again byte for
+    byte (the definition the write said it wrote three times, a generated file written the same)."""
     rebuild, log, menu = _stand_ins(tmp_path, monkeypatch, changes=2)
     monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
     rebuild.main()
@@ -379,11 +386,25 @@ def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_bles
     assert _ran(log) == ["report", "write", "report", "write", "report", "write", "docs", "leads", "coverage", "bless"]
     assert "settled in 3 writes: write 3 changed nothing" in out and menu.read_text(encoding="utf-8") == "blessed"
     tail = out[out.index("written ("):]
-    for f in ("editor/definitions/TEST-CAM_fw9.99.json", "docs/formats/sony_camset_ids_TEST-CAM_fw9.99.ksy",
-              "private/evidence/TEST-CAM_fw9.99/leads_TEST-CAM_fw9.99.json",
-              "data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json", str(menu), str(tmp_path / "ev.json")):
-        assert tail.count(f) == 1, f
-    assert str(tmp_path / "def.json") not in tail, "a file no write changed is not listed"
+    assert tail.startswith("written (4):")
+    for f in ("ev.json", "leads.json", "coverage.json", "menu.json"):
+        assert tail.count(str(tmp_path / f)) == 1, f
+    for f in ("def.json", "gen.ksy", "reset.json"):
+        assert str(tmp_path / f) not in tail, f
+    assert "rewritten unchanged: 2 files the steps wrote again byte for byte." in tail
+
+
+def test_a_file_a_step_names_two_ways_is_one_and_help_names_the_camera():
+    """A file a step names from the repository's root and another by its whole path is one file (the definition was
+    listed twice); and --help names --camera, which camkit takes off the command line before the arguments are read."""
+    import subprocess
+
+    import rebuild
+    rel = "editor/definitions/ILCE-1M2_fw4.00.json"
+    assert rebuild.resolved(rel) == rebuild.resolved(str(definitions.ROOT / rel)) == rebuild.resolved(f" {rel}")
+    got = subprocess.run([sys.executable, str(definitions.ROOT / "kit" / "rebuild.py"), "--help"], capture_output=True,
+                         text=True, cwd=definitions.ROOT, timeout=60)
+    assert got.returncode == 0 and "--camera" in got.stdout and "--write" in got.stdout
 
 
 def test_a_record_first_named_in_a_write_is_credited_after_the_report_is_made_again(tmp_path, monkeypatch, capsys):

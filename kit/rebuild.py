@@ -27,9 +27,11 @@ private/config.json: camkit.paths), its output shown as it prints it:
      computer the rebuild says that command instead
 
 The first step that fails stops the rebuild: its own words are above, the rebuild names the step and exits with its
-status (nothing after it runs). At the end it says what was written: the files the steps said they wrote, those of
-the definition's files the writes changed (its private evidence among them), and the golden menu when the bless
-changed it.
+status (nothing after it runs). At the end it lists what was written, each file once (by its path from the
+repository's root, where it is there): of the files the steps said they wrote, and the definition's own files (its
+private evidence among them) and the golden menu, those whose bytes differ from what they held when the rebuild
+began (universe: the repository's tracked files and the camera's private ones, read first); and, in one line, how
+many the steps wrote again byte for byte.
 """
 import argparse
 import hashlib
@@ -123,8 +125,66 @@ def written_in(lines: list) -> list:
     return [m[1] for m in (WROTE.match(x) for x in lines) if m]
 
 
+def resolved(p) -> Path:
+    """A path a step printed, from the repository's root where it is not absolute (the steps run there), resolved: the
+    same file is one path however a step wrote it."""
+    p = Path(str(p).strip())
+    return (p if p.is_absolute() else ROOT / p).resolve()
+
+
+def universe(camera: str) -> list:
+    """The files a rebuild may write, whose bytes it reads before it starts: the repository's tracked files (git
+    ls-files; none where git cannot say), the camera's definition and private evidence (its file and folder), the
+    private help files and the ledger's private files. A file a step says it wrote that none of these held is new."""
+    from camkit import coverage, help_files
+    out = []
+    try:
+        got = subprocess.run(["git", "ls-files", "-z"], cwd=ROOT, capture_output=True, check=True)
+        out += [ROOT / x for x in got.stdout.decode("utf-8", "replace").split("\0") if x]
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    p = definitions.path(camera)
+    out += [p, definitions.evidence_path(p)]
+    for d in (definitions.EVIDENCE_DIR / camera, help_files.PRIVATE, coverage.looks_dir() / camera):
+        if d.is_dir():
+            out += [f for f in d.rglob("*") if f.is_file()]
+    return out
+
+
+def snapshot(files: list) -> dict:
+    """{resolved path: sha256} of the files that are there."""
+    out = {}
+    for f in files:
+        q = resolved(f)
+        if q.is_file() and q not in out:
+            out[q] = hashlib.sha256(q.read_bytes()).hexdigest()
+    return out
+
+
+def changed_files(before: dict, said: list, more: list) -> tuple:
+    """([paths whose bytes differ from `before` now, or that are new], how many the steps said they wrote with the bytes
+    they held): `said` the files the steps said they wrote, in order, `more` files the rebuild watched besides (the
+    definition's, the golden menu), listed only when they changed. Each file once; one said written that is not there
+    is neither."""
+    now = snapshot([*said, *more])
+    out, same = [], set()
+    for p in dict.fromkeys(resolved(x) for x in [*said, *more]):
+        if p not in now:
+            continue
+        if before.get(p) != now[p]:
+            out.append(p)
+        else:
+            same.add(p)
+    return out, len(same & {resolved(x) for x in said})
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    # camkit takes --camera out of the command line when it is imported (camkit.paths), before argparse sees it: named
+    # here so --help says it
+    ap.add_argument("--camera", metavar="MODEL_fwFW",
+                    help="the camera to rebuild, its key as kit/tools/identify.py --camera prints it (for example "
+                         "ILCE-1M2_fw4.00); without it CAMSET_CAMERA, else private/config.json's camera")
     ap.add_argument("--write", action="store_true", help="every step, everything written (without it: the report and "
                                                          "the writer's look, its gate line, nothing written)")
     a = ap.parse_args()
@@ -141,7 +201,8 @@ def main():
         return
     wrote = []
     files = settled_files(camera)
-    first = fingerprint(files)
+    menu = golden(camera)
+    start = snapshot([*universe(camera), *files, menu])     # what each file held before anything was written
     for n in range(1, WRITES + 1):
         if n > 1:                    # the last write changed something: the report it read may call a record new
             step(1, argv("report", camera), f"pass 2's report again, for write {n}")
@@ -153,14 +214,12 @@ def main():
         raise Stop(f"\nrebuild stopped after step 2: the definition or its evidence still changed at write {WRITES}, "
                    "where a write should change nothing by then. Look at what the writer printed above (its lines for "
                    "the new records and the kept proofs), and run kit/rebuild.py --write again once you know why.")
-    wrote += [paths.shown(f) for f, was, now in zip(files, first, fingerprint(files), strict=True) if was != now]
     took = (f"the definition settled in {n} write{'s' if n > 1 else ''}: "
             + ("the first changed nothing" if n == 1 else f"write {n} changed nothing"))
     print(f"\n{took}", flush=True)
     wrote += written_in(step(3, argv("docs", camera), "the generated files"))
     wrote += written_in(step(4, argv("leads", camera), "the leads"))
     wrote += written_in(step(5, argv("coverage", camera), "the coverage ledger"))
-    menu = golden(camera)
     blessed = None
     if not menu.exists():
         blessed = f"no golden menu: the editor's tests hold none for {camera}"
@@ -170,14 +229,13 @@ def main():
     else:
         had = fingerprint([menu])
         step(6, BLESS, "the editor's golden menu", cwd=ROOT / "editor", env={**os.environ, "CAMSET_BLESS": "1"})
-        if fingerprint([menu]) != had:
-            wrote.append(paths.shown(menu))
-            blessed = "the golden menu re-blessed: look at its diff"
-        else:
-            blessed = "the golden menu re-blessed, unchanged"
-    shown = list(dict.fromkeys(wrote))
+        blessed = "the golden menu re-blessed: look at its diff" if fingerprint([menu]) != had else \
+            "the golden menu re-blessed, unchanged"
+    changed, same = changed_files(start, wrote, [*files, menu])
     print(f"\nrebuild of {camera} done: {took}; {blessed}.")
-    print(f"written ({len(shown)}):" + "".join(f"\n  {w}" for w in shown) if shown else "no step said it wrote a file.")
+    print(f"written ({len(changed)}):" + "".join(f"\n  {paths.shown(p)}" for p in changed) if changed
+          else "no file changed.")
+    print(f"rewritten unchanged: {same} file{'' if same == 1 else 's'} the steps wrote again byte for byte.")
 
 
 if __name__ == "__main__":
