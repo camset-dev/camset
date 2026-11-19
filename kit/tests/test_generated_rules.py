@@ -3,6 +3,7 @@ record marked "- **Never broken:** 7th in AGENTS.md's list", and kit/tools/build
 those lines in the order the marks give, and shows each whole in the decisions table; the same test and pre-commit hook
 that keep the other generated files current keep the list so. Offline: a made-up clone, then the real records and
 AGENTS.md."""
+import hashlib
 import re
 
 import pytest
@@ -76,8 +77,9 @@ def test_a_withdrawn_record_is_no_rule(tree):
 
 def test_a_rule_never_broken_is_shown_whole_in_the_table(tree):
     """A rule that is never broken is the whole rule an agent obeys, longer than the table's sentence: the table shows
-    it whole. Its bound is NEVER_BROKEN_CHARS, past which the build stops (mechanism goes into the record's Decision);
-    a record not so marked keeps RULE_CHARS."""
+    it whole. Past NEVER_BROKEN_CHARS the build stops, and its message never reads as advice to move a condition out of
+    the rule: it says to raise the bound instead, and that only mechanism may stand in the record's Decision. A record
+    not so marked keeps RULE_CHARS. The real rules keep room below the bound."""
     whole = "Never the first thing, " + "nor anything like it, " * 12 + "whoever asks."
     assert build_docs.RULE_CHARS < len(whole) < build_docs.NEVER_BROKEN_CHARS
     (tree / "0003-three.md").write_text(record(3, whole, "1st in AGENTS.md's list"), encoding="utf-8")
@@ -85,13 +87,23 @@ def test_a_rule_never_broken_is_shown_whole_in_the_table(tree):
     (tree / "0001-one.md").write_text(record(1, whole), encoding="utf-8")
     with pytest.raises(SystemExit, match=rf"0001-one\.md: its Rule line is {len(whole)} characters.*at most {build_docs.RULE_CHARS}"):
         build_docs.decisions_index()
-    endless = "Never " + "this, " * 200 + "nor that."
+    endless = "Never " + "this, " * 300 + "nor that."
     assert len(endless) > build_docs.NEVER_BROKEN_CHARS
     (tree / "0001-one.md").write_text(record(1, "Decisions are records."), encoding="utf-8")
     (tree / "0003-three.md").write_text(record(3, endless, "1st in AGENTS.md's list"), encoding="utf-8")
-    with pytest.raises(SystemExit, match=rf"0003-three\.md: its Rule line, a rule that is never broken, is {len(endless)} "
-                                         rf"characters.*at most {build_docs.NEVER_BROKEN_CHARS}"):
+    with pytest.raises(SystemExit) as stop:
         build_docs.decisions_index()
+    said = str(stop.value)
+    assert said.startswith(f"docs/decisions/0003-three.md: its Rule line, a rule that is never broken, is {len(endless)} "
+                           f"characters, past the {build_docs.NEVER_BROKEN_CHARS}")
+    assert "keep every condition and exception in the Rule line" in said and "raise that bound" in said
+    assert "move how the kit holds to it" not in said
+
+
+def test_the_real_rules_keep_room_below_the_bound():
+    """No rule sits so near NEVER_BROKEN_CHARS that a narrowing clause would not fit (a fifth of it to spare)."""
+    for _, n, _, rule in build_docs.never_broken_rules():
+        assert len(rule) <= build_docs.NEVER_BROKEN_CHARS * 0.8, (n, len(rule))
 
 
 # ---------------------------------------------------------------- AGENTS.md's list, generated
@@ -209,6 +221,49 @@ MUST_SAY = {
     16: ["The owner's values never reach a definition, the data files or the docs", "names and value meanings only",
          "stay in the mapper's private evidence", "is not planned"],
 }
+
+
+# Each rule that is never broken pinned whole: its first words, for a failure one can read, and the first 16 hex
+# digits of the SHA-256 of its Rule line as AGENTS.md lists it (links and all, its spaces made single, so a record
+# wrapped anew keeps its pin). A safety rule changes only with the maintainer's decision (docs/decisions/0001): any change
+# to one, a clause added as much as a clause dropped, fails here until the same commit pins the new line, which the
+# failure prints; MUST_SAY above says what a deliberate change must still say
+PINNED = {
+    2: ("Nothing that makes sound, light or motion is", "12e8c79136d08940"),
+    3: ("The camera's Screen Reader is changed remotely only", "98160dfbfddf43f1"),
+    4: ("Never format or delete a card. The one", "a573426477dbc3df"),
+    5: ("Never Initialize, Reset Network Set. or SSID/PW Reset;", "25aaf3b24d351a15"),
+    6: ("No hand-made settings files: the kit, and whoever", "1b296585c7a77428"),
+    7: ("C4 only as guarded Help, on a menu", "9959409b5807e95c"),
+    21: ("No key but MENU on the shooting screen,", "e43aeb27a3b9e609"),
+    8: ("USB settings, language, NTSC/PAL, area and date, and", "491de25eee2aa3b7"),
+    24: ("A look lap, a run of `kit/drive.py` or", "b97c4f8318819e6f"),
+    9: ("Credentials are never typed, read, OCR'd, screenshotted or", "c646458046751346"),
+    10: ("The camera is free for tests, which run", "20b96a6faaa7d4ff"),
+    15: ("Every run starts from a known file and", "64431308393734b7"),
+    16: ("The owner's values never reach a definition, the", "0c97dcd1abcccd27"),
+}
+
+
+def pin(rule: str) -> tuple:
+    return " ".join(rule.split()[:8]), hashlib.sha256(rule.encode("utf-8")).hexdigest()[:16]
+
+
+def test_every_rule_never_broken_is_pinned():
+    """A record newly marked Never broken is pinned too, and a pin outlives no rule."""
+    assert sorted(PINNED) == sorted(ORDER)
+
+
+@pytest.mark.parametrize("n", ORDER)
+def test_no_rule_changes_unless_the_test_changes_with_it(n):
+    """Each Rule line is the one pinned, word for word: an edit nobody meant as a change, a narrowing clause moved out
+    or a widening one let in, fails here, naming the record and printing the pin a deliberate change gives."""
+    name, rule = next((name, rule) for _, m, name, rule in build_docs.never_broken_rules() if m == n)
+    assert pin(rule) == PINNED[n], (
+        f"docs/decisions/{name}: its Rule line, a rule that is never broken, is not the line pinned here (it began "
+        f"{PINNED[n][0]!r}). A safety rule changes only with the maintainer's decision (docs/decisions/0001), and AGENTS.md "
+        f"lists it as written: put the record back, or, if the change is the maintainer's, pin it in the same commit as "
+        f"PINNED[{n}] = {pin(rule)!r}")
 
 
 def test_the_records_marked_never_broken_are_agents_md_s_rules_in_its_order():

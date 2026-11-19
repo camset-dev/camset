@@ -432,8 +432,9 @@ STATUS_CHARS = 60          # the decisions table's Status column: at most this m
 RULE_CHARS = 160           # a record's Rule line, the table's "The rule" column: one plain sentence of at most this many
 # the Rule line of a rule that is never broken (a record marked "- **Never broken:** 7th in AGENTS.md's list"): the
 # whole rule as an agent obeys it, its exceptions as narrow as they are, which AGENTS.md lists and the table shows
-# whole; mechanism (exit statuses, record ids, how a guard reads the screen) goes into the record's Decision
-NEVER_BROKEN_CHARS = 1000
+# whole. A condition or an exception never leaves it for want of room: raise this bound instead. Only how the kit
+# carries a rule out (exit statuses, record ids, how a guard reads the screen) may stand in the record's Decision
+NEVER_BROKEN_CHARS = 1500
 NEVER_BROKEN = re.compile(r"(\d+)(st|nd|rd|th) in AGENTS\.md's list")
 
 
@@ -535,9 +536,11 @@ def decision_rows() -> list:
                              f"sentence, which the decisions table shows")
         if never_broken(text, where) is not None:
             if len(rule) > NEVER_BROKEN_CHARS:
-                raise SystemExit(f"{where}: its Rule line, a rule that is never broken, is {len(rule)} characters, and "
-                                 f"AGENTS.md takes at most {NEVER_BROKEN_CHARS}: say the rule an agent obeys, its "
-                                 f"exceptions as narrow, and move how the kit holds to it into the record's Decision")
+                raise SystemExit(f"{where}: its Rule line, a rule that is never broken, is {len(rule)} characters, past "
+                                 f"the {NEVER_BROKEN_CHARS} that NEVER_BROKEN_CHARS in kit/tools/build_docs.py allows: keep "
+                                 f"every condition and exception in the Rule line, however long, and raise that bound "
+                                 f"rather than drop or move one; only how the kit carries the rule out (exit statuses, "
+                                 f"record ids, how a guard reads the screen) may stand in the record's Decision instead")
         elif len(rule) > RULE_CHARS:
             raise SystemExit(f"{where}: its Rule line is {len(rule)} characters, and the decisions table takes at most "
                              f"{RULE_CHARS}: say the decision in one shorter sentence (the record says the rest)")
