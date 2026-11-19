@@ -12,14 +12,14 @@ repos:
       # build_docs.py --definitions, never by a commit (kit/tools/build_docs.py says why; kit/tests/test_build_docs.py
       # checks this line)
       - id: build-generated
-        name: rebuild the generated files (record names, the reader, the C++ safety lists, the decisions table, the nav's model pages; never a definition)
+        name: rebuild the generated files (record names, the reader, the C++ safety lists, the decisions table, AGENTS.md's rules, the nav's model pages; never a definition)
         entry: python kit/tools/hook.py python kit/tools/build_docs.py --no-viewer
         language: python
         pass_filenames: false
         # the files whose edits change what build_docs.py writes (the reference definition and where camkit finds it,
-        # the safety lists, the records, the model pages, the .ksy), and what it writes (a generated file edited by hand
-        # is written over); CI's build_docs.py --check catches anything this misses
-        files: ^(kit/(tools/camset_ksy|tools/build_docs|camkit/safety|camkit/definitions|camkit/paths|camkit/__init__)\.py$|kit/common/never_touch\.h$|docs/decisions/|docs/models/|mkdocs\.yml$|docs/formats/sony_camset[^/]*\.ksy$|editor/definitions/[^/]+\.json$|kit/camkit/formats/)
+        # the safety lists, the records, the model pages, the .ksy), and what it writes (a generated file edited by hand,
+        # AGENTS.md's list among them, is written over); CI's build_docs.py --check catches anything this misses
+        files: ^(kit/(tools/camset_ksy|tools/build_docs|camkit/safety|camkit/definitions|camkit/paths|camkit/__init__)\.py$|kit/common/never_touch\.h$|docs/decisions/|docs/models/|mkdocs\.yml$|AGENTS\.md$|docs/formats/sony_camset[^/]*\.ksy$|editor/definitions/[^/]+\.json$|kit/camkit/formats/)
       # every file of a kind is checked when one of them or its JSON Schema changes (hook.py expands the wildcard)
       - id: definition-json
         name: every definition matches its JSON Schema

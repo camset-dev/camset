@@ -34,6 +34,8 @@ Committed because other tools read them as files:
                                          helper never send, from kit/camkit/safety.py
   docs/decisions/index.md, its table     decisions_index: each record's number, title, rule, date and status, from the
                                          record
+  AGENTS.md, its rules never broken      agents_rules: the Rule line of each record marked "- **Never broken:** 7th in
+                                         AGENTS.md's list", in the marks' order, with a link to the record
   mkdocs.yml, the nav's model pages      mkdocs_nav: one entry per docs/models/<model>_fw<fw>.md
 and, local only, runs/<model>_fw<fw>/_viewer/index.html (kit/tools/proof_viewer.py). STATUS, MEMORY_MAP, the model appendix's
 measured block and the data-contract tables are not committed: the docs site renders them from these sources
@@ -45,6 +47,7 @@ import collections
 import hashlib
 import json
 import os
+import posixpath
 import re
 import shutil
 import subprocess
@@ -556,6 +559,31 @@ def decisions_index(doc=None) -> str:
                    "docs/decisions/index.md")
 
 
+RULES_START = ("<!-- the rules: written by kit/tools/build_docs.py from the records in docs/decisions/ marked "
+               "\"Never broken\", each its record's Rule line; edit those -->")
+RULES_END = "<!-- end of the rules -->"
+
+
+def repo_link(target: str, name: str) -> str:
+    """A link's target in the record docs/decisions/<name> as one from the repository's root, where AGENTS.md sits:
+    another site's as it is, a heading of the record itself (#...) on the record's path."""
+    if re.match(r"[A-Za-z][A-Za-z0-9+.-]*:", target):
+        return target
+    path, hash_, anchor = target.partition("#")
+    return posixpath.normpath(posixpath.join("docs/decisions", path or name)) + hash_ + anchor
+
+
+def agents_rules(doc=None) -> str:
+    """AGENTS.md with its rules that are never broken written from the records marked so (never_broken_rules): one
+    bullet a rule, in the marks' order, the record's Rule line with its links made ones from the repository's root and a
+    link to the record (each rule edited once, in its record: docs/decisions/0014)."""
+    p = ROOT / "AGENTS.md"
+    rows = "".join("- " + re.sub(r"\]\(([^)]*)\)", lambda m, name=name: f"]({repo_link(m.group(1), name)})",
+                                 rule).removesuffix(".") + f" ([decision {n}](docs/decisions/{name})).\n"
+                   for _place, n, name, rule in never_broken_rules())
+    return between(p.read_text(encoding="utf-8"), RULES_START, RULES_END, "\n" + rows + "\n", "AGENTS.md")
+
+
 NAV_START = "# the model pages: written by kit/tools/build_docs.py from docs/models/*.md; add a page there, not here"
 NAV_END = "# end of the model pages"
 
@@ -597,8 +625,10 @@ def record_name_files() -> dict:
 GENERATED = {
     **record_name_files(),
     ROOT / "kit" / "common" / "never_touch.h": never_touch_h,
-    # and two lists in files written by hand, between their markers: the decisions' table, the nav's model pages
+    # and three lists in files written by hand, between their markers: the decisions' table, AGENTS.md's rules that
+    # are never broken, the nav's model pages
     DOCS / "decisions" / "index.md": decisions_index,
+    ROOT / "AGENTS.md": agents_rules,
     ROOT / "mkdocs.yml": mkdocs_nav,
 }
 
