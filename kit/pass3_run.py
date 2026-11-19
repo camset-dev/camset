@@ -7,7 +7,9 @@ Per blocker (BLOCKERS: the camera's own reason for each greyed row, kit2_pass1/g
 is in the camera's runs/<model>_fw<fw>/ (camkit.paths), and so are the BLOCKERS' "scan", "map" and "run":
   1. download the settings (the run's start), choose the blocker's unblocking option (the same
      moves as a proof: its row, Right, the option by its label, OK; first each of its "first" states,
-     the same way), download again;
+     the same way), download again; a notice after OK that refuses, a question after it, or a download that
+     differs from the start in no record of a switched row (the definition's records of that row) stops the
+     blocker there, nothing walked, and the start file goes back on;
   2. walk the opened row as pass 1 does (kit/crawl_run.py, into kit2_pass3);
   3. read its labels and build that run's map (kit/pass1_labels.py; kit/tiebreak.py, the third reader
      where the first two differ; kit/pass1_map.py --own, that run's map only, not pass 1's map_all.json);
@@ -27,13 +29,14 @@ starting option, which its own last proof only chooses again (it changes nothing
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, models, paths, session  # noqa: E402
+from camkit import ROOT, camset, models, ocr, paths, safety, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
@@ -43,7 +46,8 @@ from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import (PASS1, Failed, enter_any, main_name, move_to, option_index, option_key,  # noqa: E402
                        to_shooting)
-from runner import EXIT_UNRESTORED, add_scan_argument, end_session, load_scan, read_json, restoring  # noqa: E402
+from runner import (EXIT_UNRESTORED, add_scan_argument, definition, end_session, load_scan, read_json,  # noqa: E402
+                    restoring)
 
 PY = sys.executable                  # the kit's own Python on every OS (.venv/bin or .venv\Scripts)
 RUN_ROOT = paths.module_root()       # the camera's runs, runs/<model>_fw<fw>/
@@ -224,8 +228,11 @@ def labels_of(path, mp=None) -> tuple:
     raise SystemExit(f"{path} is not in pass 1's map")
 
 
-def switch(link, hdmi, run, cycle, model, b) -> None:
-    """Choose b["to"] on b["row"] and OK, as a proof would; leaves the shooting screen up."""
+def switch(link, hdmi, run, cycle, model, b) -> bool:
+    """Choose b["to"] on b["row"] and OK, as a proof would; leaves the shooting screen up. The screen after OK is read
+    as a proof reads it (after_ok): a refusal or a confirmation fails the switch, closed with MENU, never OK. Returns
+    whether the cursor moved: False where the list opened on b["to"] already, so the download after it needs no change
+    (switch_took)."""
     # a blocker can give the list as this state shows it (XAVC HS 4K offers 60p, 24p, 120p: no 30p)
     labels, kind = (b["labels"], "list") if b.get("labels") else labels_of(b["row"], b.get("map"))
     cam = LiveCamera(link, hdmi, run)
@@ -245,10 +252,70 @@ def switch(link, hdmi, run, cycle, model, b) -> None:
     if option_index(cam, labels, kind) != target[0]:
         raise Failed(f"{b['row']}: the cursor is not on {b['to']!r}")
     cam.press("enter")
-    if cam.read().kind == "notice":
-        cam.press("menu")
+    try:
+        after_ok(cam, b)
+    except Failed:
+        cam.cancel_to_menu()             # closed before the link may drop: a dropped session applies a dialog on show
+        to_shooting(link, hdmi, "after a switch that did not take")
+        raise
     cam.cancel_to_menu()
     to_shooting(link, hdmi, "after the switch")
+    return cur != target[0]
+
+
+REFUSED = re.compile(r"not available|invalid", re.I)    # a notice after OK that refuses the choice (prove_run's rule)
+
+
+def notice_text(cam) -> str:
+    """All the text OCR reads on the frame on show."""
+    return ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+
+
+def after_ok(cam, b) -> None:
+    """The screen after the blocker's OK, read as a proof reads it (prove_run.prove_row): a notice that refuses the choice
+    ("not available as follows ...", "invalid") fails the switch in plain words, naming the notice, its MENU pressed to
+    close it as a proof closes one; a confirmation fails it, nothing answered (the caller cancels it with MENU); an
+    information notice is said and closed with MENU, and the download after the switch shows what applied. Before
+    2026-11-18 any notice was closed and the run went on, and the proofs were tagged with a state the camera was not in."""
+    if cam.read().kind != "notice":
+        return
+    text, frame = notice_text(cam), cam.frame.path.name
+    row = " > ".join(b["row"])
+    why = safety.confirmation(text)
+    if why:
+        raise Failed(f"{row}: after OK on {b['to']!r} the camera asked a question ({why}; {frame}): nothing is answered, "
+                     f"the switch is cancelled with MENU and the start file goes back on")
+    if REFUSED.search(text):
+        cam.press("menu")
+        raise Failed(f"{row}: the camera refused {b['to']!r} ({' '.join(text.split())[:120]!r}; {frame}): the blocker "
+                     f"was not switched, so nothing is walked or proved in that state; switch what the notice names "
+                     f"first, or leave this blocker out")
+    print(f"   notice after OK: {' '.join(text.split())[:90]!r}", flush=True)
+    cam.press("menu")
+
+
+def row_records(row) -> set:
+    """The record keys the camera's definition places on the menu row `row` (a setting's "row" path), each copy with its
+    setting; empty where the definition places none there."""
+    out = set()
+    for s in definition().get("settings") or []:
+        if s.get("row") == list(row):
+            out |= {k.split("[")[0] for k in [s.get("key"), *(s.get("copies") or [])] if k}
+    return out
+
+
+def switch_took(changes, moved) -> str:
+    """Why the download after a blocker's switch shows it did not take, or "" when it did: each row whose cursor the
+    switch moved (moved: (row, option) pairs) must differ from the start in a record of that row (row_records); a row
+    the definition places no record on, in any record."""
+    keys = {c.key for c in changes}
+    for row, to in moved:
+        own = row_records(row)
+        if (own and not keys & own) or not keys:
+            where = f"no record of that row ({', '.join(sorted(own)[:4])})" if own else "no record at all"
+            return (f"the switch of {' > '.join(row)} to {to!r} did not take: the download after it differs from the start "
+                    f"in {where}, so nothing is walked or proved in that state, and the start file goes back on")
+    return ""
 
 
 # Why a blocker switched by a file is refused, and what to do instead (docs/decisions/0006)
@@ -293,15 +360,16 @@ def selected(only) -> list:
             if not ((only and b.get("name", b["row"][0]) not in only) or (b.get("on_request") and not only))]
 
 
-def enter_state(link, hdmi, run, cycle, model, b) -> None:
+def enter_state(link, hdmi, run, cycle, model, b) -> list:
     """Into the blocker's state: each of its "first" states chosen in the menu, in order (a File Format before that
     format's Rec Frame Rate), then its own switch. The final restore puts all of them back: it uploads the start file
-    downloaded before the first."""
-    for pre in b.get("first", []):
-        switch(link, hdmi, run, cycle, model, pre)
+    downloaded before the first. Returns the (row, option) of each switch that moved its cursor (switch_took)."""
+    moved = []
+    for x in [*b.get("first", []), b]:
+        if switch(link, hdmi, run, cycle, model, x):
+            moved.append((x["row"], x["to"]))
         time.sleep(1)
-    switch(link, hdmi, run, cycle, model, b)
-    time.sleep(1)
+    return moved
 
 
 def walk_and_prove(b, log) -> int:
@@ -381,7 +449,7 @@ def run_blockers(run, cycle, model, chosen, log) -> bool:
                 if off:
                     raise Failed(f"not in the state this blocker is for: {off}")
                 try:
-                    enter_state(link, hdmi, run, cycle, model, b)
+                    moved = enter_state(link, hdmi, run, cycle, model, b)
                 except StopRequested:
                     # a STOP file (or a first Ctrl-C) at a press of the switch: close what it opened with cleanup
                     # presses before the link closes, since a dropped session applies the dialog on screen
@@ -395,6 +463,9 @@ def run_blockers(run, cycle, model, chosen, log) -> bool:
                 switched = link.download("p3-switched")
                 ch = camset.diff(camset.read(start), camset.read(switched))
                 print(f"   switched: {[(c.key, c.before, c.after) for c in ch][:6]}", flush=True)
+                why = switch_took(ch, moved or [])
+                if why:
+                    raise Failed(why)
         except (Failed, LinkError, RuntimeError, StopRequested) as e:
             # whatever part of the switch applied goes back before the next blocker (decision 15): a blocker's "first"
             # state chosen before its own switch failed, a choice made before to_shooting gave up, the capture dongle
