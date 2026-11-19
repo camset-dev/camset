@@ -5,8 +5,9 @@
 // separated by spaces, or "quoted" with \" and \\ inside: the kit quotes every path and text it sends (camkit/link.py
 // quoted), so a folder with a space in its name ("C:\Users\First Last\camset") and a Windows path's backslashes
 // arrive whole. The last argument of osd, download, upload and setstr may also be the plain rest of the line, as
-// before quoting (a path typed by hand); upload's path may be followed by a SHA-256 (pathAndHash). A line may start
-// with "@N", the request's id, which the reply echoes.
+// before quoting (a path typed by hand); upload's path may be followed by a SHA-256 (pathAndHash). importlut's path is
+// a word or quoted, never the rest of the line, since its place and hash follow it (lutArgs). A line may start with
+// "@N", the request's id, which the reply echoes.
 #pragma once
 
 #include <cstddef>
@@ -109,6 +110,23 @@ inline std::string pathAndHash(std::istream& in, std::string& hash) {
         while (!line.empty() && (line.back() == ' ' || line.back() == '\t')) line.pop_back();
     }
     return line;
+}
+
+// importlut's arguments, PATH PLACE [SHA256]: the path, returned (a word, or "quoted" when it holds a space, as the kit
+// always sends it), into `place` the user place's number as written, and into `hash` the SHA-256 the kit checked the
+// file's bytes by ("" when none is given: a line typed by hand), which camlink checks the bytes it reads against
+// (kit/common/lut_file.h). A path or place missing, a word after the place that is no SHA-256, or anything after the
+// hash throws.
+inline std::string lutArgs(std::istream& in, std::string& place, std::string& hash) {
+    std::string path, extra;
+    place.clear();
+    hash.clear();
+    if (!word(in, path) || !word(in, place)) throw std::runtime_error("importlut PATH PLACE [SHA256]");
+    if (word(in, hash)) {
+        if (!isSha256(hash)) throw std::runtime_error("not a SHA-256 (64 hex digits) after the place: " + hash);
+        if (word(in, extra)) throw std::runtime_error("text after the SHA-256: " + extra);
+    }
+    return path;
 }
 
 }  // namespace protocol
