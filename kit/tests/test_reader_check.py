@@ -320,9 +320,11 @@ def test_a_reader_failing_during_the_run_is_said_once_and_logged(world, tmp_path
     write([{**local("omlx", 8007), "api_key_env": "CAMSET_TEST_READER_KEY"}])
     run = Run("kit2_test", root=tmp_path / "runs")
     vlm.log_to(run)
-    for _ in range(3):
+    for _ in range(vlm.DOWN_AFTER):
         with pytest.raises(urllib.error.HTTPError):
             vlm.ask_role("second", b"a frame", "prompt", 5)
+    with pytest.raises(vlm.ReaderDown):              # then the latch (2026-11-18): not asked, nothing logged as asked
+        vlm.ask_role("second", b"a frame", "prompt", 5)
     err = capsys.readouterr().err
     assert err.count("reader 'omlx' failed during the run (HTTP 401 Unauthorized: bad key <key> for <address>") == 1
     events = [json.loads(line) for line in (run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -330,7 +332,7 @@ def test_a_reader_failing_during_the_run_is_said_once_and_logged(world, tmp_path
     assert [(e["kind"], e["reader"]) for e in failing] == [("reader_failing", "omlx")]
     # each question is logged with its time (vlm.asked), never its failure's words
     assert [(e["kind"], e["reader"], e["answered"]) for e in events if e["kind"] == "reader_asked"] == \
-        [("reader_asked", "omlx", False)] * 3
+        [("reader_asked", "omlx", False)] * vlm.DOWN_AFTER
     for text in (err, failing[0]["why"], json.dumps(events)):
         for leak in ("sk-abcdef", "127.0.0.1", "8007", "203.0.113.7", "nas.local", "/Users/you", "sk-test", "someone@"):
             assert leak not in text, (leak, text)

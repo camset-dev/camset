@@ -447,3 +447,84 @@ def test_prove_run_field_names_one_field_of_the_rows_named(monkeypatch):
         prove_run.only_field_or_exit(todo, 2, ["ISO Range Limit"])
     with pytest.raises(SystemExit, match="none of the rows named is number fields"):
         prove_run.only_field_or_exit(todo[1:], 0, ["X"])
+
+
+# ------------------------------------------------------------------------------------------------ finding 14 (B6, B7)
+
+def test_a_vote_is_counted_per_model_family_not_per_configured_id():
+    """The documented second and third readers are one model in two quantisations (RedHatAI/Qwen3.8-27B-INT4 on vLLM,
+    Qwen3.8-27B-4bit on omlx): what only names a build (a quantisation, a weights format, the repository's owner) is
+    left out of the vote's key, so they are one vote; another size, version or tune stays another model."""
+    from camkit import reading
+    one = ["RedHatAI/Qwen3.8-27B-INT4", "Qwen3.8-27B-4bit", "mlx-community/Qwen3.8-27B-4bit", "qwen3.8:27b-q4_K_M",
+           "Qwen3.8-27B-Q4_K_M.gguf", "Qwen3.8-27B-AWQ", "Qwen3.8-27B-W4A16", "Qwen3.8-27B-FP8", " Qwen3.8-27B "]
+    assert {reading.model_id(m) for m in one} == {"qwen3.8-27b"}
+    others = ["Qwen3.8-8B-4bit", "Qwen3.7-27B-INT4", "Qwen3.8-27B-Instruct-INT4", "claude-opus-5-5", "gpt-4o"]
+    assert len({reading.model_id(m) for m in others} | {"qwen3.8-27b"}) == len(others) + 1
+    votes = [reading.Vote("reader", f"reader:{reading.model_id(one[0])}", "Auto"),
+             reading.Vote("third", f"reader:{reading.model_id(one[1])}", "Auto")]
+    assert reading.tally(votes, "label", ["Auto", "Manual"]) == (None, ())          # one model, one vote
+
+
+def test_the_start_check_says_when_two_reader_roles_are_one_model_family(monkeypatch, capsys):
+    """The start check names it, in plain words, when the second and third readers are one model in two builds."""
+    import camkit
+    from camkit import vlm
+    monkeypatch.setattr(camkit, "config", lambda required=True: {
+        "readers": [{"name": "vllm", "url": "http://127.0.0.1:8000/v1", "model": "RedHatAI/Qwen3.8-27B-INT4"},
+                    {"name": "omlx", "url": "http://127.0.0.1:8001/v1", "model": "Qwen3.8-27B-4bit"}]})
+    monkeypatch.setattr(vlm, "config", camkit.config)
+    checks = [vlm.Check("vllm", "openai-compatible", "Qwen3.8-27B-INT4", False, ("second",), asked=True, ok=True,
+                        seconds=1.0, said="MENU 42"),
+              vlm.Check("omlx", "openai-compatible", "Qwen3.8-27B-4bit", False, ("third",), asked=True, ok=True,
+                        seconds=1.0, said="MENU 42")]
+    vlm._passed(checks)
+    said = capsys.readouterr().out
+    assert ("the second reader 'vllm' and the third reader 'omlx' are one model, qwen3.8-27b, in two builds: their "
+            "answers are one vote, not two") in said
+
+
+def png(level: int) -> bytes:
+    import io
+
+    import numpy as np
+    from PIL import Image
+    buf = io.BytesIO()
+    Image.fromarray(np.full((48, 64, 3), level, np.uint8)).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_every_question_refuses_a_black_frame_and_a_reader_down_costs_one_timeout(monkeypatch):
+    """The black-frame refusal and the reader-down latch lived in camkit.reading.ask, which no prover calls: a hung
+    reader cost its timeout on every question, and a black frame could be asked about. Both are now in vlm.ask_role,
+    the call every question passes: a black frame is refused before anything is sent (and counts as no failure), and
+    after DOWN_AFTER failures in a row the role is not asked for DOWN_FOR seconds."""
+    from camkit import vlm
+    sent = []
+
+    class Reader:
+        served = None
+
+        def __init__(self, **cfg):
+            pass
+
+        def ask(self, image, prompt):
+            sent.append(prompt)
+            raise TimeoutError("timed out")
+    monkeypatch.setattr(vlm, "playing", lambda name: {"name": "slow", "url": "http://127.0.0.1:8000/v1", "model": "m"})
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: Reader())
+    monkeypatch.setattr(vlm, "stand_in", lambda name, failed: None)
+    with pytest.raises(vlm.BlackFrame, match="black frame"):
+        vlm.ask_role("second", png(0), "a question", 5)
+    assert sent == [] and not vlm.reader_down("second")
+    for _ in range(vlm.DOWN_AFTER):
+        with pytest.raises(TimeoutError):
+            vlm.ask_role("second", png(40), "a question", 5)
+    assert len(sent) == vlm.DOWN_AFTER and vlm.reader_down("second")
+    with pytest.raises(vlm.ReaderDown, match="did not answer just before"):
+        vlm.ask_role("second", png(40), "a question", 5)
+    assert len(sent) == vlm.DOWN_AFTER                     # nothing sent while it is down: no timeout spent
+    assert not vlm.reader_down("third")
+    vlm.forget()
+    assert not vlm.reader_down("second")
+    assert vlm.ask_role.__doc__ and "BlackFrame" in vlm.ask_role.__doc__

@@ -13,7 +13,9 @@ with no camera. Inside a run a missing reader is an ordinary exception (NoReader
 
 Every question a run asks about a frame goes through ask_role, which takes up a stand-in when the reader playing the
 role will not connect, and says once per reader, on standard error and in the run's events.jsonl, when one first fails
-during the run. The batch tools that read a whole run's frames afterwards build their readers themselves
+during the run; it never asks about a black frame (BlackFrame), and after DOWN_AFTER failures in a row it asks a
+role's reader nothing for DOWN_FOR seconds (ReaderDown). The start check says when the second and third readers are
+one model in two builds (one_family), whose answers are one vote. The batch tools that read a whole run's frames afterwards build their readers themselves
 (make_reader) and get no stand-in: kit/tiebreak.py, kit/pass1_labels.py, kit/page_model.py and kit/help_reads.py;
 kit/tools/reader_census.py --questions, which measures the questions themselves on recorded frames, asks a reader it
 names through ask_named_reader. A --network run (docs/decisions/0008) asks local readers only (LOCAL_ONLY) and marks
@@ -855,7 +857,28 @@ def _passed(checks: list) -> None:
         if own is not None and own.name in _SKIPPED and name not in stand_ins:
             print(f"reader {own.name!r} does not answer and no local reader may stand in: the {name} reader's "
                   f"questions go unanswered for this run", flush=True)
+    same = one_family()
+    if same:
+        print(f"readers: {same}", flush=True)
     _CHECKED = list(checks)
+
+
+def one_family() -> str:
+    """Plain words for a second and a third reader that are one model in two builds (camkit.reading.model_id: their
+    family), whose answers are one vote and not two (decision 22), or "" where they are two models, one role has no
+    reader, or one's reader is skipped for the run. Said at the start check; it changes no role."""
+    from . import reading
+    try:
+        second, third = playing("second"), playing("third")
+    except (NoReader, ValueError):
+        return ""
+    names = (str(second.get("name")), str(third.get("name")))
+    family = reading.model_id(second.get("model") or second.get("name"))
+    if names[0] == names[1] or set(names) & _SKIPPED or family != reading.model_id(third.get("model") or third.get("name")):
+        return ""
+    return (f"the second reader {names[0]!r} and the third reader {names[1]!r} are one model, {family}, in two builds: "
+            "their answers are one vote, not two (docs/decisions/0022), so where OCR and the second reader disagree the "
+            "third adds no independent vote; a third reader of another model would (private/config.json \"roles\")")
 
 
 # ------------------------------------------------------------------------------------------------ during a run
@@ -899,12 +922,50 @@ def failing(cfg: dict, e: BaseException, timeout: float | None = None) -> None:
 
 def forget() -> None:
     """A run's readers' state cleared: the start check's verdict, the readers it skipped, the stand-ins, the failures
-    said and the run they are logged in (a new run in the same process; the tests)."""
+    said, the latches and the run they are logged in (a new run in the same process; the tests)."""
     global _CHECKED, _RUN, LOCAL_ONLY, HELD
     _CHECKED, _RUN, LOCAL_ONLY, HELD = None, None, False, None
     _SKIPPED.clear()
     _FAILING.clear()
     _STANDING_IN.clear()
+    forget_down()
+
+
+DOWN_AFTER, DOWN_FOR = 2, 300.0          # failures in a row, then seconds a role's reader counts as unreachable
+_DOWN: dict = {}                         # role -> {"fails": n, "until": time.monotonic() it counts as down until}
+
+
+class BlackFrame(NoReader):
+    """A black frame (camkit.live.black): no reader is asked about one, for the readers invent answers on it. A NoReader,
+    so every caller takes it as no answer."""
+
+
+class ReaderDown(NoReader):
+    """The reader playing a role failed DOWN_AFTER times in a row less than DOWN_FOR seconds ago: it is not asked
+    meanwhile, so a server that is off or hung costs a run one timeout, not one per question."""
+
+
+def reader_down(role: str = "second") -> bool:
+    """The latch: the reader playing role failed DOWN_AFTER times in a row less than DOWN_FOR seconds ago."""
+    return time.monotonic() < _DOWN.get(role, {}).get("until", 0.0)
+
+
+def forget_down() -> None:
+    """Every role's latch cleared."""
+    _DOWN.clear()
+
+
+def black_image(image: bytes) -> bool:
+    """Whether the picture `image` (a frame's file, as a reader is sent it) is black as camkit.live.black judges a frame;
+    bytes that are no picture are not."""
+    try:
+        import numpy as np
+        from PIL import Image
+        from . import live
+        picture = np.asarray(Image.open(io.BytesIO(image)).convert("RGB"))
+    except Exception:            # noqa: BLE001 - no picture to judge: not black, as live.black says of one
+        return False
+    return live.black(type("Frame", (), {"image": picture})())
 
 
 def role(name: str) -> dict:
@@ -1112,7 +1173,31 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     answer the run's start check, with no reader standing in, raises NoReader at once, asking nothing: every caller
     takes it as no answer, as from a reader that failed, without the timeout each question would cost. While LOCAL_ONLY
     is set, a reader that is not local (local_reader) is never asked, and while HELD none is: NoReader at once, nothing
-    sent (local_only)."""
+    sent (local_only). Two rules every question meets here, before anything is sent (until 2026-11-18 only
+    camkit.reading.ask had them, which no prover calls): a black frame is never asked about (BlackFrame, no failure
+    counted), and a role whose reader failed DOWN_AFTER times in a row, stand-in included, is not asked for DOWN_FOR
+    seconds (ReaderDown, the latch: reader_down), a timeout counting as a failure like any other."""
+    if black_image(image):
+        raise BlackFrame(f"a black frame: no reader is asked about one, so the {name} reader's question goes unanswered")
+    if reader_down(name):
+        raise ReaderDown(f"the {name} reader did not answer just before ({DOWN_AFTER} failures in a row): it is asked "
+                         f"again after a pause of {DOWN_FOR:g} s, and this question goes unanswered")
+    try:
+        answer = _ask_role(name, image, prompt, timeout)
+    except NoReader:
+        raise                    # nothing was sent: no failure of the reader's
+    except Exception:
+        down = _DOWN.setdefault(name, {"fails": 0, "until": 0.0})
+        down["fails"] += 1
+        if down["fails"] >= DOWN_AFTER:
+            down["until"] = time.monotonic() + DOWN_FOR
+        raise
+    _DOWN.pop(name, None)
+    return answer
+
+
+def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
+    """ask_role's question sent: the reader playing the role, then a stand-in where it will not connect."""
     cfg = playing(name)
     local_only(cfg, name)
     if str(cfg.get("name")) in _SKIPPED:

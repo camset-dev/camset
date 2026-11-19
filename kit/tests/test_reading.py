@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, match, reading, safety  # noqa: E402
+from camkit import ROOT, match, reading, safety, vlm  # noqa: E402
 from camkit.reading import CAROUSEL, agree, canonical, code_same, doubts, number_key  # noqa: E402
 
 CYR_ES_CAP = "\u0421"        # CYRILLIC CAPITAL LETTER ES
@@ -720,7 +720,9 @@ def test_a_run_can_check_its_ocr_engines_before_it_presses(monkeypatch):
 
 
 def test_a_reader_model_is_one_vote_whatever_its_case_and_spacing():
-    assert reading.model_id(" Qwen3.8-27B ") == reading.model_id("qwen3.8-27b") != reading.model_id("qwen3.8-27b-4bit")
+    # one model in another build (a quantisation) is one vote too since 2026-11-18 (model_id: its family)
+    assert reading.model_id(" Qwen3.8-27B ") == reading.model_id("qwen3.8-27b") == reading.model_id("qwen3.8-27b-4bit")
+    assert reading.model_id("qwen3.8-27b") != reading.model_id("qwen3.8-8b")
 
 
 # ---------------------------------------------------------------------------------------------- read(), with the eyes faked
@@ -892,11 +894,13 @@ def test_with_the_reader_down_a_plain_reading_goes_on_and_a_doubt_is_refused(eye
     eyes.see(doubt, f"{CYR_ES_CAP}.Temp./Filter", box=CAROUSEL.box)
     d = reading.read(doubt, CAROUSEL, "label", "find", choices=["Auto", "C.Temp./Filter"])
     assert d.refused.startswith("reader needed: lookalike: CYRILLIC CAPITAL LETTER ES (the reader failed (URLError")
-    assert (d.by, d.choice) == ("ocr", None) and eyes.asked == ["option", "option"] and reading.reader_down()
+    assert (d.by, d.choice) == ("ocr", None) and eyes.asked == ["option", "option"]
+    # the latch is camkit.vlm.ask_role's since 2026-11-18 (kit/tests/test_review_pipeline.py): its refusal, no answer
+    eyes.answer("option", vlm.ReaderDown("the second reader did not answer just before"))
     later = eyes.frame("00009_right.png")
     eyes.see(later, f"120{CYR_ER}", box=CAROUSEL.box)
     a = reading.read(later, CAROUSEL, "label", "find")
-    assert eyes.asked == ["option", "option"] and "did not answer just before" in a.refused
+    assert "did not answer just before" in a.refused
     # a site's own check never stands in for the reader (a reader is required): still refused
     b = reading.read(doubt, CAROUSEL, "label", "find", choices=["Auto", "C.Temp./Filter"], second="C.Temp./Filter")
     assert b.refused.startswith("reader needed") and (b.choice, "second" in b.raw) == (None, False)
@@ -912,10 +916,11 @@ def test_a_prompt_that_is_no_question_raises_and_trips_no_latch(eyes):
 
 
 def test_the_reader_is_never_asked_about_a_black_frame(eyes):
+    # camkit.vlm.ask_role refuses a black frame before anything is sent (kit/tests/test_review_pipeline.py): its refusal
     f = eyes.frame("00010_right.png", dark=True)
-    eyes.answer("option", {"selected": "Auto"})
+    eyes.answer("option", vlm.BlackFrame("a black frame"))
     r = reading.read(f, CAROUSEL, "label", "proof", choices=["Auto", "Manual"])
-    assert eyes.asked == [] and r.refused.startswith("reader needed: empty") and "black frame" in r.refused
+    assert r.refused.startswith("reader needed: empty") and "black frame" in r.refused
 
 
 def test_the_lit_item_is_read_inside_the_cursor_and_nothing_lit_is_said(eyes):

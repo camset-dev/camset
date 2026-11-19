@@ -75,13 +75,12 @@ The eyes go through one seam each, so that a test fakes them in one place (kit/t
                                                and the reader's name and model
   _reader_model(role)                          the model a role's reader would answer with, or None (no such reader)
 Votes are told apart by their source: "ocr:<engine>", the engine name camkit.ocr.read runs (engine_of: "apple" or
-"rapidocr", any other name refused), and "reader:<model>", the model id trimmed and case-folded (model_id); the same
-weights under two ids cannot be told apart and count as two.
-ask() wraps the reader with a memo for the process (the role, the frame's bytes and the question), never asks about a
-black frame (camkit.live.black), and keeps a latch per role: after DOWN_AFTER failures in a row the reader counts as
-unreachable for DOWN_FOR seconds, so a server that is off costs a run one timeout, not one per doubt.
-(camkit.vlm.ask_role brings in a stand-in only on a refused connection; a read that times out is a failure here like
-any other.)
+"rapidocr", any other name refused), and "reader:<model>", the model's family (model_id: the id without what only names
+a build, so one model in two quantisations is one vote).
+ask() wraps the reader with a memo for the process (the role, the frame's bytes and the question). The black-frame
+refusal and the latch per role (after DOWN_AFTER failures in a row the reader counts as unreachable for DOWN_FOR seconds,
+so a server that is off costs a run one timeout, not one per doubt) are camkit.vlm.ask_role's since 2026-11-18, the call
+every question passes, and ask takes them as no answer.
 
 This file holds no character outside ASCII: the look-alike letters are written as escapes, each with its Unicode name,
 so that neither a reader of the file nor an OCR of it takes one for its Latin twin.
@@ -91,7 +90,6 @@ import hashlib
 import io
 import itertools
 import re
-import time
 import unicodedata
 from dataclasses import dataclass, field
 from typing import NamedTuple
@@ -897,10 +895,8 @@ def region(kind: str, box: tuple | None = None, k: int | None = None, field: str
 
 STAKES = ("guard", "press", "proof", "find", "note")
 TIMEOUTS = {"guard": 25.0, "press": 25.0, "proof": 25.0, "find": 15.0}   # s the reader gets, by what rides on it
-DOWN_AFTER, DOWN_FOR = 2, 300.0          # failures in a row, then seconds a reader counts as unreachable
 
 _MEMO: dict = {}                         # (role, the frame's SHA-1, the question) -> (answer, name, model)
-_DOWN: dict = {}                         # role -> {"fails": n, "until": time.monotonic() it counts as down until}
 
 
 class Asked(NamedTuple):
@@ -913,9 +909,9 @@ class Asked(NamedTuple):
 
 
 def forget() -> None:
-    """The memo and the latches cleared (a new run in the same process; the tests)."""
+    """The memo and the readers' latches cleared (a new run in the same process; the tests)."""
     _MEMO.clear()
-    _DOWN.clear()
+    vlm.forget_down()
 
 
 def _ocr_lines(frame, eng: str | None = None) -> list:
@@ -968,35 +964,30 @@ def frame_bytes(frame) -> bytes:
 
 
 def reader_down(role: str = "second") -> bool:
-    """The latch: the reader playing role failed DOWN_AFTER times in a row less than DOWN_FOR seconds ago."""
-    return time.monotonic() < _DOWN.get(role, {}).get("until", 0.0)
+    """The latch (camkit.vlm.reader_down): the reader playing role failed vlm.DOWN_AFTER times in a row less than
+    vlm.DOWN_FOR seconds ago."""
+    return vlm.reader_down(role)
 
 
 def ask(frame, prompt: str, timeout: float = 25.0, role: str = "second") -> Asked:
-    """The answer of the reader playing role to camkit.vlm.PROMPTS[prompt] about frame (Asked). Never asked about a
-    black frame (camkit.live.black: the readers invent answers on one); asked once per role, frame and question in a
-    process (camkit.vlm's own cache keeps the answers on disk); not asked while its latch is down (reader_down). A
-    failure, a missing reader (camkit.vlm.NoReader) and an answer that is no JSON object are no answer; the failures
-    count towards the latch. A prompt that is no PROMPTS key raises KeyError, before anything is asked."""
-    from . import live
+    """The answer of the reader playing role to camkit.vlm.PROMPTS[prompt] about frame (Asked), asked once per role,
+    frame and question in a process (camkit.vlm's own cache keeps the answers on disk). camkit.vlm.ask_role refuses a
+    black frame (vlm.BlackFrame: the readers invent answers on one) and a role whose reader is down (vlm.ReaderDown),
+    sending nothing; those, a failure, a missing reader (camkit.vlm.NoReader) and an answer that is no JSON object are no
+    answer, each with its reason. A prompt that is no PROMPTS key raises KeyError, before anything is asked."""
     question = vlm.PROMPTS[prompt]
-    if live.black(frame):
-        return Asked(None, None, None, "a black frame: the reader is never asked about one")
     image = frame_bytes(frame)
     key = (role, hashlib.sha1(image).hexdigest(), prompt)
     if key in _MEMO:
         return Asked(*_MEMO[key], "")
-    if reader_down(role):
-        return Asked(None, None, None, "the reader did not answer just before (asked again after a pause)")
-    down = _DOWN.setdefault(role, {"fails": 0, "until": 0.0})
     try:
         answer, name, model = _reader_answer(image, question, timeout, role)
-    except Exception as e:       # noqa: BLE001 - any failure is no answer here; the latch counts it
-        down["fails"] += 1
-        if down["fails"] >= DOWN_AFTER:
-            down["until"] = time.monotonic() + DOWN_FOR
+    except vlm.BlackFrame:
+        return Asked(None, None, None, "a black frame: the reader is never asked about one")
+    except vlm.ReaderDown:
+        return Asked(None, None, None, "the reader did not answer just before (asked again after a pause)")
+    except Exception as e:       # noqa: BLE001 - any failure is no answer here (vlm.ask_role's latch counts it)
         return Asked(None, None, None, vlm.scrub(f"the reader failed ({type(e).__name__}: {e})"[:300]))
-    down.update(fails=0, until=0.0)
     if not isinstance(answer, dict) or "_unparsed" in answer:
         return Asked(None, name, model, "the reader's answer was no JSON object")
     _MEMO[key] = (answer, name, model)
@@ -1033,10 +1024,26 @@ def check_engines() -> tuple:
     return first, (None if other == first else other)
 
 
+# What in a model id only names a build of the weights, never another model: a quantisation (INT4, INT8, W4A16, FP8,
+# BF16, 4bit, 8-bit, Q4_K_M, Q8_0, IQ4_XS), a weights format or the tool that made it (GGUF, GGML, AWQ, GPTQ, EXL2, MLX,
+# DWQ, BNB, NF4, QAT), each a whole token between separators. A size, a version, a tune (Instruct, VL, it) or any other
+# token names the model and stays.
+_BUILD = re.compile(r"(?<![a-z0-9])(?:(?:u?int|fp|bf|f|nvfp|mxfp)\d{1,2}|w\d{1,2}a\d{1,2}|\d{1,2}-?bits?"
+                    r"|i?q\d(?:_[a-z0-9]+)*|gguf|ggml|awq|gptq|exl2|mlx|dwq|bnb|nf4|qat)(?![a-z0-9])")
+
+
 def model_id(model) -> str:
-    """A reader's model as votes are told apart by it: its configured id, trimmed and case-folded. Two ids for the same
-    weights (an alias, a path and a name) cannot be told apart here and count as two models."""
-    return str(model or "unknown").strip().casefold()
+    """A reader's model as votes are told apart by it, its family: the configured id case-folded, without the folders or
+    the repository owner before its last "/" (who built or keeps it), a file's .gguf, .bin or .safetensors, and every
+    token that only names a build (_BUILD), its separators made one "-". So RedHatAI/Qwen3.8-27B-INT4 on vLLM and
+    Qwen3.8-27B-4bit on omlx, the second and third readers docs/QUICKSTART.md suggests, are one model and one vote
+    ("qwen3.8-27b", decision 22: one model, one vote), while Qwen3.8-8B or an Instruct tune is another. Two names for one
+    model that share no such form (an alias of the server's own) still count as two."""
+    t = str(model or "").strip().casefold().rstrip("/\\")
+    t = re.split(r"[/\\]", t)[-1]
+    t = re.sub(r"\.(?:gguf|bin|safetensors)$", "", t)
+    t = re.sub(r"[\s_:-]+", "-", _BUILD.sub("", re.sub(r"[\s:]+", "-", t)))
+    return t.strip("-._") or "unknown"
 
 
 @dataclass
@@ -1155,9 +1162,11 @@ def _once(frame, where: Region, expect: str, stakes: str, choices: tuple, second
     canon = canonical(judged)
 
     def third_reader():
-        """A reader of another model than any that voted (the "third" role), when one is configured."""
+        """The reader of the "third" role, when one is configured whose model is not, as configured, the second's
+        (asked as before 2026-11-18; its vote is counted by family, model_id, so one of the second's family adds none)."""
         model = _reader_model("third")
-        if model is None or f"reader:{model_id(model)}" in {v.source for v in votes}:
+        second = str(asked.model or asked.name or "unknown").strip().casefold() if asking else None
+        if model is None or str(model).strip().casefold() == second:
             return
         got = ask(frame, where.prompt, TIMEOUTS[stakes], role="third")
         raw["third"] = _picked(where, got.answer)
