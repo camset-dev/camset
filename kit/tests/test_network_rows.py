@@ -685,6 +685,7 @@ def test_once_an_address_screen_opens_only_menu_goes_out(tmp_path, monkeypatch):
     from camkit import vlm
     rows = decided(DECISION)
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Display Wi-Fi Info.")
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
     cam = camera(tmp_path, rows, screens=True)
     with pytest.raises(RuntimeError, match="sent"):                          # the press went out, then the settle
         cam.press("right")
@@ -2120,6 +2121,7 @@ def test_the_runners_give_the_page_models_readings_and_values_to_the_lift(tmp_pa
     assert values == {"Wired LAN Connect": ["On"]}
     # the camera's own press check opens it, and the walk takes the page model's row
     monkeypatch.setattr(live, "lit_text", lambda image, path: "LANWired LAN Connect  On")
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
     cam = camera(tmp_path, decided_rows, values=values, page="menu")
     cam.readings = readings
     with pytest.raises(RuntimeError, match="sent"):

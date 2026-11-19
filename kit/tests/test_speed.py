@@ -1325,6 +1325,7 @@ def reader_camera(tmp_path, monkeypatch, takes, closes=False, moves_to=None, by_
     cam.hdmi = eyes = ReaderEyes(now)
     cam.reading = lambda f: SimpleNamespace(kind=f.image[0], focus="rows", signature=str(f.image if by_row else f.image[0]),
                                             struct=f.image if by_row else f.image[0])
+    monkeypatch.setattr(live.screen, "read", cam.reading)       # the look before Right reads its fresh frame so too
     cam.frame = eyes.grab("start")
     cam.screen = cam.reading(cam.frame)
     cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
@@ -2527,3 +2528,175 @@ def test_the_lock_probe_sends_one_menu_per_trial_and_closes_only_a_menu_that_ope
     assert rows[2]["notice_gone_after_download"] == pytest.approx(1.9, abs=0.03)
     text = P.table(rows, "lock", "hdmi", "lan")
     assert "   1.6   2     0" in text and "   2.4   2     2" in text
+
+
+# ---------------------------------------------------------------- N: a fresh look before Right, as Enter has
+
+
+PROBE_LR = "kit2_probe_hdmi_lr"         # settle_probe's Left and Right on a menu page, HDMI eyes (2026-11-19)
+
+
+def probe_frame(name):
+    """A frame of the Left/Right probe's run (its shots/ or late/ folder), skipped where the run is not here."""
+    from camkit.frames import load
+    path = RUNS / PROBE_LR / name
+    if not path.exists():
+        pytest.skip(f"{path} not present")
+    return load(path)
+
+
+class FreshEyes:
+    """Eyes on a fake clock that give, grab after grab, the pictures of `fresh` in turn (the last one again once they
+    are spent); a settle takes 0.2 s and ends on the picture `settles` (the next of `fresh` when None), saved as
+    evidence. `name`: "hdmi" or "osd"."""
+    def __init__(self, now, run, fresh, settles=None, name="hdmi"):
+        self.now, self.run, self.fresh, self.settles, self.name = now, run, list(fresh), settles, name
+        self.grabs, self.settled, self.timing = [], [], {}
+
+    def grab(self, tag="f", save=True):
+        from camkit.frames import Frame, keep
+        self.grabs.append(tag)
+        image = self.fresh.pop(0) if len(self.fresh) > 1 else self.fresh[0]
+        f = Frame(image, self.now[0], None, self.name)
+        if save:
+            keep(f, self.run.shot_path(tag))
+        return f
+
+    def settle(self, before, tag, expect_change=None, sent_at=None, **k):
+        from camkit.frames import Frame, keep
+        self.settled.append(tag)
+        self.now[0] += 0.2
+        if self.settles is None:
+            return self.grab(tag), True
+        f = Frame(self.settles, self.now[0], None, self.name)
+        keep(f, self.run.shot_path(tag))
+        return f, True
+
+
+def fresh_camera(tmp_path, monkeypatch, held, fresh, settles=None, name="hdmi"):
+    """A LiveCamera on a fake clock whose last settle ended on the picture `held`, read as a run reads it, while its eyes
+    now give the pictures `fresh`; the never-open check reads "Drive Mode" in any lit bar and notes the frame it read it
+    on. (camera, keys sent with the kind and focus each was judged on, frames the bar was read on, sleeps made)."""
+    from camkit import live
+    from camkit.frames import Frame, keep
+    from camkit.runs import Run
+    now, clock = menu_clock()
+    now[0] = 10.0
+    sleeps = []
+
+    def sleep(s):
+        sleeps.append(s)
+        now[0] += s
+    monkeypatch.setattr(live, "time", SimpleNamespace(monotonic=clock.monotonic, sleep=sleep))
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run(f"fresh_{len(list(tmp_path.iterdir()))}", root=tmp_path)
+    cam.hdmi = FreshEyes(now, cam.run, fresh, settles, name)
+    cam.link = SimpleNamespace(moves=0, menus=0, moved_at=now[0])
+    cam.frame = Frame(held, now[0], None, name)
+    keep(cam.frame, cam.run.shot_path("held"))
+    cam.screen = cam.reading(cam.frame)
+    cam.screen.frame_path = cam.frame.path.name
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    cam.may_open, cam.presses, cam._seen = frozenset(), 0, 0
+    read_on = []
+    monkeypatch.setattr(live, "lit_text", lambda image, path: read_on.append(Path(path).name) or "Drive Mode")
+    sent = []
+    cam.link.press = lambda key, hold, screen=None, **k: sent.append((key, screen.kind, getattr(screen, "focus", None)))
+    return cam, sent, read_on, sleeps
+
+
+def test_right_is_judged_on_a_fresh_look_and_not_on_the_frame_its_settle_ended_on(tmp_path, monkeypatch):
+    """Before Right, on either eyes, one fresh grab (look_again, no wait): where it is the frame the last settle ended on
+    (here the very picture: the probe's two still frames before each press were alike pixel for pixel), the Right goes
+    out judged on that frame, one grab more and no settle before it; where the camera now shows the focus back in the
+    rows (the settle had read the group column) the screen is settled once more and, still not the page the caller read,
+    the Right is refused (safety.ScreenChanged): it never goes out on the stale reading, which on 2026-11-06 opened the
+    row the cursor was on. The fresh frame is the camera's then, and the log says so."""
+    from camkit import safety
+    groups, still, rows = (probe_frame(f"shots/{n}").image for n in ("00004_left.png", "00005_before-right.png",
+                                                                      "00006_right.png"))
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, groups, [still])
+    assert cam.read().kind == "menu" and cam.read().focus == "groups"
+    cam.press("right")
+    assert sent == [("right", "menu", "groups")] and read_on == ["00001_held.png"]
+    assert cam.hdmi.grabs[0] == "right-again" and cam.hdmi.settled == ["right"] and not events_of(cam, "right_settled")
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, groups, [rows])
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and read_on == [] and cam.read().focus == "rows" and cam.hdmi.settled == ["right-again"]
+    assert [e["same"] for e in events_of(cam, "right_settled")] == [False]
+    assert events_of(cam, "screen_changed_before_press") and events_of(cam, "press_refused")
+
+
+def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_settled_frame(tmp_path, monkeypatch):
+    """A settle that ended while the page was still being drawn: the fresh frame differs from it, so the screen is
+    settled once more. A settled frame at the caller's place (screen.same_position: the same page, breadcrumb and
+    counter, cursor row and focus; the lit box where it was), whose rows only were drawn late (a row's label redrawn
+    after the bar moved), is the one the bar is read on and the Right judged on; one whose breadcrumb was still being
+    drawn (the probe's Left, kit2_probe_hdmi_lr late/0007: a mid-redraw frame of the group column) is not the caller's
+    page: refused, nothing sent."""
+    from camkit import safety
+    whole = probe_frame("shots/00006_right.png").image          # the rows focused, the bar on row 6
+    late = whole.copy()
+    late[150:160, 420:560] = 255            # a stroke on an unlit row, drawn late: the page's place unchanged
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [whole])
+    assert not screen.same_state(cam.read(), screen.read(probe_frame("shots/00006_right.png")))
+    cam.press("right")
+    assert sent == [("right", "menu", "rows")] and len(read_on) == 1 and read_on[0].endswith("_right-again.png")
+    assert cam.hdmi.settled == ["right-again", "right"]
+    assert [e["same"] for e in events_of(cam, "right_settled")] == [True]
+    half, whole = (probe_frame(f"late/{n}").image for n in ("0007_left_0.30s_after.png", "0007_left_0.33s_after.png"))
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, half, [whole])
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and read_on == []
+
+
+def test_the_fresh_look_before_right_waits_for_nothing_with_osd_eyes(tmp_path, monkeypatch):
+    """With OSD eyes the look before Right is one grab at once: OSD_LAG is Enter's wait (the link's picture can lag the
+    screen; an Enter answers what the screen asks), never Right's, however recent the kit's last move."""
+    from camkit import live
+    groups, still = (probe_frame(f"shots/{n}").image for n in ("00004_left.png", "00005_before-right.png"))
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, groups, [still], name="osd")
+    cam.press("right")
+    assert sent == [("right", "menu", "groups")] and cam.hdmi.grabs[0] == "right-again"
+    assert not any(s >= 1.0 for s in sleeps) and live.OSD_LAG >= 3.0
+
+
+def test_off_the_menu_pages_the_look_before_right_refuses_only_a_screen_that_changed_kind(tmp_path, monkeypatch):
+    """Neither the caller's screen nor the fresh one a menu or submenu page (a carousel over a live view, a blinking
+    mark): no lit bar is judged, and a picture that moves by itself goes on as before, judged on the caller's frame. A
+    fresh frame of another kind (the dialog closed by itself, the shooting screen under it) is settled once more and,
+    still not the caller's screen, refused. A grab that fails refuses on a menu page; off the menu pages it leaves the
+    press as it was before the look (the link judges it, as ever)."""
+    from camkit import live, safety
+    base = probe_frame("shots/00004_left.png").image
+    pictures, kinds = [base.copy() for _ in range(3)], ("dialog", "dialog", "shooting")
+    real = live.screen.read
+
+    def read(f):
+        hit = next((k for p, k in zip(pictures, kinds, strict=True) if f.image is p), None)
+        if hit is None:
+            return real(f)
+        sig = f"{hit}-{next(i for i, p in enumerate(pictures) if f.image is p)}"
+        return SimpleNamespace(kind=hit, focus=None, signature=sig, struct=(sig,), bits=np.zeros(0, np.uint8),
+                               page=np.zeros(0, np.uint8), row=None, field=None, frame_path=None)
+    monkeypatch.setattr(live.screen, "read", read)
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, pictures[0], [pictures[1]])
+    assert cam.read().kind == "dialog"
+    cam.press("right")                      # the live view behind the carousel moved: as before
+    assert sent == [("right", "dialog", None)] and read_on == [] and cam.hdmi.settled == ["right"]
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, pictures[0], [pictures[2]])
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and cam.read().kind == "shooting" and cam.hdmi.settled == ["right-again"]
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, pictures[0], [pictures[1]])
+    cam.hdmi.grab = lambda tag="f", save=True: (_ for _ in ()).throw(RuntimeError("no frames from the dongle"))
+    with pytest.raises(RuntimeError, match="no frames"):        # the press went out; its own settle then fails
+        cam.press("right")
+    assert sent == [("right", "dialog", None)]
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, base, [base])
+    cam.hdmi.grab = lambda tag="f", save=True: (_ for _ in ()).throw(RuntimeError("no frames from the dongle"))
+    with pytest.raises(safety.Refused, match="could not be looked at again"):
+        cam.press("right")
+    assert sent == [] and cam.read().kind == "menu"

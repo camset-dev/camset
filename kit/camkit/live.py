@@ -27,6 +27,8 @@ after an armed press, MENU alone (owner_done). On such a run every Enter also me
 (wiping_refused: Initialize, Reset Network Set., SSID/PW Reset). A row whose values are withheld (safety.BLANKED) takes
 MENU alone, asks no reader, and the eyes write every frame of it black (withhold, camkit.frames' withheld). handed counts
 the presses handed to the link, which drive.py says in its log of an armed press that failed.
+Before a Right the bar is read on a frame grabbed just then (look_before_right: one grab, no wait on either eyes), never
+on the frame the last settle ended on; a screen that does not read as the caller's, nor once settled, gets no Right.
 It fails closed as drive.py does: when an orange bar is drawn but OCR reads no text in it, the vision reader is
 asked once for the row's label (reader_label), and the label it gives is judged the same way; when it gives none, the
 press is refused, since the never-open check cannot judge a row it cannot read (2026-11-08). The reader takes about a
@@ -98,6 +100,8 @@ from .vlm import PROMPTS, ask_role, log_to, scrub
 
 # Presses that open the row under the cursor, and the screens whose lit bar is a row
 OPENS = frozenset({"right", "enter", "ms_right", "ms_enter"})
+# the opening presses that are no Enter: looked at again before they go, with no wait (LiveCamera.look_before_right)
+RIGHTS = frozenset({"right", "ms_right"})
 # Inside a row a network decision opened, the presses that may close it: MENU, and an Enter inside_refused lets through
 # (an option the decision names); a network row's lock ends only after one of them (LiveCamera.network_left)
 CLOSES = frozenset({"menu", "enter", "ms_enter"})
@@ -824,6 +828,12 @@ def same_box(a, b, tol: int = 4) -> bool:
     return a is not None and b is not None and len(a) == len(b) and all(abs(x - y) <= tol for x, y in zip(a, b, strict=True))
 
 
+def boxes_alike(a, b) -> bool:
+    """Whether two pictures light one place: their lit boxes (lit_box) both absent, or the same (same_box)."""
+    x, y = lit_box(a), lit_box(b)
+    return (x is None and y is None) or same_box(x, y)
+
+
 def same_screen(a, b) -> bool:
     """Whether two readings are of one screen (screen.same_state; the very reading, too); a reading that cannot be
     compared is no proof that it is."""
@@ -1115,6 +1125,10 @@ class LiveCamera:
             # an Enter or a trash button: the screen looked at again, and that frame the one every check below judges
             # (look_before); a screen changed since its caller read it is refused (safety.ScreenChanged)
             self.look_before(key)
+        elif safety.canonical_input(key) in RIGHTS:
+            # a Right: likewise, one grab and no wait, so the lit bar and the never-open check read the screen on show,
+            # never the frame the last settle ended on (look_before_right)
+            self.look_before_right(key)
         # the never-open check judges the key as the guards read it (" right" and "Right" are Right), so a padded or
         # look-alike spelling never skips it; the link then refuses any spelling that is not the key's own name
         network, screens = getattr(self, "network", ()), getattr(self, "screens", False)
@@ -1626,6 +1640,59 @@ class LiveCamera:
         self.judge_fresh(fresh, key, changed=bool(stale))
         if stale:
             self.refuse(key, f"{stale}; read the screen again and choose afresh", changed=True)
+
+    def look_before_right(self, key: str) -> None:
+        """Before a Right (or the multi-selector's right) is judged: the screen looked at again as before an Enter
+        (look_again), one grab at once on either eyes (OSD_LAG is Enter's wait, never Right's), so the lit bar and the
+        never-open check read the screen on show, never the frame the last settle ended on: a menu caught mid-slide, or a
+        redraw that went on after the settle (2026-11-06: a frame read as the group column, and the Right meant to step
+        into the rows opened the row the cursor was on; the settle probe's finding of 2026-11-19, which every shorter
+        step window waits on). On a menu or submenu page (ROW_SCREENS) a fresh frame that reads as the caller's screen
+        (screen.same_state) with its lit box in the same place (boxes_alike) is the frame judged (judge_fresh; the
+        caller's own where the picture is the very same, pixel for pixel). Any other on such a page, or a fresh frame of
+        another kind than the caller's, or a menu or submenu page where the caller's was none, gets the screen settled once
+        more and read: a settled frame at the caller's place (screen.same_position, the same focus, the lit box where it
+        was; a row's label drawn late moves no place) is the one judged; any other is refused, that frame the camera's
+        (safety.ScreenChanged), since the caller chose the press on the screen it read. On a menu or submenu page a frame
+        that cannot be grabbed, read or settled is a refusal; elsewhere a look that fails leaves the press as it was
+        before this look, no bar being judged there. A picture that moves by itself: on a menu or submenu page only the
+        lit row's long label scrolls, which the state leaves out (camkit.screen); elsewhere (a carousel over a live view,
+        a blinking mark) the kind is all that is compared, so the press goes as before, on the caller's frame."""
+        judged, held = self.screen, self.frame
+        rows = getattr(judged, "kind", None) in ROW_SCREENS
+        stale, fresh = look_again(getattr(self, "hdmi", None), judged, key, None)       # no move given: no OSD_LAG wait
+        if fresh is None:
+            if stale and rows:
+                self.refuse(key, stale)
+            return                          # off the menu pages a look that failed leaves the press as before
+        if not stale and not rows:
+            return                          # no bar judged here: as before
+        try:
+            if not stale and boxes_alike(fresh.image, held.image):
+                if not same_picture(fresh, held):
+                    self.judge_fresh(fresh, key)
+                return
+            now = self.reading(fresh)
+        except safety.Refused:
+            raise
+        except Exception as e:
+            self.refuse(key, f"the screen looked at again before the press could not be read ({type(e).__name__})")
+        if not rows and now.kind not in ROW_SCREENS and now.kind == getattr(judged, "kind", None):
+            return                          # no menu page either way, the same kind: a picture that moves by itself
+        try:
+            f, _ = self.hdmi.settle(fresh, f"{key}-again", expect_change=False)
+            s = self.reading(f)
+            here = (screen.same_position(s, judged) and getattr(s, "focus", None) == getattr(judged, "focus", None)
+                    and (not rows or boxes_alike(f.image, held.image)))
+        except Exception as e:
+            self.refuse(key, f"the screen could not be settled and read before the press ({type(e).__name__})")
+        self.frame, self.screen = f, s
+        self.screen.frame_path = f.path.name
+        self.run.log("right_settled", key=key, frame=f.path.name, same=bool(here))
+        if not here:
+            self.run.log("screen_changed_before_press", key=key, frame=f.path.name, screen=s.kind)
+            self.refuse(key, "the screen looked at again before the press is not the one its caller read, nor once "
+                             "settled: read the screen again and choose afresh", changed=True)
 
     def judge_fresh(self, f, key: str, changed: bool = False) -> None:
         """The frame look_again grabbed before a press made the one it is judged on: saved as evidence (black on a row
