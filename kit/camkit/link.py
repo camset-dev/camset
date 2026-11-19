@@ -1131,7 +1131,8 @@ class Link:
         if not r.get("ok") and str(r.get("error") or "").startswith("unknown command importlut"):
             why = OLD_LUT_CAMLINK
         elif not r.get("ok"):
-            why = f"{real.name} was not imported into place {place}: {r.get('error')} ({r.get('cause') or 'no cause given'})"
+            why = (f"the import of {real.name} into place {place} is not confirmed: {r.get('error')} "
+                   f"({r.get('cause') or 'no cause given'})")
         elif r.get("result") != LUT_OK:
             why = (f"camlink answered without the camera's {LUT_OK} (it said {r.get('result')!r}): the import of "
                    f"{real.name} is not confirmed")

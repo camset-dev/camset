@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -263,3 +264,234 @@ def test_a_lut_is_no_settings_file_and_never_an_upload(luts):
     doc = " ".join(Link.import_lut.__doc__.split())
     for words in ("no settings file", "docs/decisions/0006", "from a card", "ImportLUTFile"):
         assert words in doc, words
+
+
+# ---------------------------------------------------------------- kit/tools/lut_import.py
+
+SAMPLE = ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.DAT"
+SETS_BACK = 0x0050          # a record a settings file sets back
+STAYS = 0x1126              # one it does not (on the ILCE-1M2: upload_check.KNOWN_LEFT)
+ELSEWHERE = 0x0051          # a record the import does not change
+
+
+def changed(*rids) -> bytes:
+    """The sample's bytes with the first byte of each record `rids` names changed."""
+    from camkit import camset
+    cs = camset.read(SAMPLE)
+    out = {}
+    for rid in rids:
+        raw = bytearray(cs.get(0, rid).raw)
+        raw[0] ^= 1
+        out[(0, rid)] = bytes(raw)
+    return camset.with_values(cs, out)
+
+
+class Camera:
+    """What the tool's stand-in link and restore check see: the enable status get answers (None: the property cannot be
+    read), what import_lut does (a reply dict to return, or an exception to raise), the records the camera's download
+    after the import differs from the start file in, those still differing after the restore (None: no reconnection),
+    and whether the start download is refused. `sent` lists what reached the camera, in order."""
+
+    def __init__(self, status=1, imports=None, after=(SETS_BACK, STAYS), restored=(STAYS,), start_refused=False,
+                 after_refused=False):
+        self.status, self.imports, self.after, self.restored = status, imports, after, restored
+        self.start_refused, self.after_refused = start_refused, after_refused
+        self.sent, self.imported = [], False
+
+
+def stand_in(monkeypatch, cam: Camera):
+    """The tool's Link and verify_restore stood in by `cam`, its LUT folder the test's own; returns the module."""
+    import lut_import as T
+
+    class StandIn:
+        def __init__(self, run, **kw):
+            self.run = run
+
+        def __enter__(self):
+            cam.sent.append("open")
+            return self
+
+        def __exit__(self, *exc):
+            cam.sent.append("close")
+            return False
+
+        def download(self, tag):
+            cam.sent.append(f"download {tag}")
+            if (tag == "start" and cam.start_refused) or (tag != "start" and cam.after_refused):
+                raise LinkError("download: camera does not allow a settings download now")
+            p = self.run.dat / f"{self.run.dat_name(tag)}.DAT"
+            p.write_bytes(changed(*cam.after) if cam.imported and tag != "start" else SAMPLE.read_bytes())
+            return p
+
+        def get(self, name):
+            cam.sent.append(f"get {name}")
+            if cam.status is None:
+                raise LinkError(f"get {name}: unknown property {name}")
+            return {"ok": True, "current": cam.status}
+
+        def import_lut(self, path, place=16):
+            cam.sent.append(f"importlut {Path(path).name} {place}")
+            if isinstance(cam.imports, BaseException):
+                cam.imported = getattr(cam.imports, "called", False)
+                raise cam.imports
+            cam.imported = True
+            return cam.imports or {"ok": True, "result": L.LUT_OK, "place": place, "called": True, "ms": 1200}
+
+        def upload(self, f):
+            cam.sent.append(f"upload {Path(f).name}")
+            return {"ok": True}
+
+    def verify(run, start, expected=frozenset(), **kw):
+        cam.sent.append("verify")
+        if cam.restored is None:
+            return None
+        p = run.dat / f"{run.dat_name('restored')}.DAT"
+        p.write_bytes(changed(*cam.restored))
+        from camkit import camset
+        return len([c for c in camset.diff(camset.read(start), camset.read(p)) if c.key not in expected])
+    monkeypatch.setattr(T, "Link", StandIn)
+    monkeypatch.setattr(T, "verify_restore", verify)
+    return T
+
+
+def tool(monkeypatch, luts, cam: Camera, *args) -> int:
+    run, _, folder, lut = luts
+    T = stand_in(monkeypatch, cam)
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *args])
+    return T.main()
+
+
+def key(rid) -> str:
+    return f"global:0x{rid:04x}"
+
+
+def test_the_lut_goes_in_its_records_are_said_and_the_start_file_goes_back(monkeypatch, luts, capsys):
+    """The whole run: the start download, the enable status read and said, the import, the download after it and every
+    record that differs from the start file said with its values, the start file put back, the restore checked with
+    the import's records left out of the count, and those that did not go back said as expected: a user LUT is state
+    no settings file puts back, and it stays in its place until the owner deletes it by hand. Exit 0. No key pressed."""
+    cam = Camera()
+    assert tool(monkeypatch, luts, cam) == 0
+    assert cam.sent == ["open", "download start", "get BaseLookImportOperationEnableStatus", f"importlut {NAME} 16",
+                        "download after-lut", "upload 00001_start.DAT", "close", "verify"]
+    out = capsys.readouterr().out
+    assert "BaseLookImportOperationEnableStatus reads 1 (Enable)" in out
+    assert f"{L.LUT_OK}: {NAME} is in user place 16" in out
+    assert "2 records differ from the start file" in out
+    assert f"   {key(SETS_BACK)}" in out and f"   {key(STAYS)}" in out and " -> " in out
+    assert f"did not go back: {key(STAYS)}" in out and "expected, not an error" in out
+    assert "until the owner deletes it on the camera by hand" in out
+    run = Run("kit2_lut")                                       # the tool's own run, in the test's runs/
+    line = json.loads((run.dir / "lut_import.jsonl").read_text(encoding="utf-8"))
+    assert line["file"] == NAME and line["place"] == 16 and line["result"] == L.LUT_OK and line["exit"] == 0
+    assert line["records_changed"] == [key(SETS_BACK), key(STAYS)] and line["not_back"] == [key(STAYS)]
+    assert line["sha256"] == hashlib.sha256(CUBE.encode()).hexdigest()
+    assert "LUT_3D_SIZE" not in json.dumps(line)
+
+
+@pytest.mark.parametrize("status,said", [(0, "reads 0 (Disable)"), (2, "reads 2"), (None, "could not be read")])
+def test_an_import_the_camera_does_not_enable_is_not_tried(monkeypatch, luts, capsys, status, said):
+    """BaseLookImportOperationEnableStatus not Enable, or unreadable: said plainly with what the camera reads, nothing
+    imported, the session ended as ever (a download compared with the start file: nothing to put back). Exit 8."""
+    from exit_status import EXIT_INCOMPLETE
+    cam = Camera(status=status)
+    assert tool(monkeypatch, luts, cam) == EXIT_INCOMPLETE
+    assert not [s for s in cam.sent if s.startswith(("importlut", "upload", "verify"))]
+    assert cam.sent[-2:] == ["download after", "close"]
+    out = capsys.readouterr().out
+    assert said in out and "nothing was imported" in out and "Movie" in out
+    assert "0 records differ from the start file" in out
+
+
+@pytest.mark.parametrize("called", [False, True])
+def test_an_import_the_camera_refused_or_left_unconfirmed_is_said_as_that(monkeypatch, luts, capsys, called):
+    """The camera's refusal before the SDK was asked (nothing changed), or an answer that never came after it was (the
+    camera may have changed: its download is compared, and anything that differs put back): never a success. Exit 8,
+    the start file back."""
+    from exit_status import EXIT_INCOMPLETE
+    reply = ({"ok": False, "cause": "import_unconfirmed", "called": True, "error": "no answer within 120 s"} if called
+             else {"ok": False, "cause": "import_refused", "called": False, "error": "place 16 already holds a LUT"})
+    cam = Camera(imports=LutNotImported(f"the import of {NAME} into place 16 is not confirmed: {reply['error']}", reply))
+    assert tool(monkeypatch, luts, cam) == EXIT_INCOMPLETE
+    out = capsys.readouterr().out
+    assert "no import confirmed" in out and reply["error"] in out and L.LUT_OK + ":" not in out
+    assert "stays in user place" not in out
+    if called:
+        assert "may have changed" in out and "upload 00001_start.DAT" in cam.sent and "verify" in cam.sent
+    else:
+        assert not [s for s in cam.sent if s.startswith(("upload", "verify"))]
+
+
+def test_a_restore_that_does_not_check_out_exits_unrestored(monkeypatch, luts, capsys):
+    """A record the import did not change still differing after the restore, or no reconnection, or the download after
+    the import refused every time: exit 4, saying how the start file goes back."""
+    from exit_status import EXIT_UNRESTORED
+    assert tool(monkeypatch, luts, Camera(restored=(STAYS, ELSEWHERE))) == EXIT_UNRESTORED
+    assert "did not check out" in capsys.readouterr().out
+    assert tool(monkeypatch, luts, Camera(restored=None)) == EXIT_UNRESTORED
+    assert "did not answer after its restart" in capsys.readouterr().out
+    monkeypatch.setattr("lut_import.PAUSE", 0)
+    cam = Camera(after_refused=True)
+    assert tool(monkeypatch, luts, cam) == EXIT_UNRESTORED
+    assert "kit/tools/upload_check.py" in capsys.readouterr().out
+    assert not [s for s in cam.sent if s.startswith("upload")]
+
+
+def test_nothing_is_sent_for_a_file_or_place_the_kit_does_not_import(monkeypatch, luts, capsys, tmp_path):
+    """A file outside the clone's LUT folder, or a place that is no user place: refused before any link opens, exit 1;
+    a camera that refuses the start download: said, nothing imported, exit 1."""
+    cam = Camera()
+    outside = made(tmp_path / "elsewhere", NAME)
+    T = stand_in(monkeypatch, cam)
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(outside)])
+    assert T.main() == 1
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(luts[3]), "--place", "17"])
+    assert T.main() == 1
+    assert cam.sent == [] and capsys.readouterr().out.count("nothing was sent") == 2
+    cam = Camera(start_refused=True)
+    assert tool(monkeypatch, luts, cam) == 1
+    assert cam.sent == ["open", "download start", "close"]
+    assert "shooting screen" in capsys.readouterr().out
+
+
+def test_the_whole_run_through_the_link_and_the_stand_in_camlink(monkeypatch, luts, tmp_path, capsys):
+    """The tool with the kit's own Link and restore check, the stand-in camlink answering: what reaches camlink is the
+    start download, the enable status's get, one importlut, the download after it, the start file's upload (the
+    camera's word on Playback asked first, a read) and the restore check's download on a new link: no press, no dial,
+    no set, and nothing but the import and the upload that changes the camera."""
+    import functools
+    from camkit import session
+    import lut_import as T
+    run, log, _, lut = luts
+    after, restored = tmp_path / "after.DAT", tmp_path / "restored.DAT"
+    after.write_bytes(changed(SETS_BACK, STAYS))
+    restored.write_bytes(changed(STAYS))
+    monkeypatch.setenv("FAKE_CAMLINK_GET", json.dumps({"BaseLookImportOperationEnableStatus": {"current": 1}}))
+    monkeypatch.setenv("FAKE_CAMLINK_DOWNLOADS", json.dumps({"_after-lut": str(after), "_restored": str(restored)}))
+    linked = functools.partial(Link, ip="192.0.2.10", binary=fake_camlink.COMMAND, catch_signals=False)
+
+    class Clock:                                       # the restart waited for without waiting
+        @staticmethod
+        def monotonic():
+            return time.monotonic()
+
+        @staticmethod
+        def sleep(s):
+            pass
+    monkeypatch.setattr(T, "Link", linked)
+    monkeypatch.setattr(T, "verify_restore", functools.partial(session.verify_restore, link_class=linked, clock=Clock))
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut)])
+    assert T.main() == 0
+    verbs = [raw.split(b" ", 2)[1].strip() for raw in received(log) if raw.startswith(b"@")]
+    assert set(verbs) <= {b"download", b"get", b"props", b"importlut", b"upload"}
+    assert [v for v in verbs if v in (b"download", b"importlut", b"upload")] == \
+        [b"download", b"importlut", b"download", b"upload", b"download"]
+    assert verbs[1] == b"get" and verbs.count(b"importlut") == 1 and verbs.count(b"upload") == 1
+    out = capsys.readouterr().out
+    assert f"did not go back: {key(STAYS)}" in out and "after the restore: 0 records differ" in out
+
+
+def test_another_place_is_named_with_place(monkeypatch, luts):
+    cam = Camera()
+    assert tool(monkeypatch, luts, cam, "--place", "3") == 0
+    assert f"importlut {NAME} 3" in cam.sent
