@@ -116,8 +116,9 @@ your owner, and the default is no.
 14. **The shooting screen: no key but MENU**
     ([decision 21](decisions/0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md)).
 15. **A user LUT** ([decision 26](decisions/0026-a-user-lut-reaches-the-camera-only-through-the-kit-s-import-tool.md)).
-    `kit/tools/lut_import.py` carries no flag for your owner's word: run it only when they gave it for that run. (The
-    a1 II's owner allowed one import into User16 on 2026-11-19; ask yours: the default is no.)
+    `kit/tools/lut_import.py` takes your owner's word for the run as `--allow "Manage User LUTs"`: pass it only when
+    they gave it for that run. (The a1 II's owner allowed one import into User16 on 2026-11-19; ask yours: the default
+    is no.)
 
 ## 2. What carries over to a new model, and what does not
 
@@ -136,9 +137,9 @@ which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 - **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 3).
 - **Records a file cannot set:** upload a download and download again; what does not match was never loaded.
 - **A user LUT,** which the kit can put on a camera and no settings file takes off: `kit/tools/lut_import.py` imports
-  one `.cube` file from `private/lut/` into an empty user place (Sony's ImportLUTFile; on your owner's word alone, rule
-  15), prints the records it changed and, after its restore, those that did not go back. The LUT stays until the owner
-  deletes it on the camera by hand (Manage User LUTs).
+  one `.cube` file from `private/lut/` into user place 16 (Sony's ImportLUTFile; on your owner's word alone, rule 15),
+  prints the records it changed and fails its restore on any that did not go back but those the camera's not-by-file
+  list names. The LUT stays until the owner deletes it on the camera by hand (Manage User LUTs).
 - **First-use records,** 0 until their feature is used.
 - **Copies and linked records:** one choice often writes two to seven records; the report names each by its own row.
 - **Arrays** of per-slot values (Picture Profiles, Creative Looks, Fn and Custom Key slots, the memory tables), keyed

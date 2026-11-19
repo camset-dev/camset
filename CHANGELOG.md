@@ -166,9 +166,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
-- **`kit/tools/lut_import.py` imports one user LUT, a `.cube` file from `private/lut/`, into a user place through
-  Sony's ImportLUTFile** (camlink's new `importlut`), and prints the settings records it changed and which did not go
-  back after its restore. Only on the camera owner's word: the LUT stays until they delete it on the camera by hand.
+- **`kit/tools/lut_import.py --allow "Manage User LUTs"` imports one user LUT, a `.cube` file from `private/lut/`, into
+  user place 16 through Sony's ImportLUTFile** (camlink's new `importlut`, decision 26), prints the settings records it
+  changed, and fails its restore on any that did not go back. Only on the camera owner's word: the LUT stays until they
+  delete it on the camera by hand.
 - **A run's start before its link is timed, and much shorter:** each link writes what the start took into the run's
   `events.jsonl` (`start_budget`), and `drive.py` and `crawl_run.py` went from about 9 s of work before the link to
   under 1 s, the page scan's screens kept in a cache signed with your own key, the coverage ledger built while the link
