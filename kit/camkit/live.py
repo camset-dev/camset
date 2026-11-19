@@ -91,7 +91,7 @@ import numpy as np
 
 from . import ocr, safety, screen, vlm
 from .frames import keep
-from .link import RECOVER_TIMEOUT, CameraRefused, LinkError
+from .link import CameraRefused, LinkError
 from .session import playback_kind
 from .vlm import PROMPTS, ask_role, log_to, scrub
 
@@ -2014,41 +2014,15 @@ def withheld_on(cam, text) -> str:
     return safety.quoted_withheld(text) if getattr(cam, "network", None) or getattr(cam, "owner", None) or getattr(cam, "look", False) else str(text)
 
 
-def wait_network(cam, link) -> bool | None:
-    """Where the SDK reports a network error on the camera's remote link (Link.network_error), the run's cleanup sends
-    nothing until it is over (Link.wait_recovered: the recovery, then a short settle) and says why in plain words, the
-    frame on show named; True when it recovered, False when it did not (a drop, or no recovery in time: the cleanup goes
-    on as before), None when there was no error. One screen of the a1 II stalls the session so while OSD Image Mode is
-    on (Zebra Level > Custom 1, kit2_zebra_split, 2026-11-18): a MENU sent at once was refused and the link closed over
-    it, the camera left unrestored; kept, the session came back 55 s later and a MENU 2 s after that was taken."""
-    if not (getattr(link, "network_error", None) and link.network_error()):
-        return None
-    frame = getattr(getattr(cam, "frame", None), "path", None)
-    on = f" ({frame.name})" if frame is not None else ""
-    print(f"the camera's remote link reported a network error while this screen was on show{on}: the kit sends "
-          f"nothing until it recovers (about a minute, at most {RECOVER_TIMEOUT:.0f} s), then cancels with MENU and "
-          "restores", flush=True)
-    if link.wait_recovered():
-        print(f"the link recovered: cancelling with MENU, then restoring. The screen it was on{on} may be one whose "
-              "picture the camera cannot send while the kit reads its screen through the link (OSD eyes); HDMI eyes "
-              "do not ask for it", flush=True)
-        return True
-    print(f"the link did not recover ({link.gone() or 'not within the wait'}): closing as before", flush=True)
-    return False
-
-
 def close(cam, link):
     """Back to the shooting screen. The camera can refuse a button for a moment ("button not
     accepted" right after Select REC Folder opened, while it read the card, 2026-10-29): wait and
     try again; never return with a screen open, since disconnecting then is not allowed. The camera's playback view
     (LiveCamera.reading) holds nothing open either: close stops there, with MENU alone sent, as it did while that view
     read as the shooting screen, and the run's end leaves it (proving.nav.leave_playback, before its download). On a
-    link in the SDK's network-error state the first MENU waits for its recovery (wait_network), once per close: a MENU
-    still refused after it is said and tried again as any other, never waited on again."""
-    waited = False
+    link in the SDK's network-error state every command, its MENU among them, waits for the recovery at the link
+    (Link.call, _net_wait), as every other command of the run does."""
     for _ in range(8):
-        if not waited and wait_network(cam, link) is not None:
-            waited = True
         try:
             cam.cancel_to_menu()
             if cam.read().kind in ("menu", "tiles", "submenu"):

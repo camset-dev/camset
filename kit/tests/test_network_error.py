@@ -140,16 +140,20 @@ def test_a_drop_or_no_recovery_in_time_ends_the_wait_false(tmp_path):
 
 
 def test_a_command_refused_in_the_error_state_says_so_in_plain_words(tmp_path):
-    """A press or an osd the camera does not take while the link is in the error state raises NetworkError, in plain
-    words (no SDK word), the camera's own reply in the run's log only; outside it the error is as before."""
+    """A press or an osd the camera does not take because the link fell into the error state while it was on its way
+    raises NetworkError, in plain words (no SDK word), the camera's own reply in the run's log only; outside it the
+    error is as before. (Sent in the error state, a command waits at the link: Link.call, _net_wait.)"""
     clock = Clock()
     lk = link_on(tmp_path, clock, lambda command, t: HELD if command.startswith("press") else
                  {"ok": False, "error": "no OSD image"})
     with pytest.raises(LinkError) as before:
         lk.press("menu", cleanup=True)
     assert not isinstance(before.value, NetworkError) and "release was refused" in str(before.value)
-    lk._event(ERROR)
+    answer = lk.proc.stdin.answer
+    lk.proc.stdin.answer = lambda command, t: (lk._event(ERROR), answer(command, t))[1]     # the error on its way
     for send in (lambda: lk.press("menu", cleanup=True), lambda: lk.osd(tmp_path / "x.png")):
+        lk._event(RECOVERED)                # the error over before each command, and its settle passed
+        clock.sleep(RECOVER_SETTLE)
         with pytest.raises(NetworkError) as got:
             send()
         said = str(got.value)
@@ -198,9 +202,9 @@ def held_in_error(lk):
 
 
 def test_the_cleanup_after_a_failure_in_the_error_state_waits_then_cancels(tmp_path, clocked, capsys):
-    """(b) The run's cleanup (camkit.live.close, runner.close_for_restore's) on a link in the error state: it says so in
-    plain words, waits for the recovery and its settle with nothing sent, then MENU, MENU, and the shooting screen, so
-    the run's restore follows; the frame on show is named, no SDK word printed."""
+    """(b) The run's cleanup (camkit.live.close, runner.close_for_restore's) on a link in the error state: its MENU waits
+    at the link (Link.call), which says so in plain words, for the recovery and its settle with nothing sent, then MENU,
+    MENU, and the shooting screen, so the run's restore follows; no SDK word printed."""
     answers = {}
     lk = link_on(tmp_path, clocked, lambda command, t: answers["f"](command, t))
     answers["f"] = held_in_error(lk)
@@ -212,21 +216,25 @@ def test_the_cleanup_after_a_failure_in_the_error_state_waits_then_cancels(tmp_p
     assert [c for _, c in sent] == ["press menu 60", "press menu 60"] and sent[0][0] >= 55.3 + RECOVER_SETTLE
     assert cam.kind == "shooting"
     out = capsys.readouterr().out
-    assert "remote link reported a network error" in out and "00012_down.png" in out and "recovered" in out
+    assert "remote link reported a network error" in out and "recovered" in out
     assert "may be one whose picture the camera cannot send" in out and "NetworkError" not in out
 
 
 def test_a_run_whose_press_meets_the_error_waits_cancels_restores_and_says_why(tmp_path, clocked, capsys, monkeypatch):
     """(b) A prover's session (runner.prover_session, whose cleanup is runner.close_for_restore, drive.py's too): a press
-    in the error state stops the body with the plain-words error; the cleanup waits for the recovery, MENU goes out
-    after it, and only then the restore (end_session) and its check; no SDK word is printed."""
+    the link fell into the error state under stops the body with the plain-words error; the cleanup's MENU waits for
+    the recovery at the link, goes out after it, and only then the restore (end_session) and its check; no SDK word is
+    printed."""
     import contextlib
 
     import proving.nav
     import runner
     order = []
     lk = link_on(tmp_path, clocked)
-    lk.proc.stdin.answer = held_in_error(lk)
+    held = held_in_error(lk)
+    # the screen stalls the session 10-36 s after it appears: here while the Down is on its way
+    lk.proc.stdin.answer = lambda command, t: (lk._event(ERROR), HELD)[1] if command == "press down 60" else held(
+        command, t)
     lk.download = lambda tag: Path(f"00001_{tag}.DAT")
     clocked.at(40.0 + 55.3, lambda: lk._event(RECOVERED))
     monkeypatch.setattr(runner, "check_readers", lambda: None)
@@ -238,7 +246,6 @@ def test_a_run_whose_press_meets_the_error_waits_cancels_restores_and_says_why(t
     eyes = SimpleNamespace(attach=lambda link: None, close=lambda: None)
     with runner.prover_session(lk.run, eyes) as s:
         clocked.sleep(40.0)
-        lk._event(ERROR)                    # the screen stalls the session 10-36 s after it appears
         s.link.press("down", screen="menu")
     menus = [t for t, c in lk.proc.stdin.sent if c == "press menu 60"]
     assert menus and menus[0] >= 40.0 + 55.3 + RECOVER_SETTLE
@@ -248,35 +255,45 @@ def test_a_run_whose_press_meets_the_error_waits_cancels_restores_and_says_why(t
     assert "NetworkErrorOccurred" not in out and "button_held" not in out and "release was refused" not in out
 
 
-def test_a_drop_or_no_recovery_during_the_cleanup_closes_as_before(tmp_path, clocked, capsys):
-    """(c) The error then a disconnect, or no recovery within the timeout: the wait ends False and close goes on as it
-    did before (MENU at once after the wait, its failures retried as ever), saying the link did not recover."""
+def test_a_drop_or_no_recovery_during_the_cleanup_sends_nothing_and_says_why(tmp_path, clocked, capsys):
+    """(c) The error then a disconnect, or no recovery within the timeout: the link sends nothing more (Disconnected; or
+    NetworkError naming the deadline, and every command after it refused at once while that error lasts, no second
+    wait), and close, its MENU never sent, gives up as it does on any MENU that cannot go."""
     lk = link_on(tmp_path, clocked)
     lk._event(ERROR)
     clocked.at(5.0, lambda: lk._event(DISCONNECTED))
-    lk.proc.stdin.answer = lambda command, t: {"ok": True}
-    cam = Cam(lk)
-    live.close(cam, lk)
-    assert lk.proc.stdin.sent[0][0] == pytest.approx(5.0, abs=0.5) and cam.kind == "shooting"
-    assert "did not recover" in capsys.readouterr().out
+    with pytest.raises(SystemExit, match="could not get back to the shooting screen"):
+        live.close(Cam(lk), lk)
+    out = capsys.readouterr().out
+    assert lk.proc.stdin.sent == [] and "dropped during its network error" in out and clocked.t < 5.0 + 8 * 2.5
     clock2_start = clocked.t
     lk2 = link_on(tmp_path, clocked)
     lk2._event(ERROR)
-    live.close(Cam(lk2), lk2)
-    assert lk2.proc.stdin.sent[0][0] == pytest.approx(clock2_start + RECOVER_TIMEOUT, abs=0.5)
+    with pytest.raises(SystemExit, match="could not get back to the shooting screen"):
+        live.close(Cam(lk2), lk2)
+    out = capsys.readouterr().out
+    assert lk2.proc.stdin.sent == [] and f"has not recovered within the {RECOVER_TIMEOUT:.0f} s" in out
+    assert out.count("trying again") == 8 and "cancel by hand" in out
+    waits = [e["outcome"] for e in events(lk2) if e["kind"] == "network_wait"]     # the run's log, both links'
+    assert waits[0].startswith("dropped") and waits[1:] == ["timed out"]
+    assert clocked.t == pytest.approx(clock2_start + RECOVER_TIMEOUT + 8 * 1.5, abs=0.5)
 
 
-def test_a_menu_still_held_after_the_wait_is_reported_as_before_not_waited_on_again(tmp_path, clocked, capsys):
-    """(d) Recovered, settled, and MENU still answers button_held, the error back: close says it and tries again as it
-    always did, with no second wait (one wait per close), until it gives up as before."""
+def test_an_error_back_after_the_recovery_is_waited_out_again(tmp_path, clocked, capsys):
+    """(d) Recovered, settled, and MENU still answers button_held: close says it and tries again as it always did; the
+    error back meanwhile, the next MENU waits at the link for its recovery too (each error is waited out where every
+    command passes, not once per close), and close gives up as before."""
     lk = link_on(tmp_path, clocked, lambda command, t: HELD)
     lk._event(ERROR)
     clocked.at(55.3, lambda: lk._event(RECOVERED))
     clocked.at(58.0, lambda: lk._event(ERROR))
+    clocked.at(58.0 + 55.3, lambda: lk._event(RECOVERED))
     with pytest.raises(SystemExit, match="could not get back to the shooting screen"):
         live.close(Cam(lk), lk)
-    assert [e["outcome"] for e in events(lk) if e["kind"] == "network_wait"] == ["recovered"]
-    assert len(lk.proc.stdin.sent) == 8 and "trying again" in capsys.readouterr().out
+    assert [e["outcome"] for e in events(lk) if e["kind"] == "network_wait"] == ["recovered", "recovered"]
+    sent = [t for t, _ in lk.proc.stdin.sent]
+    assert len(sent) == 8 and sent[0] >= 55.3 + RECOVER_SETTLE and sent[1] >= 58.0 + 55.3 + RECOVER_SETTLE
+    assert "trying again" in capsys.readouterr().out
 
 
 def test_an_ordinary_failed_press_closes_as_before_with_no_wait(tmp_path, clocked, capsys):

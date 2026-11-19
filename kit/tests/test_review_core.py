@@ -172,3 +172,101 @@ def test_drives_end_restores_after_a_stop_or_a_link_error_while_it_waits_for_the
             RESET_MOVES, more=["--confirm"], fails=refused)
         assert code == 0 and restore == ["closed", "ended"], (name, code, restore)
         assert "restoring all the same" in out and line["completed"] is False and line["before"]
+
+
+# ---------------------------------------------------------------- finding 15: the link stall waited out in Link.call
+
+NET_ERROR_EV = json.dumps({"event": "warning", "code": 131079, "text": "NetworkErrorOccurred"})
+NET_RECOVERED_EV = json.dumps({"event": "warning", "code": 131080, "text": "NetworkErrorRecovered"})
+
+
+class Clock:
+    """Time that moves only when the code sleeps; what is due at a time is done as the clock passes it."""
+    def __init__(self):
+        self.t, self.due = 0.0, []
+
+    def now(self):
+        return self.t
+
+    def at(self, t, act):
+        self.due = sorted([*self.due, (t, act)], key=lambda x: x[0])
+
+    def sleep(self, s):
+        end = self.t + max(0.0, s)
+        while self.due and self.due[0][0] <= end:
+            t, act = self.due.pop(0)
+            self.t = max(self.t, t)
+            act()
+        self.t = end
+
+
+def clocked_link(tmp_path, answer=lambda verb, args: {"ok": True}):
+    """The stand-in Link on the test's clock, every command's time of sending kept (sent_at)."""
+    clock = Clock()
+    lk = link_on(tmp_path, answer)
+    lk._clock, lk._sleep = clock.now, clock.sleep
+    stdin, sent_at = lk.proc.stdin, []
+    write = stdin.write
+
+    def timed(data):
+        sent_at.append((clock.t, data.decode().split(" ", 1)[1].strip()))
+        write(data)
+    stdin.write = timed
+    return lk, clock, sent_at
+
+
+def test_every_command_waits_at_the_link_for_the_recovery_and_its_settle(tmp_path, capsys):
+    """Finding 15: the wait the camera's link stall needs (sending nothing until NetworkErrorRecovered, then 2 s) was
+    taken only in camkit.live.close, so a run's end on OSD eyes failed on its first frame, and session.ended gave up its
+    downloads after about 30 s. Now every command waits where every command passes (Link.call): a screen picture, a
+    download, a cleanup MENU; and a command less than 2 s after a recovery gets the rest of the settle. Said in plain
+    words, no SDK word."""
+    import shutil
+
+    from camkit import session
+    from fake_camlink import SAMPLE
+
+    def answer(verb, args):
+        if verb == "download":
+            shutil.copy(SAMPLE, Path(args[0]) / f"{args[1]}.DAT")
+            return {"ok": True, "path": str(Path(args[0]) / f"{args[1]}.DAT")}
+        return {"ok": True}
+    lk, clock, sent_at = clocked_link(tmp_path, answer)
+    start = tmp_path / "start.DAT"
+    shutil.copy(SAMPLE, start)
+    lk._event(NET_ERROR_EV)
+    clock.at(55.3, lambda: lk._event(NET_RECOVERED_EV))
+    lk.osd(tmp_path / "x.png")
+    assert sent_at[0][0] >= 55.3 + 2.0 and sent_at[0][1].startswith("osd")
+    out = capsys.readouterr().out
+    assert "network error" in out and "recovered" in out and "NetworkError" not in out
+    # the session's end: its download waits out a new error, far past the 4 tries 10 s apart it once gave up after
+    lk._event(NET_ERROR_EV)
+    t0 = clock.t
+    clock.at(t0 + 55.3, lambda: lk._event(NET_RECOVERED_EV))
+    ending = session.ended(lk, start, say=lambda m: None)
+    downloads = [t for t, c in sent_at if c.startswith("download")]
+    assert ending.after is not None and downloads and downloads[0] >= t0 + 55.3 + 2.0
+    # a cleanup MENU half a second after a recovery waits the rest of the settle
+    lk._event(NET_ERROR_EV)
+    lk._event(NET_RECOVERED_EV)
+    clock.sleep(0.5)
+    t1 = clock.t
+    lk.press("menu", cleanup=True)
+    assert sent_at[-1] == (pytest.approx(t1 + 1.5), "press menu 60")
+
+
+def test_a_stop_during_the_wait_refuses_a_key_and_the_cleanup_menu_still_waits(tmp_path):
+    """Finding 15: a STOP (its file, or a first Ctrl-C) asked for while a key waits for the recovery ends that key's
+    wait, nothing sent (StopRequested), so the run's stop path goes on; its cleanup MENU, which a STOP never refuses,
+    waits for the recovery and its settle in turn, then goes."""
+    from camkit.link import StopRequested
+    lk, clock, sent_at = clocked_link(tmp_path)
+    lk._event(NET_ERROR_EV)
+    clock.at(20.0, lambda: lk.run.request_stop("STOP file"))
+    clock.at(55.3, lambda: lk._event(NET_RECOVERED_EV))
+    with pytest.raises(StopRequested):
+        lk.press("down", screen="menu")
+    assert sent_at == [] and clock.t == pytest.approx(20.0, abs=0.3)
+    lk.press("menu", cleanup=True)
+    assert sent_at == [(pytest.approx(57.3, abs=0.3), "press menu 60")]

@@ -20,8 +20,9 @@ set); the shutter released only on a link opened for kit/tools/take_picture.py, 
 (PICTURE_ONLY); an upload only of the camera's own download (camkit.provenance), with that download's SHA-256 on the
 line, which
 camlink checks the bytes it reads against, so a file swapped in after the check is never sent ("hash_mismatch"), and
-a link opens only to a camlink that says so in its ready line ("upload_sha256"); and before anything that changes the
-camera (press, dial, set, setstr), the STOP file. A command the kit does not send is refused. camlink refuses the never
+a link opens only to a camlink that says so in its ready line ("upload_sha256"); before anything that changes the
+camera (press, dial, set, setstr), the STOP file; and while the SDK reports a network error on the remote link, nothing
+at all until it recovers (_net_wait). A command the kit does not send is refused. camlink refuses the never
 buttons, an unallowed guarded button and the never-set properties itself too (kit/common/never_touch.h, written from
 camkit/safety.py). On StopRequested the caller must cancel any open dialog (press("menu", cleanup=True)) before
 closing: a dropped session applies the dialog on screen.
@@ -86,6 +87,16 @@ RECOVER_POLL = 0.25             # s: how often the wait looks at the link's stat
 NET_ERROR_SAID = ("the camera's remote link reported a network error while this screen was on show, and the camera "
                   "did not take the command: the kit sends nothing more until the link recovers (about a minute), then "
                   "cancels with MENU and restores")
+# What Link.call says while it holds a command back in the error state (_net_wait), and when the error is over
+NET_WAIT_SAID = ("the camera's remote link reported a network error: the kit sends nothing until it recovers (about a "
+                 f"minute, at most {RECOVER_TIMEOUT:.0f} s), then goes on")
+NET_BACK_SAID = ("the link recovered after {s:.0f} s: going on. The screen on show may be one whose picture the camera "
+                 "cannot send while the kit reads its screen through the link (OSD eyes); HDMI eyes do not ask for it")
+# ... and when it does not recover in time: the command is not sent, nor any other while that error lasts
+NET_LOST_SAID = ("the camera's remote link reported a network error {s:.0f} s ago and has not recovered within the "
+                 f"{RECOVER_TIMEOUT:.0f} s the kit waits (it came back after 55 s each time it was measured): nothing "
+                 "more is sent on this link while the error lasts. Look at the camera and cancel by hand whatever it "
+                 "still shows (MENU, never OK); the run's last lines say how its start file goes back")
 
 
 def _is(ev: dict, which: tuple) -> bool:
@@ -469,6 +480,7 @@ class Link:
 
     def _net_reset(self) -> None:
         self.net_error_since, self.net_recovered_at = None, None
+        self._net_lost = None           # the error (its start) _net_wait gave up on: no second wait for it
 
     def _now(self) -> float:
         return getattr(self, "_clock", time.monotonic)()
@@ -482,12 +494,18 @@ class Link:
             return ""
         return f"the camera's remote link reported a network error {max(0.0, self._now() - since):.0f} s ago"
 
-    def wait_recovered(self, timeout: float = RECOVER_TIMEOUT, settle: float = RECOVER_SETTLE) -> bool:
+    def _settling(self) -> bool:
+        """The SDK's network error recovered less than RECOVER_SETTLE s ago (a key sent at the recovery was refused)."""
+        rec = getattr(self, "net_recovered_at", None)
+        return getattr(self, "net_error_since", None) is None and rec is not None and self._now() - rec < RECOVER_SETTLE
+
+    def wait_recovered(self, timeout: float = RECOVER_TIMEOUT, settle: float = RECOVER_SETTLE, stop=None) -> bool:
         """Sending nothing, until the SDK's network error is over: in the error state, waits for NetworkErrorRecovered,
         then `settle` s more (a key sent at the recovery was refused, one 2.0 s after it taken: RECOVER_SETTLE), and
-        returns True; False at once on a disconnect or camlink's end (gone), and at `timeout` s with no recovery. A
-        recovery less than `settle` s past is given the rest of it; with no error at all it returns True at once. Each
-        wait is logged ("network_wait": its outcome and seconds)."""
+        returns True; False at once on a disconnect or camlink's end (gone), as soon as `stop()` says so (Link.call's
+        STOP for a command a STOP refuses), and at `timeout` s with no recovery. A recovery less than `settle` s past is
+        given the rest of it; with no error at all it returns True at once. Each wait is logged ("network_wait": its
+        outcome and seconds)."""
         sleep = getattr(self, "_sleep", time.sleep)
         start = self._now()
         waited = getattr(self, "net_error_since", None) is not None
@@ -495,6 +513,9 @@ class Link:
         while getattr(self, "net_error_since", None) is not None:
             if self.gone():
                 outcome = f"dropped ({self.gone()})"
+                break
+            if stop is not None and stop():
+                outcome = "stopped"
                 break
             left = timeout - (self._now() - start)
             if left <= 0:
@@ -583,6 +604,8 @@ class Link:
             raise
         if not self.proc:
             raise LinkError("link is not open")
+        if self.network_error() or self._settling():
+            self._net_wait(command, verb or "", cleanup)     # nothing goes out while the SDK's network error lasts
         if verb == PICTURE_ONLY:
             self.released = True                # once per link, answered or not
         if verb in MOVES:
@@ -607,6 +630,47 @@ class Link:
         self.run.log("cmd", cmd=command, id=n, reply=r if logged is None else logged(r),
                      ms=round((time.monotonic() - t0) * 1000))
         return r
+
+    def _net_wait(self, command: str, verb: str, cleanup: bool) -> None:
+        """call's hold while the SDK reports a network error on the remote link (network_error), every command alike,
+        a read among them: nothing is sent until the error is over (wait_recovered: the recovery, then RECOVER_SETTLE;
+        one screen of the a1 II stalls the session so while OSD Image Mode is on, and a MENU sent at once was refused
+        and the link closed over it, the camera left unrestored: kit2_zebra_split, 2026-11-18), the wait said in plain
+        words. A command a STOP refuses (CHANGES, a cleanup press aside) raises StopRequested as soon as a stop is asked
+        for meanwhile, so the run's stop path cancels, its cleanup MENU waiting in turn; a drop raises Disconnected; no
+        recovery within RECOVER_TIMEOUT raises NetworkError saying so (NET_LOST_SAID), nothing sent, and so does every
+        command after it while that same error lasts, with no second wait. Each refusal is logged ("cmd_refused")."""
+        since = getattr(self, "net_error_since", None)
+        if since is None:
+            self.wait_recovered()           # a recovery less than RECOVER_SETTLE s past: the rest of it, nothing said
+            return
+        gone = self.gone()
+        if gone:
+            self.run.log("cmd_refused", cmd=command, why=f"dropped during a network error ({gone})")
+            raise Disconnected(f"the camera's session dropped during its network error ({gone}): nothing more reaches "
+                               "the camera on this link")
+        if getattr(self, "_net_lost", None) == since:
+            why = NET_LOST_SAID.format(s=self._now() - since)
+            self.run.log("cmd_refused", cmd=command, why="network error not recovered")
+            raise NetworkError(why)
+        stops = verb in CHANGES and not (cleanup and verb == "press")
+        stop = self.run.stop_requested if stops else None
+        print(NET_WAIT_SAID, flush=True)
+        start = self._now()
+        if self.wait_recovered(stop=stop):
+            print(NET_BACK_SAID.format(s=self._now() - start), flush=True)
+            return
+        if stop is not None and stop():
+            self.run.log("cmd_refused", cmd=command, why="StopRequested during a network error")
+            raise StopRequested(self.run.stop_reason())
+        gone = self.gone()
+        if gone:
+            self.run.log("cmd_refused", cmd=command, why=f"dropped during a network error ({gone})")
+            raise Disconnected(f"the camera's session dropped during its network error ({gone}): nothing more reaches "
+                               "the camera on this link")
+        self._net_lost = since
+        self.run.log("cmd_refused", cmd=command, why="network error not recovered")
+        raise NetworkError(NET_LOST_SAID.format(s=self._now() - since))
 
     def _guard(self, verb: str, args: list, allow, cleanup: bool, screen=None, on_shooting=frozenset(), judged=None,
                leaving: bool = False):
