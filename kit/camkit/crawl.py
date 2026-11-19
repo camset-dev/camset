@@ -69,7 +69,9 @@ class RowResult:
     # identity or connection row's frames keep no reader's text (kit/pass1_labels.py leaves them out)
     network: str = ""
     # a Wi-Fi or Bluetooth setting's notice, the row greyed ("This function is currently disabled."), as the kit keeps it
-    # (safety.notice_kept: a notice it knows, naming no identity or credentials); "" for every other row
+    # (safety.notice_kept: a notice it knows, naming no identity or credentials); on a plain crawl (no --network) any
+    # row's notice, as notice_named keeps it (what it names: a blocking row's label, equipment, a remote session); ""
+    # for every other row
     notice: str = ""
     # the decided row a network decision opened it as (network_row: "IP Address Setting" for a row the page model
     # labels "LANIP Address Setting"); "" for every other row. kit/crawl_run.py keeps it as the row's label on a run
@@ -408,6 +410,13 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
         # the frame is the evidence (blocker and its value); the --info-ok that would pass it is said (notice_hint)
         r.outcome = "notice" + (f" (named, not passed: {not_passed})" if not_passed else "")
         notice_hint(cam, "(withheld)" if look else " > ".join((*path, label)), network or look)
+        if notices is not None and not network and not look:
+            # a plain crawl keeps what the notice names, as a look lap and drive.py's look keep it (notice_named)
+            read, words, told = notices
+            try:
+                r.notice = notice_named(read(cam), words, told)
+            except Exception:                    # a text that cannot be read keeps nothing
+                r.notice = ""
     elif s.kind in WALKERS:
         try:
             if s.kind == "dialog" and labels is not None:
@@ -463,6 +472,32 @@ def first_time(cam, kind) -> bool:
         return safety.first_time_screen(kind, text_of(cam))
     except Exception:
         return False
+
+
+def notice_named(text, labels=(), values=None) -> str:
+    """What a plain crawl keeps of the notice a row answered Right with (RowResult.notice, which the coverage ledger reads
+    through camkit.coverage.blocker_of), exactly as much as a look lap and drive.py's look keep and no more: the notice
+    as a look lap keeps it (safety.notice_kept: a notice the kit knows, or the blocker form with the row label it names
+    after "as follows", never that row's value), where it gives the blocker drive.py's look gives the whole text
+    (blocker_of); else what gives that blocker alone: the blocker form with the row label blocker_of found ("... as
+    follows HDMI Info. Display", never "On"), or the notice's own words that ask for equipment or say a remote session
+    is open (safety.NOTICE_EQUIPMENT, safety.NOTICE_REMOTE: "Invalid with this lens", "shoe"). Nothing where the whole
+    text holds a question, reads as a confirmation or names identity or credentials or what no allowance opens (as
+    notice_kept), nor where none of that gives the same blocker again: never free text of the screen."""
+    from .coverage import blocker_of
+    t = " ".join(safety.fold(text).split())
+    if not t or "?" in t or safety.confirmation_refused(t) or safety.identity_screen(t) or safety.never_lifted(t):
+        return ""
+    kept = safety.notice_kept(text, labels, values)
+    want = blocker_of(t, labels)
+    if not want or blocker_of(kept, labels) == want:
+        return kept
+    if want.get("row"):
+        named = f"{kept} {want['row']}" if kept else want["row"]
+    else:
+        rxs = [rx for rx, _ in safety.NOTICE_EQUIPMENT] if want.get("equipment") else [safety.NOTICE_REMOTE]
+        named = next((m.group(0) for m in (rx.search(t) for rx in rxs) if m), "")
+    return named if named and blocker_of(named, labels) == want else kept
 
 
 def notice_hint(cam, name: str, network=frozenset()) -> None:

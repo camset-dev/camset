@@ -586,3 +586,66 @@ def test_the_owner_route_saves_the_serial_number_screen_black_whatever_its_decis
     cam.press("right")
     assert cam.blank and cam.hdmi.withheld and np.asarray(Image.open(cam.frame.path)).max() == 0
     assert cam.network_open["blank"] is True
+
+
+# ---------------------------------------------------------------- 6. what a plain crawl keeps of a notice
+
+LABELS = {"HDMI Info. Display", "Zoom Ring Rotate", "Function Ring(Lens)", "Shoe Audio Set.", "Aspect Marker Level"}
+# the four notices of 2026-11-19 as the crawls logged them (notice_not_passed), and the blocker each names
+NOTICES = [("• Lens Invalid with this lens.", {"equipment": "a power-zoom lens"}),
+           ("• Lens Please attach a supported lens since the current lens is not supported.",
+            {"equipment": "a lens with a function ring"}),
+           ("Invalid since no audio device is attached to the multi interface shoe. Correctly attach the audio device.",
+            {"equipment": "a shoe audio accessory"}),
+           ("This operation or setting not available as follows HDMI Info. Display On", {"row": "HDMI Info. Display"})]
+
+
+@pytest.mark.parametrize("text, blocker", NOTICES, ids=["zoom-ring", "function-ring", "shoe", "hdmi-info"])
+def test_a_plain_crawl_keeps_what_the_notice_names_and_nothing_more(text, blocker):
+    """The kept text gives the ledger the blocker drive.py's look gives the whole text, and holds nothing else: never
+    the blocking row's value ("On"), never the notice's other words."""
+    from camkit import coverage, crawl
+    kept = crawl.notice_named(text, LABELS, {})
+    assert coverage.blocker_of(kept, LABELS) == coverage.blocker_of(text, LABELS) == blocker, kept
+    assert len(kept) < len(text) and not kept.endswith(" On"), kept
+
+
+@pytest.mark.parametrize("text", ["Shooting is in progress. Please wait.",
+                                  "This operation or setting not available as follows Some Row Nobody Knows On",
+                                  "Format the memory card? OK Cancel",
+                                  "Connected to Remote Shooting. Cannot be executed.", ""])
+def test_a_notice_that_names_nothing_the_kit_knows_keeps_nothing_named(text):
+    """Nothing the kit knows, a row it does not know (the fixed sentence alone, as a look lap keeps it), a question, a
+    connection's words (identity: as notice_kept), no text: no blocker kept."""
+    from camkit import coverage, crawl
+    kept = crawl.notice_named(text, LABELS, {})
+    assert not coverage.blocker_of(kept, LABELS) and "Nobody" not in kept and "Shooting" not in kept, kept
+
+
+def test_a_known_shape_is_kept_as_the_look_lap_keeps_it():
+    from camkit import crawl
+    assert crawl.notice_named("This function is currently disabled. OK", LABELS, {}) == safety.notice_kept(
+        "This function is currently disabled. OK", LABELS, {}) == "This function is currently disabled."
+
+
+def test_a_plain_crawls_row_and_look_carry_the_blocker_and_a_look_laps_rows_as_before(tmp_path, monkeypatch):
+    """camkit.crawl.visit_row on a row whose Right opens the capped lens's notice: a plain crawl's row keeps what it
+    names, its summary (kit/crawl_run.py) writes it and the look made of it (camkit.coverage.crawl_looks) carries the
+    blocker; a look lap keeps nothing more of an ordinary row's notice than before."""
+    import crawl_run
+    from camkit import coverage, crawl
+    from test_info_notice import NoticeCamera
+    notices = ((lambda cam: NOTICES[0][0]), LABELS, {})
+
+    def visit(**kw):
+        cam = NoticeCamera(tmp_path)
+        return crawl.visit_row(cam, cam.read(), {"page": "Shooting > Zoom"}, 0, {"label": "Zoom Ring Rotate"}, **kw)
+    r = visit(notices=notices)
+    assert r.outcome == "notice" and r.notice == "Invalid with this lens"
+    row = crawl_run.summary(r)
+    assert row["notice"] == r.notice
+    look = coverage.crawl_looks(row, ["Shooting", "Zoom"], "Stills", "kit2_x", "TEST-CAM_fw9.99")[0]
+    assert look["result"] == "greyed" and look["blocker"] == {"equipment": "a power-zoom lens"}
+    lap = visit(notices=notices, look=True)
+    assert lap.kind == "notice" and lap.notice == ""          # its notice met (the lap's way back aside), nothing kept
+    assert visit().notice == "", "no reader of the screen given: nothing kept, as before"

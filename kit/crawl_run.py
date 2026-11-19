@@ -126,7 +126,7 @@ def summary(r) -> dict:
     if getattr(r, "decided", ""):
         out["decided"] = r.decided                          # the decided row it was opened as (camkit.crawl.network_row)
     if getattr(r, "notice", ""):
-        out["notice"] = r.notice                            # why a greyed network setting is unavailable (notice_kept)
+        out["notice"] = r.notice                            # why the row is greyed: notice_kept, notice_named
     if getattr(r, "info_ok", None):
         out["info_ok"] = r.info_ok                          # the notice --info-ok named, taken with its OK (its frame)
     frames = option_frames(w)
@@ -971,11 +971,12 @@ def crawl_from_menu(cam, link, cycle, model, limit, results, start_label=None, p
         shown = functools.partial(kept_label, known={safety.plain(x) for x in keep}) if keep is not None else None
         try:
             # a Wi-Fi or Bluetooth setting that answers Right with a notice keeps the notice's text where it is one the
-            # kit knows and names no identity (camkit.crawl, safety.notice_kept)
+            # kit knows and names no identity (camkit.crawl, safety.notice_kept); on a plain crawl every row's notice
+            # keeps what it names, its blocker as a rule and nothing more (camkit.crawl.notice_named)
             out = crawl(cam, cycle[j:] + cycle[:j], model, max_rows=limit, on_row=on_row, labels=PageLabels(),
                         **({"tabs": tabs} if tabs else {}),
                         panels=panels, network=network,
-                        notices=(text_of, known_labels(model), row_values(model)) if network or look else None,
+                        notices=(text_of, known_labels(model), row_values(model)),
                         **({"info_ok": info_ok} if info_ok is not None else {}),
                         skip=ledger.skip if ledger is not None else None, first=first, look=look,
                         refind=functools.partial(back_to_row, cycle=cycle, model=model, name=shown))

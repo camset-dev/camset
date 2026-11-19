@@ -2478,7 +2478,8 @@ def test_a_notice_is_kept_only_in_a_shape_the_kit_knows_naming_no_identity(text,
 
 def test_crawl_run_gives_the_walk_its_known_labels_and_values_for_the_notices(monkeypatch):
     """crawl_run.crawl_from_menu: on a --network walk the notices are read with camkit.live.text_of and judged by the
-    row labels and values the kit knows (runner.known_labels, runner.row_values); without --network none is read."""
+    row labels and values the kit knows (runner.known_labels, runner.row_values); without --network too, since
+    2026-11-19, where a plain crawl keeps what a notice names (camkit.crawl.notice_named)."""
     import crawl_run
     got = {}
     monkeypatch.setattr(crawl_run, "crawl", lambda cam, cycle, model, **kw: got.update(kw) or SimpleNamespace(
@@ -2492,7 +2493,8 @@ def test_crawl_run_gives_the_walk_its_known_labels_and_values_for_the_notices(mo
     assert read is crawl_run.text_of and "Airplane Mode" in labels and values["Airplane Mode"] == {"On"}
     got.clear()
     crawl_run.crawl_from_menu(cam, link, [{"screen": None}], model, None, io.StringIO())
-    assert got["notices"] is None
+    read, labels, values = got["notices"]
+    assert read is crawl_run.text_of and "Airplane Mode" in labels and values["Airplane Mode"] == {"On"}
 
 
 def test_the_crawl_keeps_a_greyed_network_settings_notice_and_nothing_else():
