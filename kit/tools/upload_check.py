@@ -20,6 +20,11 @@ owner, having looked at them on the camera, may accept them by naming them back,
 set1:0x023c for one section's), which removes the file only when those are exactly the records that differ now. That is
 the owner's step, never an agent's: the ids are the ones the run before printed, so the flag cannot be passed blind.
 
+Before an upload the camera is downloaded and compared with the file, as the restore check compares (held_already):
+where no record differs, the camera already holds it, and nothing is uploaded (exit 0, "differences: 0"); a chain's
+upload steps and its end file go through here, so a chain of small runs no longer restarts the camera onto the file it
+holds. --always uploads all the same; with a restore by hand pending nothing is compared, as before.
+
 Needs no HDMI. An upload ends the session (the camera restarts); camkit.session.verify_restore
 reconnects and counts the records that differ. Some never take from a file (0x18cb's fourth slot,
 0x1126, the memory slots' registration records, Remote Shooting while it is the session in use):
@@ -40,10 +45,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, definitions, paths, provenance  # noqa: E402
-from camkit.link import Link  # noqa: E402
+from camkit.link import Link, LinkError  # noqa: E402
 from camkit.not_by_file import NOT_BY_FILE  # noqa: E402
 from camkit.runs import RESTORE_BY_HAND, Run, clear_restore_by_hand, restore_pending_any  # noqa: E402
-from camkit.session import verify_restore  # noqa: E402
+from camkit.session import compared, verify_restore  # noqa: E402
 from exit_status import EXIT_UNRESTORED  # noqa: E402
 
 IN_USE = ("live", "stills", "movie")       # picture_profile_in_use's records: the profile in use, stills', movie's
@@ -156,6 +161,25 @@ def pending_file(pending: dict, f: Path, root: Path) -> bool:
         return False
 
 
+def held_already(link, f: Path) -> Path | None:
+    """The camera's own download (a download like any other, in the run's dat/ and the manifest), compared with `f` by
+    the restore check's comparison (camkit.session.compared): the download where no record differs, so the camera
+    already holds the file and an upload would only restart it (about 45 s with its check, 2026-11-19, which a chain of
+    small runs paid before and after each); else None, said with the count. None too where the camera refuses the
+    download: said, and the upload goes as before."""
+    try:
+        got = link.download("held")
+    except LinkError as e:
+        print(f"the camera refused the download that compares it with {f.name} ({e}): uploading it as before",
+              flush=True)
+        return None
+    changes = compared(f, got, say=lambda m: print(m, flush=True))
+    if changes:
+        print(f"{len(changes)} records on the camera differ from {f.name}: uploading it", flush=True)
+        return None
+    return got
+
+
 def main() -> int | None:
     """Returns the exit status of an upload (the module docstring's last paragraph); None (0) for --diff and --adopt."""
     ap = argparse.ArgumentParser()
@@ -174,6 +198,9 @@ def main() -> int | None:
                          "start file after the upload, named back as the run before listed them, comma-separated "
                          "(0x1126,0x18cb; set1:0x023c names one section's): RESTORE_BY_HAND.json is removed only when "
                          "they are exactly the records that differ now")
+    ap.add_argument("--always", action="store_true",
+                    help="upload the file even where the camera's download shows it already holds it (the camera then "
+                         "restarts, and the restore is checked)")
     a = ap.parse_args()
     if a.adopt:
         added = provenance.adopt(Run(a.run).root)
@@ -232,7 +259,18 @@ def main() -> int | None:
     known = known_left(f)
     left = known if pending is not None else frozenset()
     with Link(run, **restoring) as link:
-        print(link.upload(f), flush=True)
+        # the camera compared with the file first (held_already), but with a restore by hand pending, which puts its
+        # start file back and checks it as it always did, or --always
+        held = held_already(link, f) if pending is None and not a.always else None
+        if held is None:
+            print(link.upload(f), flush=True)
+    if held is not None:
+        print(f"the camera already holds {f.name}: no record differs from it in the camera's download {held.name}, so "
+              "nothing was uploaded and the camera did not restart (--always uploads all the same)", flush=True)
+        print("differences: 0", flush=True)
+        if a.accept is not None:
+            print("--accept is for a restore by hand pending, and none is: it changed nothing", flush=True)
+        return 0
     n = verify_restore(run, f, **({"link_class": functools.partial(Link, **restoring)} if restoring else {}),
                        **({"expected": left} if left else {}))
     print("differences:", n, flush=True)

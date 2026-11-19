@@ -33,16 +33,19 @@ def changed(cs, *rids) -> bytes:
     return camset.with_values(cs, out)
 
 
-def upload(monkeypatch, own_runs, differ, reconnects=True):
+def upload(monkeypatch, own_runs, differ, reconnects=True, held=(OTHER,)):
     """kit/tools/upload_check.py on a start file the camera wrote (in the made-up camera's downloads manifest), its
-    link a stand-in, its restore check one that downloads a file differing from the start file in the records `differ`
-    names (None when `reconnects` is False: the camera did not answer). Returns (the module, the start file)."""
+    link a stand-in whose download (the comparison before an upload) differs from the start file in the records `held`
+    names (none: the camera already holds it), its restore check one that downloads a file differing from the start
+    file in the records `differ` names (None when `reconnects` is False: the camera did not answer). Returns (the
+    module, the start file); the module's `sent` lists the link's commands."""
     from tools import upload_check as U
     run = Run("kit2_pass2")
     start = run.dat / "00001_start.DAT"
     start.write_bytes(SAMPLE.read_bytes())
     provenance.record(start, run.root, run=run.dir.name)
     cs = camset.read(start)
+    sent = []
 
     class Link:
         def __init__(self, run, **kw):
@@ -54,7 +57,14 @@ def upload(monkeypatch, own_runs, differ, reconnects=True):
         def __exit__(self, *exc):
             return False
 
+        def download(self, tag):
+            sent.append("download")
+            got = run.dat / f"0000{len(sent) + 1}_{tag}.DAT"
+            got.write_bytes(changed(cs, *held))
+            return got
+
         def upload(self, f):
+            sent.append("upload")
             return {"ok": True}
 
     def verify(run, f, expected=frozenset(), **kw):
@@ -64,10 +74,55 @@ def upload(monkeypatch, own_runs, differ, reconnects=True):
         got.write_bytes(changed(cs, *differ))
         return len([c for c in camset.diff(cs, camset.read(got)) if c.key not in expected])
     monkeypatch.setattr(U, "Link", Link)
-    monkeypatch.setattr(U, "verify_restore", verify)
+    monkeypatch.setattr(U, "verify_restore", lambda *a, **k: sent.append("check") or verify(*a, **k))
     monkeypatch.setattr(U, "setting_names", lambda: {})
+    monkeypatch.setattr(U, "sent", sent, raising=False)
     monkeypatch.setattr(sys, "argv", ["upload_check.py", str(start)])
     return U, start
+
+
+def test_a_camera_already_on_the_file_is_sent_no_upload(monkeypatch, own_runs, capsys):
+    """upload_check first downloads and compares the camera with the file, by the restore check's own comparison
+    (camkit.session.compared): where no record differs it says so and uploads nothing (no restart, no check after one),
+    exit 0; where one differs, the upload and its check go as ever; --always uploads all the same."""
+    U, start = upload(monkeypatch, own_runs, (), held=())
+    assert U.main() == 0 and U.sent == ["download"]
+    out = capsys.readouterr().out
+    assert f"the camera already holds {start.name}" in out and "nothing was uploaded" in out and "differences: 0" in out
+    U, _ = upload(monkeypatch, own_runs, (), held=(OTHER,))
+    assert U.main() == 0 and U.sent == ["download", "upload", "check"]
+    assert "1 records on the camera differ from" in capsys.readouterr().out
+    U, start = upload(monkeypatch, own_runs, (), held=())
+    monkeypatch.setattr(sys, "argv", ["upload_check.py", str(start), "--always"])
+    assert U.main() == 0 and U.sent == ["upload", "check"]
+
+
+def test_a_record_no_file_sets_back_differing_still_gets_the_upload(monkeypatch, own_runs):
+    """Only a camera on which no record differs is spared the upload: one differing in a record no settings file sets
+    back as a whole (0x1126) is uploaded as before (another part of such a record may take)."""
+    U, _ = upload(monkeypatch, own_runs, (KNOWN,), held=(KNOWN,))
+    assert U.main() == 0 and U.sent == ["download", "upload", "check"]
+
+
+def test_a_refused_comparison_or_a_restore_by_hand_pending_uploads_as_before(monkeypatch, own_runs, capsys):
+    """The camera refusing the comparison's download: said, and the upload goes as before. With a restore by hand
+    pending (RESTORE_BY_HAND, the owner route and a first open's procedure), nothing is compared: the start file is
+    uploaded and checked as it always was."""
+    from camkit.link import LinkError
+    from camkit.runs import mark_restore_by_hand
+    U, start = upload(monkeypatch, own_runs, (), held=())
+
+    class Refusing(U.Link):
+        def download(self, tag):
+            U.sent.append("refused")
+            raise LinkError("download refused")
+    monkeypatch.setattr(U, "Link", Refusing)
+    assert U.main() == 0 and U.sent == ["refused", "upload", "check"]
+    assert "refused the download that compares it" in capsys.readouterr().out
+    U, start = upload(monkeypatch, own_runs, (), held=())
+    run = Run("kit2_pass2")
+    mark_restore_by_hand(run.root, run.dir.name, start, "a test's")
+    assert U.main() == 0 and U.sent == ["upload", "check"]
 
 
 @pytest.mark.parametrize("differ,status", [((), 0), ((KNOWN,), 0), ((OTHER,), EXIT_UNRESTORED),

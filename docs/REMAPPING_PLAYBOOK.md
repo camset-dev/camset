@@ -183,7 +183,8 @@ start file downloaded in that state.
 
 **Reaching a state.** With a switch waiting (`kit/provers/mode_switch.py --keep`), `mode_switch.py --set "ROW=OPTION"`
 puts a list row, or a two-box row's box, on that option, and `--restore` puts back the file from before the switch.
-Or load a file the camera wrote in that state: `kit/tools/upload_check.py FILE`. Keep one switch waiting at a time,
+Or load a file the camera wrote in that state: `kit/tools/upload_check.py FILE` (it uploads nothing where the camera's
+own download shows it already holds that file; `--always` uploads all the same). Keep one switch waiting at a time,
 whatever the run folder: `--keep` does not always refuse a second made with another `--run`.
 
 **Seen, or inferred.** A value is *seen* when choosing its option changed the record to it. A row's own start is

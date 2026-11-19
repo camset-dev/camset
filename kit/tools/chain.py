@@ -14,8 +14,9 @@ calls to shell word splitting. Here:
   gives no meaning (1, 2, 3 or 9 and up: a crash, a wrong argument), listing it as failed; never after an `upload` step
   (the mark is refused there before anything runs, as is a mark that is not true or false), nor after a step killed by
   a signal or one that exits with a status below, whatever it is marked;
-- an `upload` step loads a start file through kit/tools/upload_check.py; if it fails, the chain stops
-  there (the next steps would run in the wrong state and tag their proofs with the wrong context);
+- an `upload` step loads a start file through kit/tools/upload_check.py, which uploads nothing where the camera's
+  download shows it already holds that file; if it fails, the chain stops there (the next steps would run in the wrong
+  state and tag their proofs with the wrong context);
 - a step killed by a signal (macOS and Linux: Windows gives such a step a status of its own) ran no restore of its own,
   and one that exits with status 4 (EXIT_UNRESTORED, kit/exit_status.py: its restore did not check out, or the camera
   refused its last download) left the camera perhaps not on its start file: the chain stops there too, before the
