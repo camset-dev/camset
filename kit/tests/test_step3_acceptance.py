@@ -247,12 +247,22 @@ class Eyes:
     def _frame(self, tag, save):
         st = self.sim.state()
         sid = self.sim.state_id(st)
-        path = self.run.shot_path(str(tag))
-        self.sim.names[path.name] = sid
+        f = SimpleNamespace(image=self.sim.image(sid))
+
+        def keep(path, withheld=False):
+            # as camkit.frames.Frame.save: written at `path` (the screen's text here), black where withheld
+            self.sim.names[Path(path).name] = sid
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            Path(path).write_bytes(b"BLACK" if withheld else "\n".join(self.sim.texts(st)).encode("utf-8"))
+            f.path = Path(path)
+            return f.path
+
+        f.save = keep
+        f.path = self.run.shot_path(str(tag))
+        self.sim.names[f.path.name] = sid
         if save:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"BLACK" if self.withheld else "\n".join(self.sim.texts(st)).encode("utf-8"))
-        return SimpleNamespace(image=self.sim.image(sid), path=path)
+            keep(f.path, self.withheld)
+        return f
 
 
 class Clock:

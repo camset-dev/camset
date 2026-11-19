@@ -790,6 +790,9 @@ OK_LATE = 4.0           # how long OK gets to show when the camera is busy apply
 # 0.2-0.46 s after MENU (kit2_speed_lock_mv), the saving notice gone about 2 s after a download's reply; any sleep,
 # lock wait or reader's call between a read and a press (0.5 s and more) gets its fresh look
 STALE_S = 0.5
+MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
+MENU_PAGES = ("menu", "submenu", "tiles")
+MENU_POLL = 0.05       # s between two looks while a MENU from the shooting screen is watched (menu_watch, menu_check)
 # a frame this dark on average shows no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
 BLACK = 6.0
 
@@ -1092,6 +1095,8 @@ class LiveCamera:
         self.frame, self.screen = f, self.reading(f)
         self.rest(f"{key}-rest")
         f = self.look_late(key, before, moved, seen_enough)
+        if canon == "menu" and getattr(judged, "kind", None) == "shooting":
+            f = self.menu_watch(t, f)       # its result a menu page if one shows within MENU_LATE s of the press
         self.screen.frame_path = f.path.name          # evidence: which saved frame this screen is
         self.presses += 1
         self._seen = self._moves()
@@ -1124,6 +1129,32 @@ class LiveCamera:
                 return f
             if time.monotonic() >= end:
                 return f
+
+    def menu_watch(self, sent_at: float, f):
+        """After a MENU judged on the shooting screen whose settle ended on no menu page (the shooting screen's own
+        redraw can end it before the menu is drawn: kit2_pass2 250525-250527, 2026-11-18), with HDMI eyes: the frames
+        watched (glance, unsaved) until one reads as a menu page or MENU_LATE s have passed since the press (sent_at),
+        and the press's result taken from that menu page, else from the last frame watched; saved as evidence, logged
+        ("menu_watch": seen or not, after how long). The helper's own look (menu_check) then looks no more
+        (menu_watched). OSD eyes, whose picture lags the screen, unchanged: the frame the press settled on (`f`)."""
+        if getattr(self.hdmi, "name", "") != "hdmi" or getattr(self.screen, "kind", None) in MENU_PAGES:
+            return f
+        last = None
+        while time.monotonic() - sent_at < MENU_LATE:
+            time.sleep(MENU_POLL)
+            last = self.glance("menu-watch")
+            if last[1].kind in MENU_PAGES:
+                break
+        if last is not None:
+            f, self.screen = last
+            keep(f, self.run.shot_path("menu-watch"), getattr(self, "blank", False))
+            self.frame = f
+            self.rest("menu-watch-rest")    # a menu caught sliding in is looked at again until it stops
+            f = self.frame
+        self.menu_watched = f
+        self.run.log("menu_watch", frame=f.path.name, seen=getattr(self.screen, "kind", None) in MENU_PAGES,
+                     after=round(time.monotonic() - sent_at, 3))
+        return f
 
     def first_open_under_way(self) -> bool:
         """Whether the camera's RESTORE_BY_HAND is on disk for this run's camera (camkit.runs.restore_pending_any;
@@ -1809,35 +1840,47 @@ def text_of(cam) -> str:
 
 # ---------------------------------------------------------------- MENU from the shooting screen: the one helper
 
-MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
-MENU_PAGES = ("menu", "submenu", "tiles")
 
-
-def menu_check(cam, tag: str = "menu-check", clock=None, poll: float = 0.05):
-    """The screen after a MENU from the shooting screen that seemed not taken: with HDMI eyes the frames are watched
-    (LiveCamera.glance, unsaved) for up to MENU_LATE s and the first that reads as a menu page is taken at once
-    (refresh(frame=)); where none comes, and with other eyes, a fresh frame after the full MENU_LATE s (refresh), which
-    alone may say the MENU was not taken (2026-10-29: a second MENU on a menu that was only slow closed it, and the
-    next Right, on the shooting screen, opened ISO). clock: the caller's time module (this module's by default)."""
+def menu_check(cam, tag: str = "menu-check", clock=None, poll: float = MENU_POLL):
+    """The screen after a MENU from the shooting screen that seemed not taken. Where that MENU's press watched for the
+    menu already (LiveCamera.menu_watch, HDMI eyes: the screen read last is the frame its watch ended on), the screen
+    read last, at once. Otherwise with HDMI eyes the frames are watched (LiveCamera.glance, unsaved) for up to MENU_LATE
+    s and the first that reads as a menu page is taken at once (refresh(frame=)); where none comes, and with other eyes,
+    a fresh frame after the full MENU_LATE s (refresh), which alone may say the MENU was not taken (2026-10-29: a second
+    MENU on a menu that was only slow closed it, and the next Right, on the shooting screen, opened ISO). Logged
+    ("menu_check": by "press" where the press's watch had looked, by "look" where this one did; seen, whether a menu page
+    showed; waited, s). clock: the caller's time module (this module's by default)."""
     clock = clock or time
+    log = getattr(getattr(cam, "run", None), "log", None) or (lambda *a, **k: None)
+    watched = getattr(cam, "menu_watched", None)
+    if watched is not None and getattr(cam, "frame", None) is watched:
+        s = cam.read()
+        log("menu_check", frame=watched.path.name, by="press", seen=s.kind in MENU_PAGES, waited=0)
+        return s
     eyes = getattr(cam, "hdmi", None)
+    start = clock.monotonic()
+    s = None
     if getattr(eyes, "name", "") == "hdmi" and hasattr(cam, "glance"):
-        start = clock.monotonic()
         while clock.monotonic() - start < MENU_LATE:
             clock.sleep(poll)
-            f, s = cam.glance(tag)
-            if s.kind in MENU_PAGES:
-                return cam.refresh(tag, frame=f)
+            f, seen = cam.glance(tag)
+            if seen.kind in MENU_PAGES:
+                s = cam.refresh(tag, frame=f)
+                break
     else:
         clock.sleep(MENU_LATE)
-    return cam.refresh(tag)
+    if s is None:
+        s = cam.refresh(tag)
+    log("menu_check", frame=getattr(getattr(getattr(cam, "frame", None), "path", None), "name", None), by="look",
+        seen=s.kind in MENU_PAGES, waited=round(clock.monotonic() - start, 3))
+    return s
 
 
 def menu_from_shooting(cam, pressed: bool = False, shooting=None, clock=None, tries: int = 3) -> None:
     """MENU from the shooting screen, the one way every caller sends it: MENU (none where `pressed`, the caller having
     just sent it), and while the screen still reads as the shooting screen (`shooting`, a predicate on the screen, by
-    default its kind), a fresh look first (menu_check: at once on a menu page with HDMI eyes, else a fresh frame after
-    MENU_LATE s), and only then MENU once more, `tries` times at most. Never a second MENU without that look just before
+    default its kind), a fresh look first (menu_check: the press's own watch where it had one, LiveCamera.menu_watch;
+    else at once on a menu page with HDMI eyes, else a fresh frame after MENU_LATE s), and only then MENU once more, `tries` times at most. Never a second MENU without that look just before
     it: a MENU the camera took late (its settle ended on the shooting screen's own redraw) opens the menu meanwhile, and
     a MENU then would close it, the next key landing on the shooting screen (kit2_pass2 250525-250527, 2026-11-18: a
     Left; 2026-10-29: a Right that opened ISO)."""

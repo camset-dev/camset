@@ -1170,6 +1170,119 @@ def test_no_menu_goes_from_the_shooting_screen_without_a_fresh_look_before_it():
     assert found == [], f"a MENU after a shooting check with no fresh look: {found} (camkit.live.menu_from_shooting)"
 
 
+class WatchFrame:
+    """A frame of the fake camera below, grabbed at `t` on its fake clock; saved by name alone."""
+    def __init__(self, kind, t, n):
+        self.kind, self.t, self.image, self.path = kind, t, None, Path(f"{n:05d}_{kind}.png")
+
+    def save(self, path, black=False):
+        self.path = Path(path)
+        return self.path
+
+
+class WatchEyes:
+    """Eyes on a fake clock: the shooting screen until `menu_at`, a menu page from then; a settle takes 0.2 s and ends on
+    the shooting screen's own redraw while the menu is not drawn yet (kit2_pass2 250525-250527, 2026-11-18)."""
+    def __init__(self, now, name):
+        self.now, self.name, self.menu_at, self.grabs, self.timing = now, name, None, [], {}
+
+    def grab(self, tag, save=True):
+        self.grabs.append(tag)
+        shown = "menu" if self.menu_at is not None and self.now[0] >= self.menu_at else "shooting"
+        return WatchFrame(shown, self.now[0], len(self.grabs))
+
+    def settle(self, before, tag, expect_change=None, sent_at=None, **k):
+        self.now[0] += 0.2
+        return self.grab(tag), True
+
+
+def watch_camera(tmp_path, monkeypatch, name="hdmi", late=0.8):
+    """A LiveCamera on the shooting screen and a fake clock whose MENU there opens the menu `late` s after it (None:
+    never); its link records each press as (key, the screen judged, when)."""
+    from camkit import live
+    from camkit.runs import Run
+    now, clock = menu_clock()
+    monkeypatch.setattr(live, "time", clock)
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run(f"watch_{name}_{late}", root=tmp_path)
+    cam.hdmi = eyes = WatchEyes(now, name)
+    cam.reading = lambda f: SimpleNamespace(kind=f.kind, focus="rows", signature=f.path.name, struct=f.path.name)
+    cam.frame = eyes.grab("start")
+    cam.screen = cam.reading(cam.frame)
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    cam.may_open, cam.presses, cam._seen = frozenset(), 0, 0
+    sent = []
+
+    def press(key, hold, screen=None, **k):
+        sent.append((key, screen.kind, round(now[0], 2)))
+        if key == "menu" and screen.kind == "shooting" and late is not None:
+            eyes.menu_at = now[0] + late
+
+    cam.link = SimpleNamespace(moves=0, menus=0, press=press)
+    return cam, sent, now, clock
+
+
+def events_of(cam, kind):
+    import json
+    return [e for e in map(json.loads, (cam.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines())
+            if e["kind"] == kind]
+
+
+def test_a_menu_from_the_shooting_screen_takes_its_result_from_the_menu_page_its_press_watched_for(tmp_path,
+                                                                                                    monkeypatch):
+    """With HDMI eyes, a MENU judged on the shooting screen whose settle ended on the shooting screen's own redraw is
+    watched until a menu page shows (0.8 s here), up to MENU_LATE s from the press, and takes its result from it; the
+    one helper then looks no more and sends no second MENU. The log tells which look saw the menu (menu_watch)."""
+    from camkit import live
+    cam, sent, now, clock = watch_camera(tmp_path, monkeypatch, late=0.8)
+    cam.press("menu")
+    assert cam.read().kind == "menu" and now[0] == pytest.approx(0.8, abs=0.06)
+    assert cam.frame.path.parent == cam.run.dir / "shots"          # the frame the press ends on is saved evidence
+    [watch] = events_of(cam, "menu_watch")
+    assert watch["seen"] is True and watch["after"] == pytest.approx(0.8, abs=0.06)
+    live.menu_from_shooting(cam, pressed=True, clock=clock)
+    assert sent == [("menu", "shooting", 0.0)] and now[0] == pytest.approx(0.8, abs=0.06)
+
+
+def test_a_menu_its_press_watched_for_in_vain_gets_its_second_menu_with_no_second_wait(tmp_path, monkeypatch):
+    """A MENU the camera does not take: its press watches up to MENU_LATE s from the press and logs that it saw no
+    menu; the helper's own look then returns at once (logged as the press's watch, menu_check by "press"), so the
+    second MENU goes MENU_LATE s after the first, not twice that."""
+    from camkit import live
+    cam, sent, now, clock = watch_camera(tmp_path, monkeypatch, late=None)
+    cam.press("menu")
+    assert cam.read().kind == "shooting" and now[0] == pytest.approx(live.MENU_LATE, abs=0.06)
+    assert [w["seen"] for w in events_of(cam, "menu_watch")] == [False]
+    live.menu_from_shooting(cam, pressed=True, clock=clock, tries=1)
+    assert [(k, s) for k, s, t in sent] == [("menu", "shooting")] * 2
+    assert sent[1][2] == pytest.approx(live.MENU_LATE, abs=0.06)
+    [check] = events_of(cam, "menu_check")
+    assert check["by"] == "press" and check["seen"] is False and check["waited"] == 0
+
+
+def test_osd_eyes_keep_the_helpers_own_look_and_the_press_watches_nothing(tmp_path, monkeypatch):
+    """OSD eyes, unchanged: the press ends on its settle, nothing watched; the helper's own look waits MENU_LATE s and
+    takes a fresh frame, and the log says the menu was seen by that look (menu_check by "look")."""
+    from camkit import live
+    cam, sent, now, clock = watch_camera(tmp_path, monkeypatch, name="osd", late=0.8)
+    cam.press("menu")
+    assert cam.read().kind == "shooting" and "menu-watch" not in cam.hdmi.grabs and not events_of(cam, "menu_watch")
+    live.menu_from_shooting(cam, pressed=True, clock=clock)
+    assert cam.read().kind == "menu" and len(sent) == 1
+    [check] = events_of(cam, "menu_check")
+    assert check["by"] == "look" and check["seen"] is True and check["waited"] == pytest.approx(live.MENU_LATE)
+
+
+def test_a_menu_judged_on_a_menu_page_is_not_watched(tmp_path, monkeypatch):
+    """Only a MENU judged on the shooting screen is watched: one that closes a menu page ends on its settle."""
+    cam, sent, now, clock = watch_camera(tmp_path, monkeypatch, late=0.8)
+    cam.hdmi.menu_at = 0.0
+    cam.refresh("start")
+    cam.hdmi.menu_at = None
+    cam.press("menu")
+    assert cam.read().kind == "shooting" and now[0] == pytest.approx(0.2) and not events_of(cam, "menu_watch")
+
+
 # ---------------------------------------------------------------- a carousel's title, read once its strip is still
 
 
