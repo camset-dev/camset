@@ -102,6 +102,31 @@ def close(a: str, b: str) -> float:
     return difflib.SequenceMatcher(None, norm(a), norm(b)).ratio()
 
 
+# a decimal point, a colon or a fraction slash between two digits: norm drops it, and a label needs it (1.3" is not
+# 13", F1.1 not F11, 1/250 not 1250, 4:3 not 43), so kept() keeps it as a mark of its own, as camkit.reading.agree does
+_BETWEEN_DIGITS = re.compile(r"(?<=\d)\s*([.:/])\s*(?=\d)")
+_MARKS = {".": "#p", ":": "#c", "/": "#s"}
+
+
+def kept(t) -> str:
+    """norm(t) with each decimal point, colon or fraction slash between two digits kept (_BETWEEN_DIGITS): how judge,
+    option_key and alike compare labels, where norm alone made 1.3" and 13" one label (the review of 2026-11-18)."""
+    return norm(_BETWEEN_DIGITS.sub(lambda m: _MARKS[m[1]], str(t or "")))
+
+
+def kept_close(a: str, b: str) -> float:
+    """close() on kept(): two labels that differ only by a decimal point or a fraction slash are not alike."""
+    return difflib.SequenceMatcher(None, kept(a), kept(b)).ratio()
+
+
+def same_label(a, b) -> bool:
+    """Two readings of one label as the report judges them: camkit.reading.agree's rule for a label (every run of
+    digits and every decimal point kept; the readers' look-alikes and a radio ring aside), or alike by kept() (norm's
+    leniency for case, spacing, a stop, an arrow or a sign spelled out, the points and slashes between digits kept)."""
+    from camkit import reading
+    return reading.agree(a, b, "label") or kept(a) == kept(b)
+
+
 TICKED, UNTICKED = re.compile(r"allow|tick|\bon\b|target|includ|regist", re.I), re.compile(r"exclud|\boff\b|not", re.I)
 
 
@@ -179,10 +204,17 @@ AGREE = 0.8                # two readings this alike (close) name the same thing
 
 
 def alike(a: str, b: str) -> bool:
-    """Two readings of one name: AGREE alike, or one held whole in the other (the vision model reads "FINE" of the
-    camera's "FINE Fine", the OCR doubles "4:3" as "4:3 4:3")."""
-    x, y = sorted((norm(a), norm(b)), key=len)
-    return close(a, b) >= AGREE or (len(x) >= 2 and x in y)
+    """Two readings of one name: one label (same_label), or AGREE alike, or one held whole in the other (the vision
+    model reads "FINE" of the camera's "FINE Fine", the OCR doubles "4:3" as "4:3 4:3"). The likeness never stands for
+    two that both hold digits but not the same kinds of mark between them (_BETWEEN_DIGITS), and one is held in the
+    other by kept(): "F1.1" is never "F11", nor "1/250" "1250", nor "13\"" held in "1.3\""."""
+    if same_label(a, b):
+        return True
+    a, b = str(a or ""), str(b or "")
+    marks_differ = bool(re.search(r"\d", a) and re.search(r"\d", b)) and \
+        set(_BETWEEN_DIGITS.findall(a)) != set(_BETWEEN_DIGITS.findall(b))
+    x, y = sorted((kept(a), kept(b)), key=len)
+    return (close(a, b) >= AGREE and not marks_differ) or (len(x) >= 2 and x in y)
 
 
 def glued_icon(label: str, shown: str) -> bool:
@@ -343,10 +375,11 @@ def contained(s: str, lab: str, vals: dict) -> bool:
     """The schema's label s read inside the camera's lab counts as agreement only when no other proved label of the
     record holds it as well: the schema's "Hi" under the camera's "Cont. Shooting: Hi" is not agreement while
     "Cont. Shooting: Hi+" is proved too. A label of three characters or more may sit anywhere in lab; a shorter one
-    only as a whole word ("5" in "5(Wide)", "S" in "Spot: S"; never "M" in "Medium" or "P" in "Program Auto")."""
+    only as a whole word ("5" in "5(Wide)", "S" in "Spot: S"; never "M" in "Medium" or "P" in "Program Auto"). Held
+    by kept(): "13\"" is not held in "1.3\""."""
     def fit(t: str) -> int:              # 2: a whole word, 1: anywhere (three characters or more), 0: not held
-        n = norm(s)
-        if not n or n not in norm(t):
+        n = kept(s)
+        if not n or n not in kept(t):
             return 0
         if re.search(r"(?<![A-Za-z0-9])" + re.escape(str(s).strip()) + r"(?![A-Za-z0-9])", str(t), re.I):
             return 2
@@ -377,21 +410,24 @@ def abbreviates(s: str, lab: str, vals: dict) -> bool:
 
 
 def judge(vals: dict, known: dict) -> tuple:
-    """(verdict, per-value notes) for one record: vals = proved {label: value}, known = schema {value: label}."""
+    """(verdict, per-value notes) for one record: vals = proved {label: value}, known = schema {value: label}. Labels
+    are compared as same_label and kept_close compare them, a decimal point or a fraction slash between digits kept:
+    the schema's 13" for the camera's 1.3" never agrees, and where it is another proved option's label it is a
+    conflict."""
     notes, worst = [], "agrees"
     rank = ["agrees", "wording", "missing", "conflict"]
     for lab, v in vals.items():
         s = known.get(v)
-        if s and (norm(s) == norm(lab) or contained(s, lab, vals)):
+        if s and (same_label(s, lab) or contained(s, lab, vals)):
             continue
-        if s and any(o != lab and vals[o] == v and norm(o) == norm(s) for o in vals):
+        if s and any(o != lab and vals[o] == v and same_label(o, s) for o in vals):
             continue                          # a value two options share, and the schema names it after the other
         if not s:
             kind = "missing"
         else:
-            other = max((o for o in vals if o != lab), key=lambda o: close(s, o), default=None)
-            swapped = other is not None and close(s, other) > max(close(s, lab), 0.8)
-            kind = "conflict" if swapped or close(s, lab) < 0.4 else "wording"
+            other = max((o for o in vals if o != lab), key=lambda o: kept_close(s, o), default=None)
+            swapped = other is not None and kept_close(s, other) > max(kept_close(s, lab), 0.8)
+            kind = "conflict" if swapped or kept_close(s, lab) < 0.4 else "wording"
             if kind == "conflict" and (abbreviates(s, lab, vals) or abbreviates(lab, s, dict.fromkeys(known.values()))):
                 kind = "wording"              # the schema abbreviated the camera's words: they replace it
         notes.append({"value": v, "camera": lab, "schema": s, "kind": kind})
@@ -955,7 +991,8 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
     An index is a place in the list as the session that walked it numbered it: a list or a carousel's axis numbered
     from where it stood, a hold's list in another session, so two sessions can give one index to two options (hold
     2's Shoot Mode chose Aperture Priority and, in another session, Manual Exposure at place 3; S&Q's PAL rates, Drive
-    Mode's speeds). The later proof of another option at an index taken (its label another, as norm reads it) is that
+    Mode's speeds). The later proof of another option at an index taken (its label another, as same_label reads it: 1.3"
+    is not 13") is that
     option's latest where the row holds it at another index, and else goes under (index, label), the earlier proof
     kept (option_key): before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
     their proof so, the two hold values among them kept only from an older definition. A number field's index is its
@@ -974,10 +1011,10 @@ def option_key(r: dict, opts: dict):
     """The key of proof r among its row's options (rows_of): its index; where another option's proof holds that index
     already (a number field's never), the key its own option has at another index, else (index, label)."""
     idx = tuple(r["index"]) if isinstance(r.get("index"), list) else r.get("index")
-    have, lab = opts.get(idx), norm(str(r.get("label")))
-    if r.get("kind") == "fields" or have is None or norm(str(have.get("label"))) == lab:
+    have, lab = opts.get(idx), str(r.get("label"))
+    if r.get("kind") == "fields" or have is None or same_label(str(have.get("label")), lab):
         return idx
-    return next((k for k, o in opts.items() if norm(str(o.get("label"))) == lab), (idx, lab))
+    return next((k for k, o in opts.items() if same_label(str(o.get("label")), lab)), (idx, kept(lab)))
 
 
 def not_one_to_one(proofs: list, row: str, key: str, vals: dict, kinds: set, carried: frozenset = frozenset(),
@@ -995,7 +1032,7 @@ def not_one_to_one(proofs: list, row: str, key: str, vals: dict, kinds: set, car
                 continue
             idx = tuple(r["index"]) if isinstance(r["index"], list) else r["index"]
             # a picker's function by its place in the list, also in an attempt the report leaves out
-            lab = (label_of.get((idx, norm(str(r.get("label"))))) or label_of.get(idx) or f"{r.get('label')} (place {idx})") \
+            lab = (label_of.get((idx, kept(str(r.get("label"))))) or label_of.get(idx) or f"{r.get('label')} (place {idx})") \
                 if label_of else str(r.get("label"))          # an option kept apart at a taken index (option_key)
             for c in element_changes(r):
                 if c["key"] == key and (r.get("dat"), key) not in carried:
