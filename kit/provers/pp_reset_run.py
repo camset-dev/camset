@@ -587,8 +587,9 @@ def to_profile(cam, profile: str):
     """From the Picture Profile row: Right into the carousel, Down until the option under the cursor is `profile`
     (option_read: OCR and the vision model, look-alikes read as their letters and digits; two readers reading two names
     stop the run), Right into its settings. As
-    proving.nav.enter_pp, which compares readings without the digits' look-alikes and so never found PP3 read as "PРЗ".
-    The panel's guards (safety.profile_reset_row, on its title) are the same either way."""
+    proving.nav.enter_pp, which takes OCR's reading alone (the digits' look-alikes read as digits since 2026-11-18:
+    camkit.reading.code_same), since no reset follows its press. The panel's guards (safety.profile_reset_row, on its
+    title) are the same either way."""
     from prove_run import Failed, at_label
     if cam.read().kind != "menu" or not at_label(cam, "menu", ROW):
         raise Failed(f"not on the {ROW} row ({cam.read().kind}, {cam.frame.path.name})")

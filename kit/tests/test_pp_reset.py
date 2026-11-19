@@ -1104,6 +1104,48 @@ def test_two_readers_reading_two_names_stop_the_run_unless_a_fresh_frame_agrees(
         M.to_profile(carousel(["Off", "PP1", "PP3"], second={"PP1": "PP7"}), "PP3")
 
 
+# Movie mode's Picture Profile carousel as OCR read it over HDMI on 2026-11-18 (kit2_pass2 245830-245857): PP3 with a
+# Cyrillic ER and a Cyrillic ZE
+MOVIE_PP = ["Off", "PP1", "PP2", "PРЗ", "PP4", "PP5", "PP6", "PP10", "PP11", "User1: (No Import)",
+            "User2: (No Import)", "User3: (No Import)", "User4: (No Import)"]
+
+
+@pytest.fixture
+def enter(monkeypatch):
+    from proving import nav
+    monkeypatch.setattr(nav, "carousel_text", lambda cam: cam.labels[cam.i])
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: cam.read().kind == kind)
+    monkeypatch.setattr(nav, "find_row", lambda cam, label, at=None: True)
+    monkeypatch.setattr(nav.time, "sleep", lambda s: None)
+    return nav.enter_pp
+
+
+def test_enter_pp_reads_a_profiles_number_through_its_look_alikes_and_goes_round_once(enter):
+    """proving.nav.enter_pp, the way every prover enters a profile's panel: PP3 read "PРЗ" (a Cyrillic Er, a Cyrillic Ze
+    for the 3) is PP3 by camkit.reading.code_same, the kit's one rule for a short code; the carousel is walked until the
+    option it opened on comes round again (Movie's holds 13, Stills' fewer; a longer one is walked whole too), so a
+    profile it does not hold fails after one lap, and an option read as nothing ends no lap."""
+    from prove_run import Failed
+    cam = CarouselCam(MOVIE_PP)
+    enter(cam, ["Picture Profile", "PP3", "Gamma"])
+    assert cam.state == "panel" and cam.entered == 3 and cam.pressed.count("down") == 3
+    cam = CarouselCam(MOVIE_PP)
+    cam.i = 4                                                    # opened on PP4: PP3 is twelve Downs on
+    enter(cam, ["Picture Profile", "PP3", "Gamma"])
+    assert cam.entered == 3
+    long = CarouselCam(["Off"] + [f"PP{i}" for i in range(1, 20)])
+    long.i = 1
+    enter(long, ["Picture Profile", "PP19", "Gamma"])          # eighteen Downs: past the old fourteen reads
+    assert long.entered == 19
+    gone = CarouselCam(MOVIE_PP)
+    with pytest.raises(Failed, match="never showed 'PP7'.*came round"):
+        enter(gone, ["Picture Profile", "PP7", "Gamma"])
+    assert gone.pressed.count("down") == len(MOVIE_PP) and gone.state == "carousel"
+    blank = CarouselCam(["", "PP1", "", "PP2", "PP3"])
+    enter(blank, ["Picture Profile", "PP3", "Gamma"])
+    assert blank.entered == 4
+
+
 def test_a_label_neither_reader_reads_stops_the_run_naming_it_and_its_frame(carousel):
     from prove_run import Failed
     cam = carousel(["Off", "PP1", "P#?", "PP10"], second={"P#?": "a dial"})

@@ -9,7 +9,7 @@ import contextlib
 import re
 import time
 
-from camkit import live, ocr, safety, screen, vlm
+from camkit import live, ocr, reading, safety, screen, vlm
 from camkit.link import CameraRefused, LinkError, StopRequested
 from camkit.screen import same_position, same_state
 from camkit.session import kind_seen, osd_shooting, playback_kind
@@ -169,23 +169,36 @@ def cancel(cam, link):
     cam.cancel_to_menu()
 
 
+PP_LAP = 30            # at most this many carousel options read on the way round (Movie's Picture Profile holds 13)
+
+
 def enter_pp(cam, path, at=None):
-    """From the Picture Profile row: Right into the carousel, Down to PP1, Right into its panel (this
-    commits PP1 as the Picture Profile), then into submenus and down to the row (by its place `at` where this run
-    knows it: find_row)."""
+    """From the Picture Profile row: Right into the carousel, Down until the option under the cursor is the profile
+    path[1], Right into its panel (this commits that profile as the Picture Profile), then into submenus and down to
+    the row (by its place `at` where this run knows it: find_row). The option is the profile where its reading is the
+    name (option_key) or the same short code, a digit's look-alike read as that digit (camkit.reading.code_same: "PРЗ",
+    a Cyrillic Er and a Cyrillic Ze, is PP3; 2026-11-18, Movie over HDMI). The carousel is walked until the first option
+    read comes round again (PP_LAP at most), so its length is the camera's: a profile it does not hold fails after one
+    lap, and a reading of nothing ends no lap. No reading's text is said (the option it opens on is the one in use)."""
     if cam.read().kind != "menu" or not at_label(cam, "menu", path[0]):
         raise Failed(f"not on the Picture Profile row ({cam.read().kind}, {cam.frame.path.name})")
     cam.press("right")
     if cam.read().kind != "dialog":
         raise Failed(f"Right on Picture Profile opened {cam.read().kind}, not its carousel")
-    for _ in range(14):
+    first = None
+    for n in range(PP_LAP):
         time.sleep(0.4)
         cam.refresh("reread")
-        if option_key(carousel_text(cam)) == option_key(path[1]):
+        t = carousel_text(cam)
+        if option_key(t) == option_key(path[1]) or reading.code_same(t, path[1]):
             break
+        if first is not None and t.strip() and reading.code_same(t, first):
+            raise Failed(f"the Picture Profile carousel never showed {path[1]!r}: it came round to the option it "
+                         f"opened on after {n} options ({cam.frame.path.name})")
+        first = first if first is not None or not t.strip() else t
         cam.press("down")
     else:
-        raise Failed(f"the Picture Profile carousel never showed {path[1]!r}")
+        raise Failed(f"the Picture Profile carousel never showed {path[1]!r} in {PP_LAP} options")
     cam.press("right")
     if cam.read().kind != "submenu":
         raise Failed(f"Right on {path[1]} opened {cam.read().kind}, not its panel")
