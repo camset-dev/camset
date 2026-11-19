@@ -1,9 +1,9 @@
 # Remapping a Sony camera's settings file: playbook for an agent
 
 This is for an AI agent asked to map the CAMSET `.DAT` settings file of a Sony body other than the a1 II (ILCE-1M2,
-firmware 4.00) this project was built on. Read section 1, the rules, before the first command that opens the camera's
-link (QUICKSTART's step 4), and the other sections as the work reaches them. A mapping begun with an older clone is
-updated first
+firmware 4.00) this project was built on. Read section 1, the safety rules, twice before the first command that opens
+the camera's link (QUICKSTART's step 4), and the other sections as the work reaches them. A mapping begun with an
+older clone is updated first
 ([CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md)).
 
 **Goal:** for every record in the file, prove on the camera which menu setting it holds and what each stored value
