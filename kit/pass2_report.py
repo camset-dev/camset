@@ -1951,8 +1951,11 @@ def own_records(rows: dict, name: str, opts: dict) -> dict | None:
     if not option:
         return None
     # the carousel's own row in the same context, else without one (an axis proved again in a
-    # switched state: WB / DRO Bracket held on Hi by a file, 2026-10-31)
-    main = rows.get(re.sub(r" / [^\[]*", "", name, count=1).rstrip()) or rows.get(base_row(name))
+    # switched state: WB / DRO Bracket held on Hi by a file, 2026-10-31); last, the same context's row with its space
+    # before " [" kept, for a carousel that has no row without a context (Bracket Type, which opens only with the drive
+    # mode dial on BRK, 2026-11-19). Only last: the first lookup's form stands for the rows it has always found
+    main = rows.get(re.sub(r" / [^\[]*", "", name, count=1).rstrip()) or rows.get(base_row(name)) \
+        or rows.get(re.sub(r" / [^\[]*?(?= \[|$)", "", name, count=1))
     if not main:
         return None
     return {c["key"]: c["after"] for o in main.values() if str(o.get("label", "")).startswith(option)

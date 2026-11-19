@@ -778,3 +778,39 @@ def test_the_reports_entry_counts_no_put_back_among_the_samples(tmp_path):
     rec = entry["records"]["global:0x13f9"]
     assert entry["row"] == CONT_ROW and rec["proved"] == {"0.3 EV 5 Img.": 4, "0.3 EV 3 Img.": 3}
     assert rec["sampled_from_start"] is True and rec["sample_proofs"] == 1
+
+
+def brk_axis_lines() -> list:
+    """Bracket Type's lines as kit2_pass2 holds them (2026-11-19): its five options proved with the dial on BRK, then
+    White Balance Bracket's and DRO Bracket's Lo/Hi, each Hi with the option's record and the axis's own."""
+    main = [{"path": ROW, "kind": "dialog", "index": i, "label": lab, "shown": lab, "vlm": lab, "chosen_frame": "x.png",
+             "row_frame": "y.png", "dat": f"{262940 + 9 * i}_Bracket-Type-{i}.DAT", "base": "262930_before.DAT",
+             "changes": [{"key": "global:0x02bf", "before": 0, "after": i}] if i else [], "notice": None,
+             "applied": True, "attempt": "kit2_pass2-main", "context": CTX}
+            for i, lab in [(1, "Single Bracket"), (2, "Focus Bracket"), (3, WB[0]), (4, DRO[0]), (0, "Cont. Bracket")]]
+    axes = []
+    for opt, vals, code, key, n in (("White Balance Bracket", WB, 3, "global:0x13f3", 0),
+                                    ("DRO Bracket", DRO, 4, "global:0x13f5", 2)):
+        for k, final, changes in ((1, False, [("global:0x02bf", 0, code), (key, 1, 0)]), (0, True, [])):
+            axes.append({"path": ROW, "kind": "axis", "option": opt, "index": k, "label": vals[k], "shown": vals[k],
+                         "final": final, "chosen_frame": "x.png", "vlm": vals[k], "row_frame": "y.png",
+                         "dat": f"{263500 + n + (1 - k)}_Bracket Type-axis-{k}.DAT", "base": "263490_before.DAT",
+                         "notice": None, "applied": True, "context": CTX,
+                         "changes": [{"key": a, "before": b, "after": c} for a, b, c in changes]})
+    return main + axes
+
+
+@pytest.mark.parametrize("option, key, vals, code", [("White Balance Bracket", "global:0x13f3", WB, 3),
+                                                     ("DRO Bracket", "global:0x13f5", DRO, 4)])
+def test_an_axis_of_a_submenu_row_with_a_context_credits_its_record(tmp_path, option, key, vals, code):
+    """The axis row "Bracket Settings > Bracket Type / White Balance Bracket [Drive Mode dial on BRK]" found no carousel
+    row of its own (own_records took the space before " [" with the option), and the row opens only on BRK, so no row
+    without the context stood in: it credited nothing ("changed nothing ... (2 options)"). The carousel's row in the
+    same context is found now: Bracket Type's record is the option's own, the axis's record is credited Hi and Lo."""
+    import pass2_report as R
+    lines = brk_axis_lines()
+    rows = R.rows_of(tmp_path, lines)
+    name = f"{' > '.join(ROW)} / {option} [{CTX}]"
+    assert R.own_records(rows, name, rows[name]) == {"global:0x02bf": code}
+    recs = R.row_values(rows, name, rows[name], {}, {}, frozenset(), frozenset(), frozenset())[0]
+    assert recs == {key: {vals[1]: 0, vals[0]: 1}}
