@@ -122,6 +122,37 @@ def test_both_passes_set_the_names_one_way():
         assert "hand_facts.name_sources(" in src and "with_names(" not in src, f.__name__
 
 
+def dial(option: str, y: int, x: int = 448, path=("My Dial Settings",)) -> dict:
+    """A picker proof line of a table cell, its row read as it was then ("mFront dial / *i")."""
+    return {"path": list(path), "kind": "table", "opens": "picker", "screen": "table", "option": option, "cell": [x, y],
+            "changes": [{"key": "global:0x045f", "before": [0, 0, 0], "after": [1, 0, 0]}]}
+
+
+def test_a_table_cell_proved_under_an_older_reading_of_its_row_is_the_plans_cell():
+    """picker_groups finds a slot's group through prove_run's plan, which names a table's cells as the kit names a
+    table's row (match.table_row_label over every reading of the row: an icon read as a letter or a mark in front, the
+    values of the cells before it glued on, left out). A proof line made while the row read otherwise ("mFront dial / *i",
+    "Tir Rear Dial R", "T Rear Dial R -- / *2") is the plan's cell when its row, named by that same rule from the
+    readings its lines give at that height, is a row the plan holds (plan_keys); a key the plan holds as it is stays.
+    A row that really is another ("Rear Dial L" against the plan's "Rear Dial R", "Tv Auto/Manual Switch" against "Av
+    Auto/Manual Switch") is no plan cell, so a rule that no longer fires is never revived by a likeness."""
+    import schema_update as S
+    plan = {"My Dial Settings / Front dial / *i", "My Dial Settings / Front dial / 2", "My Dial Settings / Front dial",
+            "My Dial Settings / Rear Dial R", "My Dial Settings / Rear Dial R / *2", "My Dial Settings / Rear Dial R / *3",
+            "My Dial Settings / 17 Rear Dial L / *2", "Shutter / Av Auto/Manual Switch / x"}
+    lines = [dial("mFront dial / *i", 148), dial("wFront dial -- / 2", 148, 516), dial("•Front dial --", 148, 380),
+             dial("Tir Rear Dial R", 200, 380), dial("T Rear Dial R -- / *2", 200), dial("T Rear Dial R -- -- / *3", 200, 516),
+             dial("17 Rear Dial L -- / *2", 252), dial("Rear Dial L / *3", 304),
+             dial("Tv Auto/Manual Switch / x", 148, path=("Shutter",))]
+    assert S.plan_keys(lines, plan) == [
+        "My Dial Settings / Front dial / *i", "My Dial Settings / Front dial / 2", "My Dial Settings / Front dial",
+        "My Dial Settings / Rear Dial R", "My Dial Settings / Rear Dial R / *2", "My Dial Settings / Rear Dial R / *3",
+        "My Dial Settings / 17 Rear Dial L / *2", None, None]
+    # a key the plan holds as it is stays, whatever the row's other readings say
+    assert S.plan_keys([dial("17 Rear Dial L / *2", 252), dial("x 17 Rear Dial L -- / *3", 252)], plan)[0] == \
+        "My Dial Settings / 17 Rear Dial L / *2"
+
+
 def test_a_rerun_drops_a_name_no_rule_gives_any_more(tmp_path, monkeypatch, capsys):
     """The plain pass on a definition whose proof names a value "derived" with no rule naming it this run (a rule that
     no longer fires): the value stays in the list, named, but leaves the proof's values and the setting's mark."""

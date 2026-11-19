@@ -560,21 +560,22 @@ def picker_groups() -> dict:
     the proofs: the record most of the slot's proofs changed first. A sampled slot shares the full slot's code table:
     its three proofs agreed with it. One proof's first change is no slot's record: the playback AEL key's Rating option
     writes Rating's copies (0x16bd...) first, and taking its proof alone tied the playback keys' group to Rating's copy,
-    so the keys took no lending (2026-11-08)."""
+    so the keys took no lending (2026-11-08). A proof made while its table's row read otherwise than the plan names it
+    (an icon read as a letter in front: "mFront dial / *i") is the plan's cell all the same (plan_keys)."""
     import prove_run as P
+    jobs = [j for j in P.sample_pickers(P.table_jobs(None)) if j.get("opens") == "picker"]
+    lines = [r for r in jsonl.read(RUN / "proofs.jsonl")
+             if r.get("kind") == "table" and r.get("opens") == "picker" and r["changes"]]
     firsts = collections.defaultdict(collections.Counter)
-    for r in jsonl.read(RUN / "proofs.jsonl"):
-        if r.get("kind") != "table" or r.get("opens") != "picker" or not r["changes"]:
-            continue
+    for r, job in zip(lines, plan_keys(lines, {P.job_key(j) for j in jobs}), strict=True):
         c = r["changes"][0]
         if isinstance(c["after"], list):                  # an array of slots (Fn Menu): the slot that moved
             slot = next((i for i, (a, b) in enumerate(zip(c["before"], c["after"], strict=True)) if a != b), None)
             key = f"{c['key']}[{slot}]"
         else:
             key = c["key"]
-        firsts[P.job_key(r) if "option" in r else ""][key] += 1
+        firsts[job or (P.job_key(r) if "option" in r else "")][key] += 1
     rec_of = {job: n.most_common(1)[0][0] for job, n in firsts.items()}
-    jobs = [j for j in P.sample_pickers(P.table_jobs(None)) if j.get("opens") == "picker"]
     groups, firsts = collections.defaultdict(set), []
     for j in jobs:
         where = (" > ".join(j["path"]), j.get("screen"), j.get("nth", 0))
@@ -584,6 +585,41 @@ def picker_groups() -> dict:
         elif P.job_key(full) in rec_of and P.job_key(j) in rec_of:
             groups[rec_of[P.job_key(full)]].add(rec_of[P.job_key(j)])
     return groups
+
+
+def plan_keys(lines: list, planned: set) -> list:
+    """For each picker proof line (in order), the job key of prove_run's plan it is (proving.jobs.job_key, "<path> /
+    <cell>"), or None: its own key where the plan holds it as it is; else, for a cell of a table (screen "table"), its row
+    named as the kit names a table's row, match.table_row_label over every reading of that row the lines give (the
+    lines at one height on one screen, as proving/tables.table_jobs names the walk's cells by match.table_cells: the
+    icon read as a letter or a mark in front and the values of the cells before it glued on left out, "mFront dial" and
+    "T Rear Dial R --" read "Front dial" and "Rear Dial R"), its column after it, where the plan holds exactly that key.
+    Never a likeness: a row named otherwise by that rule ("Rear Dial L", "Tv Auto/Manual Switch") is no plan cell of
+    another name. A line's reading, made when the row read otherwise, never changes the plan."""
+    import prove_run as P
+    from camkit import match
+
+    def parts(r):
+        row, _, col = r["option"].rpartition(" / ") if " / " in r["option"] else (r["option"], "", "")
+        return row, col
+    rows = collections.defaultdict(list)
+    for r in lines:
+        if r.get("screen") == "table" and isinstance(r.get("option"), str) and isinstance(r.get("cell"), list):
+            rows[(tuple(r["path"]), r.get("nth", 0), r["cell"][1])].append(parts(r)[0])
+    out = []
+    for r in lines:
+        own = P.job_key(r) if "option" in r else ""
+        if own in planned:
+            out.append(own)
+            continue
+        got = None
+        if r.get("screen") == "table" and isinstance(r.get("option"), str) and isinstance(r.get("cell"), list):
+            row = match.table_row_label(rows[(tuple(r["path"]), r.get("nth", 0), r["cell"][1])])
+            name = f"{row} / {parts(r)[1]}".strip(" /")
+            key = P.job_key({**r, "option": name})
+            got = key if key in planned else None
+        out.append(got)
+    return out
 
 
 def menu_tab(menu, row: str) -> str:
