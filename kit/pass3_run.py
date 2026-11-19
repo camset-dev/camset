@@ -36,10 +36,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, models, ocr, paths, safety, session  # noqa: E402
+from camkit import ROOT, camset, models, paths, safety, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
-from camkit.live import LiveCamera  # noqa: E402
+from camkit.live import LiveCamera, text_of  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
@@ -267,8 +267,8 @@ REFUSED = re.compile(r"not available|invalid", re.I)    # a notice after OK that
 
 
 def notice_text(cam) -> str:
-    """All the text OCR reads on the frame on show."""
-    return ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
+    """All the text OCR reads on the frame on show (camkit.live.text_of)."""
+    return text_of(cam)
 
 
 def after_ok(cam, b) -> None:
