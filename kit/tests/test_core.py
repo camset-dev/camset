@@ -1464,10 +1464,12 @@ def _box_camera(monkeypatch, boxes):
         return list(boxes[b][0]), held[b]
 
     def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names):
+        from proving.commit import APPLIED, Outcome
         held[b] = vals[target]
         dat = _Dat(f"{len(downloads) + 2:05d}_{b}_{target}.DAT", dict(held))
         downloads.append(dat)
-        return {"chosen_frame": "c.png", "row_frame": "r.png", "dat": dat, "vlm": vals[target]}
+        return {"chosen_frame": "c.png", "row_frame": "r.png", "dat": dat, "vlm": vals[target],
+                "outcome": Outcome(APPLIED)}
 
     def diff(a, b):
         return [types.SimpleNamespace(key=k, before=a[k], after=b[k]) for k in a if a[k] != b[k]]

@@ -571,3 +571,64 @@ def test_orient_records_a_refused_option_as_refused(monkeypatch, turned):
     assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
         ("Zone", False, REFUSAL), ("Center Fix", True, closed), ("Wide", True, closed)]
     assert cam.presses.count("menu") == 1 and cam.saved == 0
+
+
+class BoxesCam(Shots):
+    """S&Q's Frame Rate Settings: two boxes, Rec Frame Rate (60p, 24p, 120p) and Frame Rate, holding 60p; Down steps the
+    lit box on, Up back; OK leaves for the row's page, OK with a value in `refuse` lit brings the camera's refusal."""
+    VALUES = ["60p", "24p", "120p"]
+
+    def __init__(self, refuse=()):
+        super().__init__()
+        self.at, self.lit, self.refuse, self.answer_once = 0, 0, set(refuse), None
+
+    def open(self):
+        self.kind = "unknown"                   # the two-box screen reads as no known kind
+        self.shot("right")
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key in ("down", "up"):
+            self.at = max(0, min(2, self.at + (1 if key == "down" else -1)))
+        elif key == "enter" and self.VALUES[self.at] in self.refuse:
+            self.refused_here()
+        elif key in ("enter", "menu"):
+            self.kind, self.text = "submenu", ""
+        self.shot(key)
+
+
+def boxes_world(monkeypatch, cam):
+    """boxes_run's seams on a BoxesCam: the row opened, the lit box read off the made-up screen, no second reader."""
+    import boxes_run as B
+    reads(monkeypatch, lambda f: cam.text)
+    no_diffs(monkeypatch, B)
+    for name, value in (("open_row", lambda c, cycle, model, path: c.open()), ("to_box", lambda c, b: None),
+                        ("read_box", lambda c, b, vals=None, row="": BoxesCam.VALUES[c.at]),
+                        ("focus", lambda c: c.lit), ("box_reading", lambda c, b: "made up"),
+                        ("look", lambda c, link, cycle, model, path, b, seen=None: (list(BoxesCam.VALUES), "60p")),
+                        ("look_open", lambda c, link, path, b, seen=None: (list(BoxesCam.VALUES), "60p")),
+                        ("drawn_names", lambda c, names: list(names)),
+                        ("to_shooting", lambda link, hdmi, why: None), ("wait_lock", lambda *a, **k: None)):
+        monkeypatch.setattr(B, name, value)
+    return B
+
+
+def test_boxes_record_a_refused_value_as_refused(monkeypatch):
+    """boxes_run left the screen with OK and wrote "applied": true whatever came up; now the screen after OK goes
+    through the step: a value whose OK the camera refuses says "applied": false with the notice, closed with MENU; the
+    others are as before. mode_switch's box setting (set_value) stops on such a refusal, naming the frame, never the
+    notice's words."""
+    cam = BoxesCam(refuse={"24p"})
+    B = boxes_world(monkeypatch, cam)
+    out = io.StringIO()
+    path, names = ["S&Q Settings", "Frame Rate Settings"], ["Rec Frame Rate", "Frame Rate"]
+    B.prove(cam, downloads(), None, [], {}, path, names, "Rec Frame Rate", None, Path("00001_before.DAT"), out)
+    lines = [json.loads(x) for x in out.getvalue().splitlines()]
+    assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
+        ("24p", False, REFUSAL), ("120p", True, None), ("60p", True, None)]
+    assert "notice" not in lines[1] and cam.presses.count("menu") == 1
+    cam = BoxesCam(refuse={"24p"})
+    B = boxes_world(monkeypatch, cam)
+    with pytest.raises(B.Failed, match=r"Rec Frame Rate = 24p: the camera refused it after OK \(its notice on "
+                                       r"\d+_enter.png\)$"):
+        B.set_value(cam, None, [], {}, path, names, "Rec Frame Rate", "24p")

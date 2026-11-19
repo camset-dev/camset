@@ -124,6 +124,7 @@ def test_the_row_screens_consent_passes_the_hs_4k_screen_and_choose_hands_it_bef
     cam = at(picture("value", "value"), reads=("24p", "120fps"), name="00079_down.png")
     handed = []
     cam.press = lambda key, **k: handed.append((key, getattr(cam, "answer_once", None)))
+    cam.read = lambda: SimpleNamespace(kind="submenu")         # after OK, the row's page (proving.commit reads it)
     monkeypatch.setattr(boxes_run, "focus", lambda c: 0)
     monkeypatch.setattr(boxes_run, "box_reading", lambda c, b=None: "24p")
     monkeypatch.setattr(boxes_run, "to_shooting", lambda *a: None)
@@ -271,6 +272,9 @@ class WalkCam:
 
     def refresh(self, tag):
         self.looks += 1
+
+    def read(self):                 # the screen after OK, which the prover reads (proving.commit): the row's page
+        return SimpleNamespace(kind="submenu" if self.presses[-1:] == ["enter"] else "unknown")
 
     @property
     def run(self):

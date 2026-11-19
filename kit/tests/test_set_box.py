@@ -88,6 +88,9 @@ class BoxCam:
     def close(self):
         self.open = False
 
+    def read(self):                 # the screen after OK, which the prover reads (proving.commit): the row's page
+        return SimpleNamespace(kind="unknown" if self.open else "submenu")
+
 
 @pytest.fixture
 def boxcam(monkeypatch):

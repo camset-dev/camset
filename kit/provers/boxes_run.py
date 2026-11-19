@@ -29,7 +29,8 @@ no OK, the row read "Recording Frame Rate: 24p" (kit2_pass2 240079 -> 240080, XA
 after held it (240083). So each proof is what the record holds once the box was stepped to its value, and the OK only
 leaves. The screen reads as no known kind, whose Enter the camera's shape check refuses (2026-11-14; the proofs before
 it pressed it unguarded), so that OK goes by the screen's own consent (camkit.live.TwoBoxes: screen_consent), judged
-on its shape; a screen it cannot judge so gets no OK and stops the run.
+on its shape; a screen it cannot judge so gets no OK and stops the run. The screen after OK is read by
+proving.commit.after_ok: a value whose OK the camera refuses is written "applied": false with its notice.
 A box that draws a dash (dashed: XAVC HS 8K's S&Q boxes, 240050, where Up raised "not available as follows: File
 Format") is not offered in this state: the look presses nothing on it, and the run writes it to its failures.jsonl as
 prove_run writes a row the camera would not open ("blocked": NOT_OFFERED, keyed like the box's proofs, tagged with
@@ -56,6 +57,7 @@ from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, enter_any, option_key, to_shooting  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from proving.screens import ask_second, later, settled  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, add_scan_argument, changes_of, close_screen, load_scan,  # noqa: E402
                     menu_from_shooting, proofs_file, prover_session, scan_position)
@@ -279,10 +281,12 @@ def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names) -> dict:
     return {**got, "dat": dat}
 
 
-def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
+def step_ok(cam, cycle, model, path, b, vals, target, names, quiet: bool = False) -> dict:
     """The row opened, box b stepped to vals[target] (the setting from then on) and left with OK under the screen's
-    consent (screen_consent); {"chosen_frame", "row_frame", "vlm"}: the frame it was chosen on, the frame after OK, the
-    second reader's reading of it."""
+    consent (screen_consent); {"chosen_frame", "row_frame", "vlm", "outcome"}: the frame it was chosen on, the frame after
+    OK, the second reader's reading of it, and what the camera did with the OK (proving.commit.after_ok: a refusal or a
+    notice closed with MENU, never OK; no information screen taken, the two-box screen reading as no known kind). quiet:
+    a notice's words not said (mode_switch's setting, set_value)."""
     open_row(cam, cycle, model, path)
     to_box(cam, b)
     for _ in range(len(vals) + 1):
@@ -300,7 +304,9 @@ def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
     chosen, seen_vlm = cam.frame.path.name, later(functools.partial(box_reading, b=b), cam)     # kept with the proof
     cam.answer_once = screen_consent(path, names)        # the OK that leaves, judged on the screen's shape (TwoBoxes)
     cam.press("enter")
-    return {"chosen_frame": chosen, "row_frame": cam.frame.path.name, "vlm": seen_vlm}
+    row_frame = cam.frame.path.name
+    got = after_ok(cam, path[-1], label=vals[target], info=False, **({"say": None} if quiet else {}))
+    return {"chosen_frame": chosen, "row_frame": row_frame, "vlm": seen_vlm, "outcome": got}
 
 
 def drawn_names(cam, names) -> list:
@@ -331,7 +337,10 @@ def set_value(cam, link, cycle, model, path, names, box: str, value: str) -> dic
         raise Failed(f"{path[-1]} > {box}: {value!r} is not one of its values ({', '.join(vals)}): nothing chosen")
     if vals[want[0]] == held:
         raise Failed(f"{path[-1]} > {box} already holds {held!r}: nothing to set, no OK")
-    got = step_ok(cam, cycle, model, path, b, vals, want[0], names)
+    got = step_ok(cam, cycle, model, path, b, vals, want[0], names, quiet=True)
+    if not got["outcome"].applied:          # the notice's words can name another setting's value: its frame alone
+        raise Failed(f"{path[-1]} > {box} = {value}: the camera refused it after OK (its notice on "
+                     f"{got['outcome'].notice['frame']})")
     return {**got, "values": vals, "held": held, "box": b, "names": names}
 
 
@@ -466,11 +475,12 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, f
                              "goes back on")
             keys = {c.key for c in ch}
             other = limits.other(b, keys)
+            done = got["outcome"]
             r = {"path": path + [names[b]], "kind": "list", "index": i, "label": vals[i],
                  "shown": vals[i], "vlm": settled(got["vlm"]), "chosen_frame": got["chosen_frame"],
                  "row_frame": got["row_frame"],
-                 "dat": got["dat"].name, "base": base.name, "applied": True, "boxes": True,
-                 "changes": changes_of(ch)}
+                 "dat": got["dat"].name, "base": base.name, **({"notice": done.notice} if done.notice else {}),
+                 "applied": done.applied, "boxes": True, "changes": changes_of(ch)}
             if other:
                 (j, theirs), = other.items()
                 r["moved_other"] = {"box": names[j], "changes": [c for c in r["changes"] if c["key"] in theirs]}
@@ -478,7 +488,8 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, f
             out.write(json.dumps(r) + "\n")
             out.flush()
             theirs_all = set().union(*other.values())
-            limits.learn(b, [c for c in r["changes"] if c["key"] not in theirs_all])
+            if done.applied:                    # what a box writes is learnt from applied lines alone (box_history)
+                limits.learn(b, [c for c in r["changes"] if c["key"] not in theirs_all])
             if other:
                 put_back(cam, link, hdmi, cycle, model, path, names, b, vals[i], j, theirs, base, limits, opened)
     return base

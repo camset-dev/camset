@@ -380,9 +380,10 @@ def boxes_world(monkeypatch, cam, tmp_path, history=()):
         return list(c.VALS), c.VALS[c.at[b]]
 
     def choose(c, link, hdmi, cycle, model, path, b, vals, target, names_):
+        from proving.commit import APPLIED, Outcome
         c.choose(b, target)
         return {"dat": c.download(f"ISO-{b}-{target}"), "chosen_frame": "00002_down.png", "row_frame": "00003_enter.png",
-                "vlm": None}
+                "vlm": None, "outcome": Outcome(APPLIED)}
     monkeypatch.setattr(boxes_run, "look", look)
     monkeypatch.setattr(boxes_run, "choose", choose)
     monkeypatch.setattr(boxes_run, "camset", cam.settings)
