@@ -470,6 +470,21 @@ def axis_reading(cam, vals) -> tuple:
     return strip_value(cam, vals, t, v)          # neither: the strip's lit cell, while the title is the option's
 
 
+def only_field_or_exit(todo: list, k: int, rows) -> list:
+    """--field K: each number-field job of the rows --rows names proves field K alone (proving.fields' only_field).
+    Stops, before anything connects, without --rows, where no row named is number fields, or where one has no field K
+    (they are numbered from 0)."""
+    if not rows:
+        sys.exit("--field proves one number field of the rows named with --rows only")
+    fields = [j for j in todo if j["kind"] == "fields"]
+    if not fields:
+        sys.exit(f"--field {k}: none of the rows named is number fields")
+    short = [job_key(j) for j in fields if not 0 <= k < len(j["fields"])]
+    if short:
+        sys.exit(f"--field {k}: {', '.join(short)} has no field {k} (the fields are numbered from 0)")
+    return [{**j, "only_field": k} if j["kind"] == "fields" else j for j in todo]
+
+
 # --first: per axis job ("Drive Mode / Self-timer(Cont.)"), the value to choose before its proofs. An axis proof
 # proves every value against the one held, which is itself never proved; from another value, it is.
 FIRST: dict = {}
@@ -908,6 +923,10 @@ def main():
     ap.add_argument("--help-text", action="store_true",
                     help="read the camera's help (In-Camera Guide) for each list / dialog row and option instead of "
                          "proving: <run>/option_help.jsonl in the camera's runs; nothing is chosen")
+    ap.add_argument("--field", type=int, default=None, metavar="K",
+                    help="with --rows: prove number field K alone (0 is the first), the row's other fields left as they "
+                         "are: a field whose choices can move another (ISO Range Limit's two limits) proved from a "
+                         "start chosen for it")
     ap.add_argument("--eyes", choices=["hdmi", "osd", "osd-all"], default="hdmi",
                     help="osd: also prove the scope's OSD group (the rows that can take the menus off HDMI or "
                          "change its signal: HDMI Resolution, frame rate ...), the way to each over HDMI and its "
@@ -986,6 +1005,8 @@ def main():
         missing = set(a.rows) - {" > ".join(j["path"]) for j in todo} - {job_key(j) for j in todo}
         if missing:
             sys.exit(f"not provable rows in the scope: {sorted(missing)}")
+    if a.field is not None:
+        todo = only_field_or_exit(todo, a.field, a.rows)
     info_ok_jobs_or_exit(todo, proving.checklists.INFO_OK)
     if network:
         todo = network_jobs_or_exit(todo, network, proving.jobs.NETWORK_OPTIONS)

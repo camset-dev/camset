@@ -232,7 +232,7 @@ def test_a_run_a_failure_or_a_refusal_stopped_exits_as_crawl_run_does(monkeypatc
 def test_a_run_on_a_dashed_screen_writes_its_lines_tagged_and_exits_0(monkeypatch, tmp_path, seen):
     """main on the dash screen: the run's failures.jsonl holds a not-offered line per box, tagged with the run's
     --context as its proofs are (proving.base.Tagged), and the run ends with status 0, the chain going on."""
-    def look(cam, link, cycle, model, path, b):
+    def look(cam, link, cycle, model, path, b, seen=None):
         raise boxes_run.NotOffered("00050_right.png")
     monkeypatch.setattr(boxes_run, "look", look)
     run_main(monkeypatch, tmp_path, boxes_run.prove)

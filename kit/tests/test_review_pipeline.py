@@ -6,7 +6,10 @@ from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+KIT = Path(__file__).resolve().parents[1]
+for p in (KIT, KIT / "provers"):
+    if str(p) not in sys.path:
+        sys.path.insert(0, str(p))
 
 
 # ------------------------------------------------------------------------------------------------ finding 2 (B1)
@@ -149,3 +152,298 @@ def test_a_switch_whose_download_shows_no_record_of_its_row_stops_the_blocker(mo
     restored.clear()
     assert pass3_run.run_blockers("run", [], {}, [blocker], None) is True
     assert walked == [blocker] and restored == ["00001_p3-start.DAT"]
+
+
+# ------------------------------------------------------------------------------------------------ finding 12
+
+LOWER, UPPER = (0x0b65, 0x0b69, 0x0b6d), (0x0b63, 0x0b67, 0x0b6b)     # ISO Range Limit's records, as the definition has
+
+
+class Lines(list):
+    """A proofs file: each line written, as a dict; `context` as proving.base.Tagged has it."""
+    context = None
+
+    def write(self, line):
+        self.append(__import__("json").loads(line))
+
+    def flush(self):
+        pass
+
+
+class Settings:
+    """A made-up camera's settings files: each download a snapshot of the records (a code per record), read and diffed
+    as camkit.camset reads and diffs them."""
+
+    def __init__(self):
+        self.files = {}
+
+    def keep(self, name: str, records: dict) -> Path:
+        self.files[name] = dict(records)
+        return Path(name)
+
+    def read(self, path):
+        return self.files[Path(path).name]
+
+    def diff(self, a, b):
+        from camkit import camset
+        return [camset.Change(0, rid, a[rid], b[rid]) for rid in sorted(a) if a[rid] != b[rid]]
+
+
+class LimitsCam:
+    """ISO Range Limit as the a1 II keeps it (2026-11-18): two number fields, the lower and the upper limit, each a step
+    of the ISO list (code = step + 2); OK on a lower limit above the upper pushes the upper up to it, on an upper below
+    the lower pulls the lower down to it, and the moved one stays. factory: {field: code} a file holds that no step of
+    the list writes, until that field is chosen."""
+
+    def __init__(self, settings: Settings, lo: int, hi: int, factory=None):
+        self.settings, self.at, self.factory = settings, [lo, hi], dict(factory or {})
+        self.kind, self.field, self.pending, self.n = "menu", 0, None, 0
+        self.frame = types.SimpleNamespace(path=Path("00001_right.png"))
+
+    def records(self) -> dict:
+        out = {}
+        for f, rids in ((0, LOWER), (1, UPPER)):
+            out.update(dict.fromkeys(rids, self.factory.get(f, self.at[f] + 2)))
+        return out
+
+    def press(self, key, **kw):
+        if key == "right":
+            if self.kind == "menu":
+                self.kind, self.field, self.pending = "fields", 0, list(self.at)
+            else:
+                self.field += 1
+        elif key in ("up", "down") and self.kind == "fields":
+            self.pending[self.field] = max(0, min(33, self.pending[self.field] + (1 if key == "down" else -1)))
+        elif key == "enter" and self.kind == "fields":
+            f, t = self.field, self.pending[self.field]
+            self.at[f] = t
+            self.factory.pop(f, None)
+            if f == 0 and t > self.at[1]:
+                self.at[1] = t
+                self.factory.pop(1, None)
+            if f == 1 and t < self.at[0]:
+                self.at[0] = t
+                self.factory.pop(0, None)
+            self.kind = "menu"
+        elif key == "menu":
+            self.kind = "menu"
+
+    def read(self):
+        return types.SimpleNamespace(kind=self.kind, field=self.field)
+
+    def cancel_to_menu(self):
+        self.kind = "menu"
+
+    def download(self, tag):
+        self.n += 1
+        return self.settings.keep(f"{self.n:05d}_{tag}.DAT", self.records())
+
+
+def limits_world(monkeypatch, cam):
+    """proving.fields over LimitsCam: its fields read off the made-up screen, the menu's way back made up."""
+    from proving import fields
+    from proving.jobs import LABELS
+    iso = LABELS["ISO"][1:]
+    monkeypatch.setattr(fields, "camset", cam.settings)
+    monkeypatch.setattr(fields, "field_at", lambda c, k, fld: c.pending[k] if c.kind == "fields" else None)
+    monkeypatch.setattr(fields, "field_values", lambda c: [iso[i] for i in c.pending] if c.kind == "fields" else [])
+    monkeypatch.setattr(fields, "to_row", lambda c, path, top=None, row_place=None: c.cancel_to_menu())
+    monkeypatch.setattr(fields, "place", lambda c: "the row")
+    monkeypatch.setattr(fields, "same_place", lambda a, b: True)
+    monkeypatch.setattr(fields, "after_download", lambda c, done: None)
+    monkeypatch.setattr(fields, "later", lambda read, c: None)
+    job = {"path": ["ISO Range Limit"], "kind": "fields", "wrap": False, "inc": "down",
+           "fields": [{"labels": iso, "values": iso, "plan": [0, 17, 33]} for _ in range(2)]}
+    return fields, job
+
+
+def own_only(lines):
+    """Each line's changes but those it names as the other field's are its own field's records."""
+    for r in lines:
+        other = {c["key"] for c in (r.get("moved_other") or {}).get("changes") or []}
+        mine = {c["key"] for c in r["changes"]} - other
+        rids = LOWER if r["index"][0] == 0 else UPPER
+        assert mine <= {f"global:0x{x:04x}" for x in rids}, r
+
+
+def test_iso_range_limits_that_drag_each_other_are_put_back_and_no_line_carries_a_leftover(monkeypatch, tmp_path):
+    """Both directions on one row (start: lower ISO 80, upper ISO 32000): a lower limit chosen above the upper pushes it
+    up (field 0's ISO 102400), an upper chosen below the lower pulls it down (field 1's ISO 50). Each such line says so
+    ("moved_other": the other field and its records' changes), the other field is put back on its start value through
+    the menu and checked, and every later line carries only its own field's records; both closing proofs change
+    nothing. Before, the other limit's change rode on every later line and the closing proof failed."""
+    settings = Settings()
+    cam = LimitsCam(settings, 2, 30)
+    fields, job = limits_world(monkeypatch, cam)
+    base = settings.keep("00000_before.DAT", cam.records())
+    out, run = Lines(), types.SimpleNamespace(dir=tmp_path)
+    fields.prove_fields_row(cam, cam, run, job, base, out)
+    got = [(tuple(r["index"]), r["applied"], (r.get("moved_other") or {}).get("field")) for r in out]
+    assert got == [((0, 0), True, None), ((0, 17), True, None), ((0, 33), True, 1), ((0, 2), True, None),
+                   ((1, 0), True, 0), ((1, 17), True, None), ((1, 33), True, None), ((1, 30), True, None)]
+    assert {c["key"] for c in out[2]["moved_other"]["changes"]} == {f"global:0x{x:04x}" for x in UPPER}
+    assert {c["key"] for c in out[4]["moved_other"]["changes"]} == {f"global:0x{x:04x}" for x in LOWER}
+    own_only(out)
+    assert out[3]["changes"] == [] and out[7]["changes"] == []
+    backs = [n for n in settings.files if n.endswith("-back.DAT")]
+    assert backs == ["00004_ISO Range Limit-1-30-back.DAT", "00007_ISO Range Limit-0-2-back.DAT"]
+    assert cam.at == [2, 30]
+    # the report reads such a line without the other field's records (pass2_report.own_changes)
+    import pass2_report as R
+    assert {c["key"] for c in R.own_changes(out[2])["changes"]} == {f"global:0x{x:04x}" for x in LOWER}
+
+
+def test_one_field_alone_learns_the_other_fields_records_from_the_proofs_file(monkeypatch, tmp_path, capsys):
+    """prove_run --field 1 (only_field): with no earlier line telling the fields' records apart, an upper limit that
+    pulled the lower down ends the row, nothing written for it; with the lower limit's earlier lines in the proofs file
+    (the same state), the pull is told by its records, said, and put back."""
+    import json
+    settings = Settings()
+    cam = LimitsCam(settings, 2, 30)
+    fields, job = limits_world(monkeypatch, cam)
+    job["only_field"] = 1
+    base = settings.keep("00000_before.DAT", cam.records())
+    out, run = Lines(), types.SimpleNamespace(dir=tmp_path)
+    from proving.base import Failed
+    with pytest.raises(Failed, match="also moved field 0 on the screen, and no proof has told the fields' records apart"):
+        fields.prove_fields_row(cam, cam, run, job, base, out)
+    assert [r["applied"] for r in out] == []
+    earlier = {"path": ["ISO Range Limit"], "kind": "fields", "index": [0, 0], "applied": True,
+               "changes": [{"key": f"global:0x{x:04x}", "before": 9, "after": 2} for x in LOWER]}
+    (tmp_path / "proofs.jsonl").write_text(json.dumps(earlier) + "\n", encoding="utf-8")
+    cam = LimitsCam(settings, 2, 30)
+    fields, job = limits_world(monkeypatch, cam)
+    job["only_field"] = 1
+    out = Lines()
+    fields.prove_fields_row(cam, cam, run, job, settings.keep("00100_before.DAT", cam.records()), out)
+    assert [(tuple(r["index"]), (r.get("moved_other") or {}).get("field")) for r in out] == [
+        ((1, 0), 0), ((1, 17), None), ((1, 33), None), ((1, 30), None)]
+    own_only(out)
+    assert "field 0 put back on 'ISO 80' through the menu" in capsys.readouterr().out
+
+
+def test_a_factory_value_the_menu_cannot_choose_again_ends_the_field_in_plain_words(monkeypatch, tmp_path):
+    """The lower limit holds a factory code no step writes (as ISO AUTO's factory Minimum): an upper limit chosen below
+    it pulls it down, and choosing its start step again writes another code, so the row ends there, said in plain
+    words, the pulling line written (with moved_other) and no line after it."""
+    import json
+    settings = Settings()
+    cam = LimitsCam(settings, 2, 30, factory={0: 99})
+    fields, job = limits_world(monkeypatch, cam)
+    job["only_field"] = 1
+    earlier = {"path": ["ISO Range Limit"], "kind": "fields", "index": [0, 5], "applied": True,
+               "changes": [{"key": f"global:0x{x:04x}", "before": 9, "after": 7} for x in LOWER]}
+    (tmp_path / "proofs.jsonl").write_text(json.dumps(earlier) + "\n", encoding="utf-8")
+    out = Lines()
+    from proving.base import Failed
+    with pytest.raises(Failed, match=r"choosing its start value 'ISO 80' again through the menu does not bring back "
+                                     r"what the start file holds in global:0x0b65, global:0x0b69, global:0x0b6d .*a "
+                                     r"value the menu cannot choose again"):
+        fields.prove_fields_row(cam, cam, types.SimpleNamespace(dir=tmp_path), job,
+                                settings.keep("00000_before.DAT", cam.records()), out)
+    assert [(tuple(r["index"]), (r.get("moved_other") or {}).get("field")) for r in out] == [((1, 0), 0)]
+
+
+class BoxesCam(LimitsCam):
+    """ISO AUTO's Minimum and Maximum as two boxes (boxes_run), each a step of its list ISO100 ... ISO1600 (code = step
+    + 5), the camera keeping Minimum <= Maximum; and choosing a Maximum rewrites a factory Minimum (2026-11-18)."""
+    VALS = ["ISO100", "ISO125", "ISO160", "ISO200", "ISO250", "ISO320", "ISO400", "ISO500", "ISO640", "ISO800",
+            "ISO1000", "ISO1250", "ISO1600"]
+    MIN, MAX = (0x0dfa, 0x0dfc, 0x0dfe), (0x0e00, 0x0e02, 0x0e04)
+
+    def records(self) -> dict:
+        out = dict.fromkeys(self.MIN, self.factory.get(0, self.at[0] + 5))
+        out.update(dict.fromkeys(self.MAX, self.at[1] + 5))
+        return out
+
+    def choose(self, b: int, t: int):
+        self.at[b] = t
+        self.factory.pop(0, None)              # any choice rewrites a factory Minimum into its list
+        if b == 0 and t > self.at[1]:
+            self.at[1] = t
+        if b == 1 and t < self.at[0]:
+            self.at[0] = t
+
+
+def boxes_world(monkeypatch, cam, tmp_path, history=()):
+    """boxes_run.prove over BoxesCam: the look and the choice made up on its boxes, the proofs file in tmp_path holding
+    `history`."""
+    import json
+
+    import boxes_run
+    names = ["ISO AUTO Minimum", "ISO AUTO Maximum"]
+
+    def look(c, link, cycle, model, path, b, seen=None):
+        if seen is not None:
+            seen.setdefault(b, c.VALS[c.at[b]])
+            seen.setdefault(1 - b, c.VALS[c.at[1 - b]])
+        return list(c.VALS), c.VALS[c.at[b]]
+
+    def choose(c, link, hdmi, cycle, model, path, b, vals, target, names_):
+        c.choose(b, target)
+        return {"dat": c.download(f"ISO-{b}-{target}"), "chosen_frame": "00002_down.png", "row_frame": "00003_enter.png",
+                "vlm": None}
+    monkeypatch.setattr(boxes_run, "look", look)
+    monkeypatch.setattr(boxes_run, "choose", choose)
+    monkeypatch.setattr(boxes_run, "camset", cam.settings)
+    proofs = tmp_path / "proofs.jsonl"
+    proofs.write_text("".join(json.dumps(h) + "\n" for h in history), encoding="utf-8")
+    out = Lines()
+    out.f = types.SimpleNamespace(name=str(proofs))
+    return boxes_run, names, out
+
+
+def box_line(name: str, rids, index: int) -> dict:
+    return {"path": ["ISO", name], "kind": "list", "index": index, "boxes": True, "applied": True,
+            "changes": [{"key": f"global:0x{x:04x}", "before": 1, "after": index + 5} for x in rids]}
+
+
+def test_iso_auto_boxes_that_push_each_other_are_put_back_and_the_last_proof_changes_nothing(monkeypatch, tmp_path):
+    """boxes_run, the boxes' records known from earlier lines: a Minimum chosen above the Maximum pushes it up, a
+    Maximum chosen below the Minimum pulls it down; each such line says so, the other box goes back on its value as the
+    screen opened, through the menu, and no later line carries it."""
+    settings = Settings()
+    cam = BoxesCam(settings, 3, 6)                       # Minimum ISO200, Maximum ISO400
+    history = [box_line("ISO AUTO Minimum", BoxesCam.MIN, 2), box_line("ISO AUTO Maximum", BoxesCam.MAX, 9)]
+    boxes_run, names, out = boxes_world(monkeypatch, cam, tmp_path, history)
+    start = settings.keep("00000_before.DAT", cam.records())
+    assert boxes_run.prove(cam, cam, None, None, None, ["ISO"], names, None, None, start, out) is start
+    moved = [(r["path"][-1], r["label"], r["moved_other"]["box"]) for r in out if r.get("moved_other")]
+    assert moved == [("ISO AUTO Minimum", v, "ISO AUTO Maximum") for v in BoxesCam.VALS[7:]] + \
+        [("ISO AUTO Maximum", v, "ISO AUTO Minimum") for v in BoxesCam.VALS[:3]]
+    for r in out:
+        other = {c["key"] for c in (r.get("moved_other") or {}).get("changes") or []}
+        rids = BoxesCam.MIN if r["path"][-1] == "ISO AUTO Minimum" else BoxesCam.MAX
+        assert {c["key"] for c in r["changes"]} - other <= {f"global:0x{x:04x}" for x in rids}, r
+    assert [r["changes"] for r in out if r["label"] == BoxesCam.VALS[3] and r["path"][-1] == names[0]] == [[]]
+    assert cam.at == [3, 6]
+
+
+def test_a_maximum_that_rewrites_the_factory_minimum_ends_its_box_in_plain_words(monkeypatch, tmp_path):
+    """kit2_pass2 8648-8678: every ISO AUTO Maximum line carried the Minimum's records (its factory value rewritten into
+    the list) and the closing line failed. Now the first such line says so, the Minimum is chosen again through the
+    menu, its records do not come back, and the box's proofs end there in plain words: one line written."""
+    settings = Settings()
+    cam = BoxesCam(settings, 0, 6, factory={0: 3})       # the factory Minimum, shown as the list's first step
+    boxes_run, names, out = boxes_world(monkeypatch, cam, tmp_path, [box_line("ISO AUTO Minimum", BoxesCam.MIN, 2)])
+    from proving.base import Failed
+    with pytest.raises(Failed, match=r"choosing 'ISO100' in ISO AUTO Minimum again through the menu does not bring "
+                                     r"back what the start held in global:0x0dfa, global:0x0dfc, global:0x0dfe .*a "
+                                     r"value the menu cannot choose again"):
+        boxes_run.prove(cam, cam, None, None, None, ["ISO"], names, "ISO AUTO Maximum", None,
+                        settings.keep("00000_before.DAT", cam.records()), out)
+    assert [(r["label"], r["moved_other"]["box"]) for r in out] == [("ISO100", "ISO AUTO Minimum")]
+
+
+def test_prove_run_field_names_one_field_of_the_rows_named(monkeypatch):
+    """prove_run --field K: only with --rows, only on a number-field row that has field K."""
+    import prove_run
+    todo = [{"path": ["ISO Range Limit"], "kind": "fields", "fields": [{}, {}]}, {"path": ["X"], "kind": "list"}]
+    got = prove_run.only_field_or_exit(todo, 1, ["ISO Range Limit"])
+    assert got[0]["only_field"] == 1 and "only_field" not in got[1]
+    with pytest.raises(SystemExit, match="--rows only"):
+        prove_run.only_field_or_exit(todo, 1, None)
+    with pytest.raises(SystemExit, match="has no field 2"):
+        prove_run.only_field_or_exit(todo, 2, ["ISO Range Limit"])
+    with pytest.raises(SystemExit, match="none of the rows named is number fields"):
+        prove_run.only_field_or_exit(todo[1:], 0, ["X"])

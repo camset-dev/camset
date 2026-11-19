@@ -1460,7 +1460,7 @@ def _box_camera(monkeypatch, boxes):
     held = {b: h for b, (_, h) in boxes.items()}
     downloads = []
 
-    def look(cam, link, cycle, model, path, b):
+    def look(cam, link, cycle, model, path, b, seen=None):
         return list(boxes[b][0]), held[b]
 
     def choose(cam, link, hdmi, cycle, model, path, b, vals, target, names):

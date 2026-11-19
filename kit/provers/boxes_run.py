@@ -19,7 +19,9 @@ the one held last; every choice is the row, Right, Left/Right to the box, Up/Dow
 read, OK, a settings download. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl (kind "list", the box name
 last in the path); the start file goes back on at the end and is checked. Each proof line keeps the vision model's
 reading of the chosen value ("vlm") beside OCR's ("shown"), as the second reading. The value a box opened on is proved
-only from another start: --first BOX=VALUE.
+only from another start: --first BOX=VALUE. A choice that also moved the other box (ISO AUTO keeps Minimum <= Maximum,
+and a Maximum chosen rewrites a factory Minimum) says so on its line ("moved_other"), and the other box is put back
+through the menu and checked before the next value; one that cannot be put back ends the box's proofs (prove).
 
 On the Frame Rate Settings screens the value a box shows is already the setting: stepped to 24p and left with MENU,
 no OK, the row read "Recording Frame Rate: 24p" (kit2_pass2 240079 -> 240080, XAVC HS 4K, 2026-11-17) and the download
@@ -203,16 +205,17 @@ def to_box(cam, b: int):
     raise Failed(f"box {b} never took the cursor")
 
 
-def look(cam, link, cycle, model, path, b: int) -> tuple[list, str]:
+def look(cam, link, cycle, model, path, b: int, seen: dict | None = None) -> tuple[list, str]:
     """(the box's values in Down order, the value held). A box that draws a dash once the screen is open (dashed) is
     left with MENU, nothing pressed on it, and raises NotOffered. On a screen whose box is its setting (the module's
     words), the look leaves the box where its walk ended: the held value on a box that comes round, as the Frame Rate
-    boxes do; each proof is compared with its base all the same."""
+    boxes do; each proof is compared with its base all the same. seen: each box's value as the screen opened, filled
+    where not there yet (prove: what a box that moved with the other is put back on)."""
     open_row(cam, cycle, model, path)
-    return look_open(cam, link, path, b)
+    return look_open(cam, link, path, b, seen)
 
 
-def look_open(cam, link, path, b: int) -> tuple[list, str]:
+def look_open(cam, link, path, b: int, seen: dict | None = None) -> tuple[list, str]:
     """look's walk on the row's screen already open (open_row): the dash check, the walk, MENU."""
     if dashed(cam, b):
         frame = cam.frame.path.name
@@ -221,6 +224,10 @@ def look_open(cam, link, path, b: int) -> tuple[list, str]:
     to_box(cam, b)
     row = path[-1]
     held = read_box(cam, b, row=row)
+    if seen is not None:
+        seen.setdefault(b, held)
+        if 1 - b not in seen:
+            seen[1 - b] = read_box(cam, 1 - b, row=row)      # the other box, as the screen opened
     for _ in range(40):                       # Up to one end (or once round)
         before = read_box(cam, b, row=row)
         cam.press("up", seen_enough=True)     # a step whose change was seen needs no look again (LiveCamera.look_late)
@@ -351,12 +358,65 @@ def not_offered(fails, path, name: str, frame: str) -> None:
         fails.flush()
 
 
+def box_history(out, path, names) -> list:
+    """(box, changes) of each applied line of the row's two boxes already in the proofs file `out` writes to (a
+    proofs_file: its file's name), made in the same state (its context), without the changes it names as the other
+    box's (moved_other): what proving.fields.Limits learns from first."""
+    try:
+        from camkit import jsonl
+        lines = jsonl.read(Path(out.f.name))
+    except Exception:            # noqa: BLE001 - no file to read: nothing learned before
+        return []
+    got = []
+    for r in lines:
+        p = r.get("path") or []
+        if p[:-1] == list(path) and p[-1:] and p[-1] in names and r.get("boxes") is True and r.get("applied") is True \
+                and r.get("context") == getattr(out, "context", None) and r.get("changes"):
+            other = {c["key"] for c in (r.get("moved_other") or {}).get("changes") or []}
+            got.append((names.index(p[-1]), [c for c in r["changes"] if c["key"] not in other]))
+    return got
+
+
+def put_back(cam, link, hdmi, cycle, model, path, names, b, value, j, theirs, base, limits, start) -> Path:
+    """Box j, which the choice of `value` in box b moved, back on the value it showed as the row opened (start), chosen
+    through the menu as a proof chooses (look, choose); Failed in plain words where its list does not offer that value,
+    or where a record of it (`theirs`, with its own as limits knows them) still differs from the base after it. Returns
+    the download after it."""
+    moved = f"choosing {value!r} in {names[b]} also moved {names[j]}"
+    vals, _ = look(cam, link, cycle, model, path, j)
+    want = [i for i, v in enumerate(vals) if start.get(j) and option_key(v) == option_key(start[j])]
+    if len(want) != 1:
+        raise Failed(f"{path[-1]}: {moved}, and the value {names[j]} showed as the row opened ({start.get(j)!r}) is not "
+                     f"one of its list's ({', '.join(vals)}), so it cannot be put back by a menu choice (a factory value "
+                     "the menu cannot choose again?): this box's proofs end here rather than carry that leftover, and "
+                     f"the start file goes back on; prove {names[b]} from a start where {names[j]} holds a value its "
+                     "list offers")
+    dat = choose(cam, link, hdmi, cycle, model, path, j, vals, want[0], names)["dat"]
+    left = sorted({c.key for c in camset.diff(camset.read(base), camset.read(dat))} & (set(theirs) | limits.own(j)))
+    if left:
+        raise Failed(f"{path[-1]}: {moved}, and choosing {vals[want[0]]!r} in {names[j]} again through the menu does not "
+                     f"bring back what the start held in {', '.join(left)} ({dat.name}): a value the menu cannot choose "
+                     "again (a factory value?). This box's proofs end here rather than carry that leftover, and the "
+                     f"start file goes back on; prove {names[b]} from a start where {names[j]} holds a value its list "
+                     "offers")
+    print(f"  {names[j]} put back on {vals[want[0]]!r} through the menu ({dat.name})", flush=True)
+    return dat
+
+
 def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, fails=None) -> Path:
     """Each box's values proved, as the module says; with first (box, value), that value chosen in that box before
     them. Each proof is compared with its base: the start file, or the download made after first's choice, so the
-    held value (the last proof of each box) is a return to the base and must change nothing. A box not offered in this
-    state (NotOffered) is written to `fails` (not_offered) and the next box tried; first's box not offered, nothing
-    else is. Returns the base; the caller puts the start file back, whatever first chose."""
+    held value (the last proof of each box) is a return to the base and must change nothing: a last proof that changed
+    something is not written, and the run stops. A box not offered in this state (NotOffered) is written to `fails`
+    (not_offered) and the next box tried; first's box not offered, nothing else is. Returns the base; the caller puts
+    the start file back, whatever first chose.
+    A choice in one box that changed a record of the other (ISO AUTO: a Maximum chosen rewrites a factory Minimum, and a
+    limit chosen past the other moves it; proving.fields.Limits tells the boxes' records apart, from the proofs file's
+    earlier lines and this run's) says so on its line, "moved_other": {"box": the other box's name, "changes": its
+    records' changes}, which the report leaves out of the choice's own records; the other box is then put back on the
+    value it showed as the row opened, through the menu, and checked (put_back), before the next value is proved. A
+    value the menu cannot bring back ends this box's proofs there, said in plain words, before another line is written."""
+    from proving.fields import Limits, copies, readouts
     base = start
     if first:
         fb = names.index(first[0])
@@ -370,9 +430,10 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, f
             raise Failed(f"--first: {first[1]!r} is not one value of {names[fb]}: {vals}")
         base = choose(cam, link, hdmi, cycle, model, path, fb, vals, want[0], names)["dat"]
         print(f"first {names[fb]} = {vals[want[0]]} (it held {held!r}): proofs start from {base.name}", flush=True)
+    limits, opened = Limits(2, box_history(out, path, names), readouts(), copies()), {}
     for b in [b for b in range(2) if only in (None, names[b])]:
         try:
-            vals, held = look(cam, link, cycle, model, path, b)
+            vals, held = look(cam, link, cycle, model, path, b, opened)
         except NotOffered as e:
             not_offered(fails, path, names[b], e.frame)
             continue
@@ -381,17 +442,29 @@ def prove(cam, link, hdmi, cycle, model, path, names, only, first, start, out, f
         for i in [i for i in range(len(vals)) if i != h] + [h]:
             got = choose(cam, link, hdmi, cycle, model, path, b, vals, i, names)
             ch = camset.diff(camset.read(base), camset.read(got["dat"]))
+            print(f"  {vals[i]}: {len(ch)} records {[(c.key, c.before, c.after) for c in ch][:4]}",
+                  flush=True)
+            if i == h and ch:
+                raise Failed(f"{names[b]}: back on {held!r}, {len(ch)} records still differ from the start "
+                             f"({', '.join(c.key for c in ch[:6])}): that last proof is not written, and the start file "
+                             "goes back on")
+            keys = {c.key for c in ch}
+            other = limits.other(b, keys)
             r = {"path": path + [names[b]], "kind": "list", "index": i, "label": vals[i],
                  "shown": vals[i], "vlm": settled(got["vlm"]), "chosen_frame": got["chosen_frame"],
                  "row_frame": got["row_frame"],
                  "dat": got["dat"].name, "base": base.name, "applied": True, "boxes": True,
                  "changes": changes_of(ch)}
+            if other:
+                (j, theirs), = other.items()
+                r["moved_other"] = {"box": names[j], "changes": [c for c in r["changes"] if c["key"] in theirs]}
+                print(f"  {names[j]} moved with it: {', '.join(sorted(theirs))}", flush=True)
             out.write(json.dumps(r) + "\n")
             out.flush()
-            print(f"  {vals[i]}: {len(ch)} records {[(c.key, c.before, c.after) for c in ch][:4]}",
-                  flush=True)
-            if i == h and ch:
-                raise Failed(f"{names[b]}: back on {held!r}, {len(ch)} records still differ")
+            theirs_all = set().union(*other.values())
+            limits.learn(b, [c for c in r["changes"] if c["key"] not in theirs_all])
+            if other:
+                put_back(cam, link, hdmi, cycle, model, path, names, b, vals[i], j, theirs, base, limits, opened)
     return base
 
 

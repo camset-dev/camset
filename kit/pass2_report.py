@@ -642,6 +642,14 @@ def record_allowances(opts: dict, vals: dict, label_of: dict) -> list:
                    if o.get("allowance")})
 
 
+def own_changes(r: dict) -> dict:
+    """A proof as the report reads it where its choice also moved another field or box ("moved_other": proving.fields,
+    kit/provers/boxes_run.py, 2026-11-18): its changes without that other's records, which are no value of its option
+    (the prover put the other back before its next proof)."""
+    other = {c.get("key") for c in (r.get("moved_other") or {}).get("changes") or []}
+    return {**r, "changes": [c for c in r.get("changes") or [] if c.get("key") not in other]} if other else r
+
+
 def same_proof(r: dict) -> tuple | None:
     """What one proof is, whichever run folder it was read from: its run's files, row, option and label. A proof copied
     into a second folder is counted once (report_proofs). None for a proof that names no download."""
@@ -660,7 +668,8 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
     cell at the proof's place (match.cell_options over the runs' kit2_tables/tables.json: a cell's own reading of its
     row label carries the values of the cells before it, the camera's own settings); a cell no walked cell matches
     keeps its own reading with its place, and UNWALKED_CELLS says which and why. The proofs' downloads are read from
-    the run's folders (base_value)."""
+    the run's folders (base_value). A proof whose choice also moved another field or box is read without that other's
+    records (own_changes)."""
     _BASE_DIRS[:] = [run / "dat", run]
     _RUNS_ROOT[:] = [run.parent]
     proofs, skip, blocked, failed, reread, seen = [], set(), {}, {}, 0, set()
@@ -669,7 +678,7 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
         for r in jsonl.read(part / "proofs.jsonl"):
             if r.get("kind") == MIRROR_KIND:
                 continue                       # a registration's copy, no row's proof (mirror_lines reads it)
-            r = qualified(r, part.name, run.name)
+            r = own_changes(qualified(r, part.name, run.name))
             key = same_proof(r)
             if key is not None and key in seen:
                 continue                       # the same proof read in another folder
