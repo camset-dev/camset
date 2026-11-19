@@ -90,8 +90,13 @@ NET_ERROR_SAID = ("the camera's remote link reported a network error while this 
 # What Link.call says while it holds a command back in the error state (_net_wait), and when the error is over
 NET_WAIT_SAID = ("the camera's remote link reported a network error: the kit sends nothing until it recovers (about a "
                  f"minute, at most {RECOVER_TIMEOUT:.0f} s), then goes on")
+# (the helper turns OSD Image Mode on at its first osd request and never back, kit/common/sdk_session.h saveOsd; HDMI
+# eyes ask for the camera's own picture where the HDMI picture cannot decide: camkit.live.LiveCamera.osd_seen,
+# camkit.session.osd_shooting, runner.osd_picture)
 NET_BACK_SAID = ("the link recovered after {s:.0f} s: going on. The screen on show may be one whose picture the camera "
-                 "cannot send while the kit reads its screen through the link (OSD eyes); HDMI eyes do not ask for it")
+                 "cannot send while OSD Image Mode is on: the kit turns it on at its first request for the camera's own "
+                 "picture, and it stays on until the link closes; OSD eyes ask for that picture always, HDMI eyes only "
+                 "where the HDMI picture cannot decide (a black frame, among others)")
 # ... and when it does not recover in time: the command is not sent, nor any other while that error lasts
 NET_LOST_SAID = ("the camera's remote link reported a network error {s:.0f} s ago and has not recovered within the "
                  f"{RECOVER_TIMEOUT:.0f} s the kit waits (it came back after 55 s each time it was measured): nothing "

@@ -455,3 +455,20 @@ def test_a_kept_switch_is_refused_while_another_waits_in_any_run_folder(own_runs
     said = str(stop.value.code)
     assert "kit2_other" in said and "Nothing was sent to the camera" in said
     assert "--forget" in said and "--restore --run kit2_other" in said
+
+
+# ---------------------------------------------------------------- the low ones: track1 B6, B7, B8
+
+
+def test_the_words_after_a_recovery_do_not_say_hdmi_eyes_avoid_the_stall(tmp_path, capsys):
+    """Track 1 B6: the helper turns OSD Image Mode on at the first request for the camera's own picture and never back
+    (kit/common/sdk_session.h, saveOsd), and HDMI eyes ask for it too where the HDMI picture cannot decide (a black
+    frame, a row whose own screen reads as the shooting screen). The words after a recovery said "HDMI eyes do not ask
+    for it", untrue once such a fallback has asked: they now say the mode stays on for the session."""
+    lk, clock, _ = clocked_link(tmp_path)
+    lk._event(NET_ERROR_EV)
+    clock.at(55.3, lambda: lk._event(NET_RECOVERED_EV))
+    lk.call("ping")
+    out = capsys.readouterr().out
+    assert "recovered" in out and "do not ask for it" not in out
+    assert "OSD Image Mode" in out and "stays on" in out and "HDMI eyes" in out
