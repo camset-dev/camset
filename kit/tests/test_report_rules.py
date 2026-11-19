@@ -100,6 +100,28 @@ def test_a_put_back_that_went_wrong_still_cuts_its_attempt(tmp_path):
     assert " > ".join(PATH) in R.still_failing(run)[1]
 
 
+def test_a_choice_that_moved_nothing_of_its_own_keeps_no_later_refusal_out(tmp_path):
+    """An older attempt, cut short by a real failure that no longer stands (the row was proved since), counts as such an
+    attempt always has; but its last line, BT.2020, wrote exactly what S-Gamut3 had written before it (the camera
+    refused it, and the next opening found the list on S-Gamut3: the failure). The later attempt's line refusing BT.2020
+    takes its place: a line whose download is the line before's moved nothing of its own and says nothing of whether
+    its choice took (2026-11-19: line 785 named PP1's Color Mode code 9 "BT.2020 / S-Gamut3"). A line that moved
+    something keeps a later refusal out as before (02ec9a8)."""
+    base, again = "00010_Color-Mode-base.DAT", "00030_Color-Mode-base.DAT"
+    older = [side(8, "S-Gamut3", 11, base, [(KEY, 0, 9)]), side(9, "BT.2020", 13, base, [(KEY, 0, 9)])]
+    cut = failure(16, "Picture Profile > PP1 > Color Mode: the side list opened on 'S-Gamut3', the last OK chose "
+                      "'BT.2020'")
+    finished = [side(8, "S-Gamut3", 31, again, [(KEY, 0, 9)]), side(9, "BT.2020", 33, again, applied=False),
+                side(0, "Movie", 35, again)]
+    run = a_run(tmp_path, older + finished, [cut])
+    assert left_out(run) == set()
+    row = R.rows_of(run, R.proofs_of(run), left_out(run))[" > ".join(PATH)]
+    assert row[9]["applied"] is False and "BT.2020" not in R.values_of(row)[KEY]
+    took = [side(8, "S-Gamut3", 11, base, [(KEY, 0, 9)]), side(9, "BT.2020", 13, base, [(KEY, 0, 10)])]
+    row = R.rows_of(None, took + finished)[" > ".join(PATH)]
+    assert row[9]["applied"] is True and row[9]["dat"] == "00015_Color-Mode-9.DAT"
+
+
 def test_an_attempt_that_never_ended_is_still_left_out(tmp_path):
     """The other ways an attempt ends short stay as they were: a real failure after a line that changed something cuts
     its attempt while the row still fails; a tagged attempt with no completion line (a run cut short: no failure, no

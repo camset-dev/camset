@@ -1048,23 +1048,32 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
     kept (option_key): before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
     their proof so, the two hold values among them kept only from an older definition. A number field's index is its
     value, the same option whatever its label shows of the other fields. A later line the camera refused, and one that
-    only put its session's own start back (put_back_only), never takes the place of an applied line of its option:
-    the first wrote nothing, the second wrote nothing against its own start, and a put-back is never a sample, nor does
+    only put its session's own start back (put_back_only), never takes the place of an applied line of its option
+    (a refused one does take the place of an applied line that moved nothing of its own, its changes exactly the line's
+    before it in its session): the first wrote nothing, the second wrote nothing against its own start, and a put-back is never a sample, nor does
     it unmake one (2026-11-19: Exposure Comp.'s +2.7 EV put back last in a session that began on it hid the line that
     chose it from +0.0 EV and wrote all four records)."""
     proofs = proofs_of(run) if proofs is None else proofs
     last = {}               # (row, base) -> its session's last download, by number (put_back_only)
+    sessions = collections.defaultdict(list)
     for i, r in enumerate(proofs):
         if i not in skip and r.get("dat") and r.get("applied") is not False:
             s = (row_name(r), r.get("base"))
             last[s] = max(last.get(s, -1), dat_number(r.get("dat")))
+            sessions[s].append((dat_number(r.get("dat")), i))
+    # a line whose changes are exactly the line's before it in its session moved nothing of its own: whether its choice
+    # took, its diff cannot tell (2026-11-19: a BT.2020 the camera refused, taken for applied, wrote S-Gamut3's value)
+    idle = {id(proofs[i]) for lines in sessions.values()
+            for (_, h), (_, i) in zip(sorted(lines), sorted(lines)[1:], strict=False)
+            if proofs[i].get("changes") and proofs[i].get("changes") == proofs[h].get("changes")}
     rows = collections.defaultdict(dict)
     for i, r in enumerate(proofs):
         if i in skip:
             continue
         opts = rows[row_name(r)]
         k = option_key(r, opts)
-        if r.get("applied") is False and r.get("kind") != "fields" and k in opts and opts[k].get("applied") is not False:
+        if r.get("applied") is False and r.get("kind") != "fields" and k in opts and opts[k].get("applied") is not False \
+                and id(opts[k]) not in idle:
             continue        # refused or drawn grey later: the option's proof the camera applied stays its latest
         if k in opts and opts[k].get("applied") is not False and wrote(opts[k]) and put_back_only(r, last):
             continue        # the session's own start put back: the option's proof that wrote stays its latest
