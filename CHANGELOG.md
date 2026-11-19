@@ -128,6 +128,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The coverage ledger infers what a shared list already shows** (decision 23): a slot's value another slot of its list
+  is proved on counts "inferred from a shared list" in the private form once the slot's own record agrees on two values
+  and no proof reads one otherwise (`kit/tools/coverage.py --shared` shows the grounds, `--todo` counts them apart). A
+  row a proof went through now holds the setting it proved, so a setting the camera shows under two pages is proved
+  under both.
 - **`kit/schema_update.py` takes `optboxes_run.py`'s boxes:** a box's numbers as the camera draws them (Zebra's
   "±5", "100+") are numbers proved by samples on their line, never listed, and once a `RECORD_FIXES` range is
   there every number of it is named as drawn. A `RECORD_FIXES` entry can also give a setting's `inactive_when`, the

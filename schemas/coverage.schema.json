@@ -70,7 +70,7 @@
     "closed by rule",
     "not yet tried"
    ],
-   "description": "A row's status in the public form: every status but those a state seen or a kit's failure gives (tested, no record changes; kit cannot read), which the private form alone holds."
+   "description": "A row's status in the public form: every status but those a state seen, a kit's failure or the proof lines give (tested, no record changes; kit cannot read; inferred from a shared list), which the private form alone holds."
   },
   "key": {
    "type": "string",
@@ -286,7 +286,7 @@
     "closed by rule",
     "not yet tried"
    ],
-   "description": "A value's status in the public form: never one a state seen gives (tested, no record changes; greyed in state)."
+   "description": "A value's status in the public form: never one a state seen or the proof lines give (tested, no record changes; greyed in state; inferred from a shared list)."
   }
  }
 }

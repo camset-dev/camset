@@ -344,7 +344,8 @@ Each of its `facts`:
 
 **The statuses.** An entry takes the first that applies, in this order. A label the menu repeats in a tab holds no
 setting of its own and takes the first one's status (`same_label_as`); a row with values still to try carries
-`values_left`, how many, and is never settled.
+`values_left`, how many, and is never settled; the private form also counts `values_inferred`, those inferred from a
+shared list (`kit/tools/coverage.py --shared` shows each list's grounds).
 
 {{ coverage_table("rows") }}
 
