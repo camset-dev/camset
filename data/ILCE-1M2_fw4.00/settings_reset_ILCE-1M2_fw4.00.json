@@ -632,19 +632,19 @@
    "initialize": "resets"
   },
   "global:0x0b65": {
-   "name": "ISO Range Limit",
+   "name": "ISO Range Limit (lower)",
    "tab": "Exposure/Color",
    "result": "keeps",
    "initialize": "resets"
   },
   "global:0x0b69": {
-   "name": "ISO Range Limit",
+   "name": "ISO Range Limit (lower)",
    "tab": "Exposure/Color",
    "result": "keeps",
    "initialize": "resets"
   },
   "global:0x0b6d": {
-   "name": "ISO Range Limit",
+   "name": "ISO Range Limit (lower)",
    "tab": "Exposure/Color",
    "result": "keeps",
    "initialize": "resets"

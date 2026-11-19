@@ -55,6 +55,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's ISO Range Limit is proved value by value, its lower end named "ISO Range Limit (lower)",** and its two
+  ends and ISO AUTO's Minimum and Maximum (with each mode's copies) carry the order the camera keeps between them.
 - **The a1 II's Zebra Level Custom boxes are listed as the camera draws them, Type first,** and Time-lapse's Record
   Setting under XAVC S 4K 60p names 200M 4:2:2 10bit and 150M 4:2:0 8bit as the camera does. A memory set shows the
   exposure mode last registered once, in its own record.

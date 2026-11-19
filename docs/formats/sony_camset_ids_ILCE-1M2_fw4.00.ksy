@@ -1791,21 +1791,24 @@ enums:
         camera.
     0x0b65:
       id: iso_range_limit_0b65
-      doc: ISO Range Limit [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the camera.
+      doc: ISO Range Limit (lower) [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the
+        camera.
     0x0b67:
       id: iso_range_limit_0b67
       doc: ISO Range Limit (upper) [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the
         camera.
     0x0b69:
       id: iso_range_limit_0b69
-      doc: ISO Range Limit [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the camera.
+      doc: ISO Range Limit (lower) [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the
+        camera.
     0x0b6b:
       id: iso_range_limit_0b6b
       doc: ISO Range Limit (upper) [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the
         camera.
     0x0b6d:
       id: iso_range_limit_0b6d
-      doc: ISO Range Limit [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the camera.
+      doc: ISO Range Limit (lower) [Exposure/Color > Exposure]. live settings; 1 of 1 settings on it proved on the
+        camera.
     0x0b75:
       id: preset_focus_zoom_slot_registered
       doc: 'Preset Focus/Zoom: slot registered [Setup > Other settings]. live settings; 1 of 1 settings on it proved
