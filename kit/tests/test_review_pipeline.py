@@ -557,6 +557,43 @@ def test_target_of_takes_the_row_named_exactly_and_never_one_of_two_it_only_read
     assert crawl_run.target_of(cycle, model, "Shutter Type") == (0, False, "")
 
 
+# ------------------------------------------------------------------------------------------------ B9
+
+def test_an_answer_another_model_gave_is_kept_and_voted_under_that_model(monkeypatch, tmp_path):
+    """vlm.Reader and ClaudeReader kept every answer under the configured model, and camkit.reading voted it so, while
+    the model the server said answered (a fallback) was recorded and unused. An answer from another model family is
+    now kept under that model's name and voted as its; the same model under another id, or a dated snapshot, is the
+    configured one as ever."""
+    import io
+    import json
+    import urllib.request
+
+    from camkit import reading, vlm
+    said = {"model": "Other-VL-8B"}
+
+    def urlopen(req, timeout=None):
+        body = {"choices": [{"message": {"content": '{"selected": "Auto"}'}}], "model": said["model"]}
+        return io.BytesIO(json.dumps(body).encode())
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(vlm, "CACHE", tmp_path)
+    cfg = {"name": "omlx", "url": "http://127.0.0.1:8001/v1", "model": "Qwen3.8-27B-4bit"}
+    image = png(40)
+    assert vlm.make_reader(cfg).ask(image, "q") == {"selected": "Auto"}
+    assert (tmp_path / f"{vlm.cache_key(image, 'q', 'Other-VL-8B')}.json").exists()
+    assert not (tmp_path / f"{vlm.cache_key(image, 'q', 'Qwen3.8-27B-4bit')}.json").exists()
+    said["model"] = "mlx-community/Qwen3.8-27B-4bit"            # the same model under another id: kept as configured
+    vlm.make_reader(cfg).ask(image, "q2")
+    assert (tmp_path / f"{vlm.cache_key(image, 'q2', 'Qwen3.8-27B-4bit')}.json").exists()
+    assert vlm.answered_model("claude-opus-5-5", "claude-opus-5-5-20261001") == "claude-opus-5-5"
+    # the vote: camkit.reading's seam names the model that answered
+    said["model"] = "Other-VL-8B"
+    monkeypatch.setattr(vlm, "playing", lambda name: cfg)
+    answer, name, model = reading._reader_answer(png(41), vlm.PROMPTS["option"], 5, "second")
+    assert (answer, name, model) == ({"selected": "Auto"}, "omlx", "Other-VL-8B")
+    said["model"] = "Qwen3.8-27B-4bit"
+    assert reading._reader_answer(png(42), vlm.PROMPTS["option"], 5, "second")[2] == "Qwen3.8-27B-4bit"
+
+
 # ------------------------------------------------------------------------------------------------ B11
 
 def test_the_ocr_cache_keeps_the_frames_used_last_and_a_long_batch_still_reads_whole(monkeypatch, tmp_path):

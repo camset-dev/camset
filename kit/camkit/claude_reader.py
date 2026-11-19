@@ -20,7 +20,7 @@ import threading
 
 import anthropic
 
-from .vlm import cache_key, cached, keep, parse_json
+from .vlm import answered_model, cache_key, cached, keep, parse_json
 
 FALLBACK_BETA = "server-side-fallback-2026-07-01"
 
@@ -35,13 +35,16 @@ class ClaudeReader:
 
     def ask(self, image: bytes, prompt: str) -> dict:
         """The answer, from the cache when this model has answered this question about this picture, else asked
-        (answer) and kept, unless refused."""
+        (answer) and kept under the model that answered it (a fallback's under its own: vlm.answered_model), unless
+        refused."""
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
             return answer
         answer = self.answer(image, prompt)
-        return answer if "_error" in answer else keep(key, answer)
+        if "_error" in answer:
+            return answer
+        return keep(cache_key(image, prompt, answered_model(self.model, getattr(self, "served", None))), answer)
 
     def answer(self, image: bytes, prompt: str, waits=None) -> dict:
         """The answer asked now, nothing looked up or kept (ask keeps it; camkit.vlm's start check asks this way). waits

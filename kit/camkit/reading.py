@@ -930,13 +930,14 @@ def screen_texts(paths) -> dict:
 def _reader_answer(image: bytes, question: str, timeout: float, role: str = "second") -> tuple:
     """The reader seam: (answer, name, model) from the reader playing role ("second", or "third": a reader of another
     model, the tie-breaker), through camkit.vlm.ask_role, a stand-in taking the role when that reader will not
-    connect."""
+    connect; the model is the one that answered where the server says another family did (vlm.answered_by)."""
     answer = vlm.ask_role(role, image, question, timeout)
+    served = vlm.answered_by()               # another model answered (a fallback): its vote is that model's
     try:
         cfg = vlm.playing(role)
     except Exception:            # noqa: BLE001 - the name and model are evidence only; the answer stands without them
         cfg = {}
-    return answer, cfg.get("name"), cfg.get("model")
+    return answer, cfg.get("name"), served or cfg.get("model")
 
 
 def _reader_model(role: str) -> str | None:
@@ -1026,10 +1027,10 @@ def check_engines() -> tuple:
 
 # What in a model id only names a build of the weights, never another model: a quantisation (INT4, INT8, W4A16, FP8,
 # BF16, 4bit, 8-bit, Q4_K_M, Q8_0, IQ4_XS), a weights format or the tool that made it (GGUF, GGML, AWQ, GPTQ, EXL2, MLX,
-# DWQ, BNB, NF4, QAT), each a whole token between separators. A size, a version, a tune (Instruct, VL, it) or any other
-# token names the model and stays.
+# DWQ, BNB, NF4, QAT), a snapshot's date (20261001), each a whole token between separators. A size, a version, a tune
+# (Instruct, VL, it) or any other token names the model and stays.
 _BUILD = re.compile(r"(?<![a-z0-9])(?:(?:u?int|fp|bf|f|nvfp|mxfp)\d{1,2}|w\d{1,2}a\d{1,2}|\d{1,2}-?bits?"
-                    r"|i?q\d(?:_[a-z0-9]+)*|gguf|ggml|awq|gptq|exl2|mlx|dwq|bnb|nf4|qat)(?![a-z0-9])")
+                    r"|i?q\d(?:_[a-z0-9]+)*|gguf|ggml|awq|gptq|exl2|mlx|dwq|bnb|nf4|qat|20\d{6})(?![a-z0-9])")
 
 
 def model_id(model) -> str:

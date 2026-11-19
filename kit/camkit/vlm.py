@@ -1196,8 +1196,16 @@ def ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     return answer
 
 
+def _served(cfg: dict, reader) -> None:
+    """The model that answered, kept for this thread where it is another family than the configured one (answered_by)."""
+    model = str(cfg.get("model") or getattr(reader, "model", None) or "")
+    got = answered_model(model, getattr(reader, "served", None))
+    _LAST.model = got if got != model else None
+
+
 def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     """ask_role's question sent: the reader playing the role, then a stand-in where it will not connect."""
+    _LAST.model = None
     cfg = playing(name)
     local_only(cfg, name)
     if str(cfg.get("name")) in _SKIPPED:
@@ -1205,8 +1213,10 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
                        f"it: the {name} reader's questions go unanswered for this run")
     t = time.monotonic()
     try:
-        answer = make_reader(cfg, timeout=timeout).ask(image, prompt)
+        reader = make_reader(cfg, timeout=timeout)
+        answer = reader.ask(image, prompt)
         asked(name, cfg, t, True)
+        _served(cfg, reader)
         return answer
     except Exception as e:
         asked(name, cfg, t, False)
@@ -1217,8 +1227,10 @@ def _ask_role(name: str, image: bytes, prompt: str, timeout: float) -> dict:
     local_only(cfg, name)
     t = time.monotonic()
     try:
-        answer = make_reader(cfg, timeout=max(timeout, 60)).ask(image, prompt)
+        reader = make_reader(cfg, timeout=max(timeout, 60))
+        answer = reader.ask(image, prompt)
         asked(name, cfg, t, True)
+        _served(cfg, reader)
         return answer
     except Exception as e:
         asked(name, cfg, t, False)
@@ -1288,12 +1300,13 @@ class Reader:
 
     def ask(self, image: bytes, prompt: str) -> dict:
         """The answer, from the cache when this model has answered this question about this picture, else asked
-        (answer) and kept (keep)."""
+        (answer) and kept under the model that answered it (keep, answered_model)."""
         key = cache_key(image, prompt, self.model)
         answer = cached(key)
         if answer is not None:
             return answer
-        return keep(key, self.answer(image, prompt))
+        answer = self.answer(image, prompt)
+        return keep(cache_key(image, prompt, answered_model(self.model, getattr(self, "served", None))), answer)
 
     def answer(self, image: bytes, prompt: str, waits: tuple = BUSY_WAITS) -> dict:
         """The answer asked now, nothing looked up or kept (ask keeps it; the start check asks this way). waits: the
@@ -1320,6 +1333,24 @@ class Reader:
         self.served = reply.get("model") if isinstance(reply, dict) else None     # the model the server says answered
         # a reasoning server can answer with no content at all ("content": null): that is no JSON, asked again
         return parse_json(reply["choices"][0]["message"].get("content") or "")
+
+
+def answered_model(model, served) -> str:
+    """The model an answer is kept and voted under: the configured `model`, or the one the server says answered
+    (`served`) where that is another model family (camkit.reading.model_id: a fallback, Claude's server-side one or a
+    server's own), so no answer of another model is ever kept or counted under the configured one's name. Before
+    2026-11-18 the served model was recorded and never used (review, B9)."""
+    from . import reading
+    return str(served) if served and reading.model_id(served) != reading.model_id(model) else str(model)
+
+
+_LAST = threading.local()      # the model that answered this thread's last question to ask_role (answered_by)
+
+
+def answered_by() -> str | None:
+    """The model that answered this thread's last question through ask_role where it is another family than the one the
+    role's reader is configured with (answered_model), else None: what camkit.reading votes it under."""
+    return getattr(_LAST, "model", None)
 
 
 def parse_json(text: str) -> dict:
