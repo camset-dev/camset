@@ -7,7 +7,7 @@ first status that applies. The ledger is GENERATED each time from the sources th
 
     the definition          menu, settings (proved, not_offered, unproved_reason, inactive_when, row, row_mode), and
                             with its private evidence the menu rows a proof went through (placement of an unplaced
-                            setting)
+                            setting; a row of no setting a proof went through takes the setting it proved)
     the hand tables         FRAME_PROOFS (a hand proof), MY_MENU_ROW (where the My Menu slots are set)
     the camera file         volatile_records, my_menu, save_load_excluded (Sony's Save/Load list, as data)
     camkit.safety           each row's class (never_open) and what opens it today (lift_class: --network; owner_class:
@@ -849,7 +849,7 @@ def public_build(camera: str, data_dir: Path = None, definition: Path = None) ->
 
 def _entry(mode, tab, group, path, source, order, nth=0) -> dict:
     return {"mode": mode, "tab": tab, "group": group, "path": list(path), "nth": nth, "source": source,
-            "order": order, "settings": [], "tied": [], "status": None}
+            "order": order, "settings": [], "tied": [], "through": [], "status": None}
 
 
 def _universe(led: Ledger, defn: dict, settings: list, src: Sources) -> None:
@@ -1399,7 +1399,9 @@ def _closing_proofs(src: Sources) -> set:
 
 
 def _row_settings(led: Ledger, e: dict) -> list:
-    return list(dict.fromkeys(e["settings"] + e["tied"]))
+    """The settings a row holds: placed on it or below it, tied to it (placement missing), and drawn there too, a
+    proof of theirs having gone through it (_tie_through)."""
+    return list(dict.fromkeys(e["settings"] + e["tied"] + e.get("through", [])))
 
 
 def _option_fact(f, led, e, by_key, label, kind, fact):
@@ -1419,7 +1421,8 @@ def _values_named(led, e, by_key, label) -> list:
         by = {}
         for k in _row_settings(led, e):
             s = by_key.get(k)
-            if not s or (e["path"] and (s.get("row") or [])[:len(e["path"])] != e["path"] and k not in e["tied"]):
+            if not s or (e["path"] and (s.get("row") or [])[:len(e["path"])] != e["path"] and k not in e["tied"]
+                         and k not in e.get("through", [])):
                 continue
             for v, lab in s.get("values") or []:
                 if isinstance(lab, str):
@@ -1471,8 +1474,32 @@ def _tie_unplaced(led: Ledger, settings: list, src: Sources) -> None:
             target["tied"].append(s["key"])
 
 
+def _tie_through(led: Ledger, settings: list) -> None:
+    """The camera draws one setting under more than one page (a subject's own page and the Auto page): a row that holds
+    no setting of its own, which a proof of a setting placed on another row went through (the private evidence's
+    proved.menu, the menu rows its proofs went through: proofs chosen there changed that setting's record), takes the
+    setting ("through"), and so does each row above it that holds none either. A row holding a setting of its own is
+    left as it is; the public build has no proved.menu, and such rows come from looks alone."""
+    for s in settings:
+        p = s.get("proved")
+        menus = p.get("menu") if isinstance(p, dict) else None
+        if not s.get("row") or not isinstance(menus, list):
+            continue                                # an unplaced setting: _tie_unplaced
+        tab = s.get("row_tab") or s["tab"]
+        for m in menus:
+            # a proof's context ("[Movie mode]") and a table's cell (" / AEL Button @0.key.0") are no rows
+            path = [x.strip() for x in re.sub(r"\s*\[[^\]]*\]$", "", str(m)).split(" / ")[0].split(" > ")]
+            if len(path) < 2 or not all(path) or path == list(s["row"]):
+                continue
+            for n in range(2, len(path) + 1):
+                for e in led.find(path[:n], tab=tab):
+                    if not e["settings"] and not e["tied"] and s["key"] not in e["through"]:
+                        e["through"].append(s["key"])
+
+
 def _row_statuses(led: Ledger, facts: Facts, by_key: dict, src: Sources) -> None:
     _tie_unplaced(led, list(by_key.values()), src)
+    _tie_through(led, list(by_key.values()))
     sony, header = save_load(src.camera_file)
     frame = src.hand.get("FRAME_PROOFS") or {}
     firsts = {}
@@ -1492,7 +1519,7 @@ def _row_statuses(led: Ledger, facts: Facts, by_key: dict, src: Sources) -> None
 
 
 def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: dict) -> None:
-    keys = list(dict.fromkeys(e["settings"] + e["tied"]))
+    keys = list(dict.fromkeys(e["settings"] + e["tied"] + e.get("through", [])))
     ss = [by_key[k] for k in keys if k in by_key]
     states = [setting_state(s) for s in ss]
     rule, opener, never_choose, closed = None, None, False, None
@@ -2143,7 +2170,7 @@ def _validity(led: Ledger, by_key: dict, src: Sources) -> None:
 ROW_PUBLIC = ("mode", "tab", "group", "path", "nth", "status", "same_label_as", "rule", "opener", "never_choose",
               "placement_missing", "blocker", "equipment", "fields", "reason", "confirmed", "header", "sony_note",
               "inferred", "values_left")
-ROW_PRIVATE = ROW_PUBLIC + ("values_inferred", "source", "cites", "kit_message", "kit", "changed_in_looks",
+ROW_PRIVATE = ROW_PUBLIC + ("values_inferred", "through", "source", "cites", "kit_message", "kit", "changed_in_looks",
                             "cites_changed", "looked", "options_seen", "proofs")
 # a blocker's keys the public form holds: the row an inactive_when names, never an option (the state it stood in)
 PUBLIC_BLOCKER_KEYS = ("row",)
@@ -3200,7 +3227,7 @@ def needs_of(e: dict) -> str:
         return "hand" if (e.get("opener") or ["never"]) == ["never"] or e.get("never_choose") else "decision"
     if st == "greyed in state":
         return "hand" if (e.get("blocker") or {}).get("remote") else "remote-look"
-    return "remote-proof" if e.get("settings") or e.get("tied") else "remote-look"
+    return "remote-proof" if e.get("settings") or e.get("tied") or e.get("through") else "remote-look"
 
 
 NEXT = {"remote-look": "open it remotely and read what it shows (kit/drive.py --path ... --press right)",
@@ -3262,8 +3289,8 @@ def todo(led: Ledger, tab: str = None, mode: str = None, needs: str = None) -> l
         recs = near.get(id(e), []) if len(e["path"]) == 1 else []
         weight = sum(3 if (leads.get(k) not in (None, "NEVER") or status_of.get(k) == "changed, no row attributed")
                      else 1 for k in recs)
-        y = weight + 5 * len(e.get("changed_in_looks") or []) + (2 if e.get("settings") or e.get("tied") else 0) \
-            - COST[n]
+        y = weight + 5 * len(e.get("changed_in_looks") or []) + \
+            (2 if e.get("settings") or e.get("tied") or e.get("through") else 0) - COST[n]
         out.append({"entry": e, "needs": n, "next": NEXT[n], "yield": y, "near": recs})
     out.sort(key=lambda x: (-x["yield"], x["entry"]["order"], [plain(p) for p in x["entry"]["path"]]))
     return out

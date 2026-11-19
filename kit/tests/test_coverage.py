@@ -1281,6 +1281,39 @@ def test_a_greyed_value_is_inferred_from_another_element_and_keeps_why(camera):
         assert not coverage.settled(["Quebec", "Two", "Mode"], "Ant", camera=CAM, ledger=led).skip
 
 
+def test_a_row_a_proof_went_through_takes_the_setting_it_proved(camera):
+    """The camera draws one setting under more than one page (a subject's own page and the Auto page): a row with no
+    setting of its own that a proof of a setting placed elsewhere went through (the private evidence's proved.menu) takes
+    that setting, as the rows above it that hold none do, so it is proved as the setting is, and its proofs are the
+    row's own; a row that holds a setting of its own, or that no proof went through, keeps what it had; the public
+    build, which has neither the evidence nor the looks, has no such row."""
+    leaf = setting("global:0x0140", "Romeo leaf", ["Romeo", "Own", "Leaf"], ONOFF, tab="Setup", group="G2",
+                   proved={"values": [0, 1]})
+    busy = setting("global:0x0141", "Romeo busy", ["Romeo", "Busy", "Leaf"], ONOFF, tab="Setup", group="G2")
+    menus = ["Romeo > Own > Leaf", "Romeo > Auto > Own > Leaf", "Romeo > Sister > Leaf [Movie mode]",
+             "Romeo > Busy > Leaf"]
+    evidence = {"global:0x0140": {"proved": {"values": [0, 1], "menu": menus, "run": "kit2_pass2"}}}
+    through = {"path": ["Romeo", "Auto", "Own", "Leaf"], "kind": "list", "index": 1, "label": "On", "shown": "On",
+               "vlm": "On", "changes": [{"key": "global:0x0140", "before": 0, "after": 1}]}
+    with extra_settings(camera, leaf, busy, evidence=evidence):
+        add_looks(camera, *(look(p, result="looked", by="crawl") for p in (
+            ["Romeo", "Auto", "Own", "Leaf"], ["Romeo", "Sister", "Leaf"], ["Romeo", "Other"])))
+        write_proofs(camera, "kit2_pass2", [through])
+        led = ledger(validity=True)
+        for path in (("Romeo", "Auto", "Own", "Leaf"), ("Romeo", "Auto", "Own"), ("Romeo", "Auto"),
+                     ("Romeo", "Sister", "Leaf"), ("Romeo", "Sister")):
+            e = row(led, *path)
+            assert e["status"] == "proved" and e["through"] == ["global:0x0140"], path
+        assert row(led, "Romeo", "Other")["status"] == "not yet tried"
+        assert row(led, "Romeo", "Busy", "Leaf")["status"] == "not yet tried"
+        assert row(led, "Romeo", "Busy", "Leaf")["through"] == []
+        check = next(c for c in led.proof_checks if c["path"] == ["Romeo", "Auto", "Own", "Leaf"])
+        assert check["a"] and check["b"]                                # the row's own record, two readings
+        priv = {tuple(r["path"]): r for r in coverage.private_doc(led)["rows"]}
+        assert priv[("Romeo", "Auto", "Own", "Leaf")]["through"] == ["global:0x0140"]
+        assert not any(r["path"][:2] == ["Romeo", "Auto"] for r in coverage.public_doc(led)["rows"])
+
+
 def test_the_tool_prints_the_shared_lists(camera, monkeypatch, capsys):
     import coverage as tool
     monkeypatch.setattr(sys, "argv", ["coverage.py", "--shared"])
