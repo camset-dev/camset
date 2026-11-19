@@ -2289,7 +2289,9 @@ def test_the_settles_windows_are_one_table_per_eyes_by_key_and_screen_as_measure
     before); after Left and Right on a menu page 0.45 s (0.75 before). What did not: every other step and screen (a page
     turn, the group column, lists, carousels, fields, pickers, no screen named) keeps 0.75 s; HDMI's quiet stays 0.15 s
     for every step (Up and Down too: the logs show a menu page's redraw in stages), its "nothing happened" 1.0 s; the
-    OSD picture's 6.0 s; Enter and MENU the eyes' own."""
+    OSD picture's 6.0 s for a step that shows nothing (2.0 s was asked; a change later than that would be taken for a
+    step that did nothing, which the walks take for an end and no later check notices: frames.OSD_LATE's comment);
+    Enter and MENU the eyes' own."""
     from camkit import frames
     assert frames.STEPS == ("up", "down", "left", "right")
     rows, sub, menu = frames.MENU_ROWS, frames.SUBMENU_ROWS, frames.MENU

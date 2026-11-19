@@ -123,6 +123,13 @@ OSD_QUIET = {
     # s apart; kit2_pass2 (about 1,200 on menu pages, a Right that opens a row among them), at most 0.27 s
     ("left", MENU): 0.45, ("right", MENU): 0.45,
 }
+# A step that shows nothing on the OSD picture is watched 6.0 s, though kit2_pass2's 11,300 OSD steps all showed their
+# first change within 0.69 s (2.0 s was asked, 2026-11-19): the picture froze 3.25 s and 6.6 s on 2026-11-06 while the
+# camera went on (OsdSource), and a step whose change comes after the deadline (and LiveCamera.look_late's one look
+# 0.5 s later) is taken for one that did nothing, which no later check notices: a walk's first step then makes a list
+# or carousel of one option, whole (camkit.walk.walk_cycle), a number field's walk or an axis's end comes out short
+# (walk_fields, walk_to_end), a Right is a row with "no response" or no panel (camkit.crawl), and a Down on a submenu
+# page sends the crawl's next Right, while the picture lags, onto the row under the cursor judged on the one above it
 OSD_LATE = {k: 6.0 for k in STEPS}
 
 
