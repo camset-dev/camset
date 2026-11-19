@@ -25,22 +25,19 @@ import argparse
 import collections
 import re
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link, StopRequested  # noqa: E402
-from camkit.live import LiveCamera, leave_notice, lit_text  # noqa: E402
-from camkit.vlm import check_readers  # noqa: E402
+from camkit.link import StopRequested  # noqa: E402
+from camkit.live import leave_notice, lit_text  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import Failed, at_label, bar_text, place, same_place, to_shooting  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_info_ok_argument, add_scan_argument, close_for_restore,  # noqa: E402
-                    end_session, info_ok_or_exit, load_scan, menu_from_shooting, read_json, restore_checked,
-                    write_json)
+from prove_run import Failed, at_label, bar_text, place, same_place  # noqa: E402
+from runner import (add_info_ok_argument, add_scan_argument, info_ok_or_exit, load_scan,  # noqa: E402
+                    menu_from_shooting, prover_session, read_json, write_json)
 from proving import screens  # noqa: E402
 
 TABLES = {
@@ -467,51 +464,42 @@ def main():
     run = Run("kit2_tables")
     out_path = run.dir / "tables.json"
     found = read_json(out_path) if out_path.exists() else {}
-    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
-    try:
-        with Link(run) as link:
-            hdmi.attach(link)
-            to_shooting(link, hdmi, "the settings download")
-            before = link.download("before")
-            time.sleep(5)
-            cam = LiveCamera(link, hdmi, run)
-            try:
-                menu_from_shooting(cam)
-                j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
-                if j is None:
-                    raise Failed(f"the menu opened on a screen the scan does not know ({cam.read().kind})")
-                for name in todo:
-                    t = TABLES[name]
-                    j = go_to(cam, cycle, model, j, t["path"][0])
-                    for _ in range(t.get("nth", 0)):            # the next row with the same label
-                        cam.press("down")
-                        j = (j + 1) % len(cycle)
-                        if not same_position(cam.read(), cycle[j]["screen"]):
-                            j = None
-                            break
-                    if j is None or not at_label(cam, "menu", t["path"][0]):
-                        raise Failed(f"on the way to {name!r} a screen was not the one the scan recorded")
-                    if t["screen"] == "keyset":
-                        found[name] = walk_keyset(cam, name, a.max_options)
-                    else:
-                        only = {tuple(int(v) for v in c.split(",")) for c in a.cell} if a.cell else None
-                        found[name] = walk_table(cam, name, a.max_options, only, found.get(name))
-                    write_json(out_path, found, indent=1, ensure_ascii=False)     # whole: the earlier tables' walks stay
+    # a read-only walk in the session every runner runs (runner.prover_session): closed with cleanup presses after it
+    # whatever stopped it; if anything changed, the start goes back, and a camera not known to be as the start file
+    # exits EXIT_UNRESTORED
+    with prover_session(run, hdmi, start_why="the settings download", say_start=False,
+                        end_why="the settings download after the walk", watch_restart=False) as s:
+        cam = s.cam
+        try:
+            menu_from_shooting(cam)
+            j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
+            if j is None:
+                raise Failed(f"the menu opened on a screen the scan does not know ({cam.read().kind})")
+            for name in todo:
+                t = TABLES[name]
+                j = go_to(cam, cycle, model, j, t["path"][0])
+                for _ in range(t.get("nth", 0)):            # the next row with the same label
+                    cam.press("down")
+                    j = (j + 1) % len(cycle)
                     if not same_position(cam.read(), cycle[j]["screen"]):
-                        raise Failed(f"back on {name!r}, the row does not look as the scan recorded it")
-            except StopRequested:
-                print("STOP file: cancelling", flush=True)
-            except Exception as e:
-                print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
-            close_for_restore(cam, link, before)            # cleanup presses; when they fail too, the restore all the same
-            # a read-only walk; if anything changed, the start goes back
-            ending = end_session(link, hdmi, before, "the settings download after the walk")
-        restored = restore_checked(run, ending, before)
-    finally:
-        hdmi.close()
-    if not restored:
-        sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
+                        j = None
+                        break
+                if j is None or not at_label(cam, "menu", t["path"][0]):
+                    raise Failed(f"on the way to {name!r} a screen was not the one the scan recorded")
+                if t["screen"] == "keyset":
+                    found[name] = walk_keyset(cam, name, a.max_options)
+                else:
+                    only = {tuple(int(v) for v in c.split(",")) for c in a.cell} if a.cell else None
+                    found[name] = walk_table(cam, name, a.max_options, only, found.get(name))
+                write_json(out_path, found, indent=1, ensure_ascii=False)     # whole: the earlier tables' walks stay
+                if not same_position(cam.read(), cycle[j]["screen"]):
+                    raise Failed(f"back on {name!r}, the row does not look as the scan recorded it")
+        except StopRequested:
+            print("STOP file: cancelling", flush=True)
+        except Exception as e:
+            print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
+        s.close()               # cleanup presses; when they fail too, the restore all the same
 
 
 if __name__ == "__main__":
