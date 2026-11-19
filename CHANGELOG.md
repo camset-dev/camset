@@ -180,6 +180,13 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **With the camera's own picture over the LAN in Stills the menu's lock after a download ends once the shooting screen
   is back after the saving notice,** about 2.1 s where 4.5 s stood; with no notice seen, in Movie or S&Q, and over USB,
   it is still 4.5 s.
+- **`kit/provers/carousel_fields_run.py` proves a carousel option's own fields one value a download** (Bracket Type's
+  Cont., Single and Focus Bracket, with the drive mode dial on BRK), and the report credits a record both fields write
+  with both together ("0.5 EV 3 Img.") and one written by one field with that field's value.
+- **`kit/axis_walk.py --map` walks a run's own map, and `kit/prove_run.py --map` proves the axes it walked there**
+  (Bracket Type's Lo/Hi); a run on pass 1's map never takes them, and a row inside a submenu is keyed by its whole path.
+- **The pixel reader tells a carousel option's lit field from the option lit:** a dialog gives the lit box's index
+  among its boxes, Focus Bracket's three digit boxes told apart.
 - **A run's start before its link is timed, and much shorter:** each link writes what the start took into the run's
   `events.jsonl` (`start_budget`), and `drive.py` and `crawl_run.py` went from about 9 s of work before the link to
   under 1 s, the page scan's screens kept in a cache signed with your own key, the coverage ledger built while the link
