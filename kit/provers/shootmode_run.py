@@ -9,7 +9,8 @@ own menu), so every proof ends by uploading the start file again, and the next p
 
 First a look per family (Right until the title comes round), then one proof per family and mode:
 the row, Right, Down to the family, Right to the mode, OK, a settings download, a diff with the start,
-the start file back on. Only the five exposure modes are ever chosen: the memory-recall modes (MR, M1-M4)
+the start file back on. The screen after OK is read by proving.commit.after_ok: a mode the camera refuses is written
+"applied": false with its notice, one it keeps behind an information notice "applied": true with it. Only the five exposure modes are ever chosen: the memory-recall modes (MR, M1-M4)
 are left out, since recalling a memory rewrites dozens of settings, and so is any entry whose title reads as no
 exposure mode (choosable, title_mode). Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as "axis" proofs, one row per family
 ("Shoot Mode / Movie"), plus one "dialog" proof per family holding only the records every mode of the
@@ -32,6 +33,7 @@ from camkit.runs import Run  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
@@ -173,11 +175,11 @@ def main():
                             raise Failed(f"{FAMILIES[f]}: the title reads {got!r}, not {modes[f][m]!r}")
                         chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
                         cam.press("enter")
-                        notice = None
-                        if cam.read().kind == "notice":
-                            notice = {"text": ocr.text_in(lines(cam), (0, 0, 640, 480)), "frame": cam.frame.path.name}
-                            print(f"   refused: {notice['text'][:90]!r}", flush=True)
-                            cam.cancel_to_menu()
+                        # what the camera did with it (proving.commit.after_ok): a refusal or an information notice
+                        # closed with MENU, never OK, and only the refusal is no applied mode (before 2026-11-19 any
+                        # notice was); the menu closed, as a mode chosen closes it
+                        got = after_ok(cam, "Shoot Mode", label=modes[f][m])
+                        notice = got.notice
                         to_shooting(link, hdmi, "the download after OK")
                         time.sleep(1)
                         dat = link.download(f"shootmode-{f}-{m}")
@@ -185,7 +187,7 @@ def main():
                         rec = {"path": ["Shoot Mode"], "kind": "axis", "option": FAMILIES[f], "index": m,
                                "label": f"{FAMILIES[f]}: {modes[f][m]}", "shown": modes[f][m],
                                "final": f == 0 and m == 0, "chosen_frame": chosen, "vlm": settled(seen_vlm),
-                               "dat": dat.name, "base": start.name, "notice": notice, "applied": notice is None,
+                               "dat": dat.name, "base": start.name, "notice": notice, "applied": got.applied,
                                "changes": changes_of(ch)}
                         out.write(json.dumps(rec) + "\n")
                         out.flush()

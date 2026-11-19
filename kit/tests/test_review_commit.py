@@ -756,3 +756,74 @@ def test_the_grid_tells_a_refusal_from_an_information_notice(monkeypatch):
             for x in lines] == [("A", [0], True, None), ("B", [0, 1], False, GRID_REFUSAL),
                                 ("C", [2], True, INFORMATION), ("(all back)", [2], True, None)]
     assert cam.presses.count("menu") == 2
+
+
+class ModeCam(Shots):
+    """The Shoot Mode chooser with the dial set by the menu: the stills family's modes Intelligent Auto, Program Auto
+    and Aperture Priority, Right stepping them round from the one remembered (the first); OK closes the menu (the
+    shooting screen), behind the camera's refusal for a mode in `refuse` and an information notice for one in
+    `inform`; MENU on a notice closes it and the menu."""
+    MODES = ["Intelligent Auto", "Program Auto", "Aperture Priority"]
+
+    def __init__(self, refuse=(), inform=()):
+        super().__init__()
+        self.kind, self.mode, self.refuse, self.inform = "shooting", 0, set(refuse), set(inform)
+
+    def open(self):
+        self.kind, self.mode = "dialog", 0
+        self.shot("right")
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key == "right" and self.kind == "dialog":
+            self.mode = (self.mode + 1) % len(self.MODES)
+        elif key == "enter" and self.mode in self.refuse:
+            self.refused_here()
+        elif key == "enter" and self.mode in self.inform:
+            self.kind, self.text = "notice", INFORMATION
+        elif key in ("enter", "menu"):
+            self.kind, self.text = "shooting", ""
+        self.shot(key)
+
+    def cancel_to_menu(self):
+        if self.kind not in ("menu", "shooting"):
+            self.press("menu")
+
+
+def test_shoot_mode_tells_a_refusal_from_an_information_notice(monkeypatch, tmp_path):
+    """shootmode_run took any notice after OK for a refusal, so a mode the camera kept behind an information notice lost
+    its value. Now the step tells them apart: the refused mode says "applied": false, the information notice's mode
+    "applied": true with the notice (both closed with MENU), and the family's own line counts the applied ones."""
+    import shootmode_run as S
+    cam, link = ModeCam(refuse={2}, inform={1}), downloads()
+
+    class Link:
+        def __init__(self, run):
+            pass
+
+        def __enter__(self):
+            return link
+
+        def __exit__(self, *exc):
+            return False
+    reads(monkeypatch, lambda f: cam.text)
+    no_diffs(monkeypatch, S)
+    for name, value in (("load_scan", lambda scan: ([], {})), ("check_readers", lambda: None),
+                        ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda link: None, close=lambda: None)),
+                        ("Link", Link), ("LiveCamera", lambda link, hdmi, run: cam),
+                        ("look", lambda c, link, cycle, model, f: list(ModeCam.MODES)),
+                        ("open_row", lambda c, cycle, model: c.open()), ("mode_name", lambda c: ModeCam.MODES[c.mode]),
+                        ("vlm_option", lambda c: "made up"), ("close_screen", lambda c, link: None),
+                        ("to_shooting", lambda link, hdmi, why: None), ("verify_restore", lambda run, start: 0)):
+        monkeypatch.setattr(S, name, value)
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    start = tmp_path / "00001_dialmenu.DAT"
+    start.write_bytes(b"made up")
+    monkeypatch.setattr(sys, "argv", ["shootmode_run.py", "--start", str(start), "--scan", "made-up", "--families", "0"])
+    S.main()
+    lines = proof_lines()
+    closed = "the menu closed after OK"
+    assert [(x["label"], x["applied"], (x.get("notice") or {}).get("text")) for x in lines] == [
+        ("Stills: Program Auto", True, INFORMATION), ("Stills: Aperture Priority", False, REFUSAL),
+        ("Stills: Intelligent Auto", True, closed), ("Stills", True, None)]
+    assert lines[-1]["family_of"] == [1, 0] and cam.presses.count("menu") == 2
