@@ -426,21 +426,11 @@ Each line is a symptom, then its cause, then what to do.
   waits 4.5 s (`LOCK_S`), or, with HDMI eyes in Stills, until the shooting screen is back after the notice, however
   long the notice stays (`camkit.session.wait_lock`). Never press MENU twice on a slow menu.
 - **The menu reopens after a download with the focus in the group column** → the position matches no page of the
-  scan. A session that opens the menu that way presses Right once, onto the page's rows, before it matches the scan;
-  a menu that still matches no page fails closed ("the menu opened on a screen the scan does not know") and the
-  restore puts the start file back; run it again. The Right goes out only on a group the column may enter: a group
-  never-open, or whose name reads one letter off a never-open group's or action's name ("FTP Transter" for FTP
-  Transfer), is stepped off first by Up or Down (`drive.py` and the My Menu prover go to the nearest group of the tab
-  that may be entered, `kit/crawl_run.py` `from_groups`), and only while the screen still reads as the group column
-  with its bar naming that very group (a bar that reads a row, "File Format RAW", names none); with no such group in
-  the tab nothing is pressed and the run stops. A jump by the columns that would end on such a group is refused before
-  any press (the rows are walked to instead), or, when only the bar read there shows it, stops before its last Right,
-  leaving the cursor in the column for the next run to step out of so (`crawl_run.py` steps out of it too, as `drive.py`
-  does). The jump and the way back read the lit group alike, its name whole by its letters and digits: the bar draws a
-  group's icon glyph otherwise than the page scan stored it ("(Cnct./Remote Sht." for "[Cnct./Remote Sht."), and
-  matching the scan's text as read left every jump into the Network tab unreachable (2026-11-14). On OSD eyes the bar is
-  also read with the group's number ("10 Shooting Display"): a number before or after the name names the group of that
-  number only, and the never-open check judges the name without it too (2026-11-15).
+  scan. The kit steps by Up or Down to the nearest group of the tab it may enter, never one that is never-open or reads
+  one letter off a never-open group's or action's name, and presses Right once onto its rows; with no such group it
+  presses nothing and the run stops. A jump by the columns never enters such a group either. A menu that
+  still matches no page fails closed ("the menu opened on a screen the scan does not know") and the restore puts the
+  start file back: run it again. How the column is read: `kit/crawl_run.py`, `from_groups`.
 - **A row's icon reads otherwise on its lit bar than on its page** → OCR reads a row's icon as letters, and reads it
   differently with the row lit (the a1 II's IP Address Setting: the page scan's readings show the Wired LAN icon glued on
   in one reading and set apart in another; the lit bar shows it with a letter misread). The kit takes the icon the page
@@ -473,30 +463,18 @@ Each line is a symptom, then its cause, then what to do.
   (`camkit.live.leave_notice`). A notice that starts "not available as follows" is a refusal (the a1 II refuses MENU on
   it): the proof records it as not applied. A note before a row's own screen (Mode Dial Control Set's) passes only so,
   or as `--info-ok` names it.
-- **A row whose screen sits behind an information notice** (the a1 II's Different Set for Still/Mv: "You can set
-  different settings for still image mode and movie mode in the next screen. The setting set for ☑ is independent.",
-  a single OK, then its checklist): the crawl records it as `notice`, so pass 1's map has no row for it, and the
-  checklist prover fails at the notice. Only for a notice that explains and asks nothing: no "?", no Cancel or second
-  button, nothing OK starts, applies, sends or deletes; give the notice's whole text as one unbroken phrase; when
-  unsure, ask the owner. Look at the notice's frame first. Then walk the row alone, naming the row as the camera writes
-  it and the notice's whole text as written (one row per `--info-ok`; never a never-open row). The phrase is compared
-  by its letters, digits and single spaces alone: punctuation and glyphs (the ☑ above) are ignored in it and in the
-  notice, so sentence ends may be written or left out; a question mark or a pattern's sign (`*`, `[`, `|`) is refused.
-  Its words must be found in the notice in order and account for all of it but 10 letters or digits (an icon read as a
-  letter or two beside a line's first or last word, an OCR slip; never a word of three letters or more, nor a line
-  outside the text; a negation such as "isn't" is one word), the OK and a line saying "Don't show this again." and
-  nothing else aside: a phrase that leaves a sentence or a button out is refused, and the notice's text is printed so
-  you can give it whole. `kit/crawl_run.py --start-label ROW --limit 1
-  --info-ok "ROW=PHRASE"`; then `kit/pass1_labels.py`, `kit/tiebreak.py` and `kit/pass1_map.py --own` on that crawl,
-  and `kit/prove_run.py --map <that crawl>/map.json --rows ROW --info-ok "ROW=PHRASE"`. The OK goes out once a visit,
-  and only where, besides, the lit bar before Right read as ROW, the notice has no question mark, reads as no
-  confirmation (its words run together inside one word too) and names nothing never-open, of identity or credentials;
-  exactly one of its lines is a button's word alone, OK; no other line names a second button, a choice or an action
-  ("Cancel", "Back", "Apply", "deleted"), nor sits on or below the OK's line; and the lit button reads OK. Else nothing
-  is pressed, the crawl records `notice (named, not passed: ...)` and the prover fails the row. Never with `--network`.
-  The notice is prose, judged as read (`plain_view`): with every space taken out "a different screen" holds NTSC. The
-  camera's own Enter check judges it again at the press with its words run together, and stops the run on a notice
-  that reads as a confirmation only so ("new folders").
+- **A row whose screen sits behind an information notice** with a single OK (the a1 II's Different Set for Still/Mv,
+  then its checklist) → the crawl records `notice`, so pass 1's map has no row for it, and the prover fails at the
+  notice. Look at the notice's frame first. Only for a notice that explains and asks nothing (no "?", no Cancel or
+  second button, nothing its OK starts, applies, sends or deletes; when unsure, ask the owner), walk the row alone,
+  named as the camera writes it, with the notice's whole text as one unbroken phrase:
+  `kit/crawl_run.py --start-label ROW --limit 1 --info-ok "ROW=PHRASE"`; then `kit/pass1_labels.py`, `kit/tiebreak.py`
+  and `kit/pass1_map.py --own` on that crawl, and `kit/prove_run.py --map <that crawl>/map.json --rows ROW --info-ok
+  "ROW=PHRASE"`. One row per `--info-ok`, never a never-open row, never with `--network`; the crawl prints the notice's
+  text when the phrase leaves part of it out. The kit presses that OK once a visit and only on the notice as named,
+  else records `notice (named, not passed: ...)` and the prover fails the row; the camera's own Enter check judges it
+  again at the press. How the phrase is compared and what the press checks: `kit/crawl_run.py`'s docstring and
+  `--help`.
 - **A choice that also rewrites key assignments or other rows** (Flexible Exp. Mode) → keep those
   records as side effects, not as the row's changes.
 - **The definition got wrong labels for linked records** → a shared flag (`KEEP_LABELS`), or side
