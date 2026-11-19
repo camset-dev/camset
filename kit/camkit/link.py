@@ -94,9 +94,21 @@ def _is(ev: dict, which: tuple) -> bool:
 
 
 class CameraRefused(LinkError):
-    """A reply came back and said the command was not taken ("button not accepted": the camera did nothing; camlink's
-    own guard refused it): kit/drive.py takes an armed press refused so as not gone, closes with MENU and restores.
-    No reply, a timeout, a dead camlink, a button left held: LinkError, after which the press may have acted."""
+    """A reply to a press, a dial or the shutter's release (ACTS) came back and said it was not taken ("button not
+    accepted": the camera did nothing; camlink's own guard refused it): kit/drive.py takes an armed press refused so as
+    not gone, closes with MENU and restores, and camkit.live.press tries it again. Never for a read (a screen picture,
+    a download, a property: their failure says nothing of a key) nor for a "disconnected" reply (Disconnected). No
+    reply, a timeout, a dead camlink, a button left held: LinkError, after which the press may have acted."""
+
+
+class Disconnected(LinkError):
+    """camlink answered "disconnected": the camera's session has dropped (camlink answers so to every command once the
+    SDK's OnDisconnected has run), so nothing more reaches the camera on this link. Never a CameraRefused, whatever the
+    command: a dropped session says nothing about whether the key before it acted."""
+
+
+# The commands whose "not accepted" means the camera did nothing (CameraRefused): the ones that act
+ACTS = frozenset({"press", "dial", "release"})
 
 
 def quoted(text) -> str:
@@ -682,16 +694,23 @@ class Link:
             raise LinkError(str(e)) from None
 
     def _must(self, command: str, timeout=30.0, **guard) -> dict:
-        """The command's reply when camlink answers ok; LinkError otherwise. A reply that came back saying the camera
-        (or camlink's own guard) did not take the command ("button not accepted": nothing done) is CameraRefused; a
-        button whose release was refused ("button_held": it went down, and may have acted) and camlink's last word
-        after a signal are plain LinkError, as no reply at all is. One the camera did not take while the SDK reported a
-        network error on the link (network_error) is NetworkError, in plain words, its reply in the run's log alone."""
+        """The command's reply when camlink answers ok; LinkError otherwise. A press, dial or release (ACTS) whose reply
+        came back saying the camera (or camlink's own guard) did not take it ("button not accepted": nothing done) is
+        CameraRefused; a failed read (a screen picture: "no OSD image", a download, a property) is a plain LinkError,
+        which says nothing of a key (2026-11-18, the review's finding 1: a picture that failed after a key went was
+        taken for that key refused, and the key sent again); a "disconnected" reply, whatever the command, is
+        Disconnected; a button whose release was refused ("button_held": it went down, and may have acted) and camlink's
+        last word after a signal are plain LinkError, as no reply at all is. One the camera did not take while the SDK
+        reported a network error on the link (network_error) is NetworkError, in plain words, its reply in the run's log
+        alone."""
         r = self.call(command, timeout, **guard)
         if not r.get("ok"):
             if self.network_error() and r.get("cause") != "signal":
                 raise NetworkError(NET_ERROR_SAID)
-            kind = LinkError if r.get("cause") in ("button_held", "signal") else CameraRefused
+            if r.get("error") == "disconnected" and r.get("cause") != "signal":
+                raise Disconnected(f"{command}: the camera's session has dropped (camlink answers \"disconnected\")")
+            acts = command.split(" ", 1)[0] in ACTS
+            kind = CameraRefused if acts and r.get("cause") not in ("button_held", "signal") else LinkError
             raise kind(f"{command}: {r.get('error')}")
         return r
 

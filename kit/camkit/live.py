@@ -1131,12 +1131,20 @@ class LiveCamera:
         # every press expects a change: a press that seems ignored gets a full second before it counts
         # as "nothing happened" (Picture Profile: a Down showed no change within 0.5 s, 2026-10-28)
         self.pressed_from = self.frame          # the frame the press was made on (proving.screens.title_settled)
-        f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
-        self.frame, self.screen = f, self.reading(f)
-        self.rest(f"{key}-rest")
-        f = self.look_late(key, before, moved, seen_enough)
-        if canon == "menu" and getattr(judged, "kind", None) == "shooting":
-            f = self.menu_watch(t, f)       # its result a menu page if one shows within MENU_LATE s of the press
+        try:
+            f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
+            self.frame, self.screen = f, self.reading(f)
+            self.rest(f"{key}-rest")
+            f = self.look_late(key, before, moved, seen_enough)
+            if canon == "menu" and getattr(judged, "kind", None) == "shooting":
+                f = self.menu_watch(t, f)       # its result a menu page if one shows within MENU_LATE s of the press
+        except LinkError as e:
+            # the key went: a screen read through the link that fails now (OSD eyes: "no OSD image", a dropped session)
+            # is no refusal of it, so nobody sends it again or takes it as not gone (live.press, kit/drive.py's armed
+            # press; 2026-11-18, the review's finding 1). The next press reads the screen afresh (_fresh)
+            why = f"{key}: the press went, and its screen could not be read afterwards ({type(e).__name__}: {e})"
+            self.run.log("press_unread", key=key, why=f"{type(e).__name__}")
+            raise LinkError(why) from e
         self.screen.frame_path = f.path.name          # evidence: which saved frame this screen is
         self.presses += 1
         self._seen = self._moves()

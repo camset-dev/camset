@@ -606,8 +606,9 @@ def test_the_hold_on_osd_eyes_leaves_when_the_camera_disconnects(tmp_path, monke
 
 def test_moved_at_is_set_when_a_moving_command_is_refused_or_unanswered(tmp_path, monkeypatch):
     """Mutant Y6 of the third review: the screen may have moved whatever came back, so moved_at is set for a moving
-    command the camera refused and for one camlink never answered (its exit)."""
-    from camkit.link import CameraRefused as Refused
+    command the camera refused and for one camlink never answered (its exit). A "disconnected" reply is Disconnected,
+    never CameraRefused (the review of 2026-11-18, finding 1)."""
+    from camkit.link import Disconnected as Refused
     monkeypatch.setenv("FAKE_CAMLINK_DISCONNECT", "press")
     monkeypatch.setenv("FAKE_CAMLINK_DISCONNECT_SILENT", "1")
     with fake_link(tmp_path / "refused", monkeypatch) as lk:
