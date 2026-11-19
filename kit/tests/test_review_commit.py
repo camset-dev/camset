@@ -251,3 +251,74 @@ def test_prove_row_records_a_refusal_as_before(tmp_path, monkeypatch):
     assert [(x["label"], x["applied"], x["notice"]) for x in lines] == [
         ("On", False, {"text": REFUSAL, "frame": "00004_enter.png"}), ("Off", True, None)]
     assert cam.keys == ["right", "down", "enter", "menu", "right", "enter"]
+
+
+# ------------------------------------------------------------------------------------------------ pass 3's switch
+
+class Blocker:
+    """A LiveCamera for pass3_run.switch: Right opens the blocker's list (its cursor `at`), and after Enter the screen
+    is `after`; MENU on anything but the shooting screen goes back to the menu; every press recorded."""
+
+    def __init__(self, after: str):
+        self.after, self.presses, self.kind, self.at = after, [], "menu", 0
+        self.frame = SimpleNamespace(path=Path("00042_enter.png"), image=None)
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key == "right":
+            self.kind = "list"
+        elif key == "enter":
+            self.kind = self.after
+        elif key == "menu" and self.kind != "shooting":
+            self.kind = "menu"
+
+    def read(self):
+        return SimpleNamespace(kind=self.kind)
+
+    def cancel_to_menu(self):
+        if self.kind not in ("menu", "shooting"):
+            self.presses.append("menu")
+            self.kind = "menu"
+
+
+def blocker_world(monkeypatch, after: str, notice: str = ""):
+    """pass3_run.switch's seams on a Blocker camera: the scan's route, the list's labels and cursor, OCR's notice."""
+    import pass3_run
+    cam = Blocker(after)
+    for name, value in (("LiveCamera", lambda link, hdmi, run: cam), ("same_position", lambda a, b: True),
+                        ("go_to", lambda c, cycle, model, j, label: 0), ("enter_any", lambda c, path, i: None),
+                        ("labels_of", lambda path, mp=None: (["Electronic Shutter", "Mechanical Shutter"], "list")),
+                        ("option_index", lambda c, labels, kind: c.at),
+                        ("move_to", lambda c, cur, k, n, kind: setattr(c, "at", k)),
+                        ("to_shooting", lambda link, hdmi, why: None), ("notice_text", lambda c: notice)):
+        monkeypatch.setattr(pass3_run, name, value)
+    return pass3_run, cam
+
+
+BLOCKER = {"row": ["Shutter Type"], "to": "Mechanical Shutter", "walk": "Long Exposure NR"}
+
+
+def test_pass3s_switch_reads_the_screen_after_ok_through_the_step(monkeypatch):
+    """Pass 3's switch through the step: a refusal still fails the blocker in plain words, MENU its one press on the
+    notice; an information screen after OK is now left by info_notice_ok's rules (a cleanup MENU cancelled it) and the
+    switch goes on; the list still open after OK fails the switch (it went on as a switch made), MENU cancelling it."""
+    from proving import screens
+    from proving.base import Failed
+    pass3_run, cam = blocker_world(monkeypatch, "notice", REFUSAL)
+    with pytest.raises(Failed, match=r"the camera refused 'Mechanical Shutter' .*: the blocker was not switched"):
+        pass3_run.switch(None, None, None, [{"screen": None}], {}, BLOCKER)
+    assert cam.presses == ["menu", "right", "enter", "menu"]
+    taken = []
+
+    def info(c, name, kinds=("notice", "unknown"), **k):
+        taken.append((name, kinds))
+        c.kind = "menu"
+        return {"text": "an information screen", "frame": "00042_enter.png", "left_by": "menu"}
+    monkeypatch.setattr(screens, "info_notice_ok", info)
+    pass3_run, cam = blocker_world(monkeypatch, "unknown")
+    assert pass3_run.switch(None, None, None, [{"screen": None}], {}, BLOCKER) is True
+    assert taken == [("Shutter Type", ("notice", "unknown"))] and cam.presses == ["menu", "right", "enter"]
+    pass3_run, cam = blocker_world(monkeypatch, "list")
+    with pytest.raises(Failed, match=r"Shutter Type: after OK on 'Mechanical Shutter' the screen is list"):
+        pass3_run.switch(None, None, None, [{"screen": None}], {}, BLOCKER)
+    assert cam.presses == ["menu", "right", "enter", "menu"]

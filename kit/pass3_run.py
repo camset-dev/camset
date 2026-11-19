@@ -29,14 +29,14 @@ starting option, which its own last proof only chooses again (it changes nothing
 """
 import argparse
 import os
-import re
 import subprocess
 import sys
 import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, models, paths, safety, session  # noqa: E402
+from camkit import ROOT, camset, models, paths, session  # noqa: E402
+from camkit import safety  # noqa: E402,F401   (the tests reach the confirmation judge as pass3_run.safety)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
 from camkit.live import LiveCamera, text_of  # noqa: E402
@@ -46,6 +46,7 @@ from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import (PASS1, Failed, enter_any, main_name, move_to, option_index, option_key,  # noqa: E402
                        to_shooting)
+from proving import commit  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, definition, end_session, load_scan, read_json,  # noqa: E402
                     restoring)
 
@@ -263,35 +264,31 @@ def switch(link, hdmi, run, cycle, model, b) -> bool:
     return cur != target[0]
 
 
-REFUSED = re.compile(r"not available|invalid", re.I)    # a notice after OK that refuses the choice (prove_run's rule)
-
-
 def notice_text(cam) -> str:
     """All the text OCR reads on the frame on show (camkit.live.text_of)."""
     return text_of(cam)
 
 
 def after_ok(cam, b) -> None:
-    """The screen after the blocker's OK, read as a proof reads it (prove_run.prove_row): a notice that refuses the choice
-    ("not available as follows ...", "invalid") fails the switch in plain words, naming the notice, its MENU pressed to
-    close it as a proof closes one; a confirmation fails it, nothing answered (the caller cancels it with MENU); an
-    information notice is said and closed with MENU, and the download after the switch shows what applied. Before
-    2026-11-18 any notice was closed and the run went on, and the proofs were tagged with a state the camera was not in."""
-    if cam.read().kind != "notice":
-        return
-    text, frame = notice_text(cam), cam.frame.path.name
+    """The screen after the blocker's OK, read as a proof reads it (proving.commit.after_ok, prove_row's step): a notice
+    that refuses the choice ("not available as follows ...", "invalid") fails the switch in plain words, naming the
+    notice, after the MENU that closes it as a proof closes one; a question fails it, nothing answered (the caller
+    cancels it with MENU); an information notice is said and closed with MENU, an information screen left by
+    info_notice_ok's rules, and the download after the switch shows what applied; the menu closed or a menu page is a
+    switch made; any other screen (the list still open) fails it. Before 2026-11-18 any notice was closed and the run
+    went on, and the proofs were tagged with a state the camera was not in; before 2026-11-19 any screen but a notice
+    was taken for a switch made and cancelled with a cleanup MENU."""
     row = " > ".join(b["row"])
-    why = safety.confirmation(text)
-    if why:
-        raise Failed(f"{row}: after OK on {b['to']!r} the camera asked a question ({why}; {frame}): nothing is answered, "
-                     f"the switch is cancelled with MENU and the start file goes back on")
-    if REFUSED.search(text):
-        cam.press("menu")
+    try:
+        got = commit.after_ok(cam, row, label=b["to"], read=notice_text)
+    except commit.Asked as e:
+        raise Failed(f"{row}: after OK on {b['to']!r} the camera asked a question ({e.why}; {e.frame}): nothing is "
+                     f"answered, the switch is cancelled with MENU and the start file goes back on") from None
+    if got.refused:
+        text, frame = got.notice["text"], got.notice["frame"]
         raise Failed(f"{row}: the camera refused {b['to']!r} ({' '.join(text.split())[:120]!r}; {frame}): the blocker "
                      f"was not switched, so nothing is walked or proved in that state; switch what the notice names "
                      f"first, or leave this blocker out")
-    print(f"   notice after OK: {' '.join(text.split())[:90]!r}", flush=True)
-    cam.press("menu")
 
 
 def row_records(row) -> set:
