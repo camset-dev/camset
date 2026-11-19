@@ -31,7 +31,11 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
   proved.names  what backs each value's name (NAME_SOURCES: two readers, one reader, the vision model, the kept
                 schema label, a hand table, a rule's copy, sampled), from the report's `names` (with_names); a
                 value no option was seen to write is named by its readers like any other, and an old "inferred" or
-                "held" is taken out (without_held, decision 16)
+                "held" is taken out (without_held, decision 16). Made afresh at every write, as the plain pass
+                makes them (hand_facts.name_sources, decision 25): a rule's or a table's word is never kept from
+                the old proof, and a value a hand table alone names, no proof and no shared list backing it, is
+                "counted". The public proof lists a value a rule named from another setting's proof ("derived")
+                and marks its setting "shared" (camkit.definitions.lean_proof), never which value
   shown_as      {"divide", "decimals"} for a number the camera shows scaled ("75%" stored 7500), from the side-list
                 and field proofs (scaled_numbers), the unit from the camera's text
   observed      taken out of every setting (without_observed): the old lists of the values camera files held
@@ -1778,8 +1782,9 @@ def main():
     with_frames(doc, FRAME_TRAVEL)                 # how far each focus frame travels, on the records of its places
     spelled_names(by_key, spelled, over, derived)
     with_menu_rows(doc, axis_rows)      # the rows the definition kept from an older run, named so too
-    for s in doc["settings"]:
-        with_names(s, readers[s["key"]], over[s["key"]], derived[s["key"]])
+    # the names' sources, as the plain pass sets them (docs/decisions/0025): a value a hand table alone names, no proof
+    # and no shared list backing it, counted (named, not proved); no rule's or table's word kept from the old proof
+    hand_facts.name_sources(doc, readers, over, derived)
     without_observed(doc)           # the old lists of what the owner's files held: an editor reads the proofs
     for k in sorted(registered):        # registered values no hand table's proof took in: printed, not credited
         print(f"  registered {k}: {len(registered[k]['values'])} values registered ({registered[k]['run']}), but no "

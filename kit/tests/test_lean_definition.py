@@ -82,10 +82,11 @@ def test_the_evidence_goes_private_and_comes_back(tmp_path):
     pub = json.loads(text)
     assert evidence_in(pub, text) == []
     by = {s["key"]: s for s in pub["settings"]}
-    # chosen values and names from the camera's own word are checked; a name kept from an old schema or counted out is not
-    assert by["global:0x0001"]["proved"] == {"values": [0, 1, 2]}
+    # chosen values and names from the camera's own word are checked; a name kept from an old schema or counted out is
+    # not; a value named from another setting's proof is listed and marks its setting, never itself (decision 25)
+    assert by["global:0x0001"]["proved"] == {"values": [0, 1, 2], "shared": True}
     assert by["global:0x0002"]["proved"] == {"sampled": {"linear": True}}
-    assert by["global:0x0003"]["proved"] == {"values": [7, 8], "sampled": {"linear": None}}
+    assert by["global:0x0003"]["proved"] == {"values": [7, 8], "shared": True, "sampled": {"linear": None}}
     assert by["global:0x0005"]["proved"] == {"values": [0]}
     assert by["set:0x0004"]["unproved_reason"] == {"kind": "state", "why": "The camera keeps it."}
     assert by["global:0x0001"]["not_offered"] == [{"value": 3, "label": "D", "why": "Not on its list.", "menu": "Dial"}]

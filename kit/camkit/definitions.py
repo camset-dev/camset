@@ -59,9 +59,15 @@ EVIDENCE_FORMAT = 1
 # (note_evidence), the registration that showed a memory copying it (in_sets_proved), and the options its proof runs
 # found refused under the state the camera stood in (menu_blocked)
 EVIDENCE_FIELDS = ("source", "note_evidence", "in_sets_proved", "menu_blocked")
-# the sources of a value's name (proved.names) that are the camera's own word, so the value counts as checked on the
-# camera: the lean proof lists such a value among its values (the editor's CAMERA_SOURCES, which it no longer needs)
+# the sources of a value's name (proved.names) that are the camera's own word, so the value counts as established on
+# the camera: the lean proof lists such a value among its values (the editor's CAMERA_SOURCES, which it no longer
+# needs). A "hand table" name stands only where a proof chose the value or a held not-offered mark holds it (the
+# writer counts any other, writer/hand_facts.named_not_proved)
 ESTABLISHING = ("two readers", "one reader", "vision model", "derived", "sampled", "hand table")
+# the source of a name a rule took from another setting's proof (a shared list: a picker's slots, one array's elements,
+# a hold and its live setting, a setting's copies, My Menu's places), docs/decisions/0025: such a value, where no proof
+# chose it on its own setting, is inferred (inferred), and the lean proof marks its setting "shared"
+SHARED_SOURCE = "derived"
 SCHEMA_REF = "../../schemas/definition.schema.json"         # the "$schema" a definition names, from its folder
 # the definition docs/formats/sony_camset.ksy and the record names it imports describe: the body the kit was built on
 REFERENCE = paths.A1II
@@ -121,21 +127,44 @@ def every(evidence: bool = True) -> list:
     return [(p, load(p, evidence)) for p in sorted(DIR.glob("*.json"))]
 
 
+def inferred(proved: dict) -> set:
+    """The values a whole proof names from another setting's proof (SHARED_SOURCE) that no proof chose on its own
+    setting: the writer's inference from a shared list, the one rule the lean proof's mark ("shared", lean_proof) and
+    the coverage ledger's "inferred from a shared list" both read (docs/decisions/0025). Empty for a lean proof, which
+    says nothing value by value (docs/decisions/0016)."""
+    chosen = set(proved.get("values") or ())
+    return {int(v) for v, src in (proved.get("names") or {}).items() if src == SHARED_SOURCE and int(v) not in chosen}
+
+
 def lean_proof(proved: dict) -> dict:
     """A proof as a definition publishes it: the values a proof on the camera checked ("values": those a proof chose,
-    and those whose name has a source on the camera, ESTABLISHING), and for a scale proved by samples whether they lie
-    on one line ("sampled": {"linear"}; a scale on its line checks every value, so it lists none). Never the run, the
-    day, the menu rows, the name sources, how many samples, nor whether a sample began at the option the camera held:
-    two owners mapping the same camera completely get the same lean proof. A lean proof gives itself back."""
+    and those whose name has a source on the camera, ESTABLISHING), "shared": true when some of them a rule named from
+    another setting's proof instead (inferred: one mark for the setting, never which values, for the one value no proof
+    chose can be the one the owner's camera held, docs/decisions/0016 and 0025), and for a scale proved by samples
+    whether they lie on one line ("sampled": {"linear"}; a scale on its line checks every value, so it lists none).
+    Never the run, the day, the menu rows, the name sources, how many samples, nor whether a sample began at the
+    option the camera held: two owners mapping the same camera completely get the same lean proof. A lean proof gives
+    itself back, its mark with it."""
     names = proved.get("names") or {}
     checked = set(proved.get("values") or ()) | {int(v) for v, src in names.items() if src in ESTABLISHING}
     sampled = proved.get("sampled")
     out = {}
     if sampled is None or (sampled.get("linear") is not True and checked):
         out["values"] = sorted(checked)
+        if proved.get("shared") is True or inferred(proved) & checked:
+            out["shared"] = True
     if sampled is not None:
         out["sampled"] = {"linear": sampled.get("linear")}
     return out
+
+
+def fits(whole: dict, public: dict) -> bool:
+    """Whether a whole proof is the evidence of a public one: their lean forms (lean_proof) alike, the mark aside, for
+    it is made from the whole proof's names (a public file written before the mark existed still takes its evidence
+    back, and the next write marks it)."""
+    def bare(p):
+        return {k: v for k, v in lean_proof(p).items() if k != "shared"}
+    return bare(whole) == bare(public)
 
 
 def split(doc: dict) -> tuple:
@@ -216,7 +245,7 @@ def file_names(doc, camera: str | None = "camera") -> list:
 
 def evidence_in_public(doc: dict, text: str = None) -> list:
     """Every place a public definition carries evidence, in words: a field of EVIDENCE_FIELDS (or the old observed,
-    written_with) on a setting, a proof key but values and sampled, a sample's key but linear, a date in
+    written_with) on a setting, a proof key but values, shared and sampled, a sample's key but linear, a date in
     unproved_reason or unproved_sets, not_offered's evidence, a layout's note_evidence, in the file's text (`text`,
     else the definition as JSON) a run's folder, a kit2_ run name or an ISO date, and anywhere but the camera's own
     file names a download's or a frame's file name (file_names). Empty for a lean one."""
@@ -231,7 +260,7 @@ def evidence_in_public(doc: dict, text: str = None) -> list:
         found += [f"{k}: {f}" for f in (*EVIDENCE_FIELDS, "observed", "written_with") if f in s]
         p = s.get("proved")
         if isinstance(p, dict):
-            found += [f"{k}: proved.{f}" for f in p if f not in ("values", "sampled")]
+            found += [f"{k}: proved.{f}" for f in p if f not in ("values", "shared", "sampled")]
             found += [f"{k}: proved.sampled.{f}" for f in (p.get("sampled") or {}) if f != "linear"]
         found += [f"{k}: {f}.date" for f in ("unproved_reason", "unproved_sets") if "date" in (s.get(f) or {})]
         found += [f"{k}: not_offered's evidence" for m in s.get("not_offered") or [] if "evidence" in m]
@@ -306,10 +335,10 @@ def merge(doc: dict, evidence: dict, where=None) -> dict:
             continue
         s = dict(s)
         if "proved" in ev:
-            # the lean forms compared on both sides, so a later change to what lean_proof keeps (a field added or taken
-            # out) leaves every proof that still fits in place, instead of setting each one aside as stale
-            if isinstance(ev["proved"], dict) and isinstance(s.get("proved"), dict) \
-                    and lean_proof(ev["proved"]) == lean_proof(s["proved"]):
+            # the lean forms compared on both sides (fits), so a later change to what lean_proof keeps (a field added or
+            # taken out, the mark made from the names) leaves every proof that still fits in place, instead of setting
+            # each one aside as stale
+            if isinstance(ev["proved"], dict) and isinstance(s.get("proved"), dict) and fits(ev["proved"], s["proved"]):
                 s["proved"] = ev["proved"]
             else:
                 aside("settings", k, "proved", ev["proved"], "the public proof is not this proof's lean form"
@@ -495,8 +524,8 @@ def lost_evidence(doc: dict, have: dict) -> list:
         if s is None:
             continue
         p = s.get("proved")
-        if isinstance(ev.get("proved"), dict) and isinstance(p, dict) and set(p) - {"names"} <= {"values", "sampled"} \
-                and lean_proof(ev["proved"]) == lean_proof(p) \
+        if isinstance(ev.get("proved"), dict) and isinstance(p, dict) \
+                and set(p) - {"names"} <= {"values", "shared", "sampled"} and fits(ev["proved"], p) \
                 and {f: x for f, x in p.items() if f != "names"} != {f: x for f, x in ev["proved"].items() if f != "names"}:
             out.append(f"{k}: proved")
         for f in ("unproved_reason", "unproved_sets"):

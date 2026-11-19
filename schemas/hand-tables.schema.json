@@ -161,28 +161,28 @@
   },
   "CAROUSEL": {
    "type": "array",
-   "description": "Carousel options proved with whatever second-axis value the camera held, [key, value, label]: where the record names only the option, the value takes the option's name. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
+   "description": "Carousel options proved with whatever second-axis value the camera held, [key, value, label]: where the record names only the option, the value takes the option's name. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\".",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "VALUE_FIXES": {
    "type": "array",
-   "description": "Values a proof names with something that is not the value's own (an icon, a carousel's second axis, a word the report took as agreeing), [key, value, label]: the label stands. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
+   "description": "Values a proof names with something that is not the value's own (an icon, a carousel's second axis, a word the report took as agreeing), [key, value, label]: the label stands. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\".",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "PP7_VALUES": {
    "type": "array",
-   "description": "Values outside this body's lists that its files hold, [key, value, label]: added to the record's values. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
+   "description": "Values outside this body's lists that its files hold, [key, value, label]: added to the record's values. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\".",
    "items": {
     "$ref": "#/$defs/row"
    }
   },
   "KEEP_LABELS": {
    "type": "array",
-   "description": "Records proved by a row whose options do not name their values (a flag several options share, a scale proved by counts): proved, their values keeping the definition's names. In the plain pass a value the definition does not name yet takes the camera's label (no proved value is left without a name), and a name the definition holds stays a hand table's only where the camera read otherwise. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one.",
+   "description": "Records proved by a row whose options do not name their values (a flag several options share, a scale proved by counts): proved, their values keeping the definition's names. In the plain pass a value the definition does not name yet takes the camera's label (no proved value is left without a name), and a name the definition holds stays a hand table's only where the camera read otherwise. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\".",
    "uniqueItems": true,
    "items": {
     "$ref": "#/$defs/key"
@@ -574,7 +574,7 @@
     },
     "values": {
      "$ref": "#/$defs/values",
-     "description": "Its values' names, a hand table's. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one."
+     "description": "Its values' names, a hand table's. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\"."
     },
     "note": {
      "type": "string",
@@ -609,7 +609,7 @@
     },
     "values": {
      "$ref": "#/$defs/values",
-     "description": "Its values' names, a hand table's. In the plain pass (every camera's but the ILCE-1M2 firmware 4.00's) a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\". The ILCE-1M2's own pass keeps its meaning until the two passes become one."
+     "description": "Its values' names, a hand table's. In both of the writer's passes a value a hand table names is named, not proved: its name counts as checked on the camera (an editor offers it outside Expert mode) only where a proof covers it, the report's or a hand proof with its evidence, a rule names it from another setting's proof (a shared list, docs/decisions/0025), or a NOT_OFFERED mark says the camera holds it (held); otherwise its source is \"counted\"."
     }
    }
   },

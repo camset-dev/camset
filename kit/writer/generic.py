@@ -23,7 +23,7 @@ from .labels import clean
 from .offered import check_video_systems, with_video_systems
 from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
                      reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
-                     with_names, walked_whole, written_by_row, written_values, with_option_trees, with_scales,
+                     walked_whole, written_by_row, written_values, with_option_trees, with_scales,
                      without_observed, without_set_twins)
 
 
@@ -101,8 +101,9 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     RECORD_FIXES, UNPROVED, PP7_VALUES, FRAME_PROOFS, a registration's allowance into `allowed`, what the tables no
     longer name taken out, the entries that cannot take effect said) before a disputed record loses its proof, the
     pickers' lists cut to their walks (PICKER_LISTS, the definition's sample file `sample` checked) and the
-    not-offered marks (NOT_OFFERED) before the names' sources are set, a value a hand table names that no proof covers
-    named "counted" (hand_facts.named_not_proved), and a NEW_LIKE record's filled values named as its sibling's stand
+    not-offered marks (NOT_OFFERED) before the names' sources are set (hand_facts.name_sources, as the ILCE-1M2's
+    pass sets them: a value a hand table names that no proof and no shared list covers named "counted", no rule's or
+    table's word kept from the old proof), and a NEW_LIKE record's filled values named as its sibling's stand
     (hand_facts.like_fill_names). The evidence reaches only the fields the definition keeps private; a reason's day or
     a mark's evidence the hand evidence no longer gives is taken out on purpose, said and added to `taken_out` for the
     write. Every step is a no-op on empty tables. CONTEXT_WORDS is generic_main's (proofs.reworded)."""
@@ -119,7 +120,8 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     start_only = collections.defaultdict(set)      # values only a start line credited (pass2_report.start_lines)
     came = collections.defaultdict(dict)       # the runs whose proofs proved each record, each its latest day
     readers, disputed = collections.defaultdict(dict), set()
-    # what backs a value's name against the reading (a hand table's), and a rule's copy (a sibling's fill): with_names
+    # what backs a value's name against the reading (a hand table's), and a rule's copy (a sibling's fill):
+    # hand_facts.name_sources
     over, derived = collections.defaultdict(dict), collections.defaultdict(dict)
     like_rows = {}                             # a NEW_LIKE record's rows, laid out after the loop (lay_like)
     named = set()                              # every record key a report row names
@@ -255,9 +257,9 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     hand_facts.walked_lists(doc, T, E, report, run, sample)
     hand_facts.not_offered(doc, T, E, report, run.parent, derived, taken_out,
                            hand_facts.counted_proofs(run) if T.NOT_OFFERED else None)
-    hand_facts.named_not_proved(doc, over)     # a value a hand table names that no proof covers: named, not proved
-    for s in doc["settings"]:
-        with_names(s, readers[s["key"]], over[s["key"]], derived[s["key"]])
+    # the names' sources, as the ILCE-1M2's pass sets them: a value a hand table alone names, no proof and no shared
+    # list backing it, counted (named, not proved), and no rule's or table's word kept from the old proof
+    hand_facts.name_sources(doc, readers, over, derived)
     hand_facts.like_fill_names(doc, T)         # a NEW_LIKE record's fill: established only where the sibling's is
     return changed
 

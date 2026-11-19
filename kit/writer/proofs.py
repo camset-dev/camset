@@ -291,14 +291,18 @@ def mixed(record: dict) -> bool:
 
 # where each value's name comes from (proved.names, schemas/definition.schema.json): read off the camera by two
 # readers, one, or the vision model alone; the old schema's label kept by likeness; a hand table's; counted (a rule or
-# a table written by hand names it, no proof chose it: the a1 II's hold quarter stops, and in the plain pass a hand
-# table's name no proof covers, writer/hand_facts.named_not_proved); copied from a
-# sibling, a hold or a bracket by a rule; a number scale's value between the sampled points. A value taken from
+# a table written by hand names it, no proof chose it: the a1 II's hold quarter stops, and in both passes a hand
+# table's name no proof and no shared list covers, writer/hand_facts.named_not_proved); derived, named by a rule from
+# another setting's proof (a sibling, a hold, a picker's group, a copy: camkit.definitions.SHARED_SOURCE, which marks
+# the setting "shared" where no proof chose the value on it); a number scale's value between the sampled points. A value taken from
 # "nothing changed" has its readers' source like any other, never a mark of its own (docs/decisions/0016), and an old
 # source of that kind ("held") is not written again (with_names)
 NAME_SOURCES = ("two readers", "one reader", "vision model", "schema kept", "hand table", "counted", "derived",
                 "sampled")
 READER_RANK = ("two readers", "one reader", "vision model")
+# a rule's or a hand table's word for a name, made afresh at every write from this run's proofs and tables, never taken
+# from the proof the definition held (docs/decisions/0025): a rule that no longer fires leaves no name standing
+RULE_SOURCES = ("derived", "hand table", "counted")
 
 
 def reader_source(said) -> str:
@@ -325,15 +329,16 @@ def note_readers(readers: dict, k: str, r: dict) -> None:
 
 def with_names(s: dict, readers: dict, over: dict, derived: dict) -> None:
     """The setting's proved.names, {"<value>": source} (NAME_SOURCES): every proved value, the hand table's or the
-    kept schema label's where one named it against the reading (`over`), else the readers', else what the definition
-    said before (a value kept_proof keeps), else a rule's copy (`derived`), else one reader; and each other value a rule
-    or a hand table named, or a sampled scale's, as such. Nothing when the setting has no proof. A source the
-    definition said before that is no longer one ("held", docs/decisions/0016) is not kept, nor an old reading of a value
-    a picker's sample from the held option proved (its proof now a count, "from_start")."""
+    kept schema label's where one named it against the reading (`over`), else the readers', else the reading the
+    definition said before (a value kept_proof keeps), else a rule's copy (`derived`), else one reader; and each other
+    value a rule or a hand table named this run, or a sampled scale's, as such. Nothing when the setting has no proof. A
+    rule's or a table's word the definition said before (RULE_SOURCES) is never kept: this run's rules and tables say
+    it again or nothing does (docs/decisions/0025). Nor is a source that is no longer one ("held", docs/decisions/0016),
+    nor an old reading of a value a picker's sample from the held option proved (its proof now a count, "from_start")."""
     p = s.get("proved")
     if not p:
         return
-    old = {v: src for v, src in (p.get("names") or {}).items() if src in NAME_SOURCES}
+    old = {v: src for v, src in (p.get("names") or {}).items() if src in NAME_SOURCES and src not in RULE_SOURCES}
     seen = set(p.get("values") or ())
     # a scale's samples name its values between "sampled"; a sample stepped from the option the camera held (a picker's
     # three, "from_start") names nothing, its values named by the slot proved in full or not at all
@@ -344,7 +349,7 @@ def with_names(s: dict, readers: dict, over: dict, derived: dict) -> None:
             src = over.get(v) or readers.get(v) or old.get(str(v)) or derived.get(v) or "one reader"
         else:
             src = over.get(v) or derived.get(v) or ("sampled" if line else None) \
-                or (old.get(str(v)) if old.get(str(v)) in ("derived", "sampled", "schema kept", "hand table") else None)
+                or (old.get(str(v)) if old.get(str(v)) in ("sampled", "schema kept") else None)
         if src:
             out[str(v)] = src
     p.pop("names", None)

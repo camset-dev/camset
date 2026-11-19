@@ -615,21 +615,40 @@ def not_offered(doc: dict, tables, ev: dict, report: list, run_root: Path, deriv
                 derived[k][m["value"]] = "derived"
 
 
-def named_not_proved(doc: dict, over: dict) -> int:
+def named_not_proved(doc: dict, over: dict, derived: dict | None = None) -> int:
     """A value a hand table names (over's "hand table") that no proof covers (the setting's proved values, the report's
-    or a hand proof's) and no NOT_OFFERED mark holds (a factory value the camera writes): named, not proved, so its
-    name's source is "counted", which the editor offers in Expert mode only. Returns how many."""
+    or a hand proof's, or any value of a scale proved by samples, whose samples name the values between, as
+    writer/proofs.with_names does) and no NOT_OFFERED mark holds (a factory value the camera writes): named, not proved,
+    so its name's source is "counted", which the editor offers in Expert mode only; but one a rule named from another
+    setting's proof this run (`derived`: a shared list backs it) is inferred, "derived", as the rule says. Both passes
+    (name_sources). Returns how many it counted."""
     n = 0
     for s in doc["settings"]:
         srcs = over.get(s["key"])
         if not srcs:
             continue
-        seen = set((s.get("proved") or {}).get("values") or ())
+        p = s.get("proved") or {}
+        seen = set(p.get("values") or ())
+        if "sampled" in p and not (p["sampled"] or {}).get("from_start"):
+            seen |= {v for v, _ in s.get("values") or [] if not isinstance(v, (list, dict))}
         held = {m["value"] for m in s.get("not_offered") or [] if m.get("held")}
+        lent = (derived or {}).get(s["key"]) or {}
         for v, src in srcs.items():
             if src == "hand table" and v not in seen and v not in held:
-                srcs[v] = "counted"
-                n += 1
+                srcs[v] = lent.get(v) or "counted"
+                n += v not in lent
+    return n
+
+
+def name_sources(doc: dict, readers: dict, over: dict, derived: dict) -> int:
+    """Every setting's proved.names, the one way both passes set them (docs/decisions/0025): a value a hand table alone
+    names, no proof and no shared list backing it, counted (named_not_proved), then each setting's sources from this
+    run's readings, tables and rules (writer/proofs.with_names), none of a rule's or a table's taken from the old proof.
+    Returns how many values it counted."""
+    from .proofs import with_names
+    n = named_not_proved(doc, over, derived)
+    for s in doc["settings"]:
+        with_names(s, readers[s["key"]], over[s["key"]], derived[s["key"]])
     return n
 
 
