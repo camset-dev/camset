@@ -12,9 +12,11 @@
 // SHA-256 the command names (it must name one: kit/camkit/link.py logs it); "less than 3 MB" read as 3,000,000 bytes,
 // the stricter reading; text with a LUT_3D_SIZE or LUT_1D_SIZE line (a .cube LUT's size line), so another file renamed
 // .cube is not sent; user place 16 alone. Of the camera, where the reference leaves open what an import does: it must
-// not be recording (RecordingState), and the place must not be one it lists as holding a LUT (the user LUTs it offers to
-// delete, DeleteUserBaseLook's values, read and never set), nor may that list hold a value no reading of it explains;
-// a property that cannot be read refuses too.
+// not be recording (RecordingState), and DeleteUserBaseLook's values (read, never set) must hold nothing but Invalid,
+// All and the user places 1-16; a property that cannot be read refuses too. That list names every place there is, not
+// the places that hold a LUT (the ILCE-1M2, firmware 4.00, listed 1-16 and All on 2026-11-19 with all sixteen empty),
+// and no property Sony documents tells an empty place from a held one, so camlink cannot tell whether place 16 is
+// empty: kit/tools/lut_import.py's look at the camera's own Import/Edit table is that check (decision 26).
 //
 // The SDK imports from a path, which it opens itself once asked. It is never given the file checked: the bytes checked
 // are written into a fresh folder only this user can open (0700), under the same file name (Sony's rules are about the
@@ -214,42 +216,32 @@ inline std::string recordingProblem(bool read, long long value) {
     return "";
 }
 
-// Why the place may not be imported into by what the camera lists (`listed`: DeleteUserBaseLook's values, a user place
-// by number, All, Invalid), "" when it may. Sony's reference does not document how a held place is listed: a value
-// that is none of Invalid, All or a user place 1-16 refuses, as does All with no place by number, or the place itself.
-inline std::string placeHeld(bool read, const std::vector<long long>& listed, long long place) {
-    const std::string p = std::to_string(place);
-    if (!read) return "DeleteUserBaseLook could not be read, so whether place " + p + " already holds a LUT is not "
-                      "known (Sony's reference does not say what an import over one does)";
+// Why DeleteUserBaseLook's values (`listed`) stop the import, "" when they do not. The list names every user place
+// there is (1-16), All and Invalid, held or empty alike (the a1 II on 2026-11-19, all sixteen empty), so it says
+// nothing of place 16's emptiness, which the tool's look at the camera's own table establishes: only a list that cannot
+// be read, or one holding a value no reading of it explains (none of Invalid, All, 1-16), refuses.
+inline std::string listProblem(bool read, const std::vector<long long>& listed) {
+    if (!read) return "DeleteUserBaseLook could not be read, so the camera's user places are not known";
     for (const long long v : listed)
         if (v != kDeleteNone && v != kDeleteAll && (v < kFirstUser || v > kLastUser))
-            return "the camera lists a value among the user LUTs it can delete that no reading of the list explains (" +
-                   std::to_string(v) + "), so whether place " + p + " already holds a LUT is not known";
-    const bool all = std::find(listed.begin(), listed.end(), kDeleteAll) != listed.end();
-    const bool numbered = std::any_of(listed.begin(), listed.end(), [](long long v) {
-        return v >= kFirstUser && v <= kLastUser;
-    });
-    if (std::find(listed.begin(), listed.end(), place) != listed.end())
-        return "place " + p + " already holds a LUT (the camera lists it among the user LUTs it can delete), and Sony's "
-               "reference does not say what an import over one does: delete it on the camera by hand first";
-    if (all && !numbered)
-        return "the camera lists All among the user LUTs it can delete but no place by number, so whether place " + p +
-               " already holds a LUT is not known (Sony's reference does not say what an import over one does)";
+            return "the camera lists a value among its user LUTs that no reading of the list explains (" +
+                   std::to_string(v) + "), so what its user places hold is not known";
     return "";
 }
 
-// The camera's refusal before the SDK is asked: the import not enabled ("import_disabled"), or recording, or the place
-// held or not known to be empty ("import_refused"); none when it may go.
+// The camera's refusal before the SDK is asked: the import not enabled ("import_disabled"), or recording, or a list of
+// user places that cannot be read or explained ("import_refused"); none when it may go. Whether place 16 is empty is
+// not the camera's to say here (listProblem): the tool's look at its Import/Edit table says it.
 struct Refusal {
     std::string problem, cause;
 };
 
-inline Refusal stateRefusal(const CameraState& s, long long place) {
+inline Refusal stateRefusal(const CameraState& s, long long /*place*/) {
     if (const std::string why = enableProblem(s.enableRead, s.enable); !why.empty())
         return {"not imported: " + why, "import_disabled"};
     if (const std::string why = recordingProblem(s.recordingRead, s.recording); !why.empty())
         return {"not imported: " + why, "import_refused"};
-    if (const std::string why = placeHeld(s.listRead, s.listed, place); !why.empty())
+    if (const std::string why = listProblem(s.listRead, s.listed); !why.empty())
         return {"not imported: " + why, "import_refused"};
     return {};
 }

@@ -110,7 +110,7 @@ def test_camlink_says_its_import_command_and_its_answers():
     assert "lut_file::plan(" in body and "lut_file::judge(" in body
     assert "crPath(plan.copy.path)" in body and "crPath(plan.file" not in body and "u8path(path))" not in body.split(
         "lut_file::plan(", 1)[1].split(";", 1)[1]
-    for refusal in ("placeProblem", "check(", "enableProblem", "recordingProblem", "placeHeld", "stateRefusal"):
+    for refusal in ("placeProblem", "check(", "enableProblem", "recordingProblem", "listProblem", "stateRefusal"):
         assert f"lut_file::{refusal}" not in body, refusal                      # made in plan(), never beside it
     # the clone's own LUT folder is built in (MEDIUM 1): camlink's CAMSET_LUT_DIR, from this clone's private/lut
     cmake = (ROOT / "kit" / "link" / "CMakeLists.txt").read_text(encoding="utf-8")

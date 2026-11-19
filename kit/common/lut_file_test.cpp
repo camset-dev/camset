@@ -74,17 +74,18 @@ static void states() {
     CHECK(lut_file::recordingProblem(true, lut_file::kNotRecording).empty());
     for (long long v : {1LL, 2LL, 3LL}) CHECK(lut_file::recordingProblem(true, v).find("reads " + std::to_string(v)) != std::string::npos);
     CHECK(lut_file::recordingProblem(false, 0).find("could not be read") != std::string::npos);
-    // the places the camera lists as user LUTs it can delete: the place among them, "All" with no place by number, a
-    // value no reading of the list explains, or a list that cannot be read, refuses; a list without the place does not
-    CHECK(lut_file::placeHeld(true, {}, 16).empty());
-    CHECK(lut_file::placeHeld(true, {0}, 16).empty());                            // Invalid alone: nothing to delete
-    CHECK(lut_file::placeHeld(true, {1, 2, 0xFFFF}, 16).empty());
-    CHECK(lut_file::placeHeld(true, {16}, 16).find("16") != std::string::npos);
-    CHECK(!lut_file::placeHeld(true, {3, 16, 0xFFFF}, 16).empty());
-    CHECK(lut_file::placeHeld(true, {0xFFFF}, 16).find("All") != std::string::npos);
-    for (long long odd : {0x110LL, 0x8010LL, 17LL, -1LL, 0x10LL << 8, 0xFFFELL})                // LOW 3: none explained
-        CHECK(lut_file::placeHeld(true, {1, odd}, 16).find("no reading of the list explains") != std::string::npos);
-    CHECK(lut_file::placeHeld(false, {}, 16).find("could not be read") != std::string::npos);
+    // DeleteUserBaseLook's list names every place there is, not the places that hold a LUT: the a1 II listed 1 to 16
+    // and All with all sixteen empty (2026-11-19), so a listed place refuses nothing. A value no reading of the list
+    // explains, or a list that cannot be read, still refuses
+    std::vector<long long> every;
+    for (long long p = 1; p <= 16; ++p) every.push_back(p);
+    every.push_back(0xFFFF);
+    CHECK(lut_file::listProblem(true, every).empty());                            // what the camera listed, all empty
+    for (const std::vector<long long>& listed : std::vector<std::vector<long long>>{{}, {0}, {16}, {1, 2, 0xFFFF}, {0xFFFF}})
+        CHECK(lut_file::listProblem(true, listed).empty());
+    for (long long odd : {0x110LL, 0x8010LL, 17LL, -1LL, 0x10LL << 8, 0xFFFELL})                // none explained
+        CHECK(lut_file::listProblem(true, {1, odd}).find("no reading of the list explains") != std::string::npos);
+    CHECK(lut_file::listProblem(false, {}).find("could not be read") != std::string::npos);
     // all three, in order, and the cause each gives
     lut_file::CameraState s;
     s.enableRead = s.recordingRead = s.listRead = true;
@@ -94,8 +95,14 @@ static void states() {
     s.recording = 1;
     CHECK(lut_file::stateRefusal(s, 16).cause == "import_refused");
     s.recording = 0;
-    s.listed = {16};
+    s.listed = every;                                                             // every place listed: no refusal
+    CHECK(lut_file::stateRefusal(s, 16).problem.empty());
+    s.listed = {16, 0x110};
     CHECK(lut_file::stateRefusal(s, 16).cause == "import_refused");
+    s.listRead = false;
+    CHECK(lut_file::stateRefusal(s, 16).cause == "import_refused");
+    s.listRead = true;
+    s.listed = {};
     s.enable = 0;
     const lut_file::Refusal r = lut_file::stateRefusal(s, 16);
     CHECK(r.cause == "import_disabled" && r.problem.rfind("not imported: ", 0) == 0 && r.problem.find("reads 0") != std::string::npos);
@@ -204,6 +211,8 @@ static void plans(const fs::path& top) {
     ready.enableRead = ready.recordingRead = ready.listRead = true;
     ready.enable = 1;
     ready.recording = 0;
+    for (long long n = 1; n <= 16; ++n) ready.listed.push_back(n);             // as the a1 II lists them, all empty
+    ready.listed.push_back(0xFFFF);
     auto reading = [&](lut_file::CameraState s) {
         return [&asked, s]() { ++asked; return s; };
     };
@@ -214,15 +223,16 @@ static void plans(const fs::path& top) {
     CHECK(p.cause == "not_a_lut" && asked == 0 && !p.stateRead);
     p = lut_file::plan(16, given, "", lut, reading(ready), copies);
     CHECK(p.cause == "refused" && asked == 0);
-    // the camera's refusals: recording, the place held, the import not enabled; no copy
-    lut_file::CameraState recording = ready, held = ready, disabled = ready;
+    // the camera's refusals: recording, a list no reading explains, the import not enabled; no copy
+    lut_file::CameraState recording = ready, odd = ready, disabled = ready;
     recording.recording = 1;
-    held.listed = {16};
+    odd.listed = {16, 0x110};
     disabled.enable = 0;
     p = lut_file::plan(16, given, hash, lut, reading(recording), copies);
     CHECK(asked == 1 && p.stateRead && p.cause == "import_refused" && p.problem.find("RecordingState") != std::string::npos);
-    p = lut_file::plan(16, given, hash, lut, reading(held), copies);
-    CHECK(p.cause == "import_refused" && p.problem.find("already holds a LUT") != std::string::npos && p.copy.path.empty());
+    p = lut_file::plan(16, given, hash, lut, reading(odd), copies);
+    CHECK(p.cause == "import_refused" && p.problem.find("no reading of the list explains") != std::string::npos &&
+          p.copy.path.empty());
     p = lut_file::plan(16, given, hash, lut, reading(disabled), copies);
     CHECK(p.cause == "import_disabled" && p.copy.path.empty());
     CHECK(fs::is_empty(copies));

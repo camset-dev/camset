@@ -46,8 +46,8 @@
 // line names: never sent) and "upload_refused" (the camera would not take the file); importlut's (below) "not_a_lut"
 // (a file kit/common/lut_file.h refuses, or no copy of it could be made: never sent), "refused" (a place but 16, or no
 // SHA-256 named), "import_disabled" (BaseLookImportOperationEnableStatus does not read Enable, or cannot be read: the
-// SDK not asked), "import_refused" (the camera recording, the place one it lists as holding a LUT or a list no reading
-// explains, a property unreadable, the SDK refusing the call, or the camera answering anything but
+// SDK not asked), "import_refused" (the camera recording, a list of user places no reading explains, a property
+// unreadable, the SDK refusing the call, or the camera answering anything but
 // ImportLUTFile_Result_OK) and "import_unconfirmed" (no answer within 120 s, the session dropped meanwhile, or the
 // camera's OK as it dropped: whether the LUT went in is not known). Once connected:
 //   {"ok": true, "ready": <model>, "connection": "lan A.B.C.D" or "usb", "mac", "neighbour_mac", "login", "login_under",
@@ -106,9 +106,11 @@
 //                                         really ends, the file itself no link, ".cube", a name Sony's reference takes
 //                                         (63 characters at most), under 3,000,000 bytes, a .cube LUT's text, read
 //                                         once with SHA256's bytes ("hash_mismatch"); then BaseLookImportOperation-
-//                                         EnableStatus must read Enable, RecordingState Not Recording, and the place
-//                                         be none of the user LUTs the camera offers to delete (DeleteUserBaseLook's
-//                                         values, read, never set), a value no reading of that list explains refused.
+//                                         EnableStatus must read Enable, RecordingState Not Recording, and
+//                                         DeleteUserBaseLook's values (read, never set) hold nothing but Invalid, All
+//                                         and places 1-16. That list names every place, empty or not, so camlink cannot
+//                                         tell whether place 16 is empty: kit/tools/lut_import.py's look at the
+//                                         camera's own Import/Edit table is that check.
 //                                         The SDK gets the path of a copy of the bytes checked, the same name in a
 //                                         fresh folder of the system's temporary one only this user can open (0700),
 //                                         never the file itself; the copy goes once the camera has answered, or, with
