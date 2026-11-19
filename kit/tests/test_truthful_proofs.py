@@ -153,6 +153,45 @@ def test_a_table_cell_proved_under_an_older_reading_of_its_row_is_the_plans_cell
         "My Dial Settings / 17 Rear Dial L / *2"
 
 
+def test_a_copy_takes_its_settings_established_values_named_from_its_proof():
+    """copy_names: a copy (copy_of) lists, named from its setting's proof ("derived", so its setting is marked), each
+    value its setting established (chosen there, or itself named from another setting) under the same label, where
+    its own proofs name the value no other way: a value a proof wrote to the copy under another name is not lent, a
+    value chosen on the copy keeps its readers' name, one its setting did not establish stays as it was (a hand
+    table's, counted). A copy with no proof, a copy proved on a line and a copy of a setting with no proof take
+    nothing: no proof is made up."""
+    from writer.copies import copy_names
+    vals = [[0, "A"], [1, "B"], [2, "C"], [3, "D"]]
+    main = {"key": "m", "values": vals, "proved": {"values": [0, 1], "names": {"0": "two readers", "1": "two readers",
+                                                                                "2": "derived"}}}
+    copy = {"key": "c", "copy_of": "m", "values": [[0, "A"], [1, "B"], [2, "X"], [3, "D"]],
+            "proved": {"values": [0], "names": {"0": "one reader", "3": "counted"}}}
+    bare = {"key": "b", "copy_of": "m", "values": vals}
+    line = {"key": "l", "copy_of": "m", "values": vals, "proved": {"sampled": {"proofs": 3, "linear": True}}}
+    orphan = {"key": "o", "copy_of": "n", "values": vals, "proved": {"values": [0], "names": {"0": "one reader"}}}
+    unproved_main = {"key": "n", "values": vals}
+    doc = {"settings": [main, copy, bare, line, orphan, unproved_main]}
+    assert copy_names(doc) == 1
+    assert copy["proved"]["names"] == {"0": "one reader", "1": "derived", "3": "counted"}
+    assert definitions.lean_proof(copy["proved"]) == {"values": [0, 1], "shared": True}
+    assert definitions.inferred(copy["proved"]) == {1}, "the ledger's one rule: inferred, privately"
+    assert "proved" not in bare and line["proved"] == {"sampled": {"proofs": 3, "linear": True}}
+    assert orphan["proved"]["names"] == {"0": "one reader"}
+    assert copy_names(doc) == 0, "a rerun names nothing afresh"
+
+
+def test_both_passes_name_a_copys_values_from_its_setting():
+    """The a1 II's own pass and the plain pass both run copy_names once the copies are written (with_copies) and the
+    names set, so a copy proved on every value but the one it held at its start never shows that value as the one gap
+    in its list (decision 16)."""
+    import schema_update as S
+    from writer import generic
+    for f in (S.main, generic.plain):
+        src = inspect.getsource(f)
+        assert "copy_names(" in src and src.index("with_copies(") < src.index("copy_names("), f.__name__
+    assert inspect.getsource(S.main).index("hand_facts.name_sources(") < inspect.getsource(S.main).index("copy_names(")
+
+
 def test_a_rerun_drops_a_name_no_rule_gives_any_more(tmp_path, monkeypatch, capsys):
     """The plain pass on a definition whose proof names a value "derived" with no rule naming it this run (a rule that
     no longer fires): the value stays in the list, named, but leaves the proof's values and the setting's mark."""

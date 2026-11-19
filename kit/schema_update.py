@@ -168,7 +168,7 @@ from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
                            without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
-from writer.copies import with_copies, with_keeps_apart  # noqa: E402
+from writer.copies import copy_names, with_copies, with_keeps_apart  # noqa: E402
 from writer.limits import with_limit_pairs  # noqa: E402
 from writer.frames import with_frames  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
@@ -1821,6 +1821,8 @@ def main():
     # the names' sources, as the plain pass sets them (docs/decisions/0025): a value a hand table alone names, no proof
     # and no shared list backing it, counted (named, not proved); no rule's or table's word kept from the old proof
     hand_facts.name_sources(doc, readers, over, derived)
+    # a copy's list is its setting's (the copies written above, with_copies): the values its setting established
+    print(f"copies: {copy_names(doc)} values a copy takes from its setting's proof (copy_names)")
     without_observed(doc)           # the old lists of what the owner's files held: an editor reads the proofs
     for k in sorted(registered):        # registered values no hand table's proof took in: printed, not credited
         print(f"  registered {k}: {len(registered[k]['values'])} values registered ({registered[k]['run']}), but no "

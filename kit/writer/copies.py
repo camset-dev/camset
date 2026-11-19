@@ -345,3 +345,52 @@ def with_keeps_apart(doc: dict, table: dict, run_root: Path | None = None, evide
         print(f"keeps apart: {len(want)} switches with the families they keep apart "
               f"({sum(len(v) for v in want.values())} families)")
     return len(want)
+
+
+def established(s: dict) -> set:
+    """The values a setting's proof establishes, as its lean proof lists them (camkit.definitions.lean_proof: chosen,
+    read off the camera, named from another setting's proof, between a scale's samples), or every value of its list
+    for a scale proved on a line; none without a proof."""
+    from camkit.definitions import lean_proof
+    p = s.get("proved")
+    if not isinstance(p, dict):
+        return set()
+    if (p.get("sampled") or {}).get("linear") is True:
+        return {v for v, _ in s.get("values") or [] if not isinstance(v, (list, dict))}
+    return set(lean_proof(p).get("values") or [])
+
+
+def copy_names(doc: dict) -> int:
+    """A copy (copy_of) takes its setting's established values (established) under the same label, named from that
+    setting's proof ("derived", camkit.definitions.SHARED_SOURCE, so its own lean proof marks it shared), where its own
+    proofs name the value no other way: never a value chosen on the copy or one its readers, a sample or a hand table
+    backed by a proof name, and never one whose label on the copy is another than its setting's, for a proof wrote the
+    copy that value under that other name (docs/decisions/0025). A copy's list is its setting's list by what a copy is
+    (with_copies writes copy_of only while the camera's downloads bear the copies out), and without this a copy proved
+    on every value but the one it held at its start would show that value as the one gap in its list (decision 16). A
+    copy with no proof or proved on a line, or a copy of a setting with no proof, is left as it is: no proof is made
+    up. Run once the names are set (writer/hand_facts.name_sources) and the copies written (with_copies), in both
+    passes, until nothing changes (a copy of a copy). Returns how many values it named."""
+    from .labels import value_order
+    by_key = {s["key"]: s for s in doc["settings"]}
+    total = 0
+    while True:
+        n = 0
+        for s in doc["settings"]:
+            main, p = by_key.get(s.get("copy_of") or ""), s.get("proved")
+            if main is None or not isinstance(p, dict) or (p.get("sampled") or {}).get("linear") is True:
+                continue
+            est = established(main)
+            labels = {v: lab for v, lab in main.get("values") or [] if not isinstance(v, (list, dict))}
+            chosen, names = set(p.get("values") or ()), dict(p.get("names") or {})
+            for v, lab in s.get("values") or []:
+                if isinstance(v, (list, dict)) or v in chosen or v not in est or labels.get(v) != lab:
+                    continue
+                if names.get(str(v)) in (None, "counted"):
+                    names[str(v)] = "derived"
+                    n += 1
+            if names != (p.get("names") or {}):
+                p["names"] = {x: names[x] for x in sorted(names, key=lambda x: value_order(int(x)))}
+        total += n
+        if not n:
+            return total
