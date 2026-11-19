@@ -1524,6 +1524,56 @@ def test_a_second_reading_of_the_same_carousel_frame_is_the_first_ones(monkeypat
     assert len(cam.calls) == 3 and len(read) == 2, "the OCR of the same frame is OCR's own cache; no second wait"
 
 
+class CarouselCam(TitleCam):
+    """TitleCam on a menu page whose Right opens a carousel (and Right in the carousel its panel, a submenu), each press
+    making a new frame and remembering the one it was made on."""
+    def __init__(self, name="hdmi"):
+        super().__init__(name)
+        self.frame, self.kind_now, self.pressed = SimpleNamespace(image="menu", kind="menu"), "menu", []
+
+    def read(self):
+        return SimpleNamespace(kind=self.kind_now)
+
+    def press(self, key, **kw):
+        self.pressed.append(key)
+        self.pressed_from = self.frame
+        if key == "right":
+            self.kind_now = "dialog" if self.kind_now == "menu" else "submenu"
+        self.frame = SimpleNamespace(image=f"after {len(self.pressed)}", kind=self.kind_now)
+
+
+@pytest.mark.parametrize("name", ["hdmi", "osd"])
+def test_the_carousel_readings_left_wait_for_the_title_strip_as_option_index_does(monkeypatch, name):
+    """The review's 13 left three carousel readings sleeping a fixed 0.4 s and grabbing again: axis_walk's title, the
+    Picture Profile carousel's walk (proving.nav.enter_pp) and Creative Look's icon (proving.options.icon_index; the
+    side strip it reads redraws before the title). Each goes through proving.screens.title_settled, as option_index and
+    prove_run.axis_title do: over HDMI the title strip watched, no fixed sleep; over OSD 0.4 s and a fresh grab, as
+    before."""
+    import axis_walk
+    from proving import nav, options, screens
+    monkeypatch.setattr(screens.screen, "read", lambda f: SimpleNamespace(kind=f.kind))
+    monkeypatch.setattr(screens, "_TITLED", [])
+    slept = []
+    monkeypatch.setattr(screens.time, "sleep", slept.append)      # one time module: every caller's sleep
+    monkeypatch.setattr(axis_walk, "carousel_text", lambda cam: "Spot: L")
+    cam = TitleCam(name=name)
+    assert axis_walk.title(cam) == "Spot: L"
+    monkeypatch.setattr(options, "_ICONS", {"Creative Look": [np.zeros(4), np.ones(4)]})
+    monkeypatch.setattr(options, "icon_bits", lambda frame: np.ones(4))
+    cam2 = TitleCam(name=name)
+    assert options.icon_index(cam2, {"path": ["Creative Look"], "icon_frames": [], "labels": ["ST", "PT"]}, 1) == 1
+    pp = CarouselCam(name=name)
+    monkeypatch.setattr(nav, "at_label", lambda cam, kind, label: True)
+    monkeypatch.setattr(nav, "carousel_text", lambda cam: "PP1" if "down" not in pp.pressed else "PP2")
+    nav.enter_pp(pp, ["Picture Profile", "PP2"])
+    assert pp.pressed == ["right", "down", "right"]
+    calls = len(cam.calls) + len(cam2.calls) + len(pp.calls)
+    if name == "hdmi":
+        assert 0.4 not in slept and calls == 4
+    else:
+        assert slept.count(0.4) == 4 and calls == 0
+
+
 # ---------------------------------------------------------------- I: a run's start before its link opens
 
 

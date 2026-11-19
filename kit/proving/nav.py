@@ -17,7 +17,8 @@ from crawl_run import go_to
 from camkit.live import menu_from_shooting
 
 from .base import LOCK_S, Failed, LockSeen, lock_log, lock_measured, lock_over
-from .screens import SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png, same_place
+from .screens import (SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png,
+                      same_place, title_settled)
 
 # While a DISP Set row is proved the shooting screen can be in another display mode ("No Disp. Info.":
 # no battery icon, so it reads "unknown", 2026-10-30); then a screen that stays "unknown" after the
@@ -182,8 +183,7 @@ def enter_pp(cam, path, at=None):
         raise Failed(f"Right on Picture Profile opened {cam.read().kind}, not its carousel")
     first = None
     for n in range(PP_LAP):
-        time.sleep(0.4)
-        cam.refresh("reread")
+        title_settled(cam)          # the title redraws after the side strip: watched over HDMI, 0.4 s over OSD as before
         t = carousel_text(cam)
         if option_key(t) == option_key(path[1]) or reading.code_same(t, path[1]):
             break

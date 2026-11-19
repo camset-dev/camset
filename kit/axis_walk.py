@@ -12,7 +12,6 @@ so walk the axes before proving.
 """
 import argparse
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -22,6 +21,7 @@ from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import PASS1, carousel_text, frame_file, main_name, option_key  # noqa: E402
+from proving.screens import title_settled  # noqa: E402
 from runner import (add_scan_argument, load_scan, menu_from_shooting, prover_session, read_json,  # noqa: E402
                     write_json)
 
@@ -49,8 +49,9 @@ def axis_options() -> dict:
 
 
 def title(cam) -> str:
-    time.sleep(0.4)                               # the title redraws after the strip
-    cam.refresh("reread")
+    """The carousel's title once its strip has stopped changing (proving.screens.title_settled: it redraws after the
+    side strip; over HDMI watched, over OSD 0.4 s and a fresh grab as before), as prove_run.axis_title reads it."""
+    title_settled(cam)
     return carousel_text(cam)
 
 

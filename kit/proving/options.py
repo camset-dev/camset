@@ -3,7 +3,6 @@ Creative Look's slots by their icon against pass 1's pictures, and a picker's fu
 walk (kit/table_walk.py) where OCR reads twins alike."""
 import difflib
 import re
-import time
 
 import numpy as np
 
@@ -115,8 +114,9 @@ def icon_index(cam, job, margin: int = 3) -> int | None:
     key = " > ".join(job["path"])
     if key not in _ICONS:
         _ICONS[key] = [icon_bits(load(frame_file(job["path"], fr))) for fr in job["icon_frames"]]
-    time.sleep(0.4)
-    cam.refresh("reread")
+    # the side strip, then the title, redraw after a press: the title strip watched over HDMI (its icon still by then),
+    # 0.4 s and a fresh grab over OSD, as before (proving.screens.title_settled)
+    title_settled(cam)
     live = icon_bits(cam.frame)
     d = sorted((int(np.count_nonzero(live != tp)), i) for i, tp in enumerate(_ICONS[key]))
     if len(d) == 1 or d[1][0] - d[0][0] >= margin:
