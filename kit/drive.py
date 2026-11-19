@@ -1625,13 +1625,9 @@ def main():
               flush=True)
         run.log("owner_question", row=owner_label, waived=True)
     # no reader listed: stop before the link opens, nothing pressed. The check asks each reader over the network, so it
-    # goes on beside the eyes being made, and is joined (what it raised raised there) before the link opens
-    readers = budget.beside("readers check", check_readers)
-    try:
-        hdmi = eyes_from_config(run)
-    except BaseException:
-        readers()           # what the readers' check raised comes first, as when it ran before the eyes
-        raise
+    # goes on beside the eyes being made, and is joined straight after, before any file of the run is opened or written
+    # (camkit.budget.made_beside: its error first, the eyes then closed)
+    hdmi = budget.made_beside("readers check", check_readers, lambda: eyes_from_config(run))
     log = open(run.dir / "drive.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
     if on_shooting:
         # the owner's word, said where the run's evidence is
@@ -1653,7 +1649,6 @@ def main():
     first_went = False
     unreached = None        # the --path label the scan did not reach (NotReached): the run exits EXIT_INCOMPLETE
     try:
-        readers()           # the readers' check answered, or the run stops here, the eyes closed below
         with Link(run) as link:
             why = first_open.other_body(link, run.root.name)
             if why:

@@ -467,10 +467,12 @@ def test_every_run_that_drives_the_menus_checks_its_readers_before_its_link():
     assert "kit/runner.py" in builders and "kit/crawl_run.py" in builders and len(set(builders) | set(managed)) >= 15
     for rel in builders:
         text = (ROOT / rel).read_text(encoding="utf-8")
-        # called in line, or (drive.py, crawl_run.py) beside the eyes being made and joined before the link opens
-        beside = 'readers = budget.beside("readers check", check_readers)' in text and \
-            text.index("readers()") < text.index("with Link(run) as link:") if "budget.beside(" in text else False
+        # called in line, or (drive.py, crawl_run.py) beside the eyes being made and joined straight after them
+        # (camkit.budget.made_beside), before the run's first file is opened and before the link opens
+        made = 'budget.made_beside("readers check", check_readers, lambda: eyes_from_config(run))'
+        beside = made in text and text.index(made) < min(text.index("open(run.dir"), text.index("with Link(run) as link:"))
         assert "from camkit.vlm import check_readers" in text and ("check_readers()" in text or beside), rel
+        assert "budget.beside(" not in text, f"{rel}: a check beside the start goes through budget.made_beside"
     for rel in managed:
         text = (ROOT / rel).read_text(encoding="utf-8")
         assert "readers=False" not in text or "camera=False" in text or "check_readers()" in text, rel

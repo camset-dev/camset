@@ -1747,7 +1747,8 @@ def test_the_readers_are_checked_beside_the_eyes_and_the_link_opens_only_after(t
 @pytest.mark.parametrize("which", ["drive", "crawl"])
 def test_a_readers_check_that_stops_the_run_stops_it_before_the_link_with_the_eyes_closed(tmp_path, monkeypatch, which):
     """No reader listed (camkit.vlm.check_readers' ConfigMissing): the run stops with its words before the link opens,
-    nothing pressed or downloaded, and the eyes made meanwhile are closed."""
+    nothing pressed or downloaded, the eyes made meanwhile closed, and no file of the run opened for a run that never
+    started (drive.jsonl, rows.jsonl) nor the owner's allowances logged."""
     from camkit import ConfigMissing
 
     def readers(events, made):
@@ -1755,6 +1756,49 @@ def test_a_readers_check_that_stops_the_run_stops_it_before_the_link_with_the_ey
     events, raised = start_run(which, tmp_path, monkeypatch, readers)
     assert isinstance(raised, ConfigMissing) and "no reader is listed" in str(raised.code)
     assert "link" not in events and "download" not in events and events[-1] == "eyes closed"
+    run_dir = tmp_path / ("kit2_drive" if which == "drive" else "kit2_crawl")
+    assert not (run_dir / "drive.jsonl").exists() and not (run_dir / "rows.jsonl").exists()
+    log = (run_dir / "events.jsonl").read_text(encoding="utf-8") if (run_dir / "events.jsonl").exists() else ""
+    assert "on_shooting_allowed" not in log and "c4_allowed" not in log
+
+
+def test_work_made_beside_the_readers_check_is_joined_at_once_and_left_alone_on_a_ctrl_c():
+    """camkit.budget.made_beside: the eyes made while the readers' check runs, the check joined straight after (its
+    answer before anything else of the run); what the check raised comes first, the eyes made closed; an error making
+    the eyes waits for the check to end (nothing left running past it) and raises the check's if it has one; a Ctrl-C
+    while the eyes are made goes at once, never kept waiting for a reader's answer."""
+    import threading
+    import time as real_time
+
+    from camkit import budget
+    closed, release = [], threading.Event()
+    eyes = SimpleNamespace(close=lambda: closed.append(True))
+    assert budget.made_beside("readers check", lambda: None, lambda: eyes) is eyes and not closed
+
+    def no_reader():
+        raise SystemExit("no reader")
+    with pytest.raises(SystemExit, match="no reader"):
+        budget.made_beside("readers check", no_reader, lambda: eyes)
+    assert closed == [True]
+    ended = []
+
+    def slow_check():
+        real_time.sleep(0.2)
+        ended.append(True)
+
+    def no_eyes():
+        raise RuntimeError("no capture device")
+    with pytest.raises(RuntimeError, match="no capture device"):
+        budget.made_beside("readers check", slow_check, no_eyes)
+    assert ended == [True], "the check ended before the error went on"
+
+    def ctrl_c():
+        raise KeyboardInterrupt
+    t0 = real_time.monotonic()
+    with pytest.raises(KeyboardInterrupt):
+        budget.made_beside("readers check", lambda: release.wait(5), ctrl_c)
+    assert real_time.monotonic() - t0 < 1.0, "not kept waiting for the check"
+    release.set()
 
 
 def tiny_scan(tmp_path, n=3):

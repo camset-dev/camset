@@ -13,6 +13,7 @@ thread of its own while the link opens: camkit.coverage.warm) writes the rest wi
     join = beside("readers check", fn)   fn started now on a thread of its own (named so); join() waits for it and gives
                                          what it returned, or raises what it raised, a SystemExit among them, in the
                                          caller's thread ("readers check waited": how long the caller waited)
+    made_beside(name, check, make)       make() while check() runs beside it, the check joined straight after
     taken()                              what has been timed since the last time, as {"phases": {name: s}, "notes": ...}
     report(run)                          taken() as one events.jsonl line ("start_budget"); nothing when nothing was
 
@@ -84,6 +85,28 @@ def beside(name: str, fn, *args, **kw):
             raise box["error"]
         return box.get("value")
     return join
+
+
+def made_beside(name: str, check, make, close=lambda made: made.close()):
+    """make() (a run's eyes) while check() (the readers' check, which waits on the network) runs beside it (beside), the
+    check joined straight after: what make made, once the check has answered, before anything else of the run is opened
+    or written. What the check raised comes first, as when it ran before the eyes: the thing made is closed (`close`).
+    An error making it waits for the check to end, so nothing is left running past it (and raises the check's error
+    where it has one). A KeyboardInterrupt while it is made goes at once, never kept waiting for a reader's answer."""
+    join = beside(name, check)
+    try:
+        made = make()
+    except KeyboardInterrupt:
+        raise
+    except BaseException:
+        join()
+        raise
+    try:
+        join()
+    except BaseException:
+        close(made)
+        raise
+    return made
 
 
 def taken() -> dict:
