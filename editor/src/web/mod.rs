@@ -408,7 +408,8 @@ impl App {
             // file B and the base, sent up from the page and opened as the window's B: Open… and Base: Open… open them
             "open_b" => {
                 let path = match self.web_upload_path(r, "B_") { Ok(p) => p, Err(e) => return e };
-                // another model or layout than file A: not compared, and why (`compare_refusal`)
+                // another model than file A: not compared, and why (`compare_refusal`); another firmware is compared,
+                // with the line the state carries (`firmware_note`)
                 if let Some(why) = self.load(&path).ok().and_then(|c| self.compare_refusal(&c, "file B")) {
                     return WebReply::error(409, &why);
                 }
@@ -1592,6 +1593,8 @@ impl App {
             "tabs": self.schema.tabs,
             // the window's line under the files when they were saved under different video systems; null when not
             "video_note": self.video_systems_note(),
+            // the window's line when file B or the base is from another firmware of this camera (`firmware_note`)
+            "firmware_note": self.firmware_note(),
         })
     }
 
@@ -5181,11 +5184,9 @@ mod safety_tests {
         for b in older.sections[1].get_mut(0x0cde).unwrap().value.iter_mut() { *b = b.wrapping_add(1); }
         assert_eq!(request(&mut app, "open", json!({}), Some((&older.to_bytes(), false))).status, 200);
         app.doc.as_mut().unwrap().unchecked_ok = true;   // Edit anyway, in the desktop app (the page may not turn it on)
-        // file B from a checked firmware is not compared with it at all (`compare_refusal`)
-        assert_eq!(request(&mut app, "open_b", json!({}), Some((SAMPLE, false))).status, 409);
-        // file B: the same firmware, its live Creative Look another than A's
-        let mut b = older.clone();
-        for x in b.sections[0].get_mut(0x0cde).unwrap().value.iter_mut() { *x = x.wrapping_add(2); }
+        // file B: a checked firmware whose live Creative Look differs from A's
+        let mut b = test_parse(SAMPLE).unwrap();
+        for x in b.sections[0].get_mut(0x0cde).unwrap().value.iter_mut() { *x = x.wrapping_add(1); }
         assert_eq!(request(&mut app, "open_b", json!({}), Some((&b.to_bytes(), false))).status, 200);
         let look = |app: &App| app.doc.as_ref().unwrap().edited.sections[0].get(0x0cde).unwrap().value.clone();
         let before = look(&app);

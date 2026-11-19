@@ -2468,12 +2468,12 @@ function cmpSetMode(mode) {
 
 /** The Compare bar: A, B and the base with their names and firmware badges (Open… on each), Swap A/B,
  *  Download A, Export CSV, the search, the tab and the switches, the line saying once which file
- *  each letter of the columns' names is, and the window's line when the files were saved under different video
- *  systems (`video_note`). */
+ *  each letter of the columns' names is, the window's line when B or the base is from another firmware of the camera
+ *  (`firmware_note`), and its line when the files were saved under different video systems (`video_note`). */
 function drawCompareBar(s, f) {
   const c = s.compare || { b: null, base: null, tabs: [] };
   const bar = $("bar-compare");
-  const key = JSON.stringify([f && [f.name, f.model, f.saved, f.badge, f.edit_anyway_in_desktop], c.b, c.base, c.tabs, c.video_note]);
+  const key = JSON.stringify([f && [f.name, f.model, f.saved, f.badge, f.edit_anyway_in_desktop], c.b, c.base, c.tabs, c.video_note, c.firmware_note]);
   if (bar.dataset.key !== key) {
     bar.dataset.key = key;
     const none = () => el("span", { class: "weak" }, "none");
@@ -2497,6 +2497,8 @@ function drawCompareBar(s, f) {
       f ? el("span", { class: "cmp-src-a" }, `A = ${f.name} (the file you edit)`) : null,
       c.b ? el("span", { class: "cmp-src-b" }, `B = ${c.b.name}`) : null,
       c.base ? el("span", { class: "cmp-src-base" }, `Base = ${c.base.name}`) : null,
+      // file B or the base from another firmware of this camera: the window's line, in normal-size text
+      c.firmware_note ? el("strong", { class: "warn" }, plain(`⚠ ${c.firmware_note}`)) : null,
       c.video_note ? el("span", { class: "small warn" }, c.video_note) : null].filter(Boolean);
     $("cmp-letters").replaceChildren(...letters);
     $("cmp-letters").hidden = !letters.length;

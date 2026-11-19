@@ -165,24 +165,38 @@ impl App {
     }
 
     /// Why file `c` cannot be compared with file A, as file B or as the base (`what` names it): Compare reads it with
-    /// file A's definition, record by record, and copies its values into A, so it must be from the same camera model
-    /// and hold its settings in the same places (`CamSet::layout_signature`, the firmware's layout), as the Write gate
-    /// asks of the camera (`write_check`). What it is and why, in plain words; None when it may be compared, or no
-    /// file A is open.
+    /// file A's definition, record by record, and copies its values into A, so it must be from the same camera model,
+    /// where another model's names mean nothing. One of another firmware of that model is compared, with a line saying
+    /// what that means (`firmware_note`). What it is and why, in plain words; None when it may be compared, or no file
+    /// A is open.
     pub(crate) fn compare_refusal(&self, c: &CamSet, what: &str) -> Option<String> {
         let a = &self.doc.as_ref()?.edited;
-        if c.model() != a.model() {
-            return Some(format!("Not compared: {what} is from a {} (firmware {}) and file A from a {}. The editor compares files of one camera model only: it reads both with file A's camera definition, and another model keeps other settings in the same places.", c.model(), c.firmware(), a.model()));
+        (c.model() != a.model()).then(|| format!("Not compared: {what} is from a {} (firmware {}) and file A from a {}. The editor compares files of one camera model only: it reads both with file A's camera definition, and another model keeps other settings in the same places.", c.model(), c.firmware(), a.model()))
+    }
+
+    /// The line Compare shows, window and page, while file B or the base is from the same camera as file A but keeps
+    /// its settings as another firmware does (another `CamSet::layout_signature`): which firmware, and what that means,
+    /// in the words the Edit anyway window uses (a firmware update can move settings; the settings that sit where the
+    /// editor expects them). It is compared, and copies take only those settings (`copy_row` leaves the others alone).
+    /// None when every file open is laid out as file A.
+    pub(crate) fn firmware_note(&self) -> Option<String> {
+        let d = self.doc.as_ref()?;
+        let a = &d.edited;
+        let mut who = Vec::new();
+        for (src, name) in [(Src::B, "File B"), (Src::Base, "The base file")] {
+            let Some(c) = self.set_for(src).filter(|c| c.model() == a.model() && c.layout_signature() != d.signature) else { continue };
+            who.push(if c.firmware() != a.firmware() {
+                format!("{name} is from firmware {} of this camera, file A from firmware {}.", c.firmware(), a.firmware())
+            } else {
+                format!("{name} keeps its settings in other places than file A, though both say firmware {}.", a.firmware())
+            });
         }
-        if c.layout_signature() != a.layout_signature() {
-            let why = if c.firmware() != a.firmware() { format!("{what} is from firmware {} of the {} and file A from firmware {}", c.firmware(), c.model(), a.firmware()) } else { format!("{what} holds its settings in other places than file A, though both say firmware {}", a.firmware()) };
-            return Some(format!("Not compared: {why}. The editor compares files that hold their settings in the same places only: it reads both with file A's camera definition, and a firmware that moved a setting would show it under another's name. Open a file saved by the same firmware as file A."));
-        }
-        None
+        (!who.is_empty()).then(|| format!("{} A firmware update can move settings: the editor reads both files the way file A's firmware keeps them, so a setting the other firmware keeps elsewhere can show a wrong value here, and only the settings that sit where the editor expects them in both files are copied into A.", who.join(" ")))
     }
 
     /// After file A changed (another file opened or read, the sample, a recovery): file B and the base close where they
-    /// are not like it (`compare_refusal`), and the status says why.
+    /// are of another model (`compare_refusal`), and the status says why; one of another firmware stays, and the status
+    /// says what that means (`firmware_note`), as Compare's line does.
     pub(crate) fn close_unlike_compare(&mut self) {
         if let Some(why) = self.compare.as_ref().and_then(|(_, c)| self.compare_refusal(c, "file B")) {
             self.compare = None;
@@ -191,6 +205,9 @@ impl App {
         if let Some(why) = self.base.as_ref().and_then(|(_, c)| self.compare_refusal(c, "the base file")) {
             self.base = None;
             self.status = format!("{} {why}", self.status).trim_start().to_string();
+        }
+        if let Some(note) = self.firmware_note() {
+            self.status = format!("{} {note}", self.status).trim_start().to_string();
         }
         self.prune_cols();
     }
@@ -213,6 +230,10 @@ impl App {
                 self.matrix_only_diff = self.prefs.matrix_only_diff;
                 self.mode = Mode::Compare;
                 self.diff_cursor = None;
+                // another firmware of the same camera: what that means, as Compare's line says it
+                if let Some(note) = self.firmware_note() {
+                    self.status = format!("{}. {note}", self.status);
+                }
                 self.remember_session();
             }
             Err(e) => self.status = e,
@@ -239,6 +260,9 @@ impl App {
                 self.mode = Mode::Compare;
                 self.compare_records = false;
                 self.diff_cursor = None;
+                if let Some(note) = self.firmware_note() {
+                    self.status = format!("{}. {note}", self.status);
+                }
                 self.remember_session();
             }
             Err(e) => self.status = e,
@@ -570,40 +594,67 @@ impl App {
 pub(crate) mod copy_tests {
     use super::*;
 
-    /// File B and the base are read with file A's definition and copied from into A, so Compare takes only a file of
-    /// file A's model and layout: another model's file, or one from another firmware, is not compared, and the status
-    /// (the page: its refusal) says what it is and why; nothing can then be copied from it. A file A opened after B
-    /// that B is not like closes B, and says so.
+    /// File B and the base are read with file A's definition and copied from into A. Another model's file, where A's
+    /// names mean nothing, is not compared: the status (the page: its refusal) says what it is and why. One from another
+    /// firmware of the same camera is compared, with a line the window's Compare bar and the page's draw, and the status
+    /// says, naming the firmware and what it means (copies take only the settings that sit where the editor expects
+    /// them in both: `copies_leave_other_shapes_alone` and `the_page_leaves_other_shapes_alone`). A file A opened while
+    /// B is open closes a B of another model, and says why; a B of another firmware stays, with the line.
     #[test]
-    fn compare_takes_only_a_file_like_file_a() {
+    fn compare_takes_only_a_file_of_file_as_camera() {
         use crate::write::safety_tests::{other_firmware, other_model};
         let dir = std::env::temp_dir().join(format!("camset_compare_like_{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let file = |name: &str, c: &CamSet| { let p = dir.join(name); std::fs::write(&p, c.to_bytes()).unwrap(); p };
         let (model, firmware) = (file("MODEL.DAT", &other_model()), file("OLD.DAT", &other_firmware()));
+        let note = |name: &str| format!("{name} is from firmware 2.00 of this camera, file A from firmware 4.00. A firmware update can move settings: the editor reads both files the way file A's firmware keeps them, so a setting the other firmware keeps elsewhere can show a wrong value here, and only the settings that sit where the editor expects them in both files are copied into A.");
+        let state = |app: &mut App| -> serde_json::Value { serde_json::from_slice(&crate::web::tests::answer(app, "state", serde_json::json!({})).body).unwrap() };
+        // what the window's Compare bar draws (its second frame)
+        let drawn = |app: &mut App| -> Vec<String> {
+            let ctx = egui::Context::default();
+            let mut frame = eframe::Frame::_new_kittest();
+            let _ = ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, &mut frame));
+            crate::test_support::texts(&ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(app, ctx, &mut frame)).shapes)
+        };
         let mut app = App::new(vec![], Prefs::default());
         app.open_sample_now();
-        let a = app.doc.as_ref().unwrap().edited.clone();
+        // another model: not compared, as B or as the base, in the window and on the page
         app.open_compare(model.clone());
         assert!(app.compare.is_none() && app.mode != Mode::Compare, "not opened");
         assert!(app.status.starts_with("Not compared: file B is from a ILCE-0TEST (firmware 4.00) and file A from a ILCE-1M2.") && app.status.contains("camera definition"), "{}", app.status);
-        app.open_compare(firmware.clone());
-        assert!(app.compare.is_none() && app.status.starts_with("Not compared: file B is from firmware 2.00 of the ILCE-1M2 and file A from firmware 4.00."), "{}", app.status);
-        // the same model and layout: compared; then the base, held to the same rule
-        let same = file("SAME.DAT", &a);
-        app.open_compare(same.clone());
-        assert!(app.compare.is_some() && app.mode == Mode::Compare, "{}", app.status);
-        app.open_base(firmware.clone());
-        assert!(app.base.is_none() && app.status.starts_with("Not compared: the base file is from firmware 2.00"), "{}", app.status);
-        // the page: refused in the same words, file B left as it was
         let r = crate::web::tests::upload(&mut app, "open_b", &other_model().to_bytes(), "MODEL_B.DAT");
         let j: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
         assert!(r.status == 409 && j["error"].as_str().unwrap().starts_with("Not compared: file B is from a ILCE-0TEST"), "{j}");
-        assert_eq!(app.compare.as_ref().map(|(p, _)| p.clone()), Some(same.clone()));
-        // file A of another firmware opened while B is open: B closes, and the status says why
+        assert!(app.compare.is_none());
+        // another firmware of the same camera: compared, with the line in the window, on the page and in the status
+        app.open_compare(firmware.clone());
+        assert!(app.compare.is_some() && app.mode == Mode::Compare, "{}", app.status);
+        assert_eq!(app.firmware_note(), Some(note("File B")));
+        assert!(app.status.ends_with(&note("File B")), "{}", app.status);
+        assert!(drawn(&mut app).contains(&format!("⚠ {}", note("File B"))), "the window's Compare bar draws the line");
+        assert_eq!(state(&mut app)["compare"]["firmware_note"], serde_json::json!(note("File B")));
+        app.open_base(model.clone());
+        assert!(app.base.is_none() && app.status.starts_with("Not compared: the base file is from a ILCE-0TEST"), "{}", app.status);
+        app.open_base(firmware.clone());
+        assert!(app.base.is_some() && app.firmware_note() == Some(format!("{} {}", note("File B").split(" A firmware").next().unwrap(), note("The base file"))), "{:?}", app.firmware_note());
+        app.close_base();
+        // the page's open_b of another firmware: compared, the line in its state
+        assert_eq!(crate::web::tests::upload(&mut app, "open_b", &other_firmware().to_bytes(), "OLD_B.DAT").status, 200);
+        assert_eq!(state(&mut app)["compare"]["firmware_note"], serde_json::json!(note("File B")));
+        // file B of file A's firmware: no line
+        let same = file("SAME.DAT", &app.doc.as_ref().unwrap().edited.clone());
+        app.open_compare(same.clone());
+        assert!(app.firmware_note().is_none() && state(&mut app)["compare"]["firmware_note"].is_null());
+        assert!(!drawn(&mut app).iter().any(|t| t.contains("A firmware update can move settings")));
+        // a file A of another firmware opened while B is open: B stays, with the line, and the status says it
         app.open(firmware);
-        assert!(app.compare.is_none() && app.status.contains("Not compared: file B is from firmware 4.00"), "{}", app.status);
+        assert_eq!(app.compare.as_ref().map(|(p, _)| p.clone()), Some(same.clone()));
+        let back = "File B is from firmware 4.00 of this camera, file A from firmware 2.00.";
+        assert!(app.firmware_note().is_some_and(|n| n.starts_with(back)) && app.status.contains(back), "{}", app.status);
+        // a file A of another model: B closes, and the status says why
+        app.open(model);
+        assert!(app.compare.is_none() && app.status.contains("Not compared: file B is from a ILCE-1M2 (firmware 4.00) and file A from a ILCE-0TEST."), "{}", app.status);
         assert!(app.cols.iter().all(|c| c.src == Src::A));
         let _ = std::fs::remove_dir_all(&dir);
     }

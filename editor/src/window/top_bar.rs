@@ -394,6 +394,10 @@ impl App {
                     ui.add_space(12.0);
                 }
             });
+            // file B or the base from another firmware of this camera: what that means, in normal-size text
+            if let Some(note) = self.firmware_note() {
+                ui.add(egui::Label::new(RichText::new(format!("⚠ {note}")).color(tone::caution(ui.visuals())).strong()).wrap());
+            }
             if let Some(note) = self.video_systems_note() {
                 ui.add(egui::Label::new(RichText::new(note).small().color(tone::caution(ui.visuals()))).wrap());
             }
