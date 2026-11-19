@@ -42,7 +42,8 @@ impl App {
             ui.label("No file open.");
             return actions;
         };
-        let changes = doc.changes();
+        // setting by setting, as every list of edits shows them (`edit_lines`)
+        let changes = self.edit_lines(&doc.original, &doc.edited);
         if changes.is_empty() {
             ui.label("No edits yet.");
             return actions;
@@ -54,18 +55,15 @@ impl App {
             ui.strong("Now");
             ui.label("");
             ui.end_row();
-            for (si, id) in changes {
-                let s = self.schema.find(si != 0, id);
-                let name = s.map(|s| s.name.clone()).unwrap_or_else(|| self.unnamed(id));
-                let was = doc.original.sections[si].get(id).map(|r| r.display_value()).unwrap_or_default();
-                let now = doc.edited.sections[si].get(id).map(|r| r.display_value()).unwrap_or_default();
-                let fmt = |raw: &String| s.and_then(|s| raw.parse::<i64>().ok().and_then(|v| s.label_for(v).map(|l| if self.show_raw { format!("{l} [{v}]") } else { l.to_string() }))).unwrap_or(raw.clone());
-                ui.label(self.schema.camera.target_name(si));
-                ui.label(name);
-                ui.label(fmt(&was));
-                ui.label(RichText::new(fmt(&now)).color(tone::edit(ui.visuals())));
+            for l in changes {
+                ui.label(self.schema.camera.target_name(l.si));
+                ui.label(&l.name);
+                ui.label(&l.before);
+                ui.label(RichText::new(&l.after).color(tone::edit(ui.visuals())));
+                // this setting back as the file was last opened or saved, its other records with it; another setting
+                // kept in the same record keeps its edit
                 if ui.small_button("Revert").clicked() {
-                    actions.push(Action::Revert(si, (id, None)));
+                    actions.extend(l.slots.iter().map(|&slot| Action::Revert(l.si, slot)));
                 }
                 ui.end_row();
             }

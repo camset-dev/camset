@@ -807,6 +807,8 @@ impl App {
             "works_with": self.defs.works_with(),
             "compare": self.web_compare_state(),
         });
+        // the lines All edits lists (`edit_lines`), which its entry counts, as the window's
+        out["edit_lines"] = json!(self.doc.as_ref().map_or(0, |d| self.edit_lines(&d.original, &d.edited).len()));
         // help files of the open definition's name not used (another camera's), by file name and in Settings' words;
         // set apart, as the object above is as large as the json! macro takes
         out["help_refused"] = self.schema.help_refused.iter().zip(self.schema.help_refusals())
@@ -1462,27 +1464,13 @@ impl App {
         made.map_or(Ok(()), |why| Err(Err(why)))
     }
 
-    /// Every edited record: where, which setting, what it was and is.
+    /// Every edited setting, as the window's All edits lists them (`edit_lines`): where, which setting (its key, which
+    /// the page's Revert names; none for bytes no setting covers, reverted by their record), what it was and is.
     fn web_changes(&self) -> Value {
         let Some(doc) = &self.doc else { return json!({ "changes": [] }) };
-        let changes: Vec<Value> = doc.changes().into_iter().map(|(si, id)| {
-            let s = self.schema.find(si != 0, id);
-            let fmt = |c: &CamSet| c.sections[si].get(id).map(|r| {
-                if let Some(t) = s.filter(|s| s.text.is_some()).and_then(|_| r.text()) {
-                    return t;
-                }
-                // as the window's All edits: the label with the number it is stored as
-                let raw = r.display_value();
-                s.and_then(|s| raw.parse::<i64>().ok().and_then(|v| s.label_for(v).map(|l| format!("{l} [{v}]")))).unwrap_or(raw)
-            }).unwrap_or_default();
-            let raw = |c: &CamSet| c.sections[si].get(id).map(|r| r.display_value()).unwrap_or_default();
-            json!({
-                "section": si, "id": id, "where": self.schema.camera.target_name(si),
-                "name": s.map(|s| s.name.clone()).unwrap_or_else(|| format!("record 0x{id:04x}")),
-                "was": fmt(&doc.original), "now": fmt(&doc.edited),
-                "was_raw": raw(&doc.original), "now_raw": raw(&doc.edited),
-            })
-        }).collect();
+        let changes: Vec<Value> = self.edit_lines(&doc.original, &doc.edited).into_iter().map(|l| json!({
+            "section": l.si, "id": l.id, "key": l.key, "where": self.schema.camera.target_name(l.si), "name": l.name, "was": l.before, "now": l.after,
+        })).collect();
         json!({ "changes": changes })
     }
 
@@ -2097,7 +2085,16 @@ impl App {
                 let (Some(step), Some(si), Some(id)) = (index("step"), index("section"), body["id"].as_u64().and_then(|i| u16::try_from(i).ok())) else {
                     return WebReply::error(400, "Name the edit: its step, set and record.");
                 };
-                let Some(rec) = self.undo.get(step).and_then(|c| c.sections.get(si)).and_then(|sec| sec.get(id)).cloned() else {
+                // the line of the History window asked for (`edit_lines`): a setting by its key, that setting alone put
+                // back; with no key (bytes no setting covers), its record as it was before the step
+                let key = body["key"].as_str();
+                let Some((name, acts)) = self.doc.as_ref().zip(self.undo.get(step)).and_then(|(d, before)| {
+                    let rec = before.sections.get(si)?.get(id)?;
+                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
+                    let after = self.undo.get(step + 1).unwrap_or(&d.edited);
+                    let line = self.edit_lines(before, after).into_iter().find(|l| l.si == si && l.id == id && l.key.as_deref() == Some(key))?;
+                    Some((self.placed_name(si, &line.name), line.put_back(before, &d.edited)))
+                }) else {
                     return WebReply::error(400, "The history has no such edit.");
                 };
                 // the rule every edit keeps, checked here rather than left to whoever asks
@@ -2105,13 +2102,13 @@ impl App {
                     return WebReply::error(409, "View only: this firmware has not been checked yet, so editing is off.");
                 }
                 // a switch that keeps copies apart, put back to a value that does not: the window's question first
-                if let Err(e) = self.web_untick_apply(vec![Action::SetRecord(si, rec)], body) {
+                if let Err(e) = self.web_untick_apply(acts, body) {
                     return match e {
                         Ok(ask) => WebReply::json(json!({ "ask": ask })),
                         Err(why) => WebReply::error(409, &why),
                     };
                 }
-                self.status = format!("Record 0x{id:04x} put back as it was before edit {} {from}", step + 1);
+                self.status = format!("{name} put back as it was before edit {} {from}", step + 1);
                 ok()
             }
             "sample" => {
@@ -2711,14 +2708,9 @@ impl App {
         let mut steps = Vec::new();
         for (i, before) in self.undo.iter().enumerate() {
             let after: &CamSet = self.undo.get(i + 1).unwrap_or(&doc.edited);
-            for (si, id, name) in self.record_diff(before, after) {
-                let s = self.schema.find(si != 0, id);
-                let fmt = |c: &CamSet| c.sections.get(si).and_then(|sec| sec.get(id)).map(|r| {
-                    let raw = r.display_value();
-                    s.and_then(|s| raw.parse::<i64>().ok().and_then(|v| s.label_for(v).map(|l| format!("{l} [{v}]")))).unwrap_or(raw)
-                }).unwrap_or_default();
-                let place = if si == 0 { String::new() } else { format!("{} · ", self.schema.camera.target_name(si)) };
-                steps.push(json!({ "step": i, "section": si, "id": id, "name": format!("{place}{name}"), "before": fmt(before), "after": fmt(after),
+            // setting by setting, as the window's History lists them (`edit_lines`), a Revert putting back that setting alone
+            for l in self.edit_lines(before, after) {
+                steps.push(json!({ "step": i, "section": l.si, "id": l.id, "key": l.key, "name": self.placed_name(l.si, &l.name), "before": l.before, "after": l.after,
                     "revert": self.editable() }));
             }
         }
@@ -4066,10 +4058,11 @@ pub(crate) mod tests {
         let h = ask(&mut app, "history", json!({}));
         let steps = h["steps"].as_array().unwrap();
         assert!(!steps.is_empty() && steps.iter().all(|x| x["step"] == 0 && x["before"] != x["after"]));
-        let mine = steps.iter().find(|x| x["id"] == st.id && x["section"] == 0).expect("the edit's record");
-        assert!(mine["after"].as_str().unwrap().ends_with(&format!("[{other}]")));
-        assert_eq!(answer(&mut app, "revert_history", json!({ "step": 9, "section": 0, "id": st.id })).status, 400);
-        ask(&mut app, "revert_history", json!({ "step": 0, "section": 0, "id": st.id }));
+        let mine = steps.iter().find(|x| x["id"] == st.id && x["section"] == 0).expect("the edit's setting");
+        assert_eq!((&mine["after"], &mine["key"]), (&json!(st.label_for(other).unwrap()), &json!(st.key)));
+        assert_eq!(answer(&mut app, "revert_history", json!({ "step": 9, "section": 0, "id": st.id, "key": st.key })).status, 400);
+        assert_eq!(answer(&mut app, "revert_history", json!({ "step": 0, "section": 0, "id": st.id, "key": "no such key" })).status, 400);
+        ask(&mut app, "revert_history", json!({ "step": 0, "section": 0, "id": st.id, "key": st.key }));
         assert_eq!(app.doc.as_ref().unwrap().value(0, st.slot()), Some(cur));
         assert_eq!(app.undo.len(), 2, "a revert is an edit of its own");
         // a file on disk (a recent one), opened: the editor keeps a copy of it as first opened, which the Backups
@@ -4242,18 +4235,24 @@ pub(crate) mod tests {
         assert_eq!(app.unsaved(), 0);
     }
 
-    /// All edits as the window lists them: each value with the number it is stored as.
+    /// All edits and the Edit history as the window lists them: each value in its words, with the number it is stored
+    /// as only while the raw numbers are shown (Settings), and the setting's key, which the page's Revert names.
     #[test]
     fn all_edits_with_their_numbers() {
         let mut app = App::new(vec![], Prefs::default());
         app.open_sample();
         let (st, cur, other) = changeable(&app);
         ask(&mut app, "set", json!({ "target": 0, "key": st.key, "value": other }));
-        let c = ask(&mut app, "changes", json!({}));
-        let row = c["changes"].as_array().unwrap().iter().find(|x| x["id"] == st.id && x["section"] == 0).unwrap().clone();
-        assert_eq!(row["was"], format!("{} [{cur}]", st.label_for(cur).unwrap()).as_str());
-        assert_eq!(row["now"], format!("{} [{other}]", st.label_for(other).unwrap()).as_str());
-        assert_eq!((&row["was_raw"], &row["now_raw"]), (&json!(cur.to_string()), &json!(other.to_string())));
+        let (l0, l1) = (st.label_for(cur).unwrap(), st.label_for(other).unwrap());
+        let row = |app: &mut App| ask(app, "changes", json!({}))["changes"].as_array().unwrap().iter().find(|x| x["id"] == st.id && x["section"] == 0).unwrap().clone();
+        let step = |app: &mut App| ask(app, "history", json!({}))["steps"].as_array().unwrap().iter().find(|x| x["id"] == st.id && x["section"] == 0).unwrap().clone();
+        let (r, h) = (row(&mut app), step(&mut app));
+        assert_eq!((&r["was"], &r["now"], &r["key"]), (&json!(l0), &json!(l1), &json!(st.key)));
+        assert_eq!((&h["before"], &h["after"], &h["key"]), (&json!(l0), &json!(l1), &json!(st.key)));
+        app.show_raw = true;
+        let (r, h) = (row(&mut app), step(&mut app));
+        assert_eq!((&r["was"], &r["now"]), (&json!(format!("{l0} [{cur}]")), &json!(format!("{l1} [{other}]"))));
+        assert_eq!((&h["before"], &h["after"]), (&json!(format!("{l0} [{cur}]")), &json!(format!("{l1} [{other}]"))));
     }
 
     /// My Menu from a row: added to the first page with room, shown on the row, removed again; a setting the

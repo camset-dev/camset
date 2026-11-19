@@ -88,7 +88,8 @@ impl App {
                 self.view = View::Exposure;
             }
         }
-        let n_changes = self.doc.as_ref().map(|d| d.changes().len()).unwrap_or(0);
+        // the lines All edits lists, setting by setting (`edit_lines`)
+        let n_changes = self.doc.as_ref().map(|d| self.edit_lines(&d.original, &d.edited).len()).unwrap_or(0);
         if ui.selectable_label(self.view == View::Changes, format!("All edits ({n_changes})")).clicked() {
             self.view = View::Changes;
         }

@@ -155,11 +155,11 @@ impl App {
     pub(crate) fn describe(s: &Setting, v: Option<i64>) -> String {
         match v {
             None => "—".into(),
-            Some(v) if s.range.is_some() && s.label_for(v).is_none() => format!("{} {}", s.shown_number(v), s.unit),
+            Some(v) if s.range.is_some() && s.label_for(v).is_none() => s.shown_value(v),
             Some(v) => match s.label_for(v) {
                 Some(l) => l.to_string(),
                 None if s.values.is_empty() && s.unit.is_empty() => v.to_string(),
-                None if s.values.is_empty() => format!("{} {}", s.shown_number(v), s.unit),
+                None if s.values.is_empty() => s.shown_value(v),
                 None => format!("{v} (no name yet)"),
             },
         }

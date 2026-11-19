@@ -982,7 +982,7 @@ function drawSide() {
       title: "The memories on the mode dial beside the live settings: recall one into the live settings, or register the live settings into one" }) : null,
     s.exposure ? item({ label: s.exposure, on: showing("exposure"), onclick: go("exposure"),
       title: "Aperture, shutter speed and ISO for the live settings and each memory: who sets each in that exposure mode, and the limits on what the camera may choose" }) : null,
-    item({ label: `All edits (${s.edits || 0})`, on: showing("edits"), onclick: go("edits") }),
+    item({ label: `All edits (${s.edit_lines ?? s.edits ?? 0})`, on: showing("edits"), onclick: go("edits") }),
     // the Expert pages stay shown under a search, which filters them
     expert ? item({ label: "Unmapped records", on: view.page === "unmapped", onclick: go("unmapped") }) : null,
     expert ? item({ label: "Record map", on: view.page === "records", onclick: go("records"),
@@ -1923,7 +1923,8 @@ function showInMap(hex) {
 /** A value whose label is its own number ("30 [30]") shown once, as one without a label is. */
 const sameNumber = (t) => String(t ?? "").replace(/^([+-]?\d+(?:\.\d+)?)\s*\[\1\]$/, "$1");
 
-/** Every edit: where, which setting, what it was and is, as the window's All edits. */
+/** Every edit: where, which setting, what it was and is, as the window's All edits; Revert puts back that setting
+ *  alone (by its key), or bytes no setting covers by their record. */
 function drawChanges(list) {
   const head = el("div", { class: "head" }, el("h1", {}, "All edits"));
   if (!list.length) return [head, el("p", {}, "No edits yet.")];
@@ -1931,7 +1932,7 @@ function drawChanges(list) {
     el("thead", {}, el("tr", {}, el("th", {}, "Where"), el("th", {}, "Setting"), el("th", {}, "Was"), el("th", {}, "Now"), el("th", {}, ""))),
     el("tbody", {}, ...list.map((c) => el("tr", {},
       el("td", {}, c.where), el("td", {}, c.name), el("td", {}, sameNumber(c.was)), el("td", { class: "now" }, sameNumber(c.now)),
-      el("td", {}, el("button", { class: "small", onclick: () => act("revert_record", { section: c.section, id: c.id }) }, "Revert")))))))];
+      el("td", {}, el("button", { class: "small", onclick: () => (c.key ? act("revert", { target: c.section, key: c.key }) : act("revert_record", { section: c.section, id: c.id })) }, "Revert")))))))];
 }
 
 // --- Memories ---
@@ -3890,7 +3891,7 @@ async function loadHistory() {
   drawWindows();
 }
 
-/** Edit history: every edit of the session with its before and after, each record revertable. */
+/** Edit history: every edit of the session with its before and after, setting by setting, each revertable alone. */
 function drawHistory() {
   const s = state;
   if (xp.historyRev !== s.rev) {
@@ -3909,7 +3910,7 @@ function drawHistory() {
         el("tbody", {}, ...h.steps.map((x) => el("tr", {},
           el("td", {}, String(x.step + 1)), el("td", {}, x.name), el("td", {}, x.before), el("td", { class: "hist-after" }, x.after),
           el("td", {}, x.revert === false ? null : el("button", { class: "small", title: "Put this setting back to its value before this edit",
-            onclick: () => act("revert_history", { step: x.step, section: x.section, id: x.id }) }, "Revert")))))))];
+            onclick: () => act("revert_history", { step: x.step, section: x.section, id: x.id, key: x.key }) }, "Revert")))))))];
   }
   fillWindow("history", "Edit history", ...body);
 }

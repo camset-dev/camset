@@ -260,7 +260,7 @@ struct App {
     /// Compare: the height of a row as last drawn, for the rows off screen, which only keep their place.
     matrix_row_h: std::cell::Cell<f32>,
     /// History window: the lines of each undo step, worked out once per step (index = step).
-    history_cache: std::cell::RefCell<Vec<(HistKey, std::rc::Rc<Vec<HistRow>>)>>,
+    history_cache: std::cell::RefCell<Vec<(HistKey, std::rc::Rc<Vec<EditLine>>)>>,
     /// Whether the camera link program was found, and when it was last looked for (`have_helper`).
     helper_seen: std::cell::Cell<Option<(std::time::Instant, bool)>>,
     /// The file from a camera no definition covers that the status line last spoke about (`note_foreign`).

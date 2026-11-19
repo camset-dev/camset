@@ -632,7 +632,8 @@ impl App {
                 return out;
             }
         };
-        let diffs = self.record_diff(cam, &doc.edited);
+        // setting by setting, as every list of edits shows them (`edit_lines`)
+        let diffs = self.edit_lines(cam, &doc.edited);
         if diffs.is_empty() {
             out.push((match &when {
                 None => "Nothing changes: this file holds what the camera holds now.".to_string(),
@@ -640,19 +641,14 @@ impl App {
             }, false));
             return out;
         }
-        let named: Vec<&(usize, u16, String)> = diffs.iter().filter(|d| d.2 != "(unmapped)").collect();
+        let named: Vec<&EditLine> = diffs.iter().filter(|d| d.key.is_some()).collect();
         let unmapped = diffs.len() - named.len();
         let compared = match &when { None => "Compared with the camera now".to_string(), Some(w) => format!("Compared with what the camera held when it was last read ({w})") };
         let n = if named.len() == 1 { "1 setting".to_string() } else { format!("{} settings", named.len()) };
         let more = if unmapped > 0 { format!(" and {unmapped} more the editor cannot name yet") } else { String::new() };
         out.push((format!("{compared}, this changes {n}{more}:"), false));
-        for (si, id, name) in named.iter().take(10) {
-            let s = self.schema.find(*si != 0, *id);
-            let fmt = |c: &CamSet| c.sections.get(*si).and_then(|sec| sec.get(*id)).map(|r| {
-                let raw = r.display_value();
-                s.and_then(|s| raw.parse::<i64>().ok().and_then(|v| s.label_for(v).map(|l| l.to_string()))).unwrap_or(raw)
-            }).unwrap_or_default();
-            out.push((format!("    {}{}: {} ➡ {}", if *si == 0 { String::new() } else { format!("{} · ", self.schema.camera.target_name(*si)) }, name, fmt(cam), fmt(&doc.edited)), false));
+        for l in named.iter().take(10) {
+            out.push((format!("    {}: {} ➡ {}", self.placed_name(l.si, &l.name), l.before, l.after), false));
         }
         if named.len() > 10 { out.push((format!("    … and {} more (see All edits for the full list)", named.len() - 10), false)); }
         out
