@@ -29,7 +29,9 @@ Screen types:
   slider    one value on a horizontal scale (Aspect Marker Level, Exposure Comp., Flash Comp.), over
             live view: − and + boxes (92 px wide, mirrored about x 320, y ~316-378; without outlines the
             − and + alone, mirrored the same way), an orange 13x13
-            marker above or below the scale, the value in orange between ◂ ▸ (one goes at an end)
+            marker above or below the scale, the value in orange between ◂ ▸ (one goes at an end). Drawn
+            over a picture (Aspect Marker Level with HDMI Info. Display Off) it is read first, by the parts
+            its level leaves as they are (_picture_slider)
   sidelist  Picture Profile parameter list (PP1 > Gamma, Black Gamma > Range), over live view: ↩ box at
             the left (x 19-81; the ↩ alone without outlines), rows on the right (orange bar x 303-597,
             50 px pitch from y 86), a dim scrollbar at x 607 on long lists
@@ -192,9 +194,14 @@ OPTION_SIDE, OPTION_SIDE_TOL, OPTION_SIDE_PAD, OPTION_SIDE_ABOVE = (376, 615), 4
 # line of the − and +, light bars 1-4 px wide and 8-16 tall (2 x 12 at a 22 px pitch there), at least PIC_TICKS of them
 # a whole number of pitches apart (within PIC_TOL px), the pitch 12-40 px; the marker an orange square 9-17 px a side
 # whose foot is 8-40 px above that line and whose middle is on the ticks' grid (PIC_TOL); the value orange digits 20-34
-# px tall on one line 50-130 px above that line, centred within PIC_MID px of x 320
+# px tall on one line 50-130 px above that line, centred within PIC_MID px of x 320. Its level is how dark the camera
+# draws the picture's bands outside the aspect marker (x 0-107 and 532-639 there, the − and + and the footer's OK in
+# them): black at 12, nearly the picture's own from 3 down (kit2_pass2 261797-261812). PIC_NUMBERS of the scale's numbers
+# on the ticks' grid; across the scale's span the footer's rows at most PIC_RULE a rule (0.24 there, at every level: the
+# picture's grass); the footer's OK key matched by its light pixels over PIC_KEY (1.0 there, at every level)
 PIC_TICKS, PIC_TOL, PIC_MID = 6, 3, 30
 PIC_DIGIT_H = (18, 30)      # the scale's numbers on its line: marks this tall (27 px there), read by scale_run
+PIC_NUMBERS, PIC_RULE, PIC_KEY = 2, 0.45, 0.9
 
 
 @dataclass
@@ -522,10 +529,9 @@ def features(a: np.ndarray) -> dict:
     # boxed options alone ("buttons"): looked for only under a title's rule and over a footer's, with no tab column
     f["option_boxes"] = (_option_boxes(a, g, o) if f["title_line"] > 0.9 and f["footer_line"] > 0.9 and f["tab_sat"] < 8
                          else None)
-    # a slider over a picture: looked for only where the − and + stand alone and the footer's rule is too faint for the
-    # slider rule (classify reads it last)
-    f["picture_slider"] = (_picture_slider(a, g, o) if f["slider_buttons"] and not f["slider_buttons_boxed"]
-                           and f["footer_line"] <= 0.45 else None)
+    # a slider over a picture: looked for wherever no − and + boxes are drawn, and read before any rule (classify); not by
+    # the slider rule's measures, which its level moves (_picture_slider)
+    f["picture_slider"] = _picture_slider(a, g, o) if not f["slider_buttons_boxed"] else None
     return f
 
 
@@ -534,14 +540,23 @@ def _picture_slider(a, g, o) -> dict | None:
     the value's box (x0, y0, x1, y1), and the scale as found, which kit/provers/scale_run.py reads the number from:
     "line" its y, "ticks" each tick's middle x, "grid" (the first tick's x, the pitch), "numbers" the (x0, x1) of each
     group of digit-tall marks on the line (PIC_DIGIT_H; marks closer than half a pitch one group), "strays" how many
-    marks there are neither}. All of: the − and + alone, mirrored (_bare_signs); the scale's ticks on their
-    line, evenly a whole number of pitches apart; exactly one orange marker on that grid above the line; orange digits
-    on one line above the marker, centred on the screen, and nothing else orange from the value's line down to the
-    scale's between the − and the +; the footer's OK key (footer_keys, a template a picture does not match). A
-    photograph's orange, a missing tick or a second marker, and it is none: never a guess at the marker's place."""
+    marks there are neither}. All of: the − and + by their own pixels, mirrored on one line (_bare_signs, alone=False);
+    the scale's ticks on their line, evenly a whole number of pitches apart, and PIC_NUMBERS of its numbers on that grid;
+    exactly one orange marker on that grid above the line; orange digits on one line above the marker, centred on the
+    screen, and nothing else orange from the value's line down to the scale's between the − and the +; across the
+    scale's span no footer rule (PIC_RULE); the footer's OK key by its light pixels (_lit_key). A photograph's orange, a
+    missing tick or a second marker, and it is none: never a guess at the marker's place.
+    Nothing it asks for changes with the level (PIC_TICKS). The level dims the bands outside the aspect marker, which hold
+    the − and + and the OK, from the picture's own brightness down to black: the − and +, the OK and the scale's ticks
+    and numbers are light (grey over 150) inside a black outline, so their light pixels are the same over any band, and
+    the scale, its marker, its value and the footer's rows measured lie between the bands. What lies round the − and +
+    (_bare_signs' "alone", which a band as light as the picture fails from 3 down: kit2_pass2 261808), the footer's rule
+    measured across the bands (footer_line, which a light band's grass lifts past half a line) and the OK's grey match
+    (0.999 at 12, 0.957 at 1) all do, and none decides here; nor do the ◂ ▸, one gone at each end and the cloud behind
+    the ◂ as light as it is."""
     import cv2
-    signs = _bare_signs(g)
-    if signs is None or "ok_key" not in footer_keys(a):
+    signs = _bare_signs(g, alone=False)
+    if signs is None:
         return None
     sx, sy, sw, sh = signs
     cy, x0, x1 = sy + sh // 2, sx + sw + 4, 640 - sx - sw - 20        # clear of the + (wider than the −)
@@ -588,10 +603,35 @@ def _picture_slider(a, g, o) -> dict | None:
             numbers[-1] = (numbers[-1][0], max(numbers[-1][1], bx1))
         else:
             numbers.append((bx0, bx1))
+    if sum(on_grid((bx0 + bx1) / 2) for bx0, bx1 in numbers) < PIC_NUMBERS:
+        return None
+    s0, s1 = max(0, int(ticks[0] - pitch)), min(640, int(ticks[-1] + pitch) + 1)     # the scale's span, ends included
+    sat = _sat(a)
+    if max(float(((g[y, s0:s1] > 50) & (g[y, s0:s1] < 160) & (sat[y, s0:s1] < 25)).mean())
+           for y in range(424, 429)) > PIC_RULE:
+        return None                         # the footer's rule (footer_line's measure, between the bands) is drawn
+    if _lit_key(a, "ok_key") <= PIC_KEY:
+        return None
     strays = sum(not PIC_DIGIT_H[0] <= h <= PIC_DIGIT_H[1] for _, _, h in others)
     return {"marker": int(mark[0] + mark[2] // 2), "value": (vx0 - 4, vy0 - 4, vx1 + 4, vy1 + 4), "line": int(cy),
             "ticks": tuple(float(t) for t in ticks), "grid": (float(ticks[0]), float(pitch)), "numbers": tuple(numbers),
             "strays": int(strays)}
+
+
+def _lit_key(a, name) -> float:
+    """The best match of a footer key's template (FOOTER_KEYS) in the footer's band (y 415 on), as footer_keys matches
+    it, but by light pixels alone (grey over 150, the band's and the template's): a key the camera outlines in black over
+    a picture (the a1 II's "● OK" over Aspect Marker Level's sample photograph) is matched the same however light the
+    picture behind its outline, where footer_keys' grey match falls as the picture lightens. 0.0 where nothing is lit."""
+    import cv2
+    g = np.asarray(a, np.float32)
+    if g.ndim == 3:
+        g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyphs' cut
+    band = (g[415:480, :] > 150).astype(np.float32)
+    if not band.any():
+        return 0.0
+    t = (_template(name) > 150).astype(np.float32)
+    return float(np.nan_to_num(cv2.matchTemplate(band, t, cv2.TM_CCOEFF_NORMED)).max())
 
 
 def _option_boxes(a, g, o) -> tuple | None:
@@ -971,12 +1011,13 @@ def _slider_boxes(g):
     return None
 
 
-def _bare_signs(g):
+def _bare_signs(g, alone: bool = True):
     """The box (x, y, w, h) of the slider's − when it and the + stand alone, or None (module docstring): a solid
     bar 18-36 px wide and 2-7 tall at the left, a + of the same size at the right (its middle row and column lit
     end to end, its corners dark), on one line (centres within 3 px) mirrored about x 320, and nothing else lit
     round either (AF Transition Speed, 2026-11-08). The sliders drawn with 64 px boxes (Framing Tracking Speed,
-    the volumes) pass too: their box edges are further than 10 px from the signs."""
+    the volumes) pass too: their box edges are further than 10 px from the signs. alone=False leaves that last test
+    out, for signs drawn over a picture (_picture_slider): the first such pair by their own pixels."""
     import cv2
     y0 = 290
     m = (g[y0:410] > 150).astype(np.uint8)
@@ -995,7 +1036,7 @@ def _bare_signs(g):
     for mb in minus:
         for pb in plus:
             if abs(mb[0] + mb[2] / 2 + pb[0] + pb[2] / 2 - 640) <= 4 and abs(mb[1] + mb[3] / 2 - pb[1] - pb[3] / 2) <= 3 \
-                    and _alone(g, mb) and _alone(g, pb):
+                    and (not alone or (_alone(g, mb) and _alone(g, pb))):
                 return mb
     return None
 
@@ -1070,8 +1111,14 @@ def classify(f: dict) -> str:
     list's ↩ is only found alone (PP1 > Black Level at -10, 2026-11-08). Real tables read by their buttons (My
     Dial's and Image Quality Settings' OK, Rec. Media Settings, Mode Dial Control Set's Set All) can become
     nothing else. Last of all, a screen both readings leave unknown is a "buttons" screen where its boxed options are
-    found (_option_boxes): that reading never takes a screen any rule above places (2026-11-16); and one still unknown is
-    a slider where it is one drawn over a picture (_picture_slider, 2026-11-19), likewise read last."""
+    found (_option_boxes): that reading never takes a screen any rule above places (2026-11-16).
+    A slider drawn over a picture (_picture_slider, 2026-11-19) is read before every rule: the rules measure lines and
+    columns where its picture's bands lie (a notice's frame at x 30 and 609, a popup's at x 64 and 577, the help popup's,
+    the menu's tab column), which its level lights, from black to the picture's own (kit2_pass2 261797-261812: the notice's
+    frame 0.00 at 12, 0.53 at 1), and none of the screens they read draws all it asks for (of the 451,360 saved frames of
+    the runs it is found on Aspect Marker Level's 24 alone, 2026-11-19)."""
+    if f.get("picture_slider"):
+        return "slider"
     boxed = {**f, **{k: f[b] for k, b in _ALONE_KEYS.items() if b in f}, "cell_grid": False}
     kind = _classify(boxed)
     if kind == "unknown":
@@ -1080,8 +1127,6 @@ def classify(f: dict) -> str:
         kind = "sidelist"
     if kind == "unknown" and f.get("option_boxes"):
         kind = "buttons"
-    if kind == "unknown" and f.get("picture_slider"):
-        kind = "slider"
     return kind
 
 

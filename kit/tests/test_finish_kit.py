@@ -426,22 +426,49 @@ def test_the_cameras_select_media_card_screens_read_as_buttons(path):
 # ---------------------------------------------------------------- 3b. a slider drawn over a picture
 
 CY, PITCH, FIRST = 347, 22, 155          # the scale's line, its pitch, the place of its low end (Aspect Marker Level's)
+FRAME = (108, 532)                       # the aspect marker's frame: the bands outside it are what the level dims
+BANDS = [1.0, 0.75, 0.5, 0.25, 0.0]      # the bands' share of the picture's brightness: untouched (level 0) to black
+
+
+def outlined(a, mask, ink):
+    """`mask` drawn in `ink` (a grey, or a grey picture of the frame's size) inside a 1-px black outline, as the camera
+    draws its − and +, its numbers and its footer keys over a picture (kit2_pass2 261812): their light pixels are the
+    same over any picture."""
+    import cv2
+    ring = cv2.dilate(mask.astype(np.uint8), np.ones((3, 3), np.uint8)).astype(bool) & ~mask
+    a[ring] = 0
+    a[mask] = ink if np.isscalar(ink) else ink[mask][:, None]
 
 
 def picture_slider(at=12, ticks=True, uneven=False, marks=1, mark_off=0, value_x=320, ok=True, blob=False,
-                   footer_rule=False, seed=3) -> np.ndarray:
+                   footer_rule=False, seed=3, band=0.15, hidden=(), trees=True) -> np.ndarray:
     """Aspect Marker Level over a picture as the a1 II draws it with HDMI Info. Display Off (kit2_fin_crawl_amdisp_off
-    00028): a bright, textured "sky" over a darker "field", the sides dimmed; the title; the value in orange between
-    white ◂ ▸ (each outlined in black, as the camera draws them over a picture); the scale on the line of the bare −
-    and + (0 to 15, ticks 2 x 12 at a 22 px pitch, the end numbers and every fifth drawn as digits); an orange 13 x 13
-    marker over the value `at`; the footer's Help button and OK key. The other arguments make its neighbours."""
+    00028, kit2_pass2 261797-261812): a bright, textured "sky" over a darker "field"; at each side dark "trees" with a
+    few lighter leaves round the − and + (trees=False: none), and a grey "path" low down (the photograph's right band
+    holds one, which lifts the footer's measured rule there); outside the aspect marker's frame (FRAME, its 2-px lines
+    drawn) the bands at `band` of the picture's brightness, the level's doing (1: untouched, 0: black); the title; the
+    value in orange between white ◂ ▸ (each outlined in black, as the camera draws them over a picture); the scale on
+    the line of the bare − and + (0 to 15, ticks 2 x 12 at a 22 px pitch, the end numbers and every fifth drawn as
+    digits, the places in `hidden` drawn as nothing); an orange 13 x 13 marker over the value `at`; the footer's Help
+    button and OK key. The −, the +, the numbers and the footer keys are outlined in black, as the camera draws them.
+    The other arguments make its neighbours."""
     rng = np.random.default_rng(seed)
     a = np.zeros((480, 640, 3), np.uint8)
-    light = rng.integers(0, 60, (300, 424, 1))
-    a[:300, 108:532] = np.concatenate([120 + light, 160 + light // 2, 195 + light], axis=2).astype(np.uint8)   # sky
-    dark = rng.integers(0, 50, (180, 424, 1))
-    a[300:480, 108:532] = np.concatenate([30 + dark, 80 + dark, 20 + dark // 2], axis=2).astype(np.uint8)     # field
-    a[:, :108] = a[:, 532:] = rng.integers(0, 30, (480, 108, 1)).astype(np.uint8)           # dimmed sides
+    light = rng.integers(0, 60, (300, 640, 1))
+    a[:300] = np.concatenate([120 + light, 160 + light // 2, 195 + light], axis=2).astype(np.uint8)          # sky
+    dark = rng.integers(0, 50, (180, 640, 1))
+    a[300:] = np.concatenate([30 + dark, 80 + dark, 20 + dark // 2], axis=2).astype(np.uint8)                # field
+    if trees:
+        leaf = rng.integers(0, 15, (112, 640, 1))
+        wood = np.concatenate([10 + leaf, 25 + leaf, 10 + leaf // 2], axis=2).astype(np.uint8)
+        wood[rng.random((112, 640)) < 0.02] = (60, 85, 50)                                  # a lighter leaf
+        a[250:362, :200], a[250:362, 440:] = wood[:, :200], wood[:, 440:]
+    grey = rng.integers(95, 140, (21, 640, 1)).astype(np.uint8)
+    a[415:436, :200], a[415:436, 440:] = grey[:, :200], grey[:, 440:]                                         # path
+    for x0, x1 in ((0, FRAME[0]), (FRAME[1], 640)):
+        a[:, x0:x1] = (a[:, x0:x1] * band).astype(np.uint8)                                 # the level's bands
+    for x in FRAME:
+        a[:, x - 1:x + 1] = a[:, x - 1:x + 1] // 2 + 60                                     # the frame's lines
     for x in range(20, 300, 12):                                                            # the title
         a[12:40, x:x + 4] = 221
     digits = 2 if at >= 10 else 1
@@ -454,17 +481,22 @@ def picture_slider(at=12, ticks=True, uneven=False, marks=1, mark_off=0, value_x
             a[ys, x0 + step * j - 1:x0 + step * j + 2] = 0
         for j in range(10):
             a[252 - j // 2:252 + j // 2 + 1, x0 + step * j] = 221
-    a[CY - 2:CY + 2, 50:77] = 221                                                          # − alone
-    a[CY - 2:CY + 2, 563:590] = 221                                                         # + alone, mirrored
-    a[CY - 13:CY + 14, 575:579] = 221
+    signs = np.zeros((480, 640), bool)
+    signs[CY - 2:CY + 2, 50:77] = True                                                      # − alone
+    signs[CY - 2:CY + 2, 563:590] = True                                                    # + alone, mirrored
+    signs[CY - 13:CY + 14, 575:579] = True
+    outlined(a, signs, 221)
+    digits = np.zeros((480, 640), bool)
     for v in range(16):
         x = FIRST + PITCH * v + (5 if uneven and v == 7 else 0)
+        if v in hidden:
+            continue
         if v % 5 == 0:                                                                      # a number: a digit's block
-            a[CY - 13:CY + 13, x - 6:x - 3] = 221
-            a[CY - 13:CY + 13, x + 3:x + 6] = 221
+            digits[CY - 13:CY + 13, x - 6:x - 3] = digits[CY - 13:CY + 13, x + 3:x + 6] = True
         elif ticks:
             a[CY - 7:CY + 7, x - 2:x + 2] = 0
             a[CY - 6:CY + 6, x - 1:x + 1] = 221
+    outlined(a, digits, 221)
     for k in range(marks):                                                                  # the marker
         x = FIRST + PITCH * (at + 2 * k) + mark_off
         a[CY - 37:CY - 24, x - 6:x + 7] = (230, 100, 0)
@@ -474,15 +506,37 @@ def picture_slider(at=12, ticks=True, uneven=False, marks=1, mark_off=0, value_x
         a[426, 5:635] = 119
     for name, x in (("help_only", 281), *((("ok_key", 561),) if ok else ())):
         g = glyph(name)
-        a[437:437 + g.shape[0], x:x + g.shape[1]] = g[..., None]
+        ink = np.zeros((480, 640), np.uint8)
+        ink[437:437 + g.shape[0], x:x + g.shape[1]] = g
+        outlined(a, ink > 60, ink)
     return a
 
 
-@pytest.mark.parametrize("at", [0, 12, 15])
-def test_a_slider_over_a_picture_reads_as_a_slider_with_its_marker(at):
-    s = kind_of(picture_slider(at))
-    assert s.kind == "slider" and s.marker == FIRST + PITCH * at
+@pytest.mark.parametrize("band", BANDS)
+@pytest.mark.parametrize("at", [0, 1, 7, 12, 15])
+def test_a_slider_over_a_picture_reads_as_a_slider_with_its_marker_at_every_level(at, band):
+    """The bands outside the aspect marker from untouched (the lowest levels) to black (the highest), the marker at
+    either end too: a slider over a picture, its marker where it stands on the scale."""
+    s = kind_of(picture_slider(at, band=band))
+    assert s.kind == "slider" and s.features["picture_slider"] and s.marker == FIRST + PITCH * at
     assert s.glyphs == {}, "the ◂ ▸ are not read over a picture: no end said where one may only be hidden"
+
+
+@pytest.mark.parametrize("band, trees, rules", [
+    (1.0, True, "unknown"), (0.5, True, "slider"), (1.0, False, "notice")], ids=["untouched", "half", "evenly-lit"])
+def test_what_the_level_changes_decides_nothing(band, trees, rules):
+    """What the bands' level moves, and what the rules alone would read the screen as: untouched (kit2_pass2 261808 to
+    261812, 3 down to 1), the − and + no longer stand alone, leaves lit round them (_bare_signs' "alone", which the
+    reading once rested on), so no slider rule reads it: unknown; half as light, they stand alone but the footer's rule
+    measured across the whole width reads over half a line (the bands' grey path), so the slider rule reads it, its
+    number in OCR's box; a band lit evenly draws a notice's frame lines (x 30 and 609). Each time the screen reads as
+    the slider over a picture, its marker where it stands."""
+    a = picture_slider(3, band=band, trees=trees)
+    f = screen.features(a)
+    assert screen.classify({**f, "picture_slider": None}) == rules
+    assert (screen._bare_signs(screen._grey(a)) is None) == (band == 1.0) and f["footer_line"] > 0.45
+    s = kind_of(a)
+    assert s.kind == "slider" and s.features["picture_slider"]["marker"] == s.marker == FIRST + PITCH * 3
 
 
 def test_two_places_of_the_marker_are_two_states():
@@ -490,14 +544,17 @@ def test_two_places_of_the_marker_are_two_states():
     assert a.kind == b.kind == "slider" and not screen.same_state(a, b)
 
 
+@pytest.mark.parametrize("band", [1.0, 0.15, 0.0])
 @pytest.mark.parametrize("case, kw", [
     ("no ticks", dict(ticks=False)), ("ticks unevenly apart", dict(uneven=True)), ("two markers", dict(marks=2)),
     ("the marker off the ticks' grid", dict(mark_off=9)), ("the value off centre", dict(value_x=420)),
     ("no OK key", dict(ok=False)), ("the picture's orange beside the scale", dict(blob=True)),
+    ("no number on the scale", dict(hidden=(0, 5, 10, 15))), ("one number on the scale", dict(hidden=(0, 5, 10))),
 ], ids=lambda v: v if isinstance(v, str) else "")
-def test_what_a_picture_could_fake_leaves_it_unknown(case, kw):
-    """Each part a photograph could fake or hide is required: without it the screen reads as before, unknown."""
-    f = screen.features(picture_slider(**kw))
+def test_what_a_picture_could_fake_leaves_it_unknown(case, kw, band):
+    """Each part a photograph could fake or hide is required, whatever the bands' level: without it the screen reads as
+    before, unknown."""
+    f = screen.features(picture_slider(**kw, band=band))
     assert f["picture_slider"] is None and screen.classify(f) == "unknown", case
 
 
@@ -505,6 +562,13 @@ def test_a_slider_with_its_footer_rule_is_read_as_before():
     """Where the footer's rule shows, the rules read it as they always have; the picture's reading is not looked for."""
     f = screen.features(picture_slider(footer_rule=True))
     assert f["picture_slider"] is None and screen.classify(f) == screen.classify({**f, "picture_slider": None})
+
+
+def test_a_footer_rule_drawn_across_the_scale_is_no_picture_slider_with_the_bands_untouched():
+    """The footer's rule drawn across the scale, the − and + not alone (the bands untouched), so no slider rule reads
+    it: not read as a slider over a picture either, whose footer draws no rule."""
+    f = screen.features(picture_slider(footer_rule=True, band=1.0))
+    assert f["picture_slider"] is None and screen.classify(f) == "unknown"
 
 
 def test_the_aspect_marker_level_over_the_sample_photograph_is_a_slider():
@@ -792,17 +856,36 @@ def _blob_on_line():
     return a
 
 
+@pytest.mark.parametrize("band", [1.0, 0.15, 0.0])
 @pytest.mark.parametrize("case, a, why", [
-    ("a tick hidden", lambda: hide(picture_slider(12), [FIRST + PITCH * 8]), "one on each place"),
-    ("a tick beyond the high end's number", lambda: picture_slider(12) | _tick_at(16), "no number drawn at each end"),
-    ("a mark on the line that is neither", lambda: picture_slider(12) | _blob_on_line(), "other than ticks and numbers"),
+    ("a tick hidden", lambda b: hide(picture_slider(12, band=b), [FIRST + PITCH * 8]), "one on each place"),
+    ("a tick beyond the high end's number", lambda b: picture_slider(12, band=b) | _tick_at(16),
+     "no number drawn at each end"),
+    ("a mark on the line that is neither", lambda b: picture_slider(12, band=b) | _blob_on_line(),
+     "other than ticks and numbers"),
+    ("no number at the high end", lambda b: picture_slider(12, band=b, hidden=(15,)), "no number drawn at each end"),
+    ("no number at the low end", lambda b: picture_slider(12, band=b, hidden=(0,)), "no number drawn at each end"),
 ], ids=lambda v: v if isinstance(v, str) else "")
-def test_a_scale_that_could_be_misplaced_gives_no_number(monkeypatch, case, a, why):
+def test_a_scale_that_could_be_misplaced_gives_no_number(monkeypatch, case, a, why, band):
+    """Whatever the bands' level, a scale missing a tick or an end's number, or with a mark on its line that is neither,
+    is read as the slider but gives no number: never a guess at the marker's place."""
     S = scale_run_module()
     monkeypatch.setattr(S, "masked_lines", scale_ocr())
-    cam = picture_cam(a())
+    cam = picture_cam(a(band))
     assert cam.read().kind == "slider", case
     assert S.value(cam) == "" and why in S._why[cam.frame.path], (case, S._why.get(cam.frame.path))
+
+
+@pytest.mark.parametrize("band", BANDS)
+@pytest.mark.parametrize("at", [0, 1, 7, 15])
+def test_the_number_is_the_markers_at_every_level(monkeypatch, at, band):
+    """The bands from untouched to black, the marker at either end too: the number is the one the marker stands on, read
+    by the marker, the reader not asked (OCR reading nothing on the orange digits)."""
+    S = scale_run_module()
+    asked = reader_says(monkeypatch, S, None)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr())
+    cam = picture_cam(picture_slider(at, band=band))
+    assert S.value(cam) == str(at) and S.read_by(cam) == "marker" and asked == []
 
 
 def test_number_stops_the_row_saying_why_the_marker_gave_none(monkeypatch):
@@ -964,6 +1047,31 @@ def test_the_frame_whose_8_ocr_read_00_reads_8_where_the_reader_reads_8(monkeypa
         assert S.read_by(cam) == "marker" and S._outvoted[cam.frame.path] == "00"
     else:
         assert "the marker stands on '8' on the scale, but the number drawn reads '00' by OCR" in S._why[cam.frame.path]
+
+
+# the walk the prover stopped on (kit2_pass2, 2026-11-19, OSD eyes: opened on 12, Left down to 1; "fresh" a frame
+# grabbed again without a press) and the frame of 8 a run before it: each frame's value, the place its marker stands on
+AM_WALK = {"261759_left.png": 8, "261797_right.png": 12, "261798_fresh.png": 12, "261799_left.png": 11,
+           "261800_left.png": 10, "261801_left.png": 9, "261802_left.png": 8, "261803_fresh.png": 8,
+           "261804_left.png": 7, "261805_left.png": 6, "261806_left.png": 5, "261807_left.png": 4,
+           "261808_left.png": 3, "261809_fresh.png": 3, "261810_left.png": 2, "261811_fresh.png": 2,
+           "261812_left.png": 1}
+
+
+@pytest.mark.parametrize("name", sorted(AM_WALK))
+def test_the_aspect_marker_level_walk_reads_every_frame_by_its_marker(monkeypatch, name):
+    """Every frame of that walk, 3 down to 1 among them (read unknown then: the bands outside the aspect marker grown
+    as light as the picture), is a slider over a picture, the scale on the grid from x 155 at 22 px a step; its number
+    the one its marker stands on, with what Apple's OCR read alone on the scale's line (5, 10, 15) and nothing read on
+    the orange digits, the reader not asked."""
+    S = scale_run_module()
+    cam = real_picture_cam(A1 / "kit2_pass2" / "shots" / name)
+    s, want = cam.read(), AM_WALK[name]
+    pic = s.features.get("picture_slider")
+    assert s.kind == "slider" and pic and pic["grid"] == (177.0, 22.0) and round((s.marker - FIRST) / PITCH) == want
+    asked = reader_says(monkeypatch, S, None)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=AM_DRAWN))
+    assert S.value(cam) == str(want) and S.read_by(cam) == "marker" and asked == [], S._why.get(cam.frame.path)
 
 
 @pytest.mark.parametrize("path", AM_LEVEL, ids=["pass2", "crawl"])
