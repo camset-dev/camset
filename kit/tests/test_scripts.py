@@ -454,8 +454,9 @@ def test_a_reader_missing_mid_run_is_a_failure_the_session_closes_and_restores_a
 def test_every_run_that_drives_the_menus_checks_its_readers_before_its_link():
     """Every script that builds a LiveCamera, whose walkers ask the readers, calls camkit.vlm.check_readers before it
     opens the link for that camera, and runner.prover_session does it for every runner whose session it runs, whose
-    LiveCamera it builds (all but a session with no camera, readers=False: kit/page_scan.py): a config that lists no
-    reader stops the run before anything is pressed. A restore (mode_switch --restore, pass 3's restore()) asks nothing
+    LiveCamera it builds (but a session with no camera, readers=False: kit/page_scan.py, or a run of several sessions
+    that checks once itself: kit/provers/mymenu_run.py): a config that lists no reader stops the run before anything
+    is pressed. A restore (mode_switch --restore, pass 3's restore()) asks nothing
     of a reader and is not checked; prove_run checks only when it has rows to prove, so with none its start file
     (--start) goes back with no reader (the test below)."""
     scripts = [p for p in (ROOT / "kit").rglob("*.py")
@@ -469,7 +470,7 @@ def test_every_run_that_drives_the_menus_checks_its_readers_before_its_link():
         assert "from camkit.vlm import check_readers" in text and "check_readers()" in text, rel
     for rel in managed:
         text = (ROOT / rel).read_text(encoding="utf-8")
-        assert "readers=False" not in text or "camera=False" in text, rel
+        assert "readers=False" not in text or "camera=False" in text or "check_readers()" in text, rel
     session = (ROOT / "kit" / "runner.py").read_text(encoding="utf-8").split("def prover_session", 1)[1]
     assert session.index("check_readers()") < session.index("with Link(run) as link:")
 

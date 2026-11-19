@@ -274,7 +274,7 @@ LEFT = {
 }
 # runners not moved yet: each one's own commit takes it off
 NOT_YET = {"kit/prove_run.py": 1, "kit/pass3_run.py": 1,
-           "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
+           "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
 
 def kit_sources():
@@ -422,8 +422,8 @@ def test_my_menus_session(world, monkeypatch):
     monkeypatch.setattr(mymenu_run, "to_add_item", lambda *a: (_ for _ in ()).throw(Failed("off the scan")))
     run_main(monkeypatch, mymenu_run, "--allow", "Add Item")
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the start download", "download before", "sleep 4.5",
-        "camera {'may_open': ['Add Item']}", "menu", "close", "to_shooting: the end of the fill", "finish after []",
+        "check readers", "link", "attach", "to_shooting: the start download", "download before",
+        "lock wait (4.5 s at most)", "camera {'may_open': ['Add Item']}", "menu", "close", "to_shooting: the end of the fill", "finish after []",
         "link closed", "check []", "eyes closed"]
 
 

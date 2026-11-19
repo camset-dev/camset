@@ -36,16 +36,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from camkit import camset, jsonl, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
-from camkit.live import LiveCamera, lit_text  # noqa: E402
+from camkit.live import lit_text  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.match import LOOKALIKES, clean as clean_option, norm  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
-from prove_run import LOCK_S, Failed, to_shooting, vlm_option  # noqa: E402
+from prove_run import LOCK_S, Failed, vlm_option  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_argument, allowed_or_exit,  # noqa: E402
-                    close_for_restore, end_session, in_mode, load_scan, menu_from_shooting, proofs_file, read_json,
-                    restore_checked, scan_arg, write_json, write_text)
+                    in_mode, load_scan, menu_from_shooting, proofs_file, prover_session, read_json, scan_arg,
+                    write_json, write_text)
 
 ROW = "Add Item"
 CONSENT = f"--allow {ROW!r}"        # the run's consent to answer the row's own screens (LiveCamera.answer_once)
@@ -387,13 +386,12 @@ def main():
     items, k, added_total, unrestored = None, 0, 0, False
     try:
         while True:
-            start = ending = None
-            with Link(run) as link:
-                hdmi.attach(link)
-                to_shooting(link, hdmi, "the start download")
-                start = link.download("before")
-                time.sleep(LOCK_S)
-                cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))       # the owner's word for Add Item
+            # one session (runner.prover_session; the readers checked above, once for the run): the start file, Add
+            # Item until the pages are full, the close and the end restoring the start file, which empties My Menu again
+            with prover_session(run, hdmi, readers=False, may_open=set(a.allow), settle=LOCK_S, say_start=False,
+                                end_why="the end of the fill", watch_restart=False, close_eyes=False,
+                                exit_unrestored=False) as s:
+                cam, link, start = s.cam, s.link, s.start      # may_open: the owner's word for Add Item
                 lap_only = False
                 try:
                     menu_from_shooting(cam)
@@ -445,9 +443,8 @@ def main():
                 except Exception as e:              # a Failed choice, a press refused, a STOP: end here, restoring
                     say(f"stopped: {type(e).__name__}: {e}")
                     k = len(items) if items is not None else k   # no second guess at the camera's state
-                close_for_restore(cam, link, start)        # cleanup presses: they go out after a STOP too
-                ending = end_session(link, hdmi, start, "the end of the fill")
-            if not restore_checked(run, ending, start):      # says so: THE START FILE DID NOT TAKE
+                s.close()                           # cleanup presses: they go out after a STOP too
+            if not s.restored:                      # said: THE START FILE DID NOT TAKE
                 unrestored = True
                 break
             if lap_only or items is None or k >= len(items) or (a.limit and added_total >= a.limit):
