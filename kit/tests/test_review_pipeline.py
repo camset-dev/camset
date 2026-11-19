@@ -594,6 +594,30 @@ def test_an_answer_another_model_gave_is_kept_and_voted_under_that_model(monkeyp
     assert reading._reader_answer(png(42), vlm.PROMPTS["option"], 5, "second")[2] == "Qwen3.8-27B-4bit"
 
 
+# ------------------------------------------------------------------------------------------------ B8
+
+def test_the_axis_seek_asks_no_reader_where_ocr_plainly_names_another_option(monkeypatch):
+    """prove_axis_row's seek for the axis's option asked the vision reader on every Down whose title named no axis
+    value, even where OCR plainly read another option of the carousel ("Wide"); now the reader is asked only where OCR
+    did not plainly name one (a doubt: a look-alike, a short word, no option named)."""
+    import prove_run
+    asked = []
+    monkeypatch.setattr(prove_run, "vlm_option", lambda cam: asked.append(cam) or None)
+    monkeypatch.setattr(prove_run, "strip_value", lambda cam, vals, t, v: (None, {}))
+    vals = ["Spot: XL", "Spot: L", "Spot: M", "Spot: S", "Spot: XS"]
+    listed = ["Wide", "Zone", "Center Fix", "Spot: L", "Expand Spot", "Tracking: Wide"]
+    for title, reader in (("Wide", False), ("Center Fix", False), ("Spot: S", False), ("W1de", True),
+                          ("ZoneС", True), ("Off", True)):
+        monkeypatch.setattr(prove_run, "axis_title", lambda cam, t=title: t)
+        asked.clear()
+        got = prove_run.axis_reading("cam", vals, listed)
+        assert (got[0] == 3) == (title == "Spot: S") and bool(asked) == reader, (title, got, asked)
+    monkeypatch.setattr(prove_run, "axis_title", lambda cam: "Wide")
+    asked.clear()
+    prove_run.axis_reading("cam", vals)                      # with no list, as before: the reader asked
+    assert asked == ["cam"]
+
+
 # ------------------------------------------------------------------------------------------------ B11
 
 def test_the_ocr_cache_keeps_the_frames_used_last_and_a_long_batch_still_reads_whole(monkeypatch, tmp_path):

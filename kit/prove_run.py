@@ -86,7 +86,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import camset, definitions, jsonl, models, ocr, paths, safety, screen  # noqa: E402
+from camkit import camset, definitions, jsonl, models, ocr, paths, reading, safety, screen  # noqa: E402
 from camkit import coverage  # noqa: E402
 from camkit.vlm import PROMPTS  # noqa: E402,F401   (reread_proofs imports it from here)
 from camkit.frames import OsdSource, eyes_from_config  # noqa: E402
@@ -440,19 +440,41 @@ def axis_title(cam) -> str:
     return carousel_text(cam)
 
 
-def axis_at(cam, vals) -> int | None:
+def axis_at(cam, vals, listed=()) -> int | None:
     """The axis value on the title: exactly, else the longest value inside the reading ("Custom 3 7":
     an icon read as a character after the name, 2026-10-29); else the vision model's, else the strip's lit cell
-    (axis_reading, which says how too). None when none names one."""
-    return axis_reading(cam, vals)[0]
+    (axis_reading, which says how too). None when none names one. listed: axis_reading's."""
+    return axis_reading(cam, vals, listed)[0]
 
 
-def axis_reading(cam, vals) -> tuple:
+def carousel_labels(path) -> list:
+    """The carousel's own options as pass 1's map names them (proving.base.MAP's row at `path`), [] where it has none."""
+    try:
+        rows = read_json(proving.base.MAP)["rows"]
+    except (OSError, ValueError, KeyError, TypeError):
+        return []
+    return [o["label"] for r in rows if r.get("path") == list(path) for o in r.get("options") or [] if o.get("label")]
+
+
+def names_another(t: str, vals, listed) -> bool:
+    """OCR's title plainly names one of the carousel's other options (listed): a reading with no doubt
+    (camkit.reading.doubts: one option named exactly, four characters or more, no look-alike) of an option that is
+    none of the axis's values."""
+    if not listed or reading.doubts(t, "label", choices=listed):
+        return False
+    i = reading.choice_of(t, "label", listed)
+    return i is not None and not any(reading.agree(listed[i], v, "label") for v in vals)
+
+
+def axis_reading(cam, vals, listed=()) -> tuple:
     """(the axis value's index or None, how it was read): the title, exactly, else the longest value inside the reading
     ("Custom 3 7": an icon read as a character after the name, 2026-10-29), else the vision model's reading, how {} for
     each; else the strip's lit cell, its short text ("C3") or its neighbours' (proving.screens.strip_value: only while
     the title still reads as the option's; "Customß 7", the Custom 3 box's corner over the title, 2026-11-08 and
-    2026-11-09), how then {"read_by": "axis cell", "cell_readings": [...]}, which a proof carries."""
+    2026-11-09), how then {"read_by": "axis cell", "cell_readings": [...]}, which a proof carries. listed: the
+    carousel's own options (carousel_labels), where a title OCR plainly reads as one of the others (names_another) is
+    none of the axis's values, the vision model not asked: the seek for the axis's option asked it on every Down before
+    2026-11-18 (review, B8)."""
     t = axis_title(cam)
     hits = [i for i, v in enumerate(vals) if option_key(v) == option_key(t)]
     if len(hits) == 1:
@@ -463,6 +485,8 @@ def axis_reading(cam, vals) -> tuple:
         top = [i for i in inside if len(option_key(vals[i])) == best]
         if len(top) == 1:
             return top[0], {}
+    if names_another(t, vals, listed):
+        return None, {}
     v = vlm_option(cam)                          # OCR could not tell: the vision model's reading
     vh = [i for i, x in enumerate(vals) if option_key(x) == option_key(v)] if v else []
     if len(vh) == 1:
@@ -512,6 +536,7 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     base = camset.read(base_path)
     row_place = place(cam)
     last, order, a0, prev, saved, downs0, rebase = base_path, None, None, None, None, 0, None
+    listed = carousel_labels(path)              # the carousel's options: one OCR names plainly asks no reader (B8)
     while True:
         if order is not None:
             to_row(cam, path, top, row_place)
@@ -524,13 +549,13 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             saved = axis_title(cam)
         downs = 0
         for _ in range(40):
-            if axis_at(cam, vals) is not None:
+            if axis_at(cam, vals, listed) is not None:
                 break
             cam.press("down")
             downs += 1
         else:
             raise Failed(f"{name}: the carousel never showed one of {vals[:3]}")
-        cur = axis_at(cam, vals)
+        cur = axis_at(cam, vals, listed)
         if order is None:
             a0, downs0 = cur, downs
             order = [i for i in range(n) if i != a0] + [a0]
