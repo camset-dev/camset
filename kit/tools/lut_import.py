@@ -15,9 +15,10 @@ as its eyes, no reader, and no key pressed nor anything answered on the camera's
     through a link), a name Sony's reference takes, under 3,000,000 bytes, a .cube LUT's text. And place 16's emptiness,
     which no camera property tells (DeleteUserBaseLook lists every place, held or empty: kit/common/lut_file.h): the
     frame --seen-empty names is a look at the camera's own Manage User LUTs > Import/Edit table (seen_empty): under this
-    camera's runs, in a run's shots/, never a link; its run's drive.jsonl records that path and the frame, its
-    events.jsonl when it was taken; the kit's own OCR (camkit.ocr) reads the title "Import/Edit" and User16's own row
-    as "User16: (No Import)" (the row for 16, not User1's, spaces and a dropped colon as OCR gives them); taken after the
+    camera's runs, in a run's shots/, never a link; its run's drive.jsonl records that path and the frame with the
+    screen's text the kit's OCR read at the look, its events.jsonl when it was taken; that text begins with the title
+    "Import/Edit" and reads User16's own row "User16: (No Import)" (the row for 16, not User1's nor User160's, spaces and
+    a dropped colon as OCR gives them; a row runs to the next "UserN"); taken after the
     last import the SDK was asked for (any run's lut_import.jsonl) and at most LOOK_LIMIT (an hour) before now, on the
     same day. Its path, SHA-256 and row as read go into events.jsonl ("lut_seen_empty") and lut_import.jsonl. The look
     is made with kit/drive.py (look_command, which the tool prints when it refuses one), the camera in Movie: Right on
@@ -81,7 +82,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, camset, definitions, jsonl, ocr, paths, provenance, safety, screen, session  # noqa: E402
+from camkit import ROOT, camset, definitions, jsonl, paths, provenance, safety, screen, session  # noqa: E402
 from camkit.frames import OsdFeed  # noqa: E402
 from camkit.link import LUT_OK, LUT_PLACE, Link, LinkError, LutNotImported, StopRequested, lut_refused  # noqa: E402
 from camkit.not_by_file import USER_LUT  # noqa: E402
@@ -101,13 +102,15 @@ UNCONFIRMED = "import_unconfirmed"      # camlink's cause when the camera's answ
 
 # The look that says place 16 is empty (seen_empty): the camera's own table, seen through kit/drive.py
 LOOK_PATH = ["Manage User LUTs", "Import/Edit"]
-LOOK_TITLE = "import/edit"              # the table's title, as seen_empty compares a line (no spaces, lower case)
+LOOK_TITLE = "import/edit"              # the table's title, first in the screen's text (no spaces, lower case)
 LOOK_LIMIT = 3600.0                     # s: the oldest a look may be when the import starts (and on the same day)
 LOOK_SKEW = 60.0                        # s: a look this far ahead of the clock is taken as now; any further, refused
 LOOK_DOWNS = 15                         # Down presses from User1 to User16 in the table
-ROW_GAP = 8                             # px: OCR lines this close in height are one row (camkit.ocr's own grouping)
-EMPTY_ROW = re.compile(r"user16[:;]?\(noimport\)")      # User16's row read empty, spaces taken out, lower case
-ROW_16 = re.compile(r"user16(?![0-9])")                  # a row that is User16's (never User1's, nor User160's)
+# The screen's text as kit/drive.py keeps it: every line the kit's OCR read, in reading order, joined by spaces
+# ("Import/Edit User LUT Input AE Level Offset User11: (No Import) ... User16: (No Import) MENU", kit2_fin_lut_table
+# 00034_down.png). A row runs from its "UserN" to the next one, or to the end, the footer's MENU after the last row
+ROW_START = re.compile(r"user\s*(\d+)\s*[:;]?", re.I)
+EMPTY_ROW = re.compile(r"user\s*16\s*[:;]?\s*\(\s*no\s*import\s*\)", re.I)     # User16's row, read empty
 
 
 class NotSeenEmpty(Exception):
@@ -164,23 +167,26 @@ def last_import_asked(root: Path) -> float | None:
     return max(times) if times else None
 
 
-def ocr_rows(lines) -> list:
-    """The frame's OCR lines as rows, top to bottom: lines within ROW_GAP px of each other in height joined left to
-    right by a space, as camkit.ocr groups RapidOCR's (a LUT's name in another column joins its row)."""
-    rows: list = []
-    for ln in sorted(lines, key=lambda ln: ln.y):
-        if rows and abs(rows[-1][0].y - ln.y) <= ROW_GAP:
-            rows[-1].append(ln)
-        else:
-            rows.append([ln])
-    return [" ".join(ln.text for ln in sorted(row, key=lambda ln: ln.x)).strip() for row in rows]
+def _flat(text) -> str:
+    return re.sub(r"\s+", "", str(text or "")).lower()
+
+
+def rows_16(text: str) -> list:
+    """User16's rows in a screen's text as kit/drive.py keeps it: from each "User16" (spaces and a colon as OCR gives
+    them; never User1's, nor User160's) to the next row's "UserN", or the end."""
+    starts = list(ROW_START.finditer(text or ""))
+    return [text[m.start():(starts[i + 1].start() if i + 1 < len(starts) else len(text))].strip()
+            for i, m in enumerate(starts) if m.group(1) == "16"]
 
 
 def seen_empty(given, root: Path, now: float, last_asked: float | None) -> dict:
     """That the frame `given` (a path, or one relative to `root`, the camera's run root) shows place 16 empty on the
     camera's own Import/Edit table, seen after the last import asked (`last_asked`) and at most LOOK_LIMIT before `now`,
     on the same day: {"frame": its path from the run root, "sha256", "row": User16's row as the kit's OCR read it,
-    "look_t": when the look's run says it was taken, "look_run"}. Raises NotSeenEmpty, saying why, otherwise."""
+    "look_t": when the look's run says it was taken, "look_run"}. Raises NotSeenEmpty, saying why, otherwise.
+    The screen's text is the one kit/drive.py kept for the frame in its drive.jsonl: the kit's OCR's reading of the
+    whole screen at the look (camkit.live.text_of), never read again here, since a new module reads the screen neither
+    by itself nor yet through camkit.reading.read (docs/decisions/0022; kit/tests/test_reading.py holds both gates)."""
     root = Path(root)
     p = Path(given)
     if not p.exists() and not p.is_absolute():
@@ -208,16 +214,17 @@ def seen_empty(given, root: Path, now: float, last_asked: float | None) -> dict:
         looked = None
     if looked is None:
         raise NotSeenEmpty(f"{run_dir.name}'s events.jsonl does not say when {name} was taken")
-    walked = False
+    text = None
     try:
         for x in (run_dir / "drive.jsonl").read_text(encoding="utf-8").splitlines():
             d = json.loads(x) if x.strip() else {}
-            if (isinstance(d, dict) and d.get("path") == LOOK_PATH
-                    and any(isinstance(s, dict) and s.get("frame") == name for s in d.get("screens") or [])):
-                walked = True
+            if isinstance(d, dict) and d.get("path") == LOOK_PATH:
+                for s in d.get("screens") or []:
+                    if isinstance(s, dict) and s.get("frame") == name:
+                        text = s.get("text") if isinstance(s.get("text"), str) else ""
     except (OSError, ValueError):
-        walked = False
-    if not walked:
+        text = None
+    if text is None:
         raise NotSeenEmpty(f"{run_dir.name}'s drive.jsonl does not record {name} on a look at "
                            f"{' > '.join(LOOK_PATH)}")
     if looked > now + LOOK_SKEW:
@@ -231,21 +238,19 @@ def seen_empty(given, root: Path, now: float, last_asked: float | None) -> dict:
         raise NotSeenEmpty(f"{name} was taken before the last import the camera was asked for "
                            f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_asked))}); a look after the last "
                            "import is needed")
-    try:
-        lines = ocr.read([real])[real]
-    except Exception as e:      # noqa: BLE001 (a frame the kit cannot read establishes nothing)
-        raise NotSeenEmpty(f"{name} could not be read by the kit's OCR ({type(e).__name__}: {e})") from None
-    rows = ocr_rows(lines)
-    flat = [re.sub(r"\s+", "", r).lower() for r in rows]
-    if LOOK_TITLE not in flat:
-        raise NotSeenEmpty(f"{name} does not read as the Import/Edit table (no title \"Import/Edit\" read on it)")
-    sixteen = [(r, f) for r, f in zip(rows, flat, strict=True) if ROW_16.match(f)]
+    if not text.strip():
+        raise NotSeenEmpty(f"{run_dir.name}'s drive.jsonl kept no text for {name} (a run that withholds the screen's "
+                           "text, or one that read none): look at the table again with the command below")
+    if not _flat(text).startswith(LOOK_TITLE):
+        raise NotSeenEmpty(f"{name} does not read as the Import/Edit table (its text begins {text[:40]!r})")
+    sixteen = rows_16(text)
     if not sixteen:
         raise NotSeenEmpty(f"User16's row is not on this frame ({name}): look down to User16 and name that frame")
-    row, f = sixteen[0]
-    if len(sixteen) > 1 or not EMPTY_ROW.fullmatch(f):
-        raise NotSeenEmpty(f"User16 reads {' / '.join(r for r, _ in sixteen)!r} on {name}, not \"User16: (No Import)\": "
-                           "place 16 is not seen empty")
+    empty = EMPTY_ROW.match(sixteen[0])
+    if len(sixteen) > 1 or not empty:
+        raise NotSeenEmpty(f"User16 reads {' / '.join(sixteen)!r} on {name}, not \"User16: (No Import)\": place 16 is "
+                           "not seen empty")
+    row = empty.group(0)
     return {"frame": real.relative_to(top).as_posix(), "sha256": provenance.sha256(real), "row": row,
             "look_t": round(looked, 3), "look_run": run_dir.name}
 

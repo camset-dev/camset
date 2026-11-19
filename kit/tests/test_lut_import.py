@@ -399,52 +399,33 @@ LOOK_PATH = ["Manage User LUTs", "Import/Edit"]
 
 
 def look(root: Path, rows=None, ago: float = 600.0, path=LOOK_PATH, title="Import/Edit", run="kit2_lut_look",
-         name="00034_down.png", now=None) -> Path:
+         name="00034_down.png", now=None, text=None) -> Path:
     """A look at the camera's Import/Edit table, as kit/drive.py leaves it in its run: the frame in shots/, its press in
-    events.jsonl `ago` s before `now`, and drive.jsonl's line naming the path and the frame. The frame's OCR lines (the
-    title, then one row each) are kept in OCR_LINES for the stand-in reader."""
+    events.jsonl `ago` s before `now`, and drive.jsonl's line naming the path, the frame and the screen's text as the
+    kit's OCR read it (the title, the column heads, the rows, the footer, joined by spaces, as kit2_fin_lut_table's
+    00034_down.png has it), or `text` as given."""
     now = time.time() if now is None else now
     d = root / run
     (d / "shots").mkdir(parents=True, exist_ok=True)
     frame = d / "shots" / name
     frame.write_bytes(b"\x89PNG\r\n\x1a\n a made-up frame " + name.encode() + str(now - ago).encode())
+    if text is None:
+        text = " ".join(([title] if title else []) + ["User LUT Input AE Level Offset"]
+                        + list(EMPTY_ROWS if rows is None else rows) + ["IMENU D"])
     with open(d / "events.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps({"t": now - ago, "kind": "press", "key": "down", "frame": name, "screen": "unknown"}) + "\n")
     with open(d / "drive.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps({"path": path, "presses": ["right", "down", "menu"], "completed": True,
-                            "screens": [{"after": "down", "frame": name, "kind": "unknown", "text": ""}]}) + "\n")
-    texts = ([title] if title else []) + list(EMPTY_ROWS if rows is None else rows)
-    OCR_LINES[frame.resolve()] = [L_OCR(t, 1.0, 25, 15 + 50 * i, 240, 30) for i, t in enumerate(texts)]
+                            "screens": [{"after": "down", "frame": name, "kind": "unknown", "text": text}]}) + "\n")
     return frame
-
-
-OCR_LINES: dict = {}
-
-
-def L_OCR(text, conf, x, y, w, h):
-    from camkit.ocr import Line
-    return Line(text, conf, x, y, w, h)
-
-
-def fake_read(paths, eng=None):
-    """camkit.ocr.read's stand-in: each look's lines as look() made them; a frame it knows nothing of cannot be read."""
-    out = {}
-    for p in paths:
-        key = Path(p).resolve()
-        if key not in OCR_LINES:
-            raise RuntimeError(f"the OCR helper could not read {p}")
-        out[Path(p)] = OCR_LINES[key]
-    return out
 
 
 def tool(monkeypatch, luts, cam: Camera, *args, allow=ALLOW, seen="look") -> int:
     """The tool run on the test's LUT with the owner's word and, unless `seen` says otherwise, a look at an empty table
-    taken just now (look()), so after any import a run before it in the test asked for; the kit's OCR stood in by
-    fake_read."""
-    from camkit import ocr, paths
+    taken just now (look()), so after any import a run before it in the test asked for."""
+    from camkit import paths
     run, _, folder, lut = luts
     T = stand_in(monkeypatch, cam)
-    monkeypatch.setattr(ocr, "read", fake_read)
     seen_args = ["--seen-empty", str(look(paths.run_root(), ago=0) if seen == "look" else seen)] if seen else []
     monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *allow, *seen_args, *args])
     return T.main()
@@ -672,11 +653,10 @@ def test_nothing_is_sent_for_a_file_or_place_the_kit_does_not_import(monkeypatch
     """A file outside the clone's LUT folder: refused before any link opens, exit 1; the tool takes no other place than
     16 (no --place: argparse stops it, exit 2); a camera that refuses the start download: said, nothing imported,
     exit 1."""
-    from camkit import ocr, paths
+    from camkit import paths
     cam = Camera()
     outside = made(tmp_path / "elsewhere", NAME)
     T = stand_in(monkeypatch, cam)
-    monkeypatch.setattr(ocr, "read", fake_read)
     frame = str(look(paths.run_root()))
     monkeypatch.setattr(sys, "argv", ["lut_import.py", str(outside), *ALLOW, "--seen-empty", frame])
     assert T.main() == 1
@@ -723,8 +703,6 @@ def test_the_whole_run_through_the_link_and_the_stand_in_camlink(monkeypatch, lu
     monkeypatch.setattr(T, "wait_lock", lambda since, eyes=None, **kw: None)
     # the stand-in camlink writes no picture for osd: the screen it shows stood in as the shooting screen
     monkeypatch.setattr(T, "screen_kind", lambda link, eyes, tag="end-check": "shooting")
-    from camkit import ocr
-    monkeypatch.setattr(ocr, "read", fake_read)
     monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *ALLOW, "--seen-empty", str(look(paths.run_root()))])
     monkeypatch.setitem(T.USER_LUT, "ILCE-1M2", (key(STAYS),))     # as once the first run has named it
     assert T.main() == 0
@@ -794,10 +772,8 @@ def test_the_printed_record_command_writes_a_look_with_keys_alone(monkeypatch, l
 # ---------------------------------------------------------------- the look that says place 16 is empty (--seen-empty)
 
 def seen(monkeypatch, frame, root, now=None, last=None):
-    """lut_import.seen_empty on `frame` with the stand-in OCR: its result, or the refusal's words."""
+    """lut_import.seen_empty on `frame`: its result, or the refusal's words."""
     import lut_import as T
-    from camkit import ocr
-    monkeypatch.setattr(ocr, "read", fake_read)
     try:
         return T.seen_empty(frame, root, time.time() if now is None else now, last)
     except T.NotSeenEmpty as e:
@@ -837,7 +813,7 @@ def test_a_row_16_not_read_as_empty_refuses(monkeypatch, tmp_path, rows, said):
 def test_a_frame_that_is_not_such_a_look_refuses(monkeypatch, tmp_path):
     """Refused, saying why: a frame outside the camera's runs, a link, not in a run's shots/, not a picture, not there;
     no title "Import/Edit"; a look whose run does not record when it was taken or that it was Manage User LUTs >
-    Import/Edit; one the OCR cannot read."""
+    Import/Edit; one whose run kept no text for it."""
     root = tmp_path / "TEST-CAM_fw9.99"
     now = time.time()
     good = look(root, now=now)
@@ -858,11 +834,8 @@ def test_a_frame_that_is_not_such_a_look_refuses(monkeypatch, tmp_path):
     bare = root / "kit2_bare" / "shots" / "00001_down.png"
     bare.parent.mkdir(parents=True)
     bare.write_bytes(b"\x89PNG")
-    OCR_LINES[bare.resolve()] = OCR_LINES[good.resolve()]
     assert "does not say when" in seen(monkeypatch, bare, root, now)
-    unread = look(root, now=now, name="00037_down.png")
-    del OCR_LINES[unread.resolve()]
-    assert "could not be read" in seen(monkeypatch, unread, root, now)
+    assert "kept no text" in seen(monkeypatch, look(root, now=now, name="00037_down.png", text=""), root, now)
 
 
 def test_a_look_too_old_another_day_or_before_the_last_import_refuses(monkeypatch, tmp_path):
