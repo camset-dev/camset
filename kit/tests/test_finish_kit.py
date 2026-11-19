@@ -867,3 +867,195 @@ def test_the_aspect_marker_level_frames_read_12_with_this_computers_ocr(path):
         pytest.skip(f"no {ocr.engine()} OCR on this computer")
     cam = real_picture_cam(path)
     assert S.value(cam) == "12" and S.read_by(cam) == "marker", S._why.get(cam.frame.path)
+
+
+# ---------------------------------------------------------------- 8. --stepped: a look that stepped a value
+
+LIVE = "Tv STEP Tv Anti-flicker Tv Scan MENU Exit 256.0 F5.6 ±0.0 ISO"
+
+
+@pytest.mark.parametrize("case, args, stepped", [
+    ("Up on a live adjust screen", ("up", None, "unknown", "unknown", LIVE, LIVE.replace("256.0", "257.4")), True),
+    ("a dial on a slider", ("dial.front.1", None, "slider", "slider", "Level 3", "Level 4"), True),
+    ("Left on number fields", ("left", None, "fields", "fields", "10 : 30", "10 : 29"), True),
+    ("the text read alike", ("up", None, "unknown", "unknown", LIVE, LIVE), False),
+    ("spacing alone", ("up", None, "unknown", "unknown", LIVE, LIVE.replace(" ", "  ")), False),
+    ("nothing read after it", ("up", None, "unknown", "unknown", LIVE, " "), False),
+    ("MENU", ("menu", None, "unknown", "unknown", LIVE, "other"), False),
+    ("an opener", ("right", None, "unknown", "unknown", LIVE, "other"), False),
+    ("Enter", ("enter", None, "unknown", "unknown", LIVE, "other"), False),
+    ("a cursor's key@y", ("down", "367", "unknown", "unknown", LIVE, "other"), False),
+    ("a menu page", ("down", None, "menu", "menu", "Shooting > A B", "Shooting > A C"), False),
+    ("a submenu page", ("down", None, "submenu", "submenu", "A > B", "A > C"), False),
+    ("a list whose cursor moved", ("down", None, "list", "list", "Off On", "Off On"), False),
+    ("a list that scrolled", ("down", None, "list", "list", "1 2 3 4", "2 3 4 5"), False),
+    ("a side list", ("down", None, "sidelist", "sidelist", "A B", "B C"), False),
+    ("the screen left for another kind", ("up", None, "unknown", "notice", LIVE, "Not available"), False),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_a_press_steps_a_value_only_off_cursor_screens_with_the_text_changed(case, args, stepped):
+    assert drive.stepped_press(*args) is stepped, case
+
+
+def test_the_up_that_stepped_var_shutter_set_this_morning_is_a_stepped_press():
+    """kit2_fin_vs_up1 (2026-11-19): Right opened the live screen, Up stepped 256.0 to 257.4, MENU left it."""
+    import json
+    line = json.loads(need(A1 / "kit2_fin_vs_up1" / "drive.jsonl").read_text(encoding="utf-8").splitlines()[-1])
+    opened, up, menu = line["screens"][:3]
+    assert drive.stepped_press("up", None, opened["kind"], up["kind"], opened["text"], up["text"])
+    assert not drive.stepped_press("menu", None, up["kind"], menu["kind"], up["text"], menu["text"])
+
+
+def vs_line(**kw):
+    """A drive.jsonl result line as kit2_fin_vs_up1's: Right opened the row's live screen, Up, MENU."""
+    return {"path": ["Kilo"], "presses": ["right", "up:Tv Scan", "menu"], "completed": True,
+            "screens": [{"after": "right", "kind": "unknown"}, {"after": "up:Tv Scan", "kind": "unknown"},
+                        {"after": "menu", "kind": "menu"}],
+            "before": "a.DAT", "after": "b.DAT", "changes": [], **kw}
+
+
+@pytest.fixture
+def ledger_camera(tmp_path, monkeypatch):
+    """test_coverage's made-up camera (its definition, looks and runs in the test's own folders)."""
+    import test_coverage
+    return test_coverage.camera.__wrapped__(tmp_path, monkeypatch)
+
+
+def test_a_stepped_line_is_a_choice_tested_with_no_record_changes_and_a_plain_one_stays_an_open(ledger_camera):
+    """drive_look: "stepped": true makes the run a choice (the ledger's "tested, no record changes" where no record
+    differed); the same presses without it an open, which leaves the row "not yet tried" as before. The look keeps no
+    option and no value either way."""
+    import test_coverage as T
+    from camkit import coverage
+    lk = coverage.drive_look(vs_line(), T.CAM, "Stills", "kit2_x")
+    assert lk["did"] == "open" and lk["result"] == "no_change" and lk["option"] is None
+    T.add_looks(ledger_camera, {k: v for k, v in lk.items() if v is not None})
+    assert T.row(T.ledger(), "Kilo")["status"] == "not yet tried"
+    lk = coverage.drive_look(vs_line(stepped=True), T.CAM, "Stills", "kit2_y")
+    assert lk["did"] == "choose" and lk["result"] == "no_change" and lk["option"] is None
+    assert "256.0" not in json_text(lk) and "257.4" not in json_text(lk)
+    T.add_looks(ledger_camera, {k: v for k, v in lk.items() if v is not None})
+    assert T.row(T.ledger(), "Kilo")["status"] == "tested, no record changes"
+
+
+def json_text(x) -> str:
+    import json
+    return json.dumps(x)
+
+
+def test_a_stepped_line_without_an_opening_press_stays_an_open():
+    from camkit import coverage
+    from conftest import TEST_CAMERA
+    for presses in ([], ["up", "menu"], ["down@3"]):
+        assert coverage.drive_look(vs_line(presses=presses, stepped=True), TEST_CAMERA, None, "r")["did"] == "open"
+    assert coverage.drive_look(vs_line(stepped="yes"), TEST_CAMERA, None, "r")["did"] == "open", "true alone"
+
+
+def stepped_run(tmp_path, monkeypatch, presses, states, stepped=True, path=("Kilo",)):
+    """drive.py's main() as test_first_open's drive_run fakes it, the row `path` seen opened, each state (kind, lit,
+    text) the screen after the opening MENU and after each press. Returns (the presses sent, the drive.jsonl line, what
+    was printed)."""
+    import contextlib
+    import io
+    import json
+
+    import runner
+    from camkit import coverage
+    from camkit.runs import Run
+    from conftest import TEST_CAMERA
+    from test_first_open import says
+    assert coverage.append_look(TEST_CAMERA, {"t": "2026-11-19T10:00:00", "by": "crawl", "path": list(path),
+                                              "did": "open", "result": "looked"})
+    run = Run("kit2_drive", root=tmp_path)
+    pressed = []
+
+    def now():
+        return states[min(max(len(pressed) - 1, 0), len(states) - 1)]
+
+    class Cam:
+        frame = SimpleNamespace(path=tmp_path / "00001_menu.png", image=None)
+
+        def read(self):
+            return SimpleNamespace(kind=now()[0])
+
+        def press(self, key, **kw):
+            pressed.append(key)
+
+        def refresh(self, tag):
+            return self.read()
+
+    ending = SimpleNamespace(after=tmp_path / "after.DAT", uploaded=False, changes=[])
+    link = SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT", press=lambda *a, **k: None, call=says().call)
+    for name, value in (("check_readers", lambda: None), ("load_scan", lambda _: ([], {})), ("Run", lambda name: run),
+                        ("eyes_from_config", lambda r: SimpleNamespace(attach=lambda link: None,
+                                                                       grab=lambda save=False: None, close=lambda: None)),
+                        ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
+                        ("wait_for", lambda *a, **k: None), ("LiveCamera", lambda *a, **k: Cam()),
+                        ("find_position", lambda cam, cycle, model: 0), ("go_to", lambda *a, **k: True),
+                        ("enter_any", lambda cam, path, i: None), ("screen_text", lambda cam, grip: now()[2]),
+                        ("highlighted", lambda image, p: now()[1]),
+                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0)),
+                        ("close_for_restore", lambda cam, link, start: None),
+                        ("restore_checked", lambda r, e, before, **k: True), ("row_values", lambda model: {}),
+                        ("submenu_labels", lambda cam: ("page", [{"label": x, "readings": [x]} for x in path])),
+                        ("page_labels", lambda now, cycle, model: list(path)),
+                        ("Link", lambda r, **k: contextlib.nullcontext(link))):
+        monkeypatch.setattr(drive, name, value)
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, **k: ending)
+    monkeypatch.setattr(sys, "argv", ["drive.py", *[x for p in path for x in ("--path", p)],
+                                      *[x for p in presses for x in ("--press", p)], *(["--stepped"] if stepped else [])])
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out), contextlib.suppress(SystemExit):
+        drive.main()
+    lines = (run.dir / "drive.jsonl").read_text(encoding="utf-8").splitlines()
+    return pressed, json.loads(lines[-1]), out.getvalue()
+
+
+MENU_PAGE = ("menu", "Kilo", "Shooting > G1 Kilo Alpha")
+
+
+def test_drive_stepped_says_a_choice_where_a_press_inside_the_open_row_stepped_it(tmp_path, monkeypatch):
+    states = [MENU_PAGE, ("unknown", "", LIVE), ("unknown", "", LIVE.replace("256.0", "257.4")), MENU_PAGE]
+    pressed, line, said = stepped_run(tmp_path, monkeypatch, ["right", "up:Tv Scan", "menu"], states)
+    assert pressed == ["menu", "right", "up", "menu"]
+    assert line["stepped"] is True and [s.get("stepped") for s in line["screens"][:3]] == [None, True, None]
+    assert "up stepped the row's value" in said and "257.4" not in json_text(line.get("stepped"))
+    from camkit import coverage
+    from conftest import TEST_CAMERA
+    assert coverage.drive_look(line, TEST_CAMERA, None, "r")["did"] == "choose"
+
+
+@pytest.mark.parametrize("case, presses, states", [
+    ("a list whose cursor only moved", ["right", "down", "menu"],
+     [MENU_PAGE, ("list", "Off", "Kilo Off On"), ("list", "On", "Kilo Off On"), MENU_PAGE]),
+    ("a list that scrolled", ["right", "down", "menu"],
+     [MENU_PAGE, ("list", "1", "Kilo 1 2 3"), ("list", "4", "Kilo 2 3 4"), MENU_PAGE]),
+    ("Up on the menu page before the row opened", ["up", "right", "menu"],
+     [MENU_PAGE, ("menu", "Kilo", "Shooting > G1 Juliet Kilo"), ("unknown", "", LIVE), MENU_PAGE]),
+    ("Up after the row's screen was left", ["right", "menu", "up"],
+     [MENU_PAGE, ("unknown", "", LIVE), MENU_PAGE, ("menu", "Juliet", "Shooting > G1 Juliet Kilo")]),
+    ("nothing pressed inside", ["right", "menu"], [MENU_PAGE, ("unknown", "", LIVE), MENU_PAGE]),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_drive_stepped_leaves_an_open_where_no_press_stepped_the_row(tmp_path, monkeypatch, case, presses, states):
+    pressed, line, said = stepped_run(tmp_path, monkeypatch, presses, states)
+    assert "stepped" not in line and not any(s.get("stepped") for s in line["screens"]), case
+    assert "--stepped: no press stepped the --path's row" in said, case
+    from camkit import coverage
+    from conftest import TEST_CAMERA
+    assert coverage.drive_look(line, TEST_CAMERA, None, "r")["did"] == "open", case
+
+
+def test_drive_stepped_lets_no_press_through_that_was_refused_without_it(tmp_path, monkeypatch):
+    """Enter with no regex is refused before anything connects, and Right on an unread lit row on the page, with
+    --stepped as without it; a run without --stepped that steps writes no "stepped"."""
+    for flag in (False, True):
+        monkeypatch.setattr(sys, "argv", ["drive.py", "--path", "Kilo", "--press", "enter",
+                                          *(["--stepped"] if flag else [])])
+        with pytest.raises(SystemExit, match="regex"):
+            drive.main()
+    states = [("menu", "", "Shooting > G1"), ("unknown", "", LIVE)]
+    for flag in (False, True):
+        pressed, line, said = stepped_run(tmp_path / str(flag), monkeypatch, ["right"], states, stepped=flag)
+        assert pressed == ["menu"] and "right refused" in said and "stepped" not in line
+    states = [MENU_PAGE, ("unknown", "", LIVE), ("unknown", "", LIVE.replace("256.0", "257.4")), MENU_PAGE]
+    pressed, line, said = stepped_run(tmp_path / "plain", monkeypatch, ["right", "up", "menu"], states, stepped=False)
+    assert pressed == ["menu", "right", "up", "menu"] and "stepped" not in line and "stepped" not in said

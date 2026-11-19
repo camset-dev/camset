@@ -161,6 +161,11 @@ with the row's icon as a letter or two before its label ("S Exposure Comp. +0.0"
 before a value ("Exposure Comp. +0.0"), is that row where the page model keeps that very reading of it and the value
 is one the kit knows for it (icon_reading). A camera other than the one the kit works on stops the run before anything
 is pressed.
+--stepped is the operator's word that a press inside the --path's row stepped its value where the keys alone say a look
+(Up on Var. Shutter Set.'s live screen, 2026-11-19): the run's look is a choice only where drive.py saw such a press
+(stepped_press: after the press lit_refused judged the --path's own row's opening and before its screen was left, a key
+that is no opener, MENU or key@y, sent on a screen whose Up and Down move no cursor, the screen's text reading otherwise
+after it), drive.jsonl's result line then saying "stepped": true; it lets no press through and keeps no value.
 Results: runs/<model>_fw<fw>/<run>/drive.jsonl; frames and downloads in the same run folder. The settings are downloaded before
 and after; the diff is kept with the result, and if anything changed the start file is uploaded and the restore
 checked (docs/decisions/0015: every run ends restoring its start file). On an address, --network or --owner run the
@@ -689,6 +694,22 @@ def armed_words(info: dict) -> str:
 
 OPENERS = ENTERS + RIGHTS          # a --press that opens the lit row: the --path's last row, on its page
 ROW_PAGES_OPENED = ("menu", "submenu")      # the pages whose lit row an opening press opens (lit_refused)
+# screens where Up and Down move a cursor and choose nothing (a menu page, an option list, a popup): no press on one
+# steps a value, whatever the operator says (--stepped: stepped_press)
+CURSOR_KINDS = frozenset({"menu", "submenu", "tiles", "shooting", "helppop", "buttons"}) | safety.LIST_KINDS
+
+
+def stepped_press(key: str, y, kind_before: str, kind_after: str, text_before: str, text_after: str) -> bool:
+    """Whether one press, sent inside the --path's own row after the press that opened it and before its screen was
+    left, stepped the row's value as --stepped lets the run's look say (a choice, not an open): the key is no opener,
+    MENU or cursor move (key@y, `y` given); the screen it was sent on is no menu page, option list or other screen whose
+    Up and Down move a cursor (CURSOR_KINDS); and the press left a screen of the same kind whose text, read whole, reads
+    otherwise than before it (Var. Shutter Set.'s live screen, "256.0" before Up and "257.4" after it,
+    kit2_fin_vs_up1). The text is compared, never kept: the look holds no value (docs/decisions/0016)."""
+    def norm(t) -> str:
+        return " ".join(str(t or "").split())
+    return (y is None and key not in OPENERS and canonical_key(key) != "menu" and kind_before not in CURSOR_KINDS
+            and kind_after == kind_before and bool(norm(text_after)) and norm(text_after) != norm(text_before))
 
 
 def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, values=None, gone_to=None) -> tuple:
@@ -1374,6 +1395,10 @@ def main():
     ap.add_argument("--note", default="", help="what this drive tests (kept with the result)")
     add_scan_argument(ap)
     ap.add_argument("--grip", choices=sorted(GRIPS), help="the camera is held vertically: read turned screens upright")
+    ap.add_argument("--stepped", action="store_true",
+                    help="the operator's word that a press inside the --path's row stepped its value (a live adjust "
+                         "screen): the run's look is a choice only where drive.py saw such a press (stepped_press); it "
+                         "lets no press through")
     add_network_argument(ap)
     add_owner_argument(ap)
     a = ap.parse_args()
@@ -1581,6 +1606,7 @@ def main():
                              options=options, values=values, readings=readings, labels=known, look=look,
                              **({"owner": owner_cam} if owner_cam else {}))
             screens, ok = [], True
+            stepped = False         # --stepped: a press stepped the --path's row's value as drive.py saw it
             opened = None           # on an address run, the frame a press opened a row on: from then MENU only
             owner_opened = False    # the owner row was opened once: never again this run
             try:
@@ -1616,6 +1642,9 @@ def main():
                     # (LiveCamera.owner_only), whatever its lit text reads as
                     cam.owner_only = True
                 depth = list(a.path[:-1])       # the labels above the menu page shown (next_depth)
+                # --stepped: whether the --path's own row is open, opened by a press of this run and its screen not left
+                # since (a press inside it that stepped its value: stepped, stepped_press)
+                row_open = False
                 for i, p in enumerate(a.press):
                     # the key as the guards judge it and as it is sent (canonical_key; press_args_refused saw that
                     # every key is one)
@@ -1678,6 +1707,7 @@ def main():
                         print(f"{p:32s} -> bar at y={y}  {cam.frame.path.name}", flush=True)
                         continue
                     t = screen_text(cam, a.grip)
+                    t_before = t                        # the screen's text before this press (--stepped)
                     if want and not re.search(want, t, re.I):
                         print(f"the screen does not match {want!r}: {shown(t)[0]}; cancelling", flush=True)
                         ok = False
@@ -1927,6 +1957,20 @@ def main():
                         run.log("address_screen_opened", key=key, frame=opened)
                     t = screen_text(cam, a.grip)
                     depth = next_depth(depth, key, kind_before, opening_row, cam.read().kind)
+                    # --stepped: this press stepped the --path's open row's value as drive.py can see it; the row opens
+                    # with the press lit_refused judged its own opening, and is left with MENU, any later opener, or a
+                    # menu page or the shooting screen after a press
+                    kind_after = cam.read().kind
+                    stepped_now = bool(a.stepped and row_open and stepped_press(key, y, kind_before, kind_after, t_before, t))
+                    if stepped_now:
+                        stepped = True
+                        run.log("stepped", key=key, frame=cam.frame.path.name)
+                        print(f"   {key} stepped the row's value: its screen reads otherwise after it (--stepped)", flush=True)
+                    if key in OPENERS and opening_row is not None and list(opening_row) == list(a.path) and not row_open:
+                        row_open = kind_after not in (*ROW_PAGES_OPENED, "tiles", "shooting")
+                    elif row_open and (key in OPENERS or canonical_key(key) == "menu"
+                                       or kind_after in (*ROW_PAGES_OPENED, "tiles", "shooting")):
+                        row_open = False
                     if closes:
                         inside["closing"] = True
                     if owner_opens:
@@ -1982,10 +2026,16 @@ def main():
                     console, kept = shown(t)
                     screens.append({"after": p, "frame": cam.frame.path.name, "kind": cam.read().kind, **kept,
                                     **({"vouched": True} if vouched else {}),
+                                    **({"stepped": True} if stepped_now else {}),
                                     **({"on_shooting": True} if shooting else {}),
                                     **({"armed": inside["done"]} if armed and inside and inside.get("done") else {}),
                                     **({"c4_allowed": True} if key in C4_OWNER_PRESSES else {})})
                     print(f"{p:32s} -> {cam.read().kind:9s} {cam.frame.path.name}  {console}", flush=True)
+                if a.stepped and not stepped:
+                    print("--stepped: no press stepped the --path's row as drive.py can see it (after the press that "
+                          "opened it and before its screen was left, a key that is no opener, MENU or key@y, on a "
+                          "screen whose Up and Down move no cursor, its text reading otherwise after it): the look is "
+                          "written as the presses say", flush=True)
                 if ok and not byhand:
                     time.sleep(a.wait)
                     cam.refresh("after-presses")
@@ -2054,6 +2104,7 @@ def main():
                                               **({"outcome": "pressed; the link answered", "marker": marker.name}
                                                  if byhand == "answered" else {}),
                                               **({"first_open": True} if first_label else {}),
+                                              **({"stepped": True} if stepped else {}),
                                               "screens": screens, "before": before.name,
                                               "after": ending.after.name if ending.after else None,
                                               "changes": changes_kept(ending.changes, keep_values)}) + "\n")

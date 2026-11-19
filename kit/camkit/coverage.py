@@ -3065,7 +3065,9 @@ def drive_look(line: dict, camera: str, mode: str | None, run: str) -> dict:
     judged as drive.py sends it, look-alike letters folded; or where none follows it, or nothing opened the row; the
     Enter that opens it, "enter:<row>", is the opening press. Any other press after it, left, right, a dial, Enter, a
     named key or C4, makes it "choose": on 2026-11-15 a slider moved and cancelled with MENU that changed a record was
-    written as an open, which camkit.first_open took for a first open that failed), the screen the opening showed, its
+    written as an open, which camkit.first_open took for a first open that failed; and so does a line drive.py wrote
+    "stepped": true, where --stepped and its own reading saw a press inside the row step its value, an Up on a live
+    adjust screen among them, kit2_fin_vs_up1), the screen the opening showed, its
     field names (only what the run kept: safety.kept_screen's on a private run, the known labels and field names of a
     plain screen's text), the result (a notice: greyed with its blocker as a rule, unless it shows the camera's own address
     fields and no refusal, an information screen's notice; records differing: changed; the presses cut short by a
@@ -3078,7 +3080,8 @@ def drive_look(line: dict, camera: str, mode: str | None, run: str) -> dict:
     presses = [press_key(p) for p in line.get("presses") or []]
     opened_at = next((i for i, p in enumerate(presses) if p in OPENING_KEYS), None)
     did = ("choose" if opened_at is not None
-           and any(safety.canonical_input(p) not in safety.LOOK_KEYS for p in presses[opened_at + 1:]) else "open")
+           and (line.get("stepped") is True
+                or any(safety.canonical_input(p) not in safety.LOOK_KEYS for p in presses[opened_at + 1:])) else "open")
     screens = [s for s in line.get("screens") or [] if isinstance(s, dict)]
     opened = next((s for s in screens if press_key(s.get("after", "")) in OPENING_KEYS), screens[0] if screens else {})
     kind = opened.get("kind")
