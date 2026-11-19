@@ -439,3 +439,69 @@ def test_bracket_records_a_refused_setting_as_refused(monkeypatch):
     with pytest.raises(B.Failed, match=r"Cont. Bracket: the camera refused it as its fields stood"):
         B.main()
     assert len(proof_lines()) == 3 and link.got == []
+
+
+class ScaleCam(Shots):
+    """A made-up scale 0..4 holding 3: Left and Right step its number while it is open, stopping at the ends; OK keeps
+    the number and goes back to the menu row, OK on a number in `refuse` brings the camera's refusal, whose MENU leaves
+    the number kept before. OCR reads each frame as it was shot (`seen`): the number where the scale draws it, or the
+    notice."""
+
+    def __init__(self, refuse=()):
+        super().__init__()
+        self.saved = self.pos = 3
+        self.refuse, self.seen = set(refuse), {}
+
+    def open(self):
+        self.kind, self.pos = "slider", self.saved
+        self.shot("right")
+
+    def shot(self, key):
+        super().shot(key)
+        self.seen[self.frame.path] = (self.kind, self.pos, self.text)
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key in ("left", "right") and self.kind == "slider":
+            self.pos = max(0, min(4, self.pos + (1 if key == "right" else -1)))
+        elif key == "enter" and self.pos in self.refuse:
+            self.refused_here()
+        elif key == "enter":
+            self.kind, self.saved = "menu", self.pos
+        elif key == "menu":
+            self.kind, self.text, self.pos = "menu", "", self.saved
+        self.shot(key)
+
+    def ocr(self, frames, eng=None):
+        out = {}
+        for f in frames:
+            kind, pos, text = self.seen.get(f, ("menu", None, ""))
+            out[f] = [ocr.Line(text=str(pos), conf=1.0, x=311, y=287, w=18, h=29)] if kind == "slider" else lines_of(text)
+        return out
+
+
+def test_scale_records_a_refused_number_as_refused_and_goes_on(monkeypatch):
+    """scale_run went to the download straight after OK and wrote "applied": true, so a refusal credited the label with
+    the number kept before, and the next choice, expecting the scale on the refused number, stopped the row. Now the
+    refused number's line says "applied": false with the notice (closed with MENU), the next choice expects the number
+    kept before, and the row goes on to the end."""
+    import time as clock
+
+    import scale_run as S
+    cam, link = ScaleCam(refuse={1}), downloads()
+    monkeypatch.setattr(ocr, "read", cam.ocr)
+    no_diffs(monkeypatch, S)
+    for name, value in (("load_scan", lambda scan: ([], {})), ("eyes_from_config", lambda run: None),
+                        ("prover_session", lambda run, hdmi, **kw: session_of(cam, link)),
+                        ("ends", lambda c, link, cycle, model, path, panel=False: (["0", "1", "2", "3", "4"], "3")),
+                        ("open_row", lambda c, cycle, model, path, panel=False: c.open()),
+                        ("option_answer", lambda c: None), ("close_screen", lambda c, link: None),
+                        ("to_shooting", lambda link, hdmi, why: None), ("_said", {}), ("_by_reader", set()),
+                        ("time", SimpleNamespace(sleep=lambda s: None, time_ns=clock.time_ns))):
+        monkeypatch.setattr(S, name, value)
+    monkeypatch.setattr(sys, "argv", ["scale_run.py", "--row", "Made-up Scale", "--scan", "made-up"])
+    S.main()
+    lines = proof_lines()
+    assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
+        ("0", True, None), ("1", False, REFUSAL), ("2", True, None), ("4", True, None), ("3", True, None)]
+    assert "notice" not in lines[0] and cam.saved == 3 and cam.presses.count("menu") == 1

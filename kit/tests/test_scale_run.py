@@ -47,6 +47,9 @@ class Scale:
     def refresh(self, tag):
         self.shoot()
 
+    def read(self):                         # the screen after OK, which the prover reads (proving.commit): the menu row
+        return SimpleNamespace(kind="menu" if self.presses[-1:] == ["enter"] else "slider")
+
 
 def answer(said):
     """The reader's whole answer to the option question as a made-up reader gives it: a text is its "selected" (the

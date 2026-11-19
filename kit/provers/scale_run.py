@@ -52,7 +52,9 @@ run names it: --allow "Playback/Monitor. Vol." (repeatable, as drive.py's --allo
 cards, Initialize, Reset Network Set. or credentials). The run prints the rows allowed, and every proof line carries
 "allowance": "the owner allowed <row> remotely, <date>". First a look: Left until the number stops changing, then
 Right until it stops (the scale's ends, in order), MENU. Then, as kit/prove_run.py does: each value against the start,
-the one held last; every choice is the row, Right, Left/Right until the number is read, OK, a settings download.
+the one held last; every choice is the row, Right, Left/Right until the number is read, OK, a settings download. The
+screen after OK is read by proving.commit.after_ok: a number the camera refuses is written "applied": false with its
+notice, and the next choice expects the number kept before.
 Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl (kind "list", labelled with the numbers); the start file goes
 back on at the end and is checked.
 The finder's rows (Viewfinder Bright.) are greyed while the HDMI cable is in: run them with it out (the owner's hand)
@@ -77,6 +79,7 @@ from crawl_run import go_to  # noqa: E402
 from pass2_report import scale_clean as clean, scale_key as key  # noqa: E402
 from prove_run import LOCK_S, Failed, enter_any, held_value, option_key, to_shooting  # noqa: E402
 from proving.base import finish_attempt  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from proving.screens import ask_second, option_answer  # noqa: E402
 from runner import (add_allow_argument, add_scan_argument, allowed_or_exit, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, read_json, scan_position)
@@ -434,12 +437,15 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, by, seen_vlm = cam.frame.path.name, read_by(cam), reader_said(asked(cam))[0]   # the reader's, kept
     cam.press("enter")
-    after_ok = cam.frame.path.name
+    row_frame = cam.frame.path.name
+    # what the camera did with it (proving.commit.after_ok): a refusal or a notice closed with MENU, never OK; the scale
+    # reads as no known kind, so an information screen is not taken: it fails the row
+    got = after_ok(cam, path[-1], label=vals[target], info=False)
     to_shooting(link, hdmi, "the download after OK")
     time.sleep(1)
     dat = link.download(f"{path[-1]}-{target}")
     time.sleep(LOCK_S)
-    return {"chosen_frame": chosen, "row_frame": after_ok, "dat": dat, "vlm": seen_vlm, "read_by": by}
+    return {"chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "vlm": seen_vlm, "read_by": by, "outcome": got}
 
 
 def labels_of(vals: list) -> list:
@@ -617,12 +623,14 @@ def main():
                 at = h                      # where the scale stands when opened: the value held, then each chosen
                 for i in [i for i in range(len(vals)) if i != h] + [h]:
                     got = choose(cam, link, hdmi, cycle, model, path, vals, i, at, panel)
-                    at = i
+                    done = got["outcome"]
+                    at = i if done.applied else at     # a refused number leaves the scale on the one kept before
                     ch = camset.diff(camset.read(base), camset.read(got["dat"]))
                     r = {"path": path, "kind": "list", "index": i, "label": labels[i], "shown": labels[i],
                          "chosen_frame": got["chosen_frame"], "row_frame": got["row_frame"],
                          "vlm": got["vlm"], "read_by": got["read_by"], "dat": got["dat"].name, "base": base.name,
-                         "applied": True, "scale": True, "changes": changes_of(ch), "attempt": attempt}
+                         **({"notice": done.notice} if done.notice else {}), "applied": done.applied, "scale": True,
+                         "changes": changes_of(ch), "attempt": attempt}
                     out.write(json.dumps(r) + "\n")
                     out.flush()
                     print(f"  {labels[i]}: {len(ch)} records {[(c.key, c.before, c.after) for c in ch][:4]}", flush=True)
