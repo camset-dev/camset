@@ -1,9 +1,9 @@
 """Run a chain of camera steps from a TOML file, unattended (2026-10-31).
 
-    .venv/bin/python -u kit/tools/chain.py kit/chains/stills_brackets.toml --end kit2_pass2/dat/<owner>.DAT
-    .venv/bin/python -u kit/tools/chain.py kit/chains/stills_brackets.toml --dry       # list the steps only
+    .venv/bin/python -u kit/tools/chain.py my_chain.toml --end kit2_pass2/dat/<owner>.DAT
+    .venv/bin/python -u kit/tools/chain.py my_chain.toml --dry       # list the steps only
 
-kit/chains/stills_brackets.toml is the worked example: the chain the a1 II's Recall Custom holds ran (2026-10-31).
+A chain file is written for the work at hand: the example at the end of this text is one.
 
 The chains used to be shell scripts; one waited 2.5 hours on a blank HDMI feed and one lost its prover
 calls to shell word splitting. Here:
@@ -49,7 +49,7 @@ A chain file:
 
     [[step]]
     title = "quiet Stills start file"
-    upload = "kit2_pass2/start_reg_stills_2026-10-30.DAT"
+    upload = "kit2_pass2/dat/00001_quiet_start.DAT"  # a download of the camera's own (kit/tools/upload_check.py)
 
     [[step]]
     title = "hold 2"

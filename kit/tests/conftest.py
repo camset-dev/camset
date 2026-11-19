@@ -14,6 +14,11 @@ ROOT = Path(__file__).resolve().parents[2]
 GUARDED = (ROOT / "data", ROOT / "private" / "evidence")
 
 TEST_CAMERA = "TEST-CAM_fw9.99"          # made up: no camera's key
+# the a1 II's runs from before kit2 (in runs/ILCE-1M2_fw4.00/) that the kit still reads, besides its kit2_* runs: the
+# screen reader's tests' frames and files (kit/tests/test_core.py, kit/tests/score_screen.py) and the menu twin's
+# explore_stills/graph.jsonl (kit/camkit/twin.py). A prune of the runs keeps them
+READ_BY_THE_KIT = ("explore_stills", "explore_stills_pre20261027", "rip_stills", "iq_map", "dg_mydial", "dg_wheel",
+                   "ck_keys1", "ck_play_keys", "ck_play_keys2", "fn_run1", "dial_ctrl3")
 
 
 @pytest.fixture(autouse=True)
@@ -181,8 +186,8 @@ def guard_the_clones_files():
 def guard_words(changed: list) -> str:
     """What guard_the_clones_files fails a test with: the files, and the other cause than the test itself."""
     return (f"the test changed the clone's own files: {changed}. If this test does not write them, a kit command that "
-            "writes them running at the same time as the tests can cause it (kit/schema_update.py --write, "
-            "kit/tools/move_evidence.py or a prover in another terminal): run the tests again once it has finished.")
+            "writes them running at the same time as the tests can cause it (kit/schema_update.py --write, or a prover "
+            "in another terminal): run the tests again once it has finished.")
 
 
 class Eyes:

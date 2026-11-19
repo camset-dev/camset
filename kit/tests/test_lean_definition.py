@@ -185,11 +185,10 @@ def test_the_menu_tree_is_written_and_read_whole(tmp_path):
         datafiles.load_menu_tree(tmp_path / "none.json")
 
 
-def test_the_reset_files_lean_projection_keeps_only_what_a_test_could_tell():
-    """datafiles.lean_reset (what kit/tools/move_evidence.py writes once in place of an older whole reset file): what
-    each reset does to the settings a test could tell, its name and tab; a setting with a reading no test could tell
-    (a test value that was the reset's own value, which would say the camera held another before) is left out, as one
-    not tested is, and so are the tests' words (days, counts). reset_not_lean names each part of the older shape."""
+def test_the_reset_files_lean_shape_holds_only_what_a_test_could_tell():
+    """A lean reset file holds what each reset does to the settings a test could tell, its name and tab; reset_not_lean
+    names each thing it holds beside: a reading no test could tell (a test value that was the reset's own value, which
+    would say the camera held another before), the tests' words (days, counts)."""
     from camkit import datafiles
     doc = {"test": "Reset by hand, 2026-01-02: 3 settings", "records": {
         "global:0x0001": {"name": "A", "tab": "T", "result": "resets", "initialize": "resets"},
@@ -198,12 +197,11 @@ def test_the_reset_files_lean_projection_keeps_only_what_a_test_could_tell():
                           "initialize": "keeps (test value looks like the default)"},
         "global:0x0004": {"name": "D", "tab": "T", "result": "keeps"}},
         "initialize": "Initialize by hand, 2026-01-02"}
-    pub = datafiles.lean_reset(doc)
-    assert pub == {"about": datafiles.RESET_ABOUT, "records": {
+    pub = {"about": datafiles.RESET_ABOUT, "records": {
         "global:0x0001": {"name": "A", "tab": "T", "result": "resets", "initialize": "resets"},
         "global:0x0002": {"name": "B", "tab": "T", "result": "keeps", "initialize": "resets"},
         "global:0x0004": {"name": "D", "tab": "T", "result": "keeps"}}}
-    assert datafiles.reset_not_lean(pub) == [] and datafiles.lean_reset(pub) == pub
+    assert datafiles.reset_not_lean(pub) == []
     why = datafiles.reset_not_lean(doc)
     assert any("'test'" in w for w in why) and any("'initialize'" in w for w in why) and any("0x0003" in w for w in why)
     assert datafiles.reset_not_lean({**pub, "about": "My own words."}) == []           # the mapper's own about
@@ -276,7 +274,7 @@ def test_a_mappers_hand_edits_to_the_reset_file_survive_the_next_write(tmp_path,
     from camkit import datafiles
     from writer import fromdata
     p, pub = reset_folder(tmp_path, monkeypatch)
-    archive = datafiles.evidence_path(p)                    # an older whole kept by kit/tools/move_evidence.py
+    archive = datafiles.evidence_path(p)                    # an older whole the mapper kept in their private folder
     archive.parent.mkdir(parents=True)
     archive.write_text(json.dumps({"test": "Reset by hand, 2026-01-02", "records": {
         "global:0x0001": {"name": "A", "tab": "T", "result": "resets"}}}), encoding="utf-8")
@@ -300,10 +298,10 @@ def test_a_mappers_hand_edits_to_the_reset_file_survive_the_next_write(tmp_path,
     assert sorted(x.name for x in archive.parent.iterdir()) == [archive.name], "no private half written"
 
 
-def test_a_reset_file_not_lean_stops_the_write_naming_the_move(tmp_path, monkeypatch, capsys):
-    """A public reset file in the older whole shape (the tests' words, a reading no test could tell) is never
-    rewritten: a write stops before anything is written, naming kit/tools/move_evidence.py; without --write it is said;
-    the file stays as it is."""
+def test_a_reset_file_not_lean_stops_the_write_saying_to_make_it_lean(tmp_path, monkeypatch, capsys):
+    """A public reset file not in the lean shape (the tests' words, a reading no test could tell) is never rewritten:
+    a write stops before anything is written, saying to make it lean by hand; without --write it is said; the file
+    stays as it is."""
     from camkit import datafiles
     from writer import fromdata
     p, pub = reset_folder(tmp_path, monkeypatch, {"test": "Reset by hand, 2026-01-02", "records": {
@@ -315,11 +313,11 @@ def test_a_reset_file_not_lean_stops_the_write_naming_the_move(tmp_path, monkeyp
     with pytest.raises(datafiles.Refused) as e:
         fromdata.write_definition(target, full_definition())
     words = str(e.value.code)
-    assert "kit/tools/move_evidence.py --camera ILCE-0X0_fw1.00" in words and "lean" in words
+    assert "settings_reset_ILCE-0X0_fw1.00.json" in words and "Make it lean by hand" in words
     assert not target.exists() and p.read_bytes() == before
     assert fromdata.reset_names(full_definition(), False) == 0
-    assert "move_evidence.py" in capsys.readouterr().out and p.read_bytes() == before
-    with pytest.raises(datafiles.Refused, match="move_evidence.py"):
+    assert "Make it lean by hand" in capsys.readouterr().out and p.read_bytes() == before
+    with pytest.raises(datafiles.Refused, match="Make it lean by hand"):
         fromdata.reset_names(full_definition(), True)
     assert p.read_bytes() == before
 
@@ -344,7 +342,7 @@ def test_reading_a_path_never_moves_a_file(tmp_path, monkeypatch, capsys):
     """2026-11-11 review: a path getter moved a mapper's data/<cam>/ menu tree, accepted file and record shapes into
     whatever the evidence folder was (a test's temporary folder, or the maintainer's own private folder for a
     contributor's branch). Now the getters only name the private place; readers that only show take a file left in
-    data/ as absent, saying the command that moves it; a command that writes or drives stops in plain words naming it
+    data/ as absent; a command that writes or drives stops in plain words saying where to move it by hand
     (datafiles.stop_if_left)."""
     from camkit import datafiles
     from writer import gate
@@ -356,70 +354,20 @@ def test_reading_a_path_never_moves_a_file(tmp_path, monkeypatch, capsys):
     assert gate.read_accepted(cam) == []                                  # as if absent
     with pytest.raises(datafiles.NoMenuTree) as e:
         datafiles.load_menu_tree(cam)
-    assert datafiles.move_command(cam) in str(e.value)
+    assert "private" in str(e.value)
     monkeypatch.setattr(datafiles, "_SAID_NO_TREE", set())
     datafiles.say_no_menu_tree(definitions.menu_tree_file(cam), "it goes on without")
-    assert datafiles.move_command(cam) in capsys.readouterr().err
+    assert "no menu tree at" in capsys.readouterr().err
     assert sorted(x.name for x in old.iterdir()) == listing and not private.exists(), "nothing moved"
     with pytest.raises(datafiles.Refused) as stop:
         datafiles.stop_if_left(cam, "kit/schema_update.py --write")
     words = str(stop.value.code)
-    assert "kit/schema_update.py --write" in words and f"kit/tools/move_evidence.py --camera {cam}" in words
-    assert f"data/{cam}/menu_tree_{cam}.json" in words or f"menu_tree_{cam}.json" in words
+    assert "kit/schema_update.py --write" in words and "by hand" in words
+    assert f"menu_tree_{cam}.json to " in words and f"evidence/{cam}/menu_tree_{cam}.json" in words
     assert "Traceback" not in words
-    # check_public's refusal of such a file prints the exact command
+    # check_public's refusal of such a file says where it goes
     assert datafiles.evidence_in_public(old / f"accepted_{cam}.json") == [
-        f"accepted_{cam}.json is private whole, kept in private/evidence/{cam}/: move it there with "
-        f".venv/bin/python kit/tools/move_evidence.py --camera {cam}"]
-
-
-def test_move_evidence_moves_the_three_files_once_and_refuses_in_plain_words(tmp_path, monkeypatch, capsys):
-    """kit/tools/move_evidence.py: the three files of one camera from data/<cam>/ to private/evidence/<cam>/, one line
-    each, copied, read back and compared before the data/ copy goes; a copy in both places that is the same: the data/
-    one removed, said; different: refused naming both, nothing moved; a file that is not valid JSON: refused in plain
-    words, nothing moved; CAMSET_EVIDENCE_DIR set: the move still goes into the clone's own private/evidence/, said,
-    with what to do so the kit finds the files there."""
-    from tools import move_evidence as M
-    cam, old, private, docs = old_files(tmp_path, monkeypatch)
-    data, evidence = tmp_path / "data", tmp_path / "evidence"
-    bad = old / f"record_shapes_{cam}.json"
-    good = bad.read_bytes()
-    bad.write_text("{not json", encoding="utf-8")
-    with pytest.raises(M.Refused) as e:
-        M.move(cam, data, evidence)
-    assert "not valid JSON" in str(e.value.code) and bad.name in str(e.value.code)
-    assert len(list(old.iterdir())) == 3 and not private.exists(), "nothing moved"
-    bad.write_bytes(good)
-    said = []
-    M.move(cam, data, evidence, said.append)
-    assert len(said) == 3 and all(x.startswith("moved ") for x in said)
-    assert not list(old.iterdir())
-    for kind, doc in docs.items():
-        assert json.loads((private / f"{kind}_{cam}.json").read_text(encoding="utf-8")) == doc
-    said.clear()
-    M.move(cam, data, evidence, said.append)                                     # again: nothing to do
-    assert len(said) == 3 and all("already private" in x for x in said)
-    (old / f"accepted_{cam}.json").write_text(json.dumps(docs["accepted"]), encoding="utf-8")       # the same
-    said.clear()
-    M.move(cam, data, evidence, said.append)
-    assert not (old / f"accepted_{cam}.json").exists() and any(x.startswith("removed ") for x in said)
-    (old / f"menu_tree_{cam}.json").write_text(json.dumps({"tabs": []}), encoding="utf-8")         # another
-    with pytest.raises(M.Refused) as e:
-        M.move(cam, data, evidence)
-    words = str(e.value.code)
-    assert f"data/{cam}/menu_tree_{cam}.json" in words and f"evidence/{cam}/menu_tree_{cam}.json" in words
-    assert (old / f"menu_tree_{cam}.json").exists()
-    assert json.loads((private / f"menu_tree_{cam}.json").read_text(encoding="utf-8")) == docs["menu_tree"]
-    (old / f"menu_tree_{cam}.json").unlink()
-    # CAMSET_EVIDENCE_DIR set: the move still goes into the clone's own private/evidence/, said with what to do next
-    monkeypatch.setattr(M, "CLONE_EVIDENCE", evidence)
-    monkeypatch.setenv("CAMSET_EVIDENCE_DIR", str(tmp_path / "elsewhere"))
-    (old / f"accepted_{cam}.json").write_text(json.dumps(docs["accepted"]), encoding="utf-8")
-    capsys.readouterr()
-    M.main(["--camera", cam])
-    out = capsys.readouterr().out
-    assert "CAMSET_EVIDENCE_DIR is set" in out and "point it at" in out and "copy the moved files" in out
-    assert not (old / f"accepted_{cam}.json").exists() and not (tmp_path / "elsewhere").exists()
+        f"accepted_{cam}.json is private whole, kept in private/evidence/{cam}/: move it there by hand"]
 
 
 def test_a_reader_without_the_menu_tree_says_what_that_means(tmp_path, monkeypatch, capsys):
@@ -796,109 +744,6 @@ def test_drop_stale_alone_only_lists_and_removes_with_write(tmp_path, monkeypatc
         S.main()
 
 
-# ---------------------------------------------------------------- review 4 (2026-11-11): move_evidence and the reset file
-
-def test_move_evidence_makes_an_old_whole_reset_file_lean_keeping_the_whole(tmp_path, monkeypatch):
-    """The fourth step of kit/tools/move_evidence.py: a public reset file in the older whole shape is copied whole into
-    private/evidence/<cam>/ (an archive the kit never reads; an archive of other contents there already is kept and the
-    copy takes a dated name beside it), then its lean projection written in its place, one line said; a lean file is
-    left as it is; nothing for a camera with no reset file."""
-    from camkit import datafiles
-    from tools import move_evidence as M
-    whole = {"test": "Reset by hand, 2026-01-02", "records": {
-        "global:0x0001": {"name": "A", "tab": "T", "result": "resets"},
-        "global:0x0002": {"name": "B", "tab": "T", "result": "keeps (test value looks like the default)"}}}
-    p, _ = reset_folder(tmp_path, monkeypatch, whole)
-    data, evidence = tmp_path / "data", tmp_path / "evidence"
-    original = p.read_bytes()
-    said = []
-    archive = M.lean_reset_file("ILCE-0X0_fw1.00", data, evidence, said.append)
-    assert archive == evidence / "ILCE-0X0_fw1.00" / p.name and archive.read_bytes() == original
-    assert json.loads(p.read_text(encoding="utf-8")) == datafiles.lean_reset(whole)
-    assert datafiles.reset_not_lean(json.loads(p.read_text(encoding="utf-8"))) == []
-    assert len(said) == 1 and "made" in said[0] and "1 whose reading no test could tell left out" in said[0]
-    lean = p.read_bytes()
-    assert M.lean_reset_file("ILCE-0X0_fw1.00", data, evidence, said.append) is None and p.read_bytes() == lean
-    other = dict(whole, test="Another test, 2026-02-02")             # a second old whole, the archive kept
-    p.write_text(json.dumps(other), encoding="utf-8")
-    again = M.lean_reset_file("ILCE-0X0_fw1.00", data, evidence, said.append)
-    assert again != archive and again.name.startswith(p.stem + ".archived-") and archive.read_bytes() == original
-    assert json.loads(again.read_text(encoding="utf-8")) == other
-    p.unlink()
-    assert M.lean_reset_file("ILCE-0X0_fw1.00", data, evidence, said.append) is None
-
-
-@pytest.mark.parametrize("records, odd", [
-    ([{"key": "global:0x0001", "result": "resets"}], '"records" is a list'),
-    ({"global:0x0001": ["resets"]}, "record 'global:0x0001' is a list"),
-    (None, '"records" is missing'),
-], ids=["records-a-list", "a-record-a-list", "no-records"])
-def test_move_evidence_refuses_a_reset_file_of_a_shape_it_does_not_know(tmp_path, monkeypatch, records, odd):
-    """Fix round 5 (2026-11-11): an old reset file whose records are a list (or any shape lean_reset_file does not
-    know) ended in an AttributeError; now it is refused in plain words, nothing copied or changed."""
-    from tools import move_evidence as M
-    whole = {"test": "Reset by hand", **({"records": records} if records is not None else {})}
-    p, _ = reset_folder(tmp_path, monkeypatch, whole)
-    data, evidence = tmp_path / "data", tmp_path / "evidence"
-    original = p.read_bytes()
-    with pytest.raises(M.Refused) as e:
-        M.lean_reset_file("ILCE-0X0_fw1.00", data, evidence, print)
-    words = str(e.value.code)
-    assert "shape this does not know" in words and odd in words and "Traceback" not in words
-    assert p.read_bytes() == original and not (evidence / "ILCE-0X0_fw1.00").exists()
-
-
-def test_move_evidence_counts_entries_that_are_no_setting_key_apart(tmp_path, monkeypatch):
-    """Fix round 5 (2026-11-11): entries left out because their key is not a definition's setting key are counted and
-    said apart from the settings whose reading no test could tell."""
-    from tools import move_evidence as M
-    whole = {"test": "Reset by hand", "records": {
-        "global:0x0001": {"name": "A", "tab": "T", "result": "resets"},
-        "global:0x0002": {"name": "B", "tab": "T", "result": "keeps (test value looks like the default)"},
-        "Dial": {"name": "Dial", "tab": "T", "result": "resets"},
-        "note": {"result": "keeps"}}}
-    reset_folder(tmp_path, monkeypatch, whole)
-    said = []
-    M.lean_reset_file("ILCE-0X0_fw1.00", tmp_path / "data", tmp_path / "evidence", said.append)
-    assert "1 settings kept" in said[0] and "1 whose reading no test could tell left out" in said[0]
-    assert "2 whose key is not a setting key of a definition" in said[0]
-
-
-def test_move_evidence_rough_edges(tmp_path, monkeypatch, capsys):
-    """Review 4 (2026-11-11): a destination that cannot be written ends in plain words and leaves no .part file; a
-    --camera with no data/<cam>/ folder says so and exits non-zero; --help lists --camera; a pair the same as JSON
-    beside a file that cannot be read is never called two different copies."""
-    import os
-    import stat
-    from tools import move_evidence as M
-    cam, old, private, docs = old_files(tmp_path, monkeypatch)
-    data, evidence = tmp_path / "data", tmp_path / "evidence"
-    evidence.mkdir()
-    evidence.chmod(stat.S_IRUSR | stat.S_IXUSR)                     # read-only
-    try:
-        if os.access(evidence, os.W_OK):
-            pytest.skip("this user can write a read-only folder (root)")
-        with pytest.raises(M.Refused) as e:
-            M.move(cam, data, evidence)
-        assert "cannot be written" in str(e.value.code) and "Traceback" not in str(e.value.code)
-    finally:
-        evidence.chmod(stat.S_IRWXU)
-    assert not list(evidence.rglob("*.part")) and len(list(old.iterdir())) == 3
-    monkeypatch.setattr(M, "CLONE_EVIDENCE", evidence)
-    with pytest.raises(M.Refused, match="no data/ILCE-0X9_fw1.00/ folder|no .*ILCE-0X9_fw1.00/ folder") as e:
-        M.main(["--camera", "ILCE-0X9_fw1.00"])
-    assert e.value.code and not isinstance(e.value.code, int)
-    with pytest.raises(SystemExit):
-        M.main(["--help"])
-    assert "--camera" in capsys.readouterr().out
-    private.mkdir(parents=True)
-    (private / f"accepted_{cam}.json").write_text(json.dumps(docs["accepted"], indent=4), encoding="utf-8")  # same JSON
-    (old / f"record_shapes_{cam}.json").write_text("{not json", encoding="utf-8")
-    with pytest.raises(M.Refused) as e:
-        M.plan(cam, data, evidence)
-    assert "not valid JSON" in str(e.value.code) and "two different copies" not in str(e.value.code)
-
-
 def test_from_data_checks_every_definition_before_writing_any(tmp_path, monkeypatch):
     """fromdata.refresh_from_data --write: a refusal for one definition (here the second's reset file, not lean)
     comes before any definition is written, so the first is not left written and the second not."""
@@ -919,7 +764,7 @@ def test_from_data_checks_every_definition_before_writing_any(tmp_path, monkeypa
     bad.write_text(json.dumps({"test": "Reset, 2026-01-02", "records": {}}), encoding="utf-8")
     monkeypatch.setattr(fromdata, "from_data", lambda d: {**d, "tabs": ["Shooting", "New"]})   # both would change
     before = {p: p.read_bytes() for p in defs.iterdir()}
-    with pytest.raises(datafiles.Refused, match="move_evidence.py"):
+    with pytest.raises(datafiles.Refused, match="Make it lean by hand"):
         fromdata.refresh_from_data(True)
     assert {p: p.read_bytes() for p in defs.iterdir()} == before
 

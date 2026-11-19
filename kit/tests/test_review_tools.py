@@ -204,6 +204,39 @@ def test_a_step_that_ends_at_once_costs_no_wait(tmp_path, monkeypatch):
     assert chain.run_step(step, None, sys.stdout) == 3
 
 
+# ---------------------------------------------------------------- the migration code retired
+
+def test_a_private_file_in_data_is_refused_saying_to_move_it_by_hand(tmp_path, monkeypatch):
+    """The migration tools served only the maintainer's history (the first public commit, b1a1d08, already had the
+    per-camera runs, only public files in data/ and a lean reset file), so they are gone, with paths' leftovers check;
+    the refusals that stay (check_public's of a private-whole file or a reset file not lean in data/, the commands'
+    while a private-whole file is still there) say what to do by hand, naming no retired tool."""
+    from camkit import datafiles, definitions, paths
+    cam = "ILCE-0X0_fw1.00"
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    monkeypatch.setattr(datafiles, "CLONE_DATA", tmp_path / "data")
+    monkeypatch.setattr(definitions, "EVIDENCE_DIR", tmp_path / "evidence")
+    old = tmp_path / "data" / cam
+    old.mkdir(parents=True)
+    (old / f"accepted_{cam}.json").write_text("{}", encoding="utf-8")
+    assert datafiles.evidence_in_public(old / f"accepted_{cam}.json") == [
+        f"accepted_{cam}.json is private whole, kept in private/evidence/{cam}/: move it there by hand"]
+    with pytest.raises(datafiles.Refused) as e:
+        datafiles.stop_if_left(cam, "the pass-2 report")
+    words = str(e.value.code)
+    assert "move it by hand to" in words and str(tmp_path / "evidence" / cam / f"accepted_{cam}.json") in words
+    reset = old / f"settings_reset_{cam}.json"
+    reset.write_text('{"test": "Reset by hand, 2026-01-02", "records": {}}', encoding="utf-8")
+    said = " ".join(datafiles.evidence_in_public(reset))
+    assert "not lean" in said and "by hand" in said
+    assert "by hand" in datafiles.not_lean_words(reset, ["the key 'test'"])
+    for words in (said, str(e.value.code), datafiles.not_lean_words(reset, ["x"])):
+        assert "move_evidence" not in words and "migrate_runs" not in words
+    for gone in ("kit/tools/migrate_runs.py", "kit/tools/move_evidence.py", "kit/chains/stills_brackets.toml"):
+        assert not (ROOT / gone).exists(), gone
+    assert not hasattr(paths, "check_leftovers") and not hasattr(datafiles, "move_command")
+
+
 # ---------------------------------------------------------------- finding 25: identify.py's docstring and its code
 
 def test_identify_says_what_it_does_with_the_firmware_in_the_file():

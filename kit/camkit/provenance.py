@@ -152,7 +152,7 @@ def adopt(root: Path = None, slack: float = 300.0, say=_say) -> list[dict]:
 
 def _found(logged, root: Path) -> Path | None:
     """The logged download's file: where it was written, else the same place under this camera's run root (a clone
-    that moved, or runs moved under their camera's folder by kit/tools/migrate_runs.py)."""
+    that moved, or runs moved under their camera's folder)."""
     if not logged:
         return None
     p = Path(logged)

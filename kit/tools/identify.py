@@ -132,7 +132,6 @@ def ask_camera() -> list:
     from camkit import models, paths
     from camkit.link import Link
     from camkit.runs import Run
-    paths.check_leftovers()                          # before the link opens: their message, and nothing done
     named = paths.camera()
     with tempfile.TemporaryDirectory(prefix="camset-identify-") as tmp:
         # the link opens before the camera has said which it is: its first lines wait in a folder of their own

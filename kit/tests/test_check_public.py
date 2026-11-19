@@ -1014,9 +1014,9 @@ def test_a_clean_commit_range_passes(tmp_path):
     assert C.commit_problems(f"{base}..HEAD", repo=tmp_path) == []
 
 
-def test_a_reset_file_not_lean_is_refused_naming_the_move(tmp_path, monkeypatch):
-    """check_public refuses a public reset file in the older whole shape (the tests' words, a reading no test could
-    tell), naming kit/tools/move_evidence.py, which makes it lean; a lean one with the mapper's own about passes."""
+def test_a_reset_file_not_lean_is_refused_saying_to_make_it_lean(tmp_path, monkeypatch):
+    """check_public refuses a public reset file not in the lean shape (the tests' words, a reading no test could tell),
+    saying to make it lean by hand; a lean one with the mapper's own about passes."""
     cam = "ILCE-0X0_fw1.00"
     d = tmp_path / "data" / cam
     d.mkdir(parents=True)
@@ -1026,7 +1026,7 @@ def test_a_reset_file_not_lean_is_refused_naming_the_move(tmp_path, monkeypatch)
     monkeypatch.setattr(C, "ROOT", tmp_path)
     found = C.data_problems()
     assert found and all(x.startswith(f"data/{cam}/settings_reset_{cam}.json") for x in found)
-    assert any(f"kit/tools/move_evidence.py --camera {cam}" in x and "not lean" in x for x in found)
+    assert any("make it lean by hand" in x and "not lean" in x for x in found)
     f.write_text(json.dumps({"about": "My words.", "records": {"global:0x0001": {"name": "A", "result": "keeps"}}}),
                  encoding="utf-8")
     assert C.data_problems() == []

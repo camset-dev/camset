@@ -307,7 +307,6 @@ def place(doc) -> tuple:
     """(the folder the page goes in, the camera's runs it reads or None, why there is no page when it reads none):
     the definition's camera folder, runs/<model>_fw<fw>/; its runs only when the kit works on that camera
     (camkit.paths) and has run on it here (the_runs()), else the page is refused (main())."""
-    paths.check_leftovers()
     mine = definition_key(doc)
     folder = paths.runs_top() / mine
     got = paths.camera()

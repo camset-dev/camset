@@ -41,8 +41,7 @@ What would differ between owners stays with whoever maps the camera, in `private
 tree ([below](#the-menu-tree-the-cameras-menus)), the accepted rulings
 ([below](#the-accepted-file-what-the-report-leaves-open)), the record shapes (the value shapes of the records no
 setting covers, which the proof viewer shows), and the coverage ledger's looks file and private form.
-`kit/tools/check_public.py` refuses each in `data/`, and `kit/tools/move_evidence.py` moves the menu tree, the
-accepted rulings or the record shapes an older clone left there. Pass 1's map, `runs/<model>_fw<fw>/kit2_pass1/map_all.json`, stays with the runs, written by `kit/pass1_map.py`.
+`kit/tools/check_public.py` refuses each in `data/`: one found there is moved by hand into that folder. Pass 1's map, `runs/<model>_fw<fw>/kit2_pass1/map_all.json`, stays with the runs, written by `kit/pass1_map.py`.
 
 The pre-commit hooks and CI (`.github/workflows/kit-ci.yml`) check every definition and every data folder's camera,
 help, reset, hand tables, coverage and seen files against their schemas; the Help Guide's menu list has none yet. The

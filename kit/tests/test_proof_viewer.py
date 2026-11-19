@@ -853,20 +853,6 @@ def test_another_cameras_runs_are_never_read(clone, monkeypatch, capsys):
     assert "the definition viewer needs no runs" in (ROOT / "kit" / "setup.py").read_text(encoding="utf-8").split("def step_viewer(")[1].split("\ndef ")[0]
 
 
-def test_runs_at_the_top_stop_the_build_with_the_move(clone, monkeypatch, capsys):
-    """Runs from before per-camera folders are never read where they are: the build stops and names the command."""
-    mapped_camera(clone / "runs", a_key(clone))                     # runs/kit2_pass2 at the top of runs/
-    monkeypatch.setenv("CAMSET_CAMERA", A1)
-    monkeypatch.setattr(sys, "argv", ["proof_viewer.py"])
-    with pytest.raises(paths.Leftovers) as e:
-        pv.main()
-    said = str(e.value).replace(paths.shown(clone / "runs"), "runs")          # outside the clone: shown whole, with /
-    assert said == (f"runs/kit2_pass2 sits at the top of runs/; run `python3 kit/tools/migrate_runs.py --camera {A1}` "
-                    f"to move the {A1}'s runs under runs/{A1}/ (--dry-run shows the plan first). Until then the kit "
-                    "does not use them.")
-    assert not (clone / "runs" / A1).exists() and not (clone / "runs" / "_viewer").exists()
-
-
 def test_the_page_is_the_active_cameras_definition(clone, monkeypatch, capsys):
     """With no definition given, the page is the active camera's definition when it has one, else the reference
     (the a1 II's); --definition names one, and an unknown one stops with what is missing."""

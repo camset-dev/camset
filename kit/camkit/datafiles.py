@@ -22,20 +22,17 @@ of it is the same for any owner; the definition's own menu list and each setting
 row_group, row_mode, under_option) are the public menu structure.
 The reset file is one file, public and lean (reset_not_lean, schemas/settings-reset.schema.json): the mapper writes it
 by hand after the reset tests and edits it there; the kit reads only it and keeps no private half in step with it
-(fromdata.reset_names refreshes its names and tabs from the definition, nothing else). A file in the older whole shape
-(the tests' own words, dates, a reading no test could tell) is refused by every command that writes it and by
-kit/tools/check_public.py, naming kit/tools/move_evidence.py, which keeps the whole once as an archive in
-private/evidence/<model>_fw<fw>/ (never read again) and writes the lean projection (lean_reset) in its place.
+(fromdata.reset_names refreshes its names and tabs from the definition, nothing else). A file not in that shape (the
+tests' own words, dates, a reading no test could tell) is refused by every command that writes it and by
+kit/tools/check_public.py: the mapper makes it lean by hand, keeping such notes in their own private notes.
 menu_tree_file, accepted_file and record_shapes_file only name the three files that are private whole: no reading of a
-path moves a file. One left at its old public place in data/ (a clone brought up to date in the middle of a mapping)
-is moved by kit/tools/move_evidence.py alone (move_command); the commands that read or write these files
-(kit/pass2_report.py, kit/schema_update.py --write, kit/tools/menu_tree.py, kit/tools/set_twins.py,
-kit/provers/mymenu_run.py) stop in plain words naming it while one is there only (stop_if_left), and a reader that
-only shows takes it as absent. load_menu_tree reads the first and stops in plain words without it (NoMenuTree); a
-reader that goes on without it says so in one line (say_no_menu_tree).
+path moves a file. One found at its old public place in data/ is moved by hand into private/evidence/<model>_fw<fw>/;
+the commands that read or write these files (kit/pass2_report.py, kit/schema_update.py --write, kit/tools/menu_tree.py,
+kit/tools/set_twins.py, kit/provers/mymenu_run.py) stop in plain words while one is there only (stop_if_left), and a
+reader that only shows takes it as absent. load_menu_tree reads the first and stops in plain words without it
+(NoMenuTree); a reader that goes on without it says so in one line (say_no_menu_tree).
 """
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -61,8 +58,7 @@ RESET_ABOUT = ("Which settings Camera Settings Reset (result) and Initialize (in
 def evidence_path(p) -> Path:
     """The private place of the data file at `p`: private/evidence/<model>_fw<fw>/<its name> for a file of the clone's
     data/<model>_fw<fw>/, else <name>.evidence.json beside it (a file a test writes in a folder of its own). Where the
-    private-whole files are kept (private_place), and where kit/tools/move_evidence.py archives an older whole reset
-    file, which nothing reads."""
+    private-whole files are kept (private_place)."""
     p = Path(p)
     if p.parent.parent.resolve() == CLONE_DATA.resolve():
         return definitions.EVIDENCE_DIR / p.parent.name / p.name
@@ -86,16 +82,6 @@ def _shown(p: Path) -> str:
         return p.as_posix()
 
 
-# the command that moves a mapper's private-whole files left at their old public place, data/<model>_fw<fw>/, into
-# private/evidence/<model>_fw<fw>/ (kit/tools/move_evidence.py); nothing else ever moves them: a path is only a path
-MOVE_COMMAND = ".venv/bin/python kit/tools/move_evidence.py"
-
-
-def move_command(camera: str) -> str:
-    """The exact command that moves `camera`'s private-whole files out of data/ (MOVE_COMMAND)."""
-    return f"{MOVE_COMMAND} --camera {camera}"
-
-
 def old_place(camera: str, kind: str) -> Path:
     """data/<model>_fw<fw>/<kind>_<model>_fw<fw>.json: where a file that is private whole (PRIVATE_WHOLE) was kept
     before 2026-11-11; a clone brought up to date in the middle of a mapping can still have it there."""
@@ -110,7 +96,7 @@ def private_place(camera: str, kind: str) -> Path:
 
 def left_in_data(camera: str) -> list:
     """[(old place, private place)] of each file that is private whole and is still at its old public place only (not
-    yet moved: move_command). Reads nothing but whether the files are there."""
+    yet moved by hand). Reads nothing but whether the files are there."""
     return [(old_place(camera, k), private_place(camera, k)) for k in PRIVATE_WHOLE
             if old_place(camera, k).exists() and not private_place(camera, k).exists()]
 
@@ -118,26 +104,21 @@ def left_in_data(camera: str) -> list:
 def stop_if_left(camera: str, doing: str) -> None:
     """Stops in plain words (Refused) a command that reads or writes the camera's private-whole files (`doing`, in
     words: the report, the writers, the menu tree, set_twins, mymenu_run) while one of them is at its old public place
-    only: it would go on without the mapper's own file. Naming the command that moves them (move_command); a reader
-    that only shows takes the file as absent instead."""
+    only: it would go on without the mapper's own file. Naming where each goes, moved by hand; a reader that only shows
+    takes the file as absent instead."""
     left = left_in_data(camera)
     if not left:
         return
-    names = ", ".join(_shown(o) for o, _ in left)
-    env = (" CAMSET_EVIDENCE_DIR is set, so the kit looks for them there; the move goes into this clone's own "
-           "private/evidence/, so afterwards point CAMSET_EVIDENCE_DIR at that folder or copy the moved files to yours."
-           ) if os.environ.get("CAMSET_EVIDENCE_DIR") else ""
-    raise Refused(f"nothing done: {doing} needs your own mapping's files, and {names} "
+    moves = "; ".join(f"{_shown(o)} to {_shown(p)}" for o, p in left)
+    raise Refused(f"nothing done: {doing} needs your own mapping's files, and {len(left)} of them "
                   f"{'is' if len(left) == 1 else 'are'} still in data/, where the kit no longer reads them (they are "
-                  f"private now, kept in private/evidence/{camera}/).{env} Move them there once with\n"
-                  f"  {move_command(camera)}\n"
-                  "(on Windows: .venv\\Scripts\\python kit\\tools\\move_evidence.py --camera "
-                  f"{camera}), then run the command again.")
+                  f"private, kept in private/evidence/{camera}/): move {'it' if len(left) == 1 else 'each'} by hand "
+                  f"to where the kit reads {'it' if len(left) == 1 else 'them'} ({moves}), then run the command again.")
 
 
 def menu_tree_file(camera: str) -> Path:
     """The camera's menus, row by row, as the kit walked them (kit/tools/menu_tree.py), private whole (private_place);
-    only a path: nothing is read or moved (one left at its old public place: move_command)."""
+    only a path: nothing is read or moved."""
     return definitions.menu_tree_file(camera)
 
 
@@ -162,19 +143,7 @@ def say_no_menu_tree(p, meaning: str) -> None:
     means for what the command gives (`meaning`): a reader that goes on without it says so."""
     if (str(p), meaning) not in _SAID_NO_TREE:
         _SAID_NO_TREE.add((str(p), meaning))
-        print(f"no menu tree at {_shown(p)} (the mapper's own, private): {meaning}{_old_copy_said(p)}", file=sys.stderr)
-
-
-def _old_copy_said(p) -> str:
-    """"; an old copy is in data/ ... (the command that moves it)" when the private file at `p` is missing and the
-    file is still at its old public place, else ""."""
-    p = Path(p)
-    camera = p.parent.name
-    kind = kind_of(Path(camera) / p.name)
-    if kind not in PRIVATE_WHOLE or not old_place(camera, kind).exists():
-        return ""
-    return (f"; an old copy is still at {_shown(old_place(camera, kind))}, where the kit no longer reads it: move it "
-            f"with {move_command(camera)}")
+        print(f"no menu tree at {_shown(p)} (the mapper's own, private): {meaning}", file=sys.stderr)
 
 
 def read_json(p) -> dict:
@@ -200,8 +169,7 @@ def load_menu_tree(where) -> dict:
     if not p.exists():
         raise NoMenuTree(f"no menu tree at {p}: it is the mapper's own, kept private whole (docs/decisions/0016). "
                          "kit/tools/menu_tree.py writes it from pass 1's page scan and crawls on the computer that holds "
-                         "the camera's runs; CAMSET_EVIDENCE_DIR points the kit at another private/evidence/ folder"
-                         f"{_old_copy_said(p)}.")
+                         "the camera's runs; CAMSET_EVIDENCE_DIR points the kit at another private/evidence/ folder.")
     return read_json(p)
 
 
@@ -244,26 +212,6 @@ def reset_not_lean(doc) -> list:
     return out
 
 
-def lean_reset(doc: dict) -> dict:
-    """The lean projection of a reset file in the older whole shape (kit/tools/move_evidence.py writes it once in the
-    whole file's place): what each reset does to each setting a test could tell ("resets" or "keeps" for the one
-    reading or both), its name and tab; never the tests' own words (their days and counts), and no setting a reading of
-    which no test could tell (a test value that was the value the reset gives: such a reading would say the camera
-    held another value before the test). Such a setting reads as one not tested. Its "about" is the kit's
-    (RESET_ABOUT); a "$schema" the file names is kept."""
-    out = {**({"$schema": doc["$schema"]} if isinstance(doc.get("$schema"), str) else {}),
-           "about": RESET_ABOUT, "records": {}}
-    for k, r in (doc.get("records") or {}).items():
-        if not isinstance(r, dict) or not RESET_KEY.fullmatch(str(k)):
-            continue
-        said = [r[f] for f in ("result", "initialize") if f in r]
-        if not said or any(x not in RESET_READINGS for x in said):
-            continue
-        out["records"][k] = {f: r[f] for f in RESET_FIELDS if f in r and (f in ("result", "initialize")
-                                                                          or isinstance(r[f], str))}
-    return out
-
-
 def reset_file(camera: str) -> Path:
     return definitions.data_dir(camera) / f"settings_reset_{camera}.json"
 
@@ -275,16 +223,14 @@ def hand_tables_file(camera: str) -> Path:
 
 
 def not_lean_words(p, why: list) -> str:
-    """The plain words a command stops with on a reset file that is not lean (reset_not_lean's `why`), naming the
-    command that keeps the whole file privately and writes the lean one (kit/tools/move_evidence.py)."""
+    """The plain words a command stops with on a reset file that is not lean (reset_not_lean's `why`): what is wrong,
+    and that the mapper makes it lean by hand."""
     p = Path(p)
-    camera = p.parent.name
     return (f"{_shown(p)} is not in the lean shape a public reset file has ({'; '.join(why[:3])}"
-            f"{'; ...' if len(why) > 3 else ''}). It was written by an older kit, or by hand with notes about the "
-            f"tests. Run once\n  {move_command(camera)}\n(on Windows: .venv\\Scripts\\python "
-            f"kit\\tools\\move_evidence.py --camera {camera}): it keeps the whole file in private/evidence/{camera}/ "
-            "and writes the lean one in its place. Keep notes about the tests (dates, counts, what was tried) in your "
-            "own private/ notes, never in the public file.")
+            f"{'; ...' if len(why) > 3 else ''}). It was written by hand with notes about the tests, or by an older "
+            "kit. Make it lean by hand (schemas/settings-reset.schema.json says what it holds), then run the command "
+            "again. Keep notes about the tests (dates, counts, what was tried) in your own private/ notes, never in "
+            "the public file.")
 
 
 def read_reset(p) -> dict:
@@ -332,14 +278,13 @@ def evidence_in_public(p, text: str = None) -> list:
     that is private whole (PRIVATE_WHOLE: a menu tree, the accepted rulings, the record shapes); a run's folder, a
     kit2_ run name or an ISO date anywhere; a download's or a frame's file name anywhere but the camera file's own
     (its sample and the suffix of the files the camera saves: definitions.file_names); in the reset file the walk's
-    state words (STATE_WORDS) and any part of the older whole shape (reset_not_lean: the tests' own words, a reading no
-    test could tell), naming the command that makes it lean. Empty for a lean file. `text` is the file's contents (a
-    commit's blob, check_public --commits), else the file is read."""
+    state words (STATE_WORDS) and anything a lean one does not hold (reset_not_lean: the tests' own words, a reading no
+    test could tell), saying it is made lean by hand. Empty for a lean file. `text` is the file's contents (a commit's
+    blob, check_public --commits), else the file is read."""
     p = Path(p)
     kind = kind_of(p)
     if kind in PRIVATE_WHOLE:
-        return [f"{p.name} is private whole, kept in private/evidence/{p.parent.name}/: move it there with "
-                f"{move_command(p.parent.name)}"]
+        return [f"{p.name} is private whole, kept in private/evidence/{p.parent.name}/: move it there by hand"]
     if kind == "looks":
         return [f"{p.name} is the coverage ledger's looks file, the mapper's own: it is kept in "
                 f"private/evidence/{p.parent.name}/ (docs/decisions/0023), never in data/"]
@@ -378,7 +323,6 @@ def evidence_in_public(p, text: str = None) -> list:
         except ValueError:
             why = ["it is not valid JSON"]
         if why:
-            found.append(f"not lean ({'; '.join(why[:3])}{'; ...' if len(why) > 3 else ''}): "
-                         f"{move_command(p.parent.name)} keeps the whole file in private/evidence/{p.parent.name}/ and "
-                         "writes the lean one")
+            found.append(f"not lean ({'; '.join(why[:3])}{'; ...' if len(why) > 3 else ''}): make it lean by hand, the "
+                         "notes about the tests kept in your own private/ notes")
     return found

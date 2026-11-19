@@ -20,10 +20,6 @@ Without any of them run_root() stops and says how to name the camera. "cameras" 
 {"model": ..., "firmware": ..., and any of the config's own keys for that camera alone (camera_ip, camera_model,
 hdmi, eyes)}: camkit.config() lays the active camera's keys over the rest.
 
-The kit's runs from before 2026-11-05 sat at the top of runs/ (kit2_*, _viewer, _cache, downloads.jsonl). One
-there stops run_root() with the command that moves them under their camera's folder (kit/tools/migrate_runs.py):
-they are never used where they are, nor silently.
-
 CAMSET_RUNS names another folder to hold the camera folders (the tests use it; default: runs/ in the clone).
 CAMSET_CONFIG and CAMSET_LINK_BIN name another config file and another camlink (camkit/__init__.py; the tests point
 them at a file that is not there and at a stub).
@@ -38,21 +34,15 @@ KEY = re.compile(r"^(?P<model>[A-Za-z0-9][A-Za-z0-9-]*)_fw(?P<firmware>\d+\.\d+)
 ENV = "CAMSET_CAMERA"
 EXAMPLE = "ILCE-1M2_fw4.00"
 A1II = "ILCE-1M2_fw4.00"           # the body the kit was built on: its runs are the tests' frames (a1ii_root())
-MIGRATE = "python3 kit/tools/migrate_runs.py"
-# what the kit makes in a camera's folder, which before 2026-11-05 it made at the top of runs/
-LEFTOVER_DIRS = ("_viewer", "_cache")
-LEFTOVER_FILES = ("downloads.jsonl",)
-LEFTOVER_PREFIX = "kit2_"
+# what tells a camera folder that holds runs (mapped): its downloads manifest, or a run folder of the kit's
+MANIFEST = "downloads.jsonl"
+RUN_PREFIX = "kit2_"
 
 _from_command_line = None          # the key --camera gave this process, if it did
 
 
 class NoCamera(SystemExit):
     """Nothing names the camera the kit works on."""
-
-
-class Leftovers(SystemExit):
-    """The kit's runs from before per-camera folders sit at the top of runs/."""
 
 
 def _pkg():
@@ -149,8 +139,8 @@ def mapped() -> list:
         return []
     out = []
     for p in sorted(top.iterdir()):
-        if p.is_dir() and KEY.match(p.name) and ((p / LEFTOVER_FILES[0]).exists()
-                                                 or any(q.name.startswith(LEFTOVER_PREFIX) for q in p.iterdir())):
+        if p.is_dir() and KEY.match(p.name) and ((p / MANIFEST).exists()
+                                                 or any(q.name.startswith(RUN_PREFIX) for q in p.iterdir())):
             out.append(p.name)
     return out
 
@@ -189,66 +179,9 @@ def overlay(cfg: dict) -> dict:
     return {**cfg, **{k: v for k, v in entry.items() if k not in ("model", "firmware")}}
 
 
-def leftovers(top: Path = None) -> list:
-    """The kit's runs at the top of runs/ (from before per-camera folders), by name."""
-    top = runs_top() if top is None else Path(top)
-    if not top.is_dir():
-        return []
-    return sorted(p.name for p in top.iterdir()
-                  if (p.is_dir() and (p.name.startswith(LEFTOVER_PREFIX) or p.name in LEFTOVER_DIRS))
-                  or (p.is_file() and p.name in LEFTOVER_FILES))
-
-
-def leftover_camera(top: Path = None) -> str | None:
-    """The key of the camera the runs at the top of runs/ downloaded from, when one of their files says; None when
-    none does."""
-    from . import models
-    top = runs_top() if top is None else Path(top)
-    try:
-        lines = (top / LEFTOVER_FILES[0]).read_text(encoding="utf-8").splitlines()
-    except OSError:
-        lines = []
-    tries = []
-    for line in reversed(lines[-20:]):
-        try:
-            p = Path(json.loads(line).get("path", ""))
-        except (ValueError, AttributeError):
-            continue
-        tries.append(p if p.is_absolute() else top / p)
-    for d in sorted(top.glob(LEFTOVER_PREFIX + "*/dat")):
-        with os.scandir(d) as it:
-            tries += [Path(e.path) for e in it if e.name.endswith(".DAT")][:1]
-    for p in tries:
-        try:
-            return key(*models.header(p))
-        except (OSError, ValueError):
-            continue
-    return None
-
-
-def leftover_message(names: list, top: Path = None) -> str:
-    top = runs_top() if top is None else Path(top)
-    cam = leftover_camera(top)
-    first = sorted(names, key=lambda n: (n != "kit2_pass2", n))[0]
-    more = f" (with {len(names) - 1} more of the kit's)" if len(names) > 1 else ""
-    whose = f"the {cam}'s runs under {shown(top)}/{cam}/" if cam else \
-        f"them under {shown(top)}/<model>_fw<firmware>/, the camera's they are"
-    flag = f" --camera {cam}" if cam else " --camera <model>_fw<firmware>"
-    return (f"{shown(top)}/{first} sits at the top of {shown(top)}/{more}; run `{MIGRATE}{flag}` to move {whose} "
-            f"(--dry-run shows the plan first). Until then the kit does not use them.")
-
-
-def check_leftovers(top: Path = None):
-    names = leftovers(top)
-    if names:
-        raise Leftovers(leftover_message(names, top))
-
-
 def run_root(camera_key: str = None, required: bool = True) -> Path | None:
     """runs/<model>_fw<fw>/ of the camera named (camera_key), else of the camera the kit works on (camera()). Stops
-    when the kit's runs from before 2026-11-05 sit at the top of runs/, and when nothing names the camera (None
-    instead with required=False)."""
-    check_leftovers()
+    when nothing names the camera (None instead with required=False)."""
     if camera_key:
         return runs_top() / checked(camera_key, "the camera asked for")
     got = camera()
@@ -276,8 +209,8 @@ def no_camera_message() -> str:
 
 def run_path(given) -> Path:
     """A run folder, or a file in one, as a command line names it: as given when it is there; else under the camera's
-    run root (kit2_crawl/map.json, kit2_pass2/dat/00001_start.DAT). Stops on a path into the kit's runs at the top of
-    runs/, or into another camera's folder than the one the kit works on."""
+    run root (kit2_crawl/map.json, kit2_pass2/dat/00001_start.DAT). Stops on a path into another camera's folder than
+    the one the kit works on."""
     p = Path(given)
     if not p.exists() and not p.is_absolute() and p.parts[:1] != ("runs",):
         root = run_root(required=False)
@@ -292,8 +225,6 @@ def run_path(given) -> Path:
         return p
     if not parts:
         return p
-    if parts[0] in leftovers(top):
-        raise Leftovers(leftover_message(leftovers(top), top))
     if KEY.match(parts[0]):
         got = camera()
         if got and got[0] != parts[0]:

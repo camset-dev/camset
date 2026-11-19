@@ -160,8 +160,8 @@ def test_camkit_and_every_program_parse_as_python_3_9():
 
 def test_the_oldest_python_is_the_same_everywhere():
     """start.OLDEST, the checks the kit's programs make before they can import camkit (kit/setup.py, which never
-    imports it, kit/tools/migrate_runs.py and kit/tools/move_evidence.py; start.py stays on its own), and ruff's
-    target in pyproject.toml say the same Python. Every such check in a program or in camkit is found, not listed."""
+    imports it; start.py stays on its own), and ruff's target in pyproject.toml say the same Python. Every such check
+    in a program or in camkit is found, not listed."""
     want = ".".join(str(n) for n in start.OLDEST)
     checks = {}
     for p in [*PROGRAMS, *(KIT / "camkit").glob("*.py")]:
@@ -171,7 +171,7 @@ def test_the_oldest_python_is_the_same_everywhere():
             checks[p.relative_to(ROOT).as_posix()] = said
             assert {f"{a}.{b}" for a, b in said} == {want}, p
             assert f"Python {want} or newer" in text, p
-    assert {"kit/setup.py", "kit/tools/migrate_runs.py", "kit/tools/move_evidence.py"} <= set(checks)
+    assert "kit/setup.py" in checks
     assert re.search(r'^target-version = "py(\d)(\d+)"', (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
                      re.M).groups() == tuple(str(n) for n in start.OLDEST)
 

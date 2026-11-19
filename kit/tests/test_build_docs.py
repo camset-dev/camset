@@ -116,14 +116,11 @@ def test_no_viewer_without_the_cameras_runs(clone, own_runs, monkeypatch, capsys
 
 
 def test_the_hook_path_never_looks_at_runs(clone, own_runs, monkeypatch):
-    """The pre-commit hook's --no-viewer: the kit's runs from before per-camera folders, or no camera named, stop
-    nothing (a commit in a clone that has not moved its runs yet still goes through)."""
+    """The pre-commit hook's --no-viewer: a run folder at the top of runs/, or no camera named, stops nothing."""
     (own_runs / "kit2_pass2").mkdir()
     monkeypatch.delenv("CAMSET_CAMERA")
     build_docs.main(["--no-viewer"])
     assert not clone
-    with pytest.raises(paths.Leftovers, match="migrate_runs.py"):
-        build_docs.main(["--write-schema"])
 
 
 def test_the_pages_render_per_definition_and_the_header_from_its_block():

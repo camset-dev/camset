@@ -10,8 +10,8 @@ one that was run (the kit's Python, the program's path from the camset folder, t
 
 What sets it off is what the program needs, never which Python it is: a Python older than 3.11, where the kit's code
 does not load, or a package of kit/requirements.txt missing when the program imports it (the hook watch() installs).
-A Python of the person's own with the packages runs the kit as well, and a program that needs none of them
-(kit/tools/migrate_runs.py, which the docs run with python3) runs on the system's Python as before. No package is
+A Python of the person's own with the packages runs the kit as well, and a program that needs none of them runs on
+the system's Python as before. No package is
 looked for and kit/requirements.txt is read only once a program has failed, so importing camkit costs nothing more.
 Standard library only, and readable by Python 3.9 (macOS's own /usr/bin/python3), so that it can say it is too old:
 camkit/__init__.py, this file and every kit program parse there (kit/tests/test_start.py).
