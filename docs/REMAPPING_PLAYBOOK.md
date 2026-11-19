@@ -194,8 +194,9 @@ axis is proved again from a start file the camera wrote holding the other value.
 
 Before calling a model done, check the evidence offline: each proof's frames against its label, and the report's rules
 against the proofs. Unattended runs go through `kit/tools/chain.py`, never a shell script. A chain stops at its first
-step that fails and puts its end file back, unless that step is marked `go_on_after_error = true`, which goes on only
-after an error the kit gives no meaning (its docstring says which).
+step that fails, unless that step is marked `go_on_after_error = true`, which goes on only after an error the kit gives
+no meaning (its docstring says which). It then puts its end file back, but not after a step that exits 5, whose start
+file goes back by hand first (`kit/tools/upload_check.py`, section 10).
 
 ## 7. Order of work
 
@@ -528,14 +529,17 @@ record, and what is unknown.
 
 ## 13. A round trip at the end
 
-A map is only useful if a file the editor writes loads on the camera as intended:
-1. Edit a downloaded file with the editor (several settings, including an array slot and a
-   memory-set record).
-2. Write it with the editor's "Write to camera", with the owner's word: the kit's own upload refuses an edited file
-   (rule 12). The editor reads the camera back after its restart and lists every record that differs from the file
-   sent (`EDITOR.md`, "The camera link").
-3. Check that every edit took and nothing else moved. Anything rejected or rewritten goes into the
+A map is only useful if a file the editor writes loads on the camera as intended. The round trip is the owner's own
+act, with their own editor: you ask them for it, one step a message (section 9), and check what the editor reports;
+you never edit a file in the editor or write one to the camera through it yourself (rule 12).
+1. Ask the owner to edit a downloaded file in the editor: several settings, including an array slot and a memory-set
+   record, which you may suggest.
+2. Ask them to write it with the editor's "Write to camera" (the kit's own upload refuses an edited file). The editor
+   reads the camera back after its restart and lists every record that differs from the file sent (`EDITOR.md`, "The
+   camera link"); ask them to show you that list.
+3. From that list, check that every edit took and nothing else moved. Anything rejected or rewritten goes into the
    definition's notes.
+4. Then the owner's own file goes back on the camera, as at the end of every session (rule 5).
 
 ## 14. After a camera reset
 

@@ -174,7 +174,8 @@ frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the con
 (decision 9). Such a run asks local readers only, and no tool reads its frames with a reader afterwards.
 
 The a1 II's owner, the maintainer, decided all this for their own camera on 2026-11-13; another camera's owner
-decides for theirs, and the default stays by hand (the playbook's rule 3).
+decides for theirs, and the default stays by hand (the Rule line above; how an owner allows more, the playbook's section
+1, rule 3).
 
 Before 2026-11-19 AGENTS.md and the playbook's rule 3 each stated the rule by hand beside a shorter Rule line; the
 playbook's rule said that a `--network` run never chooses in a row whose choice drops a link, starts a connection or a
@@ -198,5 +199,5 @@ Proofs of these rows come from the owner's hand changes, except the options a de
 with `--network`, each proof line carrying the decision as its `allowance`. The frames of the screens opened this way
 hold what they show: they stay in `runs/` with every other frame, never in a submission, and go to local readers
 alone, then and later, a `--owner` run's to none. For someone else's camera the
-playbook's rule 3 keeps Auto Power OFF Temp., the Wi-Fi and Bluetooth rows and the identity rows by hand too, until its
-owner decides otherwise.
+Rule line keeps Auto Power OFF Temp., the Wi-Fi and Bluetooth rows and the identity rows by hand too, until its owner
+decides otherwise (the playbook's section 1, rule 3, says how).
