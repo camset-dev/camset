@@ -44,7 +44,8 @@ What does not count: an attempt at a row that did not finish. prove_run tags eac
 records it in attempts.jsonl once its last proof (the saved option chosen again) changed nothing; an attempt
 with no such line was cut short, or a record stayed changed (a sticky side effect shows up in every later
 option's diff), and its proofs are left out. Proofs written before attempts were tagged lose the attempt a
-failure that still stands cut short (failures.jsonl, no proof of the row since). Nor does a row made where the camera
+failure that still stands cut short (failures.jsonl, no proof of the row since); a side list's put-back the camera would
+not let back (its start greyed in that state) ended its attempt and is no failure (camera_kept). Nor does a row made where the camera
 stood when lines of the same row that name the state of another row it says nothing of ("Row = option", or in words
 "Row option" for a row the proofs walk: state_row) prove all it proves, option by option (stood_rows, stood_out: a
 panel's slider proved again with its setup row on --set; AF Area Registration's holds proved again with the run's
@@ -710,7 +711,8 @@ def report_proofs(run: Path, alone: bool = False) -> tuple:
             own.append(r)
         reread += attach_readings(part, own, "" if part == run else part.name + "/")
         PUT_BACK.update(put_back_notes(part))
-        skip |= {len(proofs) + i for i in unfinished(own, attempts_done(part), failing_frames(part))}
+        kept = frozenset(camera_kept(part).values())
+        skip |= {len(proofs) + i for i in unfinished(own, attempts_done(part), failing_frames(part), kept)}
         b, f = still_failing(part)
         blocked.update(b)
         failed.update(f)
@@ -982,7 +984,7 @@ def side_named(o: dict) -> set:
     return {x.get("key") if isinstance(x, dict) else x for x in o.get("side_effects") or ()} - {None}
 
 
-def unfinished(proofs: list, done: set, failing: dict) -> set:
+def unfinished(proofs: list, done: set, failing: dict, kept: frozenset = frozenset()) -> set:
     """Indices into proofs that do not count: a tagged attempt with no completion line; and, for proofs written
     before attempts were tagged (a carousel's axis proofs still are not), each attempt a failure cut short (failing:
     {fail_key: the frames of its failures}, failing_frames: a row that still fails, and any axis row): the proofs
@@ -990,7 +992,8 @@ def unfinished(proofs: list, done: set, failing: dict) -> set:
     proof's base is the download after the visit before, so its attempt goes back proof by proof to the one whose base
     is the attempt's start, or to a visit that put its row back, which ended an attempt before), unless that attempt
     had already ended (a list row's last proof changed nothing; an axis row's last proof is its put-back, even one that
-    left a record differing). Only the last failure's proof used to go: session A's two Focus Area / Custom 1
+    left a record differing; a side list's last proof is a put-back the camera would not let back, its frame among
+    `kept`: camera_kept). Only the last failure's proof used to go: session A's two Focus Area / Custom 1
     attempts each stopped at Custom 3, and their Custom 2 visits, which wrote what Custom 2's registered frame loaded
     (two values in two attempts), counted (2026-11-08)."""
     out = {i for i, r in enumerate(proofs) if r.get("attempt") and r["attempt"] not in done}
@@ -1006,7 +1009,8 @@ def unfinished(proofs: list, done: set, failing: dict) -> set:
             # an axis put-back ends its attempt even when it left a record differing (explained, not failed, since
             # 2026-11-07); a list row's last proof with changes is a sticky side effect, and that attempt never ended
             ended = bool(last.get("final")) if last.get("kind") == "axis" else \
-                not last.get("changes") and (last.get("final") or last.get("kind") in ("list", "dialog"))
+                not last.get("changes") and (last.get("final") or last.get("kind") in ("list", "dialog")) \
+                or proof_frame(last) in kept
             if ended and proof_frame(last) < frame:
                 continue                 # that attempt ended as it began; the failure came after it
             by_dat = {r.get("dat"): (i, r) for i, r in before if r.get("dat")}
@@ -2184,14 +2188,58 @@ def failing_frames(run: Path) -> dict:
     return {k: sorted(v) for k, v in out.items()}
 
 
+def camera_kept(run: Path) -> dict:
+    """{failure's frame: its put-back's proof frame} for the failures (failures.jsonl) that are a side list's put-back
+    the camera would not let back: the side list prover's put-back failure (SIDE_PUT_BACK), raised on the put-back's own
+    line once every earlier choice was seen taken at the next opening; that line (its row's latest before the failure;
+    side-list lines carry no attempt tag) applied; and every record it left differing from the session's start the
+    camera's doing, as a list row's put-back is judged (proving.putback.put_back_leftovers, over the attempt's lines the
+    camera applied): kept since an earlier option, or a start value no applied line wrote back, the start greyed in that
+    state (a Picture Profile's Color Mode with its Gamma on HLG, 2026-11-19). prove_run restores the start file by upload
+    after it, as after any failed row. Such an attempt ended as the camera allows: its failure cuts nothing (unfinished)
+    and stands for no row (still_failing), so no older failure of its row counts again. A put-back failure with any
+    other leftover, or a put-back the camera refused, and every other failure, cut as before."""
+    path = run / "failures.jsonl"
+    fails = [r for r in jsonl.read(path) if SIDE_PUT_BACK.search(str(r.get("why") or ""))] if path.exists() else []
+    if not fails:
+        return {}
+    from types import SimpleNamespace
+
+    from proving.putback import put_back_leftovers
+    lines = [r for r in jsonl.read(run / "proofs.jsonl") if r.get("kind") == "sidelist" and not r.get("attempt")]
+    out = {}
+    for f in fails:
+        frame = frame_no(f.get("frame"))
+        before = [r for r in lines if fail_key(r) == fail_key(f) and proof_frame(r) < frame]
+        if not before:
+            continue
+        last = max(before, key=proof_frame)
+        applied = sorted((r for r in before if r.get("base") == last.get("base") and r.get("applied") is not False),
+                         key=proof_frame)
+        if last.get("applied") is False or not last.get("changes"):
+            continue
+        history = [{c["key"]: c["after"] for c in element_changes(r)} for r in applied]
+        left = [SimpleNamespace(**c) for c in element_changes(last)]
+        if put_back_leftovers(left, history) is not None:
+            out[frame] = proof_frame(last)
+    return out
+
+
+# the side list prover's words when its put-back still differs from the session's start (kit/proving/sidelists.py,
+# prove_side_row); camera_kept reads them
+SIDE_PUT_BACK = re.compile(r": back on its value, \d+ records still differ$")
+
+
 def still_failing(run: Path) -> tuple:
     """({row: blocker} the camera refused to open, {row: last reason} that failed otherwise), for
-    rows with no proof written after their last failure (failures and proofs share the frame numbers)."""
+    rows with no proof written after their last failure (failures and proofs share the frame numbers). A side list's
+    put-back the camera would not let back (camera_kept) is no failure of its row."""
     path = run / "failures.jsonl"
     if not path.exists():
         return {}, {}
 
     key = fail_key
+    kept = camera_kept(run)
     last_proof = collections.defaultdict(int)
     for r in jsonl.read(run / "proofs.jsonl"):
         last_proof[key(r)] = max(last_proof[key(r)], frame_no(r.get("chosen_frame")), frame_no(r.get("dat")))
@@ -2201,6 +2249,8 @@ def still_failing(run: Path) -> tuple:
     blocked, failed = {}, {}
     for r in jsonl.read(path):
         k = key(r)
+        if frame_no(r.get("frame")) in kept:
+            continue                          # the camera's doing: the attempt ended, its row does not fail
         if last_proof.get(k, 0) > frame_no(r.get("frame")):
             blocked.pop(k, None)
             failed.pop(k, None)
