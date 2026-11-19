@@ -135,6 +135,9 @@ def test_a_refused_comparison_or_a_restore_by_hand_pending_uploads_as_before(mon
     assert U.main() == 0 and U.sent == ["refused", "upload", "check"]
     assert "refused the download that compares it" in capsys.readouterr().out
     U, start = upload(monkeypatch, own_runs, (), held=())
+    import camkit
+    from camkit import paths
+    monkeypatch.setattr(camkit, "RUNS", paths.runs_top())   # the marker in the test's own runs/ alone, never the clone's
     run = Run("kit2_pass2")
     mark_restore_by_hand(run.root, run.dir.name, start, "a test's")
     assert U.main() == 0 and U.sent == ["upload", "check"]
