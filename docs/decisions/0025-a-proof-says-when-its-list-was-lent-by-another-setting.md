@@ -25,7 +25,9 @@ only the private evidence says. Every write names values afresh from that write'
 a hand table names, no proof and no shared list backing it, is counted, not proved, in both of the writer's passes.
 The coverage ledger reads the writer's result (`camkit.definitions.inferred`) instead of inferring by its own rule: its
 private form says value by value proved or inferred, its public form "proved or inferred from a shared list" for a
-marked setting's listed values. The editor never says such a setting's values were checked on the camera: it says
+marked setting's listed values. A view-only readout's value alone takes "inferred from a shared list" in the private
+form from the setting of its row whose codes it holds (`coverage.readout_follows`), never proved and never in the
+definition. The editor never says such a setting's values were checked on the camera: it says
 part of its list was proved on another setting of the same kind. Nor does a public list stop one value short of a
 value its own camera held: every write counts each list one value short as an open question, and `--write` refuses
 one whose missing value a start file of the camera held until a proof, a held not-offered mark or a reason closes it.
