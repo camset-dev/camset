@@ -270,3 +270,62 @@ def test_a_stop_during_the_wait_refuses_a_key_and_the_cleanup_menu_still_waits(t
     assert sent_at == [] and clock.t == pytest.approx(20.0, abs=0.3)
     lk.press("menu", cleanup=True)
     assert sent_at == [(pytest.approx(57.3, abs=0.3), "press menu 60")]
+
+
+# ---------------------------------------------------------------- finding 16: a page scan records its eyes
+
+
+def whole_scan(root: Path, name: str, when: float, mode: str = "Stills", eyes: str | None = None) -> Path:
+    """A made-up whole page scan of `mode`, its lap written at `when`, made with `eyes` (None: a scan from before scans
+    recorded them)."""
+    import os
+
+    import runner
+    d = root / name
+    d.mkdir(parents=True)
+    (d / "scan_rekeyed.json").write_text("[]", encoding="utf-8")
+    (d / "model.json").write_text("[]", encoding="utf-8")
+    runner.record_mode(d, mode, **({"eyes": eyes} if eyes else {}))
+    os.utime(d / "scan_rekeyed.json", (when, when))
+    return d
+
+
+def test_the_default_scan_is_the_latest_of_this_runs_eyes_and_a_named_scan_of_other_eyes_stops(own_runs, tmp_path,
+                                                                                               monkeypatch, capsys):
+    """Finding 16: a page scan matches only frames from the eyes it was made with, and latest_scan picked by mode alone:
+    an OSD run was handed the newer HDMI scan and failed after its start download with a message about screens. Now
+    a scan records its eyes, the default is the latest scan of this run's eyes (CAMSET_EYES, else the config's), and a
+    named scan of other eyes stops in plain words before the link opens. A scan from before (no eyes recorded) is
+    taken as before, said in one line."""
+    import runner
+    from conftest import TEST_CAMERA
+    root = own_runs / TEST_CAMERA
+    osd = whole_scan(root, "kit2_page_scan_osd", 1_000, eyes="osd")
+    hdmi = whole_scan(root, "kit2_page_scan_hdmi", 2_000, eyes="hdmi")
+    monkeypatch.setenv("CAMSET_EYES", "osd")
+    assert runner.current_eyes() == "osd" and runner.latest_scan("Stills") == osd
+    assert runner.scan_dir(runner.in_mode(runner.LATEST_SCAN, "Stills")) == osd
+    with pytest.raises(SystemExit) as stop:
+        runner.scan_dir(runner.in_mode(str(hdmi), "Stills"))
+    said = str(stop.value.code)
+    assert "made with HDMI eyes" in said and "Nothing was sent to the camera" in said and "CAMSET_EYES=hdmi" in said
+    monkeypatch.setenv("CAMSET_EYES", "hdmi")
+    assert runner.current_eyes() == "hdmi" and runner.latest_scan("Stills") == hdmi
+    with pytest.raises(SystemExit, match="made with OSD eyes"):
+        runner.scan_dir(runner.in_mode(str(osd), "Stills"))
+    # a scan from before scans recorded their eyes: taken as before (by its lap's time), named or by default, and said
+    capsys.readouterr()
+    old = whole_scan(root, "kit2_page_scan_old", 3_000)
+    assert runner.latest_scan("Stills") == old and runner.scan_dir(runner.in_mode(str(old), "Stills")) == old
+    assert capsys.readouterr().out.count("records no eyes") == 1
+    # page_scan.py records the eyes it scans with, before its first press: the ones camkit.frames opens by that rule
+    import page_scan
+    from camkit.frames import eyes_from_config
+    monkeypatch.setenv("CAMSET_EYES", "osd")
+    assert eyes_from_config(Run("eyes", root=tmp_path)).name == runner.current_eyes() == "osd"
+    monkeypatch.setattr(page_scan, "eyes_from_config", lambda run: SimpleNamespace(name="osd", close=lambda: None))
+    monkeypatch.setattr(page_scan, "Link", lambda run: (_ for _ in ()).throw(LinkError("no camera here", opened=False)))
+    monkeypatch.setattr(sys, "argv", ["page_scan.py", "--mode", "Stills", "--run", "kit2_page_scan_new"])
+    with pytest.raises(LinkError):
+        page_scan.main()
+    assert runner.scan_record(root / "kit2_page_scan_new")["eyes"] == "osd"

@@ -56,7 +56,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from camkit import live, safety, screen, session
-from camkit.frames import load
+from camkit.frames import eyes_default, load
 from camkit.link import Link, StopRequested
 from camkit.live import LiveCamera, body_of, close, lit_text, lone_of, text_of, withheld_on
 from camkit.runs import mark_restore_by_hand
@@ -123,6 +123,27 @@ def scan_mode(word) -> str:
 scan_mode.__name__ = "shooting mode"          # argparse's word for a refused value: "invalid shooting mode value"
 
 
+# A page scan matches only frames from the eyes it was made with (page keys and signatures differ between the capture
+# dongle's picture and the camera's own), so a scan records its eyes too (kit/page_scan.py: "eyes" in SCAN_MODE_FILE),
+# a runner takes by default only the latest scan of the eyes it sees with (latest_scan), and a named scan of other eyes
+# stops before the link opens (scan_dir). A scan made before 2026-11-19 records none: taken as before, said once
+EYES = ("hdmi", "osd")
+EYES_SAID = {"hdmi": "HDMI eyes (the capture dongle)", "osd": "OSD eyes (the camera's own picture through the link)"}
+
+
+def current_eyes() -> str:
+    """The eyes this run sees the camera with, by camkit.frames.eyes_from_config's own rule (CAMSET_EYES, else
+    private/config.json's "eyes", eyes_default): "osd" or "hdmi"."""
+    return "osd" if (os.environ.get("CAMSET_EYES") or eyes_default()) == "osd" else "hdmi"
+
+
+def recorded_eyes(scan) -> str | None:
+    """The eyes a page scan was made with, as it recorded them (SCAN_MODE_FILE's "eyes"); None for a scan that records
+    none (every scan made before 2026-11-19) or names no eyes of EYES."""
+    eyes = scan_record(scan).get("eyes")
+    return eyes if eyes in EYES else None
+
+
 def recorded_mode(scan) -> str | None:
     """The shooting mode a page scan was made in, as it recorded it (SCAN_MODE_FILE); None when it records none (every
     scan made before 2026-11-11) or its file names no mode of SCAN_MODES."""
@@ -141,13 +162,15 @@ def scan_record(scan) -> dict:
     return got if isinstance(got, dict) else {}
 
 
-def record_mode(scan, mode, scanning: bool = False, switch: dict | None = None) -> str:
+def record_mode(scan, mode, scanning: bool = False, switch: dict | None = None, eyes: str | None = None) -> str:
     """The shooting mode a page scan was made in written into its SCAN_MODE_FILE. scanning (kit/page_scan.py --mode,
-    before its first press): {"mode", "lap": LAP_SCANNING, "started"} and the waiting switch the scan was made under
-    ("switch", switch_for_scan), so the scan is no default until its lap is whole (mark_lap_whole, scan_unready); a
-    scan again into the same folder starts the record afresh. Else (kit/page_model.py --mode, for a scan made before
-    scans recorded it) {"mode"} alone, and a scan that records that mode already keeps its record as it is. A scan that
-    records another mode keeps it: ValueError (a scan is made in one mode)."""
+    before its first press): {"mode", "lap": LAP_SCANNING, "started"}, the eyes it scans with ("eyes", EYES) and the
+    waiting switch the scan was made under ("switch", switch_for_scan), so the scan is no default until its lap is
+    whole (mark_lap_whole, scan_unready); a scan again into the same folder starts the record afresh. Else
+    (kit/page_model.py --mode, for a scan made before scans recorded it) {"mode"} alone, with "eyes" where given, and a
+    scan that records that mode already keeps its record as it is. A scan that records another mode keeps it:
+    ValueError (a scan is made in one mode)."""
+    eyes = {"eyes": eyes} if eyes in EYES else {}
     mode, f = scan_mode(mode), Path(scan) / SCAN_MODE_FILE
     if f.exists() and recorded_mode(scan) != mode:
         from camkit import paths
@@ -157,9 +180,9 @@ def record_mode(scan, mode, scanning: bool = False, switch: dict | None = None) 
                          "delete it by hand and record the mode again.")
     if scanning:
         write_json(f, {"mode": mode, "lap": LAP_SCANNING, "started": time.strftime("%Y-%m-%d %H:%M:%S"),
-                       SCAN_ID: new_scan_id(), **({"switch": switch} if switch else {})}, indent=1)
+                       SCAN_ID: new_scan_id(), **eyes, **({"switch": switch} if switch else {})}, indent=1)
     elif not f.exists():
-        write_json(f, {"mode": mode}, indent=1)
+        write_json(f, {"mode": mode, **eyes}, indent=1)
     return mode
 
 
@@ -259,14 +282,17 @@ def page_scans(root: Path | None = None) -> list[Path]:
     return sorted(got, key=lambda d: (lap_time(d), d.name))
 
 
-def latest_scan(mode, root: Path | None = None, auto: bool = False) -> Path | None:
-    """The camera's latest page scan made in shooting mode `mode` (scan_mode): of its page scans that record that mode
-    (recorded_mode) and are whole (scan_unready), the one whose lap was written last; None when there is none. A scan
-    that records no mode, one whose scan did not finish its lap and one whose page model is older than its lap are
-    never taken. auto: the scans made in Intelligent Auto (scan_auto) instead of the others (AUTO)."""
-    mode = scan_mode(mode)
+def latest_scan(mode, root: Path | None = None, auto: bool = False, eyes: str | None = None) -> Path | None:
+    """The camera's latest page scan made in shooting mode `mode` (scan_mode) with this run's eyes (`eyes`, else
+    current_eyes): of its page scans that record that mode (recorded_mode), record those eyes or none (recorded_eyes: a
+    scan made before scans recorded them) and are whole (scan_unready), the one whose lap was written last; None when
+    there is none. A scan that records no mode or other eyes, one whose scan did not finish its lap and one whose page
+    model is older than its lap are never taken. auto: the scans made in Intelligent Auto (scan_auto) instead of the
+    others (AUTO)."""
+    mode, eyes = scan_mode(mode), eyes or current_eyes()
     return next((d for d in reversed(page_scans(root))
-                 if recorded_mode(d) == mode and scan_auto(d) == auto and scan_unready(d) is None), None)
+                 if recorded_mode(d) == mode and recorded_eyes(d) in (None, eyes) and scan_auto(d) == auto
+                 and scan_unready(d) is None), None)
 
 
 def _switches(root: Path | None = None) -> list:
@@ -539,21 +565,26 @@ def scan_state(d: Path) -> str:
     if not m:
         return "mode not recorded"
     why = scan_unready(d)
-    return f"{m} mode{f', {AUTO}' if scan_auto(d) else ''}{f': {why}' if why else ''}"
+    eyes = recorded_eyes(d)
+    return (f"{m} mode{f', {AUTO}' if scan_auto(d) else ''}{f', {eyes.upper()} eyes' if eyes else ''}"
+            f"{f': {why}' if why else ''}")
 
 
-def no_scan_message(mode: str, root: Path | None = None, auto: bool = False) -> str:
-    """What a runner says when the camera has no whole page scan that records shooting mode `mode` (auto: made in
-    Intelligent Auto, while a kept switch left the camera there): its page scans, newest first, each with its lap's
-    time and its state (scan_state), and the ways on."""
+def no_scan_message(mode: str, root: Path | None = None, auto: bool = False, eyes: str | None = None) -> str:
+    """What a runner says when the camera has no whole page scan that records shooting mode `mode` and was made with
+    this run's eyes (`eyes`, else current_eyes; or records none) (auto: made in Intelligent Auto, while a kept switch
+    left the camera there): its page scans, newest first, each with its lap's time and its state (scan_state), and the
+    ways on."""
     from camkit import paths
     root = Path(root) if root is not None else paths.run_root(required=False)
     where = f"{paths.shown(root)}/" if root is not None else "the camera's runs"
     scans = list(reversed(page_scans(root)))
+    eyes = eyes or current_eyes()
     what = f"the {mode} mode menu{f' in {AUTO}' if auto else ''}"
-    head = (f"There is no whole page scan of {what} in {where} that records its mode, so no scan is taken by "
-            "default: the menus differ per shooting mode, and a run driven by another mode's menu map would press keys "
-            "on rows that are not where the map says. Nothing was sent to the camera.")
+    head = (f"There is no whole page scan of {what} in {where} that records its mode and was made with this run's "
+            f"{EYES_SAID[eyes]}, so no scan is taken by default: the menus differ per shooting mode, and a run driven "
+            "by another mode's menu map would press keys on rows that are not where the map says; a scan matches only "
+            "frames from the eyes it was made with. Nothing was sent to the camera.")
     if auto:
         head += (f" The kit's record says a switch left the camera in {AUTO} (kit/provers/mode_switch.py --keep), "
                  f"whose menu is not known to be P/A/S/M's: scan it while the switch waits (kit/page_scan.py --mode "
@@ -574,14 +605,17 @@ def no_scan_message(mode: str, root: Path | None = None, auto: bool = False) -> 
                       f"only for a scan you know was made in {mode} mode (its own run log or frames say it)."])
 
 
-def scan_dir(scan, mode: str | None = None) -> Path:
+def scan_dir(scan, mode: str | None = None, eyes: str | None = None) -> Path:
     """The page scan's folder: --scan's as given, or for LATEST_SCAN the camera's latest whole page scan of the
-    runner's shooting mode (latest_scan; Intelligent Auto's while a kept switch left the camera there, waiting_auto),
-    stopping in plain words when it has none (no_scan_message). mode: the runner's, else the one --scan carries
-    (ScanArg). With a mode, a named scan that records another stops, and so does any scan while the kit's record says
-    the camera was left in another mode (refuse_switched). LATEST_SCAN with no mode stops in plain words."""
+    runner's shooting mode and eyes (latest_scan; Intelligent Auto's while a kept switch left the camera there,
+    waiting_auto), stopping in plain words when it has none (no_scan_message). mode: the runner's, else the one --scan
+    carries (ScanArg). With a mode, a named scan that records another stops, and so does any scan while the kit's record
+    says the camera was left in another mode (refuse_switched). A named scan made with other eyes than this run's
+    (`eyes`, else current_eyes) stops; one that records no eyes (made before scans recorded them) is taken as before,
+    said in one line. LATEST_SCAN with no mode stops in plain words."""
     from camkit import paths
     mode = scan_mode(mode) if mode else getattr(scan, "mode", None)
+    eyes = eyes or current_eyes()
     if mode:
         refuse_switched(mode)
     if scan != LATEST_SCAN:
@@ -591,13 +625,23 @@ def scan_dir(scan, mode: str | None = None) -> Path:
             sys.exit(f"The page scan {paths.shown(got)} was made in {had} mode, and this run works in {mode} mode: its "
                      f"menu pages are not this mode's. Nothing was sent to the camera. Name a {mode} mode page scan "
                      "with --scan <run>.")
-        return got
-    if mode is None:
-        sys.exit(no_mode_latest())
-    auto = waiting_auto(mode)
-    got = latest_scan(mode, auto=auto)
-    if got is None:
-        sys.exit(no_scan_message(mode, auto=auto))
+        made = recorded_eyes(got)
+        if made and made != eyes:
+            sys.exit(f"The page scan {paths.shown(got)} was made with {made.upper()} eyes, and this run sees the camera "
+                     f"with {EYES_SAID[eyes]}: a scan matches only frames from the eyes it was made with, so no menu "
+                     f"page would be found by it after the start download. Nothing was sent to the camera. Name a scan "
+                     f"made with {eyes.upper()} eyes with --scan <run>, or run this with the scan's eyes "
+                     f"(CAMSET_EYES={made}).")
+    else:
+        if mode is None:
+            sys.exit(no_mode_latest())
+        auto = waiting_auto(mode)
+        got = latest_scan(mode, auto=auto, eyes=eyes)
+        if got is None:
+            sys.exit(no_scan_message(mode, auto=auto, eyes=eyes))
+    if recorded_eyes(got) is None:
+        print(f"page scan {got.name}: it records no eyes (made before scans recorded them), so it is taken as before; "
+              f"it works only if it was made with this run's {EYES_SAID[eyes]}", flush=True)
     return got
 
 
@@ -612,12 +656,12 @@ def add_scan_argument(ap, default: str = "kit2_page_scan", mode: str | None = No
                     help=f"the page scan (a run in the camera's runs/<model>_fw<fw>/, or a path; default: {said})")
 
 
-def load_scan(scan, mode: str | None = None) -> tuple[list, dict]:
+def load_scan(scan, mode: str | None = None, eyes: str | None = None) -> tuple[list, dict]:
     """The page scan's Down cycle (scan_rekeyed.json without its last record, which is the start again) with each
     position's screen read by the current reader rather than the one at scan time, and the page model by key. scan:
-    a folder, or LATEST_SCAN (scan_dir: the latest of the runner's mode, `mode` or the one --scan carries), which is
-    said."""
-    latest, scan = scan == LATEST_SCAN, scan_dir(scan, mode)
+    a folder, or LATEST_SCAN (scan_dir: the latest of the runner's mode, `mode` or the one --scan carries, and of the
+    run's eyes, `eyes` or current_eyes), which is said."""
+    latest, scan = scan == LATEST_SCAN, scan_dir(scan, mode, eyes)
     session.MODE = recorded_mode(scan)      # the mode the menu's lock after a download goes by (session.wait_lock)
     if latest:
         print(f"page scan: {scan.name} (the camera's latest {recorded_mode(scan)} mode scan"

@@ -20,9 +20,10 @@ Writes runs/<model>_fw<fw>/<run>/scan.jsonl and, after a full lap, scan_rekeyed.
 hash of the breadcrumb bar), cursor row, row states (normal / greyed / cursor) and timing.
 Labels and values are read afterwards from the saved frames (VLM pool / OCR), off the camera loop.
 --mode names the shooting mode the camera is in (Stills, Movie, S&Q: the menus differ per mode), which the
-scan records in <run>/scan_mode.json before its first press, as unfinished, and marks whole once its full lap is
-written (runner.record_mode, runner.mark_lap_whole): a runner takes by default only the latest whole scan of the mode
-it works in whose page model is newer than its lap (runner.latest_scan). The camera's mode is not read here: say the
+scan records in <run>/scan_mode.json before its first press, as unfinished, with the eyes it scans with (a scan matches
+only frames from its own eyes), and marks whole once its full lap is written (runner.record_mode,
+runner.mark_lap_whole): a runner takes by default only the latest whole scan of the mode it works in and the eyes it
+sees with whose page model is newer than its lap (runner.latest_scan). The camera's mode is not read here: say the
 one it is in. A run folder that holds a lap or page model of a scan recording no mode or another one is refused before
 anything is sent (scan into a new --run, or record the old scan's mode with kit/page_model.py --mode first); a folder
 whose scan records the same mode is scanned again, and is no default until the new lap is whole: the scan's id, in its
@@ -41,9 +42,9 @@ from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from prove_run import to_shooting  # noqa: E402
-from runner import (EXIT_UNRESTORED, LATEST_SCAN, SCAN_ID, SCAN_MODES, end_session, mark_lap_whole,  # noqa: E402
-                    record_mode, recorded_mode, refuse_switched, restore_checked, scan_mode, scan_record,
-                    switch_for_scan, write_json)
+from runner import (EXIT_UNRESTORED, LATEST_SCAN, SCAN_ID, SCAN_MODES, current_eyes, end_session,  # noqa: E402
+                    mark_lap_whole, record_mode, recorded_mode, refuse_switched, restore_checked, scan_mode,
+                    scan_record, switch_for_scan, write_json)
 
 
 def page_key(f) -> str:
@@ -241,9 +242,11 @@ def main():
     refuse_switched(a.mode)                   # the kit's own record says the camera was left in another mode
     run = Run(a.run)
     try:
-        # before anything is sent: a runner takes the scan by its mode, once its lap is whole (runner.scan_unready),
-        # and a scan made while a kept switch left the camera in Intelligent Auto as that menu's (runner.scan_auto)
-        record_mode(run.dir, a.mode, scanning=True, switch=switch_for_scan(a.mode))
+        # before anything is sent: a runner takes the scan by its mode and the eyes it was made with (the eyes opened
+        # below, by the same rule: runner.current_eyes), once its lap is whole (runner.scan_unready,
+        # runner.latest_scan), and a scan made while a kept switch left the camera in Intelligent Auto as that menu's
+        # (runner.scan_auto)
+        record_mode(run.dir, a.mode, scanning=True, switch=switch_for_scan(a.mode), eyes=current_eyes())
     except ValueError as e:
         sys.exit(f"page_scan: {e}")
     hdmi = eyes_from_config(run)
