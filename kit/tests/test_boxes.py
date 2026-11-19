@@ -272,6 +272,11 @@ class WalkCam:
     def refresh(self, tag):
         self.looks += 1
 
+    @property
+    def run(self):
+        logged = self.__dict__.setdefault("logged", [])
+        return SimpleNamespace(log=lambda kind, **f: logged.append((kind, f)))
+
 
 def test_an_arrow_read_glued_to_a_boxs_value_is_left_off_only_where_a_value_is_left(seen):
     """The lit box draws an arrow above and below its value, which OCR reads glued to it at an end ("^ISO500"): left off
@@ -286,9 +291,61 @@ def test_an_arrow_read_glued_to_a_boxs_value_is_left_off_only_where_a_value_is_l
     cam = WalkCam(ISO_VALS, glued={("ISO500", 0): "^ISO500"})
     vals, held = boxes_run.look(cam, None, None, None, ["ISO"], 0)
     assert vals == ISO_VALS and held == "ISO100" and "^ISO500" not in vals
-    stuck = WalkCam(ISO_VALS, glued={("ISO500", k): "^ISO500" for k in range(9)})
-    with pytest.raises(boxes_run.Failed, match=r"'\^ISO500'.*arrow"):
-        boxes_run.look(stuck, None, None, None, ["ISO"], 0)
+
+
+def test_an_arrow_every_fresh_frame_keeps_is_left_off_where_the_second_reader_agrees(seen, monkeypatch):
+    """kit2_pass2 249674-249677 (2026-11-18): ISO500 read "^ISO500" on the step's frame and on every fresh frame after
+    it. The look leaves the arrow's sign off (signs only: a v or an A stays) and asks the second reader what the lit box
+    shows on that frame: the value is taken where the two readings agree as a proof's two readings are judged
+    (camkit.match.same), both readings logged in the run's events; two that disagree, or no answer, stop the look as
+    before, naming both."""
+    asked = []
+
+    def reader(answer):
+        monkeypatch.setattr(boxes_run, "vlm_option", lambda c: asked.append(c.frame.path.name) or answer)
+    glued = {("ISO500", k): "^ISO500" for k in range(9)}
+    reader("ISO 500")
+    cam = WalkCam(ISO_VALS, glued=glued)
+    vals, held = boxes_run.look(cam, None, None, None, ["ISO"], 0)
+    assert vals == ISO_VALS and asked
+    kind, f = cam.logged[-1]
+    assert kind == "box_read_by_both" and (f["ocr"], f["cleaned"], f["second"], f["agree"]) == (
+        "^ISO500", "ISO500", "ISO 500", True)
+    for answer, said in (("ISO 640", "'ISO 640'"), ("", "no answer")):
+        reader(answer)
+        with pytest.raises(boxes_run.Failed, match=rf"'\^ISO500'.*{said}"):
+            boxes_run.look(WalkCam(ISO_VALS, glued=glued), None, None, None, ["ISO"], 0)
+    reader("ISO 500")
+    letter = WalkCam(ISO_VALS, glued={("ISO500", k): "vISO500" for k in range(9)})
+    vals, _ = boxes_run.look(letter, None, None, None, ["ISO"], 0)
+    assert "vISO500" in vals, "a letter is never left off without the box's values"
+
+
+def test_the_saved_frames_of_iso500_read_with_its_arrow_give_iso500_with_the_reader(monkeypatch):
+    """The camera's own frames (kit2_pass2 249674 and the three fresh frames after it), read by this computer's OCR:
+    every one reads "^ISO500"; with the second reader answering "ISO 500" for the frame, box 0 is ISO500 (skipped
+    without the a1 II's runs or an OCR engine)."""
+    from camkit import paths
+    from camkit.frames import load
+    shots = paths.a1ii_root() / "kit2_pass2" / "shots"
+    names = ["249674_down.png", "249675_reread.png", "249676_reread.png", "249677_reread.png"]
+    if not all((shots / n).exists() for n in names):
+        pytest.skip(f"{shots} does not hold the frames")
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    frames = [load(shots / n) for n in names]
+    cam = SimpleNamespace(frame=frames[0], logged=[], at=[0])
+
+    def refresh(tag):
+        cam.at[0] = min(cam.at[0] + 1, len(frames) - 1)
+        cam.frame = frames[cam.at[0]]
+    cam.refresh = refresh
+    cam.run = SimpleNamespace(log=lambda kind, **f: cam.logged.append((kind, f)))
+    monkeypatch.setattr(boxes_run, "BOXES", boxes_run.LAYOUTS["iso"])
+    monkeypatch.setattr(boxes_run, "vlm_option", lambda c: "ISO 500")
+    assert boxes_run.value(cam, 0) == "^ISO500"
+    assert boxes_run.read_box(cam, 0, row="ISO") == "ISO500" and cam.frame is frames[-1]
+    assert cam.logged[-1][1]["frame"] == "249677_reread.png"
 
 
 def test_the_proving_pass_takes_the_value_with_the_arrow_left_off(seen, monkeypatch):

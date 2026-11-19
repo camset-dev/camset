@@ -10,9 +10,9 @@ The pixel reader does not know these screens, so this reads them by OCR: the bre
 the row's label, and the footer must draw its OK key (camkit.screen.footer_keys, by pixels: OCR drops it
 as often as not) before anything but an arrow is pressed. The box under
 the cursor is the orange one; each box's value is the text inside it (read_box: the arrows a lit box draws round its
-value, which OCR reads glued to it over HDMI, go only where a value of the box is left, or on a fresh frame). The box
-names are given on the command line, as read off the camera's frame (OCR reads their icons as letters: "sad Rec Frame
-Rate").
+value, which OCR reads glued to it over HDMI, go only where a value of the box is left, on a fresh frame, or in the
+look where the second reader agrees). The box names are given on the command line, as read off the camera's frame (OCR
+reads their icons as letters: "sad Rec Frame Rate").
 First a look per box: Up until the value stops changing or comes round, then Down the same way (its
 values in Down order), MENU. Then, as kit/prove_run.py does, per box: each value against the start,
 the one held last; every choice is the row, Right, Left/Right to the box, Up/Down until the value is
@@ -43,7 +43,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, live, ocr, safety, screen  # noqa: E402
+from camkit import camset, live, match, ocr, safety, screen  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which installs the plain words: test_start)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
@@ -116,8 +116,9 @@ def arrow_signed(t: str) -> bool:
 def read_box(cam, b: int, vals=None, row: str = "") -> str:
     """Box b's value: OCR's reading (value), as one of the box's values `vals` where they are known (box_value: the
     proving pass), and while it keeps an arrow's sign at an end, read again on up to FRESH fresh frames, no press: the
-    first reading without one (in the look, where the values are not known yet, the only way the arrow goes). Still
-    signed after them: Failed, naming the reading; no value is guessed."""
+    first reading without one. Still signed after them: in the look, where the values are not known yet, the signs left
+    off (never a letter) and taken only where the second reader agrees (by_both); in the proving pass, Failed, naming
+    the reading. No value is guessed."""
     for k in range(FRESH + 1):
         raw = value(cam, b)
         got = box_value(raw, vals) if vals else raw
@@ -127,7 +128,29 @@ def read_box(cam, b: int, vals=None, row: str = "") -> str:
             cam.refresh("reread")
         else:
             break
-    raise Failed(f"{row} box {b}: read {raw!r} on {k + 1} frames, an arrow's sign at its end: not one value")
+    if vals:
+        raise Failed(f"{row} box {b}: read {raw!r} on {k + 1} frames, an arrow's sign at its end: not one value")
+    return by_both(cam, b, raw, row, k + 1)
+
+
+def by_both(cam, b: int, raw: str, row: str, frames: int) -> str:
+    """A look's reading that keeps an arrow's sign at an end on every fresh frame (kit2_pass2 249674-249677: "^ISO500"
+    each time, 2026-11-18): the signs left off (ARROW_SIGNS alone, never a letter), and the second reader asked in line
+    what the lit box shows on that frame (vlm_option, as each proof's second reading is); the cleaned value taken only
+    where the two agree as a proof's two readings are judged (camkit.match.same), both readings logged in the run's
+    events ("box_read_by_both"). Two that disagree, or no answer: Failed, naming both, as before."""
+    cleaned = raw.strip(ARROW_SIGNS)
+    second = vlm_option(cam) or ""
+    agree = bool(cleaned and second and match.same(cleaned, second))
+    log = getattr(getattr(cam, "run", None), "log", None)
+    if log:
+        log("box_read_by_both", row=row, box=b, frame=getattr(cam.frame.path, "name", ""), ocr=raw, cleaned=cleaned,
+            second=second, agree=agree)
+    if agree:
+        return cleaned
+    said = repr(second) if second else "no answer"
+    raise Failed(f"{row} box {b}: read {raw!r} on {frames} frames, an arrow's sign at its end, and the second reader "
+                 f"{said} for {cleaned!r}: not one value")
 
 
 def dashed(cam, b: int) -> bool:
