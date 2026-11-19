@@ -23,6 +23,11 @@ pub(crate) const SAMPLE_NOT_FOR_A_CAMERA: &str = "This is the editor's sample, o
 /// session changed was checked on the camera and passed (`acceptance_issues` empty).
 pub(crate) const ALL_CLEAR: &str = "✔ Every changed value was checked on the camera and is one it takes.";
 
+/// The all-clear when a changed value is one of a list proved partly on another setting (`App::lent_edits`), the
+/// window's and the page's: such a value may have been chosen on that other setting, not the one changed, so it is not
+/// said to be checked on the camera; what is true of the whole list is (docs/decisions/0025).
+pub(crate) const ALL_CLEAR_SHARED: &str = "✔ Every changed value is in a list proved on the camera, and none is one it is known to refuse. Some of the settings you changed had part of their list proved on another setting with the same list (another key, slot or copy of the same kind), not on the setting itself.";
+
 /// What to do about the values listed (`acceptance_issues`), the window's and the page's.
 pub(crate) const ISSUES_TODO: &str = "What to do: Revert the flagged values, the safe choice. Written anyway, the camera may refuse the whole file or store other values; before writing, save the camera's own copy to its card.";
 
@@ -175,6 +180,25 @@ impl App {
     /// session (`Doc::baseline`, which Save As does not move), and the edits recovered without that file.
     pub(crate) fn acceptance_issues(&self) -> Vec<Issue> {
         self.judge(None)
+    }
+
+    /// Whether an edit of this session (against `Doc::baseline`) left a setting, in any set it lives in, at a value of a
+    /// list proved partly on another setting (`Setting::maybe_lent`): the windows' all-clear then says so
+    /// (`ALL_CLEAR_SHARED`).
+    pub(crate) fn lent_edits(&self) -> bool {
+        let Some(doc) = &self.doc else { return false };
+        self.schema.settings.iter().filter(|s| s.scalar && s.list_shared()).any(|s| {
+            (0..doc.edited.sections.len()).filter(|&si| kept_in(s, si)).any(|si| {
+                let v = doc.value(si, s.slot());
+                v != doc.baseline_value(si, s.slot()) && v.is_some_and(|v| s.maybe_lent(v))
+            })
+        })
+    }
+
+    /// The all-clear the Write and Before saving windows show when nothing is listed, the window's and the page's:
+    /// `ALL_CLEAR`, or `ALL_CLEAR_SHARED` where a changed value is one of a list proved partly elsewhere (`lent_edits`).
+    pub(crate) fn all_clear(&self) -> &'static str {
+        if self.lent_edits() { ALL_CLEAR_SHARED } else { ALL_CLEAR }
     }
 
     /// What the Write window lists (`judge`): as `acceptance_issues`, and once the camera has been read for this write
@@ -529,7 +553,7 @@ impl App {
             let flagged = issues.iter().filter(|is| is.kind != IssueKind::CameraOnly).count();
             let theirs = issues.len() - flagged;
             if issues.is_empty() {
-                ui.label(RichText::new(ALL_CLEAR).color(tone::ok(ui.visuals())));
+                ui.label(RichText::new(self.all_clear()).color(tone::ok(ui.visuals())));
             } else {
                 if flagged > 0 {
                     ui.label(RichText::new(Self::issues_words(flagged)).color(tone::caution(ui.visuals())));
@@ -1433,6 +1457,47 @@ pub(crate) mod safety_tests {
         crate::test_support::texts(&out.shapes)
     }
 
+    /// A changed value of a list proved partly on another setting (`proved.shared`, docs/decisions/0025) passes as any
+    /// proved value, nothing flagged, and the windows' all-clear (the window's and the page's: `all_clear`) says what
+    /// is true of the list instead of calling the value checked on the camera; a value outside the list keeps its
+    /// treatment (not checked on the camera), and once the value is put back the plain all-clear returns.
+    #[test]
+    fn a_value_of_a_list_proved_partly_elsewhere_is_not_called_checked() {
+        let dir = scratch("lent");
+        let mut app = opened(&dir, "CAMSET01.DAT", &camera_file());
+        let plain = |app: &App, s: &Setting| s.area == "global" && s.scalar && s.text.is_none() && s.copies.is_empty() && s.copy_of.is_none()
+            && s.video_system_values.is_none() && app.shape_ok_in(s, 0) && app.locked_why(s, 0).is_none();
+        let (s, v, w) = app.schema.settings.iter().filter(|s| plain(&app, s) && s.proved.is_some() && s.values.len() >= 3)
+            .find_map(|s| {
+                let cur = app.col_value(Col::a(0), s)?;
+                let v = s.values.iter().map(|(x, _)| *x).find(|x| *x != cur && s.checked_on_camera(*x, 0) && s.acceptance(*x).is_none())?;
+                let w = s.values.iter().map(|(x, _)| *x).find(|x| *x != cur && *x != v && s.checked_on_camera(*x, 0) && s.acceptance(*x).is_none())?;
+                Some((s.clone(), v, w))
+            })
+            .expect("a proved setting with two other values");
+        // the definition lists v and w, and says part of the list was proved on another setting; w no longer listed
+        for x in app.schema.settings.iter_mut().filter(|x| x.key == s.key) {
+            let p = x.proved.as_mut().unwrap();
+            p.shared = true;
+            p.values.retain(|x| *x != w);
+        }
+        let marked = app.schema.settings.iter().find(|x| x.key == s.key).cloned().unwrap();
+        assert!(marked.maybe_lent(v) && !marked.maybe_lent(w) && !app.lent_edits() && app.all_clear() == ALL_CLEAR);
+        app.apply(vec![Action::Set(0, s.slot(), v)]);
+        assert!(app.acceptance_issues().is_empty(), "a listed value passes: {:?}", app.acceptance_issues().iter().map(|i| &i.reason).collect::<Vec<_>>());
+        assert!(app.lent_edits() && app.all_clear() == ALL_CLEAR_SHARED);
+        app.pending = Some((Review::Save, app.acceptance_issues()));
+        let drawn = window_texts(&mut app);
+        assert!(drawn.iter().any(|t| t == ALL_CLEAR_SHARED) && !drawn.iter().any(|t| t == ALL_CLEAR), "{drawn:?}");
+        assert!(!ALL_CLEAR_SHARED.contains("checked on the camera"), "never called checked on the camera");
+        // a value outside the list: not checked on the camera, as before
+        app.prefs.expert = true;
+        app.apply(vec![Action::Set(0, s.slot(), w)]);
+        assert_eq!(app.acceptance_issues().iter().map(|i| i.kind).collect::<Vec<_>>(), vec![IssueKind::NotChecked]);
+        app.apply(vec![Action::Revert(0, s.slot())]);
+        assert!(!app.lent_edits() && app.all_clear() == ALL_CLEAR, "put back: nothing changed, the plain words");
+    }
+
     /// Two limits a file holds out of order are listed in the Before saving window under their own heading, the row's
     /// button its fix, and no all-clear shows (`IssueKind::Order`, `order_fix`); the window's button puts them in order.
     #[test]
@@ -1455,8 +1520,9 @@ pub(crate) mod safety_tests {
         let mut app = opened(&dir, "CAMSET01.DAT", &camera_file());
         let plain = |app: &App, s: &Setting| s.area == "global" && s.scalar && s.text.is_none() && s.copies.is_empty() && s.copy_of.is_none()
             && s.video_system_values.is_none() && app.shape_ok_in(s, 0) && app.locked_why(s, 0).is_none();
-        // a value a proof on the camera established: checked, and passed
-        let (s, v) = app.schema.settings.iter().filter(|s| plain(&app, s) && s.proved.is_some())
+        // a value a proof on the camera established: checked, and passed (a list proved partly on another setting has
+        // its own all-clear: a_value_of_a_list_proved_partly_elsewhere_is_not_called_checked)
+        let (s, v) = app.schema.settings.iter().filter(|s| plain(&app, s) && s.proved.is_some() && !s.list_shared())
             .find_map(|s| { let cur = app.col_value(Col::a(0), s)?; s.values.iter().map(|(x, _)| *x).find(|x| *x != cur && s.checked_on_camera(*x, 0) && s.acceptance(*x).is_none()).map(|x| (s.clone(), x)) })
             .expect("a proved value");
         app.apply(vec![Action::Set(0, s.slot(), v)]);

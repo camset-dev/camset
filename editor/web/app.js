@@ -2143,8 +2143,9 @@ function drawExposure(j) {
         ...d.settings.map((s) => el("div", { class: "ex-set" },
           el("span", {}, s.name),
           el("span", { class: "small weak" }, `${s.tab} > ${s.group}`),
-          // the proof only while Settings shows the proof lines (null otherwise)
-          typeof s.proved === "boolean" ? el("span", { class: "small " + (s.proved ? "ex-proved" : "weak") }, s.proved ? "proved on the camera" : "not proved on the camera yet") : null,
+          // the proof only while Settings shows the proof lines (null otherwise), in the window's words (`proved_words`:
+          // a list proved partly on another setting says so)
+          typeof s.proved === "boolean" ? el("span", { class: "small " + (s.proved ? "ex-proved" : "weak") }, s.proved_words || (s.proved ? "proved on the camera" : "not proved on the camera yet")) : null,
           el("button", { class: "small", onclick: () => exShowInMenu(s) }, "Show in menu")))));
     det.addEventListener("toggle", () => { if (det.open) exOpen.add(d.side); else exOpen.delete(d.side); });
     return det;
@@ -3392,7 +3393,8 @@ function issueGroups(issues) {
 
 /** The Write window's check: what the write changes, how long to leave the camera on, a write that would turn the
  *  link off (Write anyway, once a box says it is understood), and the values the camera is not known to take, under
- *  what each is; the all-clear only when the editor sends no value (every changed one checked on the camera). With
+ *  what each is; the all-clear only when the editor sends no value, in its words (every changed one checked on the
+ *  camera, or one of a list proved partly on another setting, which it says). With
  *  values listed, the button says it writes them anyway. */
 function drawSend(j) {
   const box = $("send");

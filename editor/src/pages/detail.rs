@@ -51,6 +51,16 @@ pub(crate) fn range_words(s: &Setting, lo: i64, hi: i64, step: i64) -> String {
 /// each was made is the mapping's evidence, kept by whoever mapped the camera, never in the definition.
 pub(crate) const PROVED_HOVER: &str = "Checked on the camera: each option chosen in the camera's own menu, the settings file downloaded and compared";
 
+/// The hover of the proof line of a setting whose list was proved partly on another setting (`Setting::list_shared`),
+/// the window's and the page's: what is true of the whole list, since the definition never says which values were
+/// chosen where (docs/decisions/0025).
+pub(crate) const SHARED_HOVER: &str = "Proved on the camera, partly on another setting that offers the same list (another key, slot or copy of the same kind): some of these values were chosen there, not on this setting, and are named here from that proof.";
+
+/// A proved setting's proof-line hover (`PROVED_HOVER`, or `SHARED_HOVER` for a list proved partly elsewhere).
+pub(crate) fn proved_hover(s: &Setting) -> &'static str {
+    if s.list_shared() { SHARED_HOVER } else { PROVED_HOVER }
+}
+
 /// The proof line of a setting the definition marks `disputed` (Expert mode), in the window and the page.
 pub(crate) const DISPUTED: &str = "Disputed: left out of the proofs until a mapper decides";
 
@@ -372,7 +382,7 @@ impl App {
                     }
                     (Some(_), None) => {
                         ui.label(RichText::new(s.proof_badge().0).small().color(tone::ok(ui.visuals())))
-                            .on_hover_text(PROVED_HOVER);
+                            .on_hover_text(proved_hover(s));
                     }
                     (None, None) => match &s.unproved_reason {
                         Some(u) => {

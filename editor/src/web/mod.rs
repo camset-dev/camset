@@ -350,7 +350,7 @@ impl App {
                 // what only the camera's copy shows is no flagged value, though it keeps the all-clear away
                 let theirs = listed.iter().filter(|is| is.kind == IssueKind::CameraOnly).count();
                 let flagged = listed.len() - theirs;
-                let words = json!({ "issues": (flagged > 0).then(|| Self::issues_words(flagged)), "todo": ISSUES_TODO, "all_clear": ALL_CLEAR,
+                let words = json!({ "issues": (flagged > 0).then(|| Self::issues_words(flagged)), "todo": ISSUES_TODO, "all_clear": self.all_clear(),
                     "camera_only": (theirs > 0).then(|| camera_only_words(theirs)) });
                 let summary: Vec<Value> = self.send_summary().into_iter().map(|(t, warn)| json!([t, warn])).collect();
                 // the Write window's line on how long to leave the camera on (`write_warning_ui`)
@@ -1103,9 +1103,10 @@ impl App {
             let (proof, proof_kind) = s.proof_badge_in(target);
             row["proof"] = json!(proof);
             row["proof_kind"] = json!(proof_kind);
-            // its hover: why no proof reaches it, or what a proof is (`PROVED_HOVER`), as the window's proof line says
+            // its hover: why no proof reaches it, or what a proof is (`proved_hover`: a list proved partly on another
+            // setting says so), as the window's proof line says
             row["proof_why"] = json!(s.unproved_in(target).map(|u| u.why.clone())
-                .or_else(|| s.proved.as_ref().map(|_| PROVED_HOVER.to_string()))
+                .or_else(|| s.proved.as_ref().map(|_| proved_hover(s).to_string()))
                 .or_else(|| s.unproved_reason.as_ref().map(|u| u.why.clone())).unwrap_or_default());
         } else if s.not_on_camera() {
             // with the proof line off, the one plain fact it carries: the camera's menu has no row for it
@@ -1985,7 +1986,7 @@ impl App {
     /// "What decides …" lists. Whether each of those settings was proved comes only while the
     /// proof lines are on (Settings), as in the window.
     fn web_exposure(&self) -> Value {
-        use super::exposure::{EFFECTS, EV_HOVER, INTRO, SIDES};
+        use super::exposure::{proved_words, EFFECTS, EV_HOVER, INTRO, SIDES};
         use camset_editor::stops::Side;
         let Some(ex) = self.schema.camera.exposure.clone() else { return Value::Null };
         let word = |side: Side| match side { Side::Aperture => "aperture", Side::Shutter => "shutter", Side::Iso => "iso" };
@@ -2024,6 +2025,8 @@ impl App {
                 // a setting the memory sets only keep shows in the menu while a memory is edited
                 "live": s.area == "global",
                 "proved": self.shows_proof().then_some(s.proved.is_some()),
+                // its proof in the window's words (`proved_words`: a list proved partly on another setting says so)
+                "proved_words": self.shows_proof().then(|| proved_words(s)),
             })).collect::<Vec<_>>(),
         })).collect();
         json!({
@@ -5213,6 +5216,47 @@ mod safety_tests {
         let r = json_of(&request(&mut app, "recall", json!({ "memory": m }), None));
         assert!(r["left"].as_u64().unwrap() > 0, "{r}");
         assert_eq!(look(&app), before);
+    }
+
+    /// The page says what the window says of a list proved partly on another setting (`proved.shared`, docs/decisions/
+    /// 0025): its proof line and hover (`proof_badge`, `proved_hover`), and once a value of it is changed the Write
+    /// window's all-clear (`all_clear`), never "checked on the camera"; an unmarked proved setting keeps its words.
+    #[test]
+    fn the_page_says_what_the_window_says_of_a_list_proved_partly_elsewhere() {
+        let mut app = App::new(vec![], Prefs { show_proof: true, expert: true, ..Prefs::default() });
+        assert_eq!(request(&mut app, "open", json!({}), Some((&camera_file(), false))).status, 200);
+        let doc = app.doc.as_ref().unwrap();
+        let (s, other) = app.settings_in(0, None)
+            .filter(|x| x.proved.is_some() && !x.list_shared() && x.scalar && x.range.is_none() && x.copies.is_empty() && x.copy_of.is_none()
+                && app.shape_ok_in(x, 0) && app.locked_why(x, 0).is_none())
+            .find_map(|x| { let cur = doc.value(0, x.slot())?; x.offered(false).into_iter().map(|(v, _)| v).find(|v| *v != cur && x.acceptance(*v).is_none()).map(|v| (x.clone(), v)) })
+            .expect("a proved setting with another listed value");
+        let plain = app.settings_in(0, None).find(|x| x.proved.is_some() && !x.list_shared() && x.key != s.key && x.tab == s.tab).cloned();
+        for x in app.schema.settings.iter_mut().filter(|x| x.key == s.key) {
+            x.proved.as_mut().unwrap().shared = true;
+        }
+        let rows: Vec<Value> = json_of(&request(&mut app, "tab", json!({ "target": 0, "tab": s.tab }), None))["groups"].as_array().unwrap().iter()
+            .flat_map(|g| g["rows"].as_array().unwrap().clone()).collect();
+        let row = |k: &str| rows.iter().find(|r| r["key"] == json!(k)).cloned();
+        let marked = row(&s.key).expect("the marked setting's row");
+        assert!(marked["proof"].as_str().unwrap().contains(camset_editor::schema::SHARED_LIST_WORDS) && marked["proof_why"] == json!(SHARED_HOVER), "{marked}");
+        if let Some(r) = plain.and_then(|p| row(&p.key)).filter(|r| r["proof_kind"] == json!("ok")) {
+            assert_eq!(r["proof_why"], json!(PROVED_HOVER), "an unmarked proved setting keeps its words");
+        }
+        // the Write window, the camera read first
+        let dir = std::env::temp_dir().join(format!("camset_web_lent_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let copy = dir.join("before_write_lent.DAT");
+        std::fs::write(&copy, camera_file()).unwrap();
+        app.camera_job = Some(CameraJob::finished(JobKind::BeforeWrite, Ok((copy.clone(), "Camera: USB\n".into())), None));
+        app.poll_camera_job();
+        app.web_write = Some(WebWrite::Read);
+        app.apply(vec![Action::Set(0, s.slot(), other)]);
+        let check = json_of(&request(&mut app, "send_check", json!({}), None));
+        assert!(check["issues"].as_array().unwrap().is_empty(), "{check}");
+        assert_eq!(check["words"]["all_clear"], json!(ALL_CLEAR_SHARED));
+        assert!(!ALL_CLEAR_SHARED.contains("checked on the camera"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
 

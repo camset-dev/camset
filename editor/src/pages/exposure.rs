@@ -36,6 +36,16 @@ pub(crate) const EFFECTS: [(Side, &str, &str); 3] = [
 /// The hover text of "Exposes for".
 pub(crate) const EV_HOVER: &str = "The scene brightness these three together expose correctly for (EV100): about 15 for direct sun, 12 for overcast, 8 for a bright room.";
 
+/// A setting's proof in "What decides …", the window's and the page's: proved on the camera (partly on another setting,
+/// for a list proved partly elsewhere: `Setting::list_shared`, `SHARED_LIST_WORDS`), or not yet.
+pub(crate) fn proved_words(s: &Setting) -> String {
+    match &s.proved {
+        None => "not proved on the camera yet".into(),
+        Some(_) if s.list_shared() => format!("proved on the camera, {}", camset_editor::schema::SHARED_LIST_WORDS),
+        Some(_) => "proved on the camera".into(),
+    }
+}
+
 /// Who sets one side of the triangle in one column.
 #[derive(Clone, Copy, PartialEq)]
 pub(crate) enum Who {
@@ -396,7 +406,8 @@ impl App {
                             ui.label(&s.name);
                             ui.label(RichText::new(format!("{} > {}", s.tab, s.group)).small().color(tone::weak(ui.visuals())));
                             if self.shows_proof() {
-                                ui.label(if s.proved.is_some() { RichText::new("proved on the camera").small().color(tone::ok(ui.visuals())) } else { RichText::new("not proved on the camera yet").small().color(tone::weak(ui.visuals())) });
+                                let line = RichText::new(proved_words(&s)).small();
+                                ui.label(if s.proved.is_some() { line.color(tone::ok(ui.visuals())) } else { line.color(tone::weak(ui.visuals())) });
                             }
                             if ui.small_button("Show in menu").clicked() { goto = Some(s.clone()); }
                         });

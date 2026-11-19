@@ -1832,3 +1832,25 @@ console.log(JSON.stringify({ odd, notes }));
 """)
     assert got["odd"] == [["Range: out of order, the lower end above the upper one.", "small warn"]]
     assert got["notes"].count("Range: ISO 6400 to ISO 3200") == 6, "every cell's notes as sent, the pair as the file holds it"
+
+
+@needs_node
+def test_the_exposure_page_says_a_settings_proof_in_the_editors_words(tmp_path):
+    """"What decides" shows each setting's proof in the words the editor sends (`proved_words`: a list proved partly on
+    another setting says so, docs/decisions/0025), and the plain words for an editor that sends none; nothing while
+    the proof lines are off (proved null)."""
+    got = run(tmp_path, """
+const set = (key, proved, words) => ({ key, name: key, tab: "T", group: "G", open_group: "G", open_tab: "T", live: true,
+  proved, ...(words ? { proved_words: words } : {}) });
+const j = { title: "Exposure", intro: "i", sides: [["aperture", "Aperture"], ["shutter", "Shutter speed"], ["iso", "ISO"]],
+  scales: { aperture: null, shutter: null, iso: null }, columns: [],
+  decides: [{ side: "iso", name: "ISO", effect: "e", settings: [
+    set("a", true, "proved on the camera, partly on another setting of the same kind"), set("b", true), set("c", false),
+    set("d", null)] }] };
+const box = document.createElement("div");
+box.append(...drawExposure(j));
+const lines = box.querySelectorAll(".ex-set").map((n) => n.children[2] && n.children[2].tagName === "SPAN" ? n.children[2].textContent : null);
+console.log(JSON.stringify({ lines }));
+""")
+    assert got["lines"] == ["proved on the camera, partly on another setting of the same kind", "proved on the camera",
+                            "not proved on the camera yet", None]

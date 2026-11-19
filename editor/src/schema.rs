@@ -338,6 +338,10 @@ pub struct UnprovedSets {
     pub why: String,
 }
 
+/// What the proof line says of a setting whose list was proved partly on another setting (`Setting::list_shared`), after
+/// "Proved on the camera": the window's and the page's, in the proof badge and on the Exposure page.
+pub const SHARED_LIST_WORDS: &str = "partly on another setting of the same kind";
+
 /// Why no proof can reach a setting, in a few words, by its kind (`unproved_reason.kind`, the definition schema's); the
 /// definition's `why` says it in full on hover. `in_set`: said of one memory set (`unproved_sets`). A kind this editor
 /// does not know, from a newer definition, reads as no proof possible.
@@ -369,6 +373,11 @@ pub struct Proved {
     /// The values a proof on the camera checked: chosen in the menu, or named from the camera's own word.
     #[serde(default)]
     pub values: Vec<i64>,
+    /// Some of `values` were named from another setting's proof (one that offers the same list: another key, slot,
+    /// hold or copy of the same kind) rather than chosen on this setting; which ones the definition never says, for the
+    /// one no proof chose can be the owner's own value (docs/decisions/0016, 0025). An older definition has none.
+    #[serde(default)]
+    pub shared: bool,
     /// A scale proved by samples instead, and whether they lie on one line.
     #[serde(default)]
     pub sampled: Option<Sampled>,
@@ -514,14 +523,16 @@ impl Setting {
     }
 
     /// The proof state in a few words, and its kind ("ok", "na" no proof can reach it, "no" not proved yet):
-    /// one wording for the editor's detail and its web page. The count is of the values a proof checked.
+    /// one wording for the editor's detail and its web page. The count is of the values a proof checked; a list proved
+    /// partly on another setting says so (`list_shared`, `SHARED_LIST_WORDS`).
     pub fn proof_badge(&self) -> (String, &'static str) {
+        let shared = if self.list_shared() { format!(", {SHARED_LIST_WORDS}") } else { String::new() };
         match (&self.proved, &self.unproved_reason) {
-            (Some(p), _) if p.sampled.is_some() => ("Proved on the camera (sampled)".into(), "ok"),
+            (Some(p), _) if p.sampled.is_some() => (format!("Proved on the camera (sampled{shared})"), "ok"),
             (Some(p), _) => {
                 let shown = self.values.iter().filter(|(v, _)| p.values.contains(v)).count();
                 let of = self.values.len().max(shown);
-                (format!("Proved on the camera ({shown}/{of})"), "ok")
+                (format!("Proved on the camera ({shown}/{of}{shared})"), "ok")
             }
             (None, Some(u)) => (unproved_words(&u.kind, false), "na"),
             (None, None) => ("Not proved on the camera yet".into(), "no"),
@@ -662,7 +673,8 @@ impl Setting {
     /// setting with no proof (nothing is known of it, so nothing is held back). In a proved setting, a scale proved by
     /// samples on a straight line (`proved.sampled.linear`) establishes every value, and a range every number in it;
     /// otherwise `v` is established when its proof checked it (`proved.values`: the kit lists there every value a
-    /// proof chose and every one it named from the camera's own word, never a name kept from the old schema).
+    /// proof chose and every one it named from the camera's own word or from another setting's proof, `list_shared`,
+    /// never a name kept from the old schema).
     pub fn established(&self, v: i64) -> bool {
         let Some(p) = &self.proved else { return true };
         p.sampled.as_ref().is_some_and(|s| s.linear == Some(true)) || p.values.contains(&v)
@@ -671,9 +683,25 @@ impl Setting {
     /// Whether a proof on the camera checked `v` in `section` (0, the live settings, or a memory set): the setting is
     /// proved, not disputed, not one no proof reaches in that set (`unproved_sets`), and its proof established `v`. The
     /// write and save windows judge an edit by it. Unlike `established`, which lets every value of a setting with no
-    /// proof be offered (nothing is known of it, so nothing is held back), a setting with no proof checks nothing.
+    /// proof be offered (nothing is known of it, so nothing is held back), a setting with no proof checks nothing. A
+    /// value of a list proved partly on another setting (`maybe_lent`) passes too, but the windows' all-clear then says
+    /// so instead of calling it checked on the camera (`ALL_CLEAR_SHARED`).
     pub fn checked_on_camera(&self, v: i64, section: usize) -> bool {
         self.proved.is_some() && !self.disputed && self.unproved_in(section).is_none() && self.established(v)
+    }
+
+    /// Whether part of this setting's proved list was proved on another setting that offers the same list
+    /// (`Proved::shared`): another key, slot, hold or copy of the same kind. The editor then never says its listed
+    /// values were checked on the camera, for it cannot tell which of them were chosen on this one (docs/decisions/0025).
+    pub fn list_shared(&self) -> bool {
+        self.proved.as_ref().is_some_and(|p| p.shared)
+    }
+
+    /// Whether `v` is a value of such a list (`list_shared`) that its proof lists: offered as any proved value, but
+    /// perhaps chosen on another setting rather than on this one. A value the proof does not list keeps its treatment
+    /// (not checked on the camera).
+    pub fn maybe_lent(&self, v: i64) -> bool {
+        self.list_shared() && self.proved.as_ref().is_some_and(|p| p.values.contains(&v))
     }
 
     /// Why no menu of the camera writes this setting in `section`, when none does: the definition's words for
@@ -2274,9 +2302,29 @@ mod tests {
                 assert!(x.get(k).is_none(), "{} carries {k}", x["key"]);
             }
             if let Some(p) = x.get("proved") {
-                assert!(p.as_object().unwrap().keys().all(|k| k == "values" || k == "sampled"), "{} proved: {p}", x["key"]);
+                assert!(p.as_object().unwrap().keys().all(|k| k == "values" || k == "shared" || k == "sampled"), "{} proved: {p}", x["key"]);
+                assert!(p.get("shared").is_none_or(|m| m == &serde_json::json!(true)), "{} proved: {p}", x["key"]);
             }
         }
+    }
+
+    /// A list proved partly on another setting (`proved.shared`, docs/decisions/0025): its listed values are offered
+    /// and pass the write check as any proved value, but the setting says the list was proved partly elsewhere and
+    /// never which values (`maybe_lent` holds for every listed value, none outside the list). A definition without the
+    /// field, written before it, reads as before; the field is a setting's, never a value's.
+    #[test]
+    fn a_list_proved_partly_on_another_setting_says_so_and_never_which_values() {
+        let lent = made(serde_json::json!({ "values": [[0, "Alpha"], [1, "Bravo"], [2, "Charlie"], [3, "Delta"]],
+            "proved": { "values": [0, 1, 2], "shared": true } }));
+        assert!(lent.list_shared() && lent.established(2) && lent.checked_on_camera(2, 0) && lent.offered(false).len() == 3);
+        assert!(lent.maybe_lent(0) && lent.maybe_lent(2) && !lent.maybe_lent(3), "every listed value, none outside the list");
+        assert_eq!(lent.proof_badge().0, format!("Proved on the camera (3/4, {SHARED_LIST_WORDS})"));
+        let sample = made(serde_json::json!({ "values": [[0, "Alpha"], [1, "Bravo"]],
+            "proved": { "values": [0, 1], "shared": true, "sampled": { "linear": null } } }));
+        assert_eq!(sample.proof_badge().0, format!("Proved on the camera (sampled, {SHARED_LIST_WORDS})"));
+        let older = made(serde_json::json!({ "values": [[0, "Alpha"], [1, "Bravo"]], "proved": { "values": [0, 1] } }));
+        assert!(!older.list_shared() && !older.maybe_lent(0) && older.proof_badge().0 == "Proved on the camera (2/2)");
+        assert!(!made(serde_json::json!({ "values": [[0, "Alpha"]] })).maybe_lent(0), "no proof, no list");
     }
 
     /// What the write window judges by (`checked_on_camera`): a value a proof established, in a set the proof reaches,
@@ -2399,14 +2447,16 @@ mod tests {
         range.range = Some((0, 639));
         range.values.clear();
         assert!(range.established(321), "a range sampled on a line: every number in it");
-        // the shipped definition: every My Menu place can be emptied outside Expert mode, its empty code named by a
-        // hand table from the camera's Add Item proofs
+        // the shipped definition: every My Menu place lists "(empty)", its code named by a hand table, but no proof chose
+        // it on any place, so it is counted and offered in Expert mode only (docs/decisions/0025); and each place's list,
+        // the Add Item proofs' codes named in all 42, was proved partly on another place, which the place says
         let shipped = embedded();
         let mm = shipped.camera.my_menu.as_ref().expect("the a1 II's My Menu");
         let places: Vec<&Setting> = shipped.settings.iter().filter(|x| x.area == "global" && mm.records.contains(&x.id) && x.index.is_some()).collect();
         assert_eq!(places.len(), 42);
-        assert!(places.iter().all(|x| x.established(mm.empty) && x.offered(false).iter().any(|(v, l)| *v == mm.empty && l == "(empty)")),
-            "every My Menu place offers \"(empty)\" outside Expert mode");
+        assert!(places.iter().all(|x| x.label_for(mm.empty) == Some("(empty)") && !x.established(mm.empty) && x.offered(true).iter().any(|(v, _)| *v == mm.empty)),
+            "every My Menu place lists \"(empty)\", offered in Expert mode only");
+        assert!(places.iter().all(|x| x.list_shared()), "every My Menu place's list proved partly on another place");
         // every Fn Menu place offers the functions its picker lists on the camera, the codes its group's walks proved
         // (72, 72 and 33), and no code a spelling fix alone once named (a Custom Key's "Regist. Face Priority", 1008)
         // and every playback Custom Key the 38 functions its picker lists, lent from the AEL key's full walk
