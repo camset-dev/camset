@@ -51,16 +51,22 @@ WAIT_LIMIT = 900        # s a run waits for a screen before it gives up: a run n
 # ends as soon as a frame reads as the shooting screen (or a menu page) after one read as the notice, with no floor;
 # where no notice was seen (the looks began after it had gone, or missed it), once the shooting screen has been seen
 # and LOCK_HDMI_S has passed (2.0 measured good, plus 0.4). A save that takes longer keeps its notice up, and the wait
-# goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. S&Q is not measured, nor the OSD picture,
-# which lags: there, and where the mode is not known, LOCK_S as before. A MENU that is not taken all the same is caught
-# by the callers' own guarded retry. The watched rule is MENU's alone until another key is measured: a wait before any
+# goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. With OSD eyes (the camera's own picture
+# over the link, which lags the screen), Stills alone was measured (runs/ILCE-1M2_fw4.00/kit2_probe_osd_lock, 2026-11-19:
+# Stills, wired LAN, 20 trials): the notice was seen gone 2.02 to 2.26 s after the download's reply, and MENU sent 0,
+# 0.1, 0.2 or 0.4 s after the first frame read as the shooting screen after it opened the menu 20 times of 20. There the
+# wait ends on that frame alone: never on the shooting screen with no notice seen (a picture that lags or froze can show
+# the one from before the download while the notice is up), nor is a notice on show waited past LOCK_S. S&Q, Movie with
+# OSD eyes, and a mode not known keep LOCK_S as before. A MENU that is not taken all the same is caught by the callers'
+# own guarded retry. The watched rule is MENU's alone until another key is measured: a wait before any
 # other key on the shooting screen (afreg_run's Fn hold, framepos_run's and orient_run's multi-selector moves) keeps
 # LOCK_S as its floor (lock_over's and wait_lock's floor), since a key the camera drops silently there is counted all
 # the same (a put-back one move too many, the focus frame a step off, which no file puts back) or proves nothing.
 LOCK_S = 4.5
 LOCK_HDMI_S = 2.4
 LOCK_NOTICE_LIMIT = 25.0    # s a wait goes on while the notice stays on show (proving.nav.after_download's limit)
-LOCK_MEASURED = frozenset({"Stills", "Movie"})             # runner.SCAN_MODES' spelling, as session.MODE holds it
+# the shooting modes the watched lock was measured in, by the eyes' name (runner.SCAN_MODES' spelling, as MODE holds it)
+LOCK_MEASURED = {"hdmi": frozenset({"Stills", "Movie"}), "osd": frozenset({"Stills"})}
 LOCK_READY = ("shooting", "menu", "submenu", "tiles")       # the screens whose sight says the notice has gone
 LOCK_NOTICE = "notice"                                      # the saving notice's kind (camkit.screen)
 # the shooting mode the camera is in by the kit's own record: the one the run's page scan was made in (runner.load_scan
@@ -71,9 +77,9 @@ MODE = None
 
 
 def lock_measured(eyes, mode=None) -> bool:
-    """Whether the measured lock (LOCK_HDMI_S) applies: HDMI eyes, in a shooting mode it was measured in (`mode`, else
-    MODE)."""
-    return getattr(eyes, "name", "") == "hdmi" and (MODE if mode is None else mode) in LOCK_MEASURED
+    """Whether the watched lock applies: eyes in a shooting mode it was measured in with them (LOCK_MEASURED; `mode`,
+    else MODE)."""
+    return (MODE if mode is None else mode) in LOCK_MEASURED.get(getattr(eyes, "name", None), ())
 
 
 class LockSeen:
@@ -93,23 +99,25 @@ class LockSeen:
 
 def lock_over(waited: float, seen: LockSeen, eyes=None, mode=None, longest: float = LOCK_S, floor: float = 0.0) -> str:
     """Whether the menu's lock after a download is over, `waited` s after the download's reply, given what the looks
-    have `seen` since: what ended it, or "" while it lasts. With HDMI eyes in a mode measured (lock_measured): the
-    shooting screen or a menu page after the notice ends it at once; the notice on show keeps it, past `longest`, up to
-    LOCK_NOTICE_LIMIT; the shooting screen seen with no notice ends it once LOCK_HDMI_S has passed. In every case
-    `longest`, the wait the caller made before (LOCK_S), ends it once passed. Never before `floor` s: a wait before a
+    have `seen` since: what ended it, or "" while it lasts. With eyes in a mode measured with them (lock_measured): the
+    shooting screen or a menu page after the notice ends it at once. With HDMI eyes, besides, the notice on show keeps
+    it, past `longest`, up to LOCK_NOTICE_LIMIT, and the shooting screen seen with no notice ends it once LOCK_HDMI_S has
+    passed; with OSD eyes neither (their picture lags). In every case `longest`, the wait the caller made before
+    (LOCK_S), ends it once passed. Never before `floor` s: a wait before a
     key that is not MENU gives floor=LOCK_S (the comment above LOCK_S). The one rule every wait after a download goes by
     (wait_lock, and the callers that look at the screen themselves: proving.nav.after_download, kit/page_scan.py,
     afreg_run.ready_to_hold)."""
     if waited < floor:
         return ""
     measured = lock_measured(eyes, mode)
+    hdmi = measured and getattr(eyes, "name", None) == "hdmi"
     if measured and seen.after_notice:
         return "the shooting screen after the notice"
-    if measured and seen.notice_now:
+    if hdmi and seen.notice_now:
         return f"the notice still on show after {LOCK_NOTICE_LIMIT:g} s" if waited > LOCK_NOTICE_LIMIT else ""
     if waited > longest:
         return f"{longest:g} s"
-    if measured and seen.ready and waited >= LOCK_HDMI_S:
+    if hdmi and seen.ready and waited >= LOCK_HDMI_S:
         return f"the shooting screen, no notice seen, and {LOCK_HDMI_S:g} s"
     return ""
 
