@@ -90,6 +90,13 @@ and movies (the a1 II's Different Set for Still/Mv). While it is on, the setting
 camera, but the editor does not follow it. Where turning it off set the setting to a value of the camera's own when it
 was tried, the editor asks first: do as the camera does, change the switch only, or cancel.
 
+**Two limits kept in order.** Some settings are the two ends of one range: on the a1 II, ISO Range Limit (lower) and
+(upper), and ISO AUTO's Minimum and Maximum. The camera never keeps the lower above the upper: a value chosen past the
+other moves the other to it. The editor does the same, in every place the camera keeps that limit and in each memory,
+and the status line says what moved; the note under each limit says so beforehand, and where the camera was not seen
+to move it that way, that it was not tried. A pair a file holds out of order is marked under the two settings and on
+the Exposure page, which shows the two as the file holds them and draws no band for them.
+
 **Frame rates and the video system.** Where a setting's values depend on whether the camera was set to NTSC or PAL,
 the editor offers only those of the system the file was saved under, and warns under a setting that holds a value of
 the other.
@@ -103,10 +110,12 @@ one setting either way, and "Recall Memory 1 ➡ Live" and "Register Live ➡ Me
 A value nobody has seen the camera take may make it refuse the whole file or store another value, and a file edited
 outside the camera's menus once made a camera restart over and over. So the Before saving and Write windows list every
 changed value the editor cannot vouch for: values the camera was seen to refuse or change or its menus never offer,
-values of the other video system, copies out of step, values not checked on the camera (which Expert mode lets you
-set), texts and raw edits, edits recovered without the file as opened, and, before a write, anything in the file that
-differs from the camera now but was not edited in this session. An edit of this session has its Revert, and Revert
-all flagged puts every such edit back: that is the safe choice. What the file already held when you opened it has no
+values of the other video system, copies out of step, a setting kept in several places that an edit left naming
+different values, two limits out of order, values not checked on the camera (which Expert mode lets you set), texts
+and raw edits, edits recovered without the file as opened, and, before a write, anything in the file that differs from
+the camera now but was not edited in this session. An edit of this session has its Revert, two limits out of order a
+button that puts them back in order as the camera would, and Revert all flagged takes every such fix: that is the safe
+choice. What the file already held when you opened it has no
 Revert: to be sure, read the camera and make your edits on that file. You may still go ahead with "⬆ Write anyway,
 with 3 flagged" (or "Save anyway"), but the camera may then refuse the whole file or store other values. "✔ Every
 changed value was checked on the camera and is one it takes." shows only when nothing is listed. Once a Save As has
@@ -123,6 +132,9 @@ reader (VoiceOver, Narrator, Orca), though it has not been tried with each yet.
 
 Compare shows two files side by side, and a third, the base, when both started from it. Open file B with B: Open…
 (and the base with Base: Open…), and pick which part of each file, the live settings or a memory, makes a column.
+File B and the base must be from file A's camera model, or they are refused; one from another firmware of that model
+is compared, with a line saying that a setting the other firmware keeps elsewhere can show a wrong value, and that
+only the settings in the same place in both files are copied into A.
 
 Only file A is ever changed. An arrow between two columns copies a value into file A, a right-click on a value copies
 it into any other column of file A, and a click on a value of file A changes it in place, as in Edit. With a base file

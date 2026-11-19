@@ -135,6 +135,14 @@ the camera's own downloads at every write, keys, mode names and the switches' va
 and "… (movie)", or "… (copy 1)" and "… (copy 2)" where its mode is not known yet (a test checks it). What the a1 II's
 boxes were proved to do is on [its page](models/ILCE-1M2_fw4.00.md).
 
+### Two limits kept in order (`at_most`, `at_least`)
+
+A lower limit the camera never lets past its upper (the a1 II's ISO Range Limit ends, ISO AUTO's Minimum and Maximum
+and their copies) names the upper in `at_most`, and the upper names it back in `at_least`; `moves_it` says a proof
+showed a value chosen past the other move the other to it. The order is each value's place in the two lists, which
+list the same values. The camera's `LIMIT_PAIRS` hand table names the pairs; `kit/writer/limits.py` writes them and
+checks the order against the camera's downloads at every write.
+
 ### How far a focus frame travels (`frame`)
 
 Each Focus Area option's frame stops at limits of its own, and several options keep their frame's centre in the same
@@ -245,6 +253,10 @@ A `NOT_OFFERED` mark:
 A `KEEPS_APART` entry:
 
 {{ schema_fields("hand-tables", "$defs/keeps_apart") }}
+
+A `LIMIT_PAIRS` entry:
+
+{{ schema_fields("hand-tables", "$defs/limit_pair") }}
 
 A `FRAME_TRAVEL` entry, and each of its `limits`, its `boxes` and its `pictures`:
 
