@@ -631,7 +631,7 @@
   {"mode": "Stills", "tab": "Playback", "group": "Edit", "path": ["Create Still Image"], "status": "action, nothing to map", "rule": "action", "opener": ["--network", "--owner", "--allow"], "inferred": "class"},
   {"mode": "Stills", "tab": "Playback", "group": "Edit", "path": ["after still img crt"], "status": "proved"},
   {"mode": "Stills", "tab": "Playback", "group": "Edit", "path": ["JPEG/HEIF Switch"], "status": "proved"},
-  {"mode": "Stills", "tab": "Playback", "group": "Viewing", "path": ["Cont. Play for Interval"], "status": "not yet tried"},
+  {"mode": "Stills", "tab": "Playback", "group": "Viewing", "path": ["Cont. Play for Interval"], "status": "action, nothing to map", "rule": "action", "opener": ["--owner", "--allow"], "inferred": "class"},
   {"mode": "Stills", "tab": "Playback", "group": "Viewing", "path": ["Play Speed for Interval"], "status": "proved"},
   {"mode": "Stills", "tab": "Playback", "group": "Viewing", "path": ["Slide Show"], "status": "proved", "rule": "action", "opener": ["--network", "--owner", "--allow"]},
   {"mode": "Stills", "tab": "Playback", "group": "Viewing", "path": ["Slide Show", "Interval"], "status": "proved", "rule": "action", "opener": ["--network", "--owner", "--allow"]},

@@ -512,3 +512,50 @@ def test_the_aspect_marker_level_over_the_sample_photograph_is_a_slider():
     s = screen.read(load(need(A1 / "kit2_fin_crawl_amdisp_off" / "shots" / "00028_right.png")))
     assert s.kind == "slider" and s.marker == 418 and s.glyphs == {}
     assert round((s.marker - 155) / 22) == 12
+
+
+# ---------------------------------------------------------------- 4. two rows whose opening acts
+
+ACTING = ["Cont. Play for Interval", "Zoom"]
+ZOOM_ROWS = ["Zoom Range", "Zoom Ring Rotate", "Custom Key Z. Speed", "Remote Zoom Speed"]
+
+
+@pytest.mark.parametrize("label", [*ACTING, "Cont. Play for Interval.", "zoom", "S Zoom", "• Zoom", "Cont.Play for Interval"])
+def test_the_two_rows_act_as_they_open_and_a_look_lap_leaves_them_to_the_owner(label):
+    """The camera's own spelling, read with a stop after it, an icon before it or its words run together."""
+    assert safety.acts_on_open(label), label
+    assert safety.look_lap_refused(label, False).startswith("a row whose opening acts"), label
+    assert safety.look_lap_refused(label, True).startswith("a row whose opening acts"), "seen or not"
+
+
+@pytest.mark.parametrize("label", [*ZOOM_ROWS, "Clear Image Zoom", "ZoomRange", "Cont. Play for Interval Set",
+                                   "Interval Shoot Func."])
+def test_the_list_compares_whole_labels(label):
+    """"Zoom" is a short word: the rows that hold it, run together or not, are untouched, as they were."""
+    assert not safety.acts_on_open(label) and not safety.look_lap_refused(label, False), label
+    assert safety.never_open(label) is None, label
+
+
+def test_the_ledger_classes_them_as_the_lists_other_rows_and_the_zoom_group_stays_open():
+    """Cont. Play for Interval is an action of the never-open list, as Create New Folder, Send and FTP Transfer are
+    (their openings act too); Zoom is not on it (its name would close the group Shooting > Zoom to the group column,
+    and the four rows of that group with it): an ordinary row for the ledger, which a look lap leaves to the owner."""
+    from camkit import coverage
+    assert coverage.rule_class("Cont. Play for Interval") == coverage.rule_class("Create New Folder") == "action"
+    assert coverage.rule_class("Zoom") is None and all(coverage.rule_class(r) is None for r in ZOOM_ROWS)
+    assert safety.group_refused("Zoom") is None and safety.group_refused("Viewing") is None
+
+
+def test_what_each_run_does_at_the_two_rows():
+    """A crawl: Cont. Play for Interval never-open (skipped, as every action), and on a look lap left to the owner's own
+    run; Zoom opened by a plain crawl as before, left by a look lap. drive.py --network: refused before connecting."""
+    from camkit import crawl
+    page = {"breadcrumb": "Playback > Viewing"}
+    assert crawl.closed_row(page, {"label": "Cont. Play for Interval"})[0].startswith("action:")
+    assert crawl.closed_row(page, {"label": "Cont. Play for Interval"}, look=True)[0].startswith("a row whose opening")
+    zoom = {"breadcrumb": "Shooting > Zoom"}
+    assert not crawl.closed_row(zoom, {"label": "Zoom"})[0]
+    assert crawl.closed_row(zoom, {"label": "Zoom"}, look=True)[0].startswith("a row whose opening acts")
+    for label in ACTING:
+        with pytest.raises(SystemExit, match="a row whose opening acts"):
+            drive.look_path_or_exit([label], None)

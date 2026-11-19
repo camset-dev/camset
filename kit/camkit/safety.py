@@ -342,6 +342,9 @@ _ACTIONS = [
     # FTP Transfer Func. (opened for mapping 2026-10-29, user: "we could do it without a server"):
     # the rows that send images or load/save the FTP file
     r"ftp transfer", r"save/load ftp settings",
+    # Playback > Viewing: opens the continuous play of the card's pictures at once (kit2_fin_look_contplay 00019,
+    # 2026-11-19); its opening acts (_ACTS_ON_OPEN)
+    r"cont\. play for interval",
 ]
 # Rows containing any of these: by hand only. The first part, the camera's identity, its connections and its region
 # (USB, language, NTSC/PAL, area and date, network identity: decision 8, and what a person types about themselves),
@@ -2562,10 +2565,17 @@ _OWNER_NEVER_RES = [(re.compile(rx), why) for rx, why in OWNER_NEVER]
 # "open"), and nothing is pressed in them after it
 # IP Address Setting too: opened and left with MENU over the wired LAN link it dropped the link (2026-11-14), so it is
 # never opened as a plain look
+# Two more, whole labels as the camera writes them (an icon read before the label and the signs after it aside), each
+# judged in every reading (2026-11-19): Cont. Play for Interval (Playback > Viewing) starts the continuous play of the
+# card's pictures as it opens (kit2_fin_look_contplay 00019), and Zoom (Shooting > Zoom) opens the zoom itself once Zoom
+# Range allows it (kit/pass3_run.py). Zoom is on this list alone, not on the never-open list's actions (_ACTIONS): there
+# its name would also close the group Shooting > Zoom to the group column (group_refused), and with it the way to Zoom
+# Range, Custom Key Z. Speed and Remote Zoom Speed
+_ACTS_WHOLE = r"^(?:[^0-9a-z(]+|[0-9a-z]{1,2} )?(?:cont\. ?play for interval|zoom)[\s.:;,!?…]*$"
 _ACTS_ON_OPEN = [r"\bwps\b", r"pairing", r"access point", r"select on cam", r"root certif", r"create new folder",
                  r"forced file number reset", r"tether", _CLOUD, _CLOUD_SPLIT, r"streaming", r"smartphone",
                  r"ftp function", r"ftp transfer", r"\bsend\b", r"cleaning\s?mode", r"pixel\s?mapping", r"wps push",
-                 r"wps pin", r"ip address"]
+                 r"wps pin", r"ip address", _ACTS_WHOLE]
 _ACTS_ON_OPEN_RE = _Rx(_ACTS_ON_OPEN)
 # Of those, the ones whose opening may change or drop the network the run's link is on: they need "link_loss" too, and
 # the run then restores by hand (loses_link)

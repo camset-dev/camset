@@ -514,26 +514,28 @@ def test_a_first_open_on_a_screen_the_crawl_calls_unknown_checked_clean_makes_th
                                                                                          scope, kind):  # noqa: F811 (the fixture)
     """2026-11-15, the a1 II: Cont. Play for Interval's Right showed the playback view, which the crawl records as an
     unknown screen; its first open's check came out clean, yet every later look lap opened it under the procedure again.
+    (A look lap leaves that row to the owner's own run since 2026-11-19, its opening acting: an ordinary row of the same
+    group, Play Speed for Interval, stands in for it here.)
     Its clean look now goes before the crawl's, so the row is seen and the next lap opens it plainly, no marker at its
     Right, while the crawl's kit failure stays the row's latest look."""
     import json
     from camkit import coverage, first_open
     scope(BLANK, UNRELATED)
     defined(monkeypatch, {**DEFINED, "menu": [*DEFINED["menu"], {"tab": "Playback", "group": "Playback Option",
-                                                                  "label": "Cont. Play for Interval"}]})
-    target = srow("Cont. Play for Interval", "", kind=kind, options=())
+                                                                  "label": "Play Speed for Interval"}]})
+    target = srow("Play Speed for Interval", "", kind=kind, options=())
     at_right = markers_at_right(monkeypatch)
     lap = lap_with(tmp_path / "one", monkeypatch, target, seen_target=False)
     assert_lap_went_on(lap)
     assert lap.sim.opened(1) and lap.sim.marked_at_open(1) is True, lap.out[-1500:]
-    assert (lap.row(1)["label"], lap.outcome(1), lap.row(1)["kind"]) == ("Cont. Play for Interval", "unknown screen",
+    assert (lap.row(1)["label"], lap.outcome(1), lap.row(1)["kind"]) == ("Play Speed for Interval", "unknown screen",
                                                                          kind), lap.row(1)
     kinds = [json.loads(x).get("kind") for x in lap.events.splitlines()]
     assert kinds.count("first_open") == 1 and kinds.count("first_open_checked") == 1, kinds
     looks = [json.loads(x) for x in coverage.looks_file(lap.root.name).read_text(encoding="utf-8").splitlines()]
-    mine = [(lk["result"], lk.get("note")) for lk in looks if lk.get("path") == ["Cont. Play for Interval"]]
+    mine = [(lk["result"], lk.get("note")) for lk in looks if lk.get("path") == ["Play Speed for Interval"]]
     assert mine == [("not_reached", first_open.PENDING), ("looked", "first open checked"), ("kit_failed", None)], mine
-    assert first_open.seen_record(lap.root.name).seen(["Cont. Play for Interval"])
+    assert first_open.seen_record(lap.root.name).seen(["Play Speed for Interval"])
     lap2 = lap_with(tmp_path / "two", monkeypatch, target, seen_target=False)
     assert_lap_went_on(lap2)
     assert lap2.sim.opened(1) and lap2.sim.marked_at_open(1) is False, lap2.keys
