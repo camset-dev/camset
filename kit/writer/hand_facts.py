@@ -211,7 +211,9 @@ def like_setting(key: str, by_key: dict, e: dict, r: dict, like_table: dict, who
     (sibling, name)): size, count and memory-set presence from the run's start file (`start`, run_start), labels from
     the proofs (axis value alone, the whole label for a record `whole`, NEW_WHOLE_LABELS, lists); none from a number
     field's or a box's numbers (box_numbers), samples whose labels would tell the camera's own setting; `run_name` the
-    run its evidence names."""
+    run its evidence names. A record the report marks "sampled_from_start" (a carousel option's fields walked each from
+    what the others held: the codes proved cross at the pair held, docs/decisions/0016) takes its names from the
+    sibling's list alone, never from its proofs."""
     from camkit import camset
     like, name = like_table[key]
     rid = int(key.split("0x")[1], 16)
@@ -219,8 +221,10 @@ def like_setting(key: str, by_key: dict, e: dict, r: dict, like_table: dict, who
     rec = cs.get(0, rid)
     base = by_key[like]
     s = {f: base[f] for f in ("area", "source", "tab", "group", "order", "scalar", "modes") if f in base}
-    vals = {} if "[field" in e["row"] or box_numbers(e, r) else \
+    vals = {} if "[field" in e["row"] or box_numbers(e, r) or r.get("sampled_from_start") else \
         {v: clean(lab if key in whole else lab.split(":", 1)[-1].strip()) for lab, v in r["proved"].items()}
+    if r.get("sampled_from_start"):
+        vals = {v: lab for v, lab in base.get("values") or []}
     # the sibling's spelling of a label the proofs read the same ("ISO 160" for the box's "ISO160")
     sib = {v: lab for v, lab in base.get("values") or []}
     vals = {v: sib[v] if re.sub(r"\s+", "", str(sib.get(v, ""))).lower() == re.sub(r"\s+", "", lab).lower() else lab

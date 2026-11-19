@@ -814,3 +814,82 @@ def test_an_axis_of_a_submenu_row_with_a_context_credits_its_record(tmp_path, op
     assert R.own_records(rows, name, rows[name]) == {"global:0x02bf": code}
     recs = R.row_values(rows, name, rows[name], {}, {}, frozenset(), frozenset(), frozenset())[0]
     assert recs == {key: {vals[1]: 0, vals[0]: 1}}
+
+
+# 0x13f9's report entry as the camera's proofs give it: each field walked from the pair held, the values cross at 3
+CROSS = {"0.5 EV 3 Img.": 9, "0.7 EV 3 Img.": 16, "1.0 EV 3 Img.": 23, "0.3 EV 3 Img.": 3, "0.3 EV 5 Img.": 4,
+         "0.3 EV 7 Img.": 5, "0.3 EV 2 Img. -": 2}
+CROSS_ENTRY = {"row": CONT_ROW, "options": 8, "kinds": ["list"], "notices": []}
+CROSS_RECORD = {"verdict": "new", "schema_name": None, "linear": None, "notes": [], "proved": dict(CROSS),
+                "names": dict.fromkeys(CROSS, "two readers"), "sampled_from_start": True, "sample_proofs": 6}
+
+
+def sibling_04c6() -> dict:
+    import test_definitions as D
+    return next(s for s in D.DOC["settings"] if s["key"] == "global:0x04c6")
+
+
+def test_a_sampled_record_laid_out_like_its_sibling_takes_the_siblings_names_alone():
+    """hand_facts.like_setting named a record laid out like its sibling from the codes its proofs credited: 0x13f9 like
+    0x04c6 would list 2, 3, 4, 5, 9, 16, 23, the cross centred on 3, the pair held (decision 16). A record marked
+    sampled_from_start takes its names from the sibling's list alone; one not so marked is named from its proofs as
+    before."""
+    import test_definitions as D
+    from writer import hand_facts
+    sib = sibling_04c6()
+    table = {"global:0x13f9": ("global:0x04c6", "Drive memory - continuous bracket setting (BRK)")}
+    s = hand_facts.like_setting("global:0x13f9", {"global:0x04c6": sib}, CROSS_ENTRY, CROSS_RECORD, table, set(),
+                                D.SAMPLE, "kit2_pass2")
+    assert s["values"] == sib["values"] and len(s["values"]) > len(CROSS)
+    plain = dict(CROSS_RECORD, sampled_from_start=False)
+    named = hand_facts.like_setting("global:0x13f9", {"global:0x04c6": sib}, CROSS_ENTRY, plain, table, set(), D.SAMPLE,
+                                    "kit2_pass2")
+    assert {v for v, _ in named["values"]} == set(CROSS.values())
+
+
+def test_the_plain_pass_lays_a_sampled_record_out_with_the_siblings_names_and_counts_its_proofs(tmp_path, monkeypatch):
+    """writer/generic.lay_like (the plain pass's layout of a NEW_LIKE record, through like_setting and like_more): a
+    sampled record of two rows keeps the sibling's names, never a label of either row's proofs, every value derived."""
+    import collections
+
+    import test_definitions as D
+    from writer import generic, hand_facts
+    sib = sibling_04c6()
+    doc = {"settings": [json.loads(json.dumps(sib))]}
+    by_key = {"global:0x04c6": doc["settings"][0]}
+    tables = SimpleNamespace(NEW_LIKE={"global:0x13f9": ("global:0x04c6", "Drive memory - continuous bracket setting (BRK)")},
+                             NEW_WHOLE_LABELS=set(), RECORD_FIXES={})
+    monkeypatch.setattr(hand_facts, "run_start", lambda root, run: D.SAMPLE)
+    other = dict(CROSS_RECORD, proved={"0.3 EV 9 Img.": 6, "0.3 EV 3 Img.": 3})
+    rows = [(CROSS_ENTRY, CROSS_RECORD, CONT_ROW), (CROSS_ENTRY, other, CONT_ROW)]
+    derived, changed = collections.defaultdict(dict), []
+    generic.lay_like(doc, by_key, "global:0x13f9", rows, tables, tmp_path / "kit2_pass2", None, 0, derived, changed)
+    s = by_key["global:0x13f9"]
+    assert s["values"] == sib["values"]
+    assert set(derived["global:0x13f9"]) == {v for v, _ in sib["values"]}, "no value named as proved by these lines"
+    s["values"] = [[v, lab] for v, lab in s["values"] if v not in (6, 9)]
+    generic.like_more(s, CROSS_ENTRY, other, False)
+    assert {v for v, _ in s["values"]} == {v for v, _ in sib["values"]} - {6, 9}, "like_more names nothing from a sample"
+
+
+@needs_evidence
+def test_the_a1_pass_counts_a_sampled_new_like_record_and_lists_none_of_its_values(tmp_path, monkeypatch, capsys):
+    """schema_update's a1 pass, its NEW_LIKE branch: 0x13f9 laid out like 0x04c6 from a sampled entry gets the sibling's
+    names and a count of its proofs ("sampled", "from_start"), never the codes the cross proved."""
+    import test_definitions as D
+    report = D.A1_REPORT + [dict(CROSS_ENTRY, records={"global:0x13f9": dict(CROSS_RECORD)})]
+    S, target, write = D.a1_run(tmp_path, monkeypatch, report, D.A1_PROOFS + cont_lines())
+    S._hand()
+    monkeypatch.setitem(S.NEW_LIKE, "global:0x13f9", ("global:0x04c6", "Drive memory - continuous bracket setting (BRK)"))
+    monkeypatch.setattr(S, "run_start", lambda: D.SAMPLE)
+    said = write(capsys)
+    assert f"wrote {target}" in said
+    doc = definitions_load(target)
+    s = next(x for x in doc["settings"] if x["key"] == "global:0x13f9")
+    assert s["values"] == sibling_04c6()["values"]
+    assert s["proved"].get("sampled") == {"proofs": 6, "linear": None, "from_start": True} and "values" not in s["proved"]
+
+
+def definitions_load(target):
+    from camkit import definitions
+    return definitions.load(target)

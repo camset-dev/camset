@@ -1295,6 +1295,14 @@ def main():
                 doc["settings"].append(s)
                 by_key[k] = s
                 menus[k].add(menu_row(row, axis_rows))
+                if r.get("sampled_from_start"):
+                    # its codes cross at the pair held (a carousel option's fields, decision 16): named from the
+                    # sibling's list alone (like_setting), every value derived, its proofs a count, no reader noted
+                    derived[k].update({v: "derived" for v, _ in s["values"]})
+                    proved.setdefault(k, set())
+                    from_start[k] += r.get("sample_proofs", e["options"])
+                    changed.append((k, s["name"], "new", None, s["values"]))
+                    continue
                 note_readers(readers, k, r)
                 derived[k].update({v: "derived" for v, _ in s["values"] if v not in r["proved"].values()})
                 if "[field" in e["row"] or box_numbers(e, r):

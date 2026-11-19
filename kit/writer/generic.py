@@ -321,7 +321,8 @@ def lay_like(doc: dict, by_key: dict, k: str, rows: list, tables, run: Path, cs,
     fresh = hand_facts.like_setting(k, by_key, e0, r0, tables.NEW_LIKE, tables.NEW_WHOLE_LABELS, start, run.name)
     for e, r, _row in rows[1:]:
         like_more(fresh, e, r, whole)
-    proved = {v for _e, r, _row in rows for v in r["proved"].values() if not isinstance(v, (list, dict))}
+    proved = {v for _e, r, _row in rows if not r.get("sampled_from_start") for v in r["proved"].values()
+              if not isinstance(v, (list, dict))}
     fill = {v for v, _ in fresh["values"] if v not in proved}
     fix = tables.RECORD_FIXES.get(k) or {}
     names = {name, fix.get("name")}
@@ -352,8 +353,9 @@ def lay_like(doc: dict, by_key: dict, k: str, rows: list, tables, run: Path, cs,
 def like_more(s: dict, e: dict, r: dict, whole: bool) -> None:
     """A value a later row proves of a record laid out like its sibling, named by its rule (the part of the label after
     its colon unless `whole`), where the record does not name it yet; none from a box's numbers (box_numbers), samples
-    whose labels would tell the camera's own setting."""
-    if box_numbers(e, r):
+    whose labels would tell the camera's own setting, nor from a row's record marked "sampled_from_start" (its codes
+    cross at the pair held: hand_facts.like_setting names it from the sibling's list alone)."""
+    if box_numbers(e, r) or r.get("sampled_from_start"):
         return
     labels = dict((v, lab) for v, lab in s.get("values") or [])
     for lab, v in r["proved"].items():
