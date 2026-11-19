@@ -268,7 +268,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/axis_walk.py": 1, "kit/table_walk.py": 1, "kit/page_scan.py": 1,
+NOT_YET = {"kit/table_walk.py": 1, "kit/page_scan.py": 1,
            "kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
            "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
@@ -348,8 +348,9 @@ def test_axis_walks_session(world, monkeypatch, found):
     monkeypatch.setattr(axis_walk, "menu_from_shooting", lambda cam, **k: world.say("menu"))
     run_main(monkeypatch, axis_walk)
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the settings download", "download before", "sleep 5",
-        "camera", "menu", *([] if found else ["close"]), "to_shooting: the settings download after the walk",
+        "check readers", "link", "attach", "to_shooting: the settings download", "download before",
+        "lock wait (5 s at most)", "camera", "menu", *([] if found else ["close"]),
+        "to_shooting: the settings download after the walk",
         "finish after []", "link closed", "check []", "eyes closed"]
 
 
