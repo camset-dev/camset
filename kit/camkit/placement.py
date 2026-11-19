@@ -511,6 +511,47 @@ def option_page(m: "Tree", tab: str, path: str, values_of) -> tuple | None:
     return None
 
 
+def box_orders(lines) -> dict:
+    """{(the row, the option), each norm()ed with its look-alike letters in Latin: [the option's own boxes, in the order
+    the camera draws them]} from the probe lines of an option that draws a row of boxes of its own ("row", "option",
+    "types": {an option of its first box: [the boxes then drawn, in order]}: kit/provers/optboxes_run.py --probe), the
+    latest line of each row and option. Its rows of boxes merged: the longest first, then each other's boxes it lacks
+    in their order (so neither the order the probe met them in nor the box it found held orders them), each name with
+    its look-alike letters in Latin ("Tyрe" read with a Cyrillic letter is "Type")."""
+    out, when = {}, {}
+    for x in lines:
+        if not isinstance(x, dict) or not isinstance(x.get("types"), dict):
+            continue
+        k = tuple(norm(str(x.get(f) or "").translate(LOOKALIKES)) for f in ("row", "option"))
+        t = x.get("t") if isinstance(x.get("t"), (int, float)) else 0
+        if not all(k) or t < when.get(k, t):
+            continue
+        rows = [[str(b).translate(LOOKALIKES) for b in seq if str(b).strip()] for seq in x["types"].values()
+                if isinstance(seq, list)]
+        order = []
+        for r in sorted(rows, key=lambda r: (-len(r), [norm(b) for b in r])):
+            for b in r:
+                if norm(b) not in {norm(o) for o in order}:
+                    order.append(b)
+        out[k], when[k] = order, t
+    return out
+
+
+def page_orders(doc) -> dict:
+    """{(the row, the option), keyed as box_orders keys them: [the first rows of the page the option opens, in the
+    order the definition's places give them (row_at)]}: the order a write placed them in (a probe's, box_orders, on the
+    computer that holds it), kept where no probe is (a run elsewhere, the tests), so placing again changes nothing."""
+    got = collections.defaultdict(dict)
+    for s in doc.get("settings") or []:
+        r, at, opt = s.get("row") or [], s.get("row_at") or [], s.get("under_option")
+        if not isinstance(opt, str) or len(at) != len(r) or opt not in r[1:-1]:
+            continue
+        i = r.index(opt, 1)
+        k = (norm(str(r[i - 1]).translate(LOOKALIKES)), norm(opt.translate(LOOKALIKES)))
+        got[k].setdefault(norm(str(r[i + 1])), (at[i + 1], str(r[i + 1])))
+    return {k: [lab for _, lab in sorted(v.values(), key=lambda x: (x[0], x[1]))] for k, v in got.items()}
+
+
 def page_shape(m: "Tree", node: dict, options: set, shapes: dict, first: str) -> dict:
     """The page an option of a row opens where the menu tree has no child named as that option with rows under it,
     one shape for them all (each option's page has the same rows): the row's
@@ -522,7 +563,7 @@ def page_shape(m: "Tree", node: dict, options: set, shapes: dict, first: str) ->
     return shapes[node["id"]]
 
 
-def settings(doc, tree) -> dict:
+def settings(doc, tree, boxes=None) -> dict:
     """Each setting's place on the camera: {key: {"row": [labels from its camera group's top row down], "row_at": [the
     top row's number in its tab (merge_tops), then each row's among its siblings], "under_option": the option of the
     row's own setting it is the choice for, "row_group": the definition's name for the camera group whose page holds
@@ -546,7 +587,11 @@ def settings(doc, tree) -> dict:
     so one key orders them all; "under_option" the option; "row_group" and "row_tab" as for the row, but the page is
     the setting's own group, kept (a profile's parameters stay in "Picture Profile PP2", never moved to Color/Tone).
     The option's own page is the row's child named as it, where the tree has one with rows (PP1's); else every
-    option's page has one shape (page_shape), so a page the walk opened once places the rows of all. A setting the
+    option's page has one shape (page_shape), so a page the walk opened once places the rows of all. Where the option
+    draws a row of boxes of its own and a probe read their order (`boxes`, box_orders), the page's rows the tree does
+    not know come in that order (Zebra Level > Custom 1's Type first), not in the order the definition lists the
+    settings (review 2026-11-18); with no probe here, in the order the definition's places already give them
+    (page_orders), so a page placed from a probe once stays so. A setting the
     tree's own rows place past the row already (a child row named as an option, with rows of its own: Recognition
     Target > Animal > Recognition Part) keeps that place.
     The option's index is the setting's column in its family (its group's place among the family's groups, PP2 at 1)
@@ -615,6 +660,7 @@ def settings(doc, tree) -> dict:
                       key=lambda g: min(x.get("order", 0) for x in doc["settings"] if x.get("group") == g))
         columns.update({g: i for i, g in enumerate(mine) if g not in columns})
     values_of = lambda node: (own.get(node["id"]) or {}).get("values")          # noqa: E731
+    drawn = {**page_orders(doc), **(boxes or {})}          # a page's rows as placed before, else as a probe read them
     for s in doc["settings"]:
         tab, paths = s.get("tab") or "Other", (s.get("proved") or {}).get("menu") or []
         paths = [paths] if isinstance(paths, str) else paths
@@ -629,6 +675,8 @@ def settings(doc, tree) -> dict:
         names = [str(v[1]) for v in vals if isinstance(v, (list, tuple)) and len(v) > 1] or [str(o) for o in node["opts"]]
         shape = next((k for k in node["kids"] if norm(k["l"]) == norm(opt) and k["kids"]), None) or \
             page_shape(m, node, {norm(x) for x in names + [str(o) for o in node["opts"]]}, shapes, opt)
+        for box in drawn.get((norm(node["l"].translate(LOOKALIKES)), norm(opt.translate(LOOKALIKES))), []):
+            m.grow(shape, [box])             # the page's rows in their order (drawn) before any setting grows one
         deep = m.grow(shape, rest)
         (_, g, g_tree), labels, at = m.where[node["id"]]
         index = columns.get(s.get("group")) if s.get("group") in columns else \

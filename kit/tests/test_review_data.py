@@ -15,12 +15,12 @@ def _made_up() -> dict:
             "tabs": ["Shooting", "Setup"],
             "layouts": [{"signature": "0123456789abcdef", "model": "ILCE-0X0", "firmware": "1.00",
                          "note": "ILCE-0X0 firmware 1.00", "doc": "docs/models/ILCE-0X0_fw1.00.md"}],
-            "settings": [{"key": "global:0x0001", "area": "global", "id": 1, "name": "Alpha α", "tab": "Shooting",
+            "settings": [{"key": "global:0x0001", "area": "global", "id": 1, "name": "Alpha \u03b1", "tab": "Shooting",
                           "values": [[0, "Off"], [1, "On"]], "note": "", "proved": {"values": [0, 1]}},
                          {"key": "set:0x0002", "name": "Beta", "values": [[i, f"Step {i}"] for i in range(60)],
                           "scalar": True}],
             "menu": [{"tab": "Shooting", "group": "G", "label": "Alpha", "order": 1}],
-            "camera": {"model": "ILCE-0X0", "display_name": "α0", "section_counts": [3, 2, 2],
+            "camera": {"model": "ILCE-0X0", "display_name": "\u03b10", "section_counts": [3, 2, 2],
                        "text": {f"k{i}": "a sentence long enough to need a line of its own" for i in range(4)},
                        "sample": "ILCE-0X0_fw1.00.DAT"}}
 
@@ -201,6 +201,69 @@ def test_the_save_load_rows_are_compared_folded():
     sony = {("FTP Transfer Func.",): "its own file", ("Wi-Fi Frequency Band",): ""}
     header = {("NTSC/PAL Selector",), ("FTP Transfer Func.",)}
     assert coverage.excluded_under(("FTP Transfer Func", "Upload Settings"), sony, header) == ("FTP Transfer Func.",)
-    assert coverage.excluded_under(("Wi‑Fi  Frequency Band",), sony, header) == ("Wi-Fi Frequency Band",)
+    assert coverage.excluded_under(("Wi\u2011Fi  Frequency Band",), sony, header) == ("Wi-Fi Frequency Band",)
     assert coverage.excluded_under(("ntsc/pal selector",), sony, header) == ("NTSC/PAL Selector",)
     assert coverage.excluded_under(("Wi-Fi Connect",), sony, header) is None
+
+
+# ---------------------------------------------------------------- 5. an option's own boxes in the order drawn
+
+def _boxes_camera():
+    """A made-up row whose option opens a row of boxes the walk never entered, its four boxes' settings listed in the
+    definition before the first box's (as the a1 II's Zebra Level > Custom 1 and Custom 2 were)."""
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": [
+        {"page": "1/1", "group": "Display", "rows": [
+            {"label": "Tango Level", "options": ["70", "Custom 1", "Custom 2"], "children": []}]}]}]}
+
+    def s(key, name, path, values=()):
+        return {"key": key, "area": "global", "id": int(key[-4:], 16), "name": name, "tab": "Shooting",
+                "group": "Display", "order": 1, "values": [list(v) for v in values],
+                "proved": {"run": "kit2_pass2", "date": "2026-11-18", "menu": [path]}}
+    settings = [s("global:0x0100", "Tango Level", "Tango Level", ((0, "70"), (8, "Custom 1"), (9, "Custom 2")))]
+    for n, base in ((1, 0x0110), (2, 0x0120)):
+        for i, box in enumerate(("Standard", "Range", "Lower Limit", "Type")):
+            settings.append(s(f"global:0x{base + i:04x}", f"Tango Level > Custom {n} > {box}",
+                              f"Tango Level > Custom {n} > {box} [Tango Level Custom {n}]"))
+    doc = {"model": "TEST", "tabs": ["Shooting"], "layouts": [{"model": "TEST", "firmware": "1.00"}],
+           "menu": [{"tab": "Shooting", "group": "Display", "label": "Tango Level", "order": 1}], "settings": settings}
+    return doc, tree
+
+
+def test_an_options_own_boxes_take_the_order_the_camera_draws_them_in():
+    """Review 2026-11-18, item 5: an option of a list row that draws a row of boxes of its own (the a1 II's Zebra Level
+    > Custom 1, Custom 2) had its boxes placed in the order its settings entered the definition, Type last; the camera
+    draws Type first ("Type | Standard | Range", or "Type | Lower Limit"). The probe line of that option
+    (optboxes_run.py --probe) gives the drawn order: placement takes it, generally (no row or camera named), the rows of
+    boxes merged the longest first, a Cyrillic letter in a box name folded, and the order the probe met them in no
+    matter."""
+    from camkit import placement
+    doc, tree = _boxes_camera()
+    before = placement.settings(doc, tree)
+    by = {s["key"]: s["name"].split(" > ")[-1] for s in doc["settings"]}
+    order = [by[k] for k in sorted((k for k in before if "Custom 1" in before[k]["row"]), key=lambda k: before[k]["row_at"])]
+    assert order == ["Standard", "Range", "Lower Limit", "Type"], "the definition's order, as before"
+    probe = [{"row": "Tango Level", "option": "Custom 1", "t": 2.0,
+              "types": {"Std+Range": ["Tyрe", "Standard", "Range"], "Lower Limit": ["Tyрe", "Lower Limit"]}},
+             {"row": "Tango Level", "option": "Custom 2", "t": 1.0,
+              "types": {"Lower Limit": ["Type", "Lower Limit"], "Std+Range": ["Type", "Standard", "Range"]}},
+             {"row": "Tango Level", "option": "Custom 2", "t": 0.5, "types": {"x": ["Range", "Type"]}}]   # older
+    boxes = placement.box_orders(probe)
+    assert boxes == {("tangolevel", "custom1"): ["Type", "Standard", "Range", "Lower Limit"],
+                     ("tangolevel", "custom2"): ["Type", "Standard", "Range", "Lower Limit"]}
+    after = placement.settings(doc, tree, boxes)
+    for n in (1, 2):
+        got = {by[k]: after[k]["row_at"] for k in after if f"Custom {n}" in after[k]["row"]}
+        assert got == {"Type": [0, n, 0], "Standard": [0, n, 1], "Range": [0, n, 2], "Lower Limit": [0, n, 3]}, n
+    assert {k: v for k, v in after.items() if k not in by or "Custom" not in str(v["row"])} == \
+        {k: v for k, v in before.items() if k not in by or "Custom" not in str(v["row"])}
+    assert all(after[k]["row"] == before[k]["row"] for k in before)
+    for s in doc["settings"]:                   # written so, then placed again where no probe is (a clone, the tests)
+        s.update(after.get(s["key"], {}))
+    assert placement.settings(doc, tree) == after, "a page placed from a probe once stays so"
+
+
+def test_the_box_probes_file_is_the_provers_own():
+    """fromdata reads the probes by the file name the option boxes prover writes them under."""
+    import optboxes_run
+    from writer import fromdata
+    assert fromdata.BOX_PROBES == optboxes_run.PROBES

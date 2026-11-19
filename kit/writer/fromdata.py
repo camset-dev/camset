@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from camkit import ROOT, datafiles, definitions, help_files, models, paths, placement
+from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement
 from runner import read_json
 
 from .mirror import mirror_names, mirror_of, mirror_place
@@ -173,7 +173,22 @@ def places(doc: dict) -> dict | None:
     if not tree.exists():
         datafiles.say_no_menu_tree(tree, NO_TREE)
         return None
-    return placement.settings(doc, datafiles.load_menu_tree(tree))
+    return placement.settings(doc, datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)))
+
+
+# the probe lines of the provers of an option's own row of boxes (kit/provers/optboxes_run.py's PROBES), in any run
+# folder of the camera's: the order the camera draws those boxes in (camkit.placement.box_orders)
+BOX_PROBES = "option_boxes.jsonl"
+
+
+def box_orders(camera: str) -> dict:
+    """The order the camera draws each option's own boxes in, from the probe lines in the camera's runs on this
+    computer (camkit.placement.box_orders; BOX_PROBES): none without them, and the rows stay in the order the
+    definition lists their settings."""
+    lines = []
+    for p in sorted((paths.runs_top() / camera).glob(f"*/{BOX_PROBES}")):
+        lines += jsonl.read(p, bad="skip")
+    return placement.box_orders(lines)
 
 
 def menu_list(doc: dict) -> list | None:
