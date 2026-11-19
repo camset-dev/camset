@@ -170,6 +170,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   user place 16 through Sony's ImportLUTFile** (camlink's new `importlut`, decision 26), prints the settings records it
   changed, and fails its restore on any that did not go back. Only on the camera owner's word: the LUT stays until they
   delete it on the camera by hand.
+- **Before a Right the kit looks at the screen once more, as before an Enter,** so the never-open check reads the lit
+  row on show, never the frame the last press's settle ended on; a screen that does not read as the one the Right was
+  chosen on, even once settled, gets no Right.
+- **With the camera's own picture (no capture dongle) a step settles sooner where it was measured:** 0.25 s after the
+  picture moved for Up and Down on a menu or submenu page's rows, 0.45 s for Left and Right on a menu page, where 0.75 s
+  stood. With HDMI eyes, on other screens and for a step that shows nothing (still 6 s), the waits are as they were.
+- **With the camera's own picture in Stills the menu's lock after a download ends once the shooting screen is back
+  after the saving notice,** about 2.1 s where 4.5 s stood; with no notice seen, and in Movie or S&Q, it is still 4.5 s.
 - **A run's start before its link is timed, and much shorter:** each link writes what the start took into the run's
   `events.jsonl` (`start_budget`), and `drive.py` and `crawl_run.py` went from about 9 s of work before the link to
   under 1 s, the page scan's screens kept in a cache signed with your own key, the coverage ledger built while the link
