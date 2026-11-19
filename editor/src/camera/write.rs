@@ -39,6 +39,8 @@ pub(crate) enum IssueKind {
     OtherSystem,
     /// A value the camera keeps in several records, none of which holds it (`Setting::copies`, `App::out_of_step`).
     Copy,
+    /// A setting kept in several records whose records an edit left naming different values (`App::linked_apart`).
+    Apart,
     /// No proof on the camera checked it (`Setting::checked_on_camera`).
     NotChecked,
     /// A text typed in the editor.
@@ -59,6 +61,7 @@ impl IssueKind {
             IssueKind::Refused => ("The camera may refuse or change these", "Seen on the camera: it refuses a file holding the value, stores another, or its menus never offer it."),
             IssueKind::OtherSystem => ("Another video system's values", "The camera's menus offer these only when it is set to another video system than this file was saved with."),
             IssueKind::Copy => ("Copies out of step", "The camera keeps each of these values in other records too, and every file it writes holds the value in at least one of them; here none does."),
+            IssueKind::Apart => ("Kept in several places, now apart", "The camera keeps each of these settings in more than one place in the file. An edit changed one place and left another, which has no value of that name, so they disagree as no camera was seen to write them."),
             IssueKind::NotChecked => ("Not checked on the camera", "No proof on the camera chose these values, so nobody knows whether the camera takes them."),
             IssueKind::Text => ("Texts", "Typed here: the camera was not seen to take these texts."),
             IssueKind::Raw => ("Raw edits", "Changed byte by byte, so the editor cannot say what they hold or whether the camera takes them."),
@@ -123,6 +126,17 @@ impl App {
             let acts = self.back_in_step(main, si);
             return (!acts.is_empty()).then(|| (COPIES_BACK_IN_STEP.to_string(), acts));
         }
+        if is.kind == IssueKind::Apart {
+            // every record of the setting back: to the file as last opened or saved, else as the camera wrote it
+            let s = self.schema.settings.iter().find(|s| s.slot() == is.slot && kept_in(s, si))?;
+            let row: Vec<&Setting> = std::iter::once(s).chain(self.schema.settings.iter().filter(|t| kept_in(t, si) && s.twin_of(t))).collect();
+            let back: Vec<Action> = row.iter().filter(|t| doc.value(si, t.slot()) != doc.original_value(si, t.slot())).map(|t| Action::Revert(si, t.slot())).collect();
+            if !back.is_empty() {
+                return Some(("Revert".into(), back));
+            }
+            let base: Vec<Action> = row.iter().filter_map(|t| doc.baseline_value(si, t.slot()).filter(|b| doc.value(si, t.slot()) != Some(*b)).map(|b| Action::Set(si, t.slot(), b))).collect();
+            return (!base.is_empty()).then(|| (REVERT_TO_CAMERA.into(), base));
+        }
         let rec = |c: &CamSet, id: u16| c.sections.get(si).and_then(|x| x.get(id)).cloned();
         match is.slot {
             (id, None) => {
@@ -170,7 +184,8 @@ impl App {
     /// alone and cannot be vouched for (`IssueKind::CameraOnly`), the records the camera changes on every load
     /// (`camera.volatile_records`) and the values it keeps for itself (`unproved_reason` "state") left out; every value
     /// of another video system than the file was saved under in its live settings, changed or not; and every setting
-    /// the file holds at a value none of its copies holds (`App::out_of_step`), changed or not. A record passes only
+    /// the file holds at a value none of its copies holds (`App::out_of_step`), changed or not; and every setting kept in
+    /// several records whose records an edit left naming different values (`App::linked_apart`). A record passes only
     /// when each setting covering its differing bytes was checked on the camera (`Setting::checked_on_camera`) and none
     /// of them refuses, rewrites or never offers its value; a copy the camera keeps of a value (`copy_of`) passes while
     /// it holds its setting's value, and bytes a mirror keeps in step with its copy are judged where that copy is. Edits
@@ -314,6 +329,14 @@ impl App {
                 }
             };
             out.push(Issue { section: si, slot: s.slot(), name: named(s, si), value: Self::describe(s, doc.value(si, s.slot())), reason, kind: IssueKind::Copy });
+        }
+        // a setting kept in several records that an edit left naming different values (`linked_apart`): the editor did
+        // not guess a value one of them has no name for, and no camera was seen to write them so
+        for (si, row) in self.linked_apart() {
+            let s = &self.schema.settings[row[0]];
+            let held: Vec<String> = row.iter().map(|&j| Self::describe(&self.schema.settings[j], doc.value(si, self.schema.settings[j].slot()))).collect();
+            let reason = format!("the camera keeps this setting in {} places in the file, and here they name different values; revert it, or choose a value every place has", row.len());
+            out.push(Issue { section: si, slot: s.slot(), name: named(s, si), value: held.join(" / "), reason, kind: IssueKind::Apart });
         }
         out.sort_by_key(|i| i.kind);
         out

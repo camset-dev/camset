@@ -491,14 +491,10 @@ impl App {
                             ui.data_mut(|d| d.insert_temp(scrolled, key));
                         }
                         if r.clicked() { pick = Some((group.clone(), s.name.clone())); }
-                        let mut set = Vec::new();
-                        self.compact_editor_in(ui, 0, s, editable, &mut set);
-                        // a setting kept in several records changes in all of them, as in its tab (`set_linked`)
-                        for a in set {
-                            if let Action::Set(_, _, v) = a { actions.extend(Self::set_linked(0, row, v)); }
-                        }
+                        // a setting kept in several records changes in all of them, as in its tab (`apply`)
+                        self.compact_editor_in(ui, 0, s, editable, &mut actions);
                         if edited && ui.small_button("Revert").clicked() {
-                            actions.extend(row.iter().map(|l| Action::Revert(0, l.slot())));
+                            actions.push(Action::Revert(0, s.slot()));
                         } else if !edited {
                             ui.label("");
                         }

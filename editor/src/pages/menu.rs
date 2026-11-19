@@ -278,7 +278,7 @@ impl App {
     }
 
     /// Whether `a` and `b` are one row of linked records in the layout in use, as the Edit page, its detail panel and
-    /// the page link them and as a change writes them together (`set_linked`): the same tab and group as shown, and one
+    /// the page link them and as a change writes them together (`apply`): the same tab and group as shown, and one
     /// setting kept in several records (`Setting::links_with`: never a copy with its setting). Compare's and the
     /// Memories page's rows hold the same records.
     pub(crate) fn same_row(&self, a: &Setting, b: &Setting) -> bool {

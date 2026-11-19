@@ -553,6 +553,116 @@ impl App {
             .collect()
     }
 
+    /// The settings named `name`, by index among the definition's settings: where to look for a setting's twins
+    /// (`Setting::twin_of`, which share its name).
+    fn by_name(&self) -> std::collections::HashMap<&str, Vec<usize>> {
+        let mut m: std::collections::HashMap<&str, Vec<usize>> = Default::default();
+        for (i, s) in self.schema.settings.iter().enumerate() {
+            m.entry(s.name.as_str()).or_default().push(i);
+        }
+        m
+    }
+
+    /// `actions`, with the same change made to every other record of a setting kept in several records
+    /// (`Setting::twin_of`) that the step does not change by its own action: for a Set the value of the same name
+    /// (`Setting::twin_value`), for a Revert its Revert. A Set that leaves its record as it is changes nothing anywhere,
+    /// and a record of another shape than mapped takes nothing. `at` holds each slot's settings. Returns what the status
+    /// says of the records left as they were for having no value of that name (`twins_left_words`).
+    fn with_twins(&self, actions: &mut Vec<Action>, at: &std::collections::HashMap<Slot, Vec<usize>>) -> Vec<String> {
+        let Some(d) = &self.doc else { return Vec::new() };
+        let st = &self.schema.settings;
+        let by_name = self.by_name();
+        let mut direct: std::collections::HashSet<(usize, Slot)> = actions.iter().filter_map(|a| match a {
+            Action::Set(si, slot, _) | Action::Revert(si, slot) => Some((*si, *slot)),
+            _ => None,
+        }).collect();
+        let (mut more, mut left) = (Vec::new(), Vec::new());
+        for a in actions.iter() {
+            let (si, slot, v) = match a {
+                Action::Set(si, slot, v) if d.value(*si, *slot) != Some(*v) => (*si, *slot, Some(*v)),
+                Action::Revert(si, slot) => (*si, *slot, None),
+                _ => continue,
+            };
+            for s in at.get(&slot).into_iter().flatten().map(|&i| &st[i]).filter(|s| kept_in(s, si)) {
+                let twins: Vec<&Setting> = by_name.get(s.name.as_str()).into_iter().flatten().map(|&j| &st[j]).filter(|t| kept_in(t, si) && s.twin_of(t)).collect();
+                let mut lacking = Vec::new();
+                for t in &twins {
+                    // a record this step changes by its own action, or for another of the row, keeps that change
+                    if !direct.insert((si, t.slot())) || !shape_ok_for(&d.edited, si, t) {
+                        continue;
+                    }
+                    match v {
+                        None => more.push(Action::Revert(si, t.slot())),
+                        Some(v) => match s.twin_value(v, t) {
+                            Some(tv) => more.push(Action::Set(si, t.slot(), tv)),
+                            None => lacking.push(*t),
+                        },
+                    }
+                }
+                if let (Some(v), false) = (v, lacking.is_empty()) {
+                    left.push(self.twins_left_words(s, v, &lacking, twins.len() + 1, si));
+                }
+            }
+        }
+        actions.extend(more);
+        left
+    }
+
+    /// What the status line and the page say when setting `s` to `v` in set `section` leaves `left`, other records of
+    /// its setting (`Setting::twin_of`; `n` records in all), as they were, having no value of that name
+    /// (`Setting::twin_value`): the editor does not guess theirs, and the save and write windows list it.
+    pub(crate) fn twins_left_words(&self, s: &Setting, v: i64, left: &[&Setting], n: usize, section: usize) -> String {
+        let label = Self::describe(s, Some(v));
+        let held = |t: &Setting| Self::describe(t, self.doc.as_ref().and_then(|d| d.value(section, t.slot())));
+        let which = match left {
+            [t] if n == 2 => format!("the other has no \u{201c}{label}\u{201d}, so it was left at {}", held(t)),
+            [t] => format!("one of the others has no \u{201c}{label}\u{201d}, so it was left at {}", held(t)),
+            _ => format!("{} of the others have no \u{201c}{label}\u{201d}, so they were left as they were", left.len()),
+        };
+        format!("{}: the camera keeps this setting in {n} places in this file, and {which}. No camera was seen to write them apart like this, so the Before saving and Write windows list it; Revert puts them back together.", s.name)
+    }
+
+    /// `twins_left_words` for setting `s` set to `v` in set `section`, when another record of it (`Setting::twin_of`)
+    /// has no value of that name; None when every one has.
+    pub(crate) fn twins_left(&self, s: &Setting, v: i64, section: usize) -> Option<String> {
+        let twins: Vec<&Setting> = self.schema.settings.iter().filter(|t| kept_in(t, section) && s.twin_of(t)).collect();
+        let left: Vec<&Setting> = twins.iter().copied().filter(|t| s.twin_value(v, t).is_none()).collect();
+        (!left.is_empty()).then(|| self.twins_left_words(s, v, &left, twins.len() + 1, section))
+    }
+
+    /// Every setting kept in several records (`Setting::twin_of`) whose records file A holds, in a set, at values that
+    /// differ from the file as first opened or read (`Doc::baseline`) and do not name one value (`Setting::twin_value`,
+    /// from its first record): an edit changed one and left another that had no value of that name (`with_twins`). What
+    /// the save and write windows list (`judge`): the set, and the records by index among the definition's settings,
+    /// in the definition's order (the row's control first).
+    pub(crate) fn linked_apart(&self) -> Vec<(usize, Vec<usize>)> {
+        let Some(d) = &self.doc else { return Vec::new() };
+        let st = &self.schema.settings;
+        let by_name = self.by_name();
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for (i, s) in st.iter().enumerate() {
+            if seen.contains(&i) {
+                continue;
+            }
+            let row: Vec<usize> = std::iter::once(i).chain(by_name.get(s.name.as_str()).into_iter().flatten().copied().filter(|&j| s.twin_of(&st[j]))).collect();
+            if row.len() < 2 {
+                continue;
+            }
+            seen.extend(row.iter().copied());
+            for si in 0..d.edited.sections.len() {
+                let here: Vec<(usize, i64)> = row.iter().copied().filter(|&j| kept_in(&st[j], si) && shape_ok_for(&d.edited, si, &st[j]))
+                    .filter_map(|j| d.value(si, st[j].slot()).map(|v| (j, v))).collect();
+                let Some(&(lead, lv)) = here.first() else { continue };
+                let edited = here.iter().any(|&(j, v)| d.baseline_value(si, st[j].slot()) != Some(v));
+                if edited && here[1..].iter().any(|&(j, v)| st[lead].twin_value(lv, &st[j]) != Some(v)) {
+                    out.push((si, here.iter().map(|&(j, _)| j).collect()));
+                }
+            }
+        }
+        out
+    }
+
     /// Make the changes the views asked for on this frame, as one undo step, keeping the copies the camera keeps of a
     /// value (`Setting::copies`) and the definition's mirrors as the camera keeps them. Returns why nothing was changed,
     /// when the changes were refused (the status line says it too): outside Expert mode, a value for a view-only setting
@@ -582,6 +692,10 @@ impl App {
         for (i, s) in self.schema.settings.iter().enumerate() {
             at.entry(s.slot()).or_default().push(i);
         }
+        // one setting kept in several records (a row of linked records, `Setting::twin_of`): each other record takes the
+        // value of the same name, or its Revert, in this same step, whichever view asked; one with no value of that name
+        // is left as it was, and said, and the save and write windows list the row (`linked_apart`)
+        let left = self.with_twins(&mut actions, &at);
         // a copy whose record the file holds in another shape than mapped takes no value, whichever view asked (a
         // put-back, a copy taken along): it is left as it was, and said
         let mut odd_copies: std::collections::HashSet<(usize, Slot)> = Default::default();
@@ -869,6 +983,9 @@ impl App {
             };
             self.status = words.clone();
             return Some(words);
+        }
+        if !left.is_empty() {
+            self.status = left.join(" ");
         }
         if !odd_copies.is_empty() {
             self.status = with_left(&self.status, Left { copies_shape: odd_copies.len(), ..Default::default() });
@@ -1654,7 +1771,7 @@ pub(crate) mod copies_tests {
         app.schema_gen += 1;
         app.prefs.expert = true;
         let linked = app.web_linked(0, MAIN).unwrap();
-        app.apply(App::set_linked(0, &linked, 6));
+        app.apply(vec![Action::Set(0, linked[0].slot(), 6)]);
         assert_eq!(held(&app, &three, 0), [Some(6), Some(1), Some(6)]);
     }
 
@@ -1901,5 +2018,119 @@ pub(crate) mod copies_tests {
                 assert!(!boxes.is_empty() && boxes.iter().all(|d| *d), "My Menu's box for it is off: {boxes:?}");
             }
         }
+    }
+}
+
+/// One setting the camera keeps in several records, shown as one row (`Setting::twin_of`): whichever view changes or
+/// reverts it, `apply` takes its other records along by the value of the same name, and a value one of them has no
+/// name for is made where it was asked, said, and listed before a save or a write.
+#[cfg(test)]
+mod linked_tests {
+    use super::*;
+    use super::copies_tests::setting;
+    use crate::web::tests::answer;
+    use serde_json::json;
+
+    /// Drive Mode as the shipped definition keeps it: the drive mode alone (0x02b5, the row's control) and the drive
+    /// mode with the continuous shooting speed (0x1486, the Main page's tile).
+    const DRIVE: &str = "global:0x02b5";
+    const DRIVE_SPEED: &str = "global:0x1486";
+    /// Focus Mode, kept in four records; the Main page's tile is keyed to the first.
+    const FOCUS: [&str; 4] = ["global:0x037b", "global:0x0df6", "global:0x0df8", "global:0x13d5"];
+
+    fn code(s: &Setting, label: &str) -> i64 {
+        s.values.iter().find(|(_, l)| l == label).unwrap_or_else(|| panic!("{} has no {label}", s.key)).0
+    }
+
+    fn value(app: &App, s: &Setting) -> Option<i64> {
+        app.doc.as_ref().unwrap().value(0, s.slot())
+    }
+
+    /// The window's Main page tile and its "All Main settings" row ask for one record (`Action::Set` of the tile's
+    /// key), its Revert for one record too: the other records of the row follow, by the value of the same name, in one
+    /// step. The page's tile is keyed to the same record, and the value it sends is that record's own number.
+    #[test]
+    fn a_main_tile_changes_every_record_of_its_setting() {
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let (drive, speed) = (setting(&app, DRIVE), setting(&app, DRIVE_SPEED));
+        assert!(drive.links_with(&speed) && drive.tab == speed.tab && drive.group == speed.group, "one row of linked records");
+        let tiles = app.schema.camera.main_tiles.clone().expect("the a1 II's Main page");
+        assert!(tiles.0[0].tiles.iter().any(|t| t.keys_for(0) == vec![DRIVE_SPEED.to_string()]), "the Drive Mode tile is keyed to the record with the speeds");
+        let (d0, s0) = (value(&app, &drive), value(&app, &speed));
+        let label = speed.values.iter().map(|(_, l)| l.clone()).find(|l| drive.values.iter().any(|(_, x)| x == l) && Some(code(&speed, l)) != s0).expect("a value both records name");
+        // the window's tile (and its row under "All Main settings", which asks the same)
+        assert!(app.apply(vec![Action::Set(0, speed.slot(), code(&speed, &label))]).is_none());
+        assert_eq!((value(&app, &speed), value(&app, &drive)), (Some(code(&speed, &label)), Some(code(&drive, &label))), "the other record follows by name");
+        assert_eq!(app.undo.len(), 1, "one step");
+        assert!(app.acceptance_issues().is_empty(), "as a camera writes it: nothing to list");
+        // its Revert
+        assert!(app.apply(vec![Action::Revert(0, speed.slot())]).is_none());
+        assert_eq!((value(&app, &drive), value(&app, &speed)), (d0, s0), "Revert puts both back");
+        // the page's tile sends the tile's record's own number: Cont. Bracket is 7 there and 8 in the other record
+        let (bracket_speed, bracket) = (code(&speed, "Cont. Bracket"), code(&drive, "Cont. Bracket"));
+        assert_ne!(bracket_speed, bracket);
+        let r = answer(&mut app, "set", json!({ "target": 0, "key": DRIVE_SPEED, "value": bracket_speed }));
+        assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+        assert_eq!((value(&app, &speed), value(&app, &drive)), (Some(bracket_speed), Some(bracket)), "the page's tile sets the value chosen in both");
+        assert_eq!(answer(&mut app, "revert", json!({ "target": 0, "key": DRIVE_SPEED })).status, 200);
+        assert_eq!((value(&app, &drive), value(&app, &speed)), (d0, s0));
+        // Focus Mode's tile: the three other records follow
+        let four: Vec<Setting> = FOCUS.iter().map(|k| setting(&app, k)).collect();
+        let now = value(&app, &four[0]);
+        let (v, label) = four[0].values.iter().find(|(v, _)| Some(*v) != now).cloned().unwrap();
+        assert!(app.apply(vec![Action::Set(0, four[0].slot(), v)]).is_none());
+        for s in &four {
+            assert_eq!(value(&app, s), Some(code(s, &label)), "{} follows", s.key);
+        }
+        app.apply(vec![Action::Revert(0, four[0].slot())]);
+        assert!(four.iter().all(|s| value(&app, s) == app.doc.as_ref().unwrap().original_value(0, s.slot())));
+        // two settings of one name in different groups (PP7's and PP8's Black Level, neither on a camera row) are
+        // not one setting: changing one leaves the other
+        let (pp7, pp8) = (setting(&app, "global:0x04e9[6]"), setting(&app, "global:0x04e9[7]"));
+        assert!(pp7.links_with(&pp8) && !pp7.twin_of(&pp8));
+    }
+
+    /// A value one record of the setting has no name for (Drive Mode's Continuous Shooting, which the record with the
+    /// speeds names only with a speed): the editor does not guess that record's value. The edit is made where it was
+    /// asked, the status says the other record was left as it was, and the save and write windows list the setting (no
+    /// all-clear); their Revert puts both back. The page says it in its answer. A value both name makes them one again.
+    #[test]
+    fn a_value_another_record_has_no_name_for_is_listed() {
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let (drive, speed) = (setting(&app, DRIVE), setting(&app, DRIVE_SPEED));
+        let cont = code(&drive, "Continuous Shooting");
+        assert!(!speed.values.iter().any(|(_, l)| l == "Continuous Shooting"));
+        let (d0, s0) = (value(&app, &drive), value(&app, &speed));
+        assert_ne!(d0, Some(cont), "the sample is not on Continuous Shooting");
+        assert!(app.apply(vec![Action::Set(0, drive.slot(), cont)]).is_none(), "made, not refused");
+        assert_eq!((value(&app, &drive), value(&app, &speed)), (Some(cont), s0), "the other record is left as it was");
+        assert!(app.status.starts_with("Drive Mode: the camera keeps this setting in 2 places") && app.status.contains("no \u{201c}Continuous Shooting\u{201d}, so it was left at"), "{}", app.status);
+        let issues = app.acceptance_issues();
+        let one = issues.iter().find(|i| i.kind == IssueKind::Apart).unwrap_or_else(|| panic!("listed: {:?}", issues.iter().map(|i| &i.name).collect::<Vec<_>>()));
+        assert!(one.name.starts_with("Drive Mode") && one.value.starts_with("Continuous Shooting / "), "{} {}", one.name, one.value);
+        let (words, fix) = app.issue_fix(one).expect("a Revert");
+        assert_eq!(words, "Revert");
+        app.apply(fix);
+        assert_eq!((value(&app, &drive), value(&app, &speed)), (d0, s0));
+        assert!(app.acceptance_issues().is_empty());
+        // the page: made, and said in its answer
+        let r = answer(&mut app, "set", json!({ "target": 0, "key": DRIVE, "value": cont }));
+        assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+        let j: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+        assert!(j["message"].as_str().is_some_and(|m| m.contains("Continuous Shooting") && m.contains("left at")), "{j}");
+        assert_eq!((value(&app, &drive), value(&app, &speed)), (Some(cont), s0));
+        assert!(app.acceptance_issues().iter().any(|i| i.kind == IssueKind::Apart));
+        // a value both name: one setting again, nothing listed
+        app.apply(vec![Action::Set(0, speed.slot(), code(&speed, "Self-timer(Single)"))]);
+        assert_eq!(value(&app, &drive), Some(code(&drive, "Self-timer(Single)")));
+        assert!(app.acceptance_issues().iter().all(|i| i.kind != IssueKind::Apart));
+        // the speed chosen on the tile while the other record holds Continuous Shooting: the camera may well keep the two
+        // so, but the editor cannot tell, so it is listed rather than passed
+        app.apply(vec![Action::Set(0, drive.slot(), cont)]);
+        app.apply(vec![Action::Set(0, speed.slot(), code(&speed, "Continuous Shooting Lo"))]);
+        assert_eq!(value(&app, &drive), Some(cont));
+        assert!(app.acceptance_issues().iter().any(|i| i.kind == IssueKind::Apart));
     }
 }

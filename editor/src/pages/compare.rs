@@ -628,7 +628,7 @@ pub(crate) mod copy_tests {
         let label_of = |v: i64| linked[0].label_for(v).map(str::to_string);
         let cur = app.col_value(Col::a(0), &linked[0]).unwrap();
         let other = linked[0].values.iter().map(|(v, _)| *v).find(|v| *v != cur && linked[0].checked_on_camera(*v, 0)).expect("another value");
-        // each record's own number for that value, as `set_linked` writes it
+        // each record's own number for that value, as `apply` writes it (`Setting::twin_value`)
         let want: Vec<Option<i64>> = linked.iter().map(|l| l.values.iter().find(|(_, lab)| Some(lab.clone()) == label_of(other)).map(|(v, _)| *v)).collect();
         let held = |app: &App| linked.iter().map(|l| app.col_value(Col::a(0), l)).collect::<Vec<_>>();
         let mut b = app.doc.as_ref().unwrap().original.clone();
@@ -643,7 +643,7 @@ pub(crate) mod copy_tests {
         assert!(app.write_issues().is_empty(), "as the camera writes it: nothing to list");
         app.undo();
         // the window's picker, as Compare's cell sets it
-        app.apply(App::set_linked(0, &row.2, other));
+        app.apply(vec![Action::Set(0, row.2[0].slot(), other)]);
         assert_eq!(held(&app), want, "the window's picker takes every record");
         app.undo();
         // the page's copy and its picker

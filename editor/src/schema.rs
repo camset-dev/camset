@@ -475,6 +475,25 @@ impl Setting {
         self.key == o.key || (self.name == o.name && self.same_place(o) && self.copy_of.is_none() && o.copy_of.is_none())
     }
 
+    /// Another record of the same row of linked records (`links_with`), in the same tab and group in both layouts (its
+    /// own and as on the camera), so every view shows the two as one row: an edit of one takes the other along
+    /// (`App::apply`, by `twin_value`). Two unplaced settings of one name in different groups (PP7's and PP8's Black
+    /// Level) are never twins.
+    pub fn twin_of(&self, o: &Setting) -> bool {
+        self.key != o.key && self.links_with(o) && self.tab == o.tab && self.group == o.group
+            && crate::menu_rows::camera_tab(self) == crate::menu_rows::camera_tab(o) && crate::menu_rows::camera_group(self) == crate::menu_rows::camera_group(o)
+    }
+
+    /// The value twin `o` (`twin_of`) takes when this one takes `v`: its value of the same name; for a number with no
+    /// name here, the number itself where `o` is a number too. None when `o` has no such value: the editor does not
+    /// guess one (Drive Mode's "Continuous Shooting" in a record that names only the speeds).
+    pub fn twin_value(&self, v: i64, o: &Setting) -> Option<i64> {
+        match self.label_for(v) {
+            Some(label) => o.values.iter().find(|(_, l)| l == label).map(|(x, _)| *x),
+            None => o.range.map(|_| v),
+        }
+    }
+
     /// The proof state in a few words, and its kind ("ok", "na" no proof can reach it, "no" not proved yet):
     /// one wording for the editor's detail and its web page. The count is of the values a proof checked.
     pub fn proof_badge(&self) -> (String, &'static str) {

@@ -322,11 +322,10 @@ impl App {
                                 let hover = match &locked { Some((w, _)) => format!("{hover}\n\n{w}"), None => hover };
                                 let hover = match &note { Some((w, _)) => format!("{hover}\n\n{w}"), None => hover };
                                 cell.response.on_hover_text(hover.clone()).on_disabled_hover_text(hover);
+                                // its other records follow it, by the value of the same name (`apply`)
                                 if chosen != cur {
                                     if let Some(v) = chosen {
-                                        for l in &linked {
-                                            actions.push(Action::Set(self.target, l.slot(), v));
-                                        }
+                                        actions.push(Action::Set(self.target, s.slot(), v));
                                     }
                                 }
                             }
@@ -513,9 +512,10 @@ impl App {
                 ui.label(RichText::new(Self::describe(s, cur)).strong());
                 ui.label(RichText::new("Can't be changed here: only one value is known.").small().color(tone::weak(ui.visuals())));
             }
+            // its other records follow it (`apply`)
             if chosen != cur {
                 if let Some(v) = chosen {
-                    actions.extend(Self::set_linked(self.target, linked, v));
+                    actions.push(Action::Set(self.target, s.slot(), v));
                 }
             }
             ui.add_space(8.0);
@@ -527,9 +527,7 @@ impl App {
                 }
             });
             if changed && ui.button(format!("Revert to {}", Self::describe(s, orig))).clicked() {
-                for l in linked {
-                    actions.push(Action::Revert(self.target, l.slot()));
-                }
+                actions.push(Action::Revert(self.target, s.slot()));
             }
             // where the plain Revert does not serve: a value a Save As kept put back to what the camera wrote, a copy put
             // back in step with its setting (`put_back_choice`), its hover saying which (`put_back_hover`)
@@ -762,18 +760,13 @@ impl App {
                     (true, false) => "The choice the camera shows beside this option (Right opens it on the camera).".to_string(),
                 };
                 ui.label(title).on_hover_text(hover);
-                let n = actions.len();
+                // its records move together, as on its own row (`apply`)
                 ui.horizontal(|ui| self.compact_editor(ui, sub, editable && linked.iter().all(|l| self.shape_ok(l)), actions));
-                // its records move together, as on its own row
-                if let Some(&Action::Set(_, _, v)) = actions.get(n) {
-                    actions.truncate(n);
-                    actions.extend(Self::set_linked(self.target, &linked, v));
-                }
                 if sv != so {
                     ui.horizontal(|ui| {
                         ui.label(RichText::new(format!("was {}", Self::describe(sub, so))).small().color(tone::weak(ui.visuals())));
                         if ui.small_button("Revert").clicked() {
-                            actions.extend(linked.iter().map(|l| Action::Revert(self.target, l.slot())));
+                            actions.push(Action::Revert(self.target, sub.slot()));
                         }
                     });
                 }
@@ -783,26 +776,6 @@ impl App {
             }
             ui.add_space(4.0);
         }
-    }
-
-    /// Set a setting stored in several records (`linked`, the first one leading) to `v`, keeping
-    /// them consistent: same label, each record's own value (numeric settings without a label for
-    /// the value take the number itself).
-    pub(crate) fn set_linked(target: usize, linked: &[Setting], v: i64) -> Vec<Action> {
-        let s = &linked[0];
-        let mut actions = vec![Action::Set(target, s.slot(), v)];
-        for other in &linked[1..] {
-            match s.label_for(v) {
-                Some(label) => {
-                    if let Some((ov, _)) = other.values.iter().find(|(_, l)| l == label) {
-                        actions.push(Action::Set(target, other.slot(), *ov));
-                    }
-                }
-                None if other.range.is_some() => actions.push(Action::Set(target, other.slot(), v)),
-                None => {}
-            }
-        }
-        actions
     }
 }
 

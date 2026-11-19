@@ -1287,7 +1287,11 @@ impl App {
     /// answers the row ("row"), every row it changes on the page ("rows": that one, then those it greys
     /// out or brings back), the new "rev" and the edit counts, so the page patches them in place.
     fn web_set(&mut self, target: usize, body: &Value, from: &str) -> WebReply {
-        let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
+        let key = body["key"].as_str().unwrap_or("");
+        let Some(mut linked) = self.web_linked(target, key) else { return WebReply::error(404, "No such setting here.") };
+        // the record asked for first, as the page drew it (a Main tile keyed to another record of the row than its
+        // first): the value is that record's own number, and its other records follow it (`apply`)
+        linked.sort_by_key(|o| o.key != key);
         let s = &linked[0];
         let cur = self.doc.as_ref().and_then(|d| d.value(target, s.slot()));
         let refuse = |app: &Self, status: u16, why: &str| WebReply::refused(status, why, json!({ "row": app.web_row(target, &linked), "value": cur }));
@@ -1319,6 +1323,7 @@ impl App {
         // the settings an untick as the camera does sets besides the switch (`web_untick`), whose rows the reply carries
         let mut also: Vec<String> = Vec::new();
         let shown;
+        let mut message = None;
         if let Some(text) = body["text"].as_str() {
             let Some(rule) = &s.text else { return refuse(self, 400, "This setting is not a text.") };
             let text = if rule.uppercase { text.to_uppercase() } else { text.to_string() };
@@ -1347,7 +1352,7 @@ impl App {
             if !ok {
                 return refuse(self, 400, "Not a value this setting offers.");
             }
-            let acts = Self::set_linked(target, &linked, v);
+            let acts = vec![Action::Set(target, s.slot(), v)];
             // a switch that keeps copies apart, unticked: the window's question first (`untick_ask`), answered in
             // `untick` ("camera": the families too, as one step; "box": the switch alone); nothing changed until then.
             // A step that would leave a setting held by none of its copies is refused, with why (`apply`)
@@ -1366,8 +1371,13 @@ impl App {
                 return refuse(self, 409, &why);
             }
             shown = Self::describe(s, Some(v));
+            // another record of the setting with no value of that name, left as it was: said, as the window says it
+            message = self.twins_left(s, v, target);
         }
         self.status = format!("{} set to {shown} {from}", s.name);
+        if let Some(m) = &message {
+            self.status = format!("{} {m}", self.status);
+        }
         let row = self.web_row(target, &linked);
         // the rows greyed out (or no longer) by a record this change wrote, each once
         let ids: Vec<u16> = linked.iter().map(|l| l.id).collect();
@@ -1404,7 +1414,7 @@ impl App {
             .collect();
         let edits = self.doc.as_ref().map_or(0, |d| d.changes().len());
         WebReply::json(json!({ "row": row, "rows": rows, "rev": self.web_rev(), "edits": edits,
-            "can_undo": !self.undo.is_empty(), "can_redo": !self.redo.is_empty() }))
+            "can_undo": !self.undo.is_empty(), "can_redo": !self.redo.is_empty(), "message": message }))
     }
 
     /// The page's side of the window's question before a switch that keeps copies apart leaves the values that keep a
@@ -3050,8 +3060,8 @@ pub(crate) mod tests {
         // B's value into A, from the compare: an edit of every linked record, as from Edit
         let set = ask(&mut app, "set", json!({ "target": 0, "key": s.key, "value": other, "col": ["a", 0] }));
         assert_eq!(set["row"]["changed"], true);
-        for a in App::set_linked(0, &linked, other) {
-            if let Action::Set(si, slot, v) = a { assert_eq!(app.doc.as_ref().unwrap().value(si, slot), Some(v)); }
+        for l in &linked {
+            if let Some(v) = linked[0].twin_value(other, l) { assert_eq!(app.doc.as_ref().unwrap().value(0, l.slot()), Some(v)); }
         }
         assert_eq!(app.col_value(Col::b(0), &s), Some(other), "file B unchanged");
         // the row no longer differs: kept while the page asks, gone when it does not
@@ -4688,7 +4698,7 @@ pub(crate) mod tests {
         // the file holds it now (an edit made elsewhere): listed as the value held now, with no "not checked" beside it
         // (null: the window draws no mark either), why on its hover
         let linked = app.web_linked(0, &st.key).unwrap();
-        app.apply(App::set_linked(0, &linked, other));
+        app.apply(vec![Action::Set(0, linked[0].slot(), other)]);
         let r = row(&mut app);
         let o = r["options"].as_array().unwrap().iter().find(|o| o[0] == json!(other)).expect("the value held now is listed").clone();
         assert_eq!(o[2], Value::Null, "neither established nor not: the menus never offer it");

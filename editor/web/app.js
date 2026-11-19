@@ -1257,6 +1257,8 @@ function setSetting(r, body) {
       const rows = replyRows(j);
       patchRows(rows, r.key);
       noteRows(rows, r.key);
+      // another record of the setting with no value of that name, left as it was: the editor's words (`message`)
+      if (j && j.message) toast(j.message);
       // the editor names every row the change touched (`rows`, those it greys out or brings back included) and the
       // new `rev`, so a tab or a search is left as it is now drawn: it is not fetched again for this change (each
       // group's head is drawn again for its count of edits)
@@ -2867,7 +2869,7 @@ function cmpPickClose() {
 function cmpPickSet(r, body) {
   const final = r.kind === "choice" && !r.tree;
   return act("set", { target: rowTarget(r), key: r.key, col: r.col, ...body }, null, {
-    done: () => { if (final) cmpPickClose(); },
+    done: (j) => { if (final) cmpPickClose(); if (j && j.message) toast(j.message); },
     undo: () => cmpPickRefresh(),
   });
 }

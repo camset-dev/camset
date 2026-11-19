@@ -609,7 +609,7 @@ impl App {
 
     /// Compare's picker for a value of file A, under its cell (`cell` clicked, or its menu's "Change…"): the choice the
     /// detail panel offers for the setting, in the column's set `section`, applied through the same actions (every
-    /// record of the row together, `set_linked`), so the edit marks, undo, Revert and the write check follow as from
+    /// record of the row together, as `apply` keeps them), so the edit marks, undo, Revert and the write check follow as from
     /// Edit. Named values as the detail panel lists them (`option_choice_ui`: those no proof established only when
     /// asked for, the refused ones marked, the option tree's main option and its choice), a number within its range
     /// and steps, or a text by its rule; then what it was, with Revert, and why the camera may not take it. A final
@@ -682,7 +682,7 @@ impl App {
                 let snapped = snap_to_step(v, lo, hi, step);
                 if apply {
                     if snapped != now {
-                        actions.extend(Self::set_linked(section, linked, snapped));
+                        actions.push(Action::Set(section, s.slot(), snapped));
                     }
                     close = true;
                 }
@@ -697,7 +697,7 @@ impl App {
                 egui::ScrollArea::vertical().id_salt(id.with("list")).max_height(360.0).show(ui, |ui| {
                     if let Some((v, last)) = self.option_choice_ui(ui, section, s, (cur, orig), true, false) {
                         if Some(v) != cur {
-                            actions.extend(Self::set_linked(section, linked, v));
+                            actions.push(Action::Set(section, s.slot(), v));
                         }
                         close = last;
                     }
@@ -708,7 +708,7 @@ impl App {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("was {}", Self::describe(s, orig))).small().color(tone::weak(ui.visuals())));
                     if ui.small_button("Revert").clicked() {
-                        actions.extend(linked.iter().map(|l| Action::Revert(section, l.slot())));
+                        actions.push(Action::Revert(section, s.slot()));
                         close = true;
                     }
                 });
@@ -1086,8 +1086,8 @@ pub(crate) mod screen_reader_tests {
         let _ = run(&mut app, vec![]);
         let doc = app.doc.as_ref().unwrap();
         assert_eq!(doc.value(0, s.slot()), Some(other), "{}", app.status);
-        for a in App::set_linked(0, &linked, other) {
-            if let Action::Set(si, slot, v) = a { assert_eq!(doc.value(si, slot), Some(v), "every linked record set together"); }
+        for l in &linked {
+            if let Some(v) = linked[0].twin_value(other, l) { assert_eq!(doc.value(0, l.slot()), Some(v), "every linked record set together"); }
         }
         assert!(app.row_info(&app.cols.clone(), None, &s).edited[0], "marked as an edit");
         assert_eq!(app.col_value(Col::b(0), &s), was, "file B unchanged");
