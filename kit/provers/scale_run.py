@@ -37,8 +37,12 @@ proof line says which of the two read the value chosen ("read_by": "ocr" or "rea
 on stops the row, naming the frame: two such frames in a row are never the number that stopped changing. A slider
 drawn over a picture (Aspect Marker Level with HDMI Info. Display Off: camkit.screen's picture_slider, 2026-11-19) is
 read by its marker instead, its place on the scale's own ticks and numbers, cross-checked with the number drawn where
-OCR reads it alone, and stops the row where they disagree or the scale cannot be read whole (picture_value): OCR over
-the photograph read its 12 as "92", and the reader is not asked; its lines say "read_by": "marker". Both readings
+OCR reads it alone (picture_value). Where OCR reads that number otherwise (over the photograph it read the 12 as "92"
+and the 8 as "00", 2026-11-19; the owner, 2026-11-06: the reader is right where Apple Vision drops or mangles short
+digits), the reader is asked about the frame, one question a frame as above, and the marker's number stands only where
+the reader reads it too: the line then keeps OCR's reading as "ocr_outvoted". A reader that reads another number,
+none or fails stops the row, saying what the marker, OCR and the reader each read, as does a scale that cannot be read
+whole. Its lines say "read_by": "marker": the reader never decides against the marker, nor alone. Both readings
 are cleaned alike (every dash a minus sign) and compared by key ("+2" and "2", "±0" and "0", "80%" and "80" one
 number; pass2_report's scale_clean and scale_key), the labels kept as first read. A number only the reader read never
 decides alone, for the reader can read the next number (kit/pass2_report.py, name_of), and no end of the scale stands
@@ -107,6 +111,8 @@ PANEL_SLIDER = (88, 136, 553, 272)
 _said: dict = {}            # {frame path: the reader's whole answer}: one question a frame, however often it is read
 _by_reader: set = set()     # the frames whose number the reader gave, OCR having read none
 _by_marker: set = set()     # the frames whose number the marker on a picture slider's scale gave (picture_value)
+_outvoted: dict = {}        # {frame path: OCR's reading of a picture slider's number, which the marker and the reader
+#                             both read otherwise there (picture_value)}: a proof line's "ocr_outvoted"
 _why: dict = {}             # {frame path: why a picture slider's number was not read there}, which number() says
 _number_box = VALUE         # where the row being proved draws its number: VALUE, or PANEL_VALUE (open_row sets it)
 PAD = 40                    # the margin round a part of the frame OCR reads alone (masked_lines)
@@ -213,7 +219,11 @@ def picture_value(cam, pic) -> tuple[str, str]:
     whole numbers stepping evenly up to the right (Apple's OCR drops the lone 0 at the low end and reads 5, 10 and 15,
     which give it). The number under the marker is the one its place takes on that step, the ends' numbers so given.
     Then the number drawn in orange where the screen draws it (pic["value"]), read by OCR alone: where it reads a
-    number, it must be the marker's (by key), else no number. Any of it missing, and no number: never a guess."""
+    number other than the marker's (by key), the reader is asked about the frame (asked, reader_said), and the
+    marker's number stands only where the reader's is the same (by key), OCR's reading then kept (_outvoted); another
+    number, none or a reader that failed gives no number, `why` saying what the marker, OCR and the reader each read.
+    Where OCR reads the marker's number, or none, the reader is not asked. Any of it missing, and no number: never a
+    guess."""
     import numpy as np
 
     from camkit import screen
@@ -264,15 +274,24 @@ def picture_value(cam, pic) -> tuple[str, str]:
     o = screen._orange(cam.frame.image)
     said = one_number(" ".join(ln.text for ln in masked_lines(o[vy0:vy1, vx0:vx1], pic["value"])))
     if said and key(said) != key(v):
-        return "", f"the marker stands on {v!r} on the scale, but the number drawn reads {said!r} by OCR"
+        answer = asked(cam)
+        raw, r = reader_said(answer)
+        if r and key(r) == key(v):
+            _outvoted[cam.frame.path] = said        # the marker and the reader read v: OCR outvoted, never the marker
+            return v, ""
+        by_reader = (f" and {r!r} by the reader" if r else f", and the reader read {raw!r}, no number" if raw else
+                     ", and the reader read no number" if isinstance(answer, dict) else ", and the reader gave no answer")
+        return "", f"the marker stands on {v!r} on the scale, but the number drawn reads {said!r} by OCR{by_reader}"
     return v, ""
 
 
 def value(cam) -> str:
-    """The number on the frame on screen: on a slider drawn over a picture the marker's (picture_value: OCR reads
-    the number over a picture wrongly, and the reader is not asked), else OCR's, else the reader's (2026-11-09); ""
-    when none reads one. A frame's marks are its reading's alone (a frame read again is judged afresh)."""
+    """The number on the frame on screen: on a slider drawn over a picture the marker's (picture_value: OCR misreads
+    the number drawn over a picture, and the reader is asked only where OCR's reading and the marker's differ, never
+    to decide alone), else OCR's, else the reader's (2026-11-09); "" when none reads one. A frame's marks are its
+    reading's alone (a frame read again is judged afresh)."""
     _by_marker.discard(cam.frame.path)
+    _outvoted.pop(cam.frame.path, None)
     _why.pop(cam.frame.path, None)
     pic = picture_of(cam)
     if pic is None:
@@ -556,6 +575,7 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     if safety.confirmation(full):
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, by, seen_vlm = cam.frame.path.name, read_by(cam), reader_said(asked(cam))[0]   # the reader's, kept
+    outvoted = _outvoted.get(cam.frame.path)    # OCR's reading the marker and the reader outvoted there, if any
     if panel:               # a panel reads as no known kind: its OK goes by its own consent, judged on its shape
         cam.answer_once = panel_consent(path)
     cam.press("enter")
@@ -567,7 +587,8 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     time.sleep(1)
     dat = link.download(f"{path[-1]}-{target}")
     time.sleep(LOCK_S)
-    return {"chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "vlm": seen_vlm, "read_by": by, "outcome": got}
+    return {"chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "vlm": seen_vlm, "read_by": by,
+            "ocr_outvoted": outvoted, "outcome": got}
 
 
 def panel_consent(path) -> live.PanelSlider:
@@ -758,7 +779,9 @@ def main():
                     ch = camset.diff(camset.read(base), camset.read(got["dat"]))
                     r = {"path": path, "kind": "list", "index": i, "label": labels[i], "shown": labels[i],
                          "chosen_frame": got["chosen_frame"], "row_frame": got["row_frame"],
-                         "vlm": got["vlm"], "read_by": got["read_by"], "dat": got["dat"].name, "base": base.name,
+                         "vlm": got["vlm"], "read_by": got["read_by"],
+                         **({"ocr_outvoted": got["ocr_outvoted"]} if got.get("ocr_outvoted") else {}),
+                         "dat": got["dat"].name, "base": base.name,
                          **({"notice": done.notice} if done.notice else {}), "applied": done.applied, "scale": True,
                          "changes": changes_of(ch), "attempt": attempt}
                     out.write(json.dumps(r) + "\n")

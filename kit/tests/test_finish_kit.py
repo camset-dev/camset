@@ -7,6 +7,7 @@ The camera's frames live under runs/ (not versioned); the tests that read them s
 pictures and made-up text run everywhere.
 """
 import io
+import re
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -680,16 +681,69 @@ def picture_cam(a, name="00001_slider.png"):
     return SimpleNamespace(frame=f, read=lambda: s)
 
 
+def reader_says(monkeypatch, S, said) -> list:
+    """The vision reader stubbed for every frame: `said` its "selected" (a text), or its whole answer (a dict), or None
+    (a reader that fails); its one-question-a-frame cache emptied. Returns the frames it was asked about."""
+    asked = []
+    monkeypatch.setattr(S, "_said", {})
+    monkeypatch.setattr(S, "_by_reader", set())
+
+    def option_answer(cam):
+        asked.append(cam.frame.path)
+        return {"title": "Aspect Marker Level", "selected": said, "value": ""} if isinstance(said, str) else said
+    monkeypatch.setattr(S, "option_answer", option_answer)
+    return asked
+
+
 @pytest.mark.parametrize("at", [0, 7, 15])
 @pytest.mark.parametrize("ocr_reads_it", [False, True])
 def test_a_slider_over_a_picture_reads_its_number_from_the_marker(monkeypatch, at, ocr_reads_it):
     """The marker's place on the scale's own ticks, the scale's numbers read on their places (5, 10 and 15: the 0 at the
-    low end dropped, as Apple's OCR drops it), and the number drawn in orange, where OCR reads it, the same."""
+    low end dropped, as Apple's OCR drops it), and the number drawn in orange, where OCR reads it, the same. OCR
+    reading the marker's number, or none, asks the reader nothing."""
     S = scale_run_module()
+    asked = reader_says(monkeypatch, S, str(at))
     monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=(lambda b: [str(at)]) if ocr_reads_it else None))
     cam = picture_cam(picture_slider(at))
     assert S.value(cam) == str(at) and S.read_by(cam) == "marker"
     assert S.reading(cam, None, ["Aspect Marker Level"]) == S.Reading(str(at), cam.frame.path.name, False)
+    assert asked == [] and cam.frame.path not in S._outvoted
+
+
+@pytest.mark.parametrize("said", ["8", "+8", {"title": "Aspect Marker Level", "selected": "", "value": "8"}],
+                         ids=["selected", "signed", "in-value"])
+def test_where_ocr_reads_the_drawn_number_otherwise_the_reader_reading_the_markers_number_lets_it_stand(monkeypatch, said):
+    """The marker on 8 and OCR reading the orange 8 as "00" (kit2_pass2 261759, 2026-11-19): the reader, asked once about
+    that frame, reads 8 (by key), and the marker's number stands, read by the marker, not the reader (the reader never
+    decides alone: a Reading the reader alone read would be by_reader); OCR's reading is kept as outvoted."""
+    S = scale_run_module()
+    asked = reader_says(monkeypatch, S, said)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["00"]))
+    cam = picture_cam(picture_slider(8), "00009_left.png")
+    assert S.value(cam) == "8" and S.read_by(cam) == "marker" and S._outvoted[cam.frame.path] == "00"
+    assert S.reading(cam, None, ["Aspect Marker Level"]) == S.Reading("8", "00009_left.png", False)
+    assert asked == [cam.frame.path], "one question a frame, however often it is read"
+
+
+@pytest.mark.parametrize("said, reader", [
+    ("9", "'9' by the reader"), ("00", "'00' by the reader"), ("Cancel", "the reader read 'Cancel', no number"),
+    ("", "the reader read no number"), (None, "the reader gave no answer")],
+    ids=["another-number", "ocrs-number", "a-word", "nothing", "failed"])
+def test_where_the_reader_does_not_read_the_markers_number_the_row_stops_saying_what_each_read(monkeypatch, said, reader):
+    """The marker on 8, OCR "00", the reader anything but 8 (OCR's own misreading too): no number, and number() stops the
+    row, its screen closed, the message naming the frame and what the marker, OCR and the reader each read."""
+    S = scale_run_module()
+    asked = reader_says(monkeypatch, S, said)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["00"]))
+    closed = []
+    monkeypatch.setattr(S, "close_screen", lambda cam, link: closed.append(1))
+    cam = picture_cam(picture_slider(8), "00009_left.png")
+    msg = (r"no number read on the scale on frame 00009_left\.png, by its marker: the marker stands on '8' on the "
+           r"scale, but the number drawn reads '00' by OCR" + (" and " if reader.startswith("'") else ", and ")
+           + re.escape(reader) + "$")
+    with pytest.raises(S.Failed, match=msg):
+        S.number(cam, None, ["Aspect Marker Level"])
+    assert closed == [1] and asked == [cam.frame.path] and cam.frame.path not in S._outvoted
 
 
 @pytest.mark.parametrize("case, kw, why", [
@@ -703,6 +757,7 @@ def test_a_slider_over_a_picture_reads_its_number_from_the_marker(monkeypatch, a
 ], ids=lambda v: v if isinstance(v, str) and len(v) < 40 else "")
 def test_a_slider_over_a_picture_gives_no_number_where_its_readings_do_not_hold(monkeypatch, case, kw, why):
     S = scale_run_module()
+    reader_says(monkeypatch, S, None)
     monkeypatch.setattr(S, "masked_lines", scale_ocr(**kw))
     cam = picture_cam(picture_slider(12))
     assert S.value(cam) == "" and why in S._why[cam.frame.path], (case, S._why.get(cam.frame.path))
@@ -752,12 +807,14 @@ def test_a_scale_that_could_be_misplaced_gives_no_number(monkeypatch, case, a, w
 
 def test_number_stops_the_row_saying_why_the_marker_gave_none(monkeypatch):
     S = scale_run_module()
+    reader_says(monkeypatch, S, "92")
     monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["92"]))
     closed = []
     monkeypatch.setattr(S, "close_screen", lambda cam, link: closed.append(1))
     cam = picture_cam(picture_slider(12), "00007_right.png")
     with pytest.raises(S.Failed, match=r"no number read on the scale on frame 00007_right\.png, by its marker: the "
-                                       r"marker stands on '12' on the scale, but the number drawn reads '92' by OCR"):
+                                       r"marker stands on '12' on the scale, but the number drawn reads '92' by OCR "
+                                       r"and '92' by the reader"):
         S.number(cam, None, ["Aspect Marker Level"])
     assert closed == [1]
 
@@ -819,21 +876,52 @@ def test_main_proves_a_slider_over_a_picture_by_its_marker_with_its_checks(monke
     assert got.cam.oks == want and [ln["label"] for ln in got.lines] == [str(i) for i in want]
     assert got.shown == want and {ln["read_by"] for ln in got.lines} == {"marker"}
     assert got.lines[-1]["changes"] == [] and len(got.attempts) == 1 and got.counted == got.lines
+    assert {p.name for p in got.asked} <= {ln["chosen_frame"] for ln in got.lines}, \
+        "OCR reading the marker's number or none: the reader asked only for the line's second reading, at OK"
+    assert not any("ocr_outvoted" in ln for ln in got.lines)
 
 
-def test_main_stops_a_slider_over_a_picture_whose_number_reads_otherwise(monkeypatch, scale_main):
-    """The number drawn read otherwise than the marker's on one frame of the look: the row stops, no OK, no line."""
+def test_main_proves_a_slider_over_a_picture_where_the_reader_outvotes_ocr_and_says_so(monkeypatch, scale_main):
+    """OCR reading the number drawn as "92" on every frame of 9, the reader reading 9 there: the row is proved whole, the
+    reader asked about those frames only (and at each OK, for the line's second reading); 9's line is read by the marker
+    and keeps OCR's reading as "ocr_outvoted", the others carry none. The report credits 9 to two readers, the marker and
+    the vision model, which is what read it on that frame."""
+    import pass2_report as R
     S = scale_run_module()
     cam = picture_slider_cam(12)
     monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["92"] if cam.truth[cam.frame.path] == 9
                                                      else []))
     got = scale_main(12, set(), lambda place, i: str(place), cam=cam)
-    assert "the marker stands on '9' on the scale, but the number drawn reads '92' by OCR" in got.out
+    assert "stopped" not in got.out, got.out
+    want = [i for i in range(16) if i != 12] + [12]
+    assert got.cam.oks == want and got.shown == want and len(got.attempts) == 1 and got.counted == got.lines
+    assert {ln["read_by"] for ln in got.lines} == {"marker"}
+    assert [(ln["label"], ln["ocr_outvoted"]) for ln in got.lines if "ocr_outvoted" in ln] == [("9", "92")]
+    nine = next(ln for ln in got.lines if ln["label"] == "9")
+    assert nine["vlm"] == "9" and R.name_of(nine) == ("9", "two readers", None)
+    chosen = {ln["chosen_frame"] for ln in got.lines}
+    assert all(cam.truth[p] == 9 or p.name in chosen for p in got.asked)
+    assert any(cam.truth[p] == 9 and p.name not in chosen for p in got.asked), "asked in the look too"
+
+
+@pytest.mark.parametrize("said", ["10", "92", ""], ids=["another-number", "ocrs-number", "nothing"])
+def test_main_stops_a_slider_over_a_picture_whose_number_reads_otherwise(monkeypatch, scale_main, said):
+    """The number drawn read otherwise than the marker's on one frame of the look, and the reader not reading the
+    marker's number there either: the row stops, no OK, no line, the message saying what each of the three read."""
+    S = scale_run_module()
+    cam = picture_slider_cam(12)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(value_lines=lambda b: ["92"] if cam.truth[cam.frame.path] == 9
+                                                     else []))
+    got = scale_main(12, set(), lambda place, i: said if place == 9 else str(place), cam=cam)
+    assert "the marker stands on '9' on the scale, but the number drawn reads '92' by OCR" + (
+        f" and {said!r} by the reader" if said else ", and the reader read no number") in got.out
     assert got.cam.oks == [] and got.lines == [] and got.attempts == []
 
 
 AM_LEVEL = [A1 / "kit2_pass2" / "shots" / "259951_right.png",
             A1 / "kit2_fin_crawl_amdisp_off" / "shots" / "00028_right.png"]
+AM_LEVEL_8 = A1 / "kit2_pass2" / "shots" / "261759_left.png"     # the marker on 8, OCR's "00" (2026-11-19)
+AM_DRAWN = [("5", 254, 271), ("10", 356, 393), ("15", 466, 501)]   # what Apple's OCR read alone on their scale's line
 
 
 def real_picture_cam(path):
@@ -851,22 +939,58 @@ def test_the_aspect_marker_level_frames_read_12_by_their_marker(monkeypatch, pat
     cam = real_picture_cam(path)
     pic = S.picture_of(cam)
     assert pic and pic["strays"] == 0 and len(pic["numbers"]) == 4 and pic["grid"] == (177.0, 22.0)
-    drawn = [("5", 254, 271), ("10", 356, 393), ("15", 466, 501)]
-    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=drawn, value_lines=lambda b: ["12"]))
-    assert S.value(cam) == "12" and S.read_by(cam) == "marker"
-    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=drawn, value_lines=lambda b: ["92"]))
-    assert S.value(cam) == "" and "reads '92'" in S._why[cam.frame.path]
+    asked = reader_says(monkeypatch, S, None)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=AM_DRAWN, value_lines=lambda b: ["12"]))
+    assert S.value(cam) == "12" and S.read_by(cam) == "marker" and asked == []
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=AM_DRAWN, value_lines=lambda b: ["92"]))
+    assert S.value(cam) == "" and "reads '92' by OCR, and the reader gave no answer" in S._why[cam.frame.path]
+    assert asked == [cam.frame.path]
+
+
+@pytest.mark.parametrize("said, got", [("8", "8"), ("9", ""), ("", ""), (None, "")],
+                         ids=["reader-8", "reader-9", "reader-nothing", "reader-failed"])
+def test_the_frame_whose_8_ocr_read_00_reads_8_where_the_reader_reads_8(monkeypatch, said, got):
+    """The frame the prover stopped on (kit2_pass2 261759, 2026-11-19): the marker on place 8 of the same grid; with what
+    Apple's OCR read alone on the line (5, 10, 15) and on the orange digit ("00"), the reader is asked once about that
+    frame: reading 8, the number is 8, read by the marker, OCR's "00" kept as outvoted; reading anything else, none."""
+    S = scale_run_module()
+    cam = real_picture_cam(AM_LEVEL_8)
+    pic = S.picture_of(cam)
+    assert pic and pic["strays"] == 0 and pic["grid"] == (177.0, 22.0) and pic["marker"] == 330
+    asked = reader_says(monkeypatch, S, said)
+    monkeypatch.setattr(S, "masked_lines", scale_ocr(drawn=AM_DRAWN, value_lines=lambda b: ["00"]))
+    assert S.value(cam) == got and asked == [cam.frame.path]
+    if got:
+        assert S.read_by(cam) == "marker" and S._outvoted[cam.frame.path] == "00"
+    else:
+        assert "the marker stands on '8' on the scale, but the number drawn reads '00' by OCR" in S._why[cam.frame.path]
 
 
 @pytest.mark.parametrize("path", AM_LEVEL, ids=["pass2", "crawl"])
-def test_the_aspect_marker_level_frames_read_12_with_this_computers_ocr(path):
-    """Opt-in (skipped without the runs or this computer's OCR): the real OCR on the masked line and digits."""
+def test_the_aspect_marker_level_frames_read_12_with_this_computers_ocr(monkeypatch, path):
+    """Opt-in (skipped without the runs or this computer's OCR): the real OCR on the masked line and digits, the reader
+    never asked (a reader that fails: OCR alone reads the 12)."""
     from camkit import ocr
     S = scale_run_module()
     if ocr.engine() not in ocr.available():
         pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    asked = reader_says(monkeypatch, S, None)
     cam = real_picture_cam(path)
     assert S.value(cam) == "12" and S.read_by(cam) == "marker", S._why.get(cam.frame.path)
+    assert asked == []
+
+
+def test_the_frame_whose_8_ocr_read_00_reads_8_with_this_computers_ocr_and_the_reader_reading_8(monkeypatch):
+    """Opt-in (skipped without the runs or this computer's OCR): the real OCR on kit2_pass2 261759, the reader stubbed to
+    read 8: the number is 8, by the marker, the reader asked at most once (only where OCR reads the 8 otherwise)."""
+    from camkit import ocr
+    S = scale_run_module()
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    asked = reader_says(monkeypatch, S, "8")
+    cam = real_picture_cam(AM_LEVEL_8)
+    assert S.value(cam) == "8" and S.read_by(cam) == "marker", S._why.get(cam.frame.path)
+    assert asked == ([cam.frame.path] if cam.frame.path in S._outvoted else [])
 
 
 # ---------------------------------------------------------------- 8. --stepped: a look that stepped a value
