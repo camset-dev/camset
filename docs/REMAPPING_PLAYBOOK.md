@@ -132,6 +132,10 @@ which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 
 - **Volatile records,** which change on every save or follow the camera (`camset.VOLATILE`; section 16, step 3).
 - **Records a file cannot set:** upload a download and download again; what does not match was never loaded.
+- **A user LUT,** which the kit can put on a camera and no settings file takes off: `kit/tools/lut_import.py` imports
+  one `.cube` file from `private/lut/` into a user place (Sony's ImportLUTFile; the a1 II's owner allowed it on
+  2026-11-19, ask yours), prints the records it changed and, after its restore, those that did not go back. The LUT
+  stays until the owner deletes it on the camera by hand (Manage User LUTs).
 - **First-use records,** 0 until their feature is used.
 - **Copies and linked records:** one choice often writes two to seven records; the report names each by its own row.
 - **Arrays** of per-slot values (Picture Profiles, Creative Looks, Fn and Custom Key slots, the memory tables), keyed
