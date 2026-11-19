@@ -91,7 +91,7 @@ def rig(monkeypatch):
         monkeypatch.setattr(S, "open_row", lambda c, cycle, model, path, panel=False: None)
         monkeypatch.setattr(S, "close_screen", close_screen)
         monkeypatch.setattr(S, "to_shooting", lambda link, hdmi, why: None)
-        monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None))
+        monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))
         log.link = SimpleNamespace(download=lambda name: log.downloads.append(name) or Path(f"{name}.DAT"))
         return log
     return setup
@@ -646,7 +646,7 @@ def drive(monkeypatch, tmp_path):
                             ("to_shooting", to_shooting), ("prover_session", session),
                             ("load_scan", lambda scan: (None, None)), ("Run", lambda name: SimpleNamespace(dir=folder)),
                             ("eyes_from_config", lambda r: None),
-                            ("time", SimpleNamespace(sleep=lambda s: None, time_ns=real_time.time_ns)),
+                            ("time", SimpleNamespace(sleep=lambda s: None, time_ns=real_time.time_ns, monotonic=lambda: 0.0)),
                             ("camset", SimpleNamespace(read=lambda p: dats[p], diff=lambda a, b: [
                                 SimpleNamespace(key=k, before=a[k], after=b[k]) for k in sorted(a) if a[k] != b[k]])),
                             ("changes_of", lambda ch: [{"key": c.key, "before": c.before, "after": c.after} for c in ch])):
@@ -1366,7 +1366,7 @@ def test_the_real_set_row_sets_a_panels_setup_row_and_says_no_screen_word(monkey
         return Path(f"{name}.DAT")
     monkeypatch.setattr(S, "close_screen", lambda c, link: closes.append(c.frame.path))
     monkeypatch.setattr(S, "to_shooting", lambda link, hdmi, why: None)
-    monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None))
+    monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))
     monkeypatch.setattr(S, "camset", SimpleNamespace(read=lambda p: dats[p], diff=lambda a, b: [
         SimpleNamespace(key=k, before=a[k], after=b[k]) for k in a if a[k] != b[k]]))
     monkeypatch.setattr(S, "definition_index", lambda: SET_INDEX)
@@ -1449,7 +1449,7 @@ def test_a_submenu_rows_set_is_not_judged_as_a_panels(monkeypatch, capsys):
     monkeypatch.setattr(afreg_run, "set_setup_row", afreg_run.set_setup_row)
     monkeypatch.setattr(S, "close_screen", lambda c, link: None)
     monkeypatch.setattr(S, "to_shooting", lambda link, hdmi, why: None)
-    monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None))
+    monkeypatch.setattr(S, "time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))
     monkeypatch.setattr(S, "definition_index", lambda: {})
     monkeypatch.setattr(S, "camset", SimpleNamespace(read=lambda q: {}, diff=lambda a, b: []))
     sets = [(["Made-up Settings", "Second Row"], "Option A")]

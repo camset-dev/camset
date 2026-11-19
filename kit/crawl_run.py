@@ -821,8 +821,8 @@ def main():
                 sys.exit(f"{why}: nothing was sent to the camera")
             hdmi.attach(link)
             if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                link.press("menu", cleanup=True)           # a plain menu page: close it ourselves
-                time.sleep(1.0)
+                # a plain menu page: close it ourselves; wait_for's grace covers its closing, so no second is slept
+                link.press("menu", cleanup=True)
             wait_for(hdmi, ("shooting",), "the first settings download", link=link)
             before = link.download("before")
             downloaded = time.monotonic()

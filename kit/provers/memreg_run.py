@@ -342,14 +342,15 @@ def register_slot(cam, cycle, model, slot: str, say, allow=(MEMORY_ROW,)) -> dic
 
 
 def download(cam, link, hdmi, tag: str):
-    """Back to the shooting screen, a download, and the menu lock's wait after it."""
-    from prove_run import LOCK_S, to_shooting
+    """Back to the shooting screen, a download (camlink waits up to 5 s for the camera to allow it), and the menu's lock
+    after it (camkit.session.wait_lock)."""
+    from prove_run import to_shooting
+    from proving.base import wait_lock
     from runner import close_screen
     close_screen(cam, link)
     to_shooting(link, hdmi, f"the download {tag}")
-    time.sleep(1)
     got = link.download(tag)
-    time.sleep(LOCK_S)
+    wait_lock(time.monotonic(), hdmi, clock=time)
     return got
 
 

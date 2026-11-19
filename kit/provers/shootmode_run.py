@@ -193,7 +193,7 @@ def main():
                             session.MODE = scan_mode(FAMILIES[f])
                         notice = got.notice
                         to_shooting(link, hdmi, "the download after OK")
-                        time.sleep(1)
+                        time.sleep(1)   # the camera settling into the shooting mode just chosen (not the lock)
                         dat = link.download(f"shootmode-{f}-{m}")
                         ch = camset.diff(base, camset.read(dat))
                         rec = {"path": ["Shoot Mode"], "kind": "axis", "option": FAMILIES[f], "index": m,

@@ -1628,8 +1628,8 @@ class StartLink:
 
     def __enter__(self):
         self.events.append("link")
-        return SimpleNamespace(call=lambda *a, **k: {"ok": True, "props": []}, press=lambda *a, **k: None,
-                               download=self.download)
+        return SimpleNamespace(call=lambda *a, **k: {"ok": True, "props": []},
+                               press=lambda key, **k: self.events.append(f"press {key}"), download=self.download)
 
     def __exit__(self, *exc):
         return False
@@ -1639,9 +1639,11 @@ class StartLink:
         raise self.Downloaded()
 
 
-def start_run(which, tmp_path, monkeypatch, readers):
-    """drive.main() or crawl_run.main() as far as its start download, its seams faked, `readers(events, made)` standing
-    in for the readers' check: (the events in order, what the run raised)."""
+def start_run(which, tmp_path, monkeypatch, readers, events=None, link=None, clock=None, kinds=None):
+    """drive.main() or crawl_run.main() as far as its start download (with `link`, as far as that link lets it), its
+    seams faked, `readers(events, made)` standing in for the readers' check, the screen reading as `kinds()` (else the
+    shooting screen), the clock standing at clock[0]: (the events in order, what the run raised). A sleep is an event
+    ("sleep", s), so are a press ("press menu") and the wait for the shooting screen ("wait shooting")."""
     import threading
 
     import crawl_run
@@ -1649,14 +1651,16 @@ def start_run(which, tmp_path, monkeypatch, readers):
     from camkit import coverage
     from camkit.runs import Run
     mod = drive if which == "drive" else crawl_run
-    events, made = [], threading.Event()
-    link = StartLink(events)
+    events = [] if events is None else events
+    made = threading.Event()
+    link = link or StartLink(events)
     for name, value in (("load_scan", lambda *a, **k: ([], {})), ("Run", lambda name, **k: Run(name, root=tmp_path)),
                         ("check_readers", lambda: readers(events, made)),
                         ("eyes_from_config", lambda run: StartEyes(events, made)), ("Link", link),
-                        ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
-                        ("wait_for", lambda *a, **k: None),
-                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))):
+                        ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind=kinds() if kinds else "shooting"))),
+                        ("wait_for", lambda *a, **k: events.append("wait shooting")),
+                        ("time", SimpleNamespace(sleep=lambda s: events.append(("sleep", s)),
+                                                 monotonic=lambda: clock[0] if clock else 0.0))):
         monkeypatch.setattr(mod, name, value)
     monkeypatch.setattr(coverage, "settled", lambda *a, **k: events.append("gate") or coverage.Verdict(False, "x"))
     monkeypatch.setattr(coverage, "crawl_gate", lambda *a, **k: events.append("gate"))
@@ -1754,3 +1758,133 @@ def test_a_page_scans_screens_are_read_once_and_kept_until_a_frame_or_the_kit_ch
         p.write_bytes(b"not a cache")
     runner.load_scan(scan)
     assert len(reads) == 4 * len(cycle)
+
+
+# ---------------------------------------------------------------- J: the lock after a download, every runner alike
+
+
+# a runner left as it was: kit/tools/take_picture.py, whose waits come before the owner's one release (the lock was
+# measured for MENU, not for the shutter, and a release not answered cleanly ends in RESTORE_BY_HAND)
+LOCK_LEFT = ("take_picture.py",)
+
+
+def test_no_runner_sleeps_a_fixed_lock_after_a_download_nor_a_bare_second_before_one():
+    """Every wait for the menu's lock after a settings download is camkit.session.wait_lock (watched with HDMI eyes in a
+    mode measured, LOCK_S its deadline): no runner sleeps LOCK_S, nor loops on it, any more; and no runner sleeps a
+    second just before a download, which camlink's own wait covers (it asks the camera's SaveOperationEnableStatus 50
+    times 100 ms apart, commit 9dca367), unless a comment on that line says what else it waits for (a mode change)."""
+    import re
+    files = [p for d in ("", "provers", "proving", "tools") for p in sorted((KIT / d).glob("*.py"))
+             if p.name not in LOCK_LEFT]
+    assert len(files) > 60
+    for p in files:
+        text = p.read_text(encoding="utf-8")
+        assert "time.sleep(LOCK_S)" not in text and "< LOCK_S:" not in text, p.name
+        lines = text.splitlines()
+        for i, line in enumerate(lines):
+            if "link.download(" in line and i and re.fullmatch(r"\s*time\.sleep\((1|1\.0)\)", lines[i - 1]):
+                pytest.fail(f"{p.name}:{i}: a bare second slept before a download")
+
+
+def test_drive_waits_the_lock_after_its_start_download_and_no_second_after_closing_a_menu(tmp_path, monkeypatch):
+    """drive.py's start: a menu page closed with one MENU, then the shooting screen waited for (camkit.session.wait_for,
+    whose grace covers the menu closing: no second slept), the start download, and the menu's lock after it by
+    camkit.session.wait_lock from the download's reply, not 5 s."""
+    import drive
+    events = []
+
+    class Done(Exception):
+        pass
+    import time
+    kinds = iter(["menu"])
+    downloaded = []
+    monkeypatch.setattr(drive, "wait_lock", lambda since, eyes, clock=None, **k: events.append(
+        ("lock", downloaded[0] <= since <= clock.monotonic())) or (_ for _ in ()).throw(Done()))
+    link = StartLink(events)
+    link.download = lambda tag: events.append("download") or downloaded.append(time.monotonic()) or tmp_path / "b.DAT"
+    _, raised = start_run("drive", tmp_path, monkeypatch, lambda events, made: None, events=events, link=link,
+                          kinds=lambda: next(kinds, "shooting"))
+    assert isinstance(raised, Done), raised
+    order = [e for e in events if e != "eyes closed"]
+    at = order.index("press menu")
+    assert order[at:at + 4] == ["press menu", "wait shooting", "download", ("lock", True)]
+    assert not [e for e in events if isinstance(e, tuple) and e[0] == "sleep"]
+    slept = []
+    monkeypatch.setattr(drive, "time", SimpleNamespace(sleep=slept.append))       # a test's stand-in, as the guards'
+    drive.LOCK_CLOCK.sleep(4.5)
+    assert slept == [4.5], "the lock's clock sleeps through drive's own time.sleep"
+
+
+def test_memregs_download_waits_the_measured_lock(monkeypatch, tmp_path):
+    """memreg_run.download: back to the shooting screen, the download at once, then the lock by wait_lock with the
+    run's eyes (HDMI in Stills: over at 1.0 s, the notice gone)."""
+    import memreg_run
+    import prove_run
+    import runner
+    from camkit import session
+    session_, now, clock = lock_clock(monkeypatch)
+    monkeypatch.setattr(session, "MODE", "Stills")
+    monkeypatch.setattr(memreg_run, "time", clock)
+    monkeypatch.setattr(prove_run, "to_shooting", lambda *a, **k: None)
+    monkeypatch.setattr(runner, "close_screen", lambda cam, link: None)
+    eyes = LockEyes(now, 1.0)
+    got = memreg_run.download(None, SimpleNamespace(download=lambda tag: tmp_path / f"{tag}.DAT"), eyes, "slot1")
+    assert got.name == "slot1.DAT" and now[0] == pytest.approx(1.0, abs=0.06) and eyes.grabs >= 1
+
+
+def test_mymenus_way_back_to_the_picker_waits_the_lock_by_the_one_rule(monkeypatch):
+    """mymenu_run.back_to_picker: the lock after the add's download is camkit.session.wait_lock from the download's
+    reply with the camera's eyes, no loop of its own on LOCK_S."""
+    import mymenu_run
+
+    class Done(Exception):
+        pass
+    got = []
+    monkeypatch.setattr(mymenu_run, "wait_lock", lambda since, eyes, clock=None, **k: got.append((since, eyes))
+                        or (_ for _ in ()).throw(Done()))
+    eyes = SimpleNamespace(name="hdmi")
+    with pytest.raises(Done):
+        mymenu_run.back_to_picker(SimpleNamespace(hdmi=eyes), 12.5)
+    assert got == [(12.5, eyes)]
+
+
+@pytest.mark.parametrize("name,mode,ends", [("hdmi", "Stills", 1.0), ("osd", "Stills", 4.6), ("hdmi", "S&Q", 4.6)])
+def test_afregs_wait_before_a_hold_ends_once_the_notice_has_gone(monkeypatch, name, mode, ends):
+    """afreg_run.ready_to_hold (framepos_run's too): the lock by camkit.session.lock_over on what its looks see, so
+    with HDMI eyes in a mode measured it ends at the first look on the shooting screen after the notice (1.0 s), with
+    OSD eyes or in S&Q at the first look past LOCK_S as before; and never while the words of the download's message
+    ("Saving to the connected device...") can still be read on the shooting screen."""
+    import afreg_run
+    from camkit import live, session
+    now = [0.0]
+    monkeypatch.setattr(afreg_run.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(afreg_run.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(session, "MODE", mode)
+    eyes = LockEyes(now, 1.0, name=name)
+    saying = {"until": 0.0}
+    monkeypatch.setattr(live, "text_of", lambda cam: "Saving to the connected device..." if now[0] < saying["until"]
+                        else "ISO AUTO")
+
+    def glance(tag):
+        k = eyes.kind()
+        return SimpleNamespace(kind=k), SimpleNamespace(kind=k)
+    cam = SimpleNamespace(hdmi=eyes, glance=glance, refresh=lambda tag, frame=None: SimpleNamespace(
+        kind=frame.kind if frame is not None else eyes.kind()), frame=SimpleNamespace(path=SimpleNamespace(name="f")))
+    afreg_run.ready_to_hold(cam, 0.0)
+    assert now[0] == pytest.approx(ends, abs=0.11)
+    if name == "hdmi" and mode == "Stills":
+        now[0], saying["until"] = 0.0, 1.5             # the message's words still read on the shooting screen
+        afreg_run.ready_to_hold(cam, 0.0)
+        assert now[0] == pytest.approx(1.5, abs=0.11)
+
+
+def test_the_waits_between_sessions_and_fills_are_the_lock_rule_or_gone():
+    """customshoot_run and customshoot_values put the hold's working copy back in a session of their own: its first
+    MENU waits the menu's lock from the end of the session before (wait_lock, measured from when it closed), not 4 s then
+    5 s; mymenu_run's next fill starts at once (its session's start waits for the shooting screen and its own lock: the
+    10 s between fills waited for nothing the kit could name)."""
+    for name in ("customshoot_run.py", "customshoot_values.py"):
+        text = (KIT / "provers" / name).read_text(encoding="utf-8")
+        assert "time.sleep(4)" not in text and "time.sleep(5)" not in text, name
+        assert "wait_lock(ended, hdmi, clock=time)" in text, name
+    assert "time.sleep(10)" not in (KIT / "provers" / "mymenu_run.py").read_text(encoding="utf-8")

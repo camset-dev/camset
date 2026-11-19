@@ -45,6 +45,7 @@ from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_in_argument, close_for_res
                     load_scan, proofs_file, restore_checked, scan_arg)
 from prove_run import (Failed, after_download, bar_text, check_box_label, check_state,  # noqa: E402
                        finish_attempt, focused_button, is_box, move_to, option_key, to_shooting, vlm_option)
+from proving.base import wait_lock  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 
 ROW = "Playback Filter Condition"
@@ -403,7 +404,7 @@ def main():
                     hdmi.attach(link)
                     to_shooting(link, hdmi, "the start download")
                     start = download(link, "before", say)
-                    time.sleep(5)
+                    wait_lock(time.monotonic(), hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
                     cam = LiveCamera(link, hdmi, run)
                     try:
                         open_menu(cam)

@@ -38,7 +38,8 @@ from camkit.live import LiveCamera  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines, open_hold, row_box, to_item, to_register  # noqa: E402
-from prove_run import LOCK_S, Failed, to_shooting, vlm_option  # noqa: E402
+from prove_run import Failed, to_shooting, vlm_option  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from proving.screens import later  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, load_scan, proofs_file, prover_session, restoring)
@@ -326,9 +327,8 @@ def register(cam, link, hdmi, name: str):
     if cam.read().kind == "notice" and "registered" not in said.lower():
         raise Failed(f"after Register: {said[:90]!r} ({cam.frame.path.name})")
     to_shooting(link, hdmi, "the download after Register")
-    time.sleep(1)
-    dat = link.download(name)
-    time.sleep(LOCK_S)
+    dat = link.download(name)                           # camlink waits up to 5 s for the camera to allow it
+    wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return chosen, dat, said.strip()
 
 
@@ -459,10 +459,10 @@ def main():
                 if j is None:
                     raise Failed(f"--prepare: {prepare[1]!r} is not in {prepare[0]}'s list {opts}")
                 to_shooting(link, hdmi, "the preparing item's base")
-                time.sleep(1)
-                base_path = link.download(f"hold{h}-{prepare[0]}-base")
+                base_path = link.download(f"hold{h}-{prepare[0]}-base")     # camlink waits for the camera to allow it
+                done = time.monotonic()
                 base = camset.read(base_path)
-                time.sleep(LOCK_S)
+                wait_lock(done, hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
                 prove_item(cam, link, hdmi, cycle, model, h, k, opts, s0, wraps, base, base_path, out, [j],
                            put_back=False)
                 print(f"prepared: {prepare[0]} = {opts[j]!r} (left in place)", flush=True)
@@ -488,10 +488,10 @@ def main():
                     # the item's own base: an item stopped part-way leaves its value, which the
                     # next item's diffs would otherwise carry (2026-10-30)
                     to_shooting(link, hdmi, "the item's base")
-                    time.sleep(1)
-                    base_path = link.download(f"hold{h}-{name}-base")
+                    base_path = link.download(f"hold{h}-{name}-base")       # camlink waits for the camera to allow it
+                    done = time.monotonic()
                     base = camset.read(base_path)
-                    time.sleep(LOCK_S)
+                    wait_lock(done, hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
                     blank = [j for j, o in enumerate(opts) if unread(o)]
                     if blank:
                         print(f"{name}: {len(blank)} rows no reader could read, left unproved (places {blank}); "
@@ -512,21 +512,22 @@ def main():
                 except Failed as e:
                     print(f"{name} stopped: {e}", flush=True)
                     close_screen(cam, link)
-        time.sleep(4)
+        ended = time.monotonic()        # the session's last download (its end's, or its restore check's) came before
         # the hold's working copy put back, which the start file does not cover: a STOP at cancel_hold's first press
         # (not a cleanup press) or an error leaves it where it is, which exits EXIT_UNRESTORED (runner.restoring)
         with restoring("putting the hold's working copy back"), Link(run) as link:
             hdmi.attach(link)
             to_shooting(link, hdmi, "before putting the working copy back")
-            time.sleep(5)
+            # the menu's lock after that download, from when the session ended (camkit.session.wait_lock; the link's
+            # open alone mostly outlasts it): it stood for 4 s before the link and 5 s after
+            wait_lock(ended, hdmi, clock=time)
             cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))     # the owner's word, as above
             try:
                 cancel_hold(cam, link, cycle, model, LAST_OPENED)
             except Exception:
                 close_for_restore(cam, link, start)        # cleanup presses before the link closes over an open dialog
                 raise
-            to_shooting(link, hdmi, "the last download")
-            time.sleep(1)
+            to_shooting(link, hdmi, "the last download")      # camlink waits for the camera to allow the download
             last = camset.diff(camset.read(start), camset.read(link.download("end")))
             print(f"at the end: {len(last)} records differ from the start file "
                   f"{[c.key for c in last][:8]}", flush=True)

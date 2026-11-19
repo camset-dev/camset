@@ -30,6 +30,7 @@ from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, carousel_text, to_shooting  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, scan_position, write_json)
@@ -255,9 +256,8 @@ def main():
             raise Failed(f"{a.option}: the camera refused it as its fields stood (its notice closed with MENU): no "
                          "base to prove from, nothing proved")
         to_shooting(link, hdmi, "the base download")
-        time.sleep(1)
-        base = link.download(f"bracket-{a.option.split()[0].lower()}-base")
-        time.sleep(LOCK_S)
+        base = link.download(f"bracket-{a.option.split()[0].lower()}-base")    # camlink waits for the camera to allow it
+        wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
         bc = camset.read(base)
         print(f"{a.option}: holds {label(*held) if None not in held else held}; {len(todo)} to prove", flush=True)
         for st, c in todo:
@@ -276,9 +276,8 @@ def main():
             chosen = cam.frame.path.name
             got = commit(cam, a.option, label(st, c))
             to_shooting(link, hdmi, "the download after OK")
-            time.sleep(1)
-            dat = link.download(f"bracket-{a.option.split()[0].lower()}-{i}")
-            time.sleep(LOCK_S)
+            dat = link.download(f"bracket-{a.option.split()[0].lower()}-{i}")  # camlink waits for the camera to allow it
+            wait_lock(time.monotonic(), hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
             ch = camset.diff(bc, camset.read(dat))
             rec = {"path": ["Drive Mode", a.option], "kind": "list", "index": i, "label": label(st, c),
                    "fields": f"{f['step']} | {f['images']}", "via": "the option's step and images fields",

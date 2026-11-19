@@ -137,8 +137,7 @@ def visit(cam, link, hdmi, cycle, model, path, labels, cells: list) -> dict:
     # notice closed with MENU, never OK, and only the refusal is no applied visit (before 2026-11-19 any notice was)
     got = after_ok(cam, " > ".join(path), refusal=REFUSED)
     row_frame = cam.frame.path.name
-    to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
+    to_shooting(link, hdmi, "the download after OK")    # camlink waits up to 5 s for the camera to allow the download
     dat = link.download(f"{path[-1]}-cells{'-'.join(map(str, sorted(cells)))}")
     wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {"boxes": flipped, "chosen_frame": chosen, "row_frame": row_frame, "vlm": seen_vlm,

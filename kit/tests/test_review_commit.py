@@ -566,7 +566,7 @@ def test_scale_records_a_refused_number_as_refused_and_goes_on(monkeypatch):
                         ("open_row", lambda c, cycle, model, path, panel=False: c.open()),
                         ("option_answer", lambda c: None), ("close_screen", lambda c, link: None),
                         ("to_shooting", lambda link, hdmi, why: None), ("_said", {}), ("_by_reader", set()),
-                        ("time", SimpleNamespace(sleep=lambda s: None, time_ns=clock.time_ns))):
+                        ("time", SimpleNamespace(sleep=lambda s: None, time_ns=clock.time_ns, monotonic=lambda: 0.0))):
         monkeypatch.setattr(S, name, value)
     monkeypatch.setattr(sys, "argv", ["scale_run.py", "--row", "Made-up Scale", "--scan", "made-up"])
     S.main()
@@ -1074,7 +1074,7 @@ def test_the_scale_prover_hands_a_panel_its_consent_with_the_ok_and_a_plain_scal
         for name, value in (("open_row", lambda c, cycle, model, path, panel=False: c.open()),
                             ("option_answer", lambda c: None), ("close_screen", lambda c, link: None),
                             ("to_shooting", lambda link, hdmi, why: None), ("_said", {}), ("_by_reader", set()),
-                            ("time", SimpleNamespace(sleep=lambda s: None))):
+                            ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0))):
             monkeypatch.setattr(S, name, value)
         S.choose(cam, downloads(), None, None, None, ["Monitor Brightness"], ["0", "1", "2", "3", "4"], 2, 3, panel)
         assert [type(h) for h in cam.handed] == [want]

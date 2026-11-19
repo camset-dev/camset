@@ -1348,12 +1348,12 @@ def register_slot(cam, cycle, model, allow) -> dict:
 
 
 def download(cam, link, hdmi, tag: str) -> tuple:
-    """The menu closed, the shooting screen, a download; (it, when it came)."""
+    """The menu closed, the shooting screen, a download (camlink waits up to 5 s for the camera to allow it); (it, when
+    it came: the caller waits the menu's lock from there, afreg_run.ready_to_hold)."""
     from prove_run import to_shooting
     from runner import close_screen
     close_screen(cam, link)
     to_shooting(link, hdmi, f"the download {tag}")
-    time.sleep(1)
     return link.download(tag), time.monotonic()
 
 
@@ -1421,7 +1421,8 @@ def prepare(cam, link, hdmi, run, cycle, model, focus: bool, drive: bool, start:
     restore puts the setup back)."""
     from camkit import camset
     from mode_switch import open_menu
-    from prove_run import LOCK_S, Failed, held_value, to_shooting
+    from prove_run import Failed, held_value, to_shooting
+    from proving.base import wait_lock
     from runner import close_screen
     want = amt_code(index or {}, amt) if amt else None
     if amt and want is None:
@@ -1443,11 +1444,11 @@ def prepare(cam, link, hdmi, run, cycle, model, focus: bool, drive: bool, start:
             path, option = rows[what]
             afreg_run.set_setup_row(cam, cycle, model, path, option)
         close_screen(cam, link)
-        time.sleep(1.0)
+        time.sleep(1.0)     # a pause on the shooting screen before the next step's MENU (no download: not the lock)
         steps.append(afreg_run.step_name(kind, what))
     to_shooting(link, hdmi, "the download after the setup")
-    time.sleep(1)
-    ref = link.download("after-setup")
+    ref = link.download("after-setup")                  # camlink waits up to 5 s for the camera to allow it
+    done = time.monotonic()
     after = camset.read(ref)
     changed = [c.key for c in camset.diff(camset.read(start), after)]
     took = held_value(after, want[0]) == want[1] if want else None
@@ -1464,7 +1465,7 @@ def prepare(cam, link, hdmi, run, cycle, model, focus: bool, drive: bool, start:
     if circ and not stopped:
         raise Failed(f"{CIRC_ROW} did not take {CIRC_OFF} through the menu: a frame could wrap round at an edge; the "
                      "setup is undone by the restore")
-    time.sleep(LOCK_S)
+    wait_lock(done, hdmi, clock=time)       # the menu's lock after the download (camkit.session.wait_lock)
     return steps
 
 

@@ -40,8 +40,9 @@ from crawl_run import go_to  # noqa: E402
 import numpy as np  # noqa: E402
 from PIL import Image  # noqa: E402
 from pass3_run import labels_of  # noqa: E402
-from prove_run import (AXES, LOCK_S, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
+from prove_run import (AXES, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
                        vlm_option)
+from proving.base import wait_lock  # noqa: E402
 from proving.commit import REFUSED_WORDS, after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
@@ -161,9 +162,10 @@ def choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, i, v=None) 
     # information screen taken here (a portrait screen reads so): it fails the row
     got = after_ok(cam, row, label=opt, info=False, read=lambda c: notice_text(c, k, shots))
     to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
-    dat = link.download(f"{row}-{'axis-' if v is not None else ''}{v if v is not None else i}")
-    time.sleep(LOCK_S)
+    dat = link.download(f"{row}-{'axis-' if v is not None else ''}{v if v is not None else i}")    # camlink waits for it
+    # the menu's lock after it (camkit.session.wait_lock); held vertically, frames that read as no shooting screen keep
+    # it at LOCK_S, as before
+    wait_lock(time.monotonic(), hdmi, clock=time)
     return {"shown": opt, "vlm": seen_vlm, "chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "outcome": got}
 
 
@@ -195,9 +197,8 @@ def af_point(cam, link, hdmi, run, cycle, model, row, k, labels, axes, grip):
         frames.append(cam.frame.path.name)
         if cam.read().kind != "shooting":
             raise Failed(f"{key} left the shooting screen ({cam.read().kind})")
-    time.sleep(1)
-    moved = link.download("af-point-moved")
-    time.sleep(LOCK_S)
+    moved = link.download("af-point-moved")         # camlink waits up to 5 s for the camera to allow it
+    wait_lock(time.monotonic(), hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
     ch = camset.diff(camset.read(base), camset.read(moved))
     with open(run.dir / "afpoint.jsonl", "a", encoding="utf-8", newline="\n") as f:
         f.write(json.dumps({"grip": grip, "focus_area": labels[spot], "presses": presses, "frames": frames,
@@ -269,7 +270,7 @@ def main():
                 info = axes[o]
                 i = next(n for n, lab in enumerate(labels) if axis_of(lab, axes) == o)
                 base = link.download(f"{row}-{o}-base")
-                time.sleep(LOCK_S)
+                wait_lock(time.monotonic(), hdmi, clock=time)   # the menu's lock after it (camkit.session.wait_lock)
                 open_row(cam, cycle, model, row, k, run.dir / "upright")
                 step_to(cam, k, run.dir / "upright", labels, axes, "up", lambda w, i=i: w is not None and w[0] == i,
                         len(labels), f"{row}: {o!r}")

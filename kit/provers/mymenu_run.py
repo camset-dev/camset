@@ -42,6 +42,7 @@ from camkit.match import LOOKALIKES, clean as clean_option, norm  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, vlm_option  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_argument, allowed_or_exit,  # noqa: E402
                     in_mode, load_scan, menu_from_shooting, proofs_file, prover_session, read_json, scan_arg,
                     write_json, write_text)
@@ -306,10 +307,10 @@ def add_one(cam, link, item: dict, page: int, slot: int, prev: Path, records: li
 
 
 def back_to_picker(cam, done: float) -> dict:
-    """A download closes the menu ("Saving to the connected device...", then the shooting screen): after the lock,
-    MENU reopens the menu on the Add Item row and Enter reopens the picker on the item just added."""
-    while time.monotonic() - done < LOCK_S:
-        time.sleep(0.3)
+    """A download closes the menu ("Saving to the connected device...", then the shooting screen): after the lock
+    (camkit.session.wait_lock from the download's reply at `done`), MENU reopens the menu on the Add Item row and Enter
+    reopens the picker on the item just added."""
+    wait_lock(done, cam.hdmi, clock=time)
     end = time.monotonic() + 25
     while True:
         cam.refresh("after-download")
@@ -449,8 +450,10 @@ def main():
                 break
             if lap_only or items is None or k >= len(items) or (a.limit and added_total >= a.limit):
                 break
+            # the next fill at once: its session's start waits for the shooting screen and the menu's lock after its own
+            # download (runner.session_start), and the restore's check has just reconnected and downloaded (10 s stood
+            # here, waiting for nothing the kit could name)
             say(f"My Menu emptied by the start file; {len(items) - k} items to go")
-            time.sleep(10)
         say(f"finished: {added_total} items added and proved this run; {len(proved)} proved in all")
     finally:
         hdmi.close()

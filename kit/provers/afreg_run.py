@@ -802,11 +802,10 @@ def prepare(cam, link, hdmi, run, cycle, model, grip, focus: bool, drive: bool, 
             path, option = rows[what]
             set_setup_row(cam, cycle, model, path, option)
         close_screen(cam, link)
-        time.sleep(1.0)
+        time.sleep(1.0)     # a pause on the shooting screen before the next step's MENU (no download: not the lock)
         steps.append(step_name(kind, what))
     to_shooting(link, hdmi, "the download after the setup")
-    time.sleep(1)
-    ref = link.download("after-setup")
+    ref = link.download("after-setup")                  # camlink waits up to 5 s for the camera to allow it
     done = time.monotonic()
     changed = [c.key for c in camset.diff(camset.read(start), camset.read(ref))]
     jsonl.append(run.dir / "setup.jsonl", {"t": round(time.time(), 3), "steps": steps, "start": start.name,
@@ -832,21 +831,31 @@ def shooting_words(cam, run, grip: str | None) -> str:
 
 def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
     """After a download the camera says "Saving to the connected device..." and locks the menu a moment (proving.nav
-    .after_download waits so before a MENU): the same wait before the hold, then the shooting screen with no message.
-    Held vertically (grip, which kit/provers/framepos_run.py's --grip passes) the message is looked for on the frame
-    made upright too (shooting_words), and a portrait shooting screen whose upright reading holds no text cannot show it
+    .after_download waits so before a MENU): the same wait before the hold, by the one rule every wait after a download
+    goes by (camkit.session.lock_over on what the looks see: with HDMI eyes in a mode measured, over at the shooting
+    screen after the notice, the looks every 0.1 s from the download's reply at `done_at`; else once LOCK_S has passed,
+    the looks from 1 s every 0.4 s, as always), then the shooting screen with no message's words read on it. Held
+    vertically (grip, which kit/provers/framepos_run.py's --grip passes) the message is looked for on the frame made
+    upright too (shooting_words), and a portrait shooting screen whose upright reading holds no text cannot show it
     gone: it is waited on, and after 25 s the run stops saying so."""
     from camkit.live import text_of
-    from prove_run import LOCK_S, Failed
-    time.sleep(1.0)
+    from prove_run import Failed
+    from proving.base import LockSeen, lock_log, lock_measured, lock_over
+    eyes = getattr(cam, "hdmi", None)
+    measured = lock_measured(eyes)
+    time.sleep(0.0 if measured else 1.0)
+    seen = LockSeen()
     while True:
         s = cam.refresh("before-hold")
         waited = time.monotonic() - done_at
+        seen.see(s.kind)
         unread = False
-        if waited > LOCK_S and s.kind == "shooting":
+        why = lock_over(waited, seen, eyes) if s.kind == "shooting" else ""
+        if why:
             up = shooting_words(cam, run, grip) if grip else ""
             unread = bool(grip) and not up.strip()
             if not unread and not re.search(r"saving", f"{text_of(cam)} {up}", re.I):
+                lock_log(eyes, why, waited)
                 return
         if waited > 25:
             if unread:
@@ -855,7 +864,7 @@ def ready_to_hold(cam, done_at: float, run=None, grip: str | None = None):
                              f"device...\") has gone cannot be judged on it, so no press goes out; is the camera held "
                              f"grip {grip}?")
             raise Failed(f"before the hold the camera stayed on a {s.kind} screen ({cam.frame.path.name})")
-        time.sleep(0.4)
+        time.sleep(0.1 if measured else 0.4)
 
 
 def hold_fn(cam, run, grip: str | None, allowed: bool = False) -> dict:
@@ -895,18 +904,16 @@ def register(cam, link, hdmi, run, cycle, model, labels, axes, t: dict, r: tuple
     from runner import changes_of
     turned = turned_of(grip) if turned == AS_GRIP else turned
     got = choose_area(cam, run, cycle, model, labels, axes, r, turned)
-    to_shooting(link, hdmi, "the download before the hold")
-    time.sleep(1)
+    to_shooting(link, hdmi, "the download before the hold")    # camlink waits for the camera to allow the download
     base = link.download(f"before-{slug(t['label'])}")
     based = time.monotonic()
     if held_value(camset.read(base), t["own_key"]) == t["code"]:
         wait_lock(based, hdmi, clock=time)      # the menu lock after a download, before the next area's MENU
         raise PutOff(t["label"])
-    ready_to_hold(cam, time.monotonic())
+    ready_to_hold(cam, based)       # the lock after the download from its reply, as every wait after one is
     hold = hold_fn(cam, run, turned, allowed)
-    time.sleep(MESSAGE_S)
-    to_shooting(link, hdmi, "the download after the hold")
-    time.sleep(1)
+    time.sleep(MESSAGE_S)           # the hold's own message ("Registered the focus area.") going: not the lock
+    to_shooting(link, hdmi, "the download after the hold")     # camlink waits for the camera to allow the download
     dat = link.download(f"after-{slug(t['label'])}")
     done = time.monotonic()
     after_cs = camset.read(dat)

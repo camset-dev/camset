@@ -186,6 +186,8 @@ import re
 import sys
 import time
 from pathlib import Path
+from time import monotonic
+from types import SimpleNamespace
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -198,7 +200,7 @@ from camkit.live import (WITHHELD_ROW, LiveCamera, black, body_of, info_ok_hint,
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
-from camkit.session import wait_for  # noqa: E402
+from camkit.session import wait_for, wait_lock  # noqa: E402
 from crawl_run import find_position, go_to, group_shown, tab_shown  # noqa: E402
 from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
@@ -209,6 +211,11 @@ from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, E
                     menu_from_shooting,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
                     restore_checked, restoring, row_readings, row_values, screen_named, values_withheld, wait_shooting)
+
+
+# camkit.session.wait_lock's clock: the monotonic clock the lock is measured on, and this module's time.sleep (which a
+# test's stand-in for time makes sleep nothing)
+LOCK_CLOCK = SimpleNamespace(monotonic=monotonic, sleep=lambda s: time.sleep(s))
 
 
 class NotReached(RuntimeError):
@@ -1655,11 +1662,10 @@ def main():
             ledger.say()            # the ledger's word, built while the link opened
             budget.report(run)      # and what waiting for it took (camkit.budget)
             if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                link.press("menu", cleanup=True)
-                time.sleep(1.0)
+                link.press("menu", cleanup=True)        # wait_for's grace covers the menu closing: no second slept
             wait_for(hdmi, ("shooting",), "the settings download", link=link)
             before = link.download("before")
-            time.sleep(5)
+            wait_lock(monotonic(), hdmi, clock=LOCK_CLOCK)  # the menu's lock after it (camkit.session.wait_lock)
             cam = LiveCamera(link, hdmi, run, may_open=a.allow, network=cam_network, screens=bool(address),
                              options=options, values=values, readings=readings, labels=known, look=look,
                              **({"owner": owner_cam} if owner_cam else {}))

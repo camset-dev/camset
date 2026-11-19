@@ -85,8 +85,8 @@ from camkit.vlm import PROMPTS  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 # a scale's number cleaned and keyed as the report counts a scale line's readers by them (pass2_report.name_of)
 from pass2_report import scale_clean as clean, scale_key as key  # noqa: E402
-from prove_run import LOCK_S, Failed, enter_any, held_value, option_key, to_shooting  # noqa: E402
-from proving.base import finish_attempt  # noqa: E402
+from prove_run import Failed, enter_any, held_value, option_key, to_shooting  # noqa: E402
+from proving.base import finish_attempt, wait_lock  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
 from proving.screens import ask_second, option_answer  # noqa: E402
 from runner import (add_allow_argument, add_scan_argument, allowed_or_exit, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
@@ -584,9 +584,8 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     # reads as no known kind, so an information screen is not taken: it fails the row
     got = after_ok(cam, path[-1], label=vals[target], info=False)
     to_shooting(link, hdmi, "the download after OK")
-    time.sleep(1)
-    dat = link.download(f"{path[-1]}-{target}")
-    time.sleep(LOCK_S)
+    dat = link.download(f"{path[-1]}-{target}")         # camlink waits up to 5 s for the camera to allow it
+    wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {"chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "vlm": seen_vlm, "read_by": by,
             "ocr_outvoted": outvoted, "outcome": got}
 
@@ -711,10 +710,10 @@ def setup(cam, link, hdmi, cycle, model, start, sets, panels=frozenset()) -> Pat
             close_screen(cam, link)
             raise Failed(f"{' > '.join(path)}: after OK the panel's setup row does not read {option} ({frame})")
         close_screen(cam, link)
-        time.sleep(1.0)
+        time.sleep(1.0)     # a pause on the shooting screen before the next row's MENU (no download: not the lock)
     to_shooting(link, hdmi, "the download after the settings")
-    time.sleep(1)
-    base = link.download("after-set")
+    base = link.download("after-set")                   # camlink waits up to 5 s for the camera to allow it
+    done = time.monotonic()
     after, index = camset.read(base), definition_index()
     for path, option in sets:
         got = setting_code(index, path, option)
@@ -726,7 +725,7 @@ def setup(cam, link, hdmi, cycle, model, start, sets, panels=frozenset()) -> Pat
     n = len(camset.diff(camset.read(start), after))
     print(f"set through the menu: {state_of(sets)}; {n} records now differ from the start file (the restore puts them "
           "back)", flush=True)
-    time.sleep(LOCK_S)
+    wait_lock(done, hdmi, clock=time)       # the menu's lock after the download (camkit.session.wait_lock)
     return base
 
 

@@ -581,5 +581,5 @@ def test_the_grids_wait_after_its_download(world, monkeypatch, tmp_path):
     link = world.link_class()(SimpleNamespace(dir=tmp_path))
     got = grid_run.visit(Cam(world, {}), link, Eyes(world), [], {}, ["Focus Area Limit"], ["A", "B"], [])
     assert got["applied"] is True
-    assert world.said == ["link", "open grid", "cam enter", "to_shooting: the download after OK", "sleep 1",
+    assert world.said == ["link", "open grid", "cam enter", "to_shooting: the download after OK",
                           "download Focus Area Limit-cells", "lock wait (4.5 s at most)"]
