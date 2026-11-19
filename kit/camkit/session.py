@@ -43,17 +43,21 @@ WAIT_LIMIT = 900        # s a run waits for a screen before it gives up: a run n
 # of 50, 0.13 to 0.30 s after the press. Then kit2_speed_lock/lock_seen.jsonl (48 trials, the same setup): MENU sent
 # 0.0 to 0.3 s after the first frame that read as the shooting screen after the notice opened the menu 12 of 12 times
 # at each step, 0.18 to 0.23 s after the press, the shooting screen back 1.92 to 2.06 s after the reply (median 1.97):
-# the camera takes MENU the moment the notice is gone. So with HDMI eyes in a mode measured (LOCK_MEASURED) the wait
+# the camera takes MENU the moment the notice is gone. Movie mode behaves alike (runs/ILCE-1M2_fw4.00/
+# kit2_speed_lock_mv, 2026-11-18: HDMI eyes at 1080p, Movie mode P, the same two measurements): lock_seen.jsonl (16
+# trials), MENU sent 0.00 to 0.01 s after the shooting screen came back, 1.79 to 1.84 s after the reply, opened the menu
+# 8 of 8 times, 0.18 to 0.46 s after the press, and sent 0.31 s after it 8 of 8; lock.jsonl (18 trials), MENU 1.6, 2.0
+# and 2.4 s after the reply opened it 6 of 6 times each. So with HDMI eyes in a mode measured (LOCK_MEASURED) the wait
 # ends as soon as a frame reads as the shooting screen (or a menu page) after one read as the notice, with no floor;
 # where no notice was seen (the looks began after it had gone, or missed it), once the shooting screen has been seen
 # and LOCK_HDMI_S has passed (2.0 measured good, plus 0.4). A save that takes longer keeps its notice up, and the wait
-# goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. Movie and S&Q are not measured, nor the
-# OSD picture, which lags: there, and where the mode is not known, LOCK_S as before. A MENU that is not taken all the
-# same is caught by the callers' own guarded retry.
+# goes on while the notice is on show, past LOCK_S, up to LOCK_NOTICE_LIMIT. S&Q is not measured, nor the OSD picture,
+# which lags: there, and where the mode is not known, LOCK_S as before. A MENU that is not taken all the same is caught
+# by the callers' own guarded retry.
 LOCK_S = 4.5
 LOCK_HDMI_S = 2.4
 LOCK_NOTICE_LIMIT = 25.0    # s a wait goes on while the notice stays on show (proving.nav.after_download's limit)
-LOCK_MEASURED = frozenset({"Stills"})
+LOCK_MEASURED = frozenset({"Stills", "Movie"})             # runner.SCAN_MODES' spelling, as session.MODE holds it
 LOCK_READY = ("shooting", "menu", "submenu", "tiles")       # the screens whose sight says the notice has gone
 LOCK_NOTICE = "notice"                                      # the saving notice's kind (camkit.screen)
 # the shooting mode the run's page scan was made in (runner.load_scan sets it; kit/page_scan.py its --mode): the mode

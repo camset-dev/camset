@@ -632,10 +632,10 @@ def test_with_hdmi_eyes_in_stills_the_lock_ends_on_the_shooting_screen_after_the
     assert eyes.logged == [("lock_wait", {"ended": why, "seconds": pytest.approx(ends, abs=0.06)})]
 
 
-@pytest.mark.parametrize("eyes_name,mode", [("osd", "Stills"), ("hdmi", "Movie"), ("hdmi", "S&Q"), ("hdmi", None)])
-def test_osd_eyes_movie_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode):
-    """OSD eyes (its picture lags, not measured), Movie and S&Q (not measured) and a run that cannot tell its mode keep
-    LOCK_S, no frame looked at, the notice or not; a caller's own longer wait (prove_run's 5 s) is never cut short."""
+@pytest.mark.parametrize("eyes_name,mode", [("osd", "Stills"), ("osd", "Movie"), ("hdmi", "S&Q"), ("hdmi", None)])
+def test_osd_eyes_s_and_q_or_no_mode_keep_the_old_lock(monkeypatch, eyes_name, mode):
+    """OSD eyes (its picture lags, not measured), S&Q (not measured) and a run that cannot tell its mode keep LOCK_S, no
+    frame looked at, the notice or not; a caller's own longer wait (prove_run's 5 s) is never cut short."""
     session, now, clock = lock_clock(monkeypatch)
     monkeypatch.setattr(session, "MODE", mode)
     eyes = LockEyes(now, 0.5, name=eyes_name)
@@ -660,7 +660,8 @@ def test_lock_over_is_the_old_rule_or_what_the_eyes_saw():
     hdmi = SimpleNamespace(name="hdmi")
     assert session.lock_over(4.6, seen()) and not session.lock_over(4.4, seen("shooting"), hdmi)
     assert session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "Stills")
-    assert not session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "Movie")
+    assert session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "Movie")
+    assert not session.lock_over(0.5, seen("shooting", "notice", "shooting"), hdmi, "S&Q")
     assert not session.lock_over(6.0, seen("notice"), hdmi, "Stills") and session.lock_over(6.0, seen("notice"), hdmi)
     assert session.lock_over(2.4, seen("shooting"), hdmi, "Stills") and not session.lock_over(2.3, seen("shooting"),
                                                                                               hdmi, "Stills")
@@ -691,21 +692,23 @@ def after_download_on(monkeypatch, ready_at, name="hdmi", mode="Stills", timelin
 def test_after_download_ends_on_the_shooting_screen_after_the_notice_with_hdmi_in_stills(monkeypatch):
     """proving.nav.after_download: with HDMI eyes in Stills, its looks every 0.1 s from the reply, it ends at the
     first look on the shooting screen after the notice (2.0 s, the notice gone at 1.97 s), a notice on show 6 s waited
-    out, and with no notice seen the shooting screen once 2.4 s have passed; OSD eyes and Movie end at the first look
-    past LOCK_S, 4.6 s, as before; MENU after it every time, one line logged."""
+    out, and with no notice seen the shooting screen once 2.4 s have passed; so in Movie (kit2_speed_lock_mv); OSD eyes
+    and S&Q end at the first look past LOCK_S, 4.6 s, as before; MENU after it every time, one line logged."""
     end, pressed, logged = after_download_on(monkeypatch, 1.97)
     assert end == pytest.approx(2.0, abs=0.01) and pressed == ["menu"]
     assert [f["ended"] for k, f in logged] == ["the shooting screen after the notice"]
     assert after_download_on(monkeypatch, 6.0)[0] == pytest.approx(6.0, abs=0.11)
     assert after_download_on(monkeypatch, 1.97, timeline=[])[0] == pytest.approx(2.4, abs=0.11)
     assert after_download_on(monkeypatch, 1.97, name="osd")[0] == pytest.approx(4.6)
-    assert after_download_on(monkeypatch, 1.97, mode="Movie")[0] == pytest.approx(4.6)
+    assert after_download_on(monkeypatch, 1.84, mode="Movie")[0] == pytest.approx(1.9, abs=0.01)
+    assert after_download_on(monkeypatch, 1.97, mode="S&Q")[0] == pytest.approx(4.6)
 
 
 def test_the_page_scans_wait_after_its_download_goes_by_its_mode(monkeypatch):
-    """page_scan.after_download: the shooting screen after the notice in Stills over HDMI (1.97 s), LOCK_S in Movie."""
+    """page_scan.after_download: the shooting screen after the notice in Stills and Movie over HDMI (1.97 s), LOCK_S
+    in S&Q."""
     import page_scan
-    for mode, ends in (("Stills", 1.97), ("Movie", 4.5)):
+    for mode, ends in (("Stills", 1.97), ("Movie", 1.97), ("S&Q", 4.5)):
         now = [0.0]
         monkeypatch.setattr(page_scan.time, "monotonic", lambda now=now: now[0])
         monkeypatch.setattr(page_scan.time, "sleep", lambda s, now=now: now.__setitem__(0, now[0] + s))
@@ -713,6 +716,28 @@ def test_the_page_scans_wait_after_its_download_goes_by_its_mode(monkeypatch):
         eyes = LockEyes(now, 1.97)
         page_scan.after_download(eyes, 0.0, mode)
         assert now[0] == pytest.approx(ends, abs=0.41) and now[0] >= ends - 1e-9
+
+
+def test_a_movie_scan_makes_the_runs_lock_the_measured_one(monkeypatch, tmp_path):
+    """The mode a run's lock goes by is its page scan's: runner.load_scan sets camkit.session.MODE from the scan's own
+    record, spelled as runner.SCAN_MODES spell it whatever word recorded it, so a Movie scan's run takes the measured
+    lock with HDMI eyes (kit2_speed_lock_mv, 2026-11-18) and an S&Q scan's, or one that records no mode, LOCK_S."""
+    import json
+    import runner
+    from camkit import session
+    monkeypatch.setattr(session, "MODE", None)
+    monkeypatch.setattr(runner, "load", lambda p: None)
+    monkeypatch.setattr(runner, "screen", SimpleNamespace(read=lambda f: SimpleNamespace(signature="s", kind="menu",
+                                                                                           row=0)))
+    (tmp_path / "scan_rekeyed.json").write_text(json.dumps([{"frame": "1.png", "page": "p"}] * 2), encoding="utf-8")
+    (tmp_path / "model.json").write_text(json.dumps([{"key": "p", "rows": []}]), encoding="utf-8")
+    hdmi = SimpleNamespace(name="hdmi")
+    for word, mode, measured in (("movie", "Movie", True), ("Stills", "Stills", True), ("S&Q Motion", "S&Q", False),
+                                 (None, None, False)):
+        (tmp_path / runner.SCAN_MODE_FILE).write_text(json.dumps({"mode": word}), encoding="utf-8")
+        runner.load_scan(tmp_path)
+        got = session.MODE
+        assert got == mode and session.lock_measured(hdmi) is measured, word
 
 
 def test_the_box_provers_wait_the_measured_lock_with_their_own_eyes(monkeypatch, tmp_path):
