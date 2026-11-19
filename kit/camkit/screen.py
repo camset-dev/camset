@@ -181,6 +181,12 @@ FN_TILE_DX, FN_TILE_ROWS = 107, [110, 171, 298, 359]  # Fn Menu Settings tiles: 
 OPTION_W, OPTION_H, OPTION_MID = (300, 600), (40, 70), 8
 OPTION_COUNT = (2, 4)
 OPTION_BODY = (58, 422)
+# boxed options beside a drawing (Display Media Info. and Play Set of Multi. Media: "Select media card.", Slot 1 over
+# Slot 2 at x 376-615, 55 px tall, 72 px pitch, the camera drawn at the left; kit2_fin_look_media 00016,
+# kit2_fin_look_multi 00014): the boxes' x edges, give or take OPTION_SIDE_TOL px; the column from OPTION_SIDE_PAD px left
+# of them to the screen's edge holds nothing else from OPTION_SIDE_ABOVE px above the first box down to the footer, and
+# the footer draws its MENU key with the back arrow alone
+OPTION_SIDE, OPTION_SIDE_TOL, OPTION_SIDE_PAD, OPTION_SIDE_ABOVE = (376, 615), 4, 20, 4
 
 
 @dataclass
@@ -520,17 +526,27 @@ def _option_boxes(a, g, o) -> tuple | None:
     fill or on black); exactly one filled orange (its inside 60 % orange), the others not at all (under 2 %); and
     nothing else lit (grey > 60, or orange) between the title's rule and the footer's, the boxes and 2 px round them
     left out, but 20 px; a title at the top left; the footer's help button (help_glyph). Any of it missing, and the
-    screen is no "buttons" screen: a box drawn without its outline included (see "Outlines")."""
+    screen is no "buttons" screen: a box drawn without its outline included (see "Outlines").
+    The same boxes beside a drawing (OPTION_SIDE, 2026-11-19): the lit box's edges at x 376 and 615 (OPTION_SIDE_TOL),
+    every other rule as above but two, the first box's alone: nothing else lit only in the column from OPTION_SIDE_PAD
+    px left of the boxes, from OPTION_SIDE_ABOVE px above the first box down to the footer's rule (the drawing at the
+    left and the words above stay out of it), and the footer drawing its MENU key with the back arrow and nothing
+    else (_menu_back_alone) in place of the help button."""
     import cv2
     y0, y1 = OPTION_BODY
+
+    def side(x, w) -> bool:
+        return all(abs(e - s) <= OPTION_SIDE_TOL for e, s in zip((x, x + w - 1), OPTION_SIDE, strict=True))
     _, _, st, _ = cv2.connectedComponentsWithStats(o[y0:y1].astype(np.uint8), connectivity=8)
     fills = [(int(x), int(w), int(h)) for x, y, w, h, area in st[1:]
-             if OPTION_W[0] <= w <= OPTION_W[1] and OPTION_H[0] <= h <= OPTION_H[1] and area > 0.6 * w * h]
+             if (OPTION_W[0] <= w <= OPTION_W[1] or side(x, w)) and OPTION_H[0] <= h <= OPTION_H[1]
+             and area > 0.6 * w * h]
     if not fills:
         return None
     x0, w, h = max(fills, key=lambda r: r[1] * r[2])
     x1 = x0 + w - 1
-    if abs((x0 + x1) / 2 - 320) > OPTION_MID:
+    beside = side(x0, w)
+    if not beside and abs((x0 + x1) / 2 - 320) > OPTION_MID:
         return None
     edge = ((g > 40) & (g < 200) & (_sat(a) < 40)) | o
     sides = edge[:, x0:x0 + 3].any(axis=1) & edge[:, x1 - 2:x1 + 1].any(axis=1)
@@ -569,12 +585,28 @@ def _option_boxes(a, g, o) -> tuple | None:
     rest = (g[y0:y1] > 60) | o[y0:y1]
     for t, b in boxes:
         rest[max(0, t - 2 - y0):b + 3 - y0, max(0, x0 - 2):x1 + 3] = False
+    if beside:                  # the drawing at the left and the words above the boxes are no part of the column
+        rest[:max(0, boxes[0][0] - OPTION_SIDE_ABOVE - y0)] = False
+        rest[:, :max(0, x0 - OPTION_SIDE_PAD)] = False
     if int(rest.sum()) > 20:
         return None
     title = np.nonzero((g[5:46] > 150).any(axis=0))[0]
-    if not len(title) or title[0] > 60 or help_glyph(a) is None:
+    if not len(title) or title[0] > 60 or (_menu_back_alone(a) if beside else help_glyph(a)) is None:
         return None
     return (x0, x1), tuple(boxes), lit[0]
+
+
+def _menu_back_alone(a) -> tuple | None:
+    """Where the footer draws its MENU key with the back arrow (glyphs/menu_back.png, matched as footer_keys matches its
+    keys, over 0.9), the footer drawing nothing else (footer_ink_outside); None where it does not."""
+    import cv2
+    g = np.asarray(a, np.float32)
+    if g.ndim == 3:
+        g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)      # as PIL's "L", the glyph's cut
+    t = _template("menu_back")
+    _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(g[415:480, :], t, cv2.TM_CCOEFF_NORMED))
+    box = (x, 415 + y, x + t.shape[1], 415 + y + t.shape[0])
+    return box if best > 0.9 and footer_ink_outside(a, [box]) is None else None
 
 
 def _pick_panel(g, o) -> bool:

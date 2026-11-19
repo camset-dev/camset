@@ -313,3 +313,110 @@ def test_the_two_bars_refused_this_morning_are_their_rows(name, path, row, opene
     seen = first_open.Seen(opened)
     assert b is not None and drive.lit_refused(lit, row[:-1], row, seen, labels | {b}, None, {}, None) == ("", tuple(row))
     assert drive.lit_refused(lit, row[:-1], row, seen, labels, None, {}, None)[1] is None
+
+
+# ---------------------------------------------------------------- 3. two boxed options beside a drawing
+
+WHITE, FILL, BORDER, GREY_EDGE = 221, (170, 51, 0), (221, 85, 0), 85
+
+
+def glyph(name: str) -> np.ndarray:
+    from PIL import Image
+    return np.asarray(Image.open(Path(screen.__file__).parent / "glyphs" / f"{name}.png").convert("L"))
+
+
+def strokes(a, y0, y1, x0, x1):
+    """Letter-like white strokes (4 px wide, 6 px apart) across x0..x1."""
+    for x in range(x0, x1, 10):
+        a[y0:y1, x:x + 4] = WHITE
+
+
+def media_card(lit=0, x0=376, x1=615, top=215, n=2, footer="menu_back", prose_low=False, extra=False,
+               drawing=True) -> np.ndarray:
+    """"Select media card." as the a1 II draws it (kit2_fin_look_media 00016): a title at the top left over its rule, a
+    line of words over the boxes, the camera drawn at the left (its lines and a small orange slot mark), `n` boxes x
+    x0..x1, 55 px tall, 70 px pitch from y `top`, the `lit` one filled orange, the others outlined, text in each; the
+    footer's rule and its `footer` key (glyphs/<footer>.png; None, none). prose_low: the words reach down beside the
+    first box; extra: a mark at the right below the boxes."""
+    a = np.zeros((480, 640, 3), np.uint8)
+    strokes(a, 14, 40, 21, 330)
+    a[53, 5:635] = 102
+    a[426, 5:635] = 119
+    strokes(a, 90, 120, 200, 440)                                 # "Select media card."
+    if prose_low:
+        strokes(a, top + 4, top + 30, 80, 560)
+    if drawing:
+        a[190:340, 230:232] = a[190:340, 328:330] = a[190:192, 230:330] = a[338:340, 230:330] = WHITE
+        a[240:280, 254:257] = BORDER                              # the lit slot's mark
+        strokes(a, 210, 240, 50, 170)                             # the cards' logos
+    for i in range(n):
+        t = top + 70 * i
+        b = t + 54
+        if i == lit:
+            a[t:b + 1, x0:x1 + 1] = BORDER
+            a[t + 2:b - 1, x0 + 2:x1 - 1] = FILL
+        else:
+            a[t:t + 2, x0:x1 + 1] = a[b - 1:b + 1, x0:x1 + 1] = GREY_EDGE
+            a[t:b + 1, x0:x0 + 2] = a[t:b + 1, x1 - 1:x1 + 1] = GREY_EDGE
+        strokes(a, t + 14, t + 40, x0 + 80, x0 + 160)
+    if extra:
+        a[380:400, 500:540] = WHITE
+    if footer:
+        g = glyph(footer)
+        x = 558 if footer == "menu_back" else 470
+        a[437:437 + g.shape[0], x:x + g.shape[1]] = g[..., None]
+    return a
+
+
+def kind_of(a) -> screen.Screen:
+    from camkit.frames import Frame
+    return screen.read(Frame(image=a, t=0.0))
+
+
+@pytest.mark.parametrize("lit", [0, 1])
+def test_two_boxes_beside_a_drawing_read_as_buttons_with_the_lit_one(lit):
+    s = kind_of(media_card(lit))
+    assert s.kind == "buttons" and (s.count, s.row) == (2, lit)
+    assert s.rows == [(215, 269), (285, 339)] and s.bar == s.rows[lit] and s.boxes == [(376, 615)] * 2
+
+
+@pytest.mark.parametrize("case, a", [
+    ("the help button in the footer", lambda: media_card(footer="help_only")),
+    ("the help button beside the MENU key", lambda: media_card(footer="menu_back") | media_card(footer="help_only")),
+    ("no footer key", lambda: media_card(footer=None)),
+    ("words beside the first box", lambda: media_card(prose_low=True)),
+    ("a mark at the right below the boxes", lambda: media_card(extra=True)),
+    ("boxes elsewhere", lambda: media_card(x0=330, x1=569)),
+    ("one box", lambda: media_card(n=1)),
+    ("none lit", lambda: media_card(lit=-1)),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_what_is_not_two_boxes_beside_a_drawing_stays_unknown(case, a):
+    """The side layout's neighbours read as they did before it: unknown."""
+    f = screen.features(a())
+    assert f["option_boxes"] is None and screen.classify(f) == "unknown", case
+
+
+def test_centred_boxes_still_need_a_screen_black_but_for_them():
+    """The centred layout (Image Index) keeps its rule: a drawing beside centred boxes is no "buttons" screen."""
+    f = screen.features(media_card(x0=96, x1=543))
+    assert f["option_boxes"] is None and screen.classify(f) == "unknown"
+
+
+def test_enter_stays_refused_on_two_boxes_beside_a_drawing():
+    """A "buttons" screen takes no Enter by its kind, whatever its words (the playbook's rule 8)."""
+    assert "buttons" not in safety.ENTER_KINDS and "buttons" not in safety.SHOWN_KINDS
+    why = safety.enter_refused("buttons", "Display Media Info. Select media card. Slot 1 Slot 2", "Slot 1")
+    assert "not one whose Enter chooses or opens" in why, why
+
+
+MEDIA_CARD = [A1 / "kit2_fin_look_media" / "shots" / "00016_right.png",
+              A1 / "kit2_fin_look_multi" / "shots" / "00014_right.png",
+              A1 / "kit2_a1fin_look_playback4" / "shots" / "00205_right.png"]
+
+
+@pytest.mark.parametrize("path", MEDIA_CARD, ids=["display-media-info", "multi-media", "multi-media-2"])
+def test_the_cameras_select_media_card_screens_read_as_buttons(path):
+    """Display Media Info. and Play Set of Multi. Media: two boxes x 376-615, Slot 1 lit."""
+    s = screen.read(load(need(path)))
+    assert s.kind == "buttons" and (s.count, s.row) == (2, 0) and s.boxes == [(376, 615)] * 2
+    assert s.rows[1][0] - s.rows[0][0] == 70

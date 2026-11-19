@@ -875,8 +875,9 @@ def test_creative_look_cell_zero_is_not_a_menu_page():
     (A1 / "kit2_pass1" / "shots" / "02554_right.png",
      lambda s: (s.kind, s.focus, s.marker) == ("table", "cell", (214, 135))),
     (A1 / "dial_ctrl3" / "00010_applied.png", lambda s: (s.kind, s.focus, s.marker) == ("table", "cell", (214, 239))),
-    # a look-alike that stays what it was: Display Media Info.'s slot buttons
-    (A1 / "kit2_pass1" / "shots" / "00178_right.png", lambda s: s.kind == "unknown"),
+    # a look-alike that is no assignment screen: Display Media Info.'s slot buttons, boxed options beside a drawing
+    # since 2026-11-19 (camkit.screen OPTION_SIDE; read as no known kind before)
+    (A1 / "kit2_pass1" / "shots" / "00178_right.png", lambda s: s.kind == "buttons"),
 ])
 def test_assignment_screens(path, check):
     s = screen.read(load(need(path)))
