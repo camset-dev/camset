@@ -43,7 +43,7 @@ enums:
         the camera.'
     0x00cb:
       id: unknown
-      doc: 'Unknown (memory sets; written by a registration) [Focus > AF/MF]: 0 0, 1 1. memory sets; 1 of 1 settings
+      doc: 'Unknown (memory sets; written by a registration) [Focus > AF/MF]: 0 0, 1 1. memory sets; 0 of 1 settings
         on it proved on the camera.'
     0x0170:
       id: s_q_motion_or_time_lapse_active
@@ -2758,11 +2758,11 @@ enums:
     0x0fde:
       id: iso_in_use
       doc: ISO in use (movie; the auto-chosen value when ISO is AUTO) [Exposure/Color > Exposure]. live settings;
-        1 of 1 settings on it proved on the camera.
+        0 of 1 settings on it proved on the camera.
     0x0fe0:
       id: iso_in_use_0fe0
       doc: ISO in use (movie; the auto-chosen value when ISO is AUTO) [Exposure/Color > Exposure]. live settings;
-        1 of 1 settings on it proved on the camera.
+        0 of 1 settings on it proved on the camera.
     0x0fea:
       id: focus_area_memory_0fea
       doc: Focus Area memory (horizontal, alt numbering) [Focus > Focus Area]. live settings; 1 of 1 settings on

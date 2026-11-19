@@ -29,12 +29,12 @@ LOWERS = ("global:0x0b65", "global:0x0b69", "global:0x0b6d")
 UPPERS = ("global:0x0b63", "global:0x0b67", "global:0x0b6b")
 # the a1 II's pairs as its hand table names them: ISO Range Limit, both directions proved; ISO AUTO's Minimum and
 # Maximum, and each mode's copies of the two, a Minimum chosen above the Maximum proved to raise it, and a Maximum
-# chosen below the Minimum proved to pull it down for the live and stills pairs (Stills mode), not tried in Movie mode
+# chosen below the Minimum proved to pull it down (the live and stills pairs in Stills mode, the movie pair in Movie mode)
 A1_PAIRS = {
     "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": True, "upper_moves_lower": True},
     "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": True, "upper_moves_lower": True},
     "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": True, "upper_moves_lower": True},
-    "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": True},
+    "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": True, "upper_moves_lower": True},
 }
 # what both passes write on the a1 II's settings from them
 A1_FIELDS = {
@@ -45,7 +45,7 @@ A1_FIELDS = {
     "global:0x0dfc": ("at_most", {"setting": "global:0x0e02", "moves_it": True}),
     "global:0x0e02": ("at_least", {"setting": "global:0x0dfc", "moves_it": True}),
     "global:0x0dfe": ("at_most", {"setting": "global:0x0e04", "moves_it": True}),
-    "global:0x0e04": ("at_least", {"setting": "global:0x0dfe"}),
+    "global:0x0e04": ("at_least", {"setting": "global:0x0dfe", "moves_it": True}),
 }
 UNSHOWN = "global:0x0dfe"           # the pair whose marked direction the a1 pass's made-up hand evidence leaves out
 
@@ -55,8 +55,8 @@ UNSHOWN = "global:0x0dfe"           # the pair whose marked direction the a1 pas
 def test_the_a1_hand_tables_name_both_pairs_and_the_lower_end_by_its_name():
     """The a1 II's LIMIT_PAIRS: ISO Range Limit (both directions proved, 2026-11-18), ISO AUTO's Minimum and Maximum
     and each mode's copies of the two (a Minimum chosen above the Maximum raised it, in Movie mode the movie copies
-    and in Stills mode the stills copies; a Maximum chosen below the Minimum pulled it down in Stills mode, 2026-11-19,
-    so the live and stills pairs have upper_moves_lower, the movie pair, never tried in Movie mode, none).
+    and in Stills mode the stills copies; a Maximum chosen below the Minimum pulled it down, 2026-11-19, in Stills mode
+    for the live and stills pairs and in Movie mode for the movie pair, so all three have upper_moves_lower).
     The lower ISO Range Limit's three records are named "ISO Range Limit (lower)", together, so they stay one row
     beside "ISO Range Limit (upper)". Each pair lists the same values in the committed definition and is kept in the
     same sets; the file fits its JSON Schema."""
@@ -289,10 +289,12 @@ def test_the_a1_pass_writes_the_pairs_and_the_lower_name(a1_written):
     the lower ISO Range Limit's three records by their end, as the settings reset file then does; nothing else carries
     either field."""
     said, by, reset = a1_written
-    want = {**A1_FIELDS, UNSHOWN: ("at_most", {"setting": A1_PAIRS[UNSHOWN]["upper"]})}
+    want = {**A1_FIELDS, UNSHOWN: ("at_most", {"setting": A1_PAIRS[UNSHOWN]["upper"]}),
+            A1_PAIRS[UNSHOWN]["upper"]: ("at_least", {"setting": UNSHOWN})}
     assert {k: (f, by[k][f]) for k in A1_FIELDS for f in ("at_most", "at_least") if f in by[k]} == want
-    assert (f"limit pair {UNSHOWN} <= {A1_PAIRS[UNSHOWN]['upper']}: nothing in the hand evidence shows lower_moves_upper "
-            "(its \"evidence\" in LIMIT_PAIRS); written without moves_it") in said
+    for flag in ("lower_moves_upper", "upper_moves_lower"):
+        assert (f"limit pair {UNSHOWN} <= {A1_PAIRS[UNSHOWN]['upper']}: nothing in the hand evidence shows {flag} "
+                "(its \"evidence\" in LIMIT_PAIRS); written without moves_it") in said
     assert sorted(k for k, s in by.items() if {"at_most", "at_least"} & set(s)) == sorted(A1_FIELDS)
     assert [by[k]["name"] for k in LOWERS] == ["ISO Range Limit (lower)"] * 3
     assert [by[k]["name"] for k in UPPERS] == ["ISO Range Limit (upper)"] * 3

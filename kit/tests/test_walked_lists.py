@@ -885,8 +885,9 @@ def test_a_value_the_camera_keeps_for_itself_keeps_no_proof(capsys):
     """A setting the hand table says the camera keeps or computes for itself (UNPROVED kind "state": how the camera is
     held) keeps no proof, whatever a run read there: one an earlier write left (a view-only readout's) is taken out,
     said, and the reason written in its place, in the plain pass as in the a1 II's; a reason of another kind takes
-    nothing out, and a hand proof with no state reason stands (the a1 II's "ISO in use (movie)" records, proved by hand:
-    a run fixed the ISO at known values and downloaded the file each time)."""
+    nothing out, and a hand proof with no state reason stands. The a1 II's "ISO in use (movie)" readouts, which the
+    camera works out itself, carry a state reason since 2026-11-19, their FRAME_PROOFS entries a note alone: the hand
+    proof they had listed the two ISOs one run set, which another owner's mapping would not find (decision 16)."""
     by_key = {"global:0x0ccc": setting("global:0x0ccc", [1, 2], proved={"values": [1, 2]}),
               "global:0x0fde": setting("global:0x0fde", [1], proved={"values": [1]}),
               "global:0x0bbb": setting("global:0x0bbb", [1], proved={"values": [1]})}
@@ -903,7 +904,7 @@ def test_a_value_the_camera_keeps_for_itself_keeps_no_proof(capsys):
     assert "proved" not in by_key["global:0x0ccc"] and by_key["global:0x0fde"]["proved"]
     assert by_key["global:0x0ccc"]["unproved_reason"] == {"kind": "state", "why": "How the camera is held."}
     T = hand_tables.load(A1, evidence=False)
-    assert not {"global:0x0fde", "global:0x0fe0"} & set(T.UNPROVED) and {"global:0x0fde", "global:0x0fe0"} <= set(T.FRAME_PROOFS)
+    assert all(T.UNPROVED[k][0] == "state" and set(T.FRAME_PROOFS[k]) == {"note"} for k in ("global:0x0fde", "global:0x0fe0"))
 
 
 def test_a_state_reason_and_a_hand_proof_of_one_key_stop_the_write():

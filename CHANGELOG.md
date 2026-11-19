@@ -55,6 +55,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's definition takes the proofs of 2026-11-19:** ISO AUTO's movie Minimum and Maximum are walked in
+  Movie mode (ISO 100 to ISO 32000, a Maximum set below the Minimum pulling it down there too), Color Mode is proved
+  on each profile with its Gamma on HLG, and My Menu's empty place and the Playback Filter flags' "Never set" are
+  offered as values the camera holds from the factory. ISO in use and a memory-set flag the camera writes itself carry
+  a reason in place of a proof, and 138 settings say part of their list was proved on another setting of the same kind.
 - **A setting whose list was proved partly on another setting of the same kind is never called checked on the
   camera** (its definition's `proved.shared`): it still offers every listed value, and its proof line, the Exposure
   page and the Write and Before saving windows say what is true of the list.

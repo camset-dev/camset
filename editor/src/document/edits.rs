@@ -1905,7 +1905,7 @@ pub(crate) mod copies_tests {
 
     /// Outside Expert mode a setting is changed only where a proof on the camera stands for it: one with no proof is
     /// view only, saying why in its reason's words, or, with no reason, that it has not been checked on a camera yet.
-    /// In the shipped definition this locks, beyond the settings no menu writes and the copies, the five the definition
+    /// In the shipped definition this locks, beyond the settings no menu writes and the copies, the six the definition
     /// gives other reasons for, and no text and no My Menu place.
     #[test]
     fn a_setting_no_proof_stands_for_is_view_only_outside_expert_mode() {
@@ -1940,7 +1940,7 @@ pub(crate) mod copies_tests {
             .filter(|x| x.text.is_some() || (x.scalar && (x.range.is_some() || x.values.len() >= 2)))
             .collect();
         assert!(newly.iter().all(|x| app.locked_why(x, 0).is_some() && x.text.is_none() && !mm.contains(&x.id)), "{:?}", newly.iter().map(|x| &x.name).collect::<Vec<_>>());
-        assert!(newly.len() <= 5, "{:?}", newly.iter().map(|x| &x.name).collect::<Vec<_>>());
+        assert!(newly.len() <= 6, "{:?}", newly.iter().map(|x| &x.name).collect::<Vec<_>>());
         assert!(app.schema.settings.iter().filter(|x| x.text.is_some() || mm.contains(&x.id)).all(|x| app.locked_why(x, 0).is_none()), "texts and My Menu places stay editable");
     }
 

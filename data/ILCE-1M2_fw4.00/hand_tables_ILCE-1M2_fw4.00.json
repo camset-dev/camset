@@ -40,15 +40,15 @@
     },
     "global:0x0dfa": {
       "name": "ISO Auto Range Limit Min",
-      "note": "ISO AUTO's Minimum. Setting the Maximum below it pulls it down to the Maximum's value: seen in Stills mode, where with Different Set for Still/Mv's ISO box (0x0184) not ticked its stills and movie copies went down with it; whether it comes back up when the Maximum is raised again was not tried. Setting it above the Maximum raises the Maximum to its value."
+      "note": "ISO AUTO's Minimum. Setting the Maximum below it pulls it down to the Maximum's value: seen in Stills and in Movie mode, where with Different Set for Still/Mv's ISO box (0x0184) not ticked its stills and movie copies went down with it; whether it comes back up when the Maximum is raised again was not tried. Setting it above the Maximum raises the Maximum to its value."
     },
     "global:0x0dfc": {
       "name": "ISO Auto Range Limit Min (stills)",
-      "note": "The stills copy of ISO AUTO's Minimum. Setting the Maximum below it in Stills mode pulls it down to the Maximum's value; whether it comes back up when the Maximum is raised again was not tried."
+      "note": "The stills copy of ISO AUTO's Minimum. Setting the Maximum below it in Stills mode pulls it down to the Maximum's value, and in Movie mode too while Different Set for Still/Mv's ISO box (0x0184) is not ticked; whether it comes back up when the Maximum is raised again was not tried."
     },
     "global:0x0dfe": {
       "name": "ISO Auto Range Limit Min (movie)",
-      "note": "Movie mode's ISO AUTO Minimum. A Maximum set below it in Stills mode while Different Set for Still/Mv's ISO box (0x0184) is not ticked pulled it down to that value too; a Maximum set below it in Movie mode was not tried."
+      "note": "Movie mode's ISO AUTO Minimum. In Movie mode the list goes no lower than ISO 100 and no higher than ISO 32000. Setting the Maximum below it pulls it down to the Maximum's value, in Movie mode, and in Stills mode too while Different Set for Still/Mv's ISO box (0x0184) is not ticked. Setting it above the Maximum raises the Maximum to its value."
     },
     "global:0x0e02": {"name": "ISO AUTO Max (stills)"},
     "global:0x0e16": {
@@ -67,9 +67,41 @@
       "name": "Different Set for Still/Mv: Exposure Comp.",
       "note": "One checkbox of this menu row. Ticked, Exposure Comp. is kept apart for stills and movies: a value set writes the one in use (0x0340) and only the copy of the mode it is set in, the stills copy (0x0e16) in Stills mode, the movie copy (0x0e18) in Movie mode. Not ticked, a value set in either mode writes the one in use and both copies. On the camera, ticking the box writes nothing but the box. Not proved yet: what unticking the box sets with the two copies apart; S&Q and Time-lapse; and what the camera does on loading a file whose box was changed."
     },
+    "global:0x073b[0]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[1]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[2]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[3]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[4]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[5]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[9]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
+    "global:0x073b[10]": {
+      "name": "Color Mode",
+      "note": "Picture Profile parameter (array element). While the profile's Gamma is HLG, the list offers only BT.2020 and 709, and the menu shows BT.2020 as the Color Mode whatever this holds, until a Color Mode is chosen there; under the other Gammas tried it offers the other nine."
+    },
     "global:0x0e04": {
       "name": "ISO AUTO Max (movie)",
-      "note": "Movie mode's ISO AUTO Maximum. Setting Minimum above Maximum raises both Maximum records to Minimum's value, and they stay there when Minimum comes back down."
+      "note": "Movie mode's ISO AUTO Maximum. In Movie mode the list goes no lower than ISO 100 and no higher than ISO 32000. Setting the Minimum above it raises it to the Minimum's value, with the live Maximum (0x0e00), and with the stills copy (0x0e02) too while Different Set for Still/Mv's ISO box (0x0184) is not ticked; it stays there when the Minimum comes back down. Setting it below the Minimum pulls the Minimum down to its value."
     },
     "global:0x118b": {"name": "S&Q Shoot Mode: Motion or Time-lapse"},
     "global:0x0053": {
@@ -2954,6 +2986,421 @@
       "held": true,
       "why": "No menu choice writes this value: a Camera Settings Reset or Initialize does. The menu writes 0 and 1.",
       "menu": "Proxy Settings > Px Proxy Rec. Settings"
+    },
+    {
+      "key": "global:0x0e04",
+      "values": [2, 3, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Maximum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50, ISO 64 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Maximum"
+    },
+    {
+      "key": "global:0x0dfe",
+      "values": [2, 4],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "why": "The ISO AUTO Minimum list starts at ISO 100 in Stills mode, and no lower in Movie mode: ISO 50 and ISO 80 are on neither.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0dfe",
+      "values": [3],
+      "walk": "^ISO > ISO AUTO M(?:axim|inim)um \\[(?:Stills|Movie) mode\\]$",
+      "held": true,
+      "named_by": "global:0x0334",
+      "why": "The camera's factory value: Camera Settings Reset and Initialize write it, and a file holds it until a Minimum or a Maximum is chosen (choosing a Maximum rewrites it to the lowest Minimum the list offers), but the menu's list starts at ISO 100, so it cannot be chosen again.",
+      "menu": "ISO > ISO AUTO Minimum"
+    },
+    {
+      "key": "global:0x0c8a[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c8a[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c91[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c98[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0c9f[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0ca6[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[0]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[1]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[2]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[3]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[4]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[5]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x0cad[6]",
+      "values": [2],
+      "walk": "^My Menu Setting > Add Item$",
+      "held": true,
+      "why": "Every place is empty from the factory until an item is added to it, and Delete Item, Delete Page or Delete All empty a place again; Add Item's list offers items only.",
+      "menu": "My Menu Setting > Add Item"
+    },
+    {
+      "key": "global:0x12ba",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Still Images/Movies$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Still Images/Movies"
+    },
+    {
+      "key": "global:0x12bd",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Shot Mark$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Shot Mark"
+    },
+    {
+      "key": "global:0x12be",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Protect$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Protect"
+    },
+    {
+      "key": "global:0x12bf",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Rating$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Rating"
+    },
+    {
+      "key": "global:0x12c0",
+      "values": [1],
+      "walk": "^Playback Filter Condition > FTP Transfer Status$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > FTP Transfer Status"
+    },
+    {
+      "key": "global:0x12c1",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Smartphone Trans State$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Smartphone Trans State"
+    },
+    {
+      "key": "global:0x12c2",
+      "values": [1],
+      "walk": "^Playback Filter Condition > Voice Memo$",
+      "held": true,
+      "why": "The camera holds it from the factory until a value is first chosen for this condition; no list of the menus sets it back.",
+      "menu": "Playback Filter Condition > Voice Memo"
     }
   ],
   "VIDEO_SYSTEM_VALUES": {
@@ -3281,7 +3728,7 @@
     "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": true, "upper_moves_lower": true},
     "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": true, "upper_moves_lower": true},
     "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": true, "upper_moves_lower": true},
-    "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": true}
+    "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": true, "upper_moves_lower": true}
   },
   "UNPROVED": {
     "global:0x1672": [
@@ -3328,6 +3775,21 @@
       "state",
       null,
       "A stamp the camera writes when a Recall Custom hold is registered, not a value a menu chooses."
+    ],
+    "set:0x00cb": [
+      "state",
+      null,
+      "A flag the camera writes into a memory set when Stills settings are registered there, in S or M, not a value a menu chooses."
+    ],
+    "global:0x0fde": [
+      "state",
+      null,
+      "The ISO the camera is using, which it works out itself from the ISO settings and again on each load: a view-only value, not a menu setting."
+    ],
+    "global:0x0fe0": [
+      "state",
+      null,
+      "The ISO the camera is using, which it works out itself from the ISO settings and again on each load: a view-only value, not a menu setting."
     ],
     "global:0x0f24": [
       "state",

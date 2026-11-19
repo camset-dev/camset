@@ -2180,8 +2180,9 @@ def test_no_public_note_says_it_read_a_value_off_a_file():
 
 @needs_evidence
 def test_no_proof_or_note_is_the_value_a_run_began_on():
-    """Decision 16 on three older entries (review 5, 2026-11-09): the ISO readouts 0x0fde/0x0fe0 list the two ISOs set,
-    not the one kit2_alone began on and put back; the holds' bracket copies 0x0e80/0x0e84 list the registrations of
+    """Decision 16 on three older entries (review 5, 2026-11-09): the ISO readouts 0x0fde/0x0fe0 list no value at all
+    since 2026-11-19, a state reason in place of the two ISOs one run set (never the one kit2_alone began on and put
+    back); the holds' bracket copies 0x0e80/0x0e84 list the registrations of
     live settings set by a file, not the first ones, which copied the live settings as the camera was found; and no
     note says it read a value off a file ("baseline value", as Image Jump's dials once did). The run files are read
     where runs/ is on this computer."""
@@ -2192,7 +2193,9 @@ def test_no_proof_or_note_is_the_value_a_run_began_on():
     if alone.exists():
         start = camset.read(alone)
         for k in ("global:0x0fde", "global:0x0fe0"):
-            assert start.get(0, int(k[-4:], 16)).value() not in by[k]["proved"]["values"], k
+            assert start.get(0, int(k[-4:], 16)).value() not in (by[k].get("proved") or {}).get("values", []), k
+    for k in ("global:0x0fde", "global:0x0fe0"):
+        assert "proved" not in by[k] and by[k]["unproved_reason"]["kind"] == "state", k
     proofs = ROOT / "runs" / A1 / "kit2_pass2" / "proofs.jsonl"
     if proofs.exists():
         first = {}
@@ -2232,9 +2235,10 @@ def test_squashed_compares_without_case_or_spaces():
 @needs_evidence
 def test_a_refusal_matches_its_value_whatever_the_spaces():
     """A menu's refusal names the option as the camera showed it, the list as a reader read it: "Black & White"
-    refused, "Black&White" listed (PP10's Color Mode). squashed compares them without case or spaces, so the refusal
-    (menu_blocked, evidence) carries its value."""
-    for k in ("global:0x073b[9]", "global:0x0751[9]"):
+    refused, "Black&White" listed (PP1's Color Mode, refused with its Gamma on HLG; PP10's, the example until
+    2026-11-19, was chosen since with its Gamma on Movie). squashed compares them without case or spaces, so the
+    refusal (menu_blocked, evidence) carries its value."""
+    for k in ("global:0x073b[0]", "global:0x0751[0]"):
         s = DOC_BY[k]
         (b,) = [b for b in s["menu_blocked"] if b["label"] == "Black & White"]
         assert b["value"] == 6 and dict(map(tuple, s["values"]))[6] == "Black&White", (k, b)
@@ -2726,42 +2730,59 @@ def test_a_value_is_marked_not_offered_only_where_its_evidence_holds(tmp_path):
 
 
 def test_the_shipped_marks_of_values_the_menus_never_offer_in_the_public_file():
-    """The public file alone: the a1 II's not_offered marks, 59 in all, ISO AUTO Minimum's factory ISO 64 held, twice, and
-    Proxy Rec. Settings' reset value held;
+    """The public file alone: the a1 II's not_offered marks, 114 in all, ISO AUTO Minimum's factory ISO 64 held, three
+    times, Proxy Rec. Settings' reset value held, My Menu's empty place held on its 42 places and the Playback Filter
+    flags' "Never set" held on 7;
     each says why in plain words and on which menu, each value is one of its setting's, and an editor offers none of
     the values a mark says the menus never offer (each a value no proof checked)."""
     marks = [(s, m) for s in PUB["settings"] for m in s.get("not_offered") or []]
     # + the Proxy value a reset writes (Proxy Rec. Settings' 3), held, 2026-11-15
     # - Movie White Balance's Flash: the movie copy takes it from a Stills choice, 2026-11-18
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 3)
+    # + ISO AUTO's movie copies (ISO 50/64/80 on the Maximum, ISO 50/80 and the held ISO 64 on the Minimum), My Menu's
+    #   empty place on its 42 places and the Playback Filter flags' Never set on 7, all three held, 2026-11-19
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (114, 53)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         assert "evidence" not in m, s["key"]
         if not m.get("held"):
             assert m["value"] not in (s.get("proved") or {}).get("values", []), (s["key"], m["value"])
-    held = {s["key"]: m for s, m in marks if m.get("held")}
-    assert set(held) == {"global:0x0dfa", "global:0x0dfc", "global:0x0284"} and all(m["value"] == 3 for m in held.values())
+    held_marks(marks)
+
+
+def held_marks(marks: list) -> None:
+    """The a1 II's held marks by value: ISO AUTO Minimum's factory ISO 64 (3) on the live record and both copies,
+    Proxy Rec. Settings' reset value (3), My Menu's empty place (2) on each of its 42 places, and "Never set" (1) on
+    the seven Playback Filter flags."""
+    held = {s["key"]: m["value"] for s, m in marks if m.get("held")}
+    my = PUB["camera"]["my_menu"]
+    places = {s["key"] for s in PUB["settings"] if s.get("area") == "global" and s.get("id") in my["records"]
+              and s.get("index") is not None}
+    flags = {"global:0x12ba", "global:0x12bd", "global:0x12be", "global:0x12bf", "global:0x12c0", "global:0x12c1",
+             "global:0x12c2"}
+    assert {k for k, v in held.items() if v == 3} == {"global:0x0dfa", "global:0x0dfc", "global:0x0dfe", "global:0x0284"}
+    assert {k for k, v in held.items() if v == 2} == places and len(places) == 42
+    assert {k for k, v in held.items() if v == 1} == flags and len(held) == 4 + 42 + 7
 
 
 @needs_evidence
 def test_the_shipped_marks_of_values_the_menus_never_offer():
     """The a1 II's not_offered (the unseen-values plan, route 3): the stills dials' Audio Rec Level and Follow Custom,
     the movie dials' Flash Comp., My Dial's Follow Custom, ISO AUTO's ISO 50/64/80 and four Rec Frame Rates, with the
-    values a picker's walked list never offers 56 in all, and ISO AUTO Minimum's factory ISO 64, held, twice,
-    and Proxy Rec. Settings' reset value, held. No mark is a value a proof
-    wrote, each says why in plain words, and each value is one of its setting's."""
+    values a picker's walked list never offers 56 in all, and ISO AUTO Minimum's factory ISO 64, held, three times,
+    Proxy Rec. Settings' reset value, My Menu's empty place and the Playback Filter flags' Never set, held. No mark is
+    a value a proof wrote, each says why in plain words, and each value is one of its setting's."""
     marks = [(s, m) for s in DOC["settings"] for m in s.get("not_offered") or []]
     # + the Proxy value a reset writes (Proxy Rec. Settings' 3, named by a hand table, not the ISO table), held, 2026-11-15
     # - Movie White Balance's Flash: the movie copy takes it from a Stills choice, 2026-11-18
-    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (59, 3)
+    # + ISO AUTO's movie copies, My Menu's empty place and the Playback Filter flags, 2026-11-19 (as the public test)
+    assert (len(marks), sum(1 for _, m in marks if m.get("held"))) == (114, 53)
     for s, m in marks:
         assert m["value"] in {v for v, _ in s["values"]} and m["why"].endswith(".") and m["menu"], (s["key"], m)
         if not m.get("held"):
             assert m["value"] not in (s.get("proved") or {}).get("values", []), (s["key"], m["value"])
-    held = {s["key"]: m for s, m in marks if m.get("held")}
-    assert set(held) == {"global:0x0dfa", "global:0x0dfc", "global:0x0284"} and all(m["value"] == 3 for m in held.values())
-    assert all((DOC_BY[k]["proved"]["names"] or {}).get("3") == "derived" for k in ("global:0x0dfa", "global:0x0dfc")), \
-        "named by the ISO table"
+    held_marks(marks)
+    assert all((DOC_BY[k]["proved"]["names"] or {}).get("3") == "derived"
+               for k in ("global:0x0dfa", "global:0x0dfc", "global:0x0dfe")), "named by the ISO table"
 
 
 # ---------------------------------------------------------------- the camera's other proof runs (2026-11-09)
