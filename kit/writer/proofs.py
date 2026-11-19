@@ -216,25 +216,60 @@ def kept_proof(old: dict | None, new: dict, gone: frozenset = frozenset(), writt
     return out, said
 
 
-def written_values(proofs: list, skip: set, reported=None) -> dict:
-    """{key: the values the proof lines the report counts wrote to it}: each line not cut short (skip, as
-    pass2_report.report_proofs gives it), not left out as made where the camera stood (stood_on, `reported` the rows
-    of the report the writer reads), not of a row sampled from the option the camera held (sampled_from_start: its
-    values are a count, never listed, decision 16), applied and planned, each change to a record or an array's slot
-    (element_changes) but one carried over from the option before (carried_over). kept_proof keeps an old value only
-    among these."""
+def written_by_row(proofs: list, skip: set, reported=None) -> dict:
+    """{the report's row (pass2_report.row_name): {key: the values that row's own counted lines wrote to it}}: each
+    line not cut short (skip, as pass2_report.report_proofs gives it), not left out as made where the camera stood
+    (stood_on, `reported` the rows of the report the writer reads), not of a row sampled from the option the camera
+    held (sampled_from_start: its values are a count, never listed, decision 16), applied and planned, each change to a
+    record or an array's slot (element_changes) but one carried over from the option before (carried_over)."""
     left = set(skip) | stood_on(proofs, skip, reported)
     carried = {(c["dat"], c["key"]) for c in carried_over(proofs, left)}
     from_start = {name for name, opts in rows_of(None, proofs, left).items() if sampled_from_start(opts)}
-    out = collections.defaultdict(set)
+    out = collections.defaultdict(lambda: collections.defaultdict(set))
     for i, r in enumerate(proofs):
         if i in left or r.get("applied") is False or r.get("planned") is False or row_name(r) in from_start:
             continue
         slots = element_changes(r) if "changes" in r or r.get("proof") == "display" else []
         for c in list(r.get("changes") or []) + slots:
             if (r.get("dat"), c.get("key")) not in carried and isinstance(c.get("after"), (int, str)):
-                out[c["key"]].add(c["after"])
+                out[row_name(r)][c["key"]].add(c["after"])
+    return {row: dict(keys) for row, keys in out.items()}
+
+
+def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) -> dict:
+    """{key: the values the proof lines the report counts wrote to it}: written_by_row's (`by_row` where already
+    worked out), whatever the row. kept_proof keeps an old value only among these."""
+    out = collections.defaultdict(set)
+    for keys in (written_by_row(proofs, skip, reported) if by_row is None else by_row).values():
+        for k, vs in keys.items():
+            out[k] |= vs
     return dict(out)
+
+
+def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict) -> list:
+    """The records a writer files as samples (`sampled`: a number field's, a box's, a grid's, a scale's) of which every
+    value the setting lists some line chose and saw written: a value one of the report's rows naming the record
+    credits (its "proved") that a counted line of that very row wrote to it (`by_row`, written_by_row), whatever a
+    later sampled run of the row did. Such a record is no sample: it is proved, each value listed (`proved`), and
+    taken out of `sampled`; none of its values is left that no line chose, so the list says nothing of the camera's
+    own setting (docs/decisions/0016). A record with a value no line chose stays a sample (review 2026-11-18: ISO
+    Range Limit, walked whole in one run and sampled again in later ones). Returns their keys, each printed."""
+    chose = collections.defaultdict(set)
+    for e in report:
+        for k, r in e["records"].items():
+            if k in sampled:
+                credited = {v for v in (r.get("proved") or {}).values() if isinstance(v, (int, str))}
+                chose[k] |= set((by_row.get(e["row"]) or {}).get(k, ())) & credited
+    out = []
+    for k in sorted(sampled):
+        codes = {v for v, _ in (by_key.get(k) or {}).get("values") or []}
+        if codes and codes <= chose[k]:
+            proved[k] = set(proved.get(k, ())) | codes
+            del sampled[k]
+            out.append(k)
+            print(f"  walked whole  {k} {by_key[k]['name'][:44]}: each of its {len(codes)} values chosen and seen "
+                  "written; proved, no longer a sample")
+    return out
 
 
 def print_kept(kept: dict, by_key: dict) -> None:

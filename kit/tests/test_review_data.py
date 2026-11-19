@@ -427,3 +427,44 @@ def test_without_cargo_the_rebuild_says_the_bless_command(tmp_path, monkeypatch,
     assert "bless" not in _ran(log) and rebuild.BLESS_SAID in out and "cargo is not on this computer" in out
     assert menu.read_text(encoding="utf-8") == "0"
     assert rebuild.BLESS_SAID == "cd editor && CAMSET_BLESS=1 cargo test --release the_default_menu_is_the_golden_one"
+
+
+# ---------------------------------------------------------------- 8. a number field walked whole is no sample
+
+def test_a_sampled_record_every_value_of_which_a_line_chose_is_proved(capsys):
+    """After the first rebuild (2026-11-19): ISO Range Limit read "sampled; 204 values still to try" although one run
+    chose every value of both fields and later runs, sampling the ends again, wrote "sampled": true lines. The writers
+    filed every number field row as a sample. A value one of the report's rows naming the record credits, which a
+    counted line of that very row wrote to it, is chosen; a record every value of which is chosen is proved, each value
+    listed, and no longer a sample (writer.proofs.walked_whole). A value only another row's line wrote (the other
+    limit's leftover), or one the report does not credit, is no choice; a record with a value no line chose stays a
+    sample. Made-up records and lines."""
+    from writer import proofs
+    by_key = {k: {"key": k, "name": k, "values": [[2, "ISO 50"], [3, "ISO 64"], [4, "ISO 80"]]}
+              for k in ("global:0x0001", "global:0x0002", "global:0x0003")}
+    report = [{"row": "Tango [field 0]", "records": {
+                   "global:0x0001": {"proved": {"ISO 50": 2, "ISO 64": 3, "ISO 80": 4}},
+                   "global:0x0003": {"proved": {"ISO 50": 2, "ISO 64": 3}}}},
+              {"row": "Tango [field 1]", "records": {"global:0x0002": {"proved": {"ISO 50": 2, "ISO 64": 3, "ISO 80": 4}}}}]
+
+    def line(field, t, key, after, applied=True):
+        return {"path": ["Tango"], "kind": "fields", "index": [field, t], "label": f"x{t}", "applied": applied,
+                "dat": f"{field}{t}{key}.DAT", "changes": [{"key": key, "before": 9, "after": after}]}
+    lines = [line(0, 0, "global:0x0001", 2), line(0, 1, "global:0x0001", 3),           # a whole walk but one value
+             line(0, 0, "global:0x0003", 2), line(0, 1, "global:0x0003", 3), line(0, 2, "global:0x0003", 4),
+             line(1, 0, "global:0x0002", 2), line(1, 1, "global:0x0002", 3),
+             line(1, 2, "global:0x0001", 4),                                            # field 1's leftover on 0x0001
+             line(0, 2, "global:0x0001", 4, applied=False)]                             # refused: no choice
+    by_row = proofs.written_by_row(lines, set())
+    assert by_row["Tango [field 1]"]["global:0x0001"] == {4}
+    assert proofs.written_values(lines, set()) == {"global:0x0001": {2, 3, 4}, "global:0x0003": {2, 3, 4},
+                                                   "global:0x0002": {2, 3}}
+    sampled = {k: {"proofs": 3, "linear": None} for k in by_key}
+    proved = {}
+    assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == []
+    assert set(sampled) == set(by_key), "4 written only by field 1's line, 0x0003's 4 not credited: still samples"
+    lines.append(line(0, 2, "global:0x0001", 4))              # a later run chose it too
+    by_row = proofs.written_by_row(lines, set())
+    assert proofs.walked_whole(report, by_row, sampled, by_key, proved) == ["global:0x0001"]
+    assert proved == {"global:0x0001": {2, 3, 4}} and set(sampled) == {"global:0x0002", "global:0x0003"}
+    assert "global:0x0001" in capsys.readouterr().out

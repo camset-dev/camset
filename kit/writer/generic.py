@@ -22,7 +22,8 @@ from .labels import clean
 from .offered import check_video_systems, with_video_systems
 from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
                      reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
-                     with_names, written_values, with_option_trees, with_scales, without_observed, without_set_twins)
+                     with_names, walked_whole, written_by_row, written_values, with_option_trees, with_scales,
+                     without_observed, without_set_twins)
 
 
 def newest_download(run: Path) -> Path:
@@ -126,9 +127,11 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
     # name and note as in its proof's rows: that value was the camera's own setting when the row began
     axis_rows = axis_value_rows(option_tree.read_proofs(run))
     # the values the lines the report counts wrote: of the proof the definition held before, only such a value is kept
-    # beside the report's (kept_proof); an old menu row never is
-    written = written_values(*report_proofs(run)[:2], {e["row"] for e in report}) \
+    # beside the report's (kept_proof); an old menu row never is; and each row's own, which says a sampled record walked
+    # whole by some run (walked_whole)
+    by_row = written_by_row(*report_proofs(run)[:2], {e["row"] for e in report}) \
         if (run / "proofs.jsonl").exists() else {}
+    written = written_values([], set(), by_row=by_row)
     for e in report:
         row = menu_row(re.sub(r" \[field \d+\]$", "", e["row"]), axis_rows)
         for k, r in e["records"].items():
@@ -220,6 +223,7 @@ def generic(doc: dict, report: list, run: Path, date: str, tables=None, unresolv
         if k not in by_key:                    # not added (lay_like said why): nothing of its proofs is written
             for d in (proved, sampled, from_start, menus, came, start_only):
                 d.pop(k, None)
+    walked_whole(report, by_row, sampled, by_key, proved)    # a sample every value of which some line chose: proved
     kept_old = {}
     by_lines = hand_facts.by_lines(T, E)       # what a hand table listed, proved by the lines alone
     for k in set(proved) | set(sampled) | set(from_start):
