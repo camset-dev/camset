@@ -57,6 +57,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **The a1 II's ISO Range Limit is proved value by value, its lower end named "ISO Range Limit (lower)",** and its two
   ends and ISO AUTO's Minimum and Maximum (with each mode's copies) carry the order the camera keeps between them.
+- **Two limits the camera keeps in order stay in order:** setting one past the other (the a1 II's ISO Range Limit,
+  ISO AUTO Minimum and Maximum) moves the other to the same value in the same step, as the camera does, and says what
+  moved, or that the camera was not seen to do it. A file holding a pair out of order is listed before saving and
+  writing under "Limits out of order" with a one-step fix, and the Exposure page marks it instead of swapping the two.
 - **The a1 II's Zebra Level Custom boxes are listed as the camera draws them, Type first,** and Time-lapse's Record
   Setting under XAVC S 4K 60p names 200M 4:2:2 10bit and 150M 4:2:0 8bit as the camera does. A memory set shows the
   exposure mode last registered once, in its own record.
@@ -152,6 +156,18 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **The definition says which two settings the camera keeps in order (`at_most`, `at_least`):** the hand tables name
+  the pairs (`LIMIT_PAIRS`), and both writer passes put each on its two settings where they list the same values and
+  sit in the same sets, a camera download holding a pair out of order stopping the write. On the a1 II these are ISO
+  Range Limit, its lower records now named "ISO Range Limit (lower)", and ISO AUTO Minimum and Maximum with each
+  mode's copies.
+- **A number field, box, grid or sampled scale every value of which a line of its own rows chose and saw written is
+  proved with its values,** no longer filed as a sample (the a1 II's ISO Range Limit). `kit/rebuild.py` makes the
+  report again before each further write, so a record first named in a write is credited by the next, and lists each
+  file it changed once, with one line for those it rewrote unchanged.
+- **Smaller kit fixes:** `drive.py` reads a lit bar's label behind its icon where OCR spells the icon as another row's
+  letter, a run whose eyes cannot open says the run did not start, and `prove_run.py --eyes osd-all` takes an OSD
+  page scan whatever eyes the config names.
 - **One path for a new body, in the docs:** AGENTS.md, the quick start and the playbook take a mapper from quick
   start steps 0 to 6 through the playbook's section 16 and back to steps 7 to 9, then Phase 1, and the playbook now
   says what to do after a camera reset, how to reach the state a proof needs, the whole rebuild order and what the kit
