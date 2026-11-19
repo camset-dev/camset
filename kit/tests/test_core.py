@@ -275,9 +275,9 @@ def test_dialog_signatures_differ():
     assert len(sigs) == 4
 
 
-def test_hdmi_calibration():
-    # a 1080p HDMI frame from the Cam Link 4K (2026-10-28): the config crop must land the menu on the
-    # same 640x480 layout as the OSD (Setup > External Output, cursor on HDMI Info. Display)
+def test_hdmi_calibration(owner_config):
+    # a 1080p HDMI frame from the Cam Link 4K (2026-10-28): the config crop (the owner's, asked for by name) must land
+    # the menu on the same 640x480 layout as the OSD (Setup > External Output, cursor on HDMI Info. Display)
     import numpy as np
     from PIL import Image
     from camkit import config

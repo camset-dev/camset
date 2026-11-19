@@ -4,7 +4,8 @@ frames some tests read are found by their own path (camkit.paths.a1ii_root()), a
 tests skip without them. Nor does any test change a file of the clone's own data/ or private/evidence/ (the
 mapper's evidence: guard_the_clones_files), whatever folder it points the kit at. A test that reads the screen through
 camkit.reading fakes both its eyes, OCR and the reader, in one place: the eyes fixture (Eyes). No test reaches a camera
-or reads the owner's config either, whatever fakes it forgets (no_real_camera)."""
+or reads the owner's config either, whatever fakes it forgets (no_real_camera); a test that reads the owner's config on
+purpose asks for it by name, with the owner_config fixture, and skips where there is none."""
 import sys
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def no_real_camera(link_stub, monkeypatch):
     import camkit
     import camkit.link
     stub, marker, config = link_stub
-    real = camkit.LINK_BIN
+    real, owners = camkit.LINK_BIN, camkit.CONFIG
     monkeypatch.setattr(camkit, "CONFIG", config)
     monkeypatch.setattr(camkit, "LINK_BIN", stub)
     monkeypatch.setattr(camkit.link, "LINK_BIN", stub)
@@ -84,11 +85,24 @@ def no_real_camera(link_stub, monkeypatch):
     monkeypatch.setenv("CAMSET_CONFIG", str(config))
     monkeypatch.setenv("CAMSET_LINK_BIN", str(stub))
     seen = marker.read_text(encoding="utf-8") if marker.exists() else ""
-    yield
+    yield owners                        # the clone's own config (or CAMSET_CONFIG's): owner_config gives it back
     started = marker.read_text(encoding="utf-8")[len(seen):] if marker.exists() else ""
     if started:
         pytest.fail(f"the test started camlink (kit/tests/conftest.py's stub stood in for it), with {started.strip()}: "
                     "give it a stand-in link (kit/tests/fake_camlink.py, or the no_camera fixture)")
+
+
+@pytest.fixture
+def owner_config(no_real_camera, monkeypatch):
+    """The owner's private/config.json back for a test that reads it on purpose (the HDMI crop it checks against the
+    a1 II's saved frames), for that test alone and in the programs it starts; camlink stays the stub. The test skips
+    where there is none (a fresh clone, CI). Returns its path."""
+    import camkit
+    if not no_real_camera.is_file():
+        pytest.skip(f"no config of the owner's here ({no_real_camera})")
+    monkeypatch.setattr(camkit, "CONFIG", no_real_camera)
+    monkeypatch.setenv("CAMSET_CONFIG", str(no_real_camera))
+    return no_real_camera
 
 
 @pytest.fixture(autouse=True)

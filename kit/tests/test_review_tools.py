@@ -286,3 +286,34 @@ def test_a_test_that_forgets_its_fake_fails(tmp_path):
                         "--rootdir", str(tmp_path), "--basetemp", str(tmp_path / "inner")],
                        capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
     assert r.returncode != 0 and "the test started camlink" in r.stdout and "192.0.2.10" in r.stdout, r.stdout[-3000:]
+
+
+def test_a_test_asks_for_the_owners_config_by_name(tmp_path):
+    """owner_config gives the owner's config (here a made-up one, through CAMSET_CONFIG as the session starts) back to
+    the test that asks for it, and to the programs it starts; camlink stays the stub, and the next test has none
+    again. Without a config of the owner's the test skips. Run as test sessions of their own with the kit's conftest."""
+    made_up = tmp_path / "owners_config.json"
+    made_up.write_text('{"camera_ip": "192.0.2.44"}', encoding="utf-8")
+    t = tmp_path / "test_owner.py"
+    t.write_text("import os, subprocess, sys\nimport pytest\nimport camkit, camkit.link\nfrom camkit.runs import Run\n\n"
+                 "def test_asks(owner_config, tmp_path):\n"
+                 "    assert camkit.config()['camera_ip'] == '192.0.2.44'\n"
+                 "    code = 'import sys; sys.path.insert(0, sys.argv[1]); import camkit; print(camkit.config()[\"camera_ip\"])'\n"
+                 "    r = subprocess.run([sys.executable, '-c', code, os.environ['KIT']], capture_output=True, text=True)\n"
+                 "    assert r.stdout.strip() == '192.0.2.44', r.stderr\n"
+                 "    assert camkit.link.Link(Run('r', root=tmp_path)).args[0].endswith(('camlink_stub', 'camlink_stub.cmd'))\n\n"
+                 "def test_next():\n"
+                 "    with pytest.raises(camkit.ConfigMissing):\n"
+                 "        camkit.config()\n", encoding="utf-8")
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "kit" / "tests"), str(ROOT / "kit")]),
+           "KIT": str(ROOT / "kit")}
+
+    def session(config):
+        return subprocess.run([sys.executable, "-m", "pytest", "-q", "-rs", "-p", "conftest", "-p", "no:cacheprovider",
+                               str(t), "--rootdir", str(tmp_path), "--basetemp", str(tmp_path / "inner")],
+                              capture_output=True, text=True, timeout=120, cwd=tmp_path,
+                              env={**env, "CAMSET_CONFIG": str(config)})
+    r = session(made_up)
+    assert r.returncode == 0 and "2 passed" in r.stdout, r.stdout[-3000:]
+    r = session(tmp_path / "none.json")
+    assert r.returncode == 0 and "1 passed, 1 skipped" in r.stdout and "no config of the owner's" in r.stdout, r.stdout[-3000:]
