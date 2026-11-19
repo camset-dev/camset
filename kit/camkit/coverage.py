@@ -632,20 +632,49 @@ def record_base(key) -> str | None:
     return f"{m.group(1)}:{m.group(2)}" if m else None
 
 
+# the labels' folds and comparisons memoised while a build runs (build: {function: {arguments: result}}, else None):
+# a build folds the same labels about a million times (1,641 distinct strings and 65,920 pairs on the a1 II,
+# 2026-11-18), and the folds themselves (camkit.safety, camkit.match) stay uncached, as the guards use them
+_MEMO = None
+
+
+def _memo(fn, *args):
+    """fn(*args), from this build's memo when it is there (_MEMO): `fn` is a pure fold or comparison of labels."""
+    if _MEMO is None:
+        return fn(*args)
+    table = _MEMO.setdefault(fn, {})
+    try:
+        return table[args]
+    except KeyError:
+        got = table[args] = fn(*args)
+        return got
+    except TypeError:                   # an argument that cannot be a key: not memoised
+        return fn(*args)
+
+
+def _same(a, b) -> bool:
+    """camkit.match.same(a, b), memoised for the build (_memo)."""
+    return _memo(match.same, a, b)
+
+
 def plain(text) -> str:
     """A label as the ledger compares it: safety.plain's (folded, the signs an icon reads as left out, case and spacing
     aside), and "" for none."""
-    return safety.plain(str(text or ""))
+    return _memo(safety.plain, str(text or ""))
 
 
 def same_label(a, b) -> bool:
     """Two labels of one row: camkit.match.same's (an OCR slip aside, digits and short words exact), or one the other
     cut short ("Face Priority in Mul...", a page model's), which match.same does not take."""
+    return _memo(_same_label, a, b)
+
+
+def _same_label(a, b) -> bool:
     x, y = plain(a), plain(b)
     if not x or not y:
         return False
     # match.same takes no pair this far apart in length (its ratio of 0.85 needs three quarters): asked of the others
-    if x == y or (min(len(x), len(y)) >= 0.7 * max(len(x), len(y)) and match.same(a, b)):
+    if x == y or (min(len(x), len(y)) >= 0.7 * max(len(x), len(y)) and _same(a, b)):
         return True
     x, y = (" ".join(str(t or "").casefold().split()) for t in (a, b))
     return any(p.endswith("...") and len(p) > 3 and q.startswith(p[:-3]) for p, q in ((x, y), (y, x)))
@@ -796,7 +825,18 @@ def _order(defn: dict) -> dict:
 
 def build(camera: str = None, *, src: Sources = None, public: bool = False, validity: bool = False) -> Ledger:
     """The camera's ledger, generated from its sources (load_sources; `src` given as made). validity: the proofs'
-    validity and evidence bundles too (the private form; kit/tools/coverage.py)."""
+    validity and evidence bundles too (the private form; kit/tools/coverage.py). The labels' folds are memoised for
+    the length of the build (_MEMO), a build inside it (public_ledger's) sharing them."""
+    global _MEMO
+    outer = _MEMO
+    _MEMO = {} if outer is None else outer
+    try:
+        return _build(camera, src, public, validity)
+    finally:
+        _MEMO = outer
+
+
+def _build(camera, src, public, validity) -> Ledger:
     src = src or load_sources(camera, public=public)
     led = Ledger(src)
     defn = src.definition
@@ -1471,7 +1511,9 @@ def _option_fact(f, led, e, by_key, label, kind, fact):
 
 
 def _values_named(led, e, by_key, label) -> list:
-    from .match import norm, same
+    def norm(t):
+        return _memo(match.norm, t)
+    same = _same
     memo = led.__dict__.setdefault("_named", {})
     if (id(e), label) in memo:
         return memo[(id(e), label)]
@@ -1925,8 +1967,8 @@ def _list_proofs(led: Ledger, lists: list) -> None:
         held = c["value"] in {v for v, _ in x["values"]}
         named = x["_names"].get(c["value"], set())
         others = [t for o in by_value[(id(x), c["value"])] if o["key"] != c["key"] for t in o["texts"]]
-        if held and (any(match.same(t, n) for t in c["texts"] for n in named)
-                     or any(match.same(t, o) for t in c["texts"] for o in others)):
+        if held and (any(_same(t, n) for t in c["texts"] for n in named)
+                     or any(_same(t, o) for t in c["texts"] for o in others)):
             x["own"][c["key"]]["proofs"].append({"proof": c["proof"], "run": c["run"], "value": c["value"]})
             continue
         if not c["alone"]:
@@ -1937,7 +1979,7 @@ def _list_proofs(led: Ledger, lists: list) -> None:
             for v, n in x["values"]:
                 if v == c["value"] or n in named:
                     continue
-                srcs = [s for s, t in indep if match.same(t, n)]
+                srcs = [s for s, t in indep if _same(t, n)]
                 if any(_independent(a, b) for i, a in enumerate(srcs) for b in srcs[i + 1:]):
                     reads_as = v
                     break
@@ -2100,7 +2142,7 @@ def readings_agree(p: dict) -> tuple:
     (_independent) naming it alike, compared whole (camkit.match.same: "On" is not "Continuous", "ISO 100" not "ISO
     1000", "1/250" not "1/2500")."""
     rs = readings(p)
-    agree = any(_independent(rs[i][0], rs[j][0]) and match.same(rs[i][1], rs[j][1])
+    agree = any(_independent(rs[i][0], rs[j][0]) and _same(rs[i][1], rs[j][1])
                 for i in range(len(rs)) for j in range(i + 1, len(rs)))
     return len(rs), agree
 

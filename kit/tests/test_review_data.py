@@ -64,3 +64,38 @@ def test_every_committed_definition_is_written_one_setting_a_line():
         doc = json.loads(text)
         assert definitions.public_text(doc) == text, p.name
         assert text.count("\n") < len(doc["settings"]) + 1500, p.name
+
+
+# ---------------------------------------------------------------- 2. the ledger's label folds memoised for one build
+
+from camkit import coverage, safety  # noqa: E402
+from test_coverage import CAM, RECORDS  # noqa: E402
+from test_coverage import camera  # noqa: E402, F401  (the made-up camera's fixture)
+
+
+def test_a_build_folds_each_label_once_and_builds_the_same_ledger(camera, monkeypatch):  # noqa: F811 (the fixture)
+    """Review B5 (2026-11-18): the ledger build spent most of its time folding the same labels again (996,805 calls of
+    safety.plain on 1,641 strings for the a1 II). A build now memoises its folds and comparisons (coverage._memo) for
+    its own length: each distinct label is folded once, the memo is gone after the build, and the ledger (both forms)
+    is the one a build without the memo gives."""
+    seen = []
+    fold = safety.plain
+
+    def counted(text):
+        if sys._getframe(1).f_code.co_name in ("_memo", "plain"):          # the ledger's own folds, not the guards'
+            seen.append(text)
+        return fold(text)
+    monkeypatch.setattr(safety, "plain", counted)
+
+    def forms(led):
+        return coverage.text(coverage.private_doc(led)), coverage.text(coverage.public_doc(led))
+    led = coverage.build(CAM, src=coverage.load_sources(CAM, records=RECORDS), validity=True)
+    assert coverage._MEMO is None, "the memo lasts one build"
+    assert len(seen) == len(set(seen)) > 10, "each label folded once in a build"
+    memoised = forms(led)
+    def _memo(fn, *args):                                                       # no memo: the code as before
+        return fn(*args)
+    monkeypatch.setattr(coverage, "_memo", _memo)
+    seen.clear()
+    plain = coverage.build(CAM, src=coverage.load_sources(CAM, records=RECORDS), validity=True)
+    assert len(seen) > len(set(seen)) and forms(plain) == memoised
