@@ -270,6 +270,10 @@ class StopRequested(Exception):
     pass
 
 
+# The commands this process has sent to a camlink (Link.call, every one: a read too), whichever link: none means the run
+# has sent nothing to the camera, so a failure before its first command left the camera as it was (runner.restoring)
+SENT = 0
+
 # The runs whose links this process opened: a signal asks each to stop. The handlers stay for the life of the
 # process once a link has opened (a runner's next link, and its restore, come after a stop).
 _RUNS: list = []
@@ -615,6 +619,8 @@ class Link:
             self.released = True                # once per link, answered or not
         if verb in MOVES:
             self.moves += 1                     # sent, answered or not: the screen may have moved
+        global SENT
+        SENT += 1                               # this run has sent the camera something (runner.restoring)
         t0, n = time.monotonic(), self._next_id()
         try:
             self.proc.stdin.write(f"@{n} {command}".encode() + b"\n")      # the reply echoes the id

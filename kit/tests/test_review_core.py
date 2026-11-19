@@ -554,3 +554,61 @@ def test_the_lock_rule_follows_the_mode_a_switch_leaves_the_camera_in(own_runs, 
         assert session.MODE == "S&Q" and runner.switch_waiting()
     else:
         assert seen["upload"] == "S&Q" and session.MODE == "Stills"
+
+
+# ---------------------------------------------------------------- met on the camera 2026-11-18: eyes that do not open
+
+DONGLE_LINES = ["[avfoundation] Selected framerate (59.940060) is not supported by the device.",
+                "[avfoundation] Supported modes:", "[avfoundation]   3840x2160@[29.970030 29.970030]fps"]
+
+
+def dongle_that_sends_nothing(run):
+    """camkit.frames.HdmiSource as it is when the dongle refused the mode asked (the camera's HDMI output on Auto,
+    2160p): no fresh frame, ffmpeg's lines saying which modes it offers. Its grab raises from camkit.frames itself."""
+    import collections
+    import threading
+    import time
+
+    from camkit.frames import Frame, HdmiSource
+    eyes = HdmiSource.__new__(HdmiSource)
+    eyes.run, eyes._lock, eyes.capture_size, eyes.fps = run, threading.Lock(), (1920, 1080), 59.94
+    eyes._latest = Frame(np.zeros((480, 640, 3), np.uint8), time.monotonic() - 10, None, "hdmi")
+    eyes._restarted = time.monotonic()          # restarted just now: no second start, the feed's error at once
+    eyes.errors = collections.deque(DONGLE_LINES)
+    return eyes
+
+
+def test_eyes_that_cannot_open_before_any_command_are_no_unrestored_camera(tmp_path, monkeypatch, capsys):
+    """Met on the camera 2026-11-18: with the camera's HDMI output on Auto (2160p), prove_run --start FILE ended with
+    status 4 and "putting the start file back did not finish (RuntimeError: the capture dongle does not offer 1920x1080
+    at 59.94 fps ...): the camera may not be on its start file", where nothing had been sent: the eyes failed at their
+    first frame. Now, where the eyes cannot be opened and no command has gone to the camera in this run, the run says
+    so with the dongle's own words, says nothing was sent, and exits as a run that did not start (status 1, not 4).
+    After the first command the same failure still exits 4."""
+    import contextlib
+
+    import prove_run
+    import runner
+    from camkit import link as link_mod
+    run = Run("kit2_prove", root=tmp_path)
+    lk = link_on(tmp_path, lambda verb, args: {"ok": True})
+    monkeypatch.setattr(prove_run, "Link", lambda r: contextlib.nullcontext(lk))
+    monkeypatch.setattr(link_mod, "SENT", 0)                     # no command has gone out in this run yet
+    start = tmp_path / "start.DAT"
+    with pytest.raises(SystemExit) as stop, runner.restoring("putting the start file back"):
+        prove_run.put_start_back(run, dongle_that_sends_nothing(run), start)
+    said = str(stop.value.code)
+    assert stop.value.code not in (runner.EXIT_UNRESTORED, runner.EXIT_RESTORE_BY_HAND, 0, None)
+    assert "did not start" in said and "Nothing was sent to the camera" in said
+    assert "does not offer 1920x1080 at 59.94 fps" in said and "3840x2160 at 29.97 fps" in said
+    assert "may not be on its start file" not in capsys.readouterr().out and lk.proc.stdin.sent == []
+    # one command gone (a press the camera took), then the same failure: the camera may have changed, exit 4 as ever
+    lk.press("menu", cleanup=True)
+    with pytest.raises(SystemExit) as stop, runner.restoring("the session's end"):
+        dongle_that_sends_nothing(run).grab()
+    assert stop.value.code == runner.EXIT_UNRESTORED and "may not be on its start file" in capsys.readouterr().out
+    # a failure that is not the eyes', before any command, stays as it was (4): only the eyes' own is told apart
+    monkeypatch.setattr(link_mod, "SENT", 0)
+    with pytest.raises(SystemExit) as stop, runner.restoring("putting the start file back"):
+        raise RuntimeError("the upload was not answered")
+    assert stop.value.code == runner.EXIT_UNRESTORED

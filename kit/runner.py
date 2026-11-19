@@ -55,6 +55,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from camkit import link as camlink
 from camkit import live, safety, screen, session
 from camkit.frames import eyes_default, load
 from camkit.link import Link, StopRequested
@@ -798,7 +799,11 @@ def restoring(what: str = "the restore", withhold: bool = False):
     for the shooting screen, camkit.live.close giving up with its SystemExit) is said and turned into exit
     EXIT_UNRESTORED, so a chain stops there instead of starting its next step from a camera that may not be on its
     start file. A traceback's exit status 1 once let it go on. A second Ctrl-C (KeyboardInterrupt) is left as it is.
-    withhold (a --network or --owner run): the error's quoted texts withheld, as the run's first error line has them."""
+    withhold (a --network or --owner run): the error's quoted texts withheld, as the run's first error line has them.
+    One case is a run that did not start, not an unrestored camera: the eyes could not be opened (eyes_failed) and this
+    run has sent no command to the camera at all (camkit.link.SENT); it says so, the eyes' own words kept, and exits as
+    a run refused before anything is sent does (status 1). 2026-11-18: the capture dongle refused the mode asked (the
+    camera's HDMI output on Auto) and a prove_run whose camera was exactly on its start file exited 4."""
     said = safety.quoted_withheld if withhold else str
     try:
         yield
@@ -808,9 +813,23 @@ def restoring(what: str = "the restore", withhold: bool = False):
         print(f"{what} did not finish ({said(e)}): the camera may not be on its start file", flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e
     except Exception as e:
+        if camlink.SENT == 0 and eyes_failed(e):
+            raise SystemExit(f"{what} did not start: the kit's eyes could not be opened: {said(e)}. Nothing was sent to "
+                             "the camera, so it is as it was before this run: put right what that says, then run this "
+                             "again.") from e
         print(f"{what} did not finish ({said(f'{type(e).__name__}: {e}')}): the camera may not be on its start file",
               flush=True)
         raise SystemExit(EXIT_UNRESTORED) from e
+
+
+def eyes_failed(e: BaseException) -> bool:
+    """Whether `e` was raised by the eyes themselves (camkit.frames: the capture dongle sent no frame or refused the
+    mode asked, a device not found), told by the module its innermost frame ran in; a failure the eyes passed on from
+    the link (OSD eyes: camkit.link's error) is the link's, not theirs."""
+    tb = e.__traceback__
+    while tb is not None and tb.tb_next is not None:
+        tb = tb.tb_next
+    return tb is not None and tb.tb_frame.f_globals.get("__name__") == "camkit.frames"
 
 
 def end_session(link, eyes, start: Path, why: str = "the settings download after the rows", tag: str = "after",
