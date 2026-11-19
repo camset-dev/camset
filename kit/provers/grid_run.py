@@ -24,7 +24,8 @@ from camkit import camset, ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import LOCK_S, PASS1, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from prove_run import PASS1, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.base import wait_lock  # noqa: E402
 from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
@@ -139,7 +140,7 @@ def visit(cam, link, hdmi, cycle, model, path, labels, cells: list) -> dict:
     to_shooting(link, hdmi, "the download after OK")
     time.sleep(1)
     dat = link.download(f"{path[-1]}-cells{'-'.join(map(str, sorted(cells)))}")
-    time.sleep(LOCK_S)
+    wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
     return {"boxes": flipped, "chosen_frame": chosen, "row_frame": row_frame, "vlm": seen_vlm,
             "dat": dat, "notice": got.notice, "applied": got.applied}
 
