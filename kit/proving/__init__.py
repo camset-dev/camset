@@ -3,6 +3,8 @@
     base        the run's places (pass 1's map, the table and axis walks), Failed and the other ends of a row, the
                 proofs file (Tagged), the attempts file, pass 1's saved frames
     screens     what the screen shows: the label under the cursor, a carousel's title, notices after a choice
+    commit      the one step after OK: applied, refused, a notice closed, the menu closed, back on the page, an
+                information screen taken (after_ok), for every prover that presses OK on a choice
     nav         to a row and back, the short way round a list, out with MENU, back to the shooting screen
     options     which option the cursor is on (labels, stars, icons, a picker's place)
     putback     what a row's put-back may leave differing without failing

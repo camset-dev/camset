@@ -86,7 +86,8 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import camset, definitions, jsonl, models, ocr, paths, reading, safety, screen  # noqa: E402
+from camkit import camset, definitions, jsonl, models, paths, reading, safety, screen  # noqa: E402
+from camkit import ocr  # noqa: E402,F401   (the tests reach the OCR seam as prove_run.ocr)
 from camkit import coverage  # noqa: E402
 from camkit.vlm import PROMPTS  # noqa: E402,F401   (reread_proofs imports it from here)
 from camkit.frames import OsdSource, eyes_from_config  # noqa: E402
@@ -140,6 +141,7 @@ from proving.tables import (HOLD, OWN_KINDS, SEPARATE_BOX, TICKED, cell_value, i
                             screen_of, separate_modes, separate_ticked, table_jobs, table_order, table_planned,
                             to_cell, to_key, to_ok, to_tile)
 from proving.helptext import help_row  # noqa: E402,F401
+from proving.commit import after_ok  # noqa: E402
 
 # --context: the switched state this run proves in (pass 3), which a single-option list's display proof needs to tell
 # which of its row's records holds the value now (display_records)
@@ -253,58 +255,22 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         chosen, seen_vlm, shown = enter_chosen(cam, chosen_now(), chosen_now)
         if network_row:
             print(f"   proof {step + 1} of {len(order)}", flush=True)
-        s = cam.read()
-        notice, refused = None, False
-        if s.kind == "notice":
-            # an information notice after the choice applied (Sync Terminal = Always: "Enters the state
-            # with Flash Effect dur Sht. applied", 2026-10-29): keep its text, close it with MENU (which
-            # closes the menu too), never OK; the download shows what applied. A confirmation fails.
-            # "Not available as follows <blocker>" refuses the choice (Flash Mode = Flash Off in Manual
-            # Exposure, 2026-10-29): the proof says so and names the blocker; the value stays as it was.
-            lines = ocr.read([cam.frame.path])[cam.frame.path]
-            text_n = ocr.text_in(lines, (0, 0, 640, 480))
-            why = safety.confirmation(text_n)
-            if why:
-                raise Failed(f"{name}: after OK on {labels[k]!r} a confirmation came up ({why}; {cam.frame.path.name})")
-            refused = bool(re.search(r"not available|invalid", text_n, re.I))
-            if network_row:
-                # inside a network row no notice's text is kept or said: what safety.kept_screen keeps (its row labels
-                # and field names; inside a Wi-Fi or Bluetooth setting the notice as safety.notice_kept keeps it, never
-                # inside an identity row; the count withheld); MENU alone closes it
-                kept = safety.kept_screen("notice" if not identity_row else "unknown", lines, KEPT["labels"],
-                                          KEPT["values"], (), KEPT["by_row"])
-                notice = {**kept, "frame": cam.frame.path.name}       # in proofs.jsonl alone (tell)
-            else:
-                notice = {"text": text_n, "frame": cam.frame.path.name}
-                print(f"   {'refused' if refused else 'notice after OK'}: {text_n[:90]!r}", flush=True)
-            cam.press("menu")
-        elif s.kind == "shooting":
-            # some choices close the menu (Focus Area = Wide went straight to the shooting screen with
-            # the new area icon, 2026-10-29): the download shows what applied
-            notice = {"text": "the menu closed after OK", "frame": cam.frame.path.name}
-            tell("   the menu closed after OK")
-        elif s.kind == "menu" and (same_place(place(cam), top) if top is not None else at_label(cam, "menu", path[0])):
-            # back on the top-level row: XAVC HS 8K's Rec Frame Rate rebuilds Movie Settings on OK
-            # (24p applied, 2026-10-31); the download shows what applied. Over the OSD there is no
-            # recorded place for that row, so its label decides
-            notice = {"text": "the camera went back to the menu page after OK", "frame": cam.frame.path.name}
-            tell("   back on the menu page after OK")
-        elif s.kind == "unknown" and not network_row and not same_place(place(cam), row_place):
-            # an information screen without a notice's frame lines, "Don't show this again." over its
-            # OK (Framing Stabilizer = On: Center, Movie mode, 2026-10-30): taken as the table prover
-            # takes one, never ticking the box; anything else still fails the row. Inside a network row no OK goes
-            # out on a screen nobody reads: the row fails, and MENU cancels it
-            notice = info_notice_ok(cam, name)
-        elif s.kind == "table" and not network_row and not same_place(place(cam), row_place):
-            # an information screen with buttons after the choice (Exposure Ctrl Type = Flexible Exp. Mode: "Changes
-            # keys assigned to suit this mode", a Custom Key/Dial Set. link beside its OK, 2026-11-07): its OK applies
-            # the choice, and the download shows what else it rewrote; a confirmation fails the row
-            notice = info_notice_ok(cam, name, kinds=("table",))
-            if not same_place(place(cam), row_place):
-                raise Failed(f"{name}: after the information's OK the screen is {cam.read().kind} "
-                             f"({cam.frame.path.name}), not the row")
-        elif not same_place(place(cam), row_place):
-            raise Failed(f"{name}: after OK on {labels[k]!r} the screen is {s.kind} ({cam.frame.path.name}), not the row")
+        # the screen after OK (proving.commit.after_ok): a refusal ("not available as follows <blocker>": Flash Mode =
+        # Flash Off in Manual Exposure, 2026-10-29) or an information notice closed with MENU, never OK; the menu
+        # closed; back on the top-level row (XAVC HS 8K's Rec Frame Rate rebuilds Movie Settings on OK, 2026-10-31; over
+        # the OSD there is no recorded place for that row, so its label decides); an information screen taken by
+        # info_notice_ok's rules, never inside a network row, where no OK goes out on a screen nobody reads; back on
+        # the row. Inside a network row no notice's text is kept or said: what safety.kept_screen keeps (its row labels
+        # and field names; inside a Wi-Fi or Bluetooth setting the notice as safety.notice_kept keeps it, never inside an
+        # identity row; the count withheld), in proofs.jsonl alone (tell)
+        got = after_ok(cam, name, label=labels[k], back=lambda: same_place(place(cam), row_place),
+                       page=lambda: (same_place(place(cam), top) if top is not None
+                                     else at_label(cam, "menu", path[0])),
+                       info=not network_row, say=tell,
+                       withhold=(lambda lines: safety.kept_screen("notice" if not identity_row else "unknown", lines,
+                                                                  KEPT["labels"], KEPT["values"], (), KEPT["by_row"]))
+                       if network_row else None)
+        notice, refused = got.notice, got.refused
         back = cam.frame.path.name                     # the row showing its new value (or the notice)
         dat = link.download(f"{path[-1]}-{k}")
         done = time.monotonic()
@@ -596,20 +562,10 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             return cam.frame.path.name, axis_title(cam), later(vlm_option, cam)
         chosen, shown, seen_vlm = enter_chosen(cam, (cam.frame.path.name, axis_title(cam), later(vlm_option, cam)),
                                                axis_now)
-        s = cam.read()
-        notice, refused = None, False
-        if s.kind == "notice":
-            text_n = ocr.text_in(ocr.read([cam.frame.path])[cam.frame.path], (0, 0, 640, 480))
-            if safety.confirmation(text_n):
-                raise Failed(f"{name}: after OK a confirmation came up ({cam.frame.path.name})")
-            refused = bool(re.search(r"not available|invalid", text_n, re.I))
-            notice = {"text": text_n, "frame": cam.frame.path.name}
-            print(f"   {'refused' if refused else 'notice after OK'}: {text_n[:90]!r}", flush=True)
-            cam.press("menu")
-        elif s.kind == "shooting":
-            notice = {"text": "the menu closed after OK", "frame": cam.frame.path.name}
-        elif not same_place(place(cam), row_place):
-            raise Failed(f"{name}: after OK the screen is {s.kind} ({cam.frame.path.name}), not the row")
+        # the screen after OK (proving.commit.after_ok): a refusal or a notice closed with MENU, the menu closed, or back
+        # on the row; no menu page judged as the page (a carousel's row is a top-level row), no information screen taken
+        got = after_ok(cam, name, back=lambda: same_place(place(cam), row_place), info=False)
+        notice, refused = got.notice, got.refused
         dat = link.download(f"{path[0]}-axis-{k}")
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))

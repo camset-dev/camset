@@ -1186,7 +1186,7 @@ def test_read_takes_only_the_stakes_and_kinds_it_knows(eyes):
 # module moved onto camkit.reading leaves this list, and none joins it: it only gets shorter (docs/decisions/0022).
 READ_BY_THEMSELVES = [
     "kit/camkit/live.py", "kit/crawl_run.py", "kit/drive.py", "kit/help_reads.py", "kit/help_run.py",
-    "kit/page_model.py", "kit/pass1_labels.py", "kit/prove_run.py",
+    "kit/page_model.py", "kit/pass1_labels.py",
     "kit/provers/afreg_run.py", "kit/provers/boxes_run.py", "kit/provers/bracket_run.py",
     "kit/provers/customshoot_run.py", "kit/provers/filter_run.py", "kit/provers/grid_run.py",
     "kit/provers/mode_switch.py", "kit/provers/mymenu_run.py", "kit/provers/orient_run.py",

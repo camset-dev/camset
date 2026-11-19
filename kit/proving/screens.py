@@ -116,6 +116,11 @@ def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
     return {"row": row, "frame": frame, "by": "a lone OK after MENU was refused"}
 
 
+def frame_lines(cam) -> list:
+    """OCR's lines of the whole frame on show (a notice after OK: proving.commit reads it here)."""
+    return ocr.read([cam.frame.path])[cam.frame.path]
+
+
 def bar_text(cam) -> str:
     """OCR of the label under the cursor bar (menu row, submenu row, list option)."""
     s, f = cam.read(), cam.frame
