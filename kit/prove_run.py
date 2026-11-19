@@ -1035,7 +1035,9 @@ def main():
     info_ok_jobs_or_exit(todo, proving.checklists.INFO_OK)
     if network:
         todo = network_jobs_or_exit(todo, network, proving.jobs.NETWORK_OPTIONS)
-    cycle, model = load_scan(a.scan)
+    # the scan matches the eyes the run navigates with: --eyes osd-all's the camera's own picture whatever the config
+    # says (OsdEyes), else the config's (runner.current_eyes)
+    cycle, model = load_scan(a.scan, **({"eyes": "osd"} if a.eyes == "osd-all" else {}))
     CYCLE[:] = cycle
     MODEL.update(model)
     order = {}

@@ -672,3 +672,29 @@ def test_drive_reads_the_label_behind_an_icon_read_as_another_rows_letter(tmp_pa
     assert not icon_behind("RGB Peaking Color", "Peaking Color", PEAKING)               # three letters are no icon
     assert not icon_behind("R Peaking Color", "Peaking Color", {**PEAKING, "label": "Peaking Level"})
     assert not icon_behind("R Peaking Color Level", "Peaking Color", PEAKING, {"Peaking Color Level"})
+
+
+def test_prove_run_osd_all_takes_an_osd_scan_whatever_eyes_the_config_names(own_runs, monkeypatch):
+    """Finding 16's follow-up: prove_run.py --eyes osd-all navigates with the camera's own picture (OsdEyes) whatever
+    the config's eyes, so its OSD page scan is of its own eyes; it once stopped at its start, with a config on HDMI, as
+    a scan of other eyes. load_scan is now told the eyes the run really uses. Without osd-all the config's eyes stand,
+    and the same OSD scan named stops before anything is sent, as before."""
+    import prove_run
+    from camkit import models
+    from conftest import TEST_CAMERA
+
+    class Reached(Exception):
+        """past the scan: the run went on to open its eyes"""
+    whole_scan(own_runs / TEST_CAMERA, "kit2_page_scan_osd", 1_000, eyes="osd")
+    monkeypatch.setenv("CAMSET_EYES", "hdmi")
+    monkeypatch.setattr(prove_run.models, "current", lambda root: models.A1II)
+    monkeypatch.setattr(prove_run, "jobs", lambda scope=None: [])
+    monkeypatch.setattr(prove_run, "axis_jobs", lambda scope=None: [])
+    monkeypatch.setattr(prove_run, "eyes_from_config", lambda run: (_ for _ in ()).throw(Reached()))
+    monkeypatch.setattr(prove_run, "Link", lambda run: pytest.fail("the link opened"))
+    monkeypatch.setattr(sys, "argv", ["prove_run.py", "--eyes", "osd-all", "--scan", "kit2_page_scan_osd"])
+    with pytest.raises(Reached):
+        prove_run.main()
+    monkeypatch.setattr(sys, "argv", ["prove_run.py", "--scan", "kit2_page_scan_osd"])
+    with pytest.raises(SystemExit, match="made with OSD eyes.*Nothing was sent to the camera"):
+        prove_run.main()
