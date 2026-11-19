@@ -38,8 +38,11 @@ def built(folder: Path, name: str) -> Path:
     return next((folder / t for t in tries if (folder / t).exists()), folder / tries[0])
 
 
-LINK_BIN = built(KIT / "link" / "build", "camlink")
-CONFIG = ROOT / "private" / "config.json"
+# CAMSET_LINK_BIN names another camlink and CAMSET_CONFIG another config file: the tests point them at a stub that
+# fails the test and at a file that is not there (kit/tests/conftest.py), so no test, nor a program a test starts,
+# reaches a camera or reads the owner's config
+LINK_BIN = Path(os.environ.get("CAMSET_LINK_BIN") or built(KIT / "link" / "build", "camlink"))
+CONFIG = Path(os.environ.get("CAMSET_CONFIG") or ROOT / "private" / "config.json")
 
 
 class ConfigMissing(SystemExit):

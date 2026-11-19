@@ -25,6 +25,8 @@ there stops run_root() with the command that moves them under their camera's fol
 they are never used where they are, nor silently.
 
 CAMSET_RUNS names another folder to hold the camera folders (the tests use it; default: runs/ in the clone).
+CAMSET_CONFIG and CAMSET_LINK_BIN name another config file and another camlink (camkit/__init__.py; the tests point
+them at a file that is not there and at a stub).
 """
 import json
 import os

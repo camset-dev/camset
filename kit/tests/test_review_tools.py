@@ -1,6 +1,8 @@
 """The 2026-11-18 engineering review's findings on the kit's tools, each shown by a test before its fix: the exit
-statuses of kit/tools/chain.py and kit/tools/upload_check.py (finding 18). No camera: a chain's steps here are this
-Python, an upload's link and its restore check are stand-ins, and the files are the ILCE-1M2 definition's sample."""
+statuses of kit/tools/chain.py and kit/tools/upload_check.py (finding 18), and what keeps every test off the real
+camera and the owner's config (finding 21). No camera: a chain's steps here are this Python, an upload's link and its
+restore check are stand-ins, and the files are the ILCE-1M2 definition's sample."""
+import os
 import runpy
 import subprocess
 import sys
@@ -200,3 +202,42 @@ def test_a_step_that_ends_at_once_costs_no_wait(tmp_path, monkeypatch):
     monkeypatch.setattr(chain, "RUN_ROOT", tmp_path)
     step = {"run": [sys.executable, "-c", "raise SystemExit(3)"], "log": "step.log"}
     assert chain.run_step(step, None, sys.stdout) == 3
+
+
+# ---------------------------------------------------------------- finding 21: no test reaches the real camera
+
+def test_a_test_sees_neither_the_clones_config_nor_the_built_camlink(own_runs):
+    """Finding 21: camkit.CONFIG was the clone's private/config.json and the link's camlink the built one in every test,
+    so a test that forgot its fake would read the owner's camera address and connect. Now both are the conftest's
+    (no_real_camera): a config that is not there, and a stub."""
+    import camkit
+    import camkit.link
+    assert camkit.CONFIG != ROOT / "private" / "config.json" and not camkit.CONFIG.exists()
+    assert camkit.config(required=False) == {}
+    link = camkit.link.Link(Run("kit2_link"), ip="192.0.2.10", catch_signals=False)
+    assert Path(link.args[0]).stem == "camlink_stub" and link.args[1:] == ["--ip", "192.0.2.10"], link.args
+
+
+def test_a_kit_program_a_test_starts_sees_them_too(own_runs):
+    """The same in a program a test starts, through the environment it inherits (CAMSET_CONFIG, CAMSET_LINK_BIN)."""
+    code = "import sys; sys.path.insert(0, sys.argv[1]); import camkit; print(camkit.LINK_BIN); print(camkit.CONFIG)"
+    r = subprocess.run([sys.executable, "-c", code, str(ROOT / "kit")], capture_output=True, text=True, timeout=60)
+    link, config = r.stdout.splitlines()
+    assert Path(link).stem == "camlink_stub" and config == os.environ.get("CAMSET_CONFIG"), r.stdout + r.stderr
+    assert config != str(ROOT / "private" / "config.json")
+
+
+def test_a_test_that_forgets_its_fake_fails(tmp_path):
+    """A test that opens a link with no stand-in, and swallows the error, fails all the same: the stub notes that it was
+    started. Run as a test session of its own with the kit's conftest."""
+    t = tmp_path / "test_forgot.py"
+    t.write_text("import contextlib\nfrom camkit.link import Link\nfrom camkit.runs import Run\n\n"
+                 "def test_forgot(tmp_path):\n"
+                 "    with contextlib.suppress(Exception):\n"
+                 "        Link(Run('r', root=tmp_path), ip='192.0.2.10', catch_signals=False).open(timeout=20)\n",
+                 encoding="utf-8")
+    env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(ROOT / "kit" / "tests"), str(ROOT / "kit")])}
+    r = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "conftest", "-p", "no:cacheprovider", str(t),
+                        "--rootdir", str(tmp_path), "--basetemp", str(tmp_path / "inner")],
+                       capture_output=True, text=True, timeout=120, env=env, cwd=tmp_path)
+    assert r.returncode != 0 and "the test started camlink" in r.stdout and "192.0.2.10" in r.stdout, r.stdout[-3000:]

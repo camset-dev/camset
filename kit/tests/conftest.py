@@ -3,7 +3,9 @@ command a test starts, reads or writes the runs of the clone it runs in (the own
 frames some tests read are found by their own path (camkit.paths.a1ii_root()), and those
 tests skip without them. Nor does any test change a file of the clone's own data/ or private/evidence/ (the
 mapper's evidence: guard_the_clones_files), whatever folder it points the kit at. A test that reads the screen through
-camkit.reading fakes both its eyes, OCR and the reader, in one place: the eyes fixture (Eyes)."""
+camkit.reading fakes both its eyes, OCR and the reader, in one place: the eyes fixture (Eyes). No test reaches a camera
+or reads the owner's config either, whatever fakes it forgets (no_real_camera)."""
+import sys
 from pathlib import Path
 
 import pytest
@@ -27,6 +29,61 @@ def own_runs(tmp_path_factory, monkeypatch):
     if cov is not None:
         cov.forget()
     return top
+
+
+# What every test gets for camlink (no_real_camera): it notes in its marker file that it was started, and answers a
+# ready line saying it did not connect, so camkit.link raises; a test that swallows that still fails (the marker). It
+# is started through a launcher of one path, as camlink is: a shell script, or a .cmd file on Windows
+LINK_STUB = '''import json, sys
+with open({marker!r}, "a", encoding="utf-8") as f:
+    f.write(repr(sys.argv[1:]) + "\\n")
+print(json.dumps({{"ok": False, "error": "a test started camlink (kit/tests/conftest.py's stub)"}}), flush=True)
+sys.exit(3)
+'''
+
+
+@pytest.fixture(scope="session")
+def link_stub(tmp_path_factory):
+    """(the launcher that stands in for camlink, its marker file, a config path that is not there), once a session."""
+    import os
+    folder = tmp_path_factory.mktemp("no_camera")
+    script, marker = folder / "camlink_stub.py", folder / "started.txt"
+    script.write_text(LINK_STUB.format(marker=str(marker)), encoding="utf-8")
+    if os.name == "nt":
+        stub = folder / "camlink_stub.cmd"
+        stub.write_text(f'@"{sys.executable}" "{script}" %*\r\n', encoding="utf-8")
+    else:
+        stub = folder / "camlink_stub"
+        stub.write_text(f'#!/bin/sh\nexec "{sys.executable}" "{script}" "$@"\n', encoding="utf-8")
+        stub.chmod(0o755)
+    return stub, marker, folder / "no_such_config.json"
+
+
+@pytest.fixture(autouse=True)
+def no_real_camera(link_stub, monkeypatch):
+    """No test reaches the camera or reads the owner's private/config.json, whatever fakes it forgets: camkit.CONFIG is
+    a file that is not there and camlink a stub (LINK_STUB), in this process and, through CAMSET_CONFIG and
+    CAMSET_LINK_BIN (camkit/__init__.py), in every kit program a test starts. A test that started the stub fails, naming
+    what it was started with. A test's own config (camkit.CONFIG set to a file of its own) and its own stand-in link
+    (kit/tests/fake_camlink.py, or binary= given) are untouched."""
+    import camkit
+    import camkit.link
+    stub, marker, config = link_stub
+    real = camkit.LINK_BIN
+    monkeypatch.setattr(camkit, "CONFIG", config)
+    monkeypatch.setattr(camkit, "LINK_BIN", stub)
+    monkeypatch.setattr(camkit.link, "LINK_BIN", stub)
+    # Link's binary= defaults to the camlink its module took when it was imported
+    defaults = camkit.link.Link.__init__.__defaults__
+    monkeypatch.setattr(camkit.link.Link.__init__, "__defaults__", tuple(stub if d is real else d for d in defaults))
+    monkeypatch.setenv("CAMSET_CONFIG", str(config))
+    monkeypatch.setenv("CAMSET_LINK_BIN", str(stub))
+    seen = marker.read_text(encoding="utf-8") if marker.exists() else ""
+    yield
+    started = marker.read_text(encoding="utf-8")[len(seen):] if marker.exists() else ""
+    if started:
+        pytest.fail(f"the test started camlink (kit/tests/conftest.py's stub stood in for it), with {started.strip()}: "
+                    "give it a stand-in link (kit/tests/fake_camlink.py, or the no_camera fixture)")
 
 
 @pytest.fixture(autouse=True)
