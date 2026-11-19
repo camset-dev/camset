@@ -26,9 +26,32 @@ LOOKALIKES = str.maketrans("СсАаЕеОоРрТтНМВКХху", "CcAaEeOoPp
 def key(t) -> str:
     """Compared without case, spaces, dots or OCR look-alikes (a leading number is kept); the seconds mark after a
     shutter time is one character however it is drawn (2", 2″, 2”, or two apostrophes 2'': the readers differ,
-    2026-11-07)."""
-    t = str(t or "").lower().translate(CYRILLIC).replace("″", '"').replace("”", '"').replace("“", '"').replace("''", '"')
+    2026-11-07). A decimal point between two digits stays, as norm keeps it ("p"): "F1.1" is never F11, nor 1.3" 13"
+    (it merged 124 pairs of options of one setting on the a1 II's definition until the review of 2026-11-18, finding
+    13). A reading that lost its point is a doubt where that point told two options apart (lost_point)."""
+    return _folded(re.sub(r"(?<=\d)\.(?=\d)", "p", str(t or "")))
+
+
+def _folded(t: str) -> str:
+    t = t.lower().translate(CYRILLIC).replace("″", '"').replace("”", '"').replace("“", '"').replace("''", '"')
     return re.sub(r"[\s.]+", "", t.translate(str.maketrans("l1|0", "iiio")))
+
+
+def loose(t) -> str:
+    """key without its decimal points: what a reading that lost its point folds to (key before 2026-11-18)."""
+    return _folded(str(t or ""))
+
+
+def lost_point(reading, options) -> bool:
+    """Whether `reading`, which holds no decimal point between digits, may be an option that lost its point: two or
+    more of `options` fold to its key once their points are dropped (loose), so its text cannot tell which ("13\\""
+    where the list holds 1.3" and 13", "F11" beside F1.1). Such a reading is a doubt, never a match: the caller asks
+    the reader or fails closed, as it did when key merged the two."""
+    t = str(reading or "")
+    if re.search(r"\d\.\d", t):
+        return False
+    k = loose(t)
+    return bool(k) and sum(1 for o in options or () if loose(o) == k) > 1
 
 
 def offers_ok(text) -> bool:

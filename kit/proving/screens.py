@@ -134,7 +134,7 @@ def bar_text(cam) -> str:
 
 def option_key(t: str) -> str:
     """Option labels compared without case, spaces, dots or OCR look-alikes, keeping a leading
-    number (page_model.key_text drops "1 " in "1 Sec" as if it were an icon). A Cyrillic look-alike
+    number and a decimal point between digits (camkit.match.key: "F1.1" is never F11). A Cyrillic look-alike
     is its Latin letter ("С.Temp./Filter", 2026-10-31). The rules live in camkit/match.py."""
     return match.key(t)
 
@@ -152,6 +152,12 @@ def carousel_text(cam) -> str:
 
 
 def _matches(t: str, labels) -> list:
+    """The labels a reading names: by option_key, then without a radio circle read in front, then by same_text. A
+    reading that may have lost the decimal point telling two labels apart (match.lost_point: "13\\"" beside 1.3" and
+    13") names both, a doubt each caller takes as no one option (the reader asked, else no choice), as before
+    option_key kept the point."""
+    if match.lost_point(t, labels):
+        return [i for i, l in enumerate(labels) if match.loose(l) == match.loose(t)]
     hits = [i for i, l in enumerate(labels) if option_key(l) == option_key(t)]
     if not hits:        # the saved option's radio circle read as a letter in front ("03" for "3")
         t2 = re.sub(r"^[oO0]\s*", "", t)

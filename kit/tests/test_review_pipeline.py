@@ -746,3 +746,50 @@ def test_the_ocr_cache_keeps_the_frames_used_last_and_a_long_batch_still_reads_w
         frames[-1].write_bytes(f"frame {i}".encode())
     got = ocr.read(frames, eng="rapidocr")
     assert [got[p][0].text for p in frames] == [p.name for p in frames] and len(ocr._cache) == 2
+
+
+# ------------------------------------------------------------------------------------------------ finding 13 (B4)
+
+def definition_options() -> list:
+    """(setting name, its option labels) of every setting of the a1 II's public definition that lists two or more."""
+    import json
+    doc = json.loads((KIT.parent / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    out = []
+    for s in doc["settings"]:
+        labels = sorted({str(lab) for _, lab in s.get("values") or [] if str(lab).strip()})
+        if len(labels) > 1:
+            out.append((s["name"], labels))
+    return out
+
+
+def merged(same) -> list:
+    """The pairs of options of one setting of the a1 II's definition that `same` takes for one."""
+    import itertools
+    return [(name, a, b) for name, labels in definition_options() for a, b in itertools.combinations(labels, 2)
+            if same(a, b)]
+
+
+def test_match_key_folds_no_two_options_of_one_setting_together():
+    """camkit.match.key, the provers' option_key, dropped every dot: F1.1 and F11, 1.3" and 13", 2.5" and 25" were one
+    key (124 pairs in 19 settings of the a1 II's definition). No two options of one setting may fold together now; the
+    tolerance it is for stays (case, spacing, a stop, OCR's l and 1, O and 0, a Cyrillic look-alike, the seconds mark)."""
+    from camkit import match
+    assert merged(lambda a, b: match.key(a) == match.key(b)) == []
+    for a, b in (("Sec.", "sec"), ("5 lmg.", "5 Img."), ("С.Temp./Filter", "C.Temp./Filter"), ('2″', '2"'),
+                 ("ISO 100", "ISO100"), ("F1.1", "F1.1")):
+        assert match.key(a) == match.key(b), (a, b)
+
+
+def test_a_reading_that_lost_the_point_telling_two_options_apart_is_a_doubt():
+    """Where OCR drops the decimal point that tells two options apart (1.3" read "13\\"" beside 13"), the reading names
+    both, a doubt: proving.screens._matches gives the two, which every caller takes as no one option (the reader
+    asked, else no choice), as when option_key merged them; a reading with its point, or a list with no such twin,
+    names one."""
+    from camkit import match
+    from proving.screens import _matches
+    shutter = ['15"', '13"', '10"', '2.5"', '2"', '1.6"', '1.3"', '1"']
+    assert match.lost_point('13"', shutter) and match.lost_point("13 ″", shutter)
+    assert sorted(_matches('13"', shutter)) == [1, 6] and _matches('1.3"', shutter) == [6]
+    assert _matches('15"', shutter) == [0] and not match.lost_point('15"', shutter)
+    assert _matches('13"', ['15"', '13"', '10"']) == [1]                       # no twin: the reading is the option
+    assert not match.lost_point("F1.1", ["F1.1", "F11"]) and match.lost_point("F11", ["F1.1", "F11"])
