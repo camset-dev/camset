@@ -52,7 +52,12 @@ impl App {
         let mut n = 0;
         if let Some((cols, only_diff, raw)) = compare.filter(|(cols, _, _)| cols.len() >= 2) {
             let base = cols[0];
-            let mut head = vec!["Tab".to_string(), "Group".into(), "Setting".into(), "Record".into()];
+            // the record number is Expert mode's, as in the set's export
+            let expert = self.prefs.expert;
+            let mut head = vec!["Tab".to_string(), "Group".into(), "Setting".into()];
+            if expert {
+                head.push("Record".into());
+            }
             head.extend(cols.iter().map(|c| quote(&self.col_name_with_file(*c))));
             lines.push(head.join(","));
             for (tab, group, linked) in self.matrix_rows_for(q, tab) {
@@ -62,7 +67,10 @@ impl App {
                 if only_diff && !differs {
                     continue;
                 }
-                let mut row = vec![quote(&tab), quote(&group), quote(&s.name), format!("0x{:04x}", s.id)];
+                let mut row = vec![quote(&tab), quote(&group), quote(&s.name)];
+                if expert {
+                    row.push(format!("0x{:04x}", s.id));
+                }
                 for c in cols {
                     let stored = c.section == 0 || s.in_sets;
                     let v = self.col_value(*c, s);
@@ -73,8 +81,9 @@ impl App {
                 n += 1;
             }
         } else {
-            let mut head = vec!["Tab".to_string(), "Group".into(), "Setting".into(), "Record".into(), "Value".into(), "Raw".into(), "Original".into()];
-            head.push("Note".into());
+            // the record number, the stored number and the mapping team's note are Expert mode's
+            let expert = self.prefs.expert;
+            let head: &[&str] = if expert { &["Tab", "Group", "Setting", "Record", "Value", "Raw", "Original", "Note"] } else { &["Tab", "Group", "Setting", "Value", "Original"] };
             lines.push(head.join(","));
             let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(99);
             let q = q.to_lowercase();
@@ -83,21 +92,28 @@ impl App {
                 .filter(|s| !only_changed || doc.value(target, s.slot()) != doc.original_value(target, s.slot()))
                 .collect();
             list.sort_by_key(|s| (tab_idx(&s.tab), s.order));
-            let mut seen: Vec<(String, String)> = Vec::new();
+            // the rows written so far, by name
+            let mut written: std::collections::HashMap<&str, Vec<&Setting>> = Default::default();
             for s in list {
-                if seen.contains(&(s.tab.clone(), s.name.clone())) {
-                    continue; // linked copies of one setting: one row
+                // one setting kept in several records: one row (`Setting::twin_of`); a setting of the same name in
+                // another group is a row of its own
+                let same = written.entry(s.name.as_str()).or_default();
+                if same.iter().any(|o| o.twin_of(s)) {
+                    continue;
                 }
-                seen.push((s.tab.clone(), s.name.clone()));
+                same.push(s);
                 let cur = doc.value(target, s.slot());
                 let orig = doc.original_value(target, s.slot());
                 let value = match s.text {
                     Some(_) => doc.edited.sections.get(target).and_then(|sec| sec.get(s.id)).and_then(|r| r.text()).unwrap_or_default(),
                     None => Self::describe(s, cur),
                 };
-                let mut row = vec![quote(&s.tab), quote(&s.group), quote(&s.name), format!("0x{:04x}", s.id), quote(&value),
-                                   cur.map(|v| v.to_string()).unwrap_or_default(), quote(&if cur != orig { Self::describe(s, orig) } else { String::new() })];
-                row.push(quote(&s.note));
+                let was = quote(&if cur != orig { Self::describe(s, orig) } else { String::new() });
+                let row = if expert {
+                    vec![quote(&s.tab), quote(&s.group), quote(&s.name), format!("0x{:04x}", s.id), quote(&value), cur.map(|v| v.to_string()).unwrap_or_default(), was, quote(&s.note)]
+                } else {
+                    vec![quote(&s.tab), quote(&s.group), quote(&s.name), quote(&value), was]
+                };
                 lines.push(row.join(","));
                 n += 1;
             }
@@ -135,6 +151,40 @@ impl App {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The CSV of a set has one row per setting as the Menu shows them: a setting kept in several records once (its
+    /// records folded, `Setting::twin_of`), but every setting of a name other groups share (PP1's to PP11's Black
+    /// Level, the Recall Custom holds) a row of its own. Outside Expert mode no Record, Raw or Note column (record
+    /// numbers and the mapping team's notes); in Expert mode those three. The window's and the page's export alike.
+    #[test]
+    fn the_csv_of_a_set_has_every_setting() {
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let list: Vec<Setting> = app.settings_in(0, None).cloned().collect();
+        let rows = list.iter().enumerate().filter(|(i, s)| !list[..*i].iter().any(|o| o.twin_of(s))).count();
+        assert!(rows > 1800, "{rows} rows for {} settings", list.len());
+        let (text, n) = app.csv_text(None, 0, "", None, false);
+        assert_eq!(n, rows, "one row per setting, records of one setting once");
+        let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().collect();
+        assert_eq!((lines[0], lines.len()), ("Tab,Group,Setting,Value,Original", rows + 1));
+        for pp in 1..=11 {
+            assert!(lines.iter().any(|l| l.contains(&format!("\"Picture Profile PP{pp}\",\"Black Level\""))), "PP{pp}'s Black Level");
+        }
+        let noted = list.iter().find(|s| s.note.len() > 40 && !s.note.contains('"')).expect("a setting with a note");
+        assert!(!text.contains(&noted.note), "no mapping note outside Expert mode");
+        // Drive Mode's two records: one row
+        let drive = list.iter().find(|s| s.key == "global:0x02b5").unwrap();
+        assert_eq!(lines.iter().filter(|l| l.contains(&format!("\"{}\",\"{}\",\"Drive Mode\",", drive.tab, drive.group))).count(), 1);
+        app.prefs.expert = true;
+        let (text, n) = app.csv_text(None, 0, "", None, false);
+        let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().collect();
+        assert_eq!(lines[0], "Tab,Group,Setting,Record,Value,Raw,Original,Note");
+        assert!(n >= rows && text.contains(&noted.note));
+        // the page's export is the same text
+        app.prefs.expert = false;
+        let r = crate::web::tests::answer(&mut app, "csv", serde_json::json!({ "target": 0 }));
+        assert_eq!(String::from_utf8(r.body).unwrap(), app.csv_text(None, 0, "", None, false).0);
+    }
 
     /// E-29: a CSV cell a spreadsheet would take for a formula stays text; numbers and plain words are as they were.
     #[test]

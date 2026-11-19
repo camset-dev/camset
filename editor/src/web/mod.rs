@@ -4179,11 +4179,11 @@ pub(crate) mod tests {
         assert_eq!((a.status, a.content_type), (200, "text/csv"));
         assert!(a.download.as_deref().unwrap().ends_with("_live_settings.csv"));
         let text = String::from_utf8(a.body).unwrap();
-        assert!(text.starts_with("\u{feff}Tab,Group,Setting,Record,Value,Raw,Original,Note\n"));
+        assert!(text.starts_with("\u{feff}Tab,Group,Setting,Value,Original\n"), "no record numbers or notes outside Expert mode");
         let (want, n) = app.csv_text(None, 0, "", None, false);
         assert_eq!(text, want);
-        let mut seen = std::collections::HashSet::new();
-        assert_eq!(n, app.settings_in(0, None).filter(|s| seen.insert((s.tab.clone(), s.name.clone()))).count(), "one line per setting shown");
+        let shown: Vec<&Setting> = app.settings_in(0, None).collect();
+        assert_eq!(n, shown.iter().enumerate().filter(|(i, s)| !shown[..*i].iter().any(|o| o.twin_of(s))).count(), "one line per setting shown");
         assert_eq!(text.matches("\n\"").count(), n);
         let word = app.schema.settings[0].name.split(' ').next().unwrap().to_string();
         let some = String::from_utf8(answer(&mut app, "csv", json!({ "target": 0, "q": word })).body).unwrap();
