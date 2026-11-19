@@ -192,6 +192,17 @@ def run_root(camera_key: str = None, required: bool = True) -> Path | None:
     return None
 
 
+def owner_dir() -> Path | None:
+    """The folder that keeps the owner's own files outside the repository and runs/: ~/.config/camset, where the
+    camera's credentials (network.json) and the cameras this computer trusts are kept (kit/common/camera_net.h's
+    camsetDir, whose rule this is: the home folder is HOME, else USERPROFILE on Windows). CAMSET_OWNER_DIR names another
+    (the tests point it at a folder of their own). None without a home folder."""
+    if os.environ.get("CAMSET_OWNER_DIR"):
+        return Path(os.environ["CAMSET_OWNER_DIR"])
+    home = os.environ.get("HOME") or (os.environ.get("USERPROFILE") if os.name == "nt" else None)
+    return Path(home) / ".config" / "camset" if home else None
+
+
 def module_root() -> Path:
     """run_root() for the paths a script sets when it is imported (by then the --camera hook has run): the camera's
     folder, or, with nothing naming the camera, a folder that is not there, so that reading it finds nothing and a

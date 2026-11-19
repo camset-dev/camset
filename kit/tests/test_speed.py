@@ -1758,20 +1758,22 @@ def test_a_readers_check_that_stops_the_run_stops_it_before_the_link_with_the_ey
 
 
 def tiny_scan(tmp_path, n=3):
-    """A page scan of `n` positions made from kit2_page_scan_1118p's saved frames (its model.json as it is), in the
-    test's own folder; skipped where the run is not here."""
+    """A page scan of `n` positions whose frames are made here (640 x 480, a light bar on a dark screen, at another
+    height on each), its page model one page: it runs wherever the tests run, the camera's runs or not."""
     import json
-    import shutil
-    src = RUNS / "kit2_page_scan_1118p"
-    if not (src / "scan_rekeyed.json").exists():
-        pytest.skip(f"{src} not present")
-    cycle = json.loads((src / "scan_rekeyed.json").read_text(encoding="utf-8"))[:n]
+
+    from PIL import Image
     scan = tmp_path / "kit2_page_scan_tiny"
     (scan / "shots").mkdir(parents=True)
-    for pos in cycle:
-        shutil.copy(src / "shots" / pos["frame"], scan / "shots" / pos["frame"])
+    cycle = []
+    for i in range(n):
+        img = np.full((480, 640, 3), 16, np.uint8)
+        img[60 + 48 * i:100 + 48 * i, 40:600] = (230, 110, 30)
+        name = f"{i + 1:05d}_down.png"
+        Image.fromarray(img).save(scan / "shots" / name)
+        cycle.append({"frame": name, "page": "p"})
     (scan / "scan_rekeyed.json").write_text(json.dumps(cycle + cycle[:1]), encoding="utf-8")
-    shutil.copy(src / "model.json", scan / "model.json")
+    (scan / "model.json").write_text(json.dumps([{"key": "p", "rows": []}]), encoding="utf-8")
     return scan, cycle
 
 
@@ -1808,6 +1810,89 @@ def test_a_page_scans_screens_are_read_once_and_kept_until_a_frame_or_the_kit_ch
         p.write_bytes(b"not a cache")
     runner.load_scan(scan)
     assert len(reads) == 4 * len(cycle)
+
+
+TRIPPED: list = []
+
+
+def _tripped():
+    TRIPPED.append(True)
+    return "tripped"
+
+
+class Trap:
+    """A pickle whose loading is seen: unpickling it calls _tripped."""
+    def __reduce__(self):
+        return (_tripped, ())
+
+
+def test_a_scan_cache_is_unpickled_only_under_this_users_key(tmp_path, monkeypatch):
+    """The scan cache is a pickle in the camera's runs folder, which can be packed and handed to someone else, and
+    unpickling runs what the file says: runner.scan_screens checks its HMAC-SHA256 tag, made with this user's own random
+    key (camkit.paths.owner_dir()/cache_key, made on first use, mode 600 where the system has modes), with
+    hmac.compare_digest BEFORE anything is unpickled. A file with no tag, a wrong one, or one made under another key is
+    never unpickled: it is read afresh and replaced by a cache this key signed."""
+    import os
+    import pickle
+
+    import runner
+    from camkit import paths
+    scan, cycle = tiny_scan(tmp_path)
+    real, reads = runner.screen.read, []
+    monkeypatch.setattr(runner.screen, "read", lambda f: reads.append(1) or real(f))
+    runner.load_scan(scan)
+    kept = runner.scan_cache_path(scan)
+    key_file = paths.owner_dir() / runner.CACHE_KEY_FILE
+    assert kept.is_file() and key_file.is_file() and len(key_file.read_bytes()) == 32
+    if os.name != "nt":
+        assert key_file.stat().st_mode & 0o777 == 0o600
+    trap = pickle.dumps(Trap())
+    for planted in (trap, b"\0" * 32 + trap, runner.signed(b"another user's key" * 2, trap)):
+        TRIPPED.clear()
+        kept.write_bytes(planted)
+        n = len(reads)
+        runner.load_scan(scan)
+        assert not TRIPPED and len(reads) == n + len(cycle), "read afresh, never unpickled"
+        assert runner.signed(key_file.read_bytes(), kept.read_bytes()[32:]) == kept.read_bytes(), "replaced, signed"
+    n = len(reads)
+    runner.load_scan(scan)
+    assert len(reads) == n, "the cache it signed is taken"
+
+
+def test_with_no_key_to_be_had_there_is_no_scan_cache_and_no_error(tmp_path, monkeypatch):
+    """Where the key cannot be read or made (the owner's folder is a file here), the scan is read afresh every time,
+    the budget's note says why once a reading, and nothing is written into the runs folder."""
+    import runner
+    from camkit import budget, paths
+    blocked = tmp_path / "not a folder"
+    blocked.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("CAMSET_OWNER_DIR", str(blocked))
+    scan, cycle = tiny_scan(tmp_path)
+    real, reads = runner.screen.read, []
+    monkeypatch.setattr(runner.screen, "read", lambda f: reads.append(1) or real(f))
+    budget.taken()
+    runner.load_scan(scan)
+    runner.load_scan(scan)
+    assert len(reads) == 2 * len(cycle)
+    assert budget.taken()["notes"]["page scan"].startswith("read (no cache: ")
+    assert not (paths.run_root() / "_cache").exists()
+
+
+def test_the_scan_caches_digest_holds_what_reads_a_frame(monkeypatch):
+    """runner.kit_digest holds, besides the kit's own files and Python and numpy, what else reads a frame: OpenCV's and
+    Pillow's versions and the machine (one runs folder is read from a Mac, an Ubuntu PC and a Windows PC)."""
+    import platform
+
+    import cv2
+    import PIL
+    import runner
+    first = runner.kit_digest()
+    for mod, name, value in ((cv2, "__version__", "0.0.0"), (PIL, "__version__", "0.0.0"),
+                             (platform, "system", lambda: "Plan 9"), (platform, "machine", lambda: "pdp11")):
+        with monkeypatch.context() as m:
+            m.setattr(mod, name, value)
+            assert runner.kit_digest() != first, name
+    assert runner.kit_digest() == first
 
 
 # ---------------------------------------------------------------- J: the lock after a download, every runner alike

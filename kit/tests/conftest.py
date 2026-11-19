@@ -162,6 +162,13 @@ def own_umask():
 
 
 @pytest.fixture(autouse=True)
+def own_owner_dir(tmp_path_factory, monkeypatch):
+    """The owner's own folder (camkit.paths.owner_dir: ~/.config/camset, the scan cache's key among its files) is one of
+    the test's own (CAMSET_OWNER_DIR), so no test reads or writes the person's."""
+    monkeypatch.setenv("CAMSET_OWNER_DIR", str(tmp_path_factory.mktemp("owner")))
+
+
+@pytest.fixture(autouse=True)
 def fresh_budget():
     """camkit.budget's start phases cleared before and after every test (taken), and the ledgers being built in the
     background waited for (camkit.coverage.forget), so no test's start budget or ledger reaches another's. Only once

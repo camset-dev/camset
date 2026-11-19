@@ -695,16 +695,23 @@ def load_scan(scan, mode: str | None = None, eyes: str | None = None) -> tuple[l
 
 
 SCAN_READS = "scan_reads"       # runs/<model>_fw<fw>/_cache/scan_reads/: each page scan's screens as the kit reads them
-SCAN_READS_FORMAT = b"scan_reads 1"
+SCAN_READS_FORMAT = b"scan_reads 2"     # 2: the kept bytes signed (signed)
+CACHE_KEY_FILE = "cache_key"    # in camkit.paths.owner_dir(): the random key this user's caches are signed with
+CACHE_KEY_BYTES = 32
 
 
 def kit_digest() -> str:
-    """A hash of every file of kit/camkit (its code, its glyphs, its formats), with the Python and numpy that run it: what
-    reads a screen. A cache kept under it is of this kit alone."""
+    """A hash of every file of kit/camkit (its code, its glyphs, its formats), with what else reads a frame: the Python,
+    numpy, OpenCV (camkit.screen.read) and Pillow (camkit.frames.load, the glyph templates) that run it and the machine
+    (one runs folder is read from a Mac, a Linux PC and a Windows PC). A cache kept under it is of this kit alone."""
     import hashlib
+    import platform
 
+    import cv2
     import numpy
-    h = hashlib.sha256(f"{sys.version}\0{numpy.__version__}".encode())
+    import PIL
+    h = hashlib.sha256("\0".join((sys.version, numpy.__version__, cv2.__version__, PIL.__version__, platform.system(),
+                                  platform.machine())).encode())
     top = KIT / "camkit"
     for p in sorted(top.rglob("*")):
         if p.is_file() and "__pycache__" not in p.parts:
@@ -712,16 +719,64 @@ def kit_digest() -> str:
     return h.hexdigest()
 
 
+def cache_secret() -> tuple:
+    """(the random key this user's caches are signed with, "") or (None, why there is none): camkit.paths.owner_dir()'s
+    CACHE_KEY_FILE, outside runs/ and the repository, made on first use (CACHE_KEY_BYTES random bytes, the folder 700 and
+    the file 600 where the system has modes). A key that cannot be read or made is none: no cache, never an error."""
+    from camkit import paths
+    d = paths.owner_dir()
+    if d is None:
+        return None, "no home folder for the cache's key"
+    p = d / CACHE_KEY_FILE
+    try:
+        if not p.exists():
+            d.mkdir(mode=0o700, parents=True, exist_ok=True)
+            try:
+                fd = os.open(p, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0), 0o600)
+            except FileExistsError:
+                fd = None                       # another process made it meanwhile: its key is read below
+            if fd is not None:
+                with os.fdopen(fd, "wb") as f:
+                    f.write(os.urandom(CACHE_KEY_BYTES))
+        key = p.read_bytes()
+    except OSError as e:
+        return None, f"its key cannot be read or made ({type(e).__name__})"
+    if len(key) != CACHE_KEY_BYTES:
+        return None, f"its key file is not {CACHE_KEY_BYTES} bytes"
+    return key, ""
+
+
+def signed(key: bytes, blob: bytes) -> bytes:
+    """`blob` as a cache keeps it: its HMAC-SHA256 tag under `key` first."""
+    import hashlib
+    import hmac
+    return hmac.new(key, blob, hashlib.sha256).digest() + blob
+
+
+def scan_cache_path(scan: Path) -> Path | None:
+    """Where the camera's cache keeps a page scan's screens (SCAN_READS); None where no camera is named."""
+    import hashlib
+    from camkit import paths
+    root = paths.run_root(required=False)
+    return (root / "_cache" / SCAN_READS / f"{hashlib.sha256(str(Path(scan).resolve()).encode()).hexdigest()[:16]}"
+            ".pickle") if root is not None else None
+
+
 def scan_screens(scan: Path, cycle: list) -> list:
     """The screens of the page scan's positions (camkit.screen.read of each one's saved frame), read by the kit as it is
-    now: from the camera's cache (SCAN_READS) where it holds them for these very frames read by this very kit (a hash of
-    the frames' bytes and kit_digest), else read afresh and kept there. A scan's 273 frames took 3.2 s to load and read
-    at every run's start (0.9 s to load, 2.4 s to read, 2026-11-19), the same frames each time. A frame changed, a kit
-    file changed, or a cache that cannot be read is read afresh; a cache that cannot be written changes nothing. Noted
-    "cached" or "read" (camkit.budget)."""
+    now: from the camera's cache (scan_cache_path) where it holds them for these very frames read by this very kit (a
+    hash of the frames' bytes and kit_digest), else read afresh and kept there. A scan's 273 frames took 3.2 s to load
+    and read at every run's start (0.9 s to load, 2.4 s to read, 2026-11-19), the same frames each time. A frame
+    changed, a kit file changed, or a cache that cannot be read is read afresh; a cache that cannot be written changes
+    nothing. Noted "cached" or "read" (camkit.budget).
+    The cache is a pickle, and unpickling runs whatever the file says, while a runs folder can be packed and handed to
+    another person: so its bytes are signed with this user's own random key (cache_secret, kept outside runs/ and the
+    repository), the tag checked with hmac.compare_digest before anything is unpickled, and a cache with no valid tag
+    is never unpickled: it is read afresh and replaced. Where the key cannot be read or made there is no cache at all
+    (read afresh, the note saying why)."""
     import hashlib
+    import hmac
     import pickle
-    from camkit import paths
     h = hashlib.sha256(SCAN_READS_FORMAT + b"\0" + kit_digest().encode())
     try:
         for pos in cycle:
@@ -729,26 +784,28 @@ def scan_screens(scan: Path, cycle: list) -> list:
         key = h.hexdigest()
     except OSError:
         key = None              # a frame that cannot be read: no cache, the reading below says what is wrong
-    root = paths.run_root(required=False)
-    kept = (root / "_cache" / SCAN_READS / f"{hashlib.sha256(str(Path(scan).resolve()).encode()).hexdigest()[:16]}"
-            ".pickle") if root is not None and key is not None else None
+    secret, why = cache_secret() if key is not None else (None, "")
+    kept = scan_cache_path(scan) if secret is not None else None
     if kept is not None:
         try:
-            got_key, screens = pickle.loads(kept.read_bytes())
-            if got_key == key and len(screens) == len(cycle):
-                budget.note("page scan", "cached")
-                return screens
+            data = kept.read_bytes()
+            tag, blob = data[:32], data[32:]
+            if hmac.compare_digest(tag, hmac.new(secret, blob, hashlib.sha256).digest()):    # before any unpickling
+                got_key, screens = pickle.loads(blob)
+                if got_key == key and len(screens) == len(cycle):
+                    budget.note("page scan", "cached")
+                    return screens
         except Exception:       # noqa: BLE001 (no cache, or one that cannot be read: read afresh)
             pass
     screens = [screen.read(load(scan / "shots" / pos["frame"])) for pos in cycle]
-    budget.note("page scan", "read")
+    budget.note("page scan", f"read (no cache: {why})" if why else "read")
     if kept is not None:
         tmp = None
         try:
             kept.parent.mkdir(parents=True, exist_ok=True)
             with tempfile.NamedTemporaryFile(dir=kept.parent, delete=False, suffix=".tmp") as f:
                 tmp = f.name
-                f.write(pickle.dumps((key, screens), protocol=pickle.HIGHEST_PROTOCOL))
+                f.write(signed(secret, pickle.dumps((key, screens), protocol=pickle.HIGHEST_PROTOCOL)))
             os.replace(tmp, kept)
         except (OSError, pickle.PicklingError):
             if tmp is not None:
