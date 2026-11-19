@@ -695,3 +695,64 @@ def test_optboxes_record_a_refused_value_as_refused(monkeypatch):
     with pytest.raises(O.Failed, match=r"the base: the camera refused Zebra Level > Custom 1 > Type = Std\+Range"):
         O.prove(cam, downloads(), None, [], {}, "Zebra Level", "Custom 1", ZEBRA, "Range", Path("00001_before.DAT"),
                 io.StringIO())
+
+
+GRID_REFUSAL = "Item not selected. OK"          # the a1 II's words where a grid's OK would leave a cell it will not
+
+
+class GridCam(Shots):
+    """A checkbox grid of three cells (A, B, C), all ticked: Enter on a cell flips it; Enter on the OK button keeps the
+    ticks and goes back to the menu row, except that with B unticked the camera refuses ("Item not selected.", the
+    ticks as they were) and with C unticked it keeps them behind an information notice. MENU closes a notice."""
+
+    def __init__(self):
+        super().__init__()
+        self.saved, self.ticks, self.cursor, self.on_ok = [True] * 3, [True] * 3, 0, False
+
+    def open(self):
+        self.kind, self.ticks, self.cursor, self.on_ok = "checkgrid", list(self.saved), 0, False
+        self.shot("right")
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key == "enter" and self.kind == "checkgrid" and not self.on_ok:
+            self.ticks[self.cursor] = not self.ticks[self.cursor]
+        elif key == "enter" and self.kind == "checkgrid" and not self.ticks[1]:
+            self.kind, self.text = "notice", GRID_REFUSAL
+        elif key == "enter" and self.kind == "checkgrid":
+            self.saved = list(self.ticks)
+            self.kind, self.text = ("notice", INFORMATION) if not self.ticks[2] else ("menu", "")
+        elif key == "menu":
+            self.kind, self.text = "menu", ""
+        self.shot(key)
+
+    def cancel_to_menu(self):
+        if self.kind not in ("menu", "shooting"):
+            self.press("menu")
+
+
+def test_the_grid_tells_a_refusal_from_an_information_notice(monkeypatch):
+    """grid_run took any notice after OK for a refusal ("applied": notice is None), so a cell whose OK the camera kept
+    behind an information notice lost its value. Now the step tells them apart, with the grid's own refusal words
+    ("Item not selected."): the refused visit says "applied": false and puts back nothing after it, the information
+    notice's visit "applied": true with the notice, both closed with MENU."""
+    import grid_run as G
+    cam, link = GridCam(), downloads()
+    reads(monkeypatch, lambda f: cam.text)
+    no_diffs(monkeypatch, G)
+    for name, value in (("load_scan", lambda scan: ([], {})), ("eyes_from_config", lambda run: None),
+                        ("prover_session", lambda run, hdmi, **kw: session_of(cam, link)),
+                        ("labels_of", lambda path: ["A", "B", "C"]), ("open_grid", lambda c, cycle, model, path: c.open()),
+                        ("to_cell", lambda c, labels, k: setattr(c, "cursor", k)),
+                        ("tick", lambda c: c.ticks[c.cursor] if c.kind == "checkgrid" else None),
+                        ("to_ok", lambda c: setattr(c, "on_ok", True)), ("vlm_option", lambda c: "OK"),
+                        ("to_shooting", lambda link, hdmi, why: None)):
+        monkeypatch.setattr(G, name, value)
+    monkeypatch.setattr(G.time, "sleep", lambda s: None)
+    monkeypatch.setattr(sys, "argv", ["grid_run.py", "--row", "Made-up Grid", "--scan", "made-up"])
+    G.main()
+    lines = proof_lines()
+    assert [(x["label"], [b["box"] for b in x["boxes"]], x["applied"], (x["notice"] or {}).get("text"))
+            for x in lines] == [("A", [0], True, None), ("B", [0, 1], False, GRID_REFUSAL),
+                                ("C", [2], True, INFORMATION), ("(all back)", [2], True, None)]
+    assert cam.presses.count("menu") == 2

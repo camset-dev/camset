@@ -6,13 +6,15 @@ Like kit/prove_run.py's checklists: one visit per cell puts the previous cell ba
 (neighbours are one Right apart), OK, a settings download, a diff with the start; a last visit puts
 the last cell back and must leave nothing changed. The pixel reader gives the cursor's cell and every
 cell's tick ("checkgrid"); the cell's name is the subtitle over the grid (OCR), checked against pass 1's
-labels before Enter. Down from the grid reaches the buttons; OK is the left one. A cell the camera
-will not untick (a notice comes up) is recorded as refused, as checklists do. Proofs go to
+labels before Enter. Down from the grid reaches the buttons; OK is the left one. The screen after OK is read by
+proving.commit.after_ok: a cell the camera will not untick ("Item not selected.", a refusal) is recorded as refused, and
+an information notice is closed with MENU, the visit applied (before 2026-11-19 any notice was a refusal). Proofs go to
 runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "checklist", so the report and schema_update read them unchanged;
 the start file goes back on at the end and is checked.
 """
 import argparse
 import json
+import re
 import sys
 import time
 from pathlib import Path
@@ -23,10 +25,14 @@ from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import LOCK_S, PASS1, Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, load_scan, menu_from_shooting, proofs_file,  # noqa: E402
                     prover_session, read_json, scan_position)
 
+# a notice after the grid's OK that refuses the visit: prove_row's words, and the a1 II's "Item not selected." where
+# the OK would leave a cell it will not (kit2_pass2 80289, 80897)
+REFUSED = re.compile(r"not available|invalid|not selected", re.I)
 SUBTITLE = (0, 60, 640, 118)
 OK_BOX = (73, 362, 313, 418)             # the OK button under the grid; Cancel is right of it
 COLS = 7
@@ -126,21 +132,16 @@ def visit(cam, link, hdmi, cycle, model, path, labels, cells: list) -> dict:
         raise Failed(f"the grid reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)
     cam.press("enter")
-    notice = None
-    if cam.read().kind == "notice":
-        text = ocr.text_in(lines(cam), (0, 0, 640, 480))
-        if safety.confirmation(text):
-            raise Failed(f"after OK a confirmation came up ({cam.frame.path.name})")
-        notice = {"text": text, "frame": cam.frame.path.name}
-        print(f"   refused: {text[:90]!r}", flush=True)
-        cam.cancel_to_menu()
+    # what the camera did with it (proving.commit.after_ok, the grid's refusal words): a refusal or an information
+    # notice closed with MENU, never OK, and only the refusal is no applied visit (before 2026-11-19 any notice was)
+    got = after_ok(cam, " > ".join(path), refusal=REFUSED)
     row_frame = cam.frame.path.name
     to_shooting(link, hdmi, "the download after OK")
     time.sleep(1)
     dat = link.download(f"{path[-1]}-cells{'-'.join(map(str, sorted(cells)))}")
     time.sleep(LOCK_S)
     return {"boxes": flipped, "chosen_frame": chosen, "row_frame": row_frame, "vlm": seen_vlm,
-            "dat": dat, "notice": notice}
+            "dat": dat, "notice": got.notice, "applied": got.applied}
 
 
 def main():
@@ -171,13 +172,13 @@ def main():
             rec = {"path": path, "kind": "checklist", "index": i, "label": label, "boxes": got["boxes"],
                    "chosen_frame": got["chosen_frame"], "vlm": settled(got["vlm"]), "row_frame": got["row_frame"],
                    "dat": got["dat"].name, "base": start.name, "notice": got["notice"],
-                   "applied": got["notice"] is None, "grid": True, "changes": changes_of(ch)}
+                   "applied": got["applied"], "grid": True, "changes": changes_of(ch)}
             out.write(json.dumps(rec) + "\n")
             out.flush()
             what = ", ".join(f"{b['label']!r} {'ticked' if b['ticked'] else 'unticked'}" for b in got["boxes"])
             brief = ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:6]) or "no change"
             print(f"   {what:52s} {brief}", flush=True)
-            flipped = [] if got["notice"] or i >= n else [i]
+            flipped = [] if not got["applied"] or i >= n else [i]
             if i == n and ch:
                 # unticking the area in use moves the focus area (and spot size) in use, and
                 # ticking it again leaves them: the start file puts them back below
