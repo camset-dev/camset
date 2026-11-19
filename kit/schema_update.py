@@ -58,6 +58,10 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
                 the hand evidence shows the entry (and its untick value); an entry that cannot take effect is said,
                 "not applied", and a download that contradicts one (the switch outside its apart values, the family at
                 more than one value) stops the write (writer/copies.py with_keeps_apart)
+  at_most, at_least  on two limits the camera keeps in order (the hand table's LIMIT_PAIRS: ISO Range Limit's ends, ISO
+                AUTO's Minimum and Maximum and their copies), the other limit and moves_it where the table says a value
+                chosen past it moved it, where both list the same values; a download holding the lower past the upper
+                stops the write (writer/limits.py with_limit_pairs)
   frame         on each record that holds a coordinate of a focus frame's centre (the hand table's FRAME_TRAVEL: the
                 spot's and the Custom boxes' places), its axis, the record of the other one and how far the frame
                 travels, by area, where the hand evidence shows what measured it; an entry that cannot take effect is
@@ -161,6 +165,7 @@ from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis
                            without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
 from writer.copies import with_copies, with_keeps_apart  # noqa: E402
+from writer.limits import with_limit_pairs  # noqa: E402
 from writer.frames import with_frames  # noqa: E402
 from writer.gate import (QUESTION_KINDS, accepted_file, accepts, gate, questions, read_accepted)  # noqa: E402,F401
 from writer.generic import (GENERIC_KEY, generic, generic_main, newest_download, seed)  # noqa: E402,F401
@@ -175,8 +180,8 @@ from writer.hand_facts import by_lines_of  # noqa: E402
 # patch. Read when first asked for (_hand: main's ILCE-1M2 pass and the helpers that read one; or a name read from
 # outside, __getattr__), never when this file is imported: the proof viewer imports it for its help helpers, whatever
 # the camera (review B7, 2026-11-18). main changes none of them, so a second run in one process starts from them as read
-HAND_TABLES = ("CAROUSEL", "CONTEXT_WORDS", "COPIES", "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "FRAME_TRAVEL",
-               "EV_DOWN_FROM_20", "FRAME_PROOFS", "GROUP_NAMES", "HAND_EVIDENCE", "HOLD_BRACKET_COPIES", "HOLD_TABLES",
+HAND_TABLES = ("CAROUSEL", "CONTEXT_WORDS", "COPIES", "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "LIMIT_PAIRS",
+               "FRAME_TRAVEL", "EV_DOWN_FROM_20", "FRAME_PROOFS", "GROUP_NAMES", "HAND_EVIDENCE", "HOLD_BRACKET_COPIES", "HOLD_TABLES",
                "ISO_TABLE", "KEEP_LABELS", "LABEL_FIXES", "LATE_COPY", "MY_MENU_EMPTY", "MY_MENU_ROW", "NEW_CHECK_NAMES",
                "NEW_LIKE", "NEW_RECORDS", "NEW_WHOLE_LABELS", "NOT_OFFERED", "ORIENTED", "PICKER_LISTS", "PP7_VALUES",
                "RECORD_FIXES", "SHOOT_MODE_RECORDS", "UNPROVED", "VALUE_FIXES", "VIDEO_SYSTEM_VALUES")
@@ -185,7 +190,7 @@ HAND_TABLES = ("CAROUSEL", "CONTEXT_WORDS", "COPIES", "COPY_MODES", "COPY_MODES_
 def _hand():
     """The ILCE-1M2's hand tables, read the first time they are asked for: HAND and each name of HAND_TABLES bound to
     them then, and never again."""
-    global HAND, CAROUSEL, CONTEXT_WORDS, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, FRAME_TRAVEL, \
+    global HAND, CAROUSEL, CONTEXT_WORDS, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, LIMIT_PAIRS, FRAME_TRAVEL, \
         EV_DOWN_FROM_20, FRAME_PROOFS, GROUP_NAMES, HAND_EVIDENCE, HOLD_BRACKET_COPIES, HOLD_TABLES, ISO_TABLE, \
         KEEP_LABELS, LABEL_FIXES, LATE_COPY, MY_MENU_EMPTY, MY_MENU_ROW, NEW_CHECK_NAMES, NEW_LIKE, NEW_RECORDS, \
         NEW_WHOLE_LABELS, NOT_OFFERED, ORIENTED, PICKER_LISTS, PP7_VALUES, RECORD_FIXES, SHOOT_MODE_RECORDS, UNPROVED, \
@@ -195,6 +200,7 @@ def _hand():
     h = hand_tables.load(paths.A1II)
     CAROUSEL, CONTEXT_WORDS, COPIES, COPY_MODES = h.CAROUSEL, h.CONTEXT_WORDS, h.COPIES, h.COPY_MODES
     COPY_MODES_UNKNOWN, KEEPS_APART, FRAME_TRAVEL = h.COPY_MODES_UNKNOWN, h.KEEPS_APART, h.FRAME_TRAVEL
+    LIMIT_PAIRS = h.LIMIT_PAIRS
     EV_DOWN_FROM_20, FRAME_PROOFS, GROUP_NAMES, HAND_EVIDENCE = h.EV_DOWN_FROM_20, h.FRAME_PROOFS, h.GROUP_NAMES, h.HAND_EVIDENCE
     HOLD_BRACKET_COPIES, HOLD_TABLES, ISO_TABLE, KEEP_LABELS = h.HOLD_BRACKET_COPIES, h.HOLD_TABLES, h.ISO_TABLE, h.KEEP_LABELS
     LABEL_FIXES, LATE_COPY, MY_MENU_EMPTY, MY_MENU_ROW = h.LABEL_FIXES, h.LATE_COPY, h.MY_MENU_EMPTY, h.MY_MENU_ROW
@@ -1766,6 +1772,7 @@ def main():
     check_video_systems(doc, RUN_ROOT)          # no download of one system holds a value listed as the other's
     with_copies(doc, COPIES, RUN_ROOT, modes=COPY_MODES, unknown=COPY_MODES_UNKNOWN)
     with_keeps_apart(doc, KEEPS_APART, RUN_ROOT)   # the switches that keep a family's copies apart, on those copies
+    with_limit_pairs(doc, LIMIT_PAIRS, RUN_ROOT)   # the limits the camera keeps in order, the lower never past the upper
     with_frames(doc, FRAME_TRAVEL)                 # how far each focus frame travels, on the records of its places
     spelled_names(by_key, spelled, over, derived)
     with_menu_rows(doc, axis_rows)      # the rows the definition kept from an older run, named so too

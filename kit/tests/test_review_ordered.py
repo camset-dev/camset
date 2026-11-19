@@ -6,20 +6,24 @@ where the two list the same values and are kept in the same sets, checked agains
 ISO Range Limit is named by its end, as the upper is. Made-up settings, keys and values, the a1 II's committed public
 files where a test reads the shipped ones, and files made from its sample with made-up values."""
 import json
+import re
 import sys
 from pathlib import Path
 
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import datafiles, definitions, paths  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from camkit import ROOT, camset, datafiles, definitions, paths  # noqa: E402
 from writer import hand_evidence, hand_tables  # noqa: E402
 # imported before any test points the kit at a data folder of its own: it binds the a1 II's tables as it is imported
 import schema_update  # noqa: E402,F401
+from test_plain_hand_tables import Cam, rec  # noqa: E402
 
 A1 = paths.A1II
 PUB = definitions.load_public(A1)
 PUB_BY = {s["key"]: s for s in PUB["settings"]}
+SAMPLE = definitions.sample(PUB)
 CAM = "ILCE-0X0_fw1.00"             # a made-up camera
 LOWERS = ("global:0x0b65", "global:0x0b69", "global:0x0b6d")
 UPPERS = ("global:0x0b63", "global:0x0b67", "global:0x0b6b")
@@ -31,6 +35,17 @@ A1_PAIRS = {
     "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": True},
     "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": True},
     "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": True},
+}
+# what both passes write on the a1 II's settings from them
+A1_FIELDS = {
+    "global:0x0b65": ("at_most", {"setting": "global:0x0b63", "moves_it": True}),
+    "global:0x0b63": ("at_least", {"setting": "global:0x0b65", "moves_it": True}),
+    "global:0x0dfa": ("at_most", {"setting": "global:0x0e00", "moves_it": True}),
+    "global:0x0e00": ("at_least", {"setting": "global:0x0dfa"}),
+    "global:0x0dfc": ("at_most", {"setting": "global:0x0e02", "moves_it": True}),
+    "global:0x0e02": ("at_least", {"setting": "global:0x0dfc"}),
+    "global:0x0dfe": ("at_most", {"setting": "global:0x0e04", "moves_it": True}),
+    "global:0x0e04": ("at_least", {"setting": "global:0x0dfe"}),
 }
 
 
@@ -94,3 +109,179 @@ def test_a_limit_pairs_table_out_of_its_shape_is_refused(monkeypatch, tmp_path, 
         hand_tables.load(CAM)
     said = str(got.value)
     assert words in said and p.name in said and "mend the file by hand" in said, said
+
+
+# ---------------------------------------------------------------- the writer
+
+def pairs_doc() -> dict:
+    """A made-up definition: two settings listing the same five steps (0x0001, 0x0002), two more of them (0x0003,
+    0x0004), one listing other names for the codes (0x0005), one whose memory sets keep it (0x0006), one read as a
+    whole record (0x0007) and one with an old at_most a table no longer gives (0x0008)."""
+    steps = [[c, f"Step {i}"] for i, c in enumerate((7, 3, 9, 1, 5))]       # codes in no order, on purpose
+
+    def s(rid, **more):
+        return {"key": f"global:0x{rid:04x}", "area": "global", "id": rid, "name": f"Setting {rid}", "tab": "T",
+                "group": "G", "scalar": True, "values": steps, **more}
+    return {"settings": [s(1), s(2), s(3), s(4), s(5, values=[[c, f"Other {c}"] for c, _ in steps]), s(6, in_sets=True),
+                         s(7, scalar=False), s(8, at_most={"setting": "global:0x0001"})]}
+
+
+def test_the_writer_puts_both_ends_on_their_settings(capsys):
+    """with_limit_pairs (kit/writer/limits.py): each LIMIT_PAIRS entry goes on its two settings, at_most on the lower
+    naming the upper and at_least on the upper naming the lower, each with moves_it where the table says the camera
+    moved the other on a choice past it, never else; every other setting loses an old one. An entry that cannot take
+    effect is printed, "not applied", and left out: a setting the definition lacks, a limit naming itself, two settings
+    that do not list the same values in the same order (the order is the value lists' places, never the codes'), one
+    read as a whole record, two kept in different sets, a setting already a limit of another pair. The fields fit the
+    definition's JSON Schema."""
+    import jsonschema
+    from writer.limits import with_limit_pairs
+    doc = pairs_doc()
+    by = {s["key"]: s for s in doc["settings"]}
+    table = {"global:0x0001": {"upper": "global:0x0002", "lower_moves_upper": True},
+             "global:0x0004": {"upper": "global:0x0003", "upper_moves_lower": True}}
+    assert with_limit_pairs(doc, table) == 2
+    said = capsys.readouterr().out
+    assert by["global:0x0001"]["at_most"] == {"setting": "global:0x0002", "moves_it": True}
+    assert by["global:0x0002"]["at_least"] == {"setting": "global:0x0001"}
+    assert by["global:0x0004"]["at_most"] == {"setting": "global:0x0003"}
+    assert by["global:0x0003"]["at_least"] == {"setting": "global:0x0004", "moves_it": True}
+    assert [k for k, s in by.items() if {"at_most", "at_least"} & set(s)] == [f"global:0x000{i}" for i in (1, 2, 3, 4)]
+    assert "limit pairs: 2 pairs of limits the camera keeps in order" in said
+    for entry, why in (
+            ({"global:0x0001": {"upper": "global:0x0099"}}, "the definition lacks global:0x0099"),
+            ({"global:0x0099": {"upper": "global:0x0001"}}, "the definition lacks global:0x0099"),
+            ({"global:0x0001": {"upper": "global:0x0005"}}, "the two do not list the same values in the same order"),
+            ({"global:0x0001": {"upper": "global:0x0007"}}, "global:0x0007 is not a setting with named values"),
+            ({"global:0x0001": {"upper": "global:0x0006"}}, "the two are not kept in the same sets"),
+            ({"global:0x0001": {"upper": "global:0x0002"}, "global:0x0003": {"upper": "global:0x0001"}},
+             "global:0x0001 is a limit of another pair already")):
+        doc = pairs_doc()
+        with_limit_pairs(doc, entry)
+        lower, upper = list(entry)[-1], entry[list(entry)[-1]]["upper"]
+        assert f"limit pair {lower} <= {upper}: {why}; not applied" in capsys.readouterr().out, entry
+    schema = json.loads(Path(ROOT / "schemas" / "definition.schema.json").read_text(encoding="utf-8"))
+    one = {"key": "global:0x0001", "area": "global", "id": 1, "name": "n", "tab": "t", "group": "g"}
+    check = jsonschema.Draft202012Validator(schema["$defs"]["setting"])
+    check.validate({**one, "at_most": {"setting": "global:0x0002", "moves_it": True}})
+    check.validate({**one, "at_least": {"setting": "global:0x0002"}})
+    assert list(check.iter_errors({**one, "at_most": {"setting": "global:0x0002", "moves_it": False}}))
+    assert list(check.iter_errors({**one, "at_least": {"setting": "global:0x0002", "evidence": "made up"}}))
+    # an emptied table takes the fields out
+    doc = pairs_doc()
+    with_limit_pairs(doc, table)
+    assert with_limit_pairs(doc, {}) == 0 and not [s["key"] for s in doc["settings"] if {"at_most", "at_least"} & set(s)]
+
+
+def test_limit_pairs_are_checked_against_the_cameras_downloads(tmp_path, capsys):
+    """with_limit_pairs with the camera's downloads: a download holding the lower limit past the upper by their value
+    lists' places, in a section both live in (the live settings, and each memory set for settings the memories keep),
+    stops the write (exit 1, the pair, the file and the section named, never a value), as with_copies does; the two at
+    one value, or the lower below, bear it out; a value neither lists is not judged; a download that cannot be read is
+    skipped and counted; with no downloads that is said and the pair written. The a1 II's ISO Range Limit records as
+    the definition keys them, files made from the sample with made-up values (none written down here)."""
+    from writer.limits import with_limit_pairs
+    cs = camset.read(SAMPLE)
+    lower, upper = 0x0b65, 0x0b63
+    codes = [v for v, _ in PUB_BY["global:0x0b65"]["values"]]
+    memory = next(s for s in range(1, len(cs.sections)) if cs.get(s, lower) is not None and cs.get(s, upper) is not None)
+    raw = lambda rid, v, s=0: v.to_bytes(cs.get(s, rid).size, "little", signed=True)
+
+    def made(lo, up, in_memory=None):
+        changes = {(0, lower): raw(lower, lo), (0, upper): raw(upper, up)}
+        if in_memory:
+            changes.update({(memory, lower): raw(lower, in_memory[0], memory), (memory, upper): raw(upper, in_memory[1], memory)})
+        return camset.with_values(cs, changes)
+    root = tmp_path / "runs"
+    (root / "r" / "dat").mkdir(parents=True)
+    files = {"00001_below.DAT": made(codes[2], codes[9]), "00002_level.DAT": made(codes[5], codes[5]),
+             "00003_unnamed.DAT": made(max(codes) + 7, codes[1]), "00004_junk.DAT": b"not a settings file"}
+    for name, data in files.items():
+        (root / "r" / "dat" / name).write_bytes(data)
+    log = root / "downloads.jsonl"
+    log.write_text("".join(json.dumps({"path": f"r/dat/{n}"}) + "\n" for n in files), encoding="utf-8")
+    table = {"global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": True}}
+    doc = json.loads(json.dumps(PUB))
+    assert with_limit_pairs(doc, table, root) == 1
+    said = capsys.readouterr().out
+    assert re.search(r"limit pairs: the lower at or below the upper in each of \d+ sections, of 3 downloads read, 1 that could not be read skipped", said), said
+    by = {s["key"]: s for s in doc["settings"]}
+    assert by["global:0x0b65"]["at_most"] == {"setting": "global:0x0b63", "moves_it": True}
+    for name, data in (("00005_memory_crossed.DAT", made(codes[1], codes[3], in_memory=(codes[8], codes[4]))),
+                       ("00006_live_crossed.DAT", made(codes[6], codes[2]))):
+        (root / "r" / "dat" / name).write_bytes(data)
+        with log.open("a", encoding="utf-8") as f:
+            f.write(json.dumps({"path": f"r/dat/{name}"}) + "\n")
+        with pytest.raises(SystemExit) as stop:
+            with_limit_pairs(doc, table, root)
+        said = str(stop.value).replace("\\", "/")
+        section = memory if "memory" in name else 0
+        assert said.startswith(f"limit pairs: r/dat/{name}, section {section}, holds global:0x0b65 above global:0x0b63"), said
+        assert said.endswith("nothing written. Take the entry out of LIMIT_PAIRS, or prove the state that file shows, then write again."), said
+        assert not re.search(r"(?<![\w:x])\d+(?![\w])", said.split(f"section {section}")[1].split("(")[0]), said
+        log.write_text("".join(json.dumps({"path": f"r/dat/{n}"}) + "\n" for n in files), encoding="utf-8")
+    assert with_limit_pairs(doc, table, tmp_path / "none") == 1
+    assert "limit pairs: no downloads in" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- both passes
+
+def test_the_plain_pass_writes_the_pairs_from_the_hand_table(tmp_path, monkeypatch, capsys):
+    """The plain pass (every camera's but the a1 II's) reads LIMIT_PAIRS and writes at_most and at_least on the two
+    settings it names, where its report gives both the same values; the public definition carries them, no evidence.
+    A made-up camera, made-up proofs."""
+    c = Cam(tmp_path, monkeypatch)
+    steps = {"Step 1": 4, "Step 2": 6, "Step 3": 8}
+    c.report([{"row": "Shooting > Low End", "options": 3, "notices": [], "records": {"global:0x0b65": rec(dict(steps))}},
+              {"row": "Shooting > High End", "options": 3, "notices": [], "records": {"global:0x0b63": rec(dict(steps))}}])
+    c.tables(LIMIT_PAIRS={"global:0x0b65": {"upper": "global:0x0b63", "upper_moves_lower": True}})
+    _, said = c.write(capsys)
+    public, _, text = c.written()
+    by = {s["key"]: s for s in public["settings"]}
+    assert by["global:0x0b65"]["at_most"] == {"setting": "global:0x0b63"}, said
+    assert by["global:0x0b63"]["at_least"] == {"setting": "global:0x0b65", "moves_it": True}
+    assert "limit pairs: 1 pairs of limits the camera keeps in order" in said
+    # an emptied table takes them out again
+    c.tables(LIMIT_PAIRS={})
+    c.write(capsys)
+    assert not [s["key"] for s in c.written()[0]["settings"] if {"at_most", "at_least"} & set(s)]
+
+
+@pytest.fixture(scope="module")
+def a1_written(tmp_path_factory):
+    """The a1 II's full pass (main, --write --force) on a made-up run (test_definitions.a1_run: a copy of the committed
+    definition, the sample as every download), with a copy of its data folder, so the settings reset file it writes
+    follows the names in the copy and never in data/. Returns (what it printed, the definition written by key, the
+    reset file written)."""
+    import contextlib
+    import io
+    import shutil
+
+    from test_definitions import A1_PROOFS, A1_REPORT, a1_run
+    import schema_update as S
+    tmp = tmp_path_factory.mktemp("ordered_a1")
+    with pytest.MonkeyPatch.context() as mp:
+        shutil.copytree(ROOT / "data" / A1, tmp / "data" / A1)
+        mp.setattr(definitions, "DATA", tmp / "data")
+        _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
+        mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+        mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
+        said = io.StringIO()
+        with contextlib.redirect_stdout(said):
+            S.main()
+        written = json.loads(target.read_text(encoding="utf-8"))
+        reset = json.loads(datafiles.reset_file(A1).read_text(encoding="utf-8"))
+    return said.getvalue(), {s["key"]: s for s in written["settings"]}, reset
+
+
+def test_the_a1_pass_writes_the_pairs_and_the_lower_name(a1_written):
+    """The a1 II's own pass writes its LIMIT_PAIRS onto the definition (at_most and at_least, moves_it where the table
+    says so), and names the lower ISO Range Limit's three records by their end, as the settings reset file then does;
+    nothing else carries either field."""
+    said, by, reset = a1_written
+    assert {k: (f, by[k][f]) for k in A1_FIELDS for f in ("at_most", "at_least") if f in by[k]} == A1_FIELDS
+    assert sorted(k for k, s in by.items() if {"at_most", "at_least"} & set(s)) == sorted(A1_FIELDS)
+    assert [by[k]["name"] for k in LOWERS] == ["ISO Range Limit (lower)"] * 3
+    assert [by[k]["name"] for k in UPPERS] == ["ISO Range Limit (upper)"] * 3
+    assert [reset["records"][k]["name"] for k in LOWERS if k in reset["records"]] == ["ISO Range Limit (lower)"] * 3
+    assert "limit pairs: 4 pairs of limits the camera keeps in order" in said

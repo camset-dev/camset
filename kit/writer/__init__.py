@@ -12,6 +12,8 @@
                 under one video system only
     copies      the copies the camera keeps of a live value, where its downloads bear the rule out, and the switches
                 that keep a family's copies apart (keeps_apart)
+    limits      two limits the camera keeps in order, the lower never past the upper (at_most, at_least), where its
+                downloads bear the order out
     frames      how far each focus frame travels, on the records that hold its place (frame)
     gate        --write's gate: the report's open questions against the camera's accepted file
     generic     the plain pass for any other camera, from a seed when it has no definition yet, with its hand tables
