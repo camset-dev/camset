@@ -179,14 +179,15 @@ import re
 import sys
 import time
 from pathlib import Path
+from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import match, ocr, safety, screen  # noqa: E402
 from camkit import coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
-from camkit.live import (WITHHELD_ROW, LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_text,  # noqa: E402
-                         lone_of, look_row, open_refused, osd_kind, press, submenu_labels, text_of)
+from camkit.live import (WITHHELD_ROW, LiveCamera, black, body_of, info_ok_hint, info_ok_text, lit_found,  # noqa: E402
+                         lit_text, lone_of, look_row, open_refused, osd_kind, press, submenu_labels, text_of)
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run, clear_restore_by_hand, mark_restore_by_hand  # noqa: E402
 from camkit.screen import same_position, same_state  # noqa: E402
@@ -709,7 +710,11 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     the icon itself for a short row the kit knows ("R Peaking Color White" read as Color Depth's "R": in_icon); else
     that rule's refusal stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
     first_open_or_exit; any other opens only where this camera has been seen to open it, so walking within a seen parent
-    to a seen row stays plain. Where the page shown cannot be placed (`depth` None, after a MENU or a Left on a menu
+    to a seen row stays plain. On a submenu page (no page model), where that rule takes the bar for no row, for the
+    --path's own last row with words past it that are no value of it, or for a row named by a reading of the lit row
+    itself, the bar is that last row where the page as read live on the bar's own frame ties it so (`known` holds that
+    reading, a SubmenuBar, shown_labels's; the page is the --path's last row's own, `depth` its labels above:
+    submenu_tied); else the refusal stands. Where the page shown cannot be placed (`depth` None, after a MENU or a Left on a menu
     page) nothing opens. `decided`: the row a network decision opens that the lit bar reads as (safety.network_lifted_
     row: its icon glued on and its value judged there), which is then the row."""
     named = "name it in --path, so its first open runs under the link-loss procedure"
@@ -739,6 +744,16 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
             rest = safety.plain(stop_kept(behind(lit))[len(stop_kept(path[-1])):])
             if not rest or rest in own_values:
                 row, why = own, ""
+    bar = next((k for k in known if isinstance(k, SubmenuBar)), None)
+    if not decided and bar is not None and len(path) > 1 and list(depth) == list(path[:-1]) \
+            and (why or first_open.key(row) != first_open.key(own)) \
+            and (row is None or first_open.key(row) == first_open.key(own)
+                 or first_open.key(row)[-1] in {safety.plain(r) for r in bar.readings}) \
+            and submenu_tied(lit, path[-1], bar):
+        # a submenu has no page model: the --path's own row on its own page, its bar tied to it by the page as read
+        # live on the bar's own frame (submenu_tied: kit2_fin_look_varsh's "fVar. Shutter Set.", kit2_fin_look_brtype1's
+        # "Bracket Type Cont. Bracket", 2026-11-19)
+        row, why = own, ""
     if why:
         return why, None
     if list(depth) == list(path[:-1]) and first_open.key(row) == first_open.key((*depth, path[-1])):
@@ -832,6 +847,93 @@ def icon_reading(lit: str, label: str, row, others=()) -> str:
     return max(hits, key=len)
 
 
+class SubmenuBar(NamedTuple):
+    """The lit bar of the submenu page shown, read with the page's labels on one frame (submenu_bar, which shown_labels
+    adds to the labels it gives lit_refused; no str, so every check of `known` that reads labels passes it by)."""
+    lit: str            # the bar's whole text, as highlighted reads it on that frame
+    label: str          # its text in the label column (centres up to LABEL_END), as OCR reads it
+    values: tuple       # ((text, x0, x1), ...): its texts in the value column, left to right
+    label_end: int      # x where the label column's text ends
+    bar_end: int        # x where the orange bar ends
+    readings: tuple     # the lit row's readings among the page's labels read live (camkit.live.submenu_labels)
+    others: tuple       # every reading of the page's other rows
+
+
+LABEL_END = 470         # x: a submenu row's label column ends here (camkit.live.submenu_texts), its value column begins
+VALUE_GAP = 40          # px at least between a bar's label and its value: a value stands apart (a word space is ~10)
+VALUE_RIGHT = 12        # px at most between a bar's value and the bar's right end: a value is right-aligned (3-4 seen)
+# a letter or digit, glued on or set apart by a space, read for a row's icon before its label ("fVar. Shutter Set.")
+ICON_ONE = re.compile(r"[0-9a-z] ?")
+
+
+def submenu_tied(lit: str, label: str, bar) -> bool:
+    """Whether the lit bar read as `lit` is, beyond doubt, the submenu row `label` (the --path's last), by `bar` (a
+    SubmenuBar read on the bar's own frame), compared as stop_kept compares (plain, the last stop kept), all of: `bar`
+    was read on this very bar (its text is `lit`); the bar's label column reads `label`, alone or after one letter or
+    digit read for the row's icon (ICON_ONE); every reading of the lit row among the page's labels read live is
+    `label` so, and one is `label` itself (the reader's, which leaves the icon out); no other row of the page reads as
+    `label` or a longer label that starts with it, with or without such a letter; and whatever the bar reads past its
+    label column stands in the value column, VALUE_GAP or more past the label's end and ending within VALUE_RIGHT of the
+    bar's right end, the bar's text being exactly the two. So "Bracket Type Cont. Bracket" (the value right-aligned at
+    x 495-637) is Bracket Type and "fVar. Shutter Set." Var. Shutter Set.; a bar whose label column reads longer than
+    `label`, a page with another row named so or longer, a lit row the reader reads otherwise, words past the label
+    within the label column or not at the bar's end, two letters before it, or no reading at all, are not."""
+    if not isinstance(bar, SubmenuBar) or not bar.lit.strip() or " ".join(str(lit or "").split()) != " ".join(bar.lit.split()):
+        return False
+    head = stop_kept(label)
+    if not head:
+        return False
+
+    def names(text) -> bool:
+        t = stop_kept(text)
+        return t == head or (t.endswith(head) and ICON_ONE.fullmatch(t[:len(t) - len(head)]) is not None)
+
+    if not names(bar.label) or not bar.readings or not all(names(r) for r in bar.readings) \
+            or not any(stop_kept(r) == head for r in bar.readings):
+        return False
+    for other in bar.others:
+        t = stop_kept(other)
+        for cut in (t, t[1:].lstrip()):                 # with a letter read for an icon left out too
+            if cut.startswith(head) and not cut[len(head):len(head) + 1].isalnum():
+                return False
+    if bar.values and (any(x0 < bar.label_end + VALUE_GAP for _, x0, _ in bar.values)
+                       or max(x1 for *_, x1 in bar.values) < bar.bar_end - VALUE_RIGHT):
+        return False
+    return safety.plain(lit) == safety.plain(" ".join([bar.label, *(t for t, *_ in bar.values)]))
+
+
+def bar_reading(lines, box, lit: str, rows, i: int) -> SubmenuBar:
+    """The SubmenuBar of the lit row `i` of a submenu page: `lines`, OCR's lines inside its orange bar `box` (x0, y0, x1,
+    y1); `lit`, the bar's text as highlighted reads it; `rows`, the page's labels read live (submenu_labels' rows)."""
+    def readings(r) -> tuple:
+        return tuple(t for t in (r.get("label"), *(r.get("readings") or ())) if isinstance(t, str) and t.strip())
+    left = [ln for ln in lines if ln.x + ln.w / 2 <= LABEL_END]
+    right = sorted((ln for ln in lines if ln.x + ln.w / 2 > LABEL_END), key=lambda ln: ln.x)
+    return SubmenuBar(str(lit or ""), " ".join(ln.text for ln in left).strip(),
+                      tuple((ln.text, ln.x, ln.x + ln.w) for ln in right), max((ln.x + ln.w for ln in left), default=0),
+                      int(box[2]), readings(rows[i]),
+                      tuple(t for j, r in enumerate(rows) if j != i for t in readings(r)))
+
+
+def submenu_bar(cam, rows) -> SubmenuBar | None:
+    """The SubmenuBar of the submenu page on screen (rows: its labels as submenu_labels read them on this frame), or None
+    where it cannot be read: a screen not read as a submenu, no lit row among its rows, no orange bar found, a bar
+    outside that row, a frame OCR cannot read."""
+    try:
+        f, s = cam.frame, cam.read()
+        i = s.row
+        if s.kind != "submenu" or not isinstance(i, int) or not 0 <= i < min(len(rows), len(s.rows)):
+            return None
+        box, whole = lit_found(f.image)
+        top, bottom = s.rows[i]
+        if not box or not whole or not top <= (box[1] + box[3]) / 2 <= bottom:
+            return None
+        lines = [ln for ln in ocr.read([f.path])[f.path] if ln.inside(box)]
+        return bar_reading(lines, box, highlighted(f.image, f.path), rows, i)
+    except Exception:       # noqa: BLE001 (no reading: lit_refused's rule stands alone)
+        return None
+
+
 def scan_row(cycle, model, j) -> dict | None:
     """The page model's row at the page scan's position `j` (where crawl_run.go_to went), or None where it has none."""
     if isinstance(j, bool) or not isinstance(j, int) or j < 0:
@@ -855,11 +957,14 @@ def other_names(model, label: str) -> set:
 
 def shown_labels(cam, cycle, model) -> list:
     """The row labels of the menu page shown, read as the crawl reads them: a submenu page's live, its every reading
-    (camkit.live.submenu_labels: OCR and the reader), a top-level page's from the page scan's model (page_labels); []
-    where they cannot be read."""
+    (camkit.live.submenu_labels: OCR and the reader), and its lit bar read with them on that frame (submenu_bar: a
+    SubmenuBar, where it can be read), a top-level page's from the page scan's model (page_labels); [] where they
+    cannot be read."""
     try:
         if cam.read().kind == "submenu":
-            return [t for r in submenu_labels(cam)[1] for t in (r.get("label"), *(r.get("readings") or ())) if t]
+            rows = submenu_labels(cam)[1]
+            bar = submenu_bar(cam, rows)
+            return [t for r in rows for t in (r.get("label"), *(r.get("readings") or ())) if t] + ([bar] if bar else [])
         return page_labels(cam.read(), cycle, model)
     except Exception:       # noqa: BLE001 (labels not read: the rule falls back on what the kit knows)
         return []
