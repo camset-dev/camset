@@ -750,11 +750,17 @@ def equipment_in(text) -> str | None:
 
 
 def excluded_under(path: tuple, sony: dict, header: set) -> tuple | None:
-    """The row of Sony's Save/Load list (or of the file's header) that a row's path is, or is below, the nearest one;
-    None for none: a row below a row the list leaves out of the settings file is left out with it."""
+    """The row of Sony's Save/Load list (or of the file's header) that a row's path is, or is below, the nearest one,
+    as the list writes it; None for none: a row below a row the list leaves out of the settings file is left out with
+    it. Compared folded (plain), as the ledger compares labels everywhere else: "FTP Transfer Func" is the list's
+    "FTP Transfer Func." (review B11, 2026-11-18)."""
+    folded = {}
+    for k in (*header, *sony):          # the list's own spelling where both name the row
+        folded[tuple(plain(x) for x in k)] = k
     for n in range(len(path), 0, -1):
-        if path[:n] in sony or path[:n] in header:
-            return path[:n]
+        k = folded.get(tuple(plain(x) for x in path[:n]))
+        if k is not None:
+            return k
     return None
 
 

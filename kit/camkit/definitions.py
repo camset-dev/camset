@@ -420,8 +420,8 @@ def menu_tree_file(camera: str) -> Path:
     """private/evidence/<model>_fw<fw>/menu_tree_<model>_fw<fw>.json: the camera's menus, row by row, as the kit walked
     them, private whole (camkit.datafiles): what the walk found greyed, unread or listed from the held option is the
     state the camera stood in. The definition's own menu list and each setting's place are the public menu structure.
-    Only a path: nothing is read or moved (one left at its old public place, data/<model>_fw<fw>/, is moved by
-    kit/tools/move_evidence.py alone: camkit.datafiles.stop_if_left)."""
+    Only a path: nothing is read or moved (one left at its old public place, data/<model>_fw<fw>/, stops the commands
+    that need it, which say where to move it by hand: camkit.datafiles.stop_if_left)."""
     return EVIDENCE_DIR / camera / f"menu_tree_{camera}.json"
 
 

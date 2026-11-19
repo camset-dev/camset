@@ -128,3 +128,79 @@ def test_a_block_cut_short_ends_on_no_closing_proof():
     src = SimpleNamespace(proofs=[("kit2_pass2", i + 1, p) for i, p in enumerate(lines)],
                           camera_file={"volatile_records": [0x01ff]})
     assert coverage._closing_proofs(src) == {("kit2_pass2", 4), ("kit2_pass2", 9), ("kit2_pass2", 13)}
+
+
+# ---------------------------------------------------------------- 4. the writer's and the ledger's low ones
+
+def test_importing_the_writer_reads_no_hand_tables():
+    """Review B7 (2026-11-18): kit/schema_update.py read the ILCE-1M2's hand tables and its private hand evidence when
+    it was imported, and the proof viewer imports it for its help helpers, whatever the camera. Now nothing is read on
+    import; a name read from outside (or main's ILCE-1M2 pass) reads them."""
+    import subprocess
+    code = ("import sys; sys.path[:0] = ['kit', 'kit/tools']\n"
+            "from writer import hand_tables\n"
+            "read = []\n"
+            "real = hand_tables.load\n"
+            "hand_tables.load = lambda *a, **k: read.append(a) or real(*a, **k)\n"
+            "import schema_update as S\n"
+            "from schema_update import DISABLED_RE, LOOKALIKES, counted_proofs, help_rows, proved_rows\n"
+            "assert read == [] and 'HAND' not in vars(S), read\n"
+            "assert isinstance(S.FRAME_PROOFS, dict) and len(read) == 1 and S.HAND.FRAME_PROOFS is S.FRAME_PROOFS\n"
+            "assert all(n in vars(S) and getattr(S, n) is getattr(S.HAND, n) for n in S.HAND_TABLES)\n"
+            "S.UNPROVED, S.COPIES\n"
+            "assert len(read) == 1\n")
+    got = subprocess.run([sys.executable, "-c", code], cwd=definitions.ROOT, capture_output=True, text=True)
+    assert got.returncode == 0, got.stderr[-2000:]
+
+
+def test_a_second_a1_pass_in_one_process_starts_from_the_tables_as_read(tmp_path, monkeypatch, capsys):
+    """Review B7: main wrote into the module's tables (NEW_RECORDS' bracket copies, FRAME_PROOFS' Base Look copies),
+    so a second main() in one process started from changed tables. Two looks (no --write) on a made-up run leave every
+    hand table as it was read."""
+    import copy
+
+    import schema_update as S
+    from test_definitions import A1_PROOFS, A1_REPORT, a1_run
+    S._hand()
+    before = {n: copy.deepcopy(getattr(S, n)) for n in S.HAND_TABLES}
+    S, _target, _write = a1_run(tmp_path, monkeypatch, A1_REPORT, A1_PROOFS)
+    monkeypatch.setattr(sys, "argv", ["schema_update.py"])
+    S.main()
+    first = capsys.readouterr().out
+    assert {n for n in S.HAND_TABLES if getattr(S, n) != before[n]} == set()
+    S.main()
+    assert capsys.readouterr().out == first and {n for n in S.HAND_TABLES if getattr(S, n) != before[n]} == set()
+
+
+def test_the_dial_runs_newest_download_is_found_by_the_manifest_or_its_number(tmp_path, monkeypatch):
+    """Review B8: the ILCE-1M2's pass took sorted(glob)[-1] of runs/<camera>/kit2_dial/dat: an IndexError without that
+    run, and the names sorted as text ("93438_x.DAT" after "239606_x.DAT"), which the fix of 2026-11-11 took out
+    elsewhere. Now the downloads manifest's last of the run, else the highest number, and plain words without one."""
+    import pytest
+
+    import schema_update as S
+    root = tmp_path / "runs" / "ILCE-1M2_fw4.00"
+    monkeypatch.setattr(S, "RUN_ROOT", root)
+    with pytest.raises(SystemExit) as e:
+        S.dial_download()
+    assert "kit2_dial" in str(e.value.code) and "holds none" in str(e.value.code)
+    dat = root / "kit2_dial" / "dat"
+    dat.mkdir(parents=True)
+    for name in ("93438_x.DAT", "239606_x.DAT", "_camlink_upload_x.DAT", "notes.txt"):
+        (dat / name).write_bytes(b"")
+    assert S.dial_download() == dat / "239606_x.DAT", "by number, never as text"
+    (root / "downloads.jsonl").write_text(json.dumps({"path": "kit2_dial/dat/93438_x.DAT"}) + "\n" +
+                                          json.dumps({"path": "kit2_other/dat/00001_x.DAT"}) + "\n", encoding="utf-8")
+    assert S.dial_download() == dat / "93438_x.DAT", "the manifest's order, where it lists the run"
+
+
+def test_the_save_load_rows_are_compared_folded():
+    """Review B11: excluded_under compared the row's labels raw where every other ledger comparison folds them, so a
+    label spelled with another dash or without the list's full stop missed silently. Folded now, giving the row as the
+    list writes it (its note and the header flag are looked up by it)."""
+    sony = {("FTP Transfer Func.",): "its own file", ("Wi-Fi Frequency Band",): ""}
+    header = {("NTSC/PAL Selector",), ("FTP Transfer Func.",)}
+    assert coverage.excluded_under(("FTP Transfer Func", "Upload Settings"), sony, header) == ("FTP Transfer Func.",)
+    assert coverage.excluded_under(("Wi‑Fi  Frequency Band",), sony, header) == ("Wi-Fi Frequency Band",)
+    assert coverage.excluded_under(("ntsc/pal selector",), sony, header) == ("NTSC/PAL Selector",)
+    assert coverage.excluded_under(("Wi-Fi Connect",), sony, header) is None

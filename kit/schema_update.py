@@ -16,7 +16,9 @@ Per record proved on the camera (kit2_pass2/report.json in the camera's runs/<mo
                 "sampled": {"proofs", "linear"} and no values: each sample changes one digit of the
                 camera's own setting, so the stored numbers would give that setting away. Of the proof the
                 definition held before, only a value a counted proof line still wrote stays beside the report's,
-                and is listed ("kept"); never an old menu row or count (kept_proof)
+                and is listed ("kept"); never an old menu row or count (kept_proof). That is the whole proof, as
+                the kit holds it and the private evidence file keeps it; the public definition holds neither the run
+                nor the day: its lean form, "values" and "sampled": {"linear"} only (camkit.definitions.lean_proof)
   written_with  not written (without_written_with): which records a proof wrote together stays in pass 2's report;
                 beside it a definition would tell how the camera was set when the proofs were made (decision 16)
   menu_blocked  options the camera refused in the menu, with the reason it gave (not "refused":
@@ -81,7 +83,7 @@ removes the marker (camkit.definitions.finish_write). After a write one line say
 it, by setting key and field, and removes it only with --write. Every
 refusal comes before anything is written (writer.fromdata.write_definition: the definition's, then the reset file's,
 then the definition), and --write stops in plain words while the mapper's menu tree, accepted rulings or record shapes
-are still at their old place in data/ (kit/tools/move_evidence.py moves them).
+are still at their old place in data/, saying where to move each by hand (camkit.datafiles.stop_if_left).
 Rerunning gives the same file: a note line a pass adds is added once (add_line), a note a table writes whole is
 compared with its evidence apart (note_is), and the proofs are kept as above. Prints every label it changes or adds;
 never prints the camera's own settings (no start values). Without --write it only shows.
@@ -125,6 +127,7 @@ readers of that camera's runs it needs, and gives every name of those parts unde
 """
 import argparse
 import collections
+import copy
 import re
 import sys
 import unicodedata
@@ -166,40 +169,48 @@ from writer.hand_facts import by_lines_of  # noqa: E402
 
 # the ILCE-1M2's hand tables (data/ILCE-1M2_fw4.00/hand_tables_ILCE-1M2_fw4.00.json, writer/hand_tables.py), its hand
 # evidence put back where the private overlay holds it (HAND_EVIDENCE: the file read, None on a clone without it, where
-# --write refuses): its own pass (main) applies them, under these names, which the tests read and patch
-HAND = hand_tables.load(paths.A1II)
-CAROUSEL = HAND.CAROUSEL
-CONTEXT_WORDS = HAND.CONTEXT_WORDS
-COPIES = HAND.COPIES
-COPY_MODES = HAND.COPY_MODES
-COPY_MODES_UNKNOWN = HAND.COPY_MODES_UNKNOWN
-KEEPS_APART = HAND.KEEPS_APART
-FRAME_TRAVEL = HAND.FRAME_TRAVEL
-EV_DOWN_FROM_20 = HAND.EV_DOWN_FROM_20
-FRAME_PROOFS = HAND.FRAME_PROOFS
-GROUP_NAMES = HAND.GROUP_NAMES
-HAND_EVIDENCE = HAND.HAND_EVIDENCE
-HOLD_BRACKET_COPIES = HAND.HOLD_BRACKET_COPIES
-HOLD_TABLES = HAND.HOLD_TABLES
-ISO_TABLE = HAND.ISO_TABLE
-KEEP_LABELS = HAND.KEEP_LABELS
-LABEL_FIXES = HAND.LABEL_FIXES
-LATE_COPY = HAND.LATE_COPY
-MY_MENU_EMPTY = HAND.MY_MENU_EMPTY
-MY_MENU_ROW = HAND.MY_MENU_ROW
-NEW_CHECK_NAMES = HAND.NEW_CHECK_NAMES
-NEW_LIKE = HAND.NEW_LIKE
-NEW_RECORDS = HAND.NEW_RECORDS
-NEW_WHOLE_LABELS = HAND.NEW_WHOLE_LABELS
-NOT_OFFERED = HAND.NOT_OFFERED
-ORIENTED = HAND.ORIENTED
-PICKER_LISTS = HAND.PICKER_LISTS
-PP7_VALUES = HAND.PP7_VALUES
-RECORD_FIXES = HAND.RECORD_FIXES
-SHOOT_MODE_RECORDS = HAND.SHOOT_MODE_RECORDS
-UNPROVED = HAND.UNPROVED
-VALUE_FIXES = HAND.VALUE_FIXES
-VIDEO_SYSTEM_VALUES = HAND.VIDEO_SYSTEM_VALUES
+# --write refuses): its own pass (main) applies them, under these names (HAND and HAND_TABLES), which the tests read and
+# patch. Read when first asked for (_hand: main's ILCE-1M2 pass and the helpers that read one; or a name read from
+# outside, __getattr__), never when this file is imported: the proof viewer imports it for its help helpers, whatever
+# the camera (review B7, 2026-11-18). main changes none of them, so a second run in one process starts from them as read
+HAND_TABLES = ("CAROUSEL", "CONTEXT_WORDS", "COPIES", "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "FRAME_TRAVEL",
+               "EV_DOWN_FROM_20", "FRAME_PROOFS", "GROUP_NAMES", "HAND_EVIDENCE", "HOLD_BRACKET_COPIES", "HOLD_TABLES",
+               "ISO_TABLE", "KEEP_LABELS", "LABEL_FIXES", "LATE_COPY", "MY_MENU_EMPTY", "MY_MENU_ROW", "NEW_CHECK_NAMES",
+               "NEW_LIKE", "NEW_RECORDS", "NEW_WHOLE_LABELS", "NOT_OFFERED", "ORIENTED", "PICKER_LISTS", "PP7_VALUES",
+               "RECORD_FIXES", "SHOOT_MODE_RECORDS", "UNPROVED", "VALUE_FIXES", "VIDEO_SYSTEM_VALUES")
+
+
+def _hand():
+    """The ILCE-1M2's hand tables, read the first time they are asked for: HAND and each name of HAND_TABLES bound to
+    them then, and never again."""
+    global HAND, CAROUSEL, CONTEXT_WORDS, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, FRAME_TRAVEL, \
+        EV_DOWN_FROM_20, FRAME_PROOFS, GROUP_NAMES, HAND_EVIDENCE, HOLD_BRACKET_COPIES, HOLD_TABLES, ISO_TABLE, \
+        KEEP_LABELS, LABEL_FIXES, LATE_COPY, MY_MENU_EMPTY, MY_MENU_ROW, NEW_CHECK_NAMES, NEW_LIKE, NEW_RECORDS, \
+        NEW_WHOLE_LABELS, NOT_OFFERED, ORIENTED, PICKER_LISTS, PP7_VALUES, RECORD_FIXES, SHOOT_MODE_RECORDS, UNPROVED, \
+        VALUE_FIXES, VIDEO_SYSTEM_VALUES
+    if "HAND" in globals():
+        return HAND
+    h = hand_tables.load(paths.A1II)
+    CAROUSEL, CONTEXT_WORDS, COPIES, COPY_MODES = h.CAROUSEL, h.CONTEXT_WORDS, h.COPIES, h.COPY_MODES
+    COPY_MODES_UNKNOWN, KEEPS_APART, FRAME_TRAVEL = h.COPY_MODES_UNKNOWN, h.KEEPS_APART, h.FRAME_TRAVEL
+    EV_DOWN_FROM_20, FRAME_PROOFS, GROUP_NAMES, HAND_EVIDENCE = h.EV_DOWN_FROM_20, h.FRAME_PROOFS, h.GROUP_NAMES, h.HAND_EVIDENCE
+    HOLD_BRACKET_COPIES, HOLD_TABLES, ISO_TABLE, KEEP_LABELS = h.HOLD_BRACKET_COPIES, h.HOLD_TABLES, h.ISO_TABLE, h.KEEP_LABELS
+    LABEL_FIXES, LATE_COPY, MY_MENU_EMPTY, MY_MENU_ROW = h.LABEL_FIXES, h.LATE_COPY, h.MY_MENU_EMPTY, h.MY_MENU_ROW
+    NEW_CHECK_NAMES, NEW_LIKE, NEW_RECORDS, NEW_WHOLE_LABELS = h.NEW_CHECK_NAMES, h.NEW_LIKE, h.NEW_RECORDS, h.NEW_WHOLE_LABELS
+    NOT_OFFERED, ORIENTED, PICKER_LISTS, PP7_VALUES = h.NOT_OFFERED, h.ORIENTED, h.PICKER_LISTS, h.PP7_VALUES
+    RECORD_FIXES, SHOOT_MODE_RECORDS, UNPROVED, VALUE_FIXES = h.RECORD_FIXES, h.SHOOT_MODE_RECORDS, h.UNPROVED, h.VALUE_FIXES
+    VIDEO_SYSTEM_VALUES = h.VIDEO_SYSTEM_VALUES
+    HAND = h
+    return HAND
+
+
+def __getattr__(name):
+    """A hand table's name read from outside (a test, a tool) before anything asked for them: they are read now."""
+    if name == "HAND" or name in HAND_TABLES:
+        _hand()
+        return globals()[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 RUN_ROOT = paths.module_root()          # the camera's runs (models.refused checks they are the definition's)
 RUN = RUN_ROOT / "kit2_pass2"
@@ -248,9 +259,34 @@ def run_start() -> Path:
     return hand_facts.run_start(RUN_ROOT, RUN)
 
 
+def dial_download() -> Path:
+    """The newest download of the kit2_dial run, which lays out the records the hand tables add (NEW_RECORDS) and
+    says which first-kit records this body's file holds: the last the camera's downloads manifest lists of that run,
+    else (a run older than the manifest) the one whose number is highest, as a number: never the names sorted as text,
+    "93438_x.DAT" after "239606_x.DAT" (the fix of 2026-11-11, writer/hand_facts.run_start; review B8). Stops in plain
+    words when the run holds none on this computer."""
+    from camkit import provenance
+    folder = RUN_ROOT / "kit2_dial" / "dat"
+
+    def own(p):
+        return p.suffix == ".DAT" and not p.name.startswith("_camlink_upload") and p.exists()
+    inside = folder.resolve()
+    for e in reversed(provenance.entries(RUN_ROOT)):
+        p = RUN_ROOT / str(e.get("path", ""))
+        if own(p) and p.resolve().parent == inside:
+            return p
+    files = [p for p in folder.glob("*.DAT") if own(p)] if folder.is_dir() else []
+    if not files:
+        sys.exit(f"schema_update: nothing done: the ILCE-1M2's pass reads the layout of the records its hand tables add "
+                 f"from a download of its kit2_dial run, and {paths.shown(folder)} holds none on this computer. Run it "
+                 "where that camera's runs are, or put the run's downloads back there, then run the command again.")
+    return max(files, key=lambda p: (int(re.match(r"\d*", p.name)[0] or -1), p.name))
+
+
 def like_setting(key: str, by_key: dict, e: dict, r: dict) -> dict:
     """A proved record the schema lacked, laid out like its sibling (writer/hand_facts.like_setting, with this
     camera's NEW_LIKE and NEW_WHOLE_LABELS and its run's start file)."""
+    _hand()
     return hand_facts.like_setting(key, by_key, e, r, NEW_LIKE, NEW_WHOLE_LABELS, run_start(), RUN.name)
 
 
@@ -282,6 +318,7 @@ def my_menu_empty(doc: dict, records: list, over: dict, changed: list) -> int:
     (camera.my_menu.empty) labelled "(empty)", its name a hand table's, so an editor offers it outside Expert mode and
     a person can empty a place, and the camera's evidence added to each slot's note. Returns how many slots; none
     when the camera file names no empty code."""
+    _hand()
     empty = ((doc.get("camera") or {}).get("my_menu") or {}).get("empty")
     if empty is None:
         return 0
@@ -310,6 +347,7 @@ def my_menu_tables(doc: dict, items: list, records: list, changed: list, readers
     the table abbreviates where the screen has more ("Fn Menu Settings" over "Menu Settings", 2026-11-07), unless
     the table's is the proof's with an icon glyph glued in front (an old "SISO Range Limit": glued_icon); a name unlike the
     proof's gives way to it. Returns how many codes."""
+    _hand()
     from pass2_report import alike, glued_icon, judge
     slots = [x for x in doc["settings"] if x.get("area") == "global" and x.get("id") in records and x.get("index") is not None]
     table = dict((v, lab) for v, lab in (slots[0].get("values") if slots else []) or [])
@@ -397,6 +435,7 @@ def hold_tables(by_key: dict, proved: dict, report: list, over: dict, derived: d
     labels in place of its hand table). A value whose name the hold keeps apart from the live table's (KEEP_LABELS: "ISO
     50 (multi-frame NR)" beside the live "ISO 50") stays the hand table's. A proof that does not fit stops the rule
     for that hold, printed."""
+    _hand()
     for k, rule in HOLD_TABLES.items():
         s, live = by_key.get(k), by_key.get(rule["live"])
         if s is None or live is None:
@@ -444,6 +483,7 @@ def hold_table_lines(by_key: dict, proved: dict, menus: dict, changed: list) -> 
     """A Reg. Custom Shoot Set item proved in full on one hold (every value it lists: hold 3's Aperture, 49 of 49) names
     the other holds' values, as the lending above does: each other hold whose proofs agree with it (hold_agrees) says
     so in its note, with the evidence; a hold proved in full itself, or one that disagrees, says nothing."""
+    _hand()
     for k in sorted(by_key):
         m = re.fullmatch(r"(global:0x[0-9a-f]+)\[([012])\]", k)
         s = by_key[k]
@@ -549,6 +589,7 @@ def new_setting(key: str, row: str, proved: dict, menu=()) -> dict | None:
     """A schema entry for a record proved through a checklist that the schema lacked, with the size,
     slot count and memory-set presence read from the run's start file, and its tab the one the definition's menu
     (`menu`) gives its row (menu_tab)."""
+    _hand()
     from camkit import camset
     m = re.fullmatch(r"global:0x([0-9a-f]+)(?:\[(\d+)\])?", key)
     if not m:
@@ -609,6 +650,7 @@ def camera_group_names(doc) -> int:
     """Each setting's group under the camera's own name: a cut breadcrumb by the one camera group of its tab it
     can be, or, when several can, by the row its proof went through, in the Stills menu or in the Help Guide's
     list (every mode's rows: Movie mode's Auto Framing Settings). A submenu after the group is kept."""
+    _hand()
     for m in doc.get("menu") or []:
         m["group"] = GROUP_NAMES.get(m["group"], m["group"])
     groups, rows = collections.defaultdict(list), collections.defaultdict(dict)
@@ -669,11 +711,12 @@ def help_rows(s: dict, went: dict) -> list:
     return [menu_place(m) for m in [*menus, *sorted(went.get(s.get("key"), ()))]]
 
 
-def attach_help(doc, report, proofs=()) -> tuple:
+def attach_help(doc, report, proofs=(), frame_proofs=None) -> tuple:
     """The camera's own help (In-Camera Guide, 2026-11-01) for a setting's menu row (kit/help_run.py:
     every page's rows; prove_run --help-text: list and dialog rows in submenus too) and for each option
     it proved, by stored value. Read in the mode the setting was proved in when the walk has it there;
-    the words a second reader confirmed (kit/help_reads.py).
+    the words a second reader confirmed (kit/help_reads.py). `frame_proofs`: main's copy of FRAME_PROOFS, the values
+    it filled in among it (else the table as read).
     Sony's wording, the owner's choice: main() moves it into the private help file (kit/camkit/help_files.py),
     never into the published schema. Settings with nothing read keep what they had, and so does a setting whose help
     is still, word for word, the guide of a row one of its counted proofs went through (proofs: the report's, the
@@ -681,6 +724,7 @@ def attach_help(doc, report, proofs=()) -> tuple:
     and those change as proofs are made again: S&Q Shoot Mode's proofs of 2026-10-29 wrote global:0x13e2, its later
     ones (in Time-lapse) global:0x13e3, so on 2026-11-11 its S&Q help gave way to the next row's, Shoot Mode's
     general guide, in the private help file."""
+    _hand()
     from page_model import key_text
     rows, opts = {}, {}
     # the text two readers settled on (kit/help_reads.py), by the guide's first frame; else the OCR
@@ -761,7 +805,7 @@ def attach_help(doc, report, proofs=()) -> tuple:
                     texts[(k, v)].add(text)
     # settings proved outside the report (FRAME_PROOFS: the Screen Reader's, 2026-11-02), by their menu row and
     # their own value labels
-    for k, fp in FRAME_PROOFS.items():
+    for k, fp in (FRAME_PROOFS if frame_proofs is None else frame_proofs).items():
         if k not in by_key or not fp.get("menu") or not fp.get("values"):
             continue
         for menu in fp["menu"] if isinstance(fp["menu"], list) else [fp["menu"]]:     # one row or several
@@ -846,6 +890,7 @@ def main():
     if target.stem != paths.A1II:
         generic_main(target, RUN, a.write and not a.dry_run, a.force, a.accept_stale)   # any other camera: the plain pass
         return
+    _hand()
     # the hand tables' evidence (writer/hand_evidence.py) is the mapper's, in the private overlay: without it the tables
     # give no hand proofs, and a definition written so would lose every one of them (the plain pass refuses alike)
     missing = hand_evidence.missing(paths.A1II, HAND_EVIDENCE, {n: getattr(HAND, n) for n in hand_evidence.COMPLETES})
@@ -1341,7 +1386,7 @@ def main():
             if s["key"].split("[")[0] == rec and s.get("values") and v not in {x for x, _ in s["values"]}:
                 changed.append((s["key"], s["name"], v, None, lab))
                 s["values"] = sorted(s["values"] + [[v, lab]])
-    latest = camset_read(sorted(p for p in (RUN_ROOT / "kit2_dial" / "dat").glob("*.DAT") if not p.name.startswith("_camlink_upload"))[-1])
+    latest = camset_read(dial_download())
     # a guessed record this body's file does not hold (2026-10-30: "WB fine-tune A-B (Custom 1-3)",
     # 0x0c65 / 0x0c67 / 0x0c69; the Custom grids write G-M only) is dropped: nothing could set it
     for s in list(doc["settings"]):
@@ -1351,10 +1396,13 @@ def main():
             changed.append((s["key"], s["name"], "dropped", s["name"], "(not in this body's file)"))
             doc["settings"].remove(s)
             by_key.pop(s["key"], None)
+    # this run's copy of the table: what it fills in (a bracket copy's labels) and what the definition takes from it
+    # never reaches the table as read (review B7)
+    new_records = copy.deepcopy(NEW_RECORDS)
     for k, live in HOLD_BRACKET_COPIES.items():
         if live in by_key:                           # the live list's labels, by place from 0
-            NEW_RECORDS[k]["values"] = [[i, lab] for i, (_, lab) in enumerate(sorted(by_key[live]["values"]))]
-    for k, info in NEW_RECORDS.items():
+            new_records[k]["values"] = [[i, lab] for i, (_, lab) in enumerate(sorted(by_key[live]["values"]))]
+    for k, info in new_records.items():
         (derived if k in HOLD_BRACKET_COPIES else over)[k].update(
             {v: "derived" if k in HOLD_BRACKET_COPIES else "hand table" for v, _ in info["values"]})
         if k in by_key:                              # added before: keep its words current
@@ -1482,7 +1530,9 @@ def main():
             changed.append((k, r["name"], "note", None, fp["note"][:60]))
             put_note(r, fp["note"])
     base_labels = (by_key.get("global:0x0cbe[10]") or {}).get("values") or []
-    for k, fp in FRAME_PROOFS.items():
+    # this run's copy of the table, the look copies named by that list in it, never in the table as read (review B7)
+    frame_proofs = copy.deepcopy(FRAME_PROOFS)
+    for k, fp in frame_proofs.items():
         if k.startswith(looks):
             fp["values"] = base_labels
     # why a record stays unproved, when no proof can be made (2026-11-03, the owner: "the picture profiles are
@@ -1496,11 +1546,11 @@ def main():
     # held) keeps no proof: the one a view-only readout kept from an older run goes first, and one FRAME_PROOFS proves
     # by hand too stops the write (hand_facts.state_proofs_out, as the plain pass does)
     taken_out = set()
-    by_hand = {k for k, fp in FRAME_PROOFS.items() if {"proved", "sampled"} & set(fp)}
+    by_hand = {k for k, fp in frame_proofs.items() if {"proved", "sampled"} & set(fp)}
     hand_facts.state_proofs_out(by_key, UNPROVED, by_hand, changed)
     for k, r in by_key.items():
         why = None
-        if not r.get("proved") and k in UNPROVED and not {"proved", "sampled"} & set(FRAME_PROOFS.get(k) or ()):
+        if not r.get("proved") and k in UNPROVED and not {"proved", "sampled"} & set(frame_proofs.get(k) or ()):
             kind, date, text = UNPROVED[k]
             why = {"kind": kind, **({"date": date} if date else {}), "why": text}
         elif not r.get("proved") and (r.get("group") or "") in ("Picture Profile PP7", "Picture Profile PP8", "Picture Profile PP9"):
@@ -1538,7 +1588,7 @@ def main():
         if k in by_key and v not in {x for x, _ in by_key[k].get("values") or []}:
             changed.append((k, by_key[k]["name"], v, None, lab))
             by_key[k]["values"] = sorted((by_key[k].get("values") or []) + [[v, lab]])
-    for k, fp in FRAME_PROOFS.items():
+    for k, fp in frame_proofs.items():
         s = by_key.get(k)
         if s is None:
             continue
@@ -1749,7 +1799,7 @@ def main():
     private = help_files.PRIVATE / help_files.name(doc)
     had = help_files.taken(doc)
     help_files.put(doc, help_files.read(private, doc) or had)
-    n_help, n_opt = attach_help(doc, report, [r for i, r in enumerate(all_proofs) if i not in cut_short])
+    n_help, n_opt = attach_help(doc, report, [r for i, r in enumerate(all_proofs) if i not in cut_short], frame_proofs)
     with_menu(doc)                       # the menu list from the camera's menu tree, before the groups are named by it
     print(f"groups: {camera_group_names(doc)} settings put under the camera's own group name; "
           f"{mirror_names(doc)} of the memories' live copy renamed")

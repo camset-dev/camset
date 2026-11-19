@@ -207,7 +207,7 @@ def test_the_download_pickers_pass_over_an_upload_copy(tmp_path):
     prefix = re.search(r'"(_camlink_upload)"', (ROOT / "kit" / "link" / "camlink.cpp").read_text(encoding="utf-8"))
     assert prefix, "camlink names its upload copy"
     for rel, picker in (("kit/tools/upload_check.py", "downloads = "), ("kit/writer/generic.py", "files = sorted("),
-                        ("kit/schema_update.py", "latest = camset_read(sorted(")):
+                        ("kit/schema_update.py", "return p.suffix == \".DAT\" and not p.name")):
         line = next(x for x in (ROOT / rel).read_text(encoding="utf-8").splitlines() if x.strip().startswith(picker))
         assert f'startswith("{prefix.group(1)}")' in line, rel
 

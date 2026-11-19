@@ -276,8 +276,8 @@ def reset_names(doc: dict, write: bool) -> int:
     name or tab is corrected. The public file is the reset file's one source, written and edited by the mapper by hand
     (camkit.datafiles); the kit keeps no private half of it. Written with write, and only when a name or tab differs;
     a file that is not lean is never rewritten: with write that stops (datafiles.Refused, before anything is written:
-    reset_refusal), without it is said, each naming kit/tools/move_evidence.py. Returns how many names and tabs
-    differ."""
+    reset_refusal), without it is said, both in words that say to make it lean by hand (datafiles.not_lean_words).
+    Returns how many names and tabs differ."""
     p = datafiles.reset_file(definitions.key(doc))
     if not p.exists():
         return 0

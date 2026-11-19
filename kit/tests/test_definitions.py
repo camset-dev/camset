@@ -1661,6 +1661,8 @@ def test_no_name_in_schema_update_is_bound_twice():
                 bound.update(names(node.target))
             elif isinstance(node, (ast.FunctionDef, ast.ClassDef)):
                 bound[node.name] += 1
+                if node.name == "_hand":            # the hand tables, bound under their names when first asked for
+                    bound.update(n for g in ast.walk(node) if isinstance(g, ast.Global) for n in g.names)
             elif isinstance(node, (ast.Import, ast.ImportFrom)):
                 bound.update((a.asname or a.name).split(".")[0] for a in node.names)
         return bound
