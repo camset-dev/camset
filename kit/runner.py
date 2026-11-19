@@ -11,8 +11,11 @@ proofs file holds them, and a session with the camera that always ends restoring
     changes_of(camset.diff(a, b))                 [{"key", "before", "after"}] for a proof line
     end_session(link, eyes, start, why)           the shooting screen, then camkit.session.finish; when the shooting
                                                   screen does not come, the restore is still tried
-    with prover_session(run, eyes) as s: ...      a prover's whole session: the start download, a LiveCamera (s.cam),
-                                                  the body, and the end above, the restore checked (s.restored)
+    with prover_session(run, eyes) as s: ...      a runner's whole session: the start download, a LiveCamera (s.cam),
+                                                  the body, and the end above, the restore checked (s.restored); its
+                                                  hooks for a walker's or a tool's own way (reach, readers, camera...)
+    start = session_start(link, eyes)             its start alone, for a session that does not end restoring: the
+                                                  shooting screen, the start download, the menu's lock waited out
     sys.exit(EXIT_UNRESTORED)                     a runner's exit when the camera is not known to be as its start file
     with restoring(): ...                         a restore that raises is said and exits EXIT_UNRESTORED
     add_network_argument(ap)                      --network: the Wi-Fi and Bluetooth rows a dated owner decision names
@@ -70,7 +73,7 @@ from camkit.screen import same_position
 from exit_status import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_REFUSED, EXIT_RESTORE_BY_HAND,  # noqa: F401
                          EXIT_UNRESTORED)    # the runners import them here
 
-SETTLE_S = 5.0          # after the start download: MENU within ~4 s of a download leaves the menu locked
+SETTLE_S = 5.0          # the longest wait after the start download (all of it where the lock's end cannot be watched)
 
 
 def _read_umask() -> int:
@@ -1138,53 +1141,106 @@ def close_for_restore(cam, link, start: Path) -> None:
             print(f"closing: {withheld_on(cam, f'{type(e).__name__}: {e}')}; restoring all the same", flush=True)
 
 
+def close_menu_and_wait(link, eyes, why: str) -> None:
+    """A session's way to the shooting screen for a walker that closes a plain menu page alone (help_run,
+    card_actions): MENU, a cleanup press, where the screen reads as a menu page or the Main tiles, then the shooting
+    screen waited for (camkit.session.wait_for, whose 2 s grace covers the menu closing; on any other screen it asks
+    for a hand, at most WAIT_LIMIT s)."""
+    if screen.read(eyes.grab(save=False)).kind in ("menu", "tiles"):
+        link.press("menu", cleanup=True)
+    session.wait_for(eyes, ("shooting",), why, link=link)
+
+
+def session_start(link, eyes, why: str = "the start download", tag: str = "before", reach=None, say: bool = True,
+                  settle: float = SETTLE_S, prepare=None, lock=None) -> Path:
+    """A session's start, the one place a runner downloads its start file (decision 15), its link open and its eyes
+    attached: the shooting screen (`reach(link, eyes, why)`: proving.nav.to_shooting by default, MENU until it shows),
+    the start download (`tag`), its name said (`say`), `prepare(start)` (what a runner checks against the start file
+    before anything is pressed: whatever it raises ends the start there, with no wait), then the menu's lock after the
+    download waited out from the download's reply: camkit.session.wait_lock (watched with HDMI eyes in a mode
+    measured, else `settle` s), or `lock(eyes, since)`, a runner's own watch (kit/page_scan.py). Returns the start
+    file."""
+    if reach is None:
+        from proving.nav import to_shooting as reach
+    reach(link, eyes, why)
+    start = link.download(tag)
+    since = time.monotonic()
+    if say:
+        print(f"start file: {start.name}", flush=True)
+    if prepare is not None:
+        prepare(start)
+    if lock is None:
+        session.wait_lock(since, eyes, clock=time, longest=settle)
+    else:
+        lock(eyes, since)
+    return start
+
+
 @dataclass
 class ProverSession:
     link: object
     cam: object
     start: Path
     restored: bool = False          # set when the session has ended: the start file is back on, checked
+    ending: object = None           # the session's end (camkit.session.Ending), once it has ended
+
+    def close(self) -> None:
+        """The camera back to the shooting screen with cleanup presses (close_for_restore), for a body that closes
+        after its own except, as the walkers do; the session's end follows."""
+        close_for_restore(self.cam, self.link, self.start)
 
 
 @contextlib.contextmanager
 def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: float = SETTLE_S, say_start: bool = True,
                    end_why: str = "the settings download after the rows", end_tag: str = "after",
                    note: str = "THE START FILE DID NOT TAKE: check the camera", close_eyes: bool = True,
-                   exit_unrestored: bool = True, show: int | None = None, expected=frozenset()):
-    """A prover's session, as every prover in kit/provers/ ran it: the shooting screen, the start download, a pause
-    for the menu lock, a LiveCamera (may_open: the never-open rows the owner allowed this prover), then the body. An
-    exception in the body (a Failed row, a STOP, a dropped press) is printed and the camera closed back to the shooting
-    screen (close_for_restore); either way the session ends restoring the start file (end_session) and the restore is
-    checked. The eyes are closed at the end, unless close_eyes is False (a prover with a second session after this
-    one). A start file that did not take (or a last download refused) ends the run, unless exit_unrestored is False,
-    with status EXIT_UNRESTORED, after which kit/tools/chain.py stops the chain.
-    Either way the verdict is left on the session (s.restored), for a prover with a second session to carry it to its
-    own exit. show=0: the end and the restore's check count the records that differ from the start file without listing
-    them (end_session), so no value the start file holds is printed. expected: the keys of records no settings file
-    sets which the body is known to write (a memory slot's registration marks: memreg_run): the end and the check say
-    them by key and leave them out of the count (camkit.session.ended), so they never fail the restore."""
-    from proving.nav import to_shooting
+                   exit_unrestored: bool = True, show: int | None = None, expected=frozenset(), *,
+                   readers: bool = True, reach=None, start_why: str = "the start download", lock=None,
+                   camera: bool = True, end_reach=None, keys: bool = False, on_end=None, watch_restart: bool = True):
+    """Every runner's session with the camera (decision 15): the readers checked (check_readers), the link opened and
+    the eyes attached, the start (session_start: the shooting screen, the start download, the menu's lock waited out),
+    a LiveCamera (may_open: the never-open rows the owner allowed this run), then the body. An exception in the body (a
+    Failed row, a STOP, a dropped press) is printed and the camera closed back to the shooting screen
+    (close_for_restore); either way the session ends restoring the start file (end_session) and the restore is checked.
+    The eyes are closed at the end, unless close_eyes is False (a run with a second session after this one). A start
+    file that did not take (or a last download refused) ends the run, unless exit_unrestored is False, with status
+    EXIT_UNRESTORED, after which kit/tools/chain.py stops the chain. Either way the verdict is left on the session
+    (s.restored, s.ending), for a run with a second session to carry it to its own exit. show=0: the end and the
+    restore's check count the records that differ from the start file without listing them (end_session), so no value
+    the start file holds is printed; keys with it, their keys alone (values_withheld). expected: the keys of records no
+    settings file sets which the body is known to write (a memory slot's registration marks: memreg_run): the end and
+    the check say them by key and leave them out of the count (camkit.session.ended), so they never fail the restore.
+    What a walker or a tool runs differently, each as it ran it before: readers False, a run that asks no reader
+    (kit/page_scan.py); reach and start_why, how the shooting screen is reached for the start download and what its
+    wait says, and lock, a runner's own watch of the lock (session_start); settle, the longest that wait takes; camera
+    False, no LiveCamera (s.cam None: a body that presses through the link itself); end_reach and end_why, the same for
+    the end (end_session); on_end(ending), what the run writes once the start file is back on, before the link closes;
+    watch_restart False, a check that waits its fixed time after an upload rather than watch the eyes for the camera's
+    restart (camkit.session.restarted). A body that closes after its own except calls s.close() itself."""
     ending = start = None
     restored = False
     try:
-        check_readers()     # no reader listed: stop before the link opens, nothing pressed
+        if readers:
+            check_readers()     # no reader listed: stop before the link opens, nothing pressed
         with Link(run) as link:
             eyes.attach(link)
-            to_shooting(link, eyes, "the start download")
-            start = link.download(start_tag)
-            if say_start:
-                print(f"start file: {start.name}", flush=True)
-            time.sleep(settle)
-            cam = LiveCamera(link, eyes, run, may_open=may_open)
+            start = session_start(link, eyes, start_why, start_tag, reach=reach, say=say_start, settle=settle,
+                                  lock=lock)
+            cam = LiveCamera(link, eyes, run, may_open=may_open) if camera else None
             ps = ProverSession(link, cam, start)
             try:
                 yield ps
             except Exception as e:
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
-                close_for_restore(cam, link, start)
-            ending = end_session(link, eyes, start, end_why, tag=end_tag, show=show, expected=expected)
-        restored = ps.restored = restore_checked(run, ending, start, note, eyes=eyes,
+                if cam is not None:
+                    ps.close()
+            ending = ps.ending = end_session(link, eyes, start, end_why, tag=end_tag, reach=end_reach, show=show,
+                                             expected=expected, keys=keys)
+            if on_end is not None:
+                on_end(ending)
+        restored = ps.restored = restore_checked(run, ending, start, note, **({"eyes": eyes} if watch_restart else {}),
                                                  **({} if show is None else {"show": show}),
+                                                 **({"keys": True} if keys else {}),
                                                  **({"expected": frozenset(expected)} if expected else {}))
     finally:
         if close_eyes:

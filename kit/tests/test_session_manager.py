@@ -5,6 +5,7 @@ onto runner.session_start), and holds after the move but for the two changes the
 menu's lock after the start download is waited out by camkit.session.wait_lock ("lock wait", watched with HDMI eyes in
 a mode measured) where a fixed sleep stood, and the fixed second after a cleanup MENU that camkit.session.wait_for's
 grace covers is gone."""
+import ast
 import shutil
 import sys
 import time
@@ -168,9 +169,9 @@ def test_a_provers_session_as_the_provers_run_it(world, own_runs):
         world.say("body")
     assert s.restored is True
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the start download", "download before", "sleep 5", "camera",
-        "body", "to_shooting: the settings download after the rows", "finish after []", "link closed",
-        "check ['eyes']", "eyes closed"]
+        "check readers", "link", "attach", "to_shooting: the start download", "download before",
+        "lock wait (5 s at most)", "camera", "body", "to_shooting: the settings download after the rows",
+        "finish after []", "link closed", "check ['eyes']", "eyes closed"]
 
 
 def test_a_provers_session_whose_body_fails_closes_before_its_end(world, own_runs):
@@ -182,12 +183,148 @@ def test_a_provers_session_whose_body_fails_closes_before_its_end(world, own_run
         raise RuntimeError("a made-up failure")
     assert s.restored is True
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the start download", "download bracket-before", "sleep 4.5",
-        "camera", "close", "to_shooting: the restore", "finish end []", "link closed", "check ['eyes']",
+        "check readers", "link", "attach", "to_shooting: the start download", "download bracket-before",
+        "lock wait (4.5 s at most)", "camera", "close", "to_shooting: the restore", "finish end []", "link closed",
+        "check ['eyes']", "eyes closed"]
+
+
+def test_the_managers_hooks_run_a_walkers_session_its_own_way(world, own_runs):
+    """A walker's own way, each hook as it ran it by hand: no reader asked, no LiveCamera (a body that fails is said,
+    and nothing closes it but the end's own reach), its own reach and lock watch at the start, its own reach at the
+    end, the records said by key, what it writes once the start file is back on (before the link closes), and a check
+    that does not watch the eyes for the restart."""
+    from camkit.runs import Run
+    world.wire()
+    run = Run("kit2_pin")
+
+    def reach(link, eyes, why):
+        world.say(f"my reach: {why}")
+    with runner.prover_session(run, Eyes(world, run), readers=False, camera=False, say_start=False,
+                               reach=reach, start_why="the first download", lock=lambda eyes, since: world.say("my lock"),
+                               end_reach=reach, end_why="the last download", show=0, keys=True,
+                               on_end=lambda ending: world.say(f"on end {ending.after.name}"),
+                               watch_restart=False) as s:
+        assert s.cam is None
+        raise RuntimeError("a made-up failure")
+    assert s.restored is True and s.ending.after.name == "after.DAT"
+    assert world.said == [
+        "link", "attach", "my reach: the first download", "download before", "my lock", "my reach: the last download",
+        "finish after [('keys', True), ('show', 0)]", "on end after.DAT", "link closed", "check ['keys', 'show']",
         "eyes closed"]
 
 
-# ---------------------------------------------------------------- the walkers
+def test_a_walkers_body_closes_after_its_own_except(world, own_runs):
+    """s.close(): the camera closed back to the shooting screen by the body itself (close_for_restore), then the end."""
+    from camkit.runs import Run
+    world.wire()
+    run = Run("kit2_pin")
+    with runner.prover_session(run, Eyes(world, run), say_start=False) as s:
+        s.close()
+    assert world.said[world.said.index("camera") + 1:] == [
+        "close", "to_shooting: the settings download after the rows", "finish after []", "link closed",
+        "check ['eyes']", "eyes closed"]
+
+
+def test_a_start_whose_check_fails_ends_before_the_wait(world, tmp_path):
+    """session_start's prepare(start): what a runner checks against the start file before anything is pressed; what it
+    raises ends the start there, with no wait for the lock. Without it, the wait from the download's reply."""
+    world.wire()
+    link = world.link_class()(SimpleNamespace(dir=tmp_path))
+
+    def wrong_body(start):
+        world.say(f"check {start.name}")
+        raise SystemExit("another camera")
+    with pytest.raises(SystemExit, match="another camera"):
+        runner.session_start(link, Eyes(world), tag="session", say=False, prepare=wrong_body)
+    assert world.said == ["link", "to_shooting: the start download", "download session", "check 00001_session.DAT"]
+    world.said.clear()
+    start = runner.session_start(link, Eyes(world), "the settings download", say=False, settle=4.5)
+    assert start.name == "00002_before.DAT"
+    assert world.said == ["to_shooting: the settings download", "download before", "lock wait (4.5 s at most)"]
+
+
+@pytest.mark.parametrize("kind", ["menu", "tiles", "shooting", "dialog"])
+def test_a_walkers_reach_closes_a_plain_menu_page_alone_then_waits(world, tmp_path, kind):
+    """close_menu_and_wait: MENU, a cleanup press, on a menu page or the Main tiles alone (on a dialog the wait asks for
+    a hand), then the wait for the shooting screen, whose grace covers the menu closing: no fixed sleep between."""
+    world.wire().kind = kind
+    runner.close_menu_and_wait(world.link_class()(SimpleNamespace(dir=tmp_path)), Eyes(world), "the start download")
+    menu = ["press menu (cleanup)"] if kind in ("menu", "tiles") else []
+    assert world.said == ["link", *menu, "wait_for: the start download"]
+
+
+# ---------------------------------------------------------------- the start download in one place
+
+# the start tags the runners give their start downloads (and every tag given to the manager, collected below)
+START_TAGS = {"before", "session", "p3-start", "before-set", "bracket-before"}
+# runners whose session is still written out by hand, and why: each keeps the start downloads it had, no more
+LEFT = {
+    "kit/drive.py": "the owner's route (--owner, --network, the armed last press, a row's first open): its guard "
+                    "tests fake the session's parts in drive.py itself, so a move could not be shown by them unchanged",
+    "kit/crawl_run.py": "the first-open procedure: its guard tests (test_first_open, test_network_rows, "
+                        "test_step3_acceptance) fake the session's parts in crawl_run.py itself",
+    "kit/tools/take_picture.py": "the release: its guard tests (test_first_open) fake the session's parts in "
+                                 "take_picture.py itself",
+    "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
+}
+# runners not moved yet: each one's own commit takes it off
+NOT_YET = {"kit/help_run.py": 1, "kit/axis_walk.py": 1, "kit/table_walk.py": 1, "kit/page_scan.py": 1,
+           "kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
+           "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
+
+
+def kit_sources():
+    for p in sorted(KIT.rglob("*.py")):
+        if "tests" not in p.parts and "__pycache__" not in p.parts:
+            yield p.relative_to(ROOT).as_posix(), ast.parse(p.read_text(encoding="utf-8"))
+
+
+def called(node) -> str:
+    f = node.func
+    return f.attr if isinstance(f, ast.Attribute) else f.id if isinstance(f, ast.Name) else ""
+
+
+def literal_tags(node) -> set:
+    """The string constants an argument can be: a constant, or either side of a conditional."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if isinstance(node, ast.IfExp):
+        return literal_tags(node.body) | literal_tags(node.orelse)
+    return set()
+
+
+def given_tags(sources) -> set:
+    """Every tag a runner gives the manager or its start (start_tag=, tag=, or in their places)."""
+    tags = set()
+    for _, tree in sources:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and called(node) in ("prover_session", "session_start"):
+                for kw in node.keywords:
+                    if kw.arg in ("start_tag", "tag"):
+                        tags |= literal_tags(kw.value)
+                place = 2 if called(node) == "prover_session" else 3
+                if len(node.args) > place:
+                    tags |= literal_tags(node.args[place])
+    return tags
+
+
+def test_no_runner_downloads_its_start_file_outside_the_session_manager():
+    """The start download is made in one place, runner.session_start (runner.prover_session's start): a runner that
+    downloads a start file of its own again (a download whose tag is one a session starts with: "before", "session",
+    "p3-start", ...), and with it its own wait after it, fails here. The runners still written out by hand are named,
+    each with why, and keep exactly the start downloads they had."""
+    sources = list(kit_sources())
+    tags = START_TAGS | given_tags(sources)
+    found = {}
+    for rel, tree in sources:
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Call) and called(node) == "download" and \
+                    any(literal_tags(a) & tags for a in node.args):
+                found.setdefault(rel, []).append(node.lineno)
+    assert set(found) <= set(LEFT) | set(NOT_YET), \
+        {rel: lines for rel, lines in found.items() if rel not in LEFT and rel not in NOT_YET}
+    assert {rel: len(lines) for rel, lines in found.items() if rel in NOT_YET} == NOT_YET
+    assert all(len(found.get(rel, ())) == 1 for rel in LEFT), {rel: found.get(rel) for rel in LEFT}
 
 def test_help_runs_session(world, monkeypatch):
     import help_run

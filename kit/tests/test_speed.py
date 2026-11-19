@@ -930,11 +930,13 @@ def test_a_camera_that_never_answers_is_given_up_at_the_old_deadline(monkeypatch
 
 
 def test_the_runs_that_still_hold_their_hdmi_eyes_hand_them_to_the_check(monkeypatch):
-    """runner.prover_session's restore check and prove_run's (put_start_back, a session's end) pass their eyes, so an
-    HDMI run starts its check on the shooting screen; a run that has closed its eyes passes none (20 s)."""
+    """runner.prover_session's restore check (unless a walker asks it not to: watch_restart) and prove_run's
+    (put_start_back, a session's end) pass their eyes, so an HDMI run starts its check on the shooting screen; a run
+    that has closed its eyes passes none (20 s)."""
     runner_src = (KIT / "runner.py").read_text(encoding="utf-8")
     prove_src = (KIT / "prove_run.py").read_text(encoding="utf-8")
-    assert "restore_checked(run, ending, start, note, eyes=eyes," in runner_src
+    assert 'restore_checked(run, ending, start, note, **({"eyes": eyes} if watch_restart else {}),' in runner_src
+    assert "watch_restart: bool = True" in runner_src
     assert "verify_restore(run, ref, eyes=hdmi," in prove_src and "check_restore(run, ending, start, eyes=hdmi," in prove_src
 
 
