@@ -3282,12 +3282,26 @@ def _neighbours(led: Ledger) -> dict:
     return out
 
 
+def held_values(led: Ledger, e: dict) -> tuple:
+    """(values still to try, values inferred from a shared list) of the settings a row holds itself: placed on that very
+    row, or tied to it, never those of a row below it nor those a proof drew through it, whose own rows count them
+    (values_left counts them all: a row with any value left below it is never settled)."""
+    if getattr(led, "_own_index", None) is None:
+        led._own_index = ({o["key"]: o for o in led.options},
+                          {s["key"]: s for s in led.src.definition.get("settings") or []})
+    opts, by_key = led._own_index
+    keys = [k for k in e["settings"] if (by_key.get(k) or {}).get("row") == e["path"]] + e["tied"]
+    sts = [st for k in dict.fromkeys(keys) for st in (opts.get(k) or {}).get("values", {}).values()]
+    return sum(1 for st in sts if st in LEFT), sts.count(INFERRED)
+
+
 def todo(led: Ledger, tab: str = None, mode: str = None, needs: str = None) -> list:
-    """What is left ([{entry, needs, next, yield, near}]): the rows in TODO statuses, the rows with values still to try
-    (values_left, whatever their own status) and those a look saw change records no setting maps, filtered by tab, mode
-    and what the next step needs, sorted by expected yield: the unmapped records next to the row (weighted by how the
-    leads class them: a record seen to change counts three), the records a look saw change, whether the row has
-    settings, less the cost of the step."""
+    """What is left ([{entry, needs, next, yield, near, left, inferred}]): the rows in TODO statuses, the rows holding
+    values still to try themselves (held_values: each value counted once, on the row its setting is placed on, "left";
+    "inferred" beside it, whatever the row's own status) and those a look saw change records no setting maps, filtered
+    by tab, mode and what the next step needs, sorted by expected yield: the unmapped records next to the row (weighted
+    by how the leads class them: a record seen to change counts three), the records a look saw change, whether the row
+    has settings, less the cost of the step."""
     near = _neighbours(led)
     leads = {}
     for part in ("live", "sets"):
@@ -3297,7 +3311,8 @@ def todo(led: Ledger, tab: str = None, mode: str = None, needs: str = None) -> l
     status_of = {r["key"]: r["status"] for r in led.records}
     out = []
     for e in led.rows:
-        if e["status"] not in TODO and not e.get("changed_in_looks") and not e.get("values_left"):
+        left, inferred = held_values(led, e)
+        if e["status"] not in TODO and not e.get("changed_in_looks") and not left:
             continue
         if tab and plain(e["tab"]) != plain(tab):
             continue
@@ -3311,7 +3326,8 @@ def todo(led: Ledger, tab: str = None, mode: str = None, needs: str = None) -> l
                      else 1 for k in recs)
         y = weight + 5 * len(e.get("changed_in_looks") or []) + \
             (2 if e.get("settings") or e.get("tied") or e.get("through") else 0) - COST[n]
-        out.append({"entry": e, "needs": n, "next": NEXT[n], "yield": y, "near": recs})
+        out.append({"entry": e, "needs": n, "next": NEXT[n], "yield": y, "near": recs, "left": left,
+                    "inferred": inferred})
     out.sort(key=lambda x: (-x["yield"], x["entry"]["order"], [plain(p) for p in x["entry"]["path"]]))
     return out
 

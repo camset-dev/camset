@@ -1437,6 +1437,30 @@ def test_a_look_counts_only_the_records_no_setting_maps(camera):
     assert ("Alpha",) in left and ("Bravo",) not in left
 
 
+def test_todo_counts_each_value_once_on_the_row_that_holds_its_setting(camera, monkeypatch, capsys):
+    """A value still to try is listed on the row its setting is placed on, never again on each row above it (a
+    profile's parameter under Picture Profile > PPn); those rows stay unsettled while a value below them is left, so a
+    run given --skip-settled still goes down to it."""
+    import coverage as tool
+    leaf = setting("global:0x0160", "Tango leaf", ["Tango", "Sub", "Leaf"], ((0, "A"), (1, "B"), (2, "C")),
+                   tab="Setup", group="G2", proved={"values": [0]})
+    other = setting("global:0x0161", "Tango other", ["Tango", "Other"], ONOFF, tab="Setup", group="G2",
+                    proved={"values": [0, 1]})
+    with extra_settings(camera, leaf, other):
+        led = ledger()
+        items = {tuple(x["entry"]["path"]): x for x in coverage.todo(led)}
+        assert ("Tango", "Sub", "Leaf") in items and items[("Tango", "Sub", "Leaf")]["left"] == 2
+        assert ("Tango",) not in items and ("Tango", "Sub") not in items
+        assert not coverage.settled(["Tango"], camera=CAM, ledger=led).skip
+        assert not coverage.settled(["Tango", "Sub"], camera=CAM, ledger=led).skip
+        assert row(led, "Tango")["values_left"] == 2                    # the subtree's, as the forms say
+        coverage.forget()
+        monkeypatch.setattr(sys, "argv", ["coverage.py", "--todo"])
+        tool.main()
+        out = capsys.readouterr().out
+        assert "Tango > Sub > Leaf: proved; 2 values still to try" in out and "> Tango: " not in out
+
+
 def test_todo_lists_what_is_left_by_need_and_yield(camera):
     led = ledger()
     items = coverage.todo(led)
