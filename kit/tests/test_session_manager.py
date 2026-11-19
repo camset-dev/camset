@@ -273,8 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/pass3_run.py": 1,
-           "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
+NOT_YET = {"kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
 
 def kit_sources():
@@ -502,7 +501,7 @@ def test_pass_threes_switching_session(world, monkeypatch):
     blocker = {"row": ["Shutter Type"], "to": "Mechanical Shutter", "walk": "Long Exposure NR"}
     assert pass3_run.run_blockers(Run("kit2_pass3"), [], {}, [blocker], None) is True
     assert world.said == [
-        "link", "attach", "to_shooting: the start download", "download p3-start", "sleep 5", "switch",
+        "link", "attach", "to_shooting: the start download", "download p3-start", "lock wait (5 s at most)", "switch",
         "download p3-switched", "link closed", "eyes closed", "sleep 3", "walk", "sleep 3", "restore 00001_p3-start.DAT"]
 
 

@@ -49,7 +49,7 @@ from prove_run import (PASS1, Failed, enter_any, main_name, move_to, option_inde
                        to_shooting)
 from proving import commit  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, definition, end_session, load_scan, read_json,  # noqa: E402
-                    restoring)
+                    restoring, session_start)
 
 PY = sys.executable                  # the kit's own Python on every OS (.venv/bin or .venv\Scripts)
 RUN_ROOT = paths.module_root()       # the camera's runs, runs/<model>_fw<fw>/
@@ -451,9 +451,9 @@ def run_blockers(run, cycle, model, chosen, log, scan=None) -> bool:
         try:
             with Link(run) as link:
                 hdmi.attach(link)
-                to_shooting(link, hdmi, "the start download")
-                start = link.download("p3-start")
-                time.sleep(5)
+                # the session's start (runner.session_start): the shooting screen, the start download, the menu's lock
+                # waited out; the session leaves the camera switched, the restore after the blocker's steps its own
+                start = session_start(link, hdmi, "the start download", "p3-start", reach=to_shooting, say=False)
                 # a blocker made for one state (Movie grid: a File Format loaded first) checks it is in it
                 cs = camset.read(start)
                 if cs.model != models.A1II:
