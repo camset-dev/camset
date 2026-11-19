@@ -369,6 +369,13 @@ def visit_row(cam, row_screen, page, slot, row, labels=None, path=(), parent=Non
             first.not_opened((*path, decided or label))     # nothing went out: no first open to check
         r.outcome = f"skipped: refused ({safety.quoted_withheld(e)})"
         return r
+    except safety.Refused:
+        # refused before it went out for another reason (the screen changed since it was read, a look that failed:
+        # camkit.live.look_before_right), as every refusal of a press is (camkit.live, camkit.link's guards): nothing was
+        # pressed on this row, so it is no first open, never one written checked; the lap is cancelled as before
+        if first is not None:
+            first.not_opened((*path, decided or label))
+        raise
     s = cam.read()
     r.kind = s.kind
     not_passed = ""

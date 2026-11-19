@@ -180,16 +180,19 @@ def test_another_body_than_the_key_names_is_said_by_its_own_model_and_firmware(t
 class Marked:
     """test_core's FakeMenu, keeping at each Right whether RESTORE_BY_HAND was there and the row's latest open look."""
 
-    def __init__(self, root: Path, refuse=(), astray=False):
+    def __init__(self, root: Path, refuse=(), astray=False, other=None):
         from test_core import FakeMenu
         self.menu, self.root, self.refuse, self.marks, self.astray = FakeMenu(True), root, refuse, [], astray
         self.looks = {}
+        self.other = other or {}           # label -> the refusal (not the row's own) its Right meets before it goes
 
     def press(self, key, **kw):
         if key == "right":
             label = self.label()
             if label in self.refuse:
                 raise safety.RowRefused(f"refused {label}")
+            if label in self.other:
+                raise self.other[label](f"refused {label} before it went out")
             self.marks.append((label, (self.root / RESTORE_BY_HAND).exists()))
             got = [lk for _, lk in coverage.read_looks(self.root.name) if lk.get("path", [""])[-1] == label]
             self.looks[label] = got[-1].get("note") if got else None
@@ -214,9 +217,9 @@ MODEL = {"P": {"breadcrumb": "Shooting > Test", "page": "1/1",
                "rows": [{"label": x, "never_open": None} for x in ("A", "Sub", "B")]}}
 
 
-def lap(root, first, refuse=(), astray=False, cycle=CYCLE):
+def lap(root, first, refuse=(), astray=False, cycle=CYCLE, other=None):
     from camkit.crawl import crawl
-    cam = Marked(root, refuse, astray)
+    cam = Marked(root, refuse, astray, other)
     return cam, crawl(cam, cycle, MODEL, labels=cam.labels, first=first)
 
 
@@ -319,6 +322,23 @@ def test_a_refused_right_takes_its_marker_away_but_not_while_another_row_is_pend
     fo.opening(("B",))
     fo.not_opened(("B",))
     assert fo.pending == [("A",)] and restore_pending(tmp_path)
+
+
+@pytest.mark.parametrize("refusal", [safety.ScreenChanged, safety.Refused])
+def test_a_right_refused_for_another_reason_than_its_row_is_no_first_open_and_never_checked(tmp_path, refusal):
+    """A first open's Right that the camera's own check refuses before it goes out for another reason than the row
+    itself (the screen changed since it was read, or the look before Right could not grab a frame: camkit.live's
+    look_before_right) is no first open either: the row is no longer pending and the marker goes, nothing was pressed;
+    the refusal still ends the lap as before; and the run's end writes no clean look ("first open checked") of a row
+    whose Right never went out, so the next lap opens it under its first open again (the review of 2026-11-19)."""
+    fo, sent, _ = first_opens(tmp_path, first_open.Seen({("sub",), ("sub", "s1"), ("sub", "s2 greyed"), ("sub", "s4"),
+                                                          ("b",)}))
+    with pytest.raises(refusal, match="refused A before it went out"):
+        lap(tmp_path, fo, other={"A": refusal})
+    assert fo.pending == [] and fo.marker is None and not restore_pending(tmp_path) and sent == []
+    assert fo.ended(True, SimpleNamespace(after=tmp_path / "after.DAT", changes=[])) is False
+    assert latest_open(tmp_path.name, ["A"])["note"] == first_open.PENDING
+    assert not first_open.seen_record(tmp_path.name).seen(["A"])
 
 
 def test_a_marker_or_a_pending_look_not_written_opens_nothing(tmp_path, monkeypatch):

@@ -286,8 +286,9 @@ class FirstOpens:
         return None
 
     def not_opened(self, path) -> None:
-        """The Right opening() let through for `path` was refused before it went out (safety.RowRefused): the row is no
-        longer pending, and with nothing else pending the marker goes, since nothing was pressed."""
+        """The Right opening() let through for `path` was refused before it went out (safety.Refused: RowRefused for the
+        row itself, ScreenChanged or a plain Refused for the screen it was judged on): the row is no longer pending, and
+        with nothing else pending the marker goes, since nothing was pressed."""
         if tuple(path) in self.pending:
             self.pending.remove(tuple(path))
             if not self.pending and not self.held and not self.failure and self.marker is not None:
