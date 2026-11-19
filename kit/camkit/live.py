@@ -92,7 +92,7 @@ from pathlib import Path
 import numpy as np
 
 from . import ocr, safety, screen, vlm
-from .frames import keep
+from .frames import MENU, MENU_ROWS, SUBMENU_ROWS, keep
 from .link import CameraRefused, LinkError
 from .session import playback_kind
 from .vlm import PROMPTS, ask_role, log_to, scrub
@@ -834,6 +834,25 @@ def boxes_alike(a, b) -> bool:
     return (x is None and y is None) or same_box(x, y)
 
 
+def step_place(s, key) -> str | None:
+    """The screen a step goes out on, as the settle's windows name it (camkit.frames: MENU_ROWS, SUBMENU_ROWS, MENU), or
+    None: Up or Down with the cursor in a menu page's rows (its focus "rows") or a submenu page's, where a row not greyed
+    lies beyond the cursor in the press's way (camkit.screen's slots), so the press stays on the page, as every press
+    kit/tools/settle_probe.py measured did; a page turn, the group column, a page still moving, none. Left or Right on a
+    menu page, whatever its focus. Any other key or screen, none: the key's window, as before."""
+    canon, kind = safety.canonical_input(key), getattr(s, "kind", None)
+    if canon in ("left", "right"):
+        return MENU if kind == "menu" else None
+    if canon not in ("up", "down") or kind not in ROW_SCREENS or (kind == "menu" and getattr(s, "focus", None) != "rows"):
+        return None
+    row, slots = getattr(s, "row", None), list(getattr(s, "slots", None) or ())
+    if not isinstance(row, int) or not 0 <= row < len(slots):
+        return None
+    if "normal" not in (slots[row + 1:] if canon == "down" else slots[:row]):
+        return None
+    return MENU_ROWS if kind == "menu" else SUBMENU_ROWS
+
+
 def same_screen(a, b) -> bool:
     """Whether two readings are of one screen (screen.same_state; the very reading, too); a reading that cannot be
     compared is no proof that it is."""
@@ -1262,8 +1281,9 @@ class LiveCamera:
         # every press expects a change: a press that seems ignored gets a full second before it counts
         # as "nothing happened" (Picture Profile: a Down showed no change within 0.5 s, 2026-10-28)
         self.pressed_from = self.frame          # the frame the press was made on (proving.screens.title_settled)
+        on = step_place(before, key)            # the screen the step went out on, where its window was measured
         try:
-            f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t)
+            f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t, **({"on": on} if on else {}))
             self.frame, self.screen = f, self.reading(f)
             self.rest(f"{key}-rest")
             f = self.look_late(key, before, moved, seen_enough)

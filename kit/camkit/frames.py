@@ -87,26 +87,49 @@ def same(a: Frame | None, b: Frame | None, tol=0.0) -> bool:
 
 # ------------------------------------------------------------------ the settle's windows
 
-# Each settle window once, by key, at the values every run has used: a value changes here only once
-# kit/tools/settle_probe.py has measured it on the camera (the speed review of 2026-11-18, its items 8 and 11 and its
-# measurements 5.4 and 5.5; the owner's question of 2026-11-19 for OSD eyes). STEPS are a cursor's steps; Enter and
-# MENU, and any other tag a settle is given, take the eyes' own (HdmiSource.QUIET and NOTHING, OsdSource.QUIET and
+# Each settle window once, by key, and by the screen a step went out on where that was measured: a value changes here
+# only once kit/tools/settle_probe.py has measured it on the camera (the speed review of 2026-11-18, its items 8 and 11
+# and its measurements 5.4 and 5.5; the owner's question of 2026-11-19 for OSD eyes). STEPS are a cursor's steps; Enter
+# and MENU, and any other tag a settle is given, take the eyes' own (HdmiSource.QUIET and NOTHING, OsdSource.QUIET and
 # LATE): over OSD an Enter's picture changed later than 0.5 s 302 times in 3,048 (99th centile 2.41 s) and MENU's first
 # change came later than 1 s 9 times in 2,180 (kit2_pass2, 2026-11-19), so theirs stay long whatever the steps' become.
+# A window outlasts the longest pause seen inside one redraw, with room; where a redraw was never seen in stages it need
+# only confirm the first changed frame.
 STEPS = ("up", "down", "left", "right")
-# HDMI eyes: how long a step's screen must stay still once it moved (item 8: 0.05 s proposed for Up and Down that stay
-# on one screen kind, which also needs a fresh look before Right, as Enter has: camkit.live.look_again), and how long a
-# step that shows nothing is watched before it counts as a press that did nothing (item 11: 0.6 s proposed)
+# the screens a step's window was measured on, as camkit.live.step_place names the one a press goes out on: a menu or a
+# submenu page with the cursor in its rows, the press staying on the page (a row not greyed beyond the cursor in the
+# press's way), and a menu page whatever its focus (Left and Right). A step on any other, or a settle given none (the
+# page scan's), takes the key's window
+MENU_ROWS, SUBMENU_ROWS, MENU = "menu rows", "submenu rows", "menu"
+# HDMI eyes: how long a step's screen must stay still once it moved, and how long a step that shows nothing is watched
+# before it counts as a press that did nothing (item 11: 0.6 s proposed, not measured). Up and Down stay 0.15 s: the
+# probe saw their redraw in one frame on a page's rows (kit2_probe_hdmi_presses, _submenu and _sub2: 350 presses, first
+# change 0.29 s at most), but the HDMI settles of the runs saw it in stages 5 times in 24,876 presses staying on a menu
+# page (a long label truncated up to 0.24 s after the bar left it, Metering's Face Priority in Multi Metering) and 21
+# times in 19,124 on a submenu page (the page's own redraw after the Right into it still going), each pause under the
+# 0.15 s window, none measured; Left and Right redraw in stages up to 0.10 s apart (kit2_probe_hdmi_lr)
 HDMI_QUIET = {k: 0.15 for k in STEPS}
 HDMI_NOTHING = {k: 1.0 for k in STEPS}
 # OSD eyes (the camera's own picture over the link): the same two, the quiet a floor (OsdSource's docstring)
-OSD_QUIET = {k: 0.75 for k in STEPS}
+OSD_QUIET = {
+    **{k: 0.75 for k in STEPS},
+    # Up and Down on a page's rows: kit2_probe_osd_presses and _submenu (300 on Shoot Mode's page) and _sub2 (50 inside
+    # Bracket Settings), first change 0.41 s at most, never a second; kit2_pass2 (16,500 OSD presses, 2026-11-19) saw a
+    # second change on such a press only from the lit row's long label scrolling (before the press, the press's own
+    # change at most 0.17 s after; after it, from 0.48 s), which the screen's reading leaves out (camkit.screen) and
+    # LiveCamera.look_late looks past
+    ("up", MENU_ROWS): 0.25, ("down", MENU_ROWS): 0.25, ("up", SUBMENU_ROWS): 0.25, ("down", SUBMENU_ROWS): 0.25,
+    # Left and Right on a menu page: kit2_probe_osd_lr (120 between the rows and the group column), stages at most 0.28
+    # s apart; kit2_pass2 (about 1,200 on menu pages, a Right that opens a row among them), at most 0.27 s
+    ("left", MENU): 0.45, ("right", MENU): 0.45,
+}
 OSD_LATE = {k: 6.0 for k in STEPS}
 
 
-def window(table: dict, key, default: float) -> float:
-    """The settle window `table` gives the press `key` (a settle's tag: "down", "enter"), else `default`."""
-    return table.get(key, default)
+def window(table: dict, key, default: float, on=None) -> float:
+    """The settle window `table` gives the press `key` (a settle's tag: "down", "enter") on the screen `on` (a screen
+    camkit.live.step_place named: MENU_ROWS, SUBMENU_ROWS, MENU), else by its key alone, else `default`."""
+    return table.get((key, on), table.get(key, default)) if on is not None else table.get(key, default)
 
 
 # ------------------------------------------------------------------ sources
@@ -192,15 +215,16 @@ class OsdSource:
         return f
 
     def settle(self, before: Frame | None, tag="f", expect_change: bool | None = None,
-               timeout=3.0, quiet=0.2, poll=0.04) -> tuple[Frame, bool]:
+               timeout=3.0, quiet=0.2, poll=0.04, on=None) -> tuple[Frame, bool]:
         """Poll until the screen has not changed for `quiet` s; (frame, changed since `before`).
 
         When a change is expected but nothing has moved yet, keep waiting for up to `timeout`
         (slow redraws); a no-op is declared only after a longer quiet window. Both by the press's key (`tag`:
-        OSD_QUIET, OSD_LATE; the class's QUIET and LATE for any other)."""
+        OSD_QUIET, OSD_LATE; the class's QUIET and LATE for any other) and the screen it went out on (`on`, where
+        camkit.live.step_place names one)."""
         start = time.monotonic()
-        quiet = max(quiet, window(OSD_QUIET, tag, self.QUIET))
-        late = window(OSD_LATE, tag, self.LATE)
+        quiet = max(quiet, window(OSD_QUIET, tag, self.QUIET, on))
+        late = window(OSD_LATE, tag, self.LATE, on)
         timeout = max(timeout, quiet + late)
         last, stable_since, moved = None, None, before is None
         while time.monotonic() - start < timeout:
@@ -244,8 +268,8 @@ class OsdFeed(OsdSource):
     def grab(self, tag="f", save=True) -> Frame:
         return super().grab(tag) if save else self.peek()
 
-    def settle(self, before, tag="f", expect_change=None, timeout=3.0, quiet=0.2, sent_at=None, **_):
-        return super().settle(before, tag, expect_change, timeout=timeout, quiet=quiet)
+    def settle(self, before, tag="f", expect_change=None, timeout=3.0, quiet=0.2, sent_at=None, on=None, **_):
+        return super().settle(before, tag, expect_change, timeout=timeout, quiet=quiet, on=on)
 
     def noisy(self, until: float, level=6.0) -> np.ndarray:
         return np.zeros((60, 80), bool)        # no blinking readouts to learn: frames come on request
@@ -557,7 +581,7 @@ class HdmiSource:
         return f
 
     def settle(self, before: Frame | None, tag="f", expect_change: bool | None = None,
-               timeout=3.0, quiet=None, sent_at: float | None = None) -> tuple[Frame, bool]:
+               timeout=3.0, quiet=None, sent_at: float | None = None, on=None) -> tuple[Frame, bool]:
         """Wait for the screen to stop changing; (frame, changed since `before`).
 
         Same rule as OsdSource.settle: when a change is expected but nothing has moved yet, keep
@@ -566,10 +590,10 @@ class HdmiSource:
         is neither taken for the press's effect nor allowed to keep the screen from settling.
         self.timing holds when the screen first moved and when it went quiet, from `start`. The quiet window
         (unless the caller gives one) and the wait for a press that shows nothing go by the press's key (`tag`:
-        HDMI_QUIET, HDMI_NOTHING; the class's QUIET and NOTHING for any other); a settle that expects no change waits
-        UNEXPECTED."""
-        quiet = window(HDMI_QUIET, tag, self.QUIET) if quiet is None else quiet
-        nothing = window(HDMI_NOTHING, tag, self.NOTHING) if expect_change else self.UNEXPECTED
+        HDMI_QUIET, HDMI_NOTHING; the class's QUIET and NOTHING for any other) and the screen it went out on (`on`,
+        where camkit.live.step_place names one); a settle that expects no change waits UNEXPECTED."""
+        quiet = window(HDMI_QUIET, tag, self.QUIET, on) if quiet is None else quiet
+        nothing = window(HDMI_NOTHING, tag, self.NOTHING, on) if expect_change else self.UNEXPECTED
         start = sent_at or time.monotonic()
         steady = ~self.noisy(start)
 

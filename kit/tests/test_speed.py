@@ -2279,24 +2279,120 @@ def test_a_cached_lap_is_taken_only_in_the_mode_and_scan_it_was_made_with(tmp_pa
     assert "made in Movie mode with kit2_page_scan_movie_1108" in said[0] and "this run's Stills" in said[0]
 
 
-# ---------------------------------------------------------------- L: the settle's windows by key, at today's values
+# ---------------------------------------------------------------- L: the settle's windows by key and screen, as measured
 
 
-def test_the_settles_windows_are_one_table_per_eyes_by_key_at_todays_values():
-    """camkit.frames holds each settle window once, by key, the cursor's steps (Up, Down, Left, Right) apart from Enter
-    and MENU, at the values every run has used (the speed review's items 8 and 11 and the owner's question for OSD eyes
-    change them only once kit/tools/settle_probe.py has measured them): HDMI's quiet 0.15 s and its "nothing
-    happened" 1.0 s; the OSD picture's quiet 0.75 s and its 6.0 s; any other tag the eyes' own."""
+def test_the_settles_windows_are_one_table_per_eyes_by_key_and_screen_as_measured():
+    """camkit.frames holds each settle window once, by key, and by the screen a step went out on where kit/tools/
+    settle_probe.py measured it (2026-11-19), the cursor's steps apart from Enter and MENU. What changed, all with OSD
+    eyes: the quiet after Up and Down with the cursor in a menu or submenu page's rows, staying on the page, 0.25 s (0.75
+    before); after Left and Right on a menu page 0.45 s (0.75 before). What did not: every other step and screen (a page
+    turn, the group column, lists, carousels, fields, pickers, no screen named) keeps 0.75 s; HDMI's quiet stays 0.15 s
+    for every step (Up and Down too: the logs show a menu page's redraw in stages), its "nothing happened" 1.0 s; the
+    OSD picture's 6.0 s; Enter and MENU the eyes' own."""
     from camkit import frames
     assert frames.STEPS == ("up", "down", "left", "right")
-    today = {"HDMI_QUIET": 0.15, "HDMI_NOTHING": 1.0, "OSD_QUIET": 0.75, "OSD_LATE": 6.0}
-    for name, value in today.items():
-        assert getattr(frames, name) == dict.fromkeys(frames.STEPS, value), name
+    rows, sub, menu = frames.MENU_ROWS, frames.SUBMENU_ROWS, frames.MENU
+    assert dict.fromkeys(frames.STEPS, 0.15) == frames.HDMI_QUIET
+    assert dict.fromkeys(frames.STEPS, 1.0) == frames.HDMI_NOTHING
+    assert dict.fromkeys(frames.STEPS, 6.0) == frames.OSD_LATE
+    assert {**dict.fromkeys(frames.STEPS, 0.75), ("up", rows): 0.25, ("down", rows): 0.25, ("up", sub): 0.25,
+            ("down", sub): 0.25, ("left", menu): 0.45, ("right", menu): 0.45} == frames.OSD_QUIET
     h, o = frames.HdmiSource, frames.OsdSource
     assert (h.QUIET, h.NOTHING, h.UNEXPECTED, o.QUIET, o.LATE) == (0.15, 1.0, 0.5, 0.75, 6.0)
-    for key in ("down", "enter", "menu", "cancel"):
-        assert frames.window(frames.HDMI_QUIET, key, h.QUIET) == 0.15
-        assert frames.window(frames.OSD_LATE, key, o.LATE) == 6.0
+    changed = {("osd", "up", rows): 0.25, ("osd", "down", rows): 0.25, ("osd", "up", sub): 0.25,
+               ("osd", "down", sub): 0.25, ("osd", "left", menu): 0.45, ("osd", "right", menu): 0.45}
+    for eyes, quiet, late in (("hdmi", frames.HDMI_QUIET, frames.HDMI_NOTHING), ("osd", frames.OSD_QUIET,
+                                                                                    frames.OSD_LATE)):
+        cls = h if eyes == "hdmi" else o
+        for key in (*frames.STEPS, "enter", "menu", "cancel", "ms_up"):
+            for on in (None, rows, sub, menu, "list", "dialog", "fields", "picker", "unknown"):
+                today = (0.15 if eyes == "hdmi" else 0.75)
+                assert frames.window(quiet, key, cls.QUIET, on) == changed.get((eyes, key, on), today), (eyes, key, on)
+                assert frames.window(late, key, getattr(cls, "NOTHING", None) or cls.LATE, on) == (
+                    1.0 if eyes == "hdmi" else 6.0), (eyes, key, on)
+
+
+def test_a_step_names_the_screen_it_goes_out_on_only_where_its_window_was_measured():
+    """camkit.live.step_place: Up or Down with the cursor in a menu page's rows (its focus "rows") or a submenu page's,
+    where a row that is not greyed lies beyond the cursor in the press's way (so the press stays on the page:
+    settle_probe measured nothing else), names the page's rows; a page turn (the last row down, the first up, or only
+    greyed rows beyond), the group column, a page caught moving, names none. Left and Right name a menu page whatever its
+    focus; any other key or screen, none. On the probe's own frames: Shoot Mode's page, its first row greyed."""
+    from camkit import frames, live
+    rows, sub, menu = frames.MENU_ROWS, frames.SUBMENU_ROWS, frames.MENU
+
+    def page(kind="menu", focus="rows", row=1, slots=("normal", "cursor", "normal")):
+        return SimpleNamespace(kind=kind, focus=focus, row=row, slots=list(slots))
+    assert live.step_place(page(), "down") == rows and live.step_place(page(), "up") == rows
+    assert live.step_place(page(row=2, slots=("normal", "normal", "cursor")), "down") is None       # the last row
+    assert live.step_place(page(row=0, slots=("cursor", "normal")), "up") is None                    # the first row
+    assert live.step_place(page(slots=("greyed", "cursor", "greyed")), "up") is None                 # greyed beyond
+    assert live.step_place(page(focus="groups", row=None, slots=()), "down") is None
+    assert live.step_place(page(focus=None), "down") is None                                          # still moving
+    assert live.step_place(page(kind="submenu"), "down") == sub
+    assert live.step_place(page(kind="submenu", row=1, slots=("normal", "cursor")), "down") is None
+    for focus in ("rows", "groups", None):
+        assert live.step_place(page(focus=focus), "left") == menu == live.step_place(page(focus=focus), "right")
+    assert live.step_place(page(kind="submenu"), "left") is None and live.step_place(page(kind="list"), "down") is None
+    assert live.step_place(page(), "enter") is None and live.step_place(page(), "ms_down") is None
+    shots = RUNS / "kit2_probe_osd_presses" / "shots"
+    if not shots.exists():
+        pytest.skip(f"{shots} not present")
+    from camkit.frames import load
+    shoot_mode, set_memory = (screen.read(load(shots / n)) for n in ("00003_menu.png", "00004_up.png"))
+    assert (shoot_mode.row, set_memory.row, set_memory.slots[0]) == (2, 1, "greyed")
+    assert live.step_place(shoot_mode, "up") == rows and live.step_place(set_memory, "down") == rows
+    assert live.step_place(set_memory, "up") is None                # only the greyed row above: Up turns the page
+
+
+def osd_settle_on(monkeypatch, changes_at, on, tag="down", quiet=0.2):
+    """OsdSource.settle on a fake clock whose picture changes at each of `changes_at` s; when it ended."""
+    from camkit import frames
+    now = [0.0]
+    monkeypatch.setattr(frames.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(frames.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    monkeypatch.setattr(frames.Frame, "save", lambda self, path, withheld=False: path)
+    src = frames.OsdSource.__new__(frames.OsdSource)
+    src.run = SimpleNamespace(shot_path=lambda tag: Path("/dev/null"))
+
+    def peek():
+        n = sum(1 for t in changes_at if now[0] >= t)
+        f = frames.Frame(np.full((480, 640, 3), 30 * n, np.uint8), now[0], None, "osd")
+        now[0] += 0.002
+        return f
+    src.peek = peek
+    before = peek()
+    src.settle(before, tag, expect_change=True, quiet=quiet, on=on)
+    return now[0]
+
+
+def test_the_osd_settle_takes_the_window_of_the_screen_the_step_went_out_on(monkeypatch):
+    """OsdSource.settle given the screen a step went out on (`on`, camkit.live.step_place): an Up or Down on a page's
+    rows ends 0.25 s after its picture changed (0.75 s with no screen named, as before: the page scan names none); a
+    Left on a menu page 0.45 s; a redraw in stages 0.28 s apart (the probe's longest on Left and Right) is waited out; a
+    caller's own quiet stays a floor under the table's, as before."""
+    from camkit import frames
+    rows, menu = frames.MENU_ROWS, frames.MENU
+    assert osd_settle_on(monkeypatch, [0.25], rows) == pytest.approx(0.25 + 0.25, abs=0.06)
+    assert osd_settle_on(monkeypatch, [0.25], None) == pytest.approx(0.25 + 0.75, abs=0.06)
+    assert osd_settle_on(monkeypatch, [0.25, 0.53], menu, "left") == pytest.approx(0.53 + 0.45, abs=0.06)
+    assert osd_settle_on(monkeypatch, [0.25], rows, quiet=0.5) == pytest.approx(0.25 + 0.5, abs=0.06)
+    assert osd_settle_on(monkeypatch, [0.25], rows, "down-rest", quiet=0.5) == pytest.approx(0.25 + 0.75, abs=0.06)
+
+
+def test_a_live_press_hands_its_settle_the_screen_it_went_out_on(tmp_path, monkeypatch):
+    """LiveCamera.press names the screen the step went out on to its settle (step_place, on the screen judged), and
+    names none where it is none of the measured ones, so the settle takes the key's window as before."""
+    from camkit import frames
+    groups, rows_frame = (probe_frame(f"shots/{n}").image for n in ("00004_left.png", "00006_right.png"))
+    told = []
+    for held, key, place in ((rows_frame, "up", frames.MENU_ROWS), (groups, "down", None), (groups, "left", frames.MENU)):
+        cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, held, [held])
+        real = cam.hdmi.settle
+        cam.hdmi.settle = lambda before, tag, real=real, **k: told.append(k.get("on")) or real(before, tag, **k)
+        cam.press(key)
+        assert told[-1] == place, (key, place)
 
 
 @pytest.mark.parametrize("table,key,attr", [("HDMI_QUIET", "down", None), ("HDMI_NOTHING", "down", None),
