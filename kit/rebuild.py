@@ -14,9 +14,11 @@ private/config.json: camkit.paths), its output shown as it prints it:
                                           ledger or the editor's golden menu is written
   with --write, instead of 2:
   2. kit/schema_update.py --write         the definition and its private evidence, written again until a write
-                                          changes neither (nor the reset file), at most WRITES times: a record first
-                                          named in a write has its proofs credited by the next (the rebuild says how
-                                          many it took, and stops when the third still changed something)
+                                          changes neither (nor the reset file), at most WRITES times, pass 2's report
+                                          made again before each further write: a record first named in a write is
+                                          still "new" in the report that write read, and its proofs are credited by
+                                          the next write from a report made after it (the rebuild says how many writes
+                                          it took, and stops when the third still changed something)
   3. kit/tools/build_docs.py --no-viewer  the generated files the definition gives
   4. kit/tools/leads.py --write           the mining's leads (private)
   5. kit/tools/coverage.py --write        the coverage ledger, its public form and its private one
@@ -141,6 +143,8 @@ def main():
     files = settled_files(camera)
     first = fingerprint(files)
     for n in range(1, WRITES + 1):
+        if n > 1:                    # the last write changed something: the report it read may call a record new
+            step(1, argv("report", camera), f"pass 2's report again, for write {n}")
         before = fingerprint(files)
         wrote += written_in(step(2, argv("write", camera), f"the definition, write {n} of at most {WRITES}"))
         if fingerprint(files) == before:

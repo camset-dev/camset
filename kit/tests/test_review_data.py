@@ -315,10 +315,11 @@ def test_the_a1_pass_keeps_0x0b8d_out_of_the_memory_sets(tmp_path, monkeypatch, 
 
 # ---------------------------------------------------------------- 7. one rebuild command
 
-def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True):
+def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True, bodies_over=None):
     """kit/rebuild.py with each step a stand-in (python -c) that logs its name and prints as the real one does: the
     write changes the evidence stand-in on its first `changes` runs; `fail` names a step that refuses; cargo there or
-    not, the bless a stand-in that rewrites a golden menu stand-in. Returns (the module, the log, the golden menu)."""
+    not, the bless a stand-in that rewrites a golden menu stand-in; `bodies_over` other steps' bodies, given the
+    stand-ins' folder. Returns (the module, the log, the golden menu)."""
     import rebuild
     tmp_path.mkdir(parents=True, exist_ok=True)
     log, count = tmp_path / "steps.txt", tmp_path / "writes.txt"
@@ -341,6 +342,7 @@ def _stand_ins(tmp_path, monkeypatch, changes=1, fail=None, cargo=True):
               "coverage": "print('written: data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json')"}
     if fail:
         bodies[fail] = "print('nothing written: a made-up refusal, in the step own words'); sys.exit(3)"
+    bodies.update(bodies_over(tmp_path) if bodies_over else {})
     monkeypatch.setattr(rebuild, "argv", lambda step, cam: [sys.executable, "-c", logged(step, bodies[step])])
     monkeypatch.setattr(rebuild, "settled_files", lambda cam: [defn, ev, reset])
     monkeypatch.setattr(rebuild, "golden", lambda cam: menu)
@@ -374,7 +376,7 @@ def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_bles
     monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
     rebuild.main()
     out = capsys.readouterr().out
-    assert _ran(log) == ["report", "write", "write", "write", "docs", "leads", "coverage", "bless"]
+    assert _ran(log) == ["report", "write", "report", "write", "report", "write", "docs", "leads", "coverage", "bless"]
     assert "settled in 3 writes: write 3 changed nothing" in out and menu.read_text(encoding="utf-8") == "blessed"
     tail = out[out.index("written ("):]
     for f in ("editor/definitions/TEST-CAM_fw9.99.json", "docs/formats/sony_camset_ids_TEST-CAM_fw9.99.ksy",
@@ -382,6 +384,36 @@ def test_the_rebuild_writes_until_the_write_changes_nothing_then_builds_and_bles
               "data/TEST-CAM_fw9.99/coverage_TEST-CAM_fw9.99.json", str(menu), str(tmp_path / "ev.json")):
         assert tail.count(f) == 1, f
     assert str(tmp_path / "def.json") not in tail, "a file no write changed is not listed"
+
+
+def test_a_record_first_named_in_a_write_is_credited_after_the_report_is_made_again(tmp_path, monkeypatch, capsys):
+    """After the first rebuild (2026-11-19): a record first named in a write is still "new" in the report that write
+    read, and only a report made after it lets the next write credit its proofs. The rebuild makes the report again
+    before each further write: the first write names the record (the definition changes), the report made again no
+    longer calls it new, the second write credits its proofs (the evidence changes), the third changes nothing. The
+    stand-ins: the report says whether the definition names the record; the write names a record the report calls
+    new, and credits one it no longer does."""
+    def bodies(d):
+        state = (f"import json\nD, E, R = Path({str(d / 'def.json')!r}), Path({str(d / 'ev.json')!r}), "
+                 f"Path({str(d / 'report.json')!r})\n")
+        report = state + ("named = D.read_text(encoding='utf-8') == 'named'\n"
+                          "R.write_text(json.dumps({'new': not named}), encoding='utf-8')\n"
+                          "print('1 rows proved; records: ' + ('agrees' if named else 'new'))")
+        write = state + ("new = json.loads(R.read_text(encoding='utf-8'))['new']\n"
+                         "named = D.read_text(encoding='utf-8') == 'named'\n"
+                         "if new and not named:\n    D.write_text('named', encoding='utf-8')\n"
+                         "elif named and not new and E.read_text(encoding='utf-8') != 'credited':\n"
+                         "    E.write_text('credited', encoding='utf-8')\n"
+                         "print('wrote editor/definitions/TEST-CAM_fw9.99.json')")
+        return {"report": report, "write": write}
+    rebuild, log, _menu = _stand_ins(tmp_path, monkeypatch, bodies_over=bodies)
+    monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
+    rebuild.main()
+    out = capsys.readouterr().out
+    assert _ran(log)[:6] == ["report", "write", "report", "write", "report", "write"]
+    assert (tmp_path / "def.json").read_text(encoding="utf-8") == "named"
+    assert (tmp_path / "ev.json").read_text(encoding="utf-8") == "credited", "its proofs credited by write 2"
+    assert "settled in 3 writes: write 3 changed nothing" in out and "pass 2's report again, for write 2" in out
 
 
 def test_one_write_that_changes_nothing_is_enough(tmp_path, monkeypatch, capsys):
@@ -399,7 +431,7 @@ def test_the_rebuild_stops_on_a_write_that_never_settles(tmp_path, monkeypatch, 
     monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
     with pytest.raises(SystemExit) as e:
         rebuild.main()
-    assert e.value.code == 1 and _ran(log) == ["report", "write", "write", "write"]
+    assert e.value.code == 1 and _ran(log) == ["report", "write", "report", "write", "report", "write"]
     assert "still changed at write 3" in capsys.readouterr().out
 
 
@@ -408,7 +440,7 @@ def test_the_rebuild_stops_at_the_first_step_that_refuses_in_its_own_words(tmp_p
     nothing after it runs."""
     import pytest
     for fail, ran in (("report", ["report"]), ("write", ["report", "write"]),
-                      ("leads", ["report", "write", "write", "docs", "leads"])):
+                      ("leads", ["report", "write", "report", "write", "docs", "leads"])):
         rebuild, log, menu = _stand_ins(tmp_path / fail, monkeypatch, fail=fail)
         monkeypatch.setattr(sys, "argv", ["rebuild.py", "--write"])
         with pytest.raises(SystemExit) as e:
