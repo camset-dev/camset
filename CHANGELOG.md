@@ -58,6 +58,21 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **The a1 II's Zebra Level Custom boxes are listed as the camera draws them, Type first,** and Time-lapse's Record
   Setting under XAVC S 4K 60p names 200M 4:2:2 10bit and 150M 4:2:0 8bit as the camera does. A memory set shows the
   exposure mode last registered once, in its own record.
+- **A setting the camera keeps in several records moves together in every view:** the Main page's tiles, their
+  rows and Revert now change all its records (Drive Mode, Focus Mode and their twins), and the page's Drive Mode tile
+  no longer writes the wrong drive mode. A value one of those records has no name for is made where asked, said, and
+  listed under "Kept in several places, now apart" before a save or a write.
+- **Every list of edits names settings:** Edit history, All edits and the Write window, in the window and on the
+  page, show each changed setting by its own name and value ("PP3 Black Level"), not its record's raw array. Revert
+  in Edit history puts back that one setting, leaving later edits to the record's other settings.
+- **Compare and the CSV export:** Compare refuses a file B or base of another camera model, saying what it is; one
+  from another firmware of the same camera is compared with a line saying a setting that firmware keeps elsewhere can
+  read wrong and only settings kept alike are copied. A set's CSV export writes every setting (PP2 to PP11 and the
+  Recall Custom holds were missing), its record numbers, raw values and mapping notes in Expert mode only.
+- **Plain words where a file is refused:** a file whose header checksum fails says it may be damaged and what to do,
+  instead of "this firmware has not been checked yet" and an "Edit anyway…" button it never gets, and Add definition
+  says why it refuses a file, the reader's own text in Expert mode only. My Menu's rows keep mapping notes for Expert
+  mode, as every other view does.
 - **The a1 II's Exposure Comp. has a stills and a movie copy, as White Balance does:** the movie copy is new, with
   what Different Set for Still/Mv's Exposure Comp. box does to the pair, and the slider's own copy moves to Expert
   mode. ISO's movie copies gain the values the Stills menu writes into them, ISO Range Limit's limits say how they
@@ -135,6 +150,45 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **One path for a new body, in the docs:** AGENTS.md, the quick start and the playbook take a mapper from quick
+  start steps 0 to 6 through the playbook's section 16 and back to steps 7 to 9, then Phase 1, and the playbook now
+  says what to do after a camera reset, how to reach the state a proof needs, the whole rebuild order and what the kit
+  cannot yet do on a body other than the a1 II. Statements that disagreed with the tools now agree, among them why
+  HDMI capture is held at 1080p (the pixel reader misreads option screens at 2160p).
+- **`kit/rebuild.py --camera <model>_fw<fw> [--write]` runs the whole rebuild in order:** a look by default (pass 2's
+  report and the writer's gate line, nothing written), and with `--write` the write until it changes nothing (three
+  at most), the docs, the leads, the ledger and the editor's golden menu, stopping at the first step that fails. The
+  definition is written one setting a line, the same JSON (the a1 II's 2.2 MB instead of 3.4 MB), so its diffs read
+  setting by setting, and a ledger build takes about 5 s instead of 34 s.
+- **The writer and the report:** an option's own row of boxes (Zebra Level's Custom 1 and 2) is placed in the order
+  the camera draws it, Type first, and a live setting whose record a memory set's own setting describes is kept out
+  of the sets, so a set shows that record once. The pass-2 report keeps a point, colon or slash between digits when
+  it compares labels, so 1.3" and 13", F1.1 and F11 or 1/250 and 1250 no longer pass as one label.
+- **Limits that move each other, and pass 3's switches:** where a choice in one of two limits that hold each other in
+  order (ISO Range Limit, ISO AUTO Minimum and Maximum) also moves the other, the proof line says so (`moved_other`),
+  the report leaves those records out of the choice's own, and the other is chosen back through the menu and checked
+  before the next proof (`prove_run.py --field K` proves one number field alone). Pass 3 checks that a blocker's
+  switch took: a refusal or a question after OK, or a download with no record of the switched row changed, stops the
+  blocker, so nothing is walked or proved in a state the camera was not in.
+- **The readers:** a vote counts once per model family, the start check says when two reader roles are one family,
+  an answer another model gave is kept and voted under that model, and every question refuses a black frame and
+  pauses a reader that failed twice running, so a hung reader costs one timeout. `go_to` takes the row named exactly
+  before a loose match and reads the bar on arrival, the axis seek asks no reader where OCR plainly names another
+  option, the two-box prover asks for the lit box's value, and the OCR cache keeps the 4096 frames used last.
+- **Keys and the link:** a screen read that fails after a key went is no longer taken for the camera refusing it, so
+  the key is never sent twice and `drive.py`'s armed or first-open press keeps `RESTORE_BY_HAND.json`. Every command,
+  reads and the last download among them, now waits out the camera's network error (75 s at most, then plain words),
+  and `drive.py` ends through the shared session end, so a STOP, a Ctrl-C or a link error there still restores.
+- **Presses and scans:** every MENU from the shooting screen goes through one helper that looks again before a second
+  MENU and, with HDMI eyes, waits for the menu page, and a press is judged on a frame no older than half a second,
+  again on a fresh one when a reader call took long. A page scan records its eyes, a runner takes a scan of its own
+  eyes (a named scan of other eyes stops before the link opens), and `page_scan.py`'s Right into the rows meets the
+  never-open check.
+- **Exit codes and smaller fixes:** `upload_check.py` exits 4 when its restore does not check out, and `chain.py`
+  exits 1 for a failed step, 4 when the end file did not go back and 5 after a restore by hand, stopping at an upload
+  that did not check out. `mode_switch.py --keep` refuses while a switch waits in any run folder, eyes that cannot
+  open before anything was sent exit 1 instead of 4, no test reaches the camera or reads the owner's config unless it
+  asks for it, and the migration tools (`migrate_runs.py`, `move_evidence.py`) are retired.
 - **The coverage ledger infers what a shared list already shows** (decision 23): a slot's value another slot of its list
   is proved on counts "inferred from a shared list" in the private form once the slot's own record agrees on two values
   and no proof reads one otherwise (`kit/tools/coverage.py --shared` shows the grounds, `--todo` counts them apart). A
