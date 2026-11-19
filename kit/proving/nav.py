@@ -14,7 +14,7 @@ from camkit.link import CameraRefused, LinkError, StopRequested
 from camkit.screen import same_position, same_state
 from camkit.session import kind_seen, osd_shooting, playback_kind
 from crawl_run import go_to
-from runner import menu_check
+from camkit.live import menu_from_shooting
 
 from .base import LOCK_S, Failed, LockSeen, lock_log, lock_measured, lock_over
 from .screens import SEEN, at_label, bar_text, carousel_text, closest_row, glued, option_key, place, run_tmp_png, same_place
@@ -125,16 +125,11 @@ def to_row(cam, path, top=None, row_place=None):
     """Back to the row after MENU reopened the menu: by position (the row's own place, or its
     top-level row's), else by label. Labels alone fail: the icon cleanup reads "WB " in "WB Capt.
     Frame Size" as an icon (2026-10-29)."""
-    for _ in range(3):
-        # MENU can go unanswered after a heavier change (Picture Profile = PP4 left the shooting screen
-        # up, 2026-10-29): look again at a fresh frame, and only then press it once more. A slow menu
-        # must not get a second MENU: that closed it again and the next Right, on the shooting
-        # screen, opened ISO (the wheel's Right; PP3, 2026-10-29)
-        if not shooting_like(cam.read()):
-            break
-        if not shooting_like(menu_check(cam, "menu-check", clock=time)):      # a menu page at once over HDMI
-            break
-        cam.press("menu")
+    # MENU can go unanswered after a heavier change (Picture Profile = PP4 left the shooting screen up, 2026-10-29):
+    # the one helper looks again at a fresh frame (a menu page at once over HDMI), and only then presses it once more. A
+    # slow menu must not get a second MENU: that closed it again and the next Right, on the shooting screen, opened ISO
+    # (the wheel's Right; PP3, 2026-10-29). after_download has sent the first MENU
+    menu_from_shooting(cam, pressed=True, shooting=shooting_like, clock=time)
     if cam.read().kind not in ("menu", "submenu", "tiles"):
         raise Failed(f"MENU did not bring the menu back ({cam.read().kind}, {cam.frame.path.name})")
     here = place(cam)

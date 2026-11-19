@@ -1781,6 +1781,51 @@ def text_of(cam) -> str:
     return ocr.text_in(ocr.read([f.path])[f.path], (0, 0, 640, 480)).strip()
 
 
+# ---------------------------------------------------------------- MENU from the shooting screen: the one helper
+
+MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
+MENU_PAGES = ("menu", "submenu", "tiles")
+
+
+def menu_check(cam, tag: str = "menu-check", clock=None, poll: float = 0.05):
+    """The screen after a MENU from the shooting screen that seemed not taken: with HDMI eyes the frames are watched
+    (LiveCamera.glance, unsaved) for up to MENU_LATE s and the first that reads as a menu page is taken at once
+    (refresh(frame=)); where none comes, and with other eyes, a fresh frame after the full MENU_LATE s (refresh), which
+    alone may say the MENU was not taken (2026-10-29: a second MENU on a menu that was only slow closed it, and the
+    next Right, on the shooting screen, opened ISO). clock: the caller's time module (this module's by default)."""
+    clock = clock or time
+    eyes = getattr(cam, "hdmi", None)
+    if getattr(eyes, "name", "") == "hdmi" and hasattr(cam, "glance"):
+        start = clock.monotonic()
+        while clock.monotonic() - start < MENU_LATE:
+            clock.sleep(poll)
+            f, s = cam.glance(tag)
+            if s.kind in MENU_PAGES:
+                return cam.refresh(tag, frame=f)
+    else:
+        clock.sleep(MENU_LATE)
+    return cam.refresh(tag)
+
+
+def menu_from_shooting(cam, pressed: bool = False, shooting=None, clock=None, tries: int = 3) -> None:
+    """MENU from the shooting screen, the one way every caller sends it: MENU (none where `pressed`, the caller having
+    just sent it), and while the screen still reads as the shooting screen (`shooting`, a predicate on the screen, by
+    default its kind), a fresh look first (menu_check: at once on a menu page with HDMI eyes, else a fresh frame after
+    MENU_LATE s), and only then MENU once more, `tries` times at most. Never a second MENU without that look just before
+    it: a MENU the camera took late (its settle ended on the shooting screen's own redraw) opens the menu meanwhile, and
+    a MENU then would close it, the next key landing on the shooting screen (kit2_pass2 250525-250527, 2026-11-18: a
+    Left; 2026-10-29: a Right that opened ISO)."""
+    shooting = shooting or (lambda s: s.kind == "shooting")
+    if not pressed:
+        cam.press("menu")
+    for _ in range(tries):
+        if not shooting(cam.read()):
+            break
+        if not shooting(menu_check(cam, "menu-check", clock=clock)):
+            break
+        cam.press("menu")
+
+
 def press(cam, key: str, confirm=False, answer=None, **kw):
     """A press the camera may refuse for a moment while it reads the card (Select REC Folder
     refused Up 0.3 s after opening and took MENU 1.6 s later, 2026-10-29). kw: LiveCamera.press's (on_shooting).

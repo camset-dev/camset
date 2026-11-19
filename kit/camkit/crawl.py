@@ -229,9 +229,11 @@ def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_
         s = cam.read()
         if not _at(s, pos) and s.kind in ("shooting", "playback"):
             # the camera left the menu by itself (2026-10-28: a CautionDisplay warning came with it, no
-            # message stayed on screen): MENU reopens on the same row; check the position again (MENU alone on the
-            # playback view too, as while it read as the shooting screen)
-            cam.press("menu")
+            # message stayed on screen): MENU reopens on the same row (the one helper: once more only after a fresh
+            # look); check the position again (MENU alone on the playback view too, as while it read as the shooting
+            # screen)
+            from .live import menu_from_shooting
+            menu_from_shooting(cam, shooting=lambda x: x.kind in ("shooting", "playback"))
             s = cam.read()
             out.recoveries.append(i)
         if not _at(s, pos):
@@ -496,8 +498,11 @@ def back_to(cam, place: "Place", tries: int = 4) -> bool:
 
     MENU on a notice closes the notice and the whole menu (2026-10-28), and MENU then reopens on
     the same row; inside a submenu it may reopen on the parent row instead, so: shooting screen ->
-    MENU; on the parent row -> Right into the submenu and Down to the row's position."""
+    MENU (the one helper, camkit.live.menu_from_shooting: a MENU from the shooting screen once more only after a fresh
+    look, never right after the last one); on the parent row -> Right into the submenu and Down to the row's position."""
+    from .live import menu_from_shooting
     cam.press("menu")
+    sent = False            # the last press was a MENU from the shooting screen: the next one looks first
     for _ in range(tries):
         s = cam.read()
         if same_state(s, place.screen):
@@ -506,10 +511,13 @@ def back_to(cam, place: "Place", tries: int = 4) -> bool:
             # the camera still holds the row's look lock on its page (a blanked row's frames are never read, so only the
             # shooting screen ends it: camkit.live.LiveCamera.network_left): MENU closes the menu, and MENU opens it again
             cam.press("menu")
+            sent = False
             continue
         if s.kind == "shooting":
-            cam.press("menu")
+            menu_from_shooting(cam, pressed=sent)
+            sent = True
             continue
+        sent = False
         if place.parent is not None and same_state(s, place.parent.screen):
             # back into the submenu; it may reopen on its first row or the last one used, and it
             # wraps, so Down until this row comes round (bounded: past its place, from wherever it reopens, and at

@@ -1023,6 +1023,90 @@ def test_no_second_menu_goes_before_a_fresh_frame_after_the_full_wait_shows_the_
     assert cam.pressed == [] and cam.taken == [pytest.approx(0.6, abs=0.06)] and now[0] < 0.7
 
 
+class LateMenuCamera(MenuCamera):
+    """A MenuCamera whose first MENU closes what is open (a notice, a row: the shooting screen at once) where
+    `closes_first`, and whose next MENU opens the menu `late` s after it, the frame read after that press still showing
+    the shooting screen (the shooting screen's own redraw ended its settle: kit2_pass2 250525-250527, 2026-11-18). Any
+    other key on the shooting screen is recorded as a leak."""
+    def __init__(self, now, late, closes_first=False):
+        super().__init__(now, None)
+        self.late, self.closes_first, self.leaks = late, closes_first, []
+        if closes_first:
+            self.screen = SimpleNamespace(kind="notice")
+
+    def kind(self):
+        if self.menu_at is not None and self.now[0] >= self.menu_at:
+            return "menu"
+        return self.screen.kind if self.screen.kind == "notice" else "shooting"
+
+    def press(self, key, **k):
+        self.pressed.append((key, round(self.now[0], 2)))
+        if key != "menu":
+            if self.kind() == "shooting":
+                self.leaks.append(key)
+            return
+        if self.screen.kind == "notice":
+            self.screen = SimpleNamespace(kind="shooting")
+        elif self.kind() == "menu":
+            self.menu_at, self.screen = None, SimpleNamespace(kind="shooting")     # a second MENU closes it
+        elif self.menu_at is None:
+            self.menu_at = self.now[0] + self.late                                  # read: still the shooting screen
+
+
+def test_a_menu_that_opens_late_after_the_shooting_screens_redraw_gets_no_second_menu(monkeypatch):
+    """The safety fix of 2026-11-18 (decision 21: a Left reached the shooting screen): a MENU from the shooting screen
+    whose menu opens 0.3 s later, the frame read after the press still showing the shooting screen, gets no second MENU
+    and no other key, through the one helper (camkit.live.menu_from_shooting) wherever a MENU goes from the shooting
+    screen: runner's, proving.nav.to_row's and camkit.crawl.back_to's (whose first MENU closes a notice)."""
+    import runner
+    from camkit import crawl, live
+    from proving import nav
+    now, clock = menu_clock()
+    for mod in (runner, live, nav):
+        monkeypatch.setattr(mod, "time", clock)
+    cam = LateMenuCamera(now, 0.3)
+    runner.menu_from_shooting(cam)
+    assert [k for k, t in cam.pressed] == ["menu"] and cam.read().kind == "menu" and not cam.leaks
+    now[0] = 0.0
+    cam = LateMenuCamera(now, 0.3, closes_first=True)
+    monkeypatch.setattr(crawl, "same_state", lambda a, b: a.kind == b.kind)
+    place = SimpleNamespace(screen=SimpleNamespace(kind="menu"), parent=None, index=0)
+    assert crawl.back_to(cam, place) is True
+    assert [k for k, t in cam.pressed] == ["menu", "menu"] and not cam.leaks
+    now[0] = 0.0
+    cam = LateMenuCamera(now, 0.3)
+    cam.press("menu")                               # after_download's MENU, then to_row
+    monkeypatch.setattr(nav, "place", lambda cam: "here")
+    monkeypatch.setattr(nav, "same_place", lambda a, b: a == b)
+    nav.to_row(cam, ["Shooting"], None, "here")
+    assert [k for k, t in cam.pressed] == ["menu"] and not cam.leaks
+
+
+def test_no_menu_goes_from_the_shooting_screen_without_a_fresh_look_before_it():
+    """A source check, so the blind pattern does not come back: a MENU pressed where the lines just above judged the
+    screen as the shooting screen, with no fresh look among them (a refresh, a watched check, the helper), as
+    kit/prove_run.py's start did (a sleep, then MENU again: it closed a menu that had opened late, 2026-11-18)."""
+    import ast
+    import re
+    check = re.compile(r"""kind\s*==\s*["']shooting["']|kind\s+in\s+\(["']shooting["']|shooting_like\(""")
+    look = re.compile(r"refresh\(|menu_check\(|glance\(|menu_from_shooting\(|wait_for\(|screen\.read\(")
+    menu = re.compile(r"""press\(\s*["']menu["']""")
+    helper = next(n for n in ast.walk(ast.parse((KIT / "camkit" / "live.py").read_text(encoding="utf-8")))
+                  if isinstance(n, ast.FunctionDef) and n.name == "menu_from_shooting")
+    found = []
+    for p in sorted(KIT.rglob("*.py")):
+        if "tests" in p.parts:
+            continue
+        lines = p.read_text(encoding="utf-8").splitlines()
+        for i, ln in enumerate(lines):
+            if p == KIT / "camkit" / "live.py" and helper.lineno <= i + 1 <= helper.end_lineno:
+                continue                            # the one helper itself
+            window = lines[max(0, i - 6):i]
+            if menu.search(ln) and any(check.search(w) for w in window) and not any(look.search(w) for w in window):
+                found.append(f"{p.relative_to(KIT)}:{i + 1}")
+    assert found == [], f"a MENU after a shooting check with no fresh look: {found} (camkit.live.menu_from_shooting)"
+
+
 # ---------------------------------------------------------------- a carousel's title, read once its strip is still
 
 

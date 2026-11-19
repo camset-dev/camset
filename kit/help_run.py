@@ -36,7 +36,7 @@ from drive import help_refused, highlighted  # noqa: E402
 from page_model import key_text  # noqa: E402
 from prove_run import Failed  # noqa: E402   (one class: a row prove_run --help-text cannot read is skipped)
 from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
-                    restore_checked, wait_shooting)
+                    menu_from_shooting, restore_checked, wait_shooting)
 
 TITLE, BODY = (40, 0, 640, 46), (0, 46, 640, 420)      # the guide: orange name, text, OK in the footer
 SKIP_PAGES = re.compile(r"^(My Menu|Playback > Delete)")   # repeats of other tabs; the Delete menu, by hand
@@ -149,7 +149,7 @@ def walk(cam, cycle, model, done, out, a) -> None:
     button and it was not read in this context before (`done`, which each row read joins); every screen is checked
     against the scan."""
     n, read = len(cycle), 0
-    cam.press("menu")
+    menu_from_shooting(cam)
     j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
     if j is None:
         raise Failed(f"the menu opened on a screen the scan does not know ({cam.read().kind})")

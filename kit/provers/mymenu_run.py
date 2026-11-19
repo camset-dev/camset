@@ -44,8 +44,8 @@ from camkit.runs import Run  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, to_shooting, vlm_option  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_argument, allowed_or_exit,  # noqa: E402
-                    close_for_restore, end_session, in_mode, load_scan, proofs_file, read_json, restore_checked,
-                    scan_arg, write_json, write_text)
+                    close_for_restore, end_session, in_mode, load_scan, menu_from_shooting, proofs_file, read_json,
+                    restore_checked, scan_arg, write_json, write_text)
 
 ROW = "Add Item"
 CONSENT = f"--allow {ROW!r}"        # the run's consent to answer the row's own screens (LiveCamera.answer_once)
@@ -322,7 +322,7 @@ def back_to_picker(cam, done: float) -> dict:
         if time.monotonic() > end:
             raise Failed(f"after the download the camera stayed on {st['kind']} ({cam.frame.path.name})")
         time.sleep(0.4)
-    cam.press("menu")
+    menu_from_shooting(cam)          # once more only after a fresh look (the one helper)
     lit = lit_text(cam.frame.image, cam.frame.path)
     if not re.search(r"add item", lit, re.I):
         raise Failed(f"the menu reopened on {lit!r}, not Add Item ({cam.frame.path.name})")
@@ -396,7 +396,7 @@ def main():
                 cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))       # the owner's word for Add Item
                 lap_only = False
                 try:
-                    cam.press("menu")
+                    menu_from_shooting(cam)
                     to_add_item(cam, cycle, model)
                     if items is None:
                         cached = run.dir / "mymenu_items.json"

@@ -55,7 +55,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from camkit import safety, screen, session
+from camkit import live, safety, screen, session
 from camkit.frames import load
 from camkit.link import Link, StopRequested
 from camkit.live import LiveCamera, body_of, close, lit_text, lone_of, text_of, withheld_on
@@ -649,41 +649,20 @@ def scan_position(cam, cycle) -> int | None:
     return next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
 
 
-MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
-MENU_PAGES = ("menu", "submenu", "tiles")
+MENU_LATE, MENU_PAGES = live.MENU_LATE, live.MENU_PAGES     # the one helper's (camkit.live.menu_from_shooting)
 
 
 def menu_check(cam, tag: str = "menu-check", clock=None, poll: float = 0.05):
-    """The screen after a MENU from the shooting screen that seemed not taken: with HDMI eyes the frames are watched
-    (LiveCamera.glance, unsaved) for up to MENU_LATE s and the first that reads as a menu page is taken at once
-    (refresh(frame=)); where none comes, and with other eyes, a fresh frame after the full MENU_LATE s (refresh), which
-    alone may say the MENU was not taken (2026-10-29: a second MENU on a menu that was only slow closed it, and the
-    next Right, on the shooting screen, opened ISO). clock: the caller's time module (this module's by default)."""
-    clock = clock or time
-    eyes = getattr(cam, "hdmi", None)
-    if getattr(eyes, "name", "") == "hdmi" and hasattr(cam, "glance"):
-        start = clock.monotonic()
-        while clock.monotonic() - start < MENU_LATE:
-            clock.sleep(poll)
-            f, s = cam.glance(tag)
-            if s.kind in MENU_PAGES:
-                return cam.refresh(tag, frame=f)
-    else:
-        clock.sleep(MENU_LATE)
-    return cam.refresh(tag)
+    """camkit.live.menu_check on this module's clock unless the caller gives one."""
+    return live.menu_check(cam, tag, clock=clock or time, poll=poll)
 
 
-def menu_from_shooting(cam) -> None:
-    """MENU from the shooting screen. MENU can go unanswered just after a download (two in a row, 2026-10-30): look
-    again (menu_check: at once on a menu page with HDMI eyes, else at a fresh frame after MENU_LATE s) and only then
-    press it once more, as prove_run's to_row does; a second MENU on a menu that is only slow closes it again."""
-    cam.press("menu")
-    for _ in range(3):
-        if cam.read().kind != "shooting":
-            break
-        if menu_check(cam, "menu-check").kind != "shooting":
-            break
-        cam.press("menu")
+def menu_from_shooting(cam, **kw) -> None:
+    """MENU from the shooting screen by the one helper (camkit.live.menu_from_shooting: never a second MENU without a
+    fresh look just before it; its keywords as given), on this module's clock. MENU can go unanswered just after a
+    download (two in a row, 2026-10-30); a second MENU on a menu that is only slow closes it again (2026-10-29,
+    2026-11-18)."""
+    live.menu_from_shooting(cam, clock=time, **kw)
 
 
 def write_text(path, text: str) -> None:

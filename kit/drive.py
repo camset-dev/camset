@@ -198,6 +198,7 @@ from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, E
                     cards_statement_refused, changes_kept, close_for_restore, confirm_phrase_or_exit, defined_values,
                     definition, hold_for_owner, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
+                    menu_from_shooting,
                     network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
                     restore_checked, restoring, row_readings, row_values, screen_named, values_withheld, wait_shooting)
 
@@ -1419,7 +1420,9 @@ def main():
             opened = None           # on an address run, the frame a press opened a row on: from then MENU only
             owner_opened = False    # the owner row was opened once: never again this run
             try:
-                cam.press("menu")
+                # its one MENU through the one helper, and no second: drive.py sends what it is asked, and a menu that
+                # did not open fails closed at find_position
+                menu_from_shooting(cam, tries=0)
                 j = find_position(cam, cycle, model)
                 # the owner row's top-level row is gone to in the decision's own tab and group, and the page shown is
                 # checked to be there before anything goes further (owner_place)

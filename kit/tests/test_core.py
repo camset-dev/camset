@@ -1742,21 +1742,28 @@ def test_the_cameras_own_strips_read_as_their_titles(monkeypatch, name, axis, ti
 
 class FakeMenuOpening:
     """The camera as prove_run.session meets it: MENU answered or not (the lock after a download: `locked` presses go
-    unanswered), and the menu reopening with the focus in the group column or on the rows."""
-    def __init__(self, locked=0, focus="rows", known=True, right_opens=None):
+    unanswered), and the menu reopening with the focus in the group column or on the rows. `late`: MENU taken, the menu
+    drawn only after the frame read after the press, which still shows the shooting screen (a fresh look sees the
+    menu); a second MENU on it closes it. A key other than MENU on the shooting screen is kept in `leaks`."""
+    def __init__(self, locked=0, focus="rows", known=True, right_opens=None, late=False):
         import numpy as np
         self.locked, self.focus, self.known, self.kind, self.keys = locked, focus, known, "shooting", []
         self.right_opens = right_opens              # what Right opens when the cursor was really on a row
         self.frame = type("F", (), {"path": Path("00000_fake.png"), "image": np.zeros((480, 640, 3), np.uint8)})()
         self.may_open = frozenset()
+        self.late, self.drawn, self.leaks = late, True, []
 
     def press(self, key):
         self.keys.append(key)
+        if key != "menu" and self.kind == "shooting":
+            self.leaks.append(key)
         if key == "menu" and self.kind == "shooting":
             if self.locked:
                 self.locked -= 1
             else:
-                self.kind = "menu"
+                self.kind, self.drawn = "menu", not self.late
+        elif key == "menu" and self.kind == "menu" and not self.drawn:
+            self.kind = "shooting"                  # a second MENU on the menu drawn late closes it
         elif key == "menu" and self.kind not in ("menu", "shooting"):
             self.kind = "menu"                      # MENU cancels what Right opened
         elif key == "right" and self.kind == "menu":
@@ -1766,8 +1773,13 @@ class FakeMenuOpening:
                 self.focus = "rows"
 
     def read(self):
-        return screen.Screen(kind=self.kind, focus=self.focus if self.kind == "menu" else None,
+        kind = "shooting" if self.kind == "menu" and not self.drawn else self.kind
+        return screen.Screen(kind=kind, focus=self.focus if kind == "menu" else None,
                              signature="known" if self.known else "elsewhere")
+
+    def refresh(self, tag, frame=None):
+        self.drawn = True                           # a fresh look sees the menu drawn late
+        return self.read()
 
     def cancel_to_menu(self):
         return True
@@ -1786,19 +1798,26 @@ def _session(monkeypatch, cam):
 
 
 def test_session_waits_out_the_menu_lock_and_leaves_the_group_column(monkeypatch):
-    """session(): MENU that leaves the shooting screen up (the lock after a download) is pressed once more after
-    LOCK_S; a menu that reopens with the focus in the group column gets one Right, onto the page's rows, before the scan
-    is matched. A menu that opens on the rows straight away gets neither."""
+    """session(): MENU that leaves the shooting screen up (the lock after a download) is pressed once more only after a
+    fresh look, MENU_LATE on, still shows the shooting screen (runner.menu_from_shooting, the one helper); a menu that
+    reopens with the focus in the group column gets one Right, onto the page's rows, before the scan is matched. A menu
+    that opens on the rows straight away gets neither. A menu drawn late, the frame read after MENU still showing the
+    shooting screen (kit2_pass2 250525-250527, 2026-11-18), gets no second MENU and no other key on the shooting
+    screen: where the start once slept LOCK_S and sent MENU blind, which closed it and let a Left out."""
+    import runner
     cam = FakeMenuOpening(locked=1, focus="groups")
     P, status, slept, pressed = _session(monkeypatch, cam)
-    assert status == "done" and cam.keys == ["menu", "menu", "right"] and slept == [P.LOCK_S]
+    assert status == "done" and cam.keys == ["menu", "menu", "right"] and slept == [runner.MENU_LATE]
     assert pressed == ["menu"]                                          # the session closes the menu at its end
     cam = FakeMenuOpening()
     P, status, slept, _ = _session(monkeypatch, cam)
     assert status == "done" and cam.keys == ["menu"] and slept == []
-    cam = FakeMenuOpening(locked=2)                                     # still locked after the wait: no third MENU
+    cam = FakeMenuOpening(locked=2)                     # untaken twice: a third MENU, each after a fresh look
     P, status, slept, _ = _session(monkeypatch, cam)
-    assert status == "error" and cam.keys == ["menu", "menu"] and slept == [P.LOCK_S]
+    assert status == "done" and cam.keys == ["menu", "menu", "menu"] and slept == [runner.MENU_LATE] * 2
+    cam = FakeMenuOpening(late=True)
+    P, status, slept, _ = _session(monkeypatch, cam)
+    assert status == "done" and cam.keys == ["menu"] and cam.leaks == [] and slept == [runner.MENU_LATE]
     cam = FakeMenuOpening(known=False)                                  # a page the scan does not know: fails closed
     P, status, _, _ = _session(monkeypatch, cam)
     assert status == "error" and cam.keys == ["menu"]

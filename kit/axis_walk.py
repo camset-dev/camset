@@ -26,7 +26,7 @@ from camkit.screen import same_position  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import PASS1, carousel_text, frame_file, main_name, option_key, to_shooting  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
-                    read_json, restore_checked, write_json)
+                    menu_from_shooting, read_json, restore_checked, write_json)
 
 AXIS_GLYPHS = ("side_left", "side_right")
 SKIP = {"Creative Look"}         # its arrows belong to the look's parameter strip, not a second axis
@@ -78,7 +78,7 @@ def main():
             time.sleep(5)
             cam = LiveCamera(link, hdmi, run)
             try:
-                cam.press("menu")
+                menu_from_shooting(cam)
                 j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
                 if j is None:
                     raise RuntimeError(f"the menu opened on a screen the scan does not know ({cam.read().kind})")

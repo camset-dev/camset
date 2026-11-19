@@ -39,7 +39,8 @@ from camkit.screen import same_position, same_state  # noqa: E402
 from crawl_run import go_to  # noqa: E402
 from prove_run import Failed, at_label, bar_text, place, same_place, to_shooting  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_info_ok_argument, add_scan_argument, close_for_restore,  # noqa: E402
-                    end_session, info_ok_or_exit, load_scan, read_json, restore_checked, write_json)
+                    end_session, info_ok_or_exit, load_scan, menu_from_shooting, read_json, restore_checked,
+                    write_json)
 from proving import screens  # noqa: E402
 
 TABLES = {
@@ -476,7 +477,7 @@ def main():
             time.sleep(5)
             cam = LiveCamera(link, hdmi, run)
             try:
-                cam.press("menu")
+                menu_from_shooting(cam)
                 j = next((i for i, p in enumerate(cycle) if same_position(cam.read(), p["screen"])), None)
                 if j is None:
                     raise Failed(f"the menu opened on a screen the scan does not know ({cam.read().kind})")

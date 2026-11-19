@@ -100,8 +100,8 @@ from crawl_run import go_to  # noqa: E402
 from page_model import same_text  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_allow_argument, add_network_argument, add_scan_argument, allowed_or_exit,  # noqa: E402
                     changes_of, end_session, known_groups, known_labels, known_values, label_readings, load_scan,
-                    log_network_decided, network_decided_or_exit, network_readings, network_values, read_json,
-                    restoring, row_values, values_withheld)
+                    log_network_decided, menu_from_shooting, network_decided_or_exit, network_readings, network_values,
+                    read_json, restoring, row_values, values_withheld)
 from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels  # noqa: E402
 # the run's settings live with their readers, and main() sets them there (proving.base.MAP, proving.jobs.HELP_TEXT,
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
@@ -655,11 +655,10 @@ def session(link, hdmi, run, cycle, model, pending, start, out, failures) -> str
                      labels=label_readings(MODEL) if proving.jobs.NETWORK else None)
     status = "done"
     try:
-        cam.press("menu")
-        if cam.read().kind == "shooting":
-            # MENU within a few seconds of a download is locked (section 8 of the playbook): once more after a wait
-            time.sleep(LOCK_S)
-            cam.press("menu")
+        # MENU within a few seconds of a download can go untaken (section 8 of the playbook): once more only after a
+        # fresh look shows the shooting screen still (menu_from_shooting); a MENU sent blind after a wait closed a menu
+        # that had opened late, and the next Left reached the shooting screen (kit2_pass2 250525-250527, 2026-11-18)
+        menu_from_shooting(cam)
         if cam.read().kind == "menu" and cam.read().focus == "groups":
             # the menu reopens where a hand left it, the focus in the group column: Right moves it onto the
             # page's rows, which is where every scan position is (it chooses nothing). Only with the menu at
