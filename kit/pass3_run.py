@@ -37,7 +37,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ROOT, camset, models, paths, session  # noqa: E402
-from camkit import safety  # noqa: E402,F401   (the tests reach the confirmation judge as pass3_run.safety)
+from camkit import safety  # noqa: E402   (a refused press; the tests reach the confirmation judge as pass3_run.safety)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link, LinkError, StopRequested  # noqa: E402
 from camkit.live import LiveCamera, text_of  # noqa: E402
@@ -479,10 +479,11 @@ def run_blockers(run, cycle, model, chosen, log, scan=None) -> bool:
                 why = switch_took(ch, moved or [])
                 if why:
                     raise Failed(why)
-        except (Failed, LinkError, RuntimeError, StopRequested) as e:
+        except (Failed, LinkError, RuntimeError, StopRequested, safety.Refused) as e:
             # whatever part of the switch applied goes back before the next blocker (decision 15): a blocker's "first"
             # state chosen before its own switch failed, a choice made before to_shooting gave up, the capture dongle
-            # gone after 24p reached HDMI, a download refused after the switch. restore() uploads the start file only
+            # gone after 24p reached HDMI, a download refused after the switch, a press the camera's own check refused
+            # before it went out (a changed screen, a never-open row). restore() uploads the start file only
             # when something differs from it; if that fails too, stop and leave it to the caller's upload
             print(f"   the switch {'stopped' if stopped else 'failed'}: {e}", flush=True)
             hdmi.close()

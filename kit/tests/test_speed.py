@@ -2824,6 +2824,43 @@ def test_a_right_on_a_submenu_page_still_being_drawn_goes_on_the_row_the_caller_
     assert sent == []
 
 
+@pytest.mark.parametrize("refusal", ["ScreenChanged", "RowRefused", "Refused"])
+def test_a_refused_press_in_a_pass3_switch_is_restored_as_a_failed_one(monkeypatch, capsys, refusal):
+    """pass3_run.run_blockers: a press the camera's own check refuses during a blocker's switch (the look before Right
+    refusing a changed screen, a never-open row, a look that failed) is handled as a switch that failed: the eyes closed,
+    the start file put back (restore), the next blocker taken, never a traceback with the menu open and nothing
+    restored (the review of 2026-11-19)."""
+    import pass3_run
+    from camkit import models, safety
+
+    class Link:
+        def __init__(self, run):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+    closed, restored = [], []
+    eyes = SimpleNamespace(attach=lambda link: None, close=lambda: closed.append(True))
+
+    def refused(*a):
+        raise getattr(safety, refusal)("right: the screen changed since it was judged")
+    monkeypatch.setattr(pass3_run, "Link", Link)
+    monkeypatch.setattr(pass3_run, "eyes_from_config", lambda run: eyes)
+    monkeypatch.setattr(pass3_run, "session_start", lambda *a, **k: Path("00001_p3-start.DAT"))
+    monkeypatch.setattr(pass3_run.time, "sleep", lambda s: None)
+    monkeypatch.setattr(pass3_run.camset, "read", lambda p: SimpleNamespace(model=models.A1II, get=lambda *a: None))
+    monkeypatch.setattr(pass3_run, "enter_state", refused)
+    monkeypatch.setattr(pass3_run, "walk_and_prove", lambda b, log: pytest.fail("walked after a refused switch"))
+    monkeypatch.setattr(pass3_run, "restore", lambda run, start: restored.append(start.name) or 0)
+    blocker = {"row": ["Shutter Type"], "to": "Mechanical Shutter", "walk": "Long Exposure NR"}
+    assert pass3_run.run_blockers("run", [], {}, [blocker, blocker], None) is True
+    assert restored == ["00001_p3-start.DAT"] * 2 and len(closed) == 2
+    assert "the switch failed: right: the screen changed" in capsys.readouterr().out
+
+
 def test_the_fresh_look_before_right_waits_for_nothing_with_osd_eyes(tmp_path, monkeypatch):
     """With OSD eyes the look before Right is one grab at once: OSD_LAG is Enter's wait (the link's picture can lag the
     screen; an Enter answers what the screen asks), never Right's, however recent the kit's last move."""
