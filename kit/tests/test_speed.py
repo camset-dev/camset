@@ -2017,3 +2017,219 @@ def test_a_cached_lap_is_taken_only_in_the_mode_and_scan_it_was_made_with(tmp_pa
     assert M.kept_lap(tmp_path / "none.json", "Stills", "x", said.append) is None
     assert len(said) == 3 and all(s.count("\n") == 0 and "lapped again" in s for s in said)
     assert "made in Movie mode with kit2_page_scan_movie_1108" in said[0] and "this run's Stills" in said[0]
+
+
+# ---------------------------------------------------------------- L: the settle's windows by key, at today's values
+
+
+def test_the_settles_windows_are_one_table_per_eyes_by_key_at_todays_values():
+    """camkit.frames holds each settle window once, by key, the cursor's steps (Up, Down, Left, Right) apart from Enter
+    and MENU, at the values every run has used (the speed review's items 8 and 11 and the owner's question for OSD eyes
+    change them only once kit/tools/settle_probe.py has measured them): HDMI's quiet 0.15 s and its "nothing
+    happened" 1.0 s; the OSD picture's quiet 0.75 s and its 6.0 s; any other tag the eyes' own."""
+    from camkit import frames
+    assert frames.STEPS == ("up", "down", "left", "right")
+    today = {"HDMI_QUIET": 0.15, "HDMI_NOTHING": 1.0, "OSD_QUIET": 0.75, "OSD_LATE": 6.0}
+    for name, value in today.items():
+        assert getattr(frames, name) == dict.fromkeys(frames.STEPS, value), name
+    h, o = frames.HdmiSource, frames.OsdSource
+    assert (h.QUIET, h.NOTHING, h.UNEXPECTED, o.QUIET, o.LATE) == (0.15, 1.0, 0.5, 0.75, 6.0)
+    for key in ("down", "enter", "menu", "cancel"):
+        assert frames.window(frames.HDMI_QUIET, key, h.QUIET) == 0.15
+        assert frames.window(frames.OSD_LATE, key, o.LATE) == 6.0
+
+
+@pytest.mark.parametrize("table,key,attr", [("HDMI_QUIET", "down", None), ("HDMI_NOTHING", "down", None),
+                                            ("HDMI_QUIET", "enter", "QUIET"), ("HDMI_NOTHING", "menu", "NOTHING")])
+def test_hdmi_settle_takes_its_windows_from_the_table_by_key(monkeypatch, table, key, attr):
+    """HdmiSource.settle with no quiet given takes the press's key's window (a step's from the table, Enter's and MENU's
+    the class's): a step's quiet set here ends a moved press after that long; a press that shows nothing ends after
+    the "nothing happened" window; so only the table (or the class, for Enter and MENU) need change."""
+    from camkit import frames
+    now = [0.0]
+    monkeypatch.setattr(frames.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(frames.time, "sleep", lambda s: now.__setitem__(0, now[0] + s))
+    src = frames.HdmiSource.__new__(frames.HdmiSource)
+    moves = table == "HDMI_QUIET"
+    src.noisy = lambda until: np.zeros((60, 80), bool)
+    src.grab = lambda tag="f", save=True: SimpleNamespace(t=now[0])
+
+    def latest():
+        now[0] += 0.01
+        img = np.full((60, 80), 50.0 if moves and now[0] > 0.05 else 0.0)
+        return SimpleNamespace(t=now[0], small=img)
+    src.latest = latest
+    before = SimpleNamespace(image=np.zeros((480, 640, 3), np.uint8))
+    monkeypatch.setattr(frames, "_small", lambda image: np.zeros((60, 80)))
+    if attr:
+        monkeypatch.setattr(frames.HdmiSource, attr, 0.3)
+    else:
+        monkeypatch.setitem(getattr(frames, table), key, 0.3)
+    src.settle(before, key, expect_change=True, sent_at=0.0)
+    assert now[0] == pytest.approx((0.06 if moves else 0.0) + 0.3, abs=0.03)
+
+
+# ---------------------------------------------------------------- M: the settle probe (kit/tools/settle_probe.py)
+
+
+class ProbeClock:
+    def __init__(self):
+        self.now = 0.0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, s):
+        self.now += s
+
+
+class ProbeEyes:
+    """Eyes on a ProbeClock: the picture steps once at each of `steps` s after each press went out (HDMI: a new
+    capture every 1/60 s; OSD: a fetch each look)."""
+    def __init__(self, clock, steps, name="hdmi"):
+        self.clock, self.steps, self.name, self.sends = clock, list(steps), name, []
+
+    @property
+    def sent(self):
+        return self.sends[-1] if self.sends else None
+
+    @sent.setter
+    def sent(self, t):
+        self.sends.append(t)
+
+    def value(self):
+        return sum(1 for t in self.sends for s in self.steps if self.clock.now - t >= s)
+
+    def latest(self):
+        from camkit import frames
+        self.clock.now += 1 / 60
+        img = np.full((480, 640, 3), 40 * self.value(), np.uint8)
+        return frames.Frame(img, self.clock.now, None, "hdmi", np.full((60, 80), 40.0 * self.value()))
+
+    def peek(self):
+        from camkit import frames
+        self.clock.now += 0.001
+        return frames.Frame(np.full((480, 640, 3), 40 * self.value(), np.uint8), self.clock.now, None, "osd")
+
+    def grab(self, tag="f", save=True):
+        return self.peek() if self.name == "osd" else self.latest()
+
+    def noisy(self, until):
+        return np.zeros((60, 80), bool)
+
+
+class ProbeCam:
+    """A LiveCamera stand-in for the probe: a press goes out through the link (the probe's hook notes when), then
+    the kit's own settle looks for 0.3 s; the screen reads as `kinds` says, its focus `focus`."""
+    def __init__(self, link, eyes, clock, kind="menu", focus="rows"):
+        self.link, self.eyes, self.clock, self.kind, self.focus, self.pressed = link, eyes, clock, kind, focus, []
+        self.frame = SimpleNamespace(path=Path("00001_x.png"))
+
+    def read(self):
+        return SimpleNamespace(kind=self.kind, focus=self.focus)
+
+    def press(self, key, **kw):
+        self.link.press(key)
+        self.eyes.sent = self.clock.now
+        self.pressed.append(key)
+        end = self.clock.now + 0.3
+        while self.clock.now < end:
+            self.eyes.grab("settle", save=False)
+        if key == "left":
+            self.focus = "groups"
+
+
+@pytest.mark.parametrize("name", ["hdmi", "osd"])
+def test_the_probe_notes_each_presss_first_and_last_change_and_keeps_the_late_ones(tmp_path, name):
+    """settle_probe.probe_presses with either eyes: for each press, the first and last change of the picture after the
+    press went out (the link's command), seen during the kit's own settle and during the hold after it; the frames
+    either side of each change later than LATE_KEPT kept in the run's late/ folder; a line per press in probe.jsonl;
+    two still frames compared before each press."""
+    import settle_probe as P
+    from camkit.runs import Run
+    clock = ProbeClock()
+    eyes = ProbeEyes(clock, [0.2, 0.8], name=name)
+    link = SimpleNamespace(press=lambda key, **k: None)
+    cam = ProbeCam(link, eyes, clock)
+    run = Run("kit2_settle_presses", root=tmp_path)
+    rows = P.probe_presses(cam, link, eyes, run, ["down"], 2, hold=1.0, clock=clock)
+    assert [r["key"] for r in rows] == ["down", "down"] and all(r["kind_before"] == "menu" for r in rows)
+    for r in rows:
+        assert r["first"] == pytest.approx(0.2, abs=0.03) and r["last"] == pytest.approx(0.8, abs=0.06)
+        assert r["changes"] == 2 and len(r["late_kept"]) == 2 and r["still_identical"] is True
+    kept = sorted(p.name for p in (run.dir / "late").iterdir())
+    assert len(kept) == 4 and all("_down_0.8" in k for k in kept)
+    assert len((run.dir / "probe.jsonl").read_text(encoding="utf-8").splitlines()) == 2
+    text = P.table(rows, "presses", name, "lan", "Stills")
+    assert f"eyes {name}, connection lan, shooting mode Stills" in text and "down   menu" in text
+
+
+def test_the_probe_presses_right_only_from_the_group_column(tmp_path):
+    """"left-right": Left, then Right only where the screen reads its focus in the group column; a screen that does not
+    (a submenu's Left goes back to its page, with the rows focused) stops the run before Right."""
+    import settle_probe as P
+    from camkit.runs import Run
+    clock = ProbeClock()
+    eyes = ProbeEyes(clock, [0.1])
+    link = SimpleNamespace(press=lambda key, **k: None)
+    run = Run("kit2_settle_presses", root=tmp_path)
+    cam = ProbeCam(link, eyes, clock)
+    rows = P.probe_presses(cam, link, eyes, run, ["left-right"], 1, hold=0.1, clock=clock)
+    assert cam.pressed == ["left", "right"] and [r["key"] for r in rows] == ["left", "right"]
+    cam = ProbeCam(link, eyes, clock)
+    cam.press = lambda key, **k: cam.pressed.append(key)           # a Left that leaves the rows focused
+    with pytest.raises(RuntimeError, match="Right goes only from the group column"):
+        P.probe_presses(cam, link, eyes, run, ["left-right"], 1, hold=0.1, clock=clock)
+    assert cam.pressed == ["left"]
+
+
+def test_the_lock_probe_sends_one_menu_per_trial_and_closes_only_a_menu_that_opened(monkeypatch, tmp_path):
+    """settle_probe.probe_lock: per trial a download, MENU `delay` s after its reply, and whether the menu opened (here
+    the camera takes MENU only from 2.0 s on); a MENU that did not open it gets no second MENU, one that did is closed
+    with the cleanup close; one line per trial and a table by delay."""
+    import runner
+    import settle_probe as P
+    from camkit.runs import Run
+    clock = ProbeClock()
+    state = {"done": None, "kind": "shooting"}
+    downloads, closed = [], []
+
+    def download(tag):
+        downloads.append(tag)
+        state["done"], state["kind"] = clock.now, "shooting"
+        return tmp_path / f"{tag}.DAT"
+
+    def grab(tag="f", save=True):
+        clock.now += 0.02
+        kind = state["kind"]
+        if kind == "shooting" and state["done"] is not None and clock.now - state["done"] < 1.9:
+            kind = "notice"
+        return SimpleNamespace(kind=kind)
+    eyes = SimpleNamespace(name="hdmi", grab=grab, timing={"moved": 0.2})
+    monkeypatch.setattr(P.screen, "read", lambda f: f)
+    monkeypatch.setattr(P.session, "wait_for", lambda *a, **k: "shooting")
+    monkeypatch.setattr(runner, "close_screen", lambda cam, link: closed.append(clock.now) or
+                        state.__setitem__("kind", "shooting"))
+
+    class Cam:
+        pressed = []
+
+        def refresh(self, tag):
+            return self.read()
+
+        def read(self):
+            return SimpleNamespace(kind=state["kind"])
+
+        def press(self, key, **k):
+            self.pressed.append(key)
+            if clock.now - state["done"] >= 2.0:
+                state["kind"] = "menu"
+    run = Run("kit2_settle_lock", root=tmp_path)
+    cam = Cam()
+    rows = P.probe_lock(cam, SimpleNamespace(download=download), eyes, run, [1.6, 2.4], 2, clock=clock)
+    assert cam.pressed == ["menu"] * 4 and len(downloads) == 4
+    assert [r["opened"] for r in rows] == [False, False, True, True] and len(closed) == 2
+    assert rows[0]["seen"] == ["notice"] and rows[2]["seen"] == ["notice", "shooting"]
+    assert rows[2]["notice_gone_after_download"] == pytest.approx(1.9, abs=0.03)
+    text = P.table(rows, "lock", "hdmi", "lan")
+    assert "   1.6   2     0" in text and "   2.4   2     2" in text

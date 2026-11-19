@@ -85,6 +85,30 @@ def same(a: Frame | None, b: Frame | None, tol=0.0) -> bool:
     return changed_fraction(a.image, b.image) <= tol
 
 
+# ------------------------------------------------------------------ the settle's windows
+
+# Each settle window once, by key, at the values every run has used: a value changes here only once
+# kit/tools/settle_probe.py has measured it on the camera (the speed review of 2026-11-18, its items 8 and 11 and its
+# measurements 5.4 and 5.5; the owner's question of 2026-11-19 for OSD eyes). STEPS are a cursor's steps; Enter and
+# MENU, and any other tag a settle is given, take the eyes' own (HdmiSource.QUIET and NOTHING, OsdSource.QUIET and
+# LATE): over OSD an Enter's picture changed later than 0.5 s 302 times in 3,048 (99th centile 2.41 s) and MENU's first
+# change came later than 1 s 9 times in 2,180 (kit2_pass2, 2026-11-19), so theirs stay long whatever the steps' become.
+STEPS = ("up", "down", "left", "right")
+# HDMI eyes: how long a step's screen must stay still once it moved (item 8: 0.05 s proposed for Up and Down that stay
+# on one screen kind, which also needs a fresh look before Right, as Enter has: camkit.live.look_again), and how long a
+# step that shows nothing is watched before it counts as a press that did nothing (item 11: 0.6 s proposed)
+HDMI_QUIET = {k: 0.15 for k in STEPS}
+HDMI_NOTHING = {k: 1.0 for k in STEPS}
+# OSD eyes (the camera's own picture over the link): the same two, the quiet a floor (OsdSource's docstring)
+OSD_QUIET = {k: 0.75 for k in STEPS}
+OSD_LATE = {k: 6.0 for k in STEPS}
+
+
+def window(table: dict, key, default: float) -> float:
+    """The settle window `table` gives the press `key` (a settle's tag: "down", "enter"), else `default`."""
+    return table.get(key, default)
+
+
 # ------------------------------------------------------------------ sources
 
 class OsdSource:
@@ -172,10 +196,12 @@ class OsdSource:
         """Poll until the screen has not changed for `quiet` s; (frame, changed since `before`).
 
         When a change is expected but nothing has moved yet, keep waiting for up to `timeout`
-        (slow redraws); a no-op is declared only after a longer quiet window."""
+        (slow redraws); a no-op is declared only after a longer quiet window. Both by the press's key (`tag`:
+        OSD_QUIET, OSD_LATE; the class's QUIET and LATE for any other)."""
         start = time.monotonic()
-        quiet = max(quiet, self.QUIET)
-        timeout = max(timeout, quiet + self.LATE)
+        quiet = max(quiet, window(OSD_QUIET, tag, self.QUIET))
+        late = window(OSD_LATE, tag, self.LATE)
+        timeout = max(timeout, quiet + late)
         last, stable_since, moved = None, None, before is None
         while time.monotonic() - start < timeout:
             f = self.peek()
@@ -183,7 +209,7 @@ class OsdSource:
                 moved = True
             if last is not None and same(f, last, self.TOL):
                 stable_since = stable_since or last.t
-                need = quiet if moved else (self.LATE if expect_change else quiet)
+                need = quiet if moved else (late if expect_change else quiet)
                 if f.t - stable_since >= need:
                     break
             else:
@@ -394,6 +420,9 @@ class HdmiSource:
     # share of 8x8 blocks: ~5 blocks. Once self-changing blocks are masked the uncompressed feed has a
     # zero noise floor (2026-10-28), and one digit stepping in a number field moves ~6-12 blocks.
     TOL = 0.001
+    QUIET = 0.15         # s a moved screen stays still before it counts as settled (STEPS: HDMI_QUIET)
+    NOTHING = 1.0        # s a press that shows nothing is watched before it counts as one that did nothing (HDMI_NOTHING)
+    UNEXPECTED = 0.5     # the same, for a settle that expects no change
     HISTORY = 2.5        # s of thumbnails kept to learn which blocks change by themselves
     NOISY_WINDOW = 2.0   # before a press: blocks that blinked in this window are ignored by settle()
     REFUSE = re.compile(r"facetime|iphone|continuity|desk view|integrated|webcam", re.I)   # never a built-in camera
@@ -528,14 +557,19 @@ class HdmiSource:
         return f
 
     def settle(self, before: Frame | None, tag="f", expect_change: bool | None = None,
-               timeout=3.0, quiet=0.15, sent_at: float | None = None) -> tuple[Frame, bool]:
+               timeout=3.0, quiet=None, sent_at: float | None = None) -> tuple[Frame, bool]:
         """Wait for the screen to stop changing; (frame, changed since `before`).
 
         Same rule as OsdSource.settle: when a change is expected but nothing has moved yet, keep
         waiting (MENU takes ~0.4 s to start drawing; 2026-10-28 a 0.35 s window gave up too early).
         Blocks that were already changing before `start` (blinking readouts) are ignored, so a blink
         is neither taken for the press's effect nor allowed to keep the screen from settling.
-        self.timing holds when the screen first moved and when it went quiet, from `start`."""
+        self.timing holds when the screen first moved and when it went quiet, from `start`. The quiet window
+        (unless the caller gives one) and the wait for a press that shows nothing go by the press's key (`tag`:
+        HDMI_QUIET, HDMI_NOTHING; the class's QUIET and NOTHING for any other); a settle that expects no change waits
+        UNEXPECTED."""
+        quiet = window(HDMI_QUIET, tag, self.QUIET) if quiet is None else quiet
+        nothing = window(HDMI_NOTHING, tag, self.NOTHING) if expect_change else self.UNEXPECTED
         start = sent_at or time.monotonic()
         steady = ~self.noisy(start)
 
@@ -553,7 +587,7 @@ class HdmiSource:
                 moved, moved_at = True, f.t
             if last is not None and share(f.small, last.small) <= self.TOL:
                 stable_since = stable_since or last.t
-                need = quiet if moved else (1.0 if expect_change else 0.5)
+                need = quiet if moved else nothing
                 if f.t - stable_since >= need:
                     break
             else:
