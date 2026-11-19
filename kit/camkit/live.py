@@ -1162,6 +1162,7 @@ class LiveCamera:
         closes = getattr(self, "network_open", None) is not None and safety.canonical_input(key) in CLOSES
         self._fresh(key)                    # the screen the press is judged on is never one the camera has left
         self._recent(key)                   # nor one seen longer ago than STALE_S, nor measured from such a frame
+        held = None                         # the caller's frame, where the look before Right judges another
         if safety.canonical_input(key) in safety.ENTER_KEYS | safety.TRASH_KEYS:
             # an Enter or a trash button: the screen looked at again, and that frame the one every check below judges
             # (look_before); a screen changed since its caller read it is refused (safety.ScreenChanged)
@@ -1169,7 +1170,7 @@ class LiveCamera:
         elif safety.canonical_input(key) in RIGHTS:
             # a Right: likewise, one grab and no wait, so the lit bar and the never-open check read the screen on show,
             # never the frame the last settle ended on (look_before_right)
-            self.look_before_right(key)
+            held = self.look_before_right(key)
         # the never-open check judges the key as the guards read it (" right" and "Right" are Right), so a padded or
         # look-alike spelling never skips it; the link then refuses any spelling that is not the key's own name
         network, screens = getattr(self, "network", ()), getattr(self, "screens", False)
@@ -1187,6 +1188,14 @@ class LiveCamera:
                 lit = self.lit_by_reader(key, known)    # a bar OCR read nothing in: the reader names it, or no press
             why = open_refused(lit, self.may_open, network, screens, values, readings, getattr(self, "labels", None),
                                look, row)
+            if not why and held is not None:
+                # the look before Right judged another frame: the caller's bar is judged too, so a key word a long
+                # label scrolled off one reading never lets a never-open row open on the other alone (the review of
+                # 2026-11-19; safety.never_open matches the words it reads)
+                was = lit_text(held.image, held.path)
+                if was.strip():
+                    why = open_refused(was, self.may_open, network, screens, values, readings,
+                                       getattr(self, "labels", None), look, row)
             if why and owner and getattr(self, "network_open", None) is None:
                 # the row an owner decision opens for this run, of the very class it was lifted from: Right alone, once
                 owner_row = safety.owner_lifted_row(lit, owner, values)
@@ -1690,7 +1699,7 @@ class LiveCamera:
         if stale:
             self.refuse(key, f"{stale}; read the screen again and choose afresh", changed=True)
 
-    def look_before_right(self, key: str) -> None:
+    def look_before_right(self, key: str):
         """Before a Right (or the multi-selector's right) is judged: the screen looked at again as before an Enter
         (look_again), one grab at once on either eyes (OSD_LAG is Enter's wait, never Right's), so the lit bar and the
         never-open check read the screen on show, never the frame the last settle ended on: a menu caught mid-slide, or a
@@ -1707,7 +1716,9 @@ class LiveCamera:
         that cannot be grabbed, read or settled is a refusal; elsewhere a look that fails leaves the press as it was
         before this look, no bar being judged there. A picture that moves by itself: on a menu or submenu page only the
         lit row's long label scrolls, which the state leaves out (camkit.screen); elsewhere (a carousel over a live view,
-        a blinking mark) the kind is all that is compared, so the press goes as before, on the caller's frame."""
+        a blinking mark) the kind is all that is compared, so the press goes as before, on the caller's frame.
+        Returns the caller's frame where another frame is now the one judged on a menu or submenu page (its bar is judged
+        too: press), else None."""
         judged, held = self.screen, self.frame
         rows = getattr(judged, "kind", None) in ROW_SCREENS
         stale, fresh = look_again(getattr(self, "hdmi", None), judged, key, None)       # no move given: no OSD_LAG wait
@@ -1721,7 +1732,8 @@ class LiveCamera:
             if not stale and boxes_alike(fresh.image, held.image):
                 if not same_picture(fresh, held):
                     self.judge_fresh(fresh, key)
-                return
+                    return held
+                return None
             now = self.reading(fresh)
         except safety.Refused:
             raise
@@ -1743,6 +1755,7 @@ class LiveCamera:
             self.run.log("screen_changed_before_press", key=key, frame=f.path.name, screen=s.kind)
             self.refuse(key, "the screen looked at again before the press is not the one its caller read, nor once "
                              "settled: read the screen again and choose afresh", changed=True)
+        return held if rows else None
 
     def judge_fresh(self, f, key: str, changed: bool = False) -> None:
         """The frame look_again grabbed before a press made the one it is judged on: saved as evidence (black on a row

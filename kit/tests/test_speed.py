@@ -2861,8 +2861,35 @@ def test_a_fresh_frame_of_the_same_state_but_another_picture_is_the_one_the_bar_
     assert live.same_box(live.lit_box(scrolled), (x0, y0, x1, y1))
     cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, whole, [scrolled])
     cam.press("right")
-    assert sent == [("right", "menu", "rows")] and read_on[-1].endswith("_right-judged.png")
+    # the bar read on the frame judged, then (the never-open check judging both) on the caller's
+    assert sent == [("right", "menu", "rows")] and read_on[0].endswith("_right-judged.png")
+    assert read_on[1:] == ["00001_held.png"]
     assert cam.pressed_from.image is scrolled and cam.hdmi.settled == ["right"]
+
+
+def test_the_never_open_check_judges_the_bar_on_both_frames_where_the_look_before_right_took_another(tmp_path,
+                                                                                                     monkeypatch):
+    """Where the look before Right made another frame the one judged (the lit row's long label scrolled meanwhile), the
+    never-open check judges the bar read on both, the caller's and the fresh: a key word scrolled off the left of the
+    fresh reading ("rmat" for "Format") never lets the row open on that reading alone; a bar that reads harmless on both
+    opens as before. A look whose fresh frame is the caller's own picture reads the bar once."""
+    from camkit import live, safety
+    whole = probe_frame("shots/00006_right.png").image
+    (x0, y0, x1, y1) = live.lit_box(whole)
+    scrolled = whole.copy()
+    scrolled[y0 + 6:y1 - 6, 145:420] = np.roll(scrolled[y0 + 6:y1 - 6, 145:420], -40, axis=1)
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, whole, [scrolled])
+    monkeypatch.setattr(live, "lit_text", lambda image, path: read_on.append(Path(path).name) or (
+        "Format" if image is whole else "rmat"))
+    with pytest.raises(safety.RowRefused, match="never opened"):
+        cam.press("right")
+    assert sent == [] and "00001_held.png" in read_on
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, whole, [scrolled])
+    cam.press("right")                                  # "Drive Mode" on both: opens
+    assert sent == [("right", "menu", "rows")] and len(read_on) == 2
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, whole, [whole])
+    cam.press("right")
+    assert sent == [("right", "menu", "rows")] and read_on == ["00001_held.png"]
 
 
 def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_settled_frame(tmp_path, monkeypatch):
@@ -2879,7 +2906,9 @@ def test_a_right_whose_page_was_still_being_drawn_is_settled_and_judged_on_the_s
     cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [whole])
     assert not screen.same_state(cam.read(), screen.read(probe_frame("shots/00006_right.png")))
     cam.press("right")
-    assert sent == [("right", "menu", "rows")] and read_on[-1].endswith("_right-again.png") and "00001_held.png" in read_on
+    # the row compared on both (same_row), then the never-open check on the settled frame and on the caller's
+    assert sent == [("right", "menu", "rows")] and read_on[-2].endswith("_right-again.png")
+    assert read_on[-1] == "00001_held.png" and "00001_held.png" in read_on[:2]
     assert cam.hdmi.settled == ["right-again", "right"]
     assert [e["same"] for e in events_of(cam, "right_settled")] == [True]
     half, whole = (probe_frame(f"late/{n}").image for n in ("0007_left_0.30s_after.png", "0007_left_0.33s_after.png"))
@@ -2905,7 +2934,7 @@ def test_a_right_on_a_submenu_page_still_being_drawn_goes_on_the_row_the_caller_
     assert cam.read().kind == "submenu" and cam.read().row == 0
     assert not screen.same_state(cam.read(), screen.read(probe_frame("shots/00006_right.png", sub)))
     cam.press("right")
-    assert sent == [("right", "submenu", "rows")] and read_on[-1].endswith("_right-again.png")
+    assert sent == [("right", "submenu", "rows")] and read_on[-2].endswith("_right-again.png")
     assert [e["same"] for e in events_of(cam, "right_settled")] == [True]
     cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, late, [other])
     with pytest.raises(safety.ScreenChanged):
