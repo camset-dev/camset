@@ -616,14 +616,18 @@
     },
     "proved": {
      "type": "object",
-     "description": "Proved on the camera: each option chosen in its own menu and the settings file compared, as a lean definition says it: the values a proof checked (values) or, for a scale proved by samples, whether they lie on one line (sampled). Never the run, the day, the menu rows, where each name came from, nor how many samples: that is the mapping's evidence (docs/decisions/0016).",
+     "description": "Proved on the camera: each option chosen in its own menu and the settings file compared, as a lean definition says it: the values a proof checked (values), whether some of them were named from another setting's proof (shared) or, for a scale proved by samples, whether they lie on one line (sampled). Never the run, the day, the menu rows, where each name came from, which values were named from another setting, nor how many samples: that is the mapping's evidence (docs/decisions/0016, 0025).",
      "properties": {
       "values": {
        "type": "array",
        "items": {
         "type": "integer"
        },
-       "description": "The values a proof on the camera checked: those an option was chosen for, and those named from the camera's own word (read off its screen, a rule over proved values, a hand table checked against the camera, a sampled scale's values between its points); never a name kept from an old schema or counted out by a hand rule, nor, for a camera other than the ILCE-1M2 firmware 4.00 (the plain pass), a value a hand table names that no proof covers and no held not_offered mark holds (named, not proved). An editor offers these outside Expert mode."
+       "description": "The values a proof on the camera checked: those an option was chosen for, those read off its screen, a sampled scale's values between its points, a value a held not_offered mark holds, and those a rule named from another setting's proof (see shared); never a name kept from an old schema or counted out by a hand rule, nor a value a hand table names that no proof and no other setting's proof covers (named, not proved). An editor offers these outside Expert mode."
+      },
+      "shared": {
+       "type": "boolean",
+       "description": "True when some of the values listed were named from another setting's proof rather than chosen on this setting: another key, slot, hold or copy that offers the same list, proved on the camera. Which ones is never said, for the one value no proof chose can be the owner's own (docs/decisions/0016, 0025); absent otherwise."
       },
       "sampled": {
        "type": "object",
