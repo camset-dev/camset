@@ -36,11 +36,10 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import numpy as np  # noqa: E402
-
-from camkit import frames, screen, session  # noqa: E402
+from camkit import frames, screen, session  # noqa: E402  (camkit first: it says so when the venv is not the one used)
 from camkit.frames import eyes_from_config, keep  # noqa: E402
 from camkit.runs import Run  # noqa: E402
+import numpy as np  # noqa: E402
 
 LATE_KEPT = 0.3         # s after the press: a change later than this keeps the frames either side of it
 MENU_SEEN = 3.0         # s a MENU's menu page is watched for (the OSD picture lags the screen)
