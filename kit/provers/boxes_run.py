@@ -18,7 +18,8 @@ values in Down order), MENU. Then, as kit/prove_run.py does, per box: each value
 the one held last; every choice is the row, Right, Left/Right to the box, Up/Down until the value is
 read, OK, a settings download. Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl (kind "list", the box name
 last in the path); the start file goes back on at the end and is checked. Each proof line keeps the vision model's
-reading of the chosen value ("vlm") beside OCR's ("shown"), as the second reading. The value a box opened on is proved
+reading of the chosen value ("vlm") beside OCR's ("shown"), as the second reading: the lit box's value, asked as
+optboxes_run asks it (box_reading). The value a box opened on is proved
 only from another start: --first BOX=VALUE. A choice that also moved the other box (ISO AUTO keeps Minimum <= Maximum,
 and a Maximum chosen rewrites a factory Minimum) says so on its line ("moved_other"), and the other box is put back
 through the menu and checked before the next value; one that cannot be put back ends the box's proofs (prove).
@@ -38,6 +39,7 @@ refusal stopped exits EXIT_REFUSED and one anything else stopped EXIT_INCOMPLETE
 (kit/exit_status.py; kit/tools/chain.py stops there); a restore that does not check out, EXIT_UNRESTORED.
 """
 import argparse
+import functools
 import json
 import re
 import sys
@@ -45,16 +47,16 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, live, match, ocr, safety, screen  # noqa: E402
+from camkit import camset, live, match, ocr, safety, screen, vlm  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which installs the plain words: test_start)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
 from camkit.live import TwoBoxes  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from prove_run import Failed, enter_any, option_key, to_shooting, vlm_option  # noqa: E402
+from prove_run import Failed, enter_any, option_key, to_shooting  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
-from proving.screens import later, settled  # noqa: E402
+from proving.screens import ask_second, later, settled  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, add_scan_argument, changes_of, close_screen, load_scan,  # noqa: E402
                     menu_from_shooting, proofs_file, prover_session, scan_position)
 
@@ -135,14 +137,28 @@ def read_box(cam, b: int, vals=None, row: str = "") -> str:
     return by_both(cam, b, raw, row, k + 1)
 
 
+def box_reading(cam, b: int) -> str:
+    """The second reader's reading of the value in lit box b on the frame on show: the question kit/provers/
+    optboxes_run.py asks of the same widget (PROMPTS["box"]), with the box's place handed over (camkit.vlm.box_at: the
+    left or the right of the two), never the "option" question, which named the dialog's option ("ISO AUTO") for ISO
+    AUTO Minimum's "ISO500" (2026-11-19, on the camera). "" where the reader fails, says no box is orange, or answers
+    anything but one non-empty "value"."""
+    try:
+        v = ask_second(cam.frame.path.read_bytes(), vlm.box_at("left" if b == 0 else "right"), timeout=25)
+    except Exception:
+        return ""
+    value = v.get("value") if isinstance(v, dict) else None
+    return value.strip() if isinstance(value, str) and value.strip() else ""
+
+
 def by_both(cam, b: int, raw: str, row: str, frames: int) -> str:
     """A look's reading that keeps an arrow's sign at an end on every fresh frame (kit2_pass2 249674-249677: "^ISO500"
     each time, 2026-11-18): the signs left off (ARROW_SIGNS alone, never a letter), and the second reader asked in line
-    what the lit box shows on that frame (vlm_option, as each proof's second reading is); the cleaned value taken only
+    what the lit box shows on that frame (box_reading, as each proof's second reading is); the cleaned value taken only
     where the two agree as a proof's two readings are judged (camkit.match.same), both readings logged in the run's
     events ("box_read_by_both"). Two that disagree, or no answer: Failed, naming both, as before."""
     cleaned = raw.strip(ARROW_SIGNS)
-    second = vlm_option(cam) or ""
+    second = box_reading(cam, b) or ""
     agree = bool(cleaned and second and match.same(cleaned, second))
     log = getattr(getattr(cam, "run", None), "log", None)
     if log:
@@ -281,7 +297,7 @@ def step_ok(cam, cycle, model, path, b, vals, target, names) -> dict:
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
     if safety.confirmation(full):
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
-    chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)     # a second reader, kept with the proof
+    chosen, seen_vlm = cam.frame.path.name, later(functools.partial(box_reading, b=b), cam)     # kept with the proof
     cam.answer_once = screen_consent(path, names)        # the OK that leaves, judged on the screen's shape (TwoBoxes)
     cam.press("enter")
     return {"chosen_frame": chosen, "row_frame": cam.frame.path.name, "vlm": seen_vlm}

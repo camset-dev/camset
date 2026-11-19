@@ -253,6 +253,17 @@ def with_options(prompt: str, options) -> str:
     return prompt[:at] + hint + prompt[at:] if at >= 0 else prompt + " " + hint.strip()
 
 
+def box_at(side: str) -> str:
+    """PROMPTS["box"], the question about the lit box of a row of boxes (kit/provers/optboxes_run.py's), with the box's
+    place handed over where a screen holds two boxes side by side (kit/provers/boxes_run.py: `side` "left" or "right",
+    the box its look lit), said just before its "Reply with JSON" line as with_options hands options: the "option"
+    question named the dialog's option there ("ISO AUTO") instead of the box's value (2026-11-19)."""
+    prompt = PROMPTS["box"]
+    hint = f"On this screen that row is two boxes side by side, and the orange box is the {side} one. "
+    at = prompt.find("Reply with JSON")
+    return prompt[:at] + hint + prompt[at:] if at >= 0 else prompt + " " + hint.strip()
+
+
 def make_reader(cfg: dict, **override):
     """The reader a private/config.json "readers" entry describes: "kind": "anthropic" is Claude
     (camkit.claude_reader), anything else an OpenAI-compatible /v1 server (Reader). While LOCAL_ONLY is set (a --network

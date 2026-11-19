@@ -435,6 +435,36 @@ def test_a_maximum_that_rewrites_the_factory_minimum_ends_its_box_in_plain_words
     assert [(r["label"], r["moved_other"]["box"]) for r in out] == [("ISO100", "ISO AUTO Minimum")]
 
 
+def test_the_two_box_prover_asks_the_reader_for_the_lit_box_not_the_dialogs_option(monkeypatch, tmp_path):
+    """boxes_run asked the second reader the "option" question, whose answer named the dialog's option ("ISO AUTO")
+    for ISO AUTO Minimum's "^ISO500" (2026-11-19, on the camera), so the look that put the Minimum back stopped. It
+    asks the box question optboxes_run asks of the same widget (PROMPTS["box"]), with the lit box's place, in the look
+    and for each proof's second reading."""
+    import boxes_run
+    from camkit import ocr, vlm
+    from proving.screens import settled
+    asked = []
+
+    def ask_second(image, prompt, timeout):
+        asked.append(prompt)
+        return {"value": "ISO 500"} if prompt.startswith(vlm.PROMPTS["box"].split(" Reply")[0][:60]) \
+            else {"selected": "ISO AUTO", "title": "ISO"}
+    monkeypatch.setattr(boxes_run, "ask_second", ask_second)
+    frame = tmp_path / "00001_down.png"
+    frame.write_bytes(b"a frame")
+    cam = types.SimpleNamespace(frame=types.SimpleNamespace(path=frame), refresh=lambda tag: None)
+    cam.lines = [ocr.Line("^ISO500", 1.0, boxes_run.BOXES[0][0] + 80, boxes_run.BOXES[0][1] + 10, 60, 36)]
+    monkeypatch.setattr(boxes_run, "lines", lambda c: c.lines)
+    assert boxes_run.read_box(cam, 0, row="ISO") == "ISO500"          # the look's arrow settled by the box question
+    assert asked and all("orange box is the left one" in q and "Reply with JSON" in q for q in asked)
+    assert vlm.box_at("right").startswith(vlm.PROMPTS["box"].split("Reply with JSON")[0])
+    asked.clear()
+    reading = boxes_run.later(lambda c: boxes_run.box_reading(c, 1), cam)
+    assert settled(reading) == "ISO 500" and "the right one" in asked[0]
+    monkeypatch.setattr(boxes_run, "ask_second", lambda image, prompt, timeout: {"value": None})
+    assert boxes_run.box_reading(cam, 0) == ""                         # no box orange: no answer, no guess
+
+
 def test_prove_run_field_names_one_field_of_the_rows_named(monkeypatch):
     """prove_run --field K: only with --rows, only on a number-field row that has field K."""
     import prove_run

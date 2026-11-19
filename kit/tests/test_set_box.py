@@ -100,7 +100,7 @@ def boxcam(monkeypatch):
     monkeypatch.setattr(boxes_run, "go_to", lambda *a: True)
     monkeypatch.setattr(boxes_run, "enter_any", lambda cam, path, i: None)
     monkeypatch.setattr(boxes_run, "close_screen", lambda cam, link: cam.close())
-    monkeypatch.setattr(boxes_run, "vlm_option", lambda cam: None)
+    monkeypatch.setattr(boxes_run, "box_reading", lambda cam, b=None: None)
     return BoxCam
 
 

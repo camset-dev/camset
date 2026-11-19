@@ -125,7 +125,7 @@ def test_the_row_screens_consent_passes_the_hs_4k_screen_and_choose_hands_it_bef
     handed = []
     cam.press = lambda key, **k: handed.append((key, getattr(cam, "answer_once", None)))
     monkeypatch.setattr(boxes_run, "focus", lambda c: 0)
-    monkeypatch.setattr(boxes_run, "vlm_option", lambda c: "24p")
+    monkeypatch.setattr(boxes_run, "box_reading", lambda c, b=None: "24p")
     monkeypatch.setattr(boxes_run, "to_shooting", lambda *a: None)
     monkeypatch.setattr(boxes_run.time, "sleep", lambda s: None)
     link = SimpleNamespace(download=lambda tag: SimpleNamespace(name=f"{tag}.DAT"))
@@ -302,7 +302,7 @@ def test_an_arrow_every_fresh_frame_keeps_is_left_off_where_the_second_reader_ag
     asked = []
 
     def reader(answer):
-        monkeypatch.setattr(boxes_run, "vlm_option", lambda c: asked.append(c.frame.path.name) or answer)
+        monkeypatch.setattr(boxes_run, "box_reading", lambda c, b=None: asked.append(c.frame.path.name) or answer)
     glued = {("ISO500", k): "^ISO500" for k in range(9)}
     reader("ISO 500")
     cam = WalkCam(ISO_VALS, glued=glued)
@@ -342,7 +342,7 @@ def test_the_saved_frames_of_iso500_read_with_its_arrow_give_iso500_with_the_rea
     cam.refresh = refresh
     cam.run = SimpleNamespace(log=lambda kind, **f: cam.logged.append((kind, f)))
     monkeypatch.setattr(boxes_run, "BOXES", boxes_run.LAYOUTS["iso"])
-    monkeypatch.setattr(boxes_run, "vlm_option", lambda c: "ISO 500")
+    monkeypatch.setattr(boxes_run, "box_reading", lambda c, b=None: "ISO 500")
     assert boxes_run.value(cam, 0) == "^ISO500"
     assert boxes_run.read_box(cam, 0, row="ISO") == "ISO500" and cam.frame is frames[-1]
     assert cam.logged[-1][1]["frame"] == "249677_reread.png"
@@ -354,6 +354,6 @@ def test_the_proving_pass_takes_the_value_with_the_arrow_left_off(seen, monkeypa
     is kept beside OCR's as before."""
     cam = WalkCam(ISO_VALS, at=3, glued={("ISO200", 0): "^ISO200", ("ISO250", 0): "^ISO250"})
     monkeypatch.setattr(boxes_run, "focus", lambda c: 0)
-    monkeypatch.setattr(boxes_run, "vlm_option", lambda c: "ISO 250")
+    monkeypatch.setattr(boxes_run, "box_reading", lambda c, b=None: "ISO 250")
     got = boxes_run.step_ok(cam, None, None, ["ISO"], 0, ISO_VALS, 4, ["ISO AUTO Minimum", "ISO AUTO Maximum"])
     assert cam.presses == ["down", "enter"] and boxes_run.settled(got["vlm"]) == "ISO 250"
