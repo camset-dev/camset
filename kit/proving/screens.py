@@ -231,8 +231,8 @@ class Later:
     so that the line is written. The speed review of 2026-11-18: the evidence question cost 0.8-1.1 s a proof with the
     reader free, 5-8 s with it slow, all of it waited."""
 
-    def __init__(self, read, cam):
-        self._future = _EVIDENCE.submit(read, SimpleNamespace(frame=cam.frame))
+    def __init__(self, read, cam, pool=None):
+        self._future = (pool or _EVIDENCE).submit(read, SimpleNamespace(frame=cam.frame))
 
     def result(self):
         try:
@@ -241,9 +241,26 @@ class Later:
             return ""
 
 
-def later(read, cam) -> Later:
-    """read(cam) (a prover's vlm_option) asked in the background about the frame on show now (Later)."""
-    return Later(read, cam)
+def later(read, cam, pool=None) -> Later:
+    """read(cam) (a prover's vlm_option) asked in the background about the frame on show now (Later), on `pool` (a
+    lap's, lap_workers) or the one evidence worker."""
+    return Later(read, cam, pool)
+
+
+# A lap that asks the reader about every entry it passes, where the answer only names the entry (kit/provers/
+# mymenu_run.py's picker lap), keeps up to this many questions out at once, on workers of its own: no more than the
+# second reader's server takes ("parallel" in its private/config.json entry; the a1 II's vLLM server takes 8)
+LAP_WORKERS = 4
+
+
+def lap_workers() -> int:
+    """How many questions a lap keeps out at once: the "parallel" of the reader playing the second role (a stand-in's
+    where one plays it), at most LAP_WORKERS; 1 where it cannot be told."""
+    try:
+        from camkit import vlm
+        return max(1, min(int(vlm.playing("second").get("parallel") or 1), LAP_WORKERS))
+    except Exception:       # noqa: BLE001 (no reader, a config that cannot be read: one at a time)
+        return 1
 
 
 def settled(v):

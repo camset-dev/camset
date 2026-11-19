@@ -1888,3 +1888,82 @@ def test_the_waits_between_sessions_and_fills_are_the_lock_rule_or_gone():
         assert "time.sleep(4)" not in text and "time.sleep(5)" not in text, name
         assert "wait_lock(ended, hdmi, clock=time)" in text, name
     assert "time.sleep(10)" not in (KIT / "provers" / "mymenu_run.py").read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------- K: a lap's readings on workers
+
+
+class Picker:
+    """A made-up Add Item picker that comes round: settle_items' state for the lit item (its OCR text, "" where OCR
+    reads nothing in it), Down to the next; each step its own frame, whose item `on` names."""
+    def __init__(self, lits):
+        self.lits, self.at, self.n, self.pressed, self.on = list(lits), 0, 1, [], {}
+        self._frame()
+
+    def _frame(self):
+        self.frame = SimpleNamespace(path=Path(f"{self.n:05d}_lap.png"))
+        self.on[self.frame.path.name] = self.at
+
+    def press(self, key, **kw):
+        self.pressed.append(key)
+        self.at, self.n = (self.at + 1) % len(self.lits), self.n + 1
+        self._frame()
+
+    def state(self):
+        return {"kind": "items", "page": self.at // 3 + 1, "pages": 2, "lit": self.lits[self.at], "text": ""}
+
+
+def test_mymenus_lap_asks_the_reader_on_workers_and_names_each_item_once_every_answer_is_in(monkeypatch):
+    """mymenu_run.lap: the reader's reading of an item OCR has read only names it, so it goes out on a worker while the
+    lap steps on (here every such answer waits until the lap has pressed its last Down, which a question asked in line
+    could never see) and every answer is joined, in the lap's order, before any item is named: each item's "vlm" is the
+    answer about its own frame and its name the one item_name gives from it. An item OCR read nothing in is keyed by
+    the reader's words, so that question is asked in line. The presses are the lap's as before."""
+    import threading
+
+    import mymenu_run as M
+    from proving import screens
+    lits = ["Shoot Mode", "", "ISO", "Drive Mode", "Grid Line Display"]
+    rows = {M.squash(x): x for x in ("Shoot Mode", "Focus Mode", "ISO", "Drive Mode", "Grid Line Display")}
+    cam = Picker(lits)
+    words = {0: "Shoot Mode", 1: "Focus Mode", 2: "ISO", 3: "AF/MF", 4: "Grid Line Display"}
+    last_down, asked = threading.Event(), []
+
+    def vlm_option(c):
+        i = cam.on[c.frame.path.name]
+        asked.append((threading.current_thread().name.startswith("lap"), i))
+        if lits[i]:
+            last_down.wait(5)
+        return words[i] if (not lits[i] or last_down.is_set()) else "asked in line"
+    monkeypatch.setattr(M, "settle_items", lambda c, why: c.state())
+    monkeypatch.setattr(M, "vlm_option", vlm_option)
+    monkeypatch.setattr(M, "lap_workers", lambda: 3)
+    real_press = cam.press
+    cam.press = lambda key, **k: real_press(key) or (len(cam.pressed) == len(lits) and last_down.set())
+    items = M.lap(cam, rows, lambda m: None)
+    assert cam.pressed == ["down"] * len(lits)
+    assert [it["vlm"] for it in items] == [words[i] for i in range(len(lits))]
+    assert [it["lit"] for it in items] == ["Shoot Mode", "Focus Mode", "ISO", "Drive Mode", "Grid Line Display"]
+    assert [it["label"] for it in items] == [M.item_name(it["lit"], it["vlm"], rows)[0] for it in items]
+    assert [it["frame"] for it in items] == [f"{n:05d}_lap.png" for n in range(1, len(lits) + 1)]
+    assert sorted(asked) == [(False, 1)] + [(True, i) for i in (0, 2, 3, 4)]
+    assert screens.lap_workers() >= 1
+
+
+def test_a_cached_lap_is_taken_only_in_the_mode_and_scan_it_was_made_with(tmp_path):
+    """mymenu_run's cached lap (mymenu_items.json) keeps the mode and the page scan it was made with: taken in that
+    mode with that scan; a lap of another mode or scan, or one kept before it said either, is made again, said in one
+    line, never taken (a Movie lap taken in Stills failed a whole lap later, 2026-11-19)."""
+    import mymenu_run as M
+    from runner import write_json
+    kept, said = tmp_path / "mymenu_items.json", []
+    items = [{"page": 1, "lit": "ISO", "label": "ISO"}]
+    write_json(kept, M.lap_kept(items, "Movie", "kit2_page_scan_movie_1108"), indent=1)
+    assert M.kept_lap(kept, "Movie", "kit2_page_scan_movie_1108", said.append) == items and not said
+    assert M.kept_lap(kept, "Stills", "kit2_page_scan_movie_1108", said.append) is None
+    assert M.kept_lap(kept, "Movie", "kit2_page_scan_1118p", said.append) is None
+    write_json(kept, items, indent=1)                   # kept before it said its mode and scan
+    assert M.kept_lap(kept, "Stills", "kit2_page_scan_1118p", said.append) is None
+    assert M.kept_lap(tmp_path / "none.json", "Stills", "x", said.append) is None
+    assert len(said) == 3 and all(s.count("\n") == 0 and "lapped again" in s for s in said)
+    assert "made in Movie mode with kit2_page_scan_movie_1108" in said[0] and "this run's Stills" in said[0]

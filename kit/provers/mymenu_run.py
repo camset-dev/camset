@@ -22,7 +22,8 @@ that rule from the readings they kept, touching no camera. Six pages take 42 ite
 the start file (the camera restarts on an upload), a new session opens, and the walk goes on where it was.
 
 First a lap of the picker (Down until the first item comes round) lists the items in order, so a stopped run resumes
-by (page, label). Only Add Item is ever opened: never Sort, Delete Item, Delete Page or Delete All. Proofs go to
+by (page, label); it is kept in the run's mymenu_items.json with the shooting mode and the page scan it was made with,
+and taken again only in that mode with that scan (kept_lap). Only Add Item is ever opened: never Sort, Delete Item, Delete Page or Delete All. Proofs go to
 runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["My Menu Setting", "Add Item"]; kit/pass2_report.py
 credits each slot's new code with its label, and kit/schema_update.py names a code proved in one slot in all 42.
 """
@@ -31,6 +32,7 @@ import json
 import re
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -43,8 +45,9 @@ from camkit.runs import Run  # noqa: E402
 from crawl_run import find_position, go_to  # noqa: E402
 from prove_run import LOCK_S, Failed, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
+from proving.screens import lap_workers, later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_in_argument, allowed_or_exit,  # noqa: E402
-                    in_mode, load_scan, menu_from_shooting, proofs_file, prover_session, read_json, scan_arg,
+                    in_mode, load_scan, menu_from_shooting, proofs_file, prover_session, read_json, scan_arg, scan_dir,
                     write_json, write_text)
 
 ROW = "Add Item"
@@ -182,25 +185,68 @@ def to_add_item(cam, cycle, model):
 
 
 def lap(cam, rows: dict, say) -> list:
-    """Down through the whole picker until the first item comes round: [{page, lit, label, label_from, vlm}] in
-    order, each named by item_name against the camera's row names and twins numbered (twin_names)."""
-    items, first = [], None
-    for _ in range(LAP_MAX):
-        st = settle_items(cam, "lap")
-        seen = vlm_option(cam)
-        if not st["lit"]:
-            st["lit"] = seen                       # OCR read nothing in the cursor: the reader's words key the item
-        key = item_key(st)
-        if first is None:
-            first = key
-        elif key == first and items:
-            return twin_names(items)
-        name, src = item_name(st["lit"], seen, rows)       # the OCR text is kept beside it as "shown"
+    """Down through the whole picker until the first item comes round: [{page, lit, label, label_from, vlm, frame}] in
+    order, each named by item_name against the camera's row names and twins numbered (twin_names). The reader's
+    reading of an item OCR has read only names it: it goes out on a worker while the lap steps on (proving.screens.
+    later, as many at once as the second reader takes: lap_workers), and every answer is joined, in the lap's order,
+    before any item is named. An item OCR read nothing in is keyed by the reader's words, so that question is asked in
+    line (the owner's rule of 2026-11-06: the reader is asked where it decides). A lap of about 400 items asked one
+    question at a time, about 2 s each: 10 minutes (2026-11-19)."""
+    seen_at, first = [], None
+    pool = ThreadPoolExecutor(max_workers=lap_workers(), thread_name_prefix="lap")
+    try:
+        for _ in range(LAP_MAX):
+            st = settle_items(cam, "lap")
+            seen = None
+            if not st["lit"]:
+                seen = vlm_option(cam)
+                st["lit"] = seen                   # OCR read nothing in the cursor: the reader's words key the item
+            key = item_key(st)
+            if first is None:
+                first = key
+            elif key == first and seen_at:
+                break
+            if seen is None:
+                seen = later(vlm_option, cam, pool)          # it only names the item: asked while the lap goes on
+            seen_at.append((st, seen, cam.frame.path.name))
+            say(f"  lap {len(seen_at):3d}: page {st['page']}/{st['pages']}  {st['lit']!r}")
+            cam.press("down")
+        else:
+            raise Failed(f"the picker did not come round in {LAP_MAX} presses")
+    except BaseException:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+    items = []
+    for n, (st, seen, frame) in enumerate(seen_at, 1):
+        seen = settled(seen)                                 # joined, in the lap's order, before the name
+        name, src = item_name(st["lit"], seen, rows)         # the OCR text is kept beside it as "shown"
         items.append({"page": st["page"], "lit": st["lit"], "label": name, "label_from": src, "vlm": seen,
-                      "frame": cam.frame.path.name})
-        say(f"  lap {len(items):3d}: page {st['page']}/{st['pages']}  {st['lit']!r}  vision {seen!r}  -> {name!r} ({src})")
-        cam.press("down")
-    raise Failed(f"the picker did not come round in {LAP_MAX} presses")
+                      "frame": frame})
+        say(f"  lap {n:3d}: {st['lit']!r}  vision {seen!r}  -> {name!r} ({src})")
+    pool.shutdown()
+    return twin_names(items)
+
+
+def lap_kept(items: list, mode: str, scan: str) -> dict:
+    """A lap as mymenu_items.json keeps it: its items with the shooting mode and the page scan it was made with."""
+    return {"mode": mode, "scan": scan, "items": items}
+
+
+def kept_lap(path: Path, mode: str, scan: str, say) -> list | None:
+    """The items of the lap kept at `path` (lap_kept) where it was made in this run's shooting mode with this run's
+    page scan; else None, said in one line (none kept: nothing said): a lap made in another mode or with another scan,
+    or kept before it said either, is made again, never taken (a lap made in Movie was taken in Stills, and the run
+    failed only after a whole lap, 5.5 minutes, with "item ... not found in a lap of the picker", 2026-11-19)."""
+    if not path.exists():
+        return None
+    doc = read_json(path)
+    if isinstance(doc, dict) and doc.get("mode") == mode and doc.get("scan") == scan and isinstance(doc.get("items"),
+                                                                                                    list):
+        return doc["items"]
+    made = (f"made in {doc.get('mode')} mode with {doc.get('scan')}" if isinstance(doc, dict)
+            else "kept before a lap said its mode and scan")
+    say(f"{path.name} was {made}, not this run's {mode} mode with {scan}: the picker is lapped again")
+    return None
 
 
 def relabel(proofs: Path, rows: dict, say) -> int:
@@ -367,10 +413,12 @@ def main():
         relabel(run.dir / "proofs.jsonl", rows, say)
         cached = run.dir / "mymenu_items.json"
         if cached.exists():
-            items = read_json(cached)
+            doc = read_json(cached)
+            items = doc["items"] if isinstance(doc, dict) else doc
             for it in items:
                 it["label"], it["label_from"] = item_name(it["lit"], it.get("vlm") or "", rows)
-            write_json(cached, twin_names(items), indent=1)
+            write_json(cached, {**doc, "items": twin_names(items)} if isinstance(doc, dict) else twin_names(items),
+                       indent=1)
         return
     cycle, model = load_scan(in_mode(a.scan, a.in_mode))
     records = doc["camera"]["my_menu"]["records"]
@@ -398,13 +446,14 @@ def main():
                     menu_from_shooting(cam)
                     to_add_item(cam, cycle, model)
                     if items is None:
-                        cached = run.dir / "mymenu_items.json"
-                        if cached.exists() and not a.lap_only:
-                            items = read_json(cached)
+                        # the lap kept is this mode's and this scan's (kept_lap)
+                        cached, scan_name = run.dir / "mymenu_items.json", scan_dir(in_mode(a.scan, a.in_mode)).name
+                        items = None if a.lap_only else kept_lap(cached, a.in_mode, scan_name, say)
+                        if items is not None:
                             say(f"{len(items)} items from {cached.name}; {len(proved)} proved before")
                         else:
                             items = lap(cam, rows, say)
-                            write_json(cached, items, indent=1)
+                            write_json(cached, lap_kept(items, a.in_mode, scan_name), indent=1)
                             say(f"{len(items)} items in the picker; {len(proved)} proved before")
                         if a.lap_only:
                             lap_only = True
