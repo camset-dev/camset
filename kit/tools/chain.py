@@ -28,7 +28,11 @@ calls to shell word splitting. Here:
   steps;
 - the `--end` file (or the chain's `end`) is uploaded last whatever happened, so the camera is left
   as its owner had it, but after a step that exited with status 5 (above). The owner's file is given on the command
-  line, not kept in the chain file.
+  line, not kept in the chain file;
+- the chain's own exit status says how it ended: 0 when every step ran and the end file went back (a STOP_CHAIN
+  between steps too); 1 when a step failed; 5 (EXIT_RESTORE_BY_HAND) after a step that exited 5; 4 (EXIT_UNRESTORED)
+  when the end file did not go back, or, with no end file, when the chain stopped on a step after which the camera
+  may not be on its start file (status 4, or an `upload` step that did not check out).
 
 The chain runs on one camera, the one the kit works on when it starts (camkit.paths; --camera names another), and
 every step is told which (CAMSET_CAMERA). A relative path in a chain file (upload, log, stop, end) is in that
@@ -134,8 +138,14 @@ def run_step(step: dict, env: dict, chain_log) -> int:
             out.close()
         raise
     try:
-        while p.poll() is None:
-            time.sleep(2)
+        while True:
+            # returns as soon as the step ends; the 2 s bound only how late its limit is seen, and let a Ctrl-C reach
+            # this loop on Windows, where a wait without one cannot be interrupted
+            try:
+                p.wait(timeout=2)
+                break
+            except subprocess.TimeoutExpired:
+                pass
             if limit and not asked and time.monotonic() - t0 > limit:
                 asked = True
                 if stop:
@@ -162,7 +172,8 @@ def run_step(step: dict, env: dict, chain_log) -> int:
     return p.returncode
 
 
-def main():
+def main() -> int:
+    """Runs the chain; returns its exit status (the module docstring's last point)."""
     ap = argparse.ArgumentParser()
     ap.add_argument("chain")
     ap.add_argument("--end", type=paths.run_arg,
@@ -193,14 +204,15 @@ def main():
                   + (f"\n    {extra}" if extra else ""))
         print(f"camera: {RUN_ROOT.name} ({paths.shown(RUN_ROOT)}/)")
         print(f"end: {end or '(none: the camera keeps the state of the last step)'}")
-        return
+        return 0
     if stop_chain.exists():
         sys.exit(f"{rel(stop_chain)} exists: remove it to run the chain")
     if end and not Path(end).is_file():          # found missing now, not after hours of steps
         sys.exit(f"the end file {end} is not there: the camera could not be left as its owner had it")
     say(f"chain {chain.get('name', Path(a.chain).stem)}: {len(steps)} steps"
         + (f", ending on {Path(end).name}" if end else ", no end file"))
-    failed = []
+    failed, status = [], 0
+    unrestored = False          # the chain stopped where the camera may not be on the step's start file
     try:
         for i, s in enumerate(steps, 1):
             if stop_chain.exists():
@@ -211,13 +223,16 @@ def main():
             rc = run_step(s, step_env, sys.stdout)
             if rc:
                 failed.append(i)
+                status = 1
                 say(f"   step {i} exited {rc}")
                 if "upload" in s:
                     say("   the start file did not load: stopping the chain (its next steps need that state)")
+                    unrestored = True
                     break
                 if rc == EXIT_UNRESTORED:
                     say("   the camera may not be back on its start file (the step's restore did not check out, or its "
                         "last download was refused): stopping the chain before another step changes it")
+                    unrestored = True
                     break
                 if rc == EXIT_RESTORE_BY_HAND:
                     # the step's last press, which an owner decision allowed with "link_loss", may have dropped the
@@ -229,7 +244,7 @@ def main():
                         "Enter or OK. Put the step's start file back by hand once the camera is reachable, with "
                         "kit/tools/upload_check.py and the file RESTORE_BY_HAND.json names, then upload the end file "
                         "the same way")
-                    end = None
+                    end, status = None, EXIT_RESTORE_BY_HAND
                     break
                 if rc == EXIT_REFUSED:
                     # a refusal stopped the step's work part way (kit/crawl_run.py), its start file back and checked: what
@@ -248,9 +263,15 @@ def main():
     finally:
         if end:
             say(f"== the end file: {Path(end).name}")
-            run_step({"upload": end}, env, sys.stdout)
+            if run_step({"upload": end}, env, sys.stdout):
+                say(f"   the end file did not go back on the camera (the lines above say why): put it back with "
+                    f"kit/tools/upload_check.py {end} before anything else runs on the camera")
+                status = EXIT_UNRESTORED
+        elif unrestored:
+            status = EXIT_UNRESTORED          # no end file put the camera back
         say(f"done{'; steps that failed: ' + str(failed) if failed else ''}")
+    return status
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

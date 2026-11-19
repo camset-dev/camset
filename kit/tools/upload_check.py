@@ -24,6 +24,11 @@ Needs no HDMI. An upload ends the session (the camera restarts); camkit.session.
 reconnects and counts the records that differ. Some never take from a file (0x18cb's fourth slot,
 0x1126, the memory slots' registration records, Remote Shooting while it is the session in use):
 they are listed by name so a person can tell them from a failed restore.
+
+An upload exits 0 once its restore checks out (no record differs but those no settings file sets back, KNOWN_LEFT and
+NOT_BY_FILE; with a restore by hand pending, once RESTORE_BY_HAND.json is removed), and 4 (EXIT_UNRESTORED,
+kit/exit_status.py) when it does not: other records still differ, or the camera did not answer after its restart. A
+chain's upload step stops there (kit/tools/chain.py).
 """
 import argparse
 import functools
@@ -38,6 +43,7 @@ from camkit import camset, definitions, paths, provenance  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.runs import RESTORE_BY_HAND, Run, clear_restore_by_hand, restore_pending_any  # noqa: E402
 from camkit.session import verify_restore  # noqa: E402
+from exit_status import EXIT_UNRESTORED  # noqa: E402
 
 IN_USE = ("live", "stills", "movie")       # picture_profile_in_use's records: the profile in use, stills', movie's
 
@@ -154,7 +160,8 @@ def pending_file(pending: dict, f: Path, root: Path) -> bool:
         return False
 
 
-def main():
+def main() -> int | None:
+    """Returns the exit status of an upload (the module docstring's last paragraph); None (0) for --diff and --adopt."""
     ap = argparse.ArgumentParser()
     ap.add_argument("file", nargs="?", help="settings file to upload, or download tag when used with --diff")
     ap.add_argument("--diff", metavar="REF.DAT", default=None, type=paths.run_arg,
@@ -224,8 +231,10 @@ def main():
                  f"start file back first ({pending.get('start')}), then this one (docs/decisions/0015); nothing was sent")
     restoring = {"pending_restore": True} if pending is not None else {}
     # the records a file never sets back (KNOWN_LEFT), said by key and left out of the count, while a restore by hand
-    # is pending: an Initialize or a registration leaves them as it wrote them, whatever the start file holds
-    left = known_left(f) if pending is not None else frozenset()
+    # is pending: an Initialize or a registration leaves them as it wrote them, whatever the start file holds. Without
+    # one they are counted and listed as before, and never make the restore one that did not check out
+    known = known_left(f)
+    left = known if pending is not None else frozenset()
     with Link(run, **restoring) as link:
         print(link.upload(f), flush=True)
     n = verify_restore(run, f, **({"link_class": functools.partial(Link, **restoring)} if restoring else {}),
@@ -262,8 +271,24 @@ def main():
                       "them on the camera, accepts them, they name them back with --accept "
                       f"{','.join(sorted({k.split(':')[-1] for k in differ}))} (the owner's step, never an agent's)",
                       flush=True)
-    elif a.accept is not None:
+        return EXIT_UNRESTORED if why else 0
+    if a.accept is not None:
         print("--accept is for a restore by hand pending, and none is: it changed nothing", flush=True)
+    if n is None:
+        print("the restore could not be checked: the camera did not answer after its restart. Check that it is on and "
+              "connected, then run this again", flush=True)
+        return EXIT_UNRESTORED
+    if n and not differ:
+        print("the restore did not check out: records differ, and they could not be listed. Run this again", flush=True)
+        return EXIT_UNRESTORED
+    if set(differ) - known:
+        print("the restore did not check out: the records listed above still differ from the file. Look at those "
+              "settings on the camera, then run this again", flush=True)
+        return EXIT_UNRESTORED
+    if n:
+        print(f"only records no settings file sets back differ ({', '.join(sorted(set(differ)))}): the restore checked "
+              "out", flush=True)
+    return 0
 
 
 def accept_refused(given: str, differ) -> str:
@@ -290,4 +315,4 @@ def accept_refused(given: str, differ) -> str:
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
