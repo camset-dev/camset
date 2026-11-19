@@ -52,7 +52,10 @@ Screen types:
   guide     In-Camera Guide text: the item name in orange at the top left, a description, ● OK in the
             footer (OK only closes it)
   dialog    item dialog: light divider at x 112, icon carousel at x 20-105 (the selected option is
-            always the centre slot, empty slots above/below mean the start/end of the list)
+            always the centre slot, empty slots above/below mean the start/end of the list). An option may draw
+            fields of its own under its title (Bracket Type's Cont. Bracket: Exposure Value, Number of Shots); Right
+            lights the first, a box filled orange, and the option's icon turns white: field is then the lit box's
+            index among boxes on that line (bar, its rows), None while the option itself is lit (_dialog_field)
   list      radio-button list popup: framed panel (1-px lines at x 64/577, y 9/470) over the dimmed
             menu, up to 6 rows; the orange bar is the cursor, the radio with an orange centre is the
             value currently saved; a scrollbar (x 564) on long lists gives the window position
@@ -126,6 +129,10 @@ GLYPHS = {
     "strip_right": (597, 340, 623, 375),
 }
 SUB_BOX = (125, 176, 185, 250)         # › box: Right opens a sub-panel
+# where a carousel option's own fields are looked for: right of the divider and under the title line (x, y from). Lit,
+# the box is filled orange 211 x 56 at y 351 (Cont. Bracket's, kit2_fin_brtype_cont 00006), 248 or 58 wide (Focus
+# Bracket's Step Width and its digits, kit2_fin_brtype_f_look2 00008-00009), the other boxes outlined in grey beside it
+DIALOG_FIELDS = (115, 110)
 BATTERY = (556, 0, 640, 40)            # shooting screen: battery icon (template = its left end, no digits)
 # held vertically the camera turns the shooting screen on HDMI too (2026-10-30): grip down puts the
 # battery at the top left, read bottom to top; grip up at the bottom right (each template cut from
@@ -214,10 +221,10 @@ class Screen:
     row: int | None = None                          # menu: row slot of the bar on its page; buttons: the lit box
     group: int | None = None                        # menu: visible slot of the current group
     focus: str | None = None                        # menu: "rows" | "groups"
-    field: int | None = None                        # fields/look: index of the active field or cell
+    field: int | None = None                        # fields/look/dialog: index of the active field or cell
     pitch: int | None = None                        # menu/submenu: row height (53, or 61 on some submenus)
     rows: list = dataclasses.field(default_factory=list)   # menu/submenu: (top, bottom) of each row; buttons: of each box
-    boxes: list = dataclasses.field(default_factory=list)  # fields: (x0, x1) of each field
+    boxes: list = dataclasses.field(default_factory=list)  # fields, a dialog's lit field: (x0, x1) of each field
     marker: int | None = None                       # look: y of the value marker; slider: its x
     ticks: int | None = None                        # look: the scale's tick marks counted (_look_ticks)
     count: int | None = None                        # list: options visible
@@ -1226,6 +1233,7 @@ def _dialog(a, s: Screen):
             s.slots.append("icon")
         else:
             s.slots.append("empty")
+    _dialog_field(a, s)
     centre = DIALOG_SLOTS[CENTRE]
     _sig(s, b"dialog",
                         # at twice the old resolution: neighbouring Picture Profile options (PP3/PP4) were
@@ -1235,6 +1243,70 @@ def _dialog(a, s: Screen):
                         # the body under the title: a second axis changes a value here (Pixel Shift)
                         _binarize_small(lit, (120, 110, 636, 400), (64, 30), 150),
                         np.array([s.glyphs[k] for k in sorted(s.glyphs)]))
+
+
+def _dialog_field(a, s: Screen):
+    """A carousel option's lit field (DIALOG_FIELDS): field, the lit box's index among the boxes on its line (boxes,
+    each's x0, x1; bar, the lit box's rows), as a number form's (_fields), the line looked at right of the divider only.
+    Left as they are (None, []) while no box is lit: the option itself is lit, or it draws no fields. The signature is
+    not touched: the body's picture under the title already holds the lit box."""
+    x0, y0 = DIALOG_FIELDS
+    o = _orange(a).copy()
+    o[:y0] = False
+    o[:, :x0] = False
+    box = _active_field(o)
+    if box is None:
+        return
+    x, y, w, h = box
+    g = _grey(a)
+    s.boxes = _split_sides(g, _line_boxes(g, box, x0), box)
+    s.field = s.boxes.index((x, x + w - 1))
+    s.bar = (y, y + h - 1)
+
+
+def _split_sides(g, boxes, box) -> list:
+    """`boxes` with each unlit run cut where boxes drawn side by side share a side: Focus Bracket's three digit boxes
+    share 3 px wide sides, and their top lines' rounded corners join into one run (kit2_fin_brtype_f_look2 00008: x
+    393-562, sides at 448-450 and 505-507). A side is a column of the run, 8 px or more inside it, lit (grey over 60)
+    down 90% or more of the box's height but 6 px at each end; a digit's stroke reaches 55-70%. Each piece ends at the
+    side's middle column, where the next begins. The lit box (`box`, x y w h) is left as it is."""
+    x, y, w, h = box
+    out = []
+    for a, b in boxes:
+        if a == x:
+            out.append((a, b))
+            continue
+        col = (g[y + 6:y + h - 6, a:b + 1] > 60).mean(axis=0)
+        sides, run = [], []
+        for c in range(a + 8, b - 7):
+            if col[c - a] >= 0.9:
+                run.append(c)
+            elif run:
+                sides.append(run[len(run) // 2])
+                run = []
+        if run:
+            sides.append(run[len(run) // 2])
+        edges = [a, *sides, b]
+        out += list(zip(edges, edges[1:], strict=False))
+    return sorted(out)
+
+
+def _line_boxes(g, box, x_from: int = 0) -> list:
+    """The boxes on the active box's line, left to right, each (x0, x1): the active one, and every grey border run
+    longer than 30 px on its top line from x_from on. The border runs on the box's top line over HDMI and one row lower
+    on OSD frames, so rows y-1..y+2 are combined."""
+    x, y, w, _ = box
+    line = ((g[y - 1:y + 3] > 60) & (g[y - 1:y + 3] < 200)).any(axis=0)
+    boxes, start = [(x, x + w - 1)], None
+    for xx in range(x_from, 641):
+        on = xx < 640 and line[xx] and not (x - 3 <= xx <= x + w + 3)
+        if on and start is None:
+            start = xx
+        elif not on and start is not None:
+            if xx - start > 30:
+                boxes.append((start, xx - 1))
+            start = None
+    return sorted(boxes)
 
 
 def _list(a, s: Screen):
@@ -1263,19 +1335,7 @@ def _list(a, s: Screen):
 def _fields(a, s: Screen):
     g = _grey(a)
     x, y, w, h = _active_field(_orange(a))
-    # the other fields: grey border runs on the active box's top line, which is on the same row over
-    # HDMI and one row lower on OSD frames, so rows y-1..y+2 are combined
-    line = ((g[y - 1:y + 3] > 60) & (g[y - 1:y + 3] < 200)).any(axis=0)
-    boxes, start = [(x, x + w - 1)], None
-    for xx in range(641):
-        on = xx < 640 and line[xx] and not (x - 3 <= xx <= x + w + 3)
-        if on and start is None:
-            start = xx
-        elif not on and start is not None:
-            if xx - start > 30:
-                boxes.append((start, xx - 1))
-            start = None
-    boxes.sort()
+    boxes = _line_boxes(g, (x, y, w, h))             # the other fields: grey border runs on the active box's line
     s.count, s.field = len(boxes), boxes.index((x, x + w - 1))
     s.bar = (y, y + h - 1)
     s.boxes = boxes                                  # each field's (x0, x1), left to right
