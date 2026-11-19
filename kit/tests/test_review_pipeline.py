@@ -557,6 +557,67 @@ def test_target_of_takes_the_row_named_exactly_and_never_one_of_two_it_only_read
     assert crawl_run.target_of(cycle, model, "Shutter Type") == (0, False, "")
 
 
+def arrive(monkeypatch, labels, label, bar, said=""):
+    """crawl_run.go_to on page_world(*labels) to `label`, the travel made up: the lit bar reads `bar` on arrival and
+    the reader, if asked, `said`. Returns (go_to's position, whether the reader was asked)."""
+    import crawl_run
+    cycle, model = page_world(*labels)
+    asked = []
+    monkeypatch.setattr(crawl_run, "travel", lambda cam, cycle, model, j, target, label: target)
+    monkeypatch.setattr(crawl_run, "lit_text", lambda image, path: bar)
+    monkeypatch.setattr(crawl_run, "reader_label", lambda path: asked.append(path) or (said, ""))
+    cam = types.SimpleNamespace(frame=types.SimpleNamespace(image=None, path=Path("00061_down.png")))
+    return crawl_run.go_to(cam, cycle, model, 0, label), bool(asked)
+
+
+def test_a_loose_row_is_reached_where_its_bar_reads_it_behind_an_icon_of_a_letter_or_two(monkeypatch):
+    """The arrival check added for B5 refused the a1 II's Memory/Recall Media, whose bar OCR reads "MR Memory/Recall
+    Media Slot 1" and the reader "MR Memory/Recall Media" (an icon read as letters; 2026-11-19, on the camera). The
+    label behind an icon read as a stray mark or a letter or two (camkit.match.ICON) is now the label, as read or as
+    the reader says it; a bar that names another row is still refused."""
+    import crawl_run
+    rows = ("Shutter Type", "MR Memory/Recall Media")
+    assert arrive(monkeypatch, rows, "Memory/Recall Media", "MR Memory/Recall Media Slot 1") == (1, False)
+    assert arrive(monkeypatch, rows, "Memory/Recall Media", "garbled", said="MR Memory/Recall Media") == (1, True)
+    assert arrive(monkeypatch, rows, "Memory/Recall Media", "MR Shutter Type", said="Shutter Type") == (None, True)
+    assert arrive(monkeypatch, ("S after still img crt",), "after still img crt",
+                  "S 5 after still img crt Maintain") == (0, False)
+    entry = {"readings": ["MR Memory/Recall Media"]}
+    known = {"Memory/Recall Media", "MR Memory/Recall Media", "Memory", "Tv Auto/Manual Switch", "Auto/Manual Switch"}
+    assert crawl_run.bar_reads_row("MR Memory/Recall Media Slot 1", "Memory/Recall Media", entry, known)
+    assert not crawl_run.bar_reads_row("Memory/Recall Media Slot 1", "Memory/Recall Media", entry, known)   # no icon
+    assert not crawl_run.bar_reads_row("MR Memory/Recall Media Slot 1", "Memory", {"readings": []}, known)  # a longer
+    assert not crawl_run.bar_reads_row("Tv Auto/Manual Switch", "Auto/Manual Switch", {"readings": []}, known)
+
+
+def test_the_three_loose_rows_of_the_a1_ii_scans_read_on_their_own_frames(monkeypatch):
+    """On the a1 II's page scans (kit2_page_scan_1118p, kit2_page_scan_movie_1118): the three rows target_of finds only
+    loosely are each reached by their own frame's bar as OCR reads it, and no other menu position's bar reads as them
+    (skipped without the a1 II's runs or an OCR engine)."""
+    import crawl_run
+    from camkit import ocr, paths
+    from camkit.frames import load
+    from camkit.live import lit_text
+    from runner import label_readings, load_scan, row_readings
+    root = paths.a1ii_root()
+    if not (root / "kit2_page_scan_1118p").is_dir() or not (root / "kit2_page_scan_movie_1118").is_dir():
+        pytest.skip(f"{root} does not hold the a1 II's page scans")
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    for scan, label in (("kit2_page_scan_1118p", "Camera Set. Memory"), ("kit2_page_scan_1118p", "Memory/Recall Media"),
+                        ("kit2_page_scan_movie_1118", "after still img crt")):
+        cycle, model = load_scan(root / scan)
+        j, loose, _ = crawl_run.target_of(cycle, model, label)
+        row = model[cycle[j]["page"]]["rows"][cycle[j]["row"]]
+        entry = {"readings": [row.get("label") or "", *row_readings(row)]}
+        known = label_readings(model)
+        bars = {i: lit_text(load(root / scan / "shots" / p["frame"]).image, root / scan / "shots" / p["frame"])
+                for i, p in enumerate(cycle) if p["kind"] == "menu"}
+        assert loose and crawl_run.bar_reads_row(bars[j], label, entry, known), (scan, label, bars[j])
+        assert not [i for i, b in bars.items() if (cycle[i]["page"], cycle[i]["row"]) != (cycle[j]["page"], cycle[j]["row"])
+                    and b and crawl_run.bar_reads_row(b, label, entry, known)], (scan, label)
+
+
 # ------------------------------------------------------------------------------------------------ B9
 
 def test_an_answer_another_model_gave_is_kept_and_voted_under_that_model(monkeypatch, tmp_path):

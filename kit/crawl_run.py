@@ -89,7 +89,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ocr, safety, screen  # noqa: E402
+from camkit import match, ocr, safety, screen  # noqa: E402
 from camkit import coverage, first_open  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
 from camkit.crawl import LAP_TABS, crawl, lap_rows  # noqa: E402
@@ -256,9 +256,11 @@ def go_to(cam, cycle, model, j, label, place=None):
         entry = {"group": page_group(model[cycle[j]["page"]]), "readings": [row.get("label") or "", *row_readings(row)]}
         frame = cam.frame
         lit = lit_text(frame.image, frame.path)
-        if not safety.bar_on_row(lit, label, {label: [entry]}, label_readings(model)):
+        known = label_readings(model)
+        if not safety.bar_on_row(lit, label, {label: [entry]}, known) and not bar_reads_row(lit, label, entry, known):
             answer, why_not = reader_label(frame.path)
-            taken = bool(safety.plain(label)) and safety.plain(answer) == safety.plain(label)
+            taken = bool(safety.plain(label)) and (safety.plain(answer) == safety.plain(label)
+                                                   or bar_reads_row(answer, label, entry, known))
             if getattr(cam, "run", None) is not None:
                 withheld = said(cam, answer) == TEXT_WITHHELD and answer
                 cam.run.log("bar_by_reader", frame=Path(frame.path).name, row=label,
@@ -269,6 +271,27 @@ def go_to(cam, cycle, model, j, label, place=None):
                 return None
             print(f"the lit bar read by the reader as {said(cam, answer)}", flush=True)
     return j
+
+
+def bar_reads_row(text, label: str, entry: dict, labels) -> bool:
+    """Whether `text`, a lit bar as OCR read it or the reader's label of it, is on the row `label` once the icon read in
+    front of it as a stray mark or a letter or two is left out, by the kit's rule for such an icon (camkit.match.ICON,
+    which function_name leaves out too): "MR Memory/Recall Media Slot 1" and the reader's "MR Memory/Recall Media" are
+    Memory/Recall Media, "S 5 after still img crt Maintain" is after still img crt (the a1 II's page scans, 2026-11-19).
+    What is left must start with the label, its value maybe after (safety.bar_on_row); and neither the text as read nor
+    what is left may start with another row the kit knows (`labels`, runner.label_readings; `entry`'s readings of the
+    row itself aside), what is left not with a longer one: a bar that names another row stays refused."""
+    text = str(text or "").strip()
+    cut = match.ICON.sub("", text).strip()
+    if not cut or cut == text or not safety.bar_on_row(cut, label):
+        return False
+    own = {safety.plain(t) for t in [label, *(entry.get("readings") or [])]}
+    want = len(safety.plain(label))
+    for other in labels or ():
+        p = safety.plain(other)
+        if p and p not in own and (safety.bar_on_row(text, other) or (len(p) > want and safety.bar_on_row(cut, other))):
+            return False
+    return True
 
 
 def travel(cam, cycle, model, j, target, label, walk_closed: bool = True):
