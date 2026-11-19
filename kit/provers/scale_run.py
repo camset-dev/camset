@@ -70,7 +70,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, definitions, match, ocr, safety  # noqa: E402
+from camkit import camset, definitions, live, match, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.vlm import PROMPTS  # noqa: E402
@@ -96,6 +96,9 @@ NUMBER = re.compile(r"[+-]?\d{1,3}(?:\.\d+|%)?")    # a scale's number, cleaned:
 PANEL_SETUP = (400, 70, 640, 130)     # the setup row's option, at its right
 PANEL_NEEDS = "Manual"                # the option under which the panel shows its slider
 PANEL_VALUE = (250, 140, 390, 200)    # the slider's number in a panel, centred near y 168
+# the slider's frame, lit: orange lines across it at y 138 and 265 (Monitor Brightness over HDMI, kit2_pass2 252551) or
+# a frame down to 269 (Viewfinder Bright. over the OSD picture, 239651); the panel's OK is judged on it (panel_consent)
+PANEL_SLIDER = (88, 136, 553, 272)
 
 _said: dict = {}            # {frame path: the reader's whole answer}: one question a frame, however often it is read
 _by_reader: set = set()     # the frames whose number the reader gave, OCR having read none
@@ -436,6 +439,8 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     if safety.confirmation(full):
         raise Failed(f"{path[-1]}: the screen reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, by, seen_vlm = cam.frame.path.name, read_by(cam), reader_said(asked(cam))[0]   # the reader's, kept
+    if panel:               # a panel reads as no known kind: its OK goes by its own consent, judged on its shape
+        cam.answer_once = panel_consent(path)
     cam.press("enter")
     row_frame = cam.frame.path.name
     # what the camera did with it (proving.commit.after_ok): a refusal or a notice closed with MENU, never OK; the scale
@@ -446,6 +451,14 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     dat = link.download(f"{path[-1]}-{target}")
     time.sleep(LOCK_S)
     return {"chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "vlm": seen_vlm, "read_by": by, "outcome": got}
+
+
+def panel_consent(path) -> live.PanelSlider:
+    """The consent for the one OK that keeps a panel's slider on the number it shows (camkit.live.PanelSlider: the camera
+    reads the panel as no known kind, whose Enter its shape check refuses, 2026-11-19), named for the panel's row and
+    where its slider and its setup row stand; judged by the camera on the panel's shape."""
+    return live.PanelSlider(f"{path[-1]}'s own slider: OK keeps the number it shows (scale_run)", path[-1], PANEL_SLIDER,
+                            PANEL_SETUP)
 
 
 def labels_of(vals: list) -> list:

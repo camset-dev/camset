@@ -387,6 +387,25 @@ class OptionBoxes:
     places: tuple = ()  # every place of the row (optboxes_run.PLACES): where given, `at` must be the one lit of them
 
 
+@dataclass(frozen=True)
+class PanelSlider:
+    """A prover's consent for one Enter on a panel's slider, the OK that keeps the number Left and Right stepped it to:
+    the a1 II's Monitor Brightness and Viewfinder Bright. (a setup row, Brightness Setup, its option at the right; under
+    it the slider, lit by an orange frame; a test chart below) read as no known kind, whose Enter the shape check refuses
+    (kit2_pass2 252551, 2026-11-19; the proofs of 2026-11-10 pressed it unguarded, before 2026-11-14). Given through
+    answer_once by kit/provers/scale_run.py alone, for a --panel-row, once it has read the slider on the number it
+    proves; judged here (confirm_refused: panel_passed) by the panel's own shape (panel_slider_refused): its title the
+    row's, the slider lit (an orange line across it at its top and at its bottom: drawn only with the setup row on the
+    option that shows it) and the setup row not, no question mark above the footer, no line where the panel draws
+    none, the footer drawing its Help button, its MENU key and its OK key and nothing else, OCR reading no word in it but
+    MENU and OK; then the confirmation words on what stands above the footer, which every consent keeps. It answers no
+    other kind of screen, nor the trash button, and is spent by its press."""
+    name: str           # the consent's words, logged with the press
+    row: str            # the panel's row ("Monitor Brightness"): its title must start with that name
+    slider: tuple       # where the slider's frame is drawn (x0, y0, x1, y1), as the prover measured it (scale_run)
+    setup_at: tuple     # where the setup row's option stands (x0, y0, x1, y1): the row is that band, the whole width
+
+
 # the option's title line (its lit option under the row's name, "Custom 1") and the band where the camera writes the lit
 # box's name above the row of boxes (kit2_look_zebra_a 00013-00015, kit2_zebra_split: "Type", "Standard", "Range")
 OPTION_TITLE = (110, 60, 400, 106)
@@ -584,6 +603,79 @@ def two_boxes_refused(consent: TwoBoxes, lines, image) -> str:
         return "its footer lacks its Help button (trash and ?)"
     stray = screen.footer_ink_outside(image, [keys["ok_key"], keys["help_only"]])
     return f"its footer draws more than its Help button and OK (ink at {stray})" if stray else ""
+
+
+PANEL_TITLE = (0, 0, 640, 60)
+PANEL_EDGE = 8          # px: rows at the slider's top and bottom edge where its lit frame's orange line is looked for
+PANEL_KEYS = ("menu", "ok")             # the only words OCR may read in a panel's footer (its MENU key, its OK)
+
+
+def menu_back_key(image) -> tuple | None:
+    """Where the footer draws its MENU key with the back arrow (glyphs/menu_back.png, cut from the a1 II's panel footer,
+    kit2_pass2 252551), found by its template as camkit.screen.footer_keys finds its keys: (x0, y0, x1, y1), or None
+    where its best match scores 0.9 or less (the panels' 0.97 to 1.0; MENU Close or MENU Cancel score under 0.7)."""
+    import cv2
+    g = np.asarray(image, np.float32)
+    if g.ndim == 3:
+        g = g[..., :3] @ np.array([0.299, 0.587, 0.114], np.float32)
+    t = screen._template("menu_back")
+    _, best, _, (x, y) = cv2.minMaxLoc(cv2.matchTemplate(g[FOOTER_TOP:480, :], t, cv2.TM_CCOEFF_NORMED))
+    return (x, FOOTER_TOP + y, x + t.shape[1], FOOTER_TOP + y + t.shape[0]) if best > 0.9 else None
+
+
+def slider_lit(image, at, setup_row) -> bool:
+    """Whether a panel's slider is lit on `image`: an orange line runs across the slider's whole width (`at`) in the rows
+    at its top edge and in those at its bottom edge (PANEL_EDGE: Monitor Brightness's lines over HDMI at y 138 and 265,
+    Viewfinder Bright.'s frame over the OSD picture down to 269), and the setup row (`setup_row`) is not lit (an orange
+    bar over it: under a fifth of it orange, its option's orange letters aside). By pixels alone."""
+    o = screen._orange(image)
+    x0, y0, x1, y1 = at
+
+    def line(rows) -> bool:
+        return bool(rows.size) and bool((rows.mean(axis=1) >= 0.9).any())
+    r0, r1 = setup_row[1], setup_row[3]
+    return line(o[y0:y0 + PANEL_EDGE, x0:x1]) and line(o[y1 - PANEL_EDGE:y1, x0:x1]) and float(o[r0:r1].mean()) < 0.2
+
+
+def panel_slider_refused(consent: PanelSlider, lines, image) -> str:
+    """Why a screen whose OCR lines are `lines` and whose picture is `image` is not `consent.row`'s panel with its slider
+    lit, shaped as it is (PanelSlider), or "" when it is: its title starts with the row's name ("Viewfinder Bright"
+    for Viewfinder Bright.); its slider lit and its setup row not (slider_lit, by pixels: the slider is drawn only on the
+    setup option that shows it, so its words are not read, which OCR spells "Manua" on some frames); no question mark
+    above the footer; every line above the footer stands on the title, the setup row, the slider or the test chart
+    under it, a lone glyph anywhere. Its footer: OCR reads no word in it but MENU and OK (a glyph glued before one read
+    as a letter: "iMENU", "cOK" over the OSD picture), and as drawn it holds the Help button, the MENU key
+    (menu_back_key) and the OK key (camkit.screen.footer_keys) and no ink besides them (footer_ink_outside). The OK
+    judged as drawn, never by OCR finding it. Fail closed: a screen read or drawn otherwise stops the run before its
+    OK."""
+    def text_at(box):
+        return ocr.text_in(lines, box).strip()
+    title = text_at(PANEL_TITLE)
+    if not _compact(consent.row) or not _compact(title).startswith(_compact(consent.row)):
+        return f"its title ({title[:60]!r}) is not {consent.row}'s"
+    setup_row = (0, consent.setup_at[1], 640, consent.setup_at[3])
+    if image is None or not slider_lit(image, consent.slider, setup_row):
+        return "its slider is not lit (no orange line across its top and its bottom, or its setup row lit)"
+    if safety.question_mark(text_at((0, 0, 640, FOOTER_TOP))):
+        return "it holds a question mark above its footer"
+    x0, _, x1, y1 = consent.slider
+    places = [PANEL_TITLE, setup_row, consent.slider, (x0, y1, x1, FOOTER_TOP)]
+    for ln in lines:
+        if ln.y + ln.h / 2 < FOOTER_TOP and not any(ln.inside(p) for p in places) \
+                and len(re.findall(r"[^\W\d_]", ln.text)) > 1:
+            return f"a line ({ln.text.strip()[:40]!r}) stands where its panel draws none"
+    words = re.findall(r"[a-z]{2,}", safety.fold(text_at((0, FOOTER_TOP, 640, 480))).lower())
+    others = [w for w in words if not any(w == k or (len(w) == len(k) + 1 and w.endswith(k)) for k in PANEL_KEYS)]
+    if others:
+        return f"its footer reads {others[0]!r}, not its MENU and OK alone"
+    keys = screen.footer_keys(image)
+    if "ok_key" not in keys:
+        return "its footer offers no OK (no OK key drawn in it)"
+    menu = menu_back_key(image)
+    if "help_only" not in keys or menu is None:
+        return "its footer lacks its Help button (trash and ?) or its MENU key"
+    stray = screen.footer_ink_outside(image, [keys["ok_key"], keys["help_only"], menu])
+    return f"its footer draws more than its Help button, MENU and OK (ink at {stray})" if stray else ""
 
 
 # the size editor's title, top left above the box (kit2_freesize's 00394_c4.png); its footer's words, a key's word cut
@@ -1321,7 +1413,9 @@ class LiveCamera:
           (the editor's Reset) judged so, the link then handed decision 7's size editor kind (reset_passed); a TwoBoxes,
           that one Enter (the OK that leaves a row's two-box screen) judged on that screen's own shape and the words
           above its footer (boxes_passed); an OptionBoxes, that one Enter (the OK that keeps a list option's lit box)
-          judged on its title, the lit box's word and value and the drawn OK key (option_passed);
+          judged on its title, the lit box's word and value and the drawn OK key (option_passed); a PanelSlider, that
+          one Enter (the OK that keeps a panel's slider) judged on the panel's own shape and the words above its footer
+          (panel_passed);
         - on a notice, `notice_ok` (the run's --info-ok, which proving.screens.pass_named_notice judged), or
           `menu_refused`: the camera refused MENU on this very screen with nothing sent since (leave_notice); either goes
           only where the notice's lit button reads OK, is plainly its only one (lone_of: safety.lone_ok) and its text
@@ -1353,11 +1447,12 @@ class LiveCamera:
         passed, lone = "", None
         if safety.first_time_screen(kind, text):
             kind = "notice"         # a first-time screen (no notice's frame lines, a "Don't show this again." box)
-        if isinstance(answer, UprightDialog | BoxEditor | TwoBoxes | OptionBoxes):
-            consent, answer = answer, None      # a portrait dialog's, a size editor's, a two-box screen's or an
-            if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:      # option's boxes' consent
-                passed_by = {UprightDialog: self.upright_passed, BoxEditor: self.editor_passed,   # answers it alone
-                             TwoBoxes: self.boxes_passed, OptionBoxes: self.option_passed}[type(consent)]
+        if isinstance(answer, UprightDialog | BoxEditor | TwoBoxes | OptionBoxes | PanelSlider):
+            consent, answer = answer, None      # a portrait dialog's, a size editor's, a two-box screen's, an option's
+            if kind == "unknown" and canon in safety.ENTER_KEYS and not require_notice:  # boxes' or a panel's slider's
+                passed_by = {UprightDialog: self.upright_passed, BoxEditor: self.editor_passed,   # consent answers it
+                             TwoBoxes: self.boxes_passed, OptionBoxes: self.option_passed,       # alone
+                             PanelSlider: self.panel_passed}[type(consent)]
                 return passed_by(key, consent, judged_at)
         if isinstance(answer, BoxReset):
             consent, answer = answer, None      # a size editor's Reset consent answers its C4 alone
@@ -1448,6 +1543,23 @@ class LiveCamera:
             self.refuse(key, f"{consent.name}: the screen cannot be read ({type(e).__name__}), so whether it asks cannot "
                              "be told")
         why = two_boxes_refused(consent, lines, self.frame.image)
+        said = "" if why else safety.confirmation_refused(ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)))
+        if why or said:
+            self.refuse(key, f"{consent.name}: {why or f'it reads as a confirmation ({said})'}: no Enter")
+        self.run.log("enter_passed", key=key, frame=self.frame.path.name, screen=self.screen.kind, by=consent.name)
+        return judged_at
+
+    def panel_passed(self, key: str, consent: PanelSlider, judged_at: int) -> int:
+        """An Enter on a screen of no known kind under a panel slider's consent (PanelSlider): the frame judged
+        (look_before's) read and judged by the panel's own shape (panel_slider_refused), then by the confirmation words
+        on what stands above its footer, which every consent keeps. Refused, logged, on any of them, or where the reading
+        fails; passed, logged with the consent's words. Returns judged_at."""
+        try:
+            lines = boxes_lines(self)
+        except Exception as e:
+            self.refuse(key, f"{consent.name}: the screen cannot be read ({type(e).__name__}), so whether it asks cannot "
+                             "be told")
+        why = panel_slider_refused(consent, lines, self.frame.image)
         said = "" if why else safety.confirmation_refused(ocr.text_in(lines, (0, 0, 640, FOOTER_TOP)))
         if why or said:
             self.refuse(key, f"{consent.name}: {why or f'it reads as a confirmation ({said})'}: no Enter")

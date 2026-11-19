@@ -827,3 +827,212 @@ def test_shoot_mode_tells_a_refusal_from_an_information_notice(monkeypatch, tmp_
         ("Stills: Program Auto", True, INFORMATION), ("Stills: Aperture Priority", False, REFUSAL),
         ("Stills: Intelligent Auto", True, closed), ("Stills", True, None)]
     assert lines[-1]["family_of"] == [1, 0] and cam.presses.count("menu") == 2
+
+
+# ------------------------------------------------------------------------------------------------ a panel's slider OK
+
+class Sent(Exception):
+    """The camera's link reached: the press went (what it carried)."""
+
+
+# Monitor Brightness with its slider lit, as OCR read kit2_pass2 252551 (2026-11-19): the title, the setup row and its
+# option, the slider's number, the footer's MENU key (its arrow read "D") and OK; the Help button's "?" read as nothing
+PANEL_ROWS = [("Monitor Brightness", 17, 9, 278, 44), ("Brightness Setup", 23, 79, 216, 47), ("Manual", 530, 83, 86, 30),
+              ("-2", 302, 153, 35, 30), ("MENU D", 461, 443, 65, 24), ("• OK", 563, 437, 63, 28)]
+# where that footer draws its keys: the Help button (trash and "?"), the MENU key with its arrow, and OK
+PANEL_FOOTER = {"help_only": (376, 437), "menu_back": (462, 437), "ok_key": (561, 436)}
+ORANGE = (170, 51, 0)
+
+
+def panel_picture(lit="slider", keys=tuple(PANEL_FOOTER), stray=None):
+    """A panel's picture as far as its consent looks: the slider lit (an orange line across its top and its bottom) or
+    the setup row lit (an orange bar), the footer's line, the key hints `keys` drawn from the kit's own glyphs where the
+    camera draws them, and `stray`, a block of ink besides (a second button)."""
+    import numpy as np
+    from PIL import Image
+
+    from camkit import screen
+    a = np.zeros((480, 640, 3), np.uint8)
+    a[:415] = 10                                    # as dark as the camera's screen, no black frame (live.black)
+    if lit == "slider":
+        a[138:140, 88:553] = ORANGE
+        a[265:267, 88:553] = ORANGE
+    elif lit == "setup":
+        a[75:123, 18:623] = ORANGE
+    a[425:428, :] = 90
+    for k in keys:
+        with Image.open(Path(screen.__file__).parent / "glyphs" / f"{k}.png") as im:
+            g = np.asarray(im.convert("L"))
+        x, y = PANEL_FOOTER[k]
+        a[y:y + g.shape[0], x:x + g.shape[1]] = g[..., None]
+    if stray:
+        x0, y0, x1, y1 = stray
+        a[y0:y1, x0:x1] = 230
+    return a
+
+
+def panel_camera(tmp_path, monkeypatch, rows=PANEL_ROWS, picture=None, kind="unknown", consent=True):
+    """A LiveCamera on a panel read as `kind` (no known kind, as the a1 II's is), its OCR lines `rows`, its picture
+    panel_picture's by default; its Enter carrying scale_run's consent for Monitor Brightness where `consent`. Its link
+    refuses MENU as the camera does and raises Sent for any other key."""
+    from camkit import live
+    from camkit.link import CameraRefused
+    from camkit.runs import Run
+
+    import scale_run as S
+    text = " ".join(r[0] for r in rows)
+    for name, value in (("text_of", text), ("body_of", " ".join(r[0] for r in rows if r[2] + r[4] / 2 < 415)),
+                        ("title_of", "")):
+        monkeypatch.setattr(live, name, lambda cam, v=value: v)
+    monkeypatch.setattr(live, "lit_text", lambda image, path: "")
+    monkeypatch.setattr(live, "lone_of", lambda image, path: "")
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))
+    monkeypatch.setattr(live, "boxes_lines", lambda c: [ocr.Line(t, 1.0, x, y, w, h) for t, x, y, w, h in rows])
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run("enter", root=tmp_path)
+    cam.screen = SimpleNamespace(kind=kind)
+    cam.frame = SimpleNamespace(image=panel_picture() if picture is None else picture, path=tmp_path / "00001_x.png")
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    cam.may_open = frozenset()
+
+    def press(key, *a, **k):
+        if key == "menu":
+            raise CameraRefused("press menu 60: button not accepted")
+        raise Sent(k)
+    cam.link = SimpleNamespace(press=press, moves=0, menus=0)
+    cam.answer_once = S.panel_consent(["Monitor Brightness"]) if consent else None
+    return cam
+
+
+def enter_passed(cam) -> list:
+    f = cam.run.dir / "events.jsonl"
+    return [e["by"] for e in map(json.loads, f.read_text(encoding="utf-8").splitlines()) if e["kind"] == "enter_passed"] \
+        if f.exists() else []
+
+
+def test_a_panels_ok_goes_by_its_consent_judged_on_the_panels_own_shape(tmp_path, monkeypatch):
+    """Monitor Brightness's panel reads as no known kind, so the camera's shape check refused its OK (the run of
+    2026-11-19 stopped there; the proofs of 2026-11-10 pressed it before that check, 2026-11-15). scale_run's consent
+    for that one OK (camkit.live.PanelSlider) lets it go judged on the panel's own shape: its title, its slider lit, its
+    footer's Help button, MENU key and OK drawn and nothing else; logged with the consent's words, spent by its press."""
+    from camkit import safety
+    cam = panel_camera(tmp_path, monkeypatch, consent=False)
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("enter")                                  # the guard as it stopped the run
+    cam = panel_camera(tmp_path, monkeypatch)
+    with pytest.raises(Sent):
+        cam.press("enter")
+    assert enter_passed(cam) == ["Monitor Brightness's own slider: OK keeps the number it shows (scale_run)"]
+    assert cam.answer_once is None
+    glued = [*PANEL_ROWS[:4], ("iMENU", 461, 443, 65, 24), ("cOK", 563, 437, 63, 28)]       # read over the OSD picture
+    for rows in (glued, PANEL_ROWS[:4], [*PANEL_ROWS[:2], ("Manua", 530, 83, 86, 30), *PANEL_ROWS[3:]]):
+        cam = panel_camera(tmp_path, monkeypatch, rows)
+        with pytest.raises(Sent):
+            cam.press("enter")
+
+
+def _rows_with(i, text):
+    return [*PANEL_ROWS[:i], (text, *PANEL_ROWS[i][1:]), *PANEL_ROWS[i + 1:]]
+
+
+@pytest.mark.parametrize("rows,picture,why", [
+    (PANEL_ROWS, panel_picture(lit="setup"), "its slider is not lit"),
+    (PANEL_ROWS, panel_picture(lit=None), "its slider is not lit"),
+    (PANEL_ROWS, panel_picture(keys=("help_only", "menu_back")), "offers no OK"),
+    (PANEL_ROWS, panel_picture(keys=("help_only", "ok_key")), "lacks its Help button .* or its MENU key"),
+    (PANEL_ROWS, panel_picture(keys=("menu_back", "ok_key")), "lacks its Help button"),
+    (PANEL_ROWS, panel_picture(stray=(20, 436, 140, 470)), "draws more than its Help button, MENU and OK"),
+    (_rows_with(0, "Viewfinder Bright."), None, "is not Monitor Brightness's"),
+    (_rows_with(0, "Setup > Finder/Monitor"), None, "is not Monitor Brightness's"),
+    (_rows_with(3, "Reset all settings?"), None, "question mark"),
+    (PANEL_ROWS + [("Format the memory card", 120, 330, 300, 30)], None, "reads as a confirmation"),
+    (PANEL_ROWS + [("Recording will begin", 10, 380, 70, 28)], None, "stands where its panel draws none"),
+    (_rows_with(4, "Reset"), None, "'reset'"),
+    (_rows_with(5, "Cancel • OK"), None, "'cancel'")])
+def test_a_panels_consent_refuses_any_screen_not_shaped_as_that_panel(tmp_path, monkeypatch, rows, picture, why):
+    """The setup row lit or nothing lit, no OK key drawn, no MENU key or Help button, ink besides them, another title, a
+    question mark or a confirmation's word above the footer, a line where the panel draws none, a footer word but MENU
+    and OK: no OK."""
+    from camkit import safety
+    cam = panel_camera(tmp_path, monkeypatch, rows, picture)
+    with pytest.raises(safety.Refused, match=why):
+        cam.press("enter")
+
+
+def test_a_panels_consent_answers_no_other_screen_nor_key(tmp_path, monkeypatch):
+    """On a notice the panel's consent lifts nothing (the notice's own judgement stands); the trash button on the panel
+    meets the shape check as ever; and only scale_run builds the consent."""
+    import re
+
+    from camkit import safety
+    cam = panel_camera(tmp_path, monkeypatch, [("Not available as follows: Shoot Mode", 50, 200, 500, 30),
+                                               ("• OK", 563, 437, 63, 28)], kind="notice")
+    with pytest.raises(safety.Refused, match="is a notice"):
+        cam.press("enter")
+    cam = panel_camera(tmp_path, monkeypatch)
+    with pytest.raises(safety.Refused, match="reads as 'unknown'"):
+        cam.press("c4", allow=frozenset({"c4"}))
+    for f in sorted(KIT.rglob("*.py")):
+        if "tests" not in f.parts and re.search(r"\bPanelSlider\(", f.read_text(encoding="utf-8")):
+            assert f.relative_to(KIT).as_posix() in ("camkit/live.py", "provers/scale_run.py"), f
+
+
+class PanelCam(ScaleCam):
+    """ScaleCam on a panel's slider: what its OK carried (answer_once) is kept, press by press."""
+
+    def __init__(self):
+        super().__init__()
+        self.answer_once, self.handed = None, []
+
+    def press(self, key, **kw):
+        if key == "enter":
+            self.handed.append(self.answer_once)
+            self.answer_once = None
+        super().press(key, **kw)
+
+
+def test_the_scale_prover_hands_a_panel_its_consent_with_the_ok_and_a_plain_scale_none(monkeypatch):
+    """scale_run.choose on a --panel-row gives the camera the panel's consent (PanelSlider, named for the row, the
+    slider's place and the setup row's) with its one OK, after the number is read; on a plain scale (read as a slider,
+    whose Enter the shape check takes) it gives none."""
+    from camkit import live
+
+    import scale_run as S
+    for panel, want in ((True, live.PanelSlider), (False, type(None))):
+        cam = PanelCam()
+        monkeypatch.setattr(ocr, "read", cam.ocr)
+        no_diffs(monkeypatch, S)
+        for name, value in (("open_row", lambda c, cycle, model, path, panel=False: c.open()),
+                            ("option_answer", lambda c: None), ("close_screen", lambda c, link: None),
+                            ("to_shooting", lambda link, hdmi, why: None), ("_said", {}), ("_by_reader", set()),
+                            ("time", SimpleNamespace(sleep=lambda s: None))):
+            monkeypatch.setattr(S, name, value)
+        S.choose(cam, downloads(), None, None, None, ["Monitor Brightness"], ["0", "1", "2", "3", "4"], 2, 3, panel)
+        assert [type(h) for h in cam.handed] == [want]
+        if panel:
+            assert (cam.handed[0].row, cam.handed[0].slider, cam.handed[0].setup_at) == (
+                "Monitor Brightness", S.PANEL_SLIDER, S.PANEL_SETUP)
+
+
+@pytest.mark.parametrize("name, row, passes", [
+    ("252551_fresh.png", "Monitor Brightness", True), ("239309_left.png", "Monitor Brightness", True),
+    ("239651_left.png", "Viewfinder Bright.", True), ("252547_right.png", "Monitor Brightness", False),
+    ("239652_enter.png", "Monitor Brightness", False), ("240079_down.png", "Monitor Brightness", False),
+    ("252551_fresh.png", "Viewfinder Bright.", False)],
+    ids=["refused-on-2026-11-19", "monitor-2026-11-10", "viewfinder-over-osd", "setup-row-lit", "menu-page",
+         "two-box-screen", "another-panel"])
+def test_the_panels_consent_on_the_cameras_saved_frames(name, row, passes):
+    """The a1 II's frames (kit2_pass2), read by this computer's OCR and judged as the camera judges the consent: the
+    frame the run of 2026-11-19 was refused on, Monitor Brightness proved on 2026-11-10 over HDMI and Viewfinder Bright.
+    over the OSD picture pass; the panel with its setup row lit, a menu page, the two-box screen and another panel's
+    title do not. Skipped without the frames or an OCR engine."""
+    from camkit import frames, live
+
+    import scale_run as S
+    if not (SHOTS / name).exists():
+        pytest.skip(f"{SHOTS / name} not present")
+    if ocr.engine() not in ocr.available():
+        pytest.skip(f"no {ocr.engine()} OCR on this computer")
+    f = frames.load(SHOTS / name)
+    why = live.panel_slider_refused(S.panel_consent([row]), ocr.read([f.path])[f.path], f.image)
+    assert (why == "") is passes, why
