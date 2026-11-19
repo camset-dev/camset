@@ -32,8 +32,8 @@ UPPERS = ("global:0x0b63", "global:0x0b67", "global:0x0b6b")
 # tried
 A1_PAIRS = {
     "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": True, "upper_moves_lower": True},
-    "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": True},
-    "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": True},
+    "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": True, "upper_moves_lower": True},
+    "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": True, "upper_moves_lower": True},
     "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": True},
 }
 # what both passes write on the a1 II's settings from them
@@ -41,9 +41,9 @@ A1_FIELDS = {
     "global:0x0b65": ("at_most", {"setting": "global:0x0b63", "moves_it": True}),
     "global:0x0b63": ("at_least", {"setting": "global:0x0b65", "moves_it": True}),
     "global:0x0dfa": ("at_most", {"setting": "global:0x0e00", "moves_it": True}),
-    "global:0x0e00": ("at_least", {"setting": "global:0x0dfa"}),
+    "global:0x0e00": ("at_least", {"setting": "global:0x0dfa", "moves_it": True}),
     "global:0x0dfc": ("at_most", {"setting": "global:0x0e02", "moves_it": True}),
-    "global:0x0e02": ("at_least", {"setting": "global:0x0dfc"}),
+    "global:0x0e02": ("at_least", {"setting": "global:0x0dfc", "moves_it": True}),
     "global:0x0dfe": ("at_most", {"setting": "global:0x0e04", "moves_it": True}),
     "global:0x0e04": ("at_least", {"setting": "global:0x0dfe"}),
 }
@@ -54,7 +54,8 @@ A1_FIELDS = {
 def test_the_a1_hand_tables_name_both_pairs_and_the_lower_end_by_its_name():
     """The a1 II's LIMIT_PAIRS: ISO Range Limit (both directions proved, 2026-11-18), ISO AUTO's Minimum and Maximum
     and each mode's copies of the two (a Minimum chosen above the Maximum raised it, in Movie mode the movie copies
-    and in Stills mode the stills copies; a Maximum chosen below the Minimum was never tried, so no upper_moves_lower).
+    and in Stills mode the stills copies; a Maximum chosen below the Minimum pulled it down in Stills mode, 2026-11-19,
+    so the live and stills pairs have upper_moves_lower, the movie pair, never tried in Movie mode, none).
     The lower ISO Range Limit's three records are named "ISO Range Limit (lower)", together, so they stay one row
     beside "ISO Range Limit (upper)". Each pair lists the same values in the committed definition and is kept in the
     same sets; the file fits its JSON Schema."""

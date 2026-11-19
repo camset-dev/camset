@@ -55,6 +55,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **The a1 II's ISO AUTO Maximum set below the Minimum pulls the Minimum down,** as the camera did in Stills mode:
+  the editor no longer calls that untried for the setting and its stills copy, and still does for the movie copy.
 - **The a1 II's ISO Range Limit is proved value by value, its lower end named "ISO Range Limit (lower)",** and its two
   ends and ISO AUTO's Minimum and Maximum (with each mode's copies) carry the order the camera keeps between them.
 - **Two limits the camera keeps in order stay in order:** setting one past the other (the a1 II's ISO Range Limit,

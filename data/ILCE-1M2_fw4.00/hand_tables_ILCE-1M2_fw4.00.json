@@ -38,7 +38,18 @@
       "name": "Different Set for Still/Mv: Picture Profile",
       "note": "One checkbox of this menu row. Ticked, the Picture Profile in use is kept apart for stills and movies: a Picture Profile choice writes the one in use (0x0053) and only the copy of the mode it is made in, the stills copy (0x0e12) in Stills mode, the movie copy (0x0e14) in Movie mode. Not ticked, a choice in either mode writes the one in use and both copies. On the camera, ticking the box writes nothing but the box, and unticking it sets Picture Profile to Off in the one in use and in both copies, whatever they held. Not proved yet: what the box does to the profiles' parameters; an untick in S&Q or Time-lapse, or in Stills mode with the two copies apart and neither Off; and what the camera does on loading a file whose box was changed."
     },
-    "global:0x0dfc": {"name": "ISO Auto Range Limit Min (stills)"},
+    "global:0x0dfa": {
+      "name": "ISO Auto Range Limit Min",
+      "note": "ISO AUTO's Minimum. Setting the Maximum below it pulls it down to the Maximum's value: seen in Stills mode, where with Different Set for Still/Mv's ISO box (0x0184) not ticked its stills and movie copies went down with it; whether it comes back up when the Maximum is raised again was not tried. Setting it above the Maximum raises the Maximum to its value."
+    },
+    "global:0x0dfc": {
+      "name": "ISO Auto Range Limit Min (stills)",
+      "note": "The stills copy of ISO AUTO's Minimum. Setting the Maximum below it in Stills mode pulls it down to the Maximum's value; whether it comes back up when the Maximum is raised again was not tried."
+    },
+    "global:0x0dfe": {
+      "name": "ISO Auto Range Limit Min (movie)",
+      "note": "Movie mode's ISO AUTO Minimum. A Maximum set below it in Stills mode while Different Set for Still/Mv's ISO box (0x0184) is not ticked pulled it down to that value too; a Maximum set below it in Movie mode was not tried."
+    },
     "global:0x0e02": {"name": "ISO AUTO Max (stills)"},
     "global:0x0e16": {
       "name": "Exposure Comp. (stills)",
@@ -3268,8 +3279,8 @@
   },
   "LIMIT_PAIRS": {
     "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": true, "upper_moves_lower": true},
-    "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": true},
-    "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": true},
+    "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": true, "upper_moves_lower": true},
+    "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": true, "upper_moves_lower": true},
     "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": true}
   },
   "UNPROVED": {
