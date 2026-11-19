@@ -9,7 +9,8 @@ download), a record a proof found laid out like a sibling (NEW_LIKE, NEW_WHOLE_L
 hand proof (FRAME_PROOFS), value names no proof gives (CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS), the pickers
 whose lists were walked whole (PICKER_LISTS), the values the menus never offer (NOT_OFFERED), the values offered under
 one video system (VIDEO_SYSTEM_VALUES), the copies (COPIES, COPY_MODES, COPY_MODES_UNKNOWN) and the switches that keep
-them apart (KEEPS_APART), how far each focus frame travels (FRAME_TRAVEL), why a record cannot be proved (UNPROVED)
+them apart (KEEPS_APART), the limits the camera keeps in order (LIMIT_PAIRS), how far each focus frame travels
+(FRAME_TRAVEL), why a record cannot be proved (UNPROVED)
 and proof contexts in other words (CONTEXT_WORDS). ZONE is a prover's (PROVERS). The rest the
 ILCE-1M2's own pass alone reads so far (A1_PASS_ONLY), or no part of the kit's passes (NO_READER): the plain pass
 refuses a camera whose file fills one (refusals), in plain words, for a mapper who fills in a table must not believe
@@ -46,7 +47,7 @@ from .proofs import box_numbers, sampled_scale
 # the tables the plain pass reads, in the order schemas/hand-tables.schema.json's description lists them
 PLAIN = ("RECORD_FIXES", "FILTER_FLAGS", "NEW_RECORDS", "NEW_LIKE", "NEW_WHOLE_LABELS", "FRAME_PROOFS", "CAROUSEL",
          "VALUE_FIXES", "PP7_VALUES", "KEEP_LABELS", "PICKER_LISTS", "NOT_OFFERED", "VIDEO_SYSTEM_VALUES", "COPIES",
-         "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "FRAME_TRAVEL", "UNPROVED", "CONTEXT_WORDS")
+         "COPY_MODES", "COPY_MODES_UNKNOWN", "KEEPS_APART", "LIMIT_PAIRS", "FRAME_TRAVEL", "UNPROVED", "CONTEXT_WORDS")
 # a table a prover reads for the camera it works on, which no pass of the writer reads
 PROVERS = {"ZONE": "kit/provers/framepos_run.py --zone-grid"}
 # the tables only the ILCE-1M2's own pass (kit/schema_update.py main) reads so far, each with what it is for: rules tied

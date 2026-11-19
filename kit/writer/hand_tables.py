@@ -7,7 +7,8 @@ each table under its name: records whose name or note the camera proved wrong (R
 write, found by hand (NEW_RECORDS, FILTER_FLAGS, NEW_LIKE, FRAME_PROOFS), value names no proof can give (CAROUSEL,
 VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKER_LISTS), the values the menus never
 offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that keep a family's copies apart
-(KEEPS_APART), how far each focus frame travels (FRAME_TRAVEL), why a record cannot be proved (UNPROVED), and the label
+(KEEPS_APART), the limits it keeps in order (LIMIT_PAIRS), how far each focus frame travels (FRAME_TRAVEL), why a
+record cannot be proved (UNPROVED), and the label
 fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
@@ -53,14 +54,15 @@ TABLES = {
     "ISO_TABLE": "text", "LABEL_FIXES": "words", "GROUP_NAMES": "words", "MY_MENU_ROW": "text",
     "MY_MENU_EMPTY": "my_menu_empty", "SHOOT_MODE_RECORDS": "lists", "PICKER_LISTS": "picker_lists",
     "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
-    "KEEPS_APART": "keeps_apart",
+    "KEEPS_APART": "keeps_apart", "LIMIT_PAIRS": "limit_pairs",
     "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
-         "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "frame_travel": dict}
+         "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "limit_pairs": dict,
+         "frame_travel": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
@@ -70,7 +72,7 @@ FIELDS = {"RECORD_FIXES": {"name": str}, "FILTER_FLAGS": NEW_RECORD, "NEW_RECORD
 # fields read when an entry has them
 MAYBE = {"FRAME_PROOFS": ("values",)}             # each a value list
 JSON_TYPE = {dict: "an object", list: "an array", str: "a string", int: "a whole number", float: "a decimal number",
-             type(None): "null"}
+             type(None): "null", bool: "true or false"}
 
 
 class Refused(SystemExit, ValueError):
@@ -472,6 +474,18 @@ def _shaped(name: str, kind: str, raw):
                 if "untick_sets" in e:
                     _need(e["untick_sets"], int, f"{where}'s 'untick_sets'")
             _unique(entries, lambda e: e["setting"])
+        return raw
+    if kind == "limit_pairs":
+        # the lower limit's key, then {upper, lower_moves_upper?, upper_moves_lower?}, the fields the writer reads; a
+        # direction the camera was not seen to move the other in is left out, never false; each upper of one pair
+        for k, e in _need(raw, dict, "the table").items():
+            _fields(e, ("upper",), repr(k))
+            if _need(e["upper"], str, f"{k!r}'s 'upper'") == k:
+                raise _Shape(f"{k!r} names itself as its upper limit")
+            for f in ("lower_moves_upper", "upper_moves_lower"):
+                if f in e and _need(e[f], bool, f"{k!r}'s {f!r}") is not True:
+                    raise _Shape(f"{k!r}'s {f!r} is only ever true (left out where the camera was not seen to do it)")
+        _unique(e["upper"] for e in raw.values())
         return raw
     if kind == "frame_travel":
         # a kind of focus frame, by a name: measured area by area ({places, limits}) or boxes one rule bounds ({inside,

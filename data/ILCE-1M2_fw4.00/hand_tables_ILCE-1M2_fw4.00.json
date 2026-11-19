@@ -75,15 +75,15 @@
     "global:0x13e2": {"name": "Exposure mode (S&Q Motion)"},
     "global:0x13fd": {"name": "Drive Mode Limit: Single Shooting"},
     "global:0x0b65": {
-      "name": "ISO Range Limit",
+      "name": "ISO Range Limit (lower)",
       "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
     },
     "global:0x0b69": {
-      "name": "ISO Range Limit",
+      "name": "ISO Range Limit (lower)",
       "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
     },
     "global:0x0b6d": {
-      "name": "ISO Range Limit",
+      "name": "ISO Range Limit (lower)",
       "note": "ISO Range Limit's lower limit. Setting the upper limit below it pulls it down to the upper limit's value, and it stays there when the upper limit goes back up; setting it above the upper limit pushes the upper limit up to its value."
     },
     "global:0x0b63": {
@@ -3265,6 +3265,12 @@
     "global:0x0187": [{"setting": "global:0x0367", "apart": [1], "untick_sets": 0}],
     "global:0x0188": [{"setting": "global:0x0053", "apart": [1], "untick_sets": 0}],
     "global:0x0185": [{"setting": "global:0x0340", "apart": [1]}]
+  },
+  "LIMIT_PAIRS": {
+    "global:0x0b65": {"upper": "global:0x0b63", "lower_moves_upper": true, "upper_moves_lower": true},
+    "global:0x0dfa": {"upper": "global:0x0e00", "lower_moves_upper": true},
+    "global:0x0dfc": {"upper": "global:0x0e02", "lower_moves_upper": true},
+    "global:0x0dfe": {"upper": "global:0x0e04", "lower_moves_upper": true}
   },
   "UNPROVED": {
     "global:0x1672": [
