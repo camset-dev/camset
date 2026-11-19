@@ -1448,23 +1448,40 @@ OPTION_FIELDS = "a carousel option's own fields"
 FIELD_READERS = {"both": "two readers", "votes": "two readers", "ocr": "one reader (ocr)", "reader": "vision model"}
 
 
+def fields_lines(opts: dict) -> list:
+    """A carousel option's fields' lines the camera applied (never one it refused, nor a value it did not keep)."""
+    return [o for o in opts.values() if o.get("via") == OPTION_FIELDS and o.get("applied") is True]
+
+
+def held_together(lines: list, key: str) -> bool:
+    """Whether record `key` holds a carousel option's fields together (option_fields_values): the lines of two fields or
+    more moved it, or a field the lines name ("fields") has no walk that finished among them (no put-back, "final":
+    never walked, or its attempt cut short and left out), so nothing says the record leaves that field out."""
+    moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
+    named = {f.get("label") for o in lines for f in o.get("fields") or [] if isinstance(f, dict)}
+    finished = {o.get("field") for o in lines if o.get("final")}
+    return len(moved_by) > 1 or not named <= finished
+
+
 def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
     """record key -> {label: value} for a carousel option's fields (OPTION_FIELDS: Bracket Type's Cont. Bracket, with the
     drive mode dial on BRK). Each line changed one field ("field", its name as drawn) and says how every field read
     after it ("label", all of them together, "0.5 EV 3 Img." for a step and a count, as the Drive Mode bracket lists
-    word them) and how its own field read ("value", "0.5EV"). A record the lines of two fields or more moved holds them
-    together: each value is credited to the line's "label". A record only one field's lines moved holds that field
-    alone: its value is credited to the line's "value", from that field's lines only. A field's put-back ("final")
+    word them) and how its own field read ("value", "0.5EV"). A record holds the fields together (held_together) unless
+    only one field's lines moved it and every field the lines name ("fields") had a walk that finished (its put-back
+    counted): then it holds that field alone, its value credited to the line's "value", from that field's lines only.
+    Together, each value is credited to the line's "label": a field never walked, or walked and cut short of its
+    put-back (its attempt's lines left out), says nothing of whether the record holds it. A field's put-back ("final")
     changes nothing: its value is the record's before in its own session (its base), as a list's own start is, but only
     where its walk was whole ("whole" not False): in a walk the deadline cut short the value held would stand out, as a
     list walked in part keeps its start uncredited (start_lines, docs/decisions/0016). A line the camera refused (its
     changes already none) and any other line that left the record as it was are no value of it. sources (key ->
     {label: source}): who read the box ("read_by": two readers, OCR, or the vision model alone)."""
-    lines = sorted((o for o in opts.values() if o.get("applied") is not False), key=lambda o: dat_number(o.get("dat")))
+    lines = sorted(fields_lines(opts), key=lambda o: dat_number(o.get("dat")))
     out = {}
     for key in sorted({c["key"] for o in lines for c in o["changes"]}):
         moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
-        both = len(moved_by) > 1
+        both = held_together(lines, key)
         befores = {}
         for o in lines:
             for c in o["changes"]:
@@ -1494,15 +1511,16 @@ def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
 def option_fields_sampled(opts: dict) -> set:
     """The records of a carousel option's fields row (OPTION_FIELDS) whose proved values tell the value the row held
     (docs/decisions/0016), which main marks "sampled_from_start" as a table sampled from its start is (the definition
-    counts their proofs and lists none of their values): a record two fields' lines move (each field is walked from what
-    the other held, so the values proved cross at the pair held), and a record a field moved whose walk the deadline cut
-    short (its put-back "whole": false: the values proved stand round the one held)."""
-    lines = [o for o in opts.values() if o.get("via") == OPTION_FIELDS and o.get("applied") is not False]
+    counts their proofs and lists none of their values): a record that holds the fields together (held_together: each
+    field is walked from what the other held, so the values proved cross at the pair held, and one arm alone tells the
+    other field's value held), and a record a field moved whose walk the deadline cut short (its put-back "whole": false:
+    the values proved stand round the one held)."""
+    lines = fields_lines(opts)
     cut = {o.get("field") for o in lines if o.get("final") and o.get("whole") is False}
     out = set()
     for key in {c["key"] for o in lines for c in o["changes"]}:
         fields = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
-        if len(fields) > 1 or fields & cut:
+        if held_together(lines, key) or fields & cut:
             out.add(key)
     return out
 
@@ -2075,8 +2093,10 @@ def main():
                 entry["records"][key]["inferred"] = inferred[key]
             if from_start or key in crossed:
                 entry["records"][key]["sampled_from_start"] = True     # a count in the definition, never these values
-                # how many proofs: the lines that chose an option for its own sake, never a put-back ("planned": false)
+                # how many proofs: the lines that chose an option for its own sake, never a put-back ("planned": false; a
+                # carousel option's field's "final")
                 entry["records"][key]["sample_proofs"] = sum(1 for o in opts.values() if o.get("planned") is not False
+                                                             and not (o.get("via") == OPTION_FIELDS and o.get("final"))
                                                              and credited(o))
             if held_back.get(key):
                 # what a start line would have credited (start_lines), for a person reading this report: the writer

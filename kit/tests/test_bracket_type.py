@@ -320,6 +320,9 @@ class FieldsCam:
         self.saved, self.where, self.opt, self.field, self.edit = 0, "shooting", 0, None, []
         self.keys, self.n, self.closes, self.lost = [], 0, [], None
         self.same_text = set(same_text)       # values the readers read alike ("2 Images" for two of them)
+        self.extra = {}                       # records a test sets beside the boxes'
+        self.drop = None                      # (key, n): the n-th press of key goes unanswered (a new frame, no change)
+        self.correct = None                   # correct(option, edit) -> the boxes the camera keeps on Enter
         self.shoot("start")
 
     def shoot(self, tag):
@@ -329,6 +332,9 @@ class FieldsCam:
     def press(self, key, **kw):
         self.keys.append(key)
         boxes = self.spec.get(self.opt, [])
+        if self.drop is not None and self.keys.count(self.drop[0]) == self.drop[1] and key == self.drop[0]:
+            self.shoot(key)                      # the press the camera did not answer
+            return
         if self.where == "row" and key == "right":
             self.where, self.opt, self.field = "dialog", self.saved, None
             self.edit = list(self.at.get(self.saved, []))
@@ -346,7 +352,7 @@ class FieldsCam:
         elif self.where == "dialog" and key == "enter":
             self.saved, self.where, self.field = self.opt, "row", None
             if boxes:
-                self.at[self.opt] = list(self.edit)
+                self.at[self.opt] = list(self.correct(self.opt, self.edit) if self.correct else self.edit)
         elif self.where == "dialog" and key == "menu":
             if self.field is not None:
                 self.field = None
@@ -377,7 +383,7 @@ class FieldsCam:
         step, *digits = self.at[2]
         number = int("".join(b["values"][i] for b, i in zip(FOCUS_BOXES[1:], digits, strict=True)))
         return {"global:0x02bf": self.saved, "global:0x13f9": 10 * ev + img + 1, "global:0x9001": ev,
-                "global:0x9002": step, "global:0x9003": number}
+                "global:0x9002": step, "global:0x9003": number, **self.extra}
 
 
 def fields_world(monkeypatch, own_runs, cam):
@@ -391,6 +397,8 @@ def fields_world(monkeypatch, own_runs, cam):
 
     def download(tag):
         downloads.append(tag)
+        if getattr(cam, "downloaded", None):          # a test's own change of the camera at a download
+            cam.downloaded(tag)
         return SimpleNamespace(name=f"{len(downloads) + 1:05d}_{tag}.DAT", values=cam.records())
 
     def diff(a, b):
@@ -399,12 +407,15 @@ def fields_world(monkeypatch, own_runs, cam):
     @contextlib.contextmanager
     def session(run, eyes, **kw):
         s = SimpleNamespace(cam=cam, link=link, start=SimpleNamespace(name="00001_before.DAT", values=cam.records()))
+        held = ({o: list(v) for o, v in cam.at.items()}, cam.saved, dict(cam.extra))
         try:
             yield s
         except Exception as e:                    # runner.prover_session: said, closed, then the restore
             print(f"stopped: {type(e).__name__}: {e}", flush=True)
             cam.closes.append(cam.frame.path.name)
             cam.where = "shooting"
+        finally:                                  # the session's end: the start file back on
+            cam.at, cam.saved, cam.extra = {o: list(v) for o, v in held[0].items()}, held[1], dict(held[2])
 
     def enter_any(c, path, start, at=None):
         assert c.where == "menu" and path == ROW
@@ -503,7 +514,8 @@ def test_the_report_credits_a_record_of_both_fields_and_one_of_one(own_runs, mon
 
 def test_a_walk_the_deadline_cuts_credits_no_value_held(own_runs, monkeypatch, capsys):
     """--most 2: Exposure Value Up to 0.7EV, then the deadline; Down finds its low end; 0.3EV put back, its line saying the
-    walk was not whole. The report credits 0.5EV and 0.7EV, never the value held, and marks the record sampled."""
+    walk was not whole. The report credits 0.5EV's and 0.7EV's values, never the value held, and marks the records
+    sampled; Number of Shots never walked, both records are credited with the fields together."""
     import pass2_report as R
     cam = FieldsCam()
     F, root, _ = fields_world(monkeypatch, own_runs, cam)
@@ -513,7 +525,8 @@ def test_a_walk_the_deadline_cuts_credits_no_value_held(own_runs, monkeypatch, c
         ([0, 1], "0.5EV", False, None), ([0, 2], "0.7EV", False, None), ([0, 0], "0.3EV", True, False)]
     assert "the deadline (--most): its top end not reached" in capsys.readouterr().out
     opts = R.rows_of(root / "kit2_pass2", lines)["Bracket Settings > Bracket Type > Cont. Bracket [Drive Mode dial on BRK]"]
-    assert R.values_of(opts) == {"global:0x13f9": {"0.5EV": 12, "0.7EV": 22}, "global:0x9001": {"0.5EV": 1, "0.7EV": 2}}
+    assert R.values_of(opts) == {"global:0x13f9": {"0.5 EV 3 Img.": 12, "0.7 EV 3 Img.": 22},
+                                 "global:0x9001": {"0.5 EV 3 Img.": 1, "0.7 EV 3 Img.": 2}}
     assert R.option_fields_sampled(opts) == {"global:0x13f9", "global:0x9001"}
 
 
@@ -704,3 +717,64 @@ def test_the_a1_pass_looks_over_carousel_fields_lines(tmp_path, monkeypatch, cap
     monkeypatch.setattr(sys, "argv", ["schema_update.py"])
     said = write(capsys)
     assert "Traceback" not in said and f"wrote {target}" not in said
+
+
+def counted_rows(root: Path) -> dict:
+    """The report's rows of the run's lines as the report counts them: the attempts that did not finish left out."""
+    import pass2_report as R
+    run = root / "kit2_pass2"
+    proofs = fields_lines()
+    return R.rows_of(run, proofs, R.unfinished(proofs, R.attempts_done(run), {}))
+
+
+CONT_ROW = f"Bracket Settings > Bracket Type > Cont. Bracket [{CTX}]"
+COUNTS_HELD_AT_03 = {"0.3 EV 5 Img.": 3, "0.3 EV 2 Img.": 1, "0.3 EV 3 Img.": 2}
+
+
+def test_a_record_with_one_field_cut_and_the_other_finished_holds_both(own_runs, monkeypatch, capsys):
+    """Single Bracket on the camera, 2026-11-19: Exposure Value's walk was cut before its put-back (its attempt never
+    finished, its lines left out), and a later --box 1 run finished Number of Shots. The record moved only with Number
+    of Shots' counted lines, but Exposure Value never had a finished walk, so nothing says the record leaves it out:
+    it is credited with both fields together ("0.3 EV 5 Img.", the step held in every label) and marked sampled, never
+    "5 Images" (the wrong names, and one arm of the cross that tells the step held, decision 16)."""
+    import pass2_report as R
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.lost = ("up", 3)                          # the link stalls on Exposure Value's third value
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--box", "0")
+    cam.lost = None
+    run_fields(F, root, "Cont. Bracket", "--box", "1")
+    rows = counted_rows(root)
+    assert {x["field"] for x in rows[CONT_ROW].values()} == {"Number of Shots"}, "Exposure Value's lines left out"
+    assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": COUNTS_HELD_AT_03}
+    assert R.option_fields_sampled(rows[CONT_ROW]) == {"global:0x13f9"}
+
+
+def test_a_record_of_one_field_alone_ever_walked_holds_both(own_runs, monkeypatch, capsys):
+    """--box 1 alone: Exposure Value never walked, so the record Number of Shots moves holds both, as above."""
+    import pass2_report as R
+    cam = FieldsCam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--box", "1")
+    rows = counted_rows(root)
+    assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": COUNTS_HELD_AT_03}
+    assert R.option_fields_sampled(rows[CONT_ROW]) == {"global:0x13f9"}
+
+
+def test_the_reports_entry_counts_no_put_back_among_the_samples(tmp_path):
+    """The report written whole (pass2_report.py --no-schema) over real-shaped lines of Number of Shots alone: the
+    record holds both fields, marked sampled, its sample_proofs the one value chosen for its own sake, never the
+    put-back."""
+    import subprocess
+
+    import test_definitions as D
+    lines = cont_lines()[2:]
+    run = D.write_run(tmp_path, lines, done=["kit2_pass2-b"])
+    r = subprocess.run([sys.executable, str(ROOT / "kit" / "pass2_report.py"), str(run), "--no-schema"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    (entry,) = json.loads((run / "report.json").read_text(encoding="utf-8"))
+    rec = entry["records"]["global:0x13f9"]
+    assert entry["row"] == CONT_ROW and rec["proved"] == {"0.3 EV 5 Img.": 4, "0.3 EV 3 Img.": 3}
+    assert rec["sampled_from_start"] is True and rec["sample_proofs"] == 1
