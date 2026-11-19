@@ -8,9 +8,16 @@ A chain file is written for the work at hand: the example at the end of this tex
 The chains used to be shell scripts; one waited 2.5 hours on a blank HDMI feed and one lost its prover
 calls to shell word splitting. Here:
 - each step is an argument list (no shell), a `.py` first argument runs with this Python;
+- a step that fails, any status but 0, stops the chain there, which says which step and why, before the next step
+  changes anything else: the steps after it would run in a state nobody checked. The end file is uploaded all the same
+  (below). A step marked `go_on_after_error = true` lets the chain go on after it when it fails with a status the kit
+  gives no meaning (1, 2, 3 or 9 and up: a crash, a wrong argument), listing it as failed; never after an `upload` step
+  (the mark is refused there before anything runs, as is a mark that is not true or false), nor after a step killed by
+  a signal or one that exits with a status below, whatever it is marked;
 - an `upload` step loads a start file through kit/tools/upload_check.py; if it fails, the chain stops
   there (the next steps would run in the wrong state and tag their proofs with the wrong context);
-- a step that exits with status 4 (EXIT_UNRESTORED, kit/exit_status.py: its restore did not check out, or the camera
+- a step killed by a signal (macOS and Linux: Windows gives such a step a status of its own) ran no restore of its own,
+  and one that exits with status 4 (EXIT_UNRESTORED, kit/exit_status.py: its restore did not check out, or the camera
   refused its last download) left the camera perhaps not on its start file: the chain stops there too, before the
   next step changes anything else, and the end file is uploaded (decision 15); a step that exits with status 5
   (EXIT_RESTORE_BY_HAND: its last press, which an owner decision allowed with "link_loss", may have dropped the link)
@@ -20,7 +27,7 @@ calls to shell word splitting. Here:
   cancelled with MENU, its start file restored and checked) stops the chain as status 4 does, since nothing was
   confirmed; a step that exits with status 7 (EXIT_REFUSED: a refusal stopped its work part way, kit/crawl_run.py, its
   start file restored and checked) or 8 (EXIT_INCOMPLETE: anything else stopped it short, restored and checked) stops
-  the chain as status 4 does; any other failure is listed and the chain goes on;
+  the chain as status 4 does;
 - a step over its `limit` (seconds) is asked to stop through its `stop` file (a run's STOP: the
   walkers cancel to the menu and close it). The runner never kills a step: a camera left in a
   dialog is worse than a late chain. A step with no `stop` file is only reported;
@@ -30,9 +37,10 @@ calls to shell word splitting. Here:
   as its owner had it, but after a step that exited with status 5 (above). The owner's file is given on the command
   line, not kept in the chain file;
 - the chain's own exit status says how it ended: 0 when every step ran and the end file went back (a STOP_CHAIN
-  between steps too); 1 when a step failed; 5 (EXIT_RESTORE_BY_HAND) after a step that exited 5; 4 (EXIT_UNRESTORED)
-  when the end file did not go back, or, with no end file, when the chain stopped on a step after which the camera
-  may not be on its start file (status 4, or an `upload` step that did not check out).
+  between steps too); 1 when a step failed (the chain stopped there, or went on past a step marked go_on_after_error);
+  5 (EXIT_RESTORE_BY_HAND) after a step that exited 5; 4 (EXIT_UNRESTORED) when the end file did not go back, or, with
+  no end file, when the chain stopped on a step after which the camera may not be on its start file (status 4, a step
+  killed by a signal, or an `upload` step that did not check out).
 
 The chain runs on one camera, the one the kit works on when it starts (camkit.paths; --camera names another), and
 every step is told which (CAMSET_CAMERA). A relative path in a chain file (upload, log, stop, end) is in that
@@ -58,10 +66,12 @@ A chain file:
     show = "options|stopped|records differ|restore"  # lines of it to echo to the chain's output
     limit = 3600
     stop = "kit2_pass2/STOP"
+    go_on_after_error = true                         # optional: the chain goes on if this step fails with an error
 """
 import argparse
 import os
 import re
+import signal
 import subprocess
 import sys
 import time
@@ -78,6 +88,10 @@ from exit_status import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_REFUSED, EXIT
 
 PY = sys.executable
 RUN_ROOT = None          # the camera's runs, set in main()
+# a step's mark: the chain goes on after the step when it fails with a status the kit gives no meaning (the docstring)
+GO_ON = "go_on_after_error"
+# the statuses the kit gives a meaning, after which the chain stops whatever the step is marked
+NAMED = (EXIT_UNRESTORED, EXIT_RESTORE_BY_HAND, EXIT_NOT_CONFIRMED, EXIT_REFUSED, EXIT_INCOMPLETE)
 
 
 def at(p) -> Path:
@@ -111,6 +125,29 @@ def load(chain_file) -> dict:
         sys.exit(f"{chain_file}: not a chain file TOML can read ({e}). A path with backslashes (a Windows path) goes in "
                  "single quotes ('C:\\runs\\my.log') or with forward slashes (\"C:/runs/my.log\"). A relative path "
                  "(my.log) needs neither: the chain reads it from the camera's runs folder")
+
+
+def marks_refused(steps: list) -> str:
+    """Why the chain cannot honour a step's go_on_after_error, "" when it can: the mark on an upload step, whose next
+    steps need the state it loads, or a mark that is not true or false (read one way or the other, it could carry a
+    chain past a failure its owner meant to stop it)."""
+    for i, s in enumerate(steps, 1):
+        if GO_ON not in s:
+            continue
+        where = f"step {i} ({s.get('title') or s.get('upload') or ''})"
+        if not isinstance(s[GO_ON], bool):
+            return f"{where}: {GO_ON} is true or false, not {s[GO_ON]!r}"
+        if s[GO_ON] and "upload" in s:
+            return f"{where}: an upload step never goes on after an error: the steps after it need the state it loads"
+    return ""
+
+
+def killed_by(rc: int) -> str:
+    """The signal that killed a step, from the negative status Popen gives it on macOS and Linux (SIGTERM for -15)."""
+    try:
+        return signal.Signals(-rc).name
+    except ValueError:
+        return str(-rc)
 
 
 def say(msg: str):
@@ -186,6 +223,9 @@ def main() -> int:
     RUN_ROOT = paths.run_root()
     chain = load(a.chain)
     steps = chain.get("step", [])
+    refused = marks_refused(steps)
+    if refused:                                  # before anything runs, and before --dry lists the steps as fine
+        sys.exit(refused)
     # the end file as an absolute path now: --end names an existing file as given (relative to this folder), which the
     # upload step would otherwise take for one in the camera's runs, after every step had run
     end = str(Path(a.end).resolve()) if a.end else (str(at(chain["end"])) if chain.get("end") else None)
@@ -196,7 +236,7 @@ def main() -> int:
            paths.ENV: RUN_ROOT.name}
     if a.dry:
         for i, s in enumerate(steps, 1):
-            extra = {k: s[k] for k in ("log", "limit", "stop", "env") if k in s}
+            extra = {k: s[k] for k in ("log", "limit", "stop", "env", GO_ON) if k in s}
             argv = argv_of(s)
             shown = [str(Path(x).relative_to(ROOT)) if x.startswith(str(ROOT)) else x for x in argv[2:]] \
                 if argv[0] == PY else argv
@@ -224,9 +264,17 @@ def main() -> int:
             if rc:
                 failed.append(i)
                 status = 1
-                say(f"   step {i} exited {rc}")
+                marked = s.get(GO_ON) is True
+                say(f"   step {i} was killed by signal {killed_by(rc)}" if rc < 0 else f"   step {i} exited {rc}")
+                if marked and (rc < 0 or rc in NAMED):
+                    say(f"   {GO_ON} does not go past a step killed by a signal, nor one that exits 4, 5, 6, 7 or 8")
                 if "upload" in s:
                     say("   the start file did not load: stopping the chain (its next steps need that state)")
+                    unrestored = True
+                    break
+                if rc < 0:
+                    say("   it ran no restore of its own, so the camera may not be on its start file: stopping the "
+                        "chain before another step changes it")
                     unrestored = True
                     break
                 if rc == EXIT_UNRESTORED:
@@ -260,6 +308,12 @@ def main() -> int:
                     say("   the step's last press only brought up its row's question, cancelled with MENU: nothing was "
                         "confirmed (its drive.jsonl keeps the question's frame); stopping the chain")
                     break
+                if marked:
+                    say(f"   it is marked {GO_ON}: the chain goes on")
+                    continue
+                say(f"   stopping the chain: a step that fails stops it before the next changes anything (a step marked "
+                    f"{GO_ON} = true lets it go on after that step's errors)")
+                break
     finally:
         if end:
             say(f"== the end file: {Path(end).name}")

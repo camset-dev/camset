@@ -1,5 +1,6 @@
 """The kit's smaller tools (kit/tools/) that have no test file of their own, offline: what a chain leaves on the camera
-at its end and after a step that left the camera unrestored, the reader reread_proofs.py asks, and score_screen.py's frames the OCR cannot read. No camera: a chain's steps here are this Python, and its end file a
+at its end and after a step that left the camera unrestored, where it stops (its first step that fails, unless marked to
+go on after its errors), the reader reread_proofs.py asks, and score_screen.py's frames the OCR cannot read. No camera: a chain's steps here are this Python, and its end file a
 made-up one, which upload_check.py refuses before any connection; no reader is asked anything.
 """
 import json
@@ -47,13 +48,74 @@ def exits(tmp_path: Path, status: int) -> Path:
 
 def test_a_step_that_left_the_camera_unrestored_stops_the_chain(tmp_path):
     """Status 4 (EXIT_UNRESTORED, kit/exit_status.py): the camera may not be on the step's start file, so no next step
-    changes anything else on it; any other failure is listed and the chain goes on (decision 15)."""
+    changes anything else on it (decision 15)."""
     run = [sys.executable, str(CHAIN), "--stop", str(tmp_path / "STOP_CHAIN")]
     r = subprocess.run(run[:2] + [str(exits(tmp_path, 4))] + run[2:], capture_output=True, text=True, timeout=60)
     assert "step 1 exited 4" in r.stdout and "may not be back on its start file" in r.stdout
     assert "NEXT RAN" not in r.stdout and "steps that failed: [1]" in r.stdout
-    r = subprocess.run(run[:2] + [str(exits(tmp_path, 1))] + run[2:], capture_output=True, text=True, timeout=60)
-    assert "step 1 exited 1" in r.stdout and "NEXT RAN" in r.stdout and "start file" not in r.stdout
+
+
+@pytest.mark.parametrize("status", [1, 2, 3, 9])
+def test_a_step_that_fails_stops_the_chain(tmp_path, status):
+    """Any status but 0 stops the chain at that step, saying which and why: the steps after it would run in a state
+    nobody checked (the owner's decision, 2026-11-19). The chain exits 1, its steps not run."""
+    r = subprocess.run([sys.executable, str(CHAIN), str(exits(tmp_path, status)), "--stop", str(tmp_path / "STOP_CHAIN")],
+                       capture_output=True, text=True, timeout=60)
+    assert f"step 1 exited {status}" in r.stdout and "stopping the chain" in r.stdout and "go_on_after_error" in r.stdout
+    assert "NEXT RAN" not in r.stdout and "steps that failed: [1]" in r.stdout and r.returncode == 1, r.stdout
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="a signal ends a process on macOS and Linux only")
+def test_a_step_killed_by_a_signal_stops_the_chain(tmp_path):
+    """A step killed by a signal ran no restore of its own, so the camera may not be on its start file: the chain stops
+    there, says so, and with no end file to put the camera back exits 4 (EXIT_UNRESTORED); a step marked to go on after
+    its errors stops it all the same."""
+    py = Path(sys.executable).as_posix()
+    c = tmp_path / "killed.toml"
+    c.write_text(f'name = "t"\n[[step]]\ntitle = "first"\ngo_on_after_error = true\n'
+                 f'run = ["{py}", "-c", "import os, signal; os.kill(os.getpid(), signal.SIGTERM)"]\n'
+                 f'[[step]]\ntitle = "next"\nrun = ["{py}", "-c", "print(\'NEXT RAN\')"]\n', encoding="utf-8")
+    r = subprocess.run([sys.executable, str(CHAIN), str(c), "--stop", str(tmp_path / "STOP_CHAIN")],
+                       capture_output=True, text=True, timeout=60)
+    assert "step 1 was killed by signal SIGTERM" in r.stdout and "may not be on its start file" in r.stdout
+    assert "NEXT RAN" not in r.stdout and r.returncode == 4, r.stdout
+
+
+def marked(tmp_path: Path, status: int) -> Path:
+    """A chain whose first step, marked go_on_after_error, exits with status, and whose second says it ran."""
+    c = tmp_path / f"marked{status}.toml"
+    c.write_text(exits(tmp_path, status).read_text(encoding="utf-8").replace(
+        'title = "first"\n', 'title = "first"\ngo_on_after_error = true\n'), encoding="utf-8")
+    return c
+
+
+def test_a_step_marked_to_go_on_after_its_errors(tmp_path):
+    """go_on_after_error = true: the chain goes on after an error the kit gives no meaning (status 1, 2, 3 ...), lists
+    the step as failed and exits 1; never after a status that says the camera may not be on its start file (4), that
+    it waits for a hand (5), or that the step's work was not done (6, 7, 8)."""
+    run = [sys.executable, str(CHAIN), "--stop", str(tmp_path / "STOP_CHAIN")]
+    r = subprocess.run(run[:2] + [str(marked(tmp_path, 3))] + run[2:], capture_output=True, text=True, timeout=60)
+    assert "step 1 exited 3" in r.stdout and "marked go_on_after_error: the chain goes on" in r.stdout
+    assert "NEXT RAN" in r.stdout and "steps that failed: [1]" in r.stdout and r.returncode == 1, r.stdout
+    for status in (4, 6, 7, 8):
+        r = subprocess.run(run[:2] + [str(marked(tmp_path, status))] + run[2:], capture_output=True, text=True, timeout=60)
+        assert f"step 1 exited {status}" in r.stdout and "NEXT RAN" not in r.stdout, (status, r.stdout)
+        assert "go_on_after_error does not go past" in r.stdout, (status, r.stdout)
+
+
+@pytest.mark.parametrize("step,why", [
+    ('upload = "start.DAT"\ngo_on_after_error = true\n', "an upload step never goes on after an error"),
+    ('run = ["kit/drive.py"]\ngo_on_after_error = "yes"\n', "go_on_after_error is true or false, not 'yes'"),
+])
+def test_a_mark_the_chain_cannot_honour_is_refused_before_it_starts(tmp_path, step, why):
+    """An upload step's next steps need the state it loads, so it is never gone past; a mark that is no true or false
+    is refused rather than read one way or the other. Before anything runs, --dry too."""
+    c = tmp_path / "c.toml"
+    c.write_text(f'name = "t"\n[[step]]\ntitle = "first"\n{step}', encoding="utf-8")
+    for extra in ([], ["--dry"]):
+        r = subprocess.run([sys.executable, str(CHAIN), str(c), "--stop", str(tmp_path / "STOP_CHAIN"), *extra],
+                           capture_output=True, text=True, timeout=60)
+        assert r.returncode != 0 and f"step 1 (first): {why}" in r.stderr and "== 1/1" not in r.stdout, r.stdout + r.stderr
 
 
 def test_the_exit_status_is_kept_once_and_the_chain_takes_no_camera_code():

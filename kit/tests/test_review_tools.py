@@ -131,7 +131,7 @@ def chain_toml(tmp_path: Path, *codes: int) -> Path:
 
 
 def test_a_chain_with_a_failed_step_exits_non_zero(tmp_path):
-    """Finding 18: a chain whose step failed (status 3, the chain goes on) used to exit 0."""
+    """Finding 18: a chain whose step failed (status 3, which now stops the chain there) used to exit 0."""
     r = subprocess.run([sys.executable, str(CHAIN), str(chain_toml(tmp_path, 3, 0)), "--stop", str(tmp_path / "STOP")],
                        capture_output=True, text=True, timeout=60)
     assert "steps that failed: [1]" in r.stdout and r.returncode == 1, r.stdout + r.stderr
@@ -150,15 +150,17 @@ def test_a_chain_whose_end_file_did_not_go_back_exits_unrestored(tmp_path):
     assert r.returncode == EXIT_UNRESTORED, r.stdout + r.stderr
 
 
-def run_chain(tmp_path, monkeypatch, steps: list, codes: dict, end: bool = True):
+def run_chain(tmp_path, monkeypatch, steps: list, codes: dict, end: bool = True, go_on: tuple = ()):
     """chain.main on a chain of `steps` (titles; "upload" an upload step), each step's status from `codes` (the end
-    file's upload under "end"), 0 when not named. Returns (its status, what ran)."""
+    file's upload under "end"; a negative status a signal that killed the step, as Popen gives it), 0 when not named,
+    the steps `go_on` names marked go_on_after_error. Returns (its status, what ran)."""
     from tools import chain
     owner = tmp_path / "owner.DAT"
     owner.write_bytes(b"x")
     f = tmp_path / "c.toml"
     f.write_text('name = "c"\n' + "".join('[[step]]\nupload = "start.DAT"\n' if s == "upload" else
-                                          f'[[step]]\ntitle = "{s}"\nrun = ["kit/drive.py"]\n' for s in steps),
+                                          f'[[step]]\ntitle = "{s}"\nrun = ["kit/drive.py"]\n'
+                                          + ("go_on_after_error = true\n" if s in go_on else "") for s in steps),
                  encoding="utf-8")
     ran = []
 
@@ -173,17 +175,24 @@ def run_chain(tmp_path, monkeypatch, steps: list, codes: dict, end: bool = True)
     return chain.main(), ran
 
 
-@pytest.mark.parametrize("steps,codes,end,status,ran", [
-    (["a", "b"], {}, True, 0, ["a", "b", "end"]),
-    (["a", "b"], {"a": 3}, True, 1, ["a", "b", "end"]),                  # a failure the chain goes on after
-    (["a", "b"], {"end": 1}, True, EXIT_UNRESTORED, ["a", "b", "end"]),  # the end file did not go back
-    (["upload", "a"], {"upload": EXIT_UNRESTORED}, True, 1, ["upload", "end"]),       # stopped, the end file back
-    (["upload", "a"], {"upload": EXIT_UNRESTORED}, False, EXIT_UNRESTORED, ["upload"]),   # stopped, nothing back
-    (["a", "b"], {"a": EXIT_UNRESTORED}, False, EXIT_UNRESTORED, ["a"]),
-    (["a", "b"], {"a": EXIT_RESTORE_BY_HAND}, True, EXIT_RESTORE_BY_HAND, ["a"]),     # no end file uploaded
+@pytest.mark.parametrize("steps,codes,end,status,ran,go_on", [
+    (["a", "b"], {}, True, 0, ["a", "b", "end"], ()),
+    (["a", "b"], {"a": 3}, True, 1, ["a", "end"], ()),                   # any failure stops the chain, the end file back
+    (["a", "b"], {"a": 3}, False, 1, ["a"], ()),
+    (["a", "b", "c"], {"b": 1}, True, 1, ["a", "b", "end"], ()),
+    (["a", "b"], {"a": 3}, True, 1, ["a", "b", "end"], ("a",)),           # marked: the chain goes on after its error
+    (["a", "b"], {"a": EXIT_UNRESTORED}, True, 1, ["a", "end"], ("a",)),  # ... never after a status the kit gives
+    (["a", "b"], {"a": -9}, True, 1, ["a", "end"], ()),                  # killed by a signal: stopped, the end file back
+    (["a", "b"], {"a": -9}, False, EXIT_UNRESTORED, ["a"], ("a",)),      # ... and with none, the camera unrestored
+    (["a", "b"], {"end": 1}, True, EXIT_UNRESTORED, ["a", "b", "end"], ()),  # the end file did not go back
+    (["upload", "a"], {"upload": EXIT_UNRESTORED}, True, 1, ["upload", "end"], ()),       # stopped, the end file back
+    (["upload", "a"], {"upload": EXIT_UNRESTORED}, False, EXIT_UNRESTORED, ["upload"], ()),   # stopped, nothing back
+    (["a", "b"], {"a": EXIT_UNRESTORED}, False, EXIT_UNRESTORED, ["a"], ()),
+    (["a", "b"], {"a": EXIT_RESTORE_BY_HAND}, True, EXIT_RESTORE_BY_HAND, ["a"], ()),     # no end file uploaded
+    (["a", "b"], {"a": EXIT_RESTORE_BY_HAND}, True, EXIT_RESTORE_BY_HAND, ["a"], ("a",)),
 ])
-def test_the_chains_status_says_how_it_ended(tmp_path, monkeypatch, capsys, steps, codes, end, status, ran):
-    assert run_chain(tmp_path, monkeypatch, steps, codes, end) == (status, ran)
+def test_the_chains_status_says_how_it_ended(tmp_path, monkeypatch, capsys, steps, codes, end, status, ran, go_on):
+    assert run_chain(tmp_path, monkeypatch, steps, codes, end, go_on) == (status, ran)
 
 
 def test_a_step_that_ends_at_once_costs_no_wait(tmp_path, monkeypatch):

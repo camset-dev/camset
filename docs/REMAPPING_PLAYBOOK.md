@@ -193,7 +193,9 @@ alone, the report lists them (`inferred`) and the definition does not, since one
 axis is proved again from a start file the camera wrote holding the other value.
 
 Before calling a model done, check the evidence offline: each proof's frames against its label, and the report's rules
-against the proofs. Unattended runs go through `kit/tools/chain.py`, never a shell script.
+against the proofs. Unattended runs go through `kit/tools/chain.py`, never a shell script. A chain stops at its first
+step that fails and puts its end file back, unless that step is marked `go_on_after_error = true`, which goes on only
+after an error the kit gives no meaning (its docstring says which).
 
 ## 7. Order of work
 
