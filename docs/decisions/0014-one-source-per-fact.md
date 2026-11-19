@@ -1,6 +1,6 @@
 # 14. One source per fact
 
-- **Date:** 2026-11-03; changed 2026-11-06
+- **Date:** 2026-11-03; changed 2026-11-06 and 2026-11-19
 - **Status:** accepted
 - **Rule:** Each fact is edited in one place; pages are rendered from their sources, and the few generated files
   committed are rebuilt by their tool, never by hand.
@@ -17,8 +17,9 @@ file's container has one source, the camera file's container block
 ([decision 20](0020-the-editor-holds-no-camera-facts.md)), which `docs/formats/sony_camset.ksy` describes for
 Kaitai's tools, tied to it by a test until the `.ksy` is generated from the block. The data files have JSON Schemas.
 The generated files other tools read as files stay committed (each definition's record names, the Python reader
-compiled from the `.ksy`, the C++ safety lists), as do two lists in files written by hand (the decisions table, the
-nav's model pages): `kit/tools/build_docs.py` writes them, and the pre-commit hook runs it. A camera's definition is
+compiled from the `.ksy`, the C++ safety lists), as do three lists in files written by hand (the decisions table,
+AGENTS.md's rules that are never broken, the nav's model pages): `kit/tools/build_docs.py` writes them, and the
+pre-commit hook runs it. A camera's definition is
 written only by `kit/schema_update.py --write`, never by the hook
 ([decision 19](0019-definitions-are-files-one-per-model-and-firmware.md)).
 
@@ -35,13 +36,16 @@ written only by `kit/schema_update.py --write`, never by the hook
 | Why things are done as they are | each record here | `docs/decisions/index.md`'s table |
 | What the kit never sends | `kit/camkit/safety.py` | `kit/common/never_touch.h` |
 | How the kit works | `docs/KIT_PLAN.md` | |
-| The mapping rules; how long things take | the playbook, sections 1 and 11 | |
+| The rules that are never broken | each one's record here, its Rule line (the record marked Never broken) | AGENTS.md's list of them; `docs/decisions/index.md`'s table |
+| How an owner allows more, and the kit's own mapping rules; how long things take | the playbook, sections 1 and 11 | |
 | What a mapping delivers | `docs/DATA_CONTRACTS.md` | |
 | Which login a camera gets | `kit/common/camera_net.h`; in words, `docs/EDITOR.md` | |
 | What the kit can do with a body | the SDK table, `kit/tools/sdk_support.py --json` into `private/data/` | `kit/tools/body_check.py` reads it |
 | The SDK's terms; releases | `docs/RELEASING.md` | |
 | Installing and running the kit | `kit/setup.py`; `docs/QUICKSTART.md`; `docs/PORTING.md`; each tool's `--help` | |
 
+Before 2026-11-19 the mapping rules were edited in the playbook's section 1, AGENTS.md restating the rules that are
+never broken by hand.
 Before 2026-11-06 the file format's one source was the Kaitai spec; the record first named MkDocs (mkdocs-macros) as
 the renderer, which Zensical replaced on 2026-11-03. Before 2026-11-14 the table was its own page, Where each fact
 lives.
