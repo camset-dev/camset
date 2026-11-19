@@ -1,6 +1,8 @@
 """Rules of pass 2's report (kit/pass2_report.py) that the proofs of 2026-11-19 turned into wrong results, each on
 made-up proof lines (a row, a session or two, the lines that matter): a side list's put-back the camera would not let
-back ends its attempt and re-arms no older failure (rule A). Synthetic runs, made-up records and values; no camera."""
+back ends its attempt and re-arms no older failure (rule A); a line that changed nothing in a record is credited with
+what its session started from only where that session's lines move the record (rule B). Synthetic runs, made-up
+records and values; no camera."""
 import json
 import sys
 from pathlib import Path
@@ -111,3 +113,58 @@ def test_an_attempt_that_never_ended_is_still_left_out(tmp_path):
     assert left_out(a_run(tmp_path / "tagged_done", tagged, done=["t1"])) == set()
     refused = lines + [side(0, "Movie", 55, base, applied=False)]
     assert left_out(a_run(tmp_path / "refused", refused, [failure(58, PUT_BACK)])) == {0, 1, 2}
+
+
+# ---------------------------------------------------------------- rule B: "nothing changed" across camera states
+
+LIVE, STILLS, MOVIE = "global:0x0001", "global:0x0002", "global:0x0003"      # made up: a setting and its two copies
+
+
+def iso(index, label, frame, base, changes=()):
+    """A list row's proof line (ISO AUTO Minimum in Stills mode, made-up records)."""
+    return {"path": ["ISO", "ISO AUTO Minimum"], "context": "Stills mode", "kind": "list", "index": index,
+            "label": label, "base": base, "chosen_frame": f"{frame:05d}_down.png", "dat": f"{frame + 2:05d}_x.DAT",
+            "applied": True, "changes": [{"key": k, "before": b, "after": a} for k, b, a in changes]}
+
+
+def credit(proofs):
+    """values_of over the row's latest line per option (rows_of), what each session moves read from all its lines
+    (session_moves), as the report credits a row."""
+    (name, opts), = R.rows_of(None, proofs).items()
+    return R.values_of(opts, moves=R.session_moves(proofs).get(name))
+
+
+def test_nothing_changed_says_nothing_of_a_record_its_session_never_moves(monkeypatch):
+    """The older session was made with Different Set for Still/Mv's box ticked for the row: a choice moves the live
+    setting and the stills copy, never the movie copy, which holds its factory value (3, a value the list never offers).
+    The later session, the box unticked, moves all three. ISO100 was chosen in the older session only: it is credited
+    with what it wrote, and on the movie copy with nothing, never with the 3 its session started from (the report of
+    2026-11-19: line 6751 named 0x0dfe's 3 "ISO100")."""
+    held = {("00010_before.DAT", MOVIE): 3, ("00020_before.DAT", MOVIE): 3}
+    monkeypatch.setattr(R, "base_value", lambda base, key: held.get((base, key)))
+    older = [iso(1, "ISO125", 11, "00010_before.DAT", [(LIVE, 35, 6), (STILLS, 35, 6)]),
+             iso(0, "ISO100", 13, "00010_before.DAT", [(LIVE, 35, 5), (STILLS, 35, 5)])]
+    later = [iso(1, "ISO125", 21, "00020_before.DAT", [(LIVE, 3, 6), (STILLS, 3, 6), (MOVIE, 3, 6)]),
+             iso(2, "ISO160", 23, "00020_before.DAT", [(LIVE, 3, 7), (STILLS, 3, 7), (MOVIE, 3, 7)])]
+    got = credit(older + later)
+    assert got[MOVIE] == {"ISO125": 6, "ISO160": 7}
+    assert got[LIVE] == got[STILLS] == {"ISO125": 6, "ISO100": 5, "ISO160": 7}
+
+
+def test_nothing_changed_within_a_session_that_moves_the_record_is_credited_as_before(monkeypatch):
+    """Within one session whose other lines wrote the record, a line that changed nothing in it holds what the session
+    started from, as the report has always read it (the saved option chosen back last). So it is where the session's
+    line that wrote the record was later replaced by another session's line of the same option: every line of a session
+    tells what it moves, not only each option's latest. A session that moved nothing at all (a saved option put back in
+    a session of its own) still takes its own start."""
+    held = {("00030_before.DAT", MOVIE): 5, ("00040_before.DAT", MOVIE): 5, ("00050_before.DAT", MOVIE): 9}
+    monkeypatch.setattr(R, "base_value", lambda base, key: held.get((base, key)))
+    one = [iso(1, "ISO125", 31, "00030_before.DAT", [(MOVIE, 5, 6)]), iso(0, "ISO100", 33, "00030_before.DAT")]
+    assert credit(one)[MOVIE] == {"ISO125": 6, "ISO100": 5}
+    replaced = [iso(1, "ISO125", 41, "00040_before.DAT", [(MOVIE, 5, 6)]),
+                iso(0, "ISO100", 43, "00040_before.DAT", [(LIVE, 6, 5)]),
+                iso(1, "ISO125", 51, "00050_before.DAT", [(MOVIE, 9, 6)])]
+    assert credit(replaced)[MOVIE] == {"ISO125": 6, "ISO100": 5}
+    alone = [iso(0, "ISO100", 61, "00060_before.DAT", [(MOVIE, 7, 5)]),
+             iso(1, "ISO125", 63, "00060_before.DAT", [(MOVIE, 7, 6)]), iso(2, "ISO160", 71, "00050_before.DAT")]
+    assert credit(alone)[MOVIE] == {"ISO100": 5, "ISO125": 6, "ISO160": 9}

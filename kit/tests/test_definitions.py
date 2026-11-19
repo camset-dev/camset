@@ -3134,7 +3134,9 @@ def test_a_record_a_proof_names_as_a_side_effect_is_never_credited_to_its_option
     got = R.values_of({0: held, 1: wrote, 2: by_hand})
     assert got[copy] == {"B": 4} and got[kind] == {"A": 1, "B": 2, "C": 3}
     plain = {k: v for k, v in held.items() if k != "side_effects"}
-    assert R.values_of({0: plain, 1: wrote})[copy] == {"A": 3, "B": 4}, "named nowhere: nothing changed credits it"
+    moved = proof("D", 2, [(kind, 0, 7), (copy, 3, 8)], base="b1.DAT", path=("Hold",))     # A's session moves it
+    assert R.values_of({0: plain, 1: wrote, 2: moved})[copy] == {"A": 3, "B": 4, "D": 8}, \
+        "named nowhere: nothing changed credits it"
 
 
 def test_registered_af_areas_carry_no_hand_proof():

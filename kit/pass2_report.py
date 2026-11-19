@@ -62,7 +62,8 @@ kit/tools/reread_proofs.py wrote for its frame in <run>/readings.jsonl) confirms
 wins alone. Each value's source goes into report.json ("names": two readers, one reader (map), vision model (a scale
 number the reader alone read), disputed, ocr disagrees...), and the disputed ones and those the OCR disagrees
 with into "name_disputes", listed in full in <run>/report.md. A value taken from "nothing changed" (the row's start, and
-any option that left the record as it was) keeps its readers' source too: report.json lists such labels apart
+any option that left the record as it was, never in a session whose lines moved other records but not that one:
+session_moves) keeps its readers' source too: report.json lists such labels apart
 ("inferred", two or more in a record), for a person to read; the definition never says which they are, for one of them
 is the value the record held when the row began (docs/decisions/0016). A table row that proved only a sample stepped from
 the option the camera held (prove_run --picker-sample: sampled_from_start) marks its records "sampled_from_start": the
@@ -884,16 +885,28 @@ def credit_inputs(proofs: list, skip: set, rows: dict, hand: set) -> tuple:
     return carried, not_credited, kept_over, owners
 
 
+def session_moves(proofs: list, skip: set = frozenset()) -> dict:
+    """{report row: {base: the records its lines of that session changed}}: every line that counts (skip: those that do
+    not) and that the camera applied (a number field's kept value too: credited), each array slot apart
+    (element_changes), not only each option's latest line. values_of credits a line that changed nothing in a record
+    with what its session started from only where that session moved the record, or moved nothing at all."""
+    out = collections.defaultdict(lambda: collections.defaultdict(set))
+    for i, r in enumerate(proofs):
+        if i not in skip and r.get("path") and credited(r) and ("changes" in r or r.get("proof") == "display"):
+            out[row_name(r)][r.get("base")] |= {c["key"] for c in element_changes(r)}
+    return out
+
+
 def row_values(rows: dict, name: str, opts: dict, schema: dict, owners: dict, not_credited: frozenset,
-               kept_over: frozenset, readouts: frozenset) -> tuple:
-    """(records, inferred, sources, disputes, held back) of one report row, as values_of credits them. A record another
-    (not checklist) row's proofs change is that row's: in a checklist it moved with the setting in use (Focus Area Limit
-    unticking the area in use, 2026-10-30)."""
+               kept_over: frozenset, readouts: frozenset, moves: dict | None = None) -> tuple:
+    """(records, inferred, sources, disputes, held back) of one report row, as values_of credits them (moves: the row's
+    session_moves). A record another (not checklist) row's proofs change is that row's: in a checklist it moved with
+    the setting in use (Focus Area Limit unticking the area in use, 2026-10-30)."""
     elsewhere = frozenset(k for row, keys in owners.items() if base_row(row) != base_row(name) for k in keys)
     inferred, sources, disputes, held_back = {}, {}, {}, {}
     recs = values_of(opts, elsewhere, {k: x["name"] for k, x in schema.items()}, own_records(rows, name, opts),
                      inferred, not_credited, sources, disputes, kept_over, no_credit(rows, name, opts, readouts),
-                     held_back)
+                     held_back, moves)
     return recs, inferred, sources, disputes, held_back
 
 
@@ -914,12 +927,13 @@ def stood_out(run: Path, proofs: list, skip: set, schema: dict, hand: set, reado
         return set()
     rows = rows_of(run, proofs, skip)
     _, not_credited, kept_over, owners = credit_inputs(proofs, skip, rows, hand)
+    moves = session_moves(proofs, skip)
     memo = {}
 
     def credited(name):          # {record: {value: best rank}}
         if name not in memo:
             recs, _, sources, _, _ = row_values(rows, name, rows[name], schema, owners, not_credited, kept_over,
-                                                readouts)
+                                                readouts, moves.get(name))
             out = collections.defaultdict(dict)
             for key, vals in recs.items():
                 for lab, v in vals.items():
@@ -1548,9 +1562,13 @@ def screen_records(opts: dict, carried: frozenset = frozenset()) -> set:
 def values_of(opts: dict, elsewhere: frozenset = frozenset(), names: dict | None = None,
               own: dict | None = None, inferred: dict | None = None, carried: frozenset = frozenset(),
               sources: dict | None = None, disputes: dict | None = None, kept_over: frozenset = frozenset(),
-              main_keys: frozenset | None = None, held_back: dict | None = None) -> dict:
+              main_keys: frozenset | None = None, held_back: dict | None = None, moves: dict | None = None) -> dict:
     """record key -> {label: value}. The option a row started on changes nothing: its value is the
-    one every other option's change started from. Each label is name_of's; sources (key -> {label: source}) and
+    one every other option's change started from, read in its own session; never in a session whose lines moved other
+    records but never this one (moves: {base: the records the row's lines of that session changed}, session_moves; by
+    default each option's latest line's): in the state it was made in, the record does not move with the row's options
+    (Different Set for Still/Mv's box ticked for the row keeps a movie copy as it was), so what it held says nothing of
+    an option. A session that moved nothing at all (a saved option put back alone) takes its start as before. Each label is name_of's; sources (key -> {label: source}) and
     disputes ((key, label) -> {label, shown, vlm, frame}) are filled when given. A value carried over from the option
     before (carried: (dat, key), carried_over) is not credited to the label. kept_over: every value carried over,
     those a hand rule names too, which no plain option wrote when the records a function's own screen writes are
@@ -1601,6 +1619,10 @@ def values_of(opts: dict, elsewhere: frozenset = frozenset(), names: dict | None
     if any(o["kind"] == "wbgrid" for o in opts.values()):
         return grid_values(opts)
     keys = {c["key"] for o in opts.values() for c in o["changes"]}
+    if moves is None:
+        moves = collections.defaultdict(set)
+        for o in opts.values():
+            moves[o.get("base")] |= {c["key"] for c in o["changes"]}
     # a record another row's proofs own (elsewhere) that every option of this row that changed anything wrote to one
     # value moved with the state the first option put the camera in, not with the options (S&Q Shoot Mode's proofs
     # both carry the S&Q exposure mode the camera set on entering S&Q Motion, 2026-11-07): not this row's
@@ -1667,6 +1689,10 @@ def values_of(opts: dict, elsewhere: frozenset = frozenset(), names: dict | None
                     # row is its own though another row writes it too (S&Q Shoot Mode's, which the Shoot Mode
                     # carousel's family also sets; a setting table's cell by its row: File Format (Slot 1), which
                     # JPEG/HEIF Switch also writes, is the File Format cell's)
+                    continue
+                if moves.get(o.get("base")) and key not in moves[o.get("base")]:
+                    # its session moved other records of the row, never this one: no option's value (ISO AUTO Minimum's
+                    # movie copy in a session made with its Different Set box ticked held its factory 3, 2026-11-19)
                     continue
                 v = befores.get(o.get("base"))
                 if v is None:
@@ -1869,11 +1895,12 @@ def main():
     skip = skip | stood
     rows = rows_of(run, proofs, skip)
     carried, not_credited, kept_over, owners = credit_inputs(proofs, skip, rows, hand)
+    moves = session_moves(proofs, skip)
     lines = grid_lines([r for i, r in enumerate(proofs) if i not in skip])
     name_disputes, twins, samples = [], [], 0
     for name, opts in rows.items():
         recs, inferred, sources, disputes, held_back = row_values(rows, name, opts, schema, owners, not_credited,
-                                                                  kept_over, readouts)
+                                                                  kept_over, readouts, moves.get(name))
         notices = [o["notice"]["text"] for o in opts.values() if o.get("notice")]
         # the kinds of proof the row holds (list, axis, wbgrid...): the writer takes a grid's records as sampled scales
         from_start = sampled_from_start(opts)
