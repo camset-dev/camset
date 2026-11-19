@@ -542,7 +542,7 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     is still the Custom option). The last visit puts the axis back on the value it held and the
     carousel back on the option it opened on; that diff must be empty."""
     path, vals = job["path"], job["values"]
-    name, n = f"{path[0]} / {job['option']}", len(vals)
+    name, n = f"{' > '.join(path)} / {job['option']}", len(vals)       # a submenu's row by its whole path (job_key)
     base = camset.read(base_path)
     row_place = place(cam)
     last, order, a0, prev, saved, downs0, rebase = base_path, None, None, None, None, 0, None
@@ -610,7 +610,7 @@ def prove_axis_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         # on the row; no menu page judged as the page (a carousel's row is a top-level row), no information screen taken
         got = after_ok(cam, name, back=lambda: same_place(place(cam), row_place), info=False)
         notice, refused = got.notice, got.refused
-        dat = link.download(f"{path[0]}-axis-{k}")
+        dat = link.download(f"{path[-1]}-axis-{k}")
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         rec = {"path": path, "kind": "axis", "option": job["option"], "index": k, "label": vals[k], "shown": shown,
@@ -946,8 +946,8 @@ def main():
     add_scan_argument(ap)
     ap.add_argument("--run", default="kit2_pass2", help="run folder in the camera's runs/<model>_fw<fw>/")
     ap.add_argument("--map", default=None, type=paths.run_arg,
-                    help="a pass-3 run's map.json instead of pass 1's (no axis jobs then): kit2_crawl/map.json is "
-                         "in the camera's runs/<model>_fw<fw>/")
+                    help="a run's own map.json instead of pass 1's, its axis jobs those kit/axis_walk.py --map walked "
+                         "on it: kit2_crawl/map.json is in the camera's runs/<model>_fw<fw>/")
     ap.add_argument("--looks", action="store_true", help="prove Creative Look's parameter panels (18 looks x 8)")
     ap.add_argument("--look-base", action="store_true", help="prove the six custom looks' base look (12 looks each)")
     ap.add_argument("--every", action="store_true",
@@ -1036,7 +1036,8 @@ def main():
         LABELS.clear()
         ICON_ROWS.clear()
         DISP_MODES.clear()
-    todo = jobs(set(a.rows) if a.rows else None) + ([] if a.map else axis_jobs(set(a.rows) if a.rows else None))
+    # the second axes the axis walk read on this run's map (proving.jobs.axis_jobs: pass 1's, or a --map's own walk)
+    todo = jobs(set(a.rows) if a.rows else None) + axis_jobs(set(a.rows) if a.rows else None)
     if a.every:
         todo = every_value(todo)
     FIRST.update(first_values(a.first))

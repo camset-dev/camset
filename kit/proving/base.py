@@ -8,6 +8,7 @@ a run; a copy of the others by name (prove_run's PASS1 and AXES, proving.tables'
 import json
 import re
 import time
+from pathlib import Path
 
 from camkit import paths
 from camkit.session import (LOCK_S, LockSeen, lock_log, lock_measured, lock_over,  # noqa: F401 (the lock after a
@@ -82,6 +83,17 @@ def frame_file(map_path, fr: str):
 
 
 AXES = RUN_ROOT / "kit2_axes" / "axes.json"
+
+
+def map_key(map_path, root) -> str:
+    """How an axis walk's entry names the run's own map it walked (kit/axis_walk.py --map, its "map"), and how
+    jobs.axis_jobs finds the entries of the map a run proves with: the map's path under the camera's runs (`root`),
+    with forward slashes ("kit2_fin_crawl_brk/map.json"), else its whole path."""
+    p = Path(map_path).resolve()
+    try:
+        return p.relative_to(Path(root).resolve()).as_posix()
+    except ValueError:
+        return p.as_posix()
 
 TABLES = RUN_ROOT / "kit2_tables" / "tables.json"
 

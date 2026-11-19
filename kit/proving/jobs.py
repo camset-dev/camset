@@ -270,15 +270,22 @@ def check_job(r) -> dict:
 
 def axis_jobs(scope_names=None) -> list:
     """One job per carousel option with a second axis (kit/axis_walk.py found its values, in Right
-    order from the one held then): {"path": [row], "kind": "axis", "option", "values"}."""
+    order from the one held then): {"path": the row's path, "kind": "axis", "option", "values"}. Only the entries of the
+    map the run proves with (base.MAP): on pass 1's map those with no "map", as before; on a run's own map (prove_run
+    --map) those its own axis walk wrote (axis_walk --map, "map": base.map_key), so a row a switched state alone opens
+    (Bracket Type, the drive mode dial on BRK) is never a job of a run made without it. A row inside a submenu is keyed
+    by its whole path ("Bracket Settings > Bracket Type")."""
     if not base.AXES.exists():
         return []
+    here = None if base.MAP == base.PASS1 / "map_all.json" else base.map_key(base.MAP, base.AXES.parent.parent)
     out = []
     for row, opts in read_json(base.AXES).items():
         for opt, info in opts.items():
+            if info.get("map") != here:
+                continue
             if len(info["values"]) < 2 or (scope_names and f"{row} / {opt}" not in scope_names and row not in scope_names):
                 continue
-            out.append({"path": [row], "kind": "axis", "option": opt, "values": info["values"]})
+            out.append({"path": row.split(" > "), "kind": "axis", "option": opt, "values": info["values"]})
     return out
 
 
