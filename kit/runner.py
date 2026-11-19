@@ -1205,11 +1205,12 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
     The eyes are closed at the end, unless close_eyes is False (a run with a second session after this one). A start
     file that did not take (or a last download refused) ends the run, unless exit_unrestored is False, with status
     EXIT_UNRESTORED, after which kit/tools/chain.py stops the chain. Either way the verdict is left on the session
-    (s.restored, s.ending), for a run with a second session to carry it to its own exit. show=0: the end and the
-    restore's check count the records that differ from the start file without listing them (end_session), so no value
-    the start file holds is printed; keys with it, their keys alone (values_withheld). expected: the keys of records no
-    settings file sets which the body is known to write (a memory slot's registration marks: memreg_run): the end and
-    the check say them by key and leave them out of the count (camkit.session.ended), so they never fail the restore.
+    (s.restored, s.ending), for a run with a second session to carry it to its own exit. show: how many records that
+    differ from the start file the end lists (end_session); 0, the end and the restore's check count them without
+    listing them, so no value the start file holds is printed; keys with it, their keys alone (values_withheld).
+    expected: the keys of records no settings file sets which the body is known to write (a memory slot's registration
+    marks: memreg_run): the end and the check say them by key and leave them out of the count (camkit.session.ended),
+    so they never fail the restore.
     What a walker or a tool runs differently, each as it ran it before: readers False, a run that asks no reader
     (kit/page_scan.py); reach and start_why, how the shooting screen is reached for the start download and what its
     wait says, and lock, a runner's own watch of the lock (session_start); settle, the longest that wait takes; camera
@@ -1239,7 +1240,7 @@ def prover_session(run, eyes, start_tag: str = "before", may_open=(), settle: fl
             if on_end is not None:
                 on_end(ending)
         restored = ps.restored = restore_checked(run, ending, start, note, **({"eyes": eyes} if watch_restart else {}),
-                                                 **({} if show is None else {"show": show}),
+                                                 **({"show": 0} if show == 0 else {}),
                                                  **({"keys": True} if keys else {}),
                                                  **({"expected": frozenset(expected)} if expected else {}))
     finally:

@@ -1136,8 +1136,11 @@ def cards_module():
 
 def cards_world(tmp_path, monkeypatch, restored=True):
     """card_actions.main() made up around: a body that fails (a screen the scan did not record), the session's end and
-    the restore's check recorded in the calls returned with the module and the run."""
+    the restore's check recorded in the calls returned with the module and the run. Its session is
+    runner.prover_session's, whose parts are made up in runner."""
     from types import SimpleNamespace
+
+    import runner
     from camkit import session
     from camkit.runs import Run
     C = cards_module()
@@ -1161,19 +1164,21 @@ def cards_world(tmp_path, monkeypatch, restored=True):
             return tmp_path / f"{tag}.DAT"
     eyes = SimpleNamespace(attach=lambda link: None, grab=lambda save=False: None, close=lambda: calls.append("eyes closed"))
     ending = session.Ending(tmp_path / "after.DAT", [SimpleNamespace(key="global:0x0001", before=0, after=1)], True)
-    for name, value in (("check_readers", lambda: None), ("Link", Link), ("Run", lambda name: run),
-                        ("eyes_from_config", lambda r: eyes),
-                        ("load_scan", lambda scan: ([], {})), ("wait_for", lambda *a, **k: None),
+    for name, value in (("Run", lambda name: run), ("eyes_from_config", lambda r: eyes),
+                        ("load_scan", lambda scan: ([], {})),
+                        ("to_row", lambda *a: (_ for _ in ()).throw(RuntimeError("a screen the scan did not record")))):
+        monkeypatch.setattr(C, name, value)
+    monkeypatch.setattr(session, "wait_for", lambda *a, **k: None)
+    for name, value in (("check_readers", lambda: None), ("Link", Link),
                         ("screen", SimpleNamespace(read=lambda f: SimpleNamespace(kind="shooting"))),
-                        ("time", SimpleNamespace(sleep=lambda s: None)),
+                        ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0)),
                         ("LiveCamera", lambda link, eyes, run, may_open=(): calls.append(("may_open", set(may_open)))
                          or SimpleNamespace()),
-                        ("to_row", lambda *a: (_ for _ in ()).throw(RuntimeError("a screen the scan did not record"))),
                         ("close_for_restore", lambda cam, link, start: calls.append("closed")),
-                        ("end_session", lambda link, eyes, start, why, reach=None, show=None:
+                        ("end_session", lambda link, eyes, start, why, reach=None, show=None, **kw:
                          calls.append(("end", start.name, reach)) or ending),
-                        ("restore_checked", lambda r, e, start: calls.append("checked") or restored)):
-        monkeypatch.setattr(C, name, value)
+                        ("restore_checked", lambda r, e, start, *a, **kw: calls.append("checked") or restored)):
+        monkeypatch.setattr(runner, name, value)
     monkeypatch.setattr(sys, "argv", ["card_actions.py", "peek", "Create New Folder", "--allow", "Create New Folder"])
     return C, calls, run
 

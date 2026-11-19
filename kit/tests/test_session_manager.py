@@ -273,7 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
+NOT_YET = {"kit/prove_run.py": 1, "kit/pass3_run.py": 1,
            "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
 
@@ -400,8 +400,8 @@ def test_card_actions_session(world, monkeypatch):
     monkeypatch.setattr(card_actions, "to_row", lambda *a: (_ for _ in ()).throw(RuntimeError("off the scan")))
     run_main(monkeypatch, card_actions, "peek", "Create New Folder", "--allow", "Create New Folder")
     assert world.said == [
-        "check readers", "link", "attach", "press menu (cleanup)", "sleep 1", "wait_for: the settings download",
-        "download before", "sleep 5", "camera {'may_open': ['Create New Folder']}", "close",
+        "check readers", "link", "attach", "press menu (cleanup)", "wait_for: the settings download",
+        "download before", "lock wait (5 s at most)", "camera {'may_open': ['Create New Folder']}", "close",
         "wait_for: the settings download after the action", "finish after [('show', 30)]", "link closed", "check []",
         "eyes closed"]
 

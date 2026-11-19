@@ -41,18 +41,14 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(1, str(Path(__file__).resolve().parent))
 import drive  # noqa: E402
-from camkit import safety, screen  # noqa: E402
+from camkit import safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
-from camkit.live import LiveCamera, press, text_of  # noqa: E402
-from camkit.vlm import check_readers  # noqa: E402
+from camkit.live import press, text_of  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
-from camkit.session import wait_for  # noqa: E402
 from crawl_run import go_to  # noqa: E402
-from runner import (EXIT_UNRESTORED, LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
-                    close_for_restore, confirm_phrase_or_exit, end_session, load_scan, restore_checked, restoring,
-                    wait_shooting)
+from runner import (LATEST_SCAN, add_allow_argument, add_scan_argument, allowed_or_exit, changes_of,  # noqa: E402
+                    close_menu_and_wait, confirm_phrase_or_exit, load_scan, prover_session, restoring, wait_shooting)
 
 # 2026-11-01 (user): "Please don't delete the cards." Format is off the list: nothing on the cards
 # is deleted or formatted remotely (Delete was never on it)
@@ -144,21 +140,30 @@ def main():
     allowance = allowance_of(a.row, a.allow)
     cycle, model = load_scan(a.scan)
     run = Run("kit2_cards")
-    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
     log = open(run.dir / "results.jsonl", "a", encoding="utf-8", newline="\n")  # noqa: SIM115 (closed in the finally below)
-    ending, restored = None, False
+    screens, ok = [], True
+
+    def results(ending):
+        """The results line, once the start file is back on (a line that cannot be written skips nothing); its write
+        failing exits EXIT_UNRESTORED, as whatever ends the restore early does."""
+        with restoring("card_actions.py's restore"):
+            log.write(json.dumps({"what": a.what, "row": a.row, "presses": presses, "completed": ok,
+                                  "screens": screens, "allowance": allowance, "before": s.start.name,
+                                  "after": ending.after.name if ending.after else None,
+                                  "changes": changes_of(ending.changes)}) + "\n")
+            log.flush()
     try:
-        with Link(run) as link:
-            hdmi.attach(link)
-            if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                link.press("menu", cleanup=True)
-                time.sleep(1.0)
-            wait_for(hdmi, ("shooting",), "the settings download", link=link)
-            before = link.download("before")       # peek too: Right alone may act (Create New Folder)
-            time.sleep(5)
-            cam = LiveCamera(link, hdmi, run, may_open=set(a.allow))    # the owner's word for the row, no other
-            screens, ok = [], True
+        # the session every runner runs (runner.prover_session), its end as drive.py's: a plain menu page closed and the
+        # shooting screen waited for before the start download (peek too: Right alone may act, Create New Folder), the
+        # LiveCamera given the owner's word for the row and no other; after the body the cleanup presses, which go out
+        # after a STOP too, then the download, the diff and the start file put back when anything differs, and only
+        # then the results line. A camera not known to be as the start file exits EXIT_UNRESTORED
+        with prover_session(run, hdmi, may_open=set(a.allow), reach=close_menu_and_wait,
+                            start_why="the settings download", say_start=False, end_reach=wait_shooting,
+                            end_why="the settings download after the action", show=30, on_end=results,
+                            watch_restart=False) as s:
+            cam = s.cam
             try:
                 to_row(cam, cycle, model, a.row)
                 for p in presses:
@@ -180,24 +185,9 @@ def main():
             except Exception as e:
                 print(f"error: {type(e).__name__}: {e}; cancelling", flush=True)
                 ok = False
-            # the standard end (runner), as drive.py's: cleanup presses, which go out after a STOP too; then the download,
-            # the diff and the start file put back when anything differs, and only then the results line (a line that
-            # cannot be written skips nothing). Whatever ends it early, the line's write too, exits EXIT_UNRESTORED
-            with restoring("card_actions.py's restore"):
-                close_for_restore(cam, link, before)
-                ending = end_session(link, hdmi, before, "the settings download after the action", reach=wait_shooting,
-                                     show=30)
-                log.write(json.dumps({"what": a.what, "row": a.row, "presses": presses, "completed": ok,
-                                      "screens": screens, "allowance": allowance, "before": before.name,
-                                      "after": ending.after.name if ending.after else None,
-                                      "changes": changes_of(ending.changes)}) + "\n")
-                log.flush()
-        restored = restore_checked(run, ending, before)
+            s.close()
     finally:
-        hdmi.close()
         log.close()
-    if not restored:
-        sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
 
 
 if __name__ == "__main__":
