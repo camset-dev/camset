@@ -181,7 +181,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ocr, safety, screen  # noqa: E402
+from camkit import match, ocr, safety, screen  # noqa: E402
 from camkit import coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
@@ -704,7 +704,10 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     with a reading the page model keeps of it, its label itself or that label with the row's icon read as a letter or two
     before it ("S Exposure Comp. +0.0"), both with their last stop kept (stop_kept: plain leaves out the stop of
     "Exposure Comp.", so "Exposure Comp. +0.0" ran on with ". +0.0"), and the words past that reading are none or a
-    value of the row as above; else that rule's refusal stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
+    value of the row as above; or, where the page model saw the row drawn with an icon, it is that row behind any icon
+    read in front as a stray mark or a letter or two (icon_behind: camkit.match.ICON's rule), also where that rule took
+    the icon itself for a short row the kit knows ("R Peaking Color White" read as Color Depth's "R": in_icon); else
+    that rule's refusal stands. The --path's own last row (`depth` its labels above, the page enter_any walked to) is then judged by
     first_open_or_exit; any other opens only where this camera has been seen to open it, so walking within a seen parent
     to a seen row stays plain. Where the page shown cannot be placed (`depth` None, after a MENU or a Left on a menu
     page) nothing opens. `decided`: the row a network decision opens that the lit bar reads as (safety.network_lifted_
@@ -722,12 +725,20 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
                    f"value of it: {named}")
     own = (*depth, path[-1])
     if why and not decided and gone_to and list(depth) == list(path[:-1]) \
-            and (row is None or first_open.key(row) == first_open.key(own)):
+            and (row is None or first_open.key(row) == first_open.key(own) or in_icon(lit, row)):
         # the navigated row's own reading the bar starts with (icon_reading), the words past it none or a value of it
         head = icon_reading(lit, path[-1], gone_to[0], {*known, *gone_to[1]})
         rest = safety.plain(stop_kept(lit)[len(head):]) if head else ""
-        if head and (not rest or rest in {safety.plain(v) for v in (values or {}).get(first_open.key(own)[-1], ())}):
+        own_values = {safety.plain(v) for v in (values or {}).get(first_open.key(own)[-1], ())}
+        if head and (not rest or rest in own_values):
             row, why = own, ""
+        elif icon_behind(lit, path[-1], gone_to[0], {*known, *gone_to[1]}):
+            # the label behind the icon read as a letter or two (camkit.match.ICON) is the navigated row, which the page
+            # model saw drawn with an icon, the words past it none or a value of it: the live OCR spelled the icon
+            # otherwise than the page model's (kit2_chk_drive_1119: "R" for "i"), even as a short row of another page
+            rest = safety.plain(stop_kept(behind(lit))[len(stop_kept(path[-1])):])
+            if not rest or rest in own_values:
+                row, why = own, ""
     if why:
         return why, None
     if list(depth) == list(path[:-1]) and first_open.key(row) == first_open.key((*depth, path[-1])):
@@ -735,6 +746,54 @@ def lit_refused(lit: str, depth, path: list, seen, known=(), decided=None, value
     if not seen.seen(row):
         return f"the lit row reads {lit.strip()!r}, a row this camera has not been seen to open: {named}", None
     return "", row
+
+
+def behind(lit) -> str:
+    """The lit bar's text without the icon read in front of it as a stray mark or a letter or two, by the kit's one rule
+    for such an icon (camkit.match.ICON): "R Peaking Color White" -> "Peaking Color White"; the text as it is where
+    nothing is so read."""
+    return match.ICON.sub("", str(lit or "").strip()).strip()
+
+
+def in_icon(lit, row) -> bool:
+    """Whether the row lit_refused's longest-label rule read the bar as (`row`, a path) is no more than the icon read in
+    front of the label (behind's): "R Peaking Color White" read as the row "R", a row the kit knows on another page
+    (Picture Profile's Color Depth R; kit2_chk_drive_1119, 2026-11-19)."""
+    text, cut = str(lit or "").strip(), behind(lit)
+    if row is None or not cut or cut == text:
+        return False
+    icon, label = safety.plain(text[:len(text) - len(cut)]), first_open.key(row)[-1]
+    return bool(label) and len(label) <= len(icon) and icon.startswith(label)
+
+
+def icon_behind(lit: str, label: str, row, others=()) -> bool:
+    """Whether the lit bar's text `lit` is the page model row `row` (the one go_to reached for the --path's row `label`)
+    with its icon read in front as a stray mark or a letter or two, by camkit.match.ICON's rule (behind), whatever the
+    letter: the row's label is `label` (compared plain); the page model saw the row drawn with an icon (a reading of it
+    is the label behind such an icon: "i Peaking Color"); the text behind the icon starts with the label, both with
+    their last stop kept (stop_kept), alone or before what is no letter or digit of a longer word; and no name the kit
+    knows another row by (`others`, as icon_reading takes them) is what the text as read, or behind the icon, starts
+    with, unless it lies within the icon itself ("R", Color Depth's row, read for the icon of Peaking Color). So "AF
+    Assist On" is never the row "Assist" where another row is read "AF Assist", and a row the page model never saw with
+    an icon takes no letter in front."""
+    want = safety.plain(label or "")
+    if not want or not isinstance(row, dict) or safety.plain(row.get("label") or "") != want:
+        return False
+    if not any(behind(r) != r.strip() and safety.plain(behind(r)) == want for r in row_readings(row)):
+        return False                        # the page model never saw an icon in front of this row's label
+    text, cut = str(lit or "").strip(), behind(lit)
+    head, seen = stop_kept(label), stop_kept(cut)
+    if cut == text or not seen.startswith(head) or seen[len(head):len(head) + 1].isalnum():
+        return False
+    full, icon = safety.plain(text), safety.plain(text[:len(text) - len(cut)])
+    for other in others:
+        p = safety.plain(other) if isinstance(other, str) else ""
+        if not p or p == want:
+            continue
+        if (full.startswith(p) and not full[len(p):len(p) + 1].isalnum() and len(p) > len(icon)) or \
+                (len(p) > len(want) and seen.startswith(p) and not seen[len(p):len(p) + 1].isalnum()):
+            return False
+    return True
 
 
 # what stands before a row's label in a reading of it, compared plain: nothing (the label itself), or the row's icon

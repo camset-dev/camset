@@ -612,3 +612,62 @@ def test_eyes_that_cannot_open_before_any_command_are_no_unrestored_camera(tmp_p
     with pytest.raises(SystemExit) as stop, runner.restoring("putting the start file back"):
         raise RuntimeError("the upload was not answered")
     assert stop.value.code == runner.EXIT_UNRESTORED
+
+
+# ---------------------------------------------------------------- met on the camera 2026-11-19: an icon read as "R"
+
+# the page model's row as kit2_page_scan_1118o2 keeps it (its OCR read the icon as "i"); the live bar's OCR read it "R"
+PEAKING = {"label": "Peaking Color", "value": "White",
+           "readings": {"label": {"ocr": "i Peaking Color", "ocr2": "Peaking Color", "vllm": "Peaking Color"}}}
+LEVEL = {"label": "Peaking Level", "value": "Mid",
+         "readings": {"label": {"ocr": "& Peaking Level", "ocr2": "Peaking Level", "vllm": "Peaking Level"}}}
+
+
+def test_drive_reads_the_label_behind_an_icon_read_as_another_rows_letter(tmp_path, monkeypatch):
+    """Met on the camera 2026-11-19 (kit2_chk_drive_1119, OSD eyes): drive.py --path "Peaking Color" --press right went
+    by the page scan to the row and was refused: "the lit row reads 'R Peaking Color White', which runs on past the row
+    'r' ...". The row draws an icon before its label, OCR spelled it "R", and "R" is a row the kit knows (Picture
+    Profile's Color Depth R), so the longest-label rule took the icon for that row. Now, where that rule takes for the
+    row only what the kit's rule for an icon read as a letter or two strips (camkit.match.ICON), the label behind it is
+    read, on the row go_to went to: the --path's row, its first open where it is not seen, a plain Right where it is. A
+    label behind the icon that runs on with words that are no value of it, or that is another row, stays refused."""
+    import drive
+    from test_first_open import BLANK, icon_drive, look, looks_of
+    from test_first_open import scope as scope_fixture  # noqa: F401
+    from conftest import TEST_CAMERA
+    from proving import base
+    pass1 = tmp_path / "pass1"
+    monkeypatch.setattr(base, "PASS1", pass1)
+    pass1.mkdir()
+    (pass1 / "pass2_scope_draft.json").write_text(json.dumps({"prove": [], "exclude": {}, "decisions": [BLANK]}),
+                                                  encoding="utf-8")
+    monkeypatch.setattr(drive, "row_labels", lambda doc: {"R", "G", "B", "Peaking Color", "Peaking Level"})
+    values = {"peaking color": {"White", "Red"}, "peaking level": {"Mid", "High"}}
+    rows = [PEAKING, LEVEL]
+    code, pressed, line, said = icon_drive(tmp_path / "a", monkeypatch, PEAKING, "R Peaking Color White", rows=rows,
+                                           values=values)
+    assert pressed == [("menu", False), ("right", True)] and code in (0, None) and line["first_open"] is True, said
+    looks_of(TEST_CAMERA, look(["Peaking Color"], by="drive"))
+    code, pressed, line, said = icon_drive(tmp_path / "b", monkeypatch, PEAKING, "R Peaking Color White", rows=rows,
+                                           values=values)
+    assert pressed == [("menu", False), ("right", False)] and code in (0, None) and "first_open" not in line, said
+    for lit, words in (("R Peaking Color Purple", "which runs on past the row 'r' with words that are no value of it"),
+                       ("R Peaking Level Mid", "which runs on past the row 'r' with words that are no value of it"),
+                       ("Rd Peaking Colors White", "a row this camera has not been seen to open")):
+        code, pressed, line, said = icon_drive(tmp_path / "c", monkeypatch, PEAKING, lit, rows=rows, values=values)
+        assert pressed == [("menu", False)] and words in said, (lit, said)
+    # a row the page model never saw drawn with an icon takes no letter in front; nor does a bar whose text as read
+    # starts with a name another row is known by, past the icon (another row's reading "R Peaking Color")
+    plain_row = {**PEAKING, "readings": {"label": {"ocr": "Peaking Color", "vllm": "Peaking Color"}}}
+    other = {**LEVEL, "readings": {"label": {"ocr": "R Peaking Color", "vllm": "Peaking Level"}}}
+    for row, rows_here in ((plain_row, [plain_row, LEVEL]), (PEAKING, [PEAKING, other])):
+        code, pressed, line, said = icon_drive(tmp_path / "d", monkeypatch, row, "R Peaking Color White",
+                                               rows=rows_here, values=values)
+        assert pressed == [("menu", False)] and "which runs on past the row 'r'" in said, said
+    from drive import icon_behind
+    assert icon_behind("R Peaking Color White", "Peaking Color", PEAKING, {"R", "Peaking Level"})
+    assert icon_behind("• S Peaking Color", "Peaking Color", PEAKING)
+    assert not icon_behind("Peaking Color White", "Peaking Color", PEAKING)            # no icon in front: the rule's
+    assert not icon_behind("RGB Peaking Color", "Peaking Color", PEAKING)               # three letters are no icon
+    assert not icon_behind("R Peaking Color", "Peaking Color", {**PEAKING, "label": "Peaking Level"})
+    assert not icon_behind("R Peaking Color Level", "Peaking Color", PEAKING, {"Peaking Color Level"})
