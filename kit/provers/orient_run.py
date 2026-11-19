@@ -14,7 +14,9 @@ title, and the option under the cursor in orange under it.
 As kit/prove_run.py does for a carousel row: each option against the row's base (the option the
 row opened on last), then each option with a second axis (runs/<model>_fw<fw>/kit2_axes/axes.json), every axis
 value against that option's own base (the value it held last). Every choice is the row, Right,
-Up until the option is read, Right until the axis value is read, OK, then a settings download.
+Up until the option is read, Right until the axis value is read, OK, then a settings download. The screen after OK is
+read by proving.commit.after_ok (a notice's words both as the frame is and made upright): an option the camera refuses
+is written "applied": false with its notice.
 The keys are not assumed to move one way: grip down, Down steps back through the carousel.
 Proofs go to runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl tagged with the context, each keeping the vision model's
 reading of the chosen option ("vlm") beside OCR's ("shown"); the start file goes back on at the end and is checked.
@@ -31,7 +33,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # camkit before any other package, as in every kit program: a Python without the kit's packages is told so (camkit/start.py)
-from camkit import camset, ocr, safety  # noqa: E402
+from camkit import camset, live, ocr, safety  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from crawl_run import go_to  # noqa: E402
@@ -40,6 +42,7 @@ from PIL import Image  # noqa: E402
 from pass3_run import labels_of  # noqa: E402
 from prove_run import (AXES, LOCK_S, Failed, enter_any, main_name, option_key, to_shooting,  # noqa: E402
                        vlm_option)
+from proving.commit import REFUSED_WORDS, after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (add_scan_argument, changes_of, close_screen, load_scan, menu_from_shooting,  # noqa: E402
                     proofs_file, prover_session, read_json, scan_position)
@@ -152,12 +155,27 @@ def choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, i, v=None) 
         raise Failed(f"the dialog reads like a confirmation ({safety.confirmation(full)}): no OK")
     chosen, seen_vlm = cam.frame.path.name, later(vlm_option, cam)     # a second reader, kept with the proof
     cam.press("enter")
-    after_ok = cam.frame.path.name
+    row_frame = cam.frame.path.name
+    # what the camera did with it (proving.commit.after_ok): a refusal or a notice closed with MENU, never OK, its words
+    # read level and upright (notice_text); the menu closed (Focus Area's OK closes it); a screen of no known kind is no
+    # information screen taken here (a portrait screen reads so): it fails the row
+    got = after_ok(cam, row, label=opt, info=False, read=lambda c: notice_text(c, k, shots))
     to_shooting(link, hdmi, "the download after OK")
     time.sleep(1)
     dat = link.download(f"{row}-{'axis-' if v is not None else ''}{v if v is not None else i}")
     time.sleep(LOCK_S)
-    return {"shown": opt, "vlm": seen_vlm, "chosen_frame": chosen, "row_frame": after_ok, "dat": dat}
+    return {"shown": opt, "vlm": seen_vlm, "chosen_frame": chosen, "row_frame": row_frame, "dat": dat, "outcome": got}
+
+
+def notice_text(cam, k: int, shots: Path) -> str:
+    """A notice's whole text after OK, held vertically: read on the frame as it is (camkit.live.text_of) and made upright
+    (upright), as nobody has seen which way the camera draws a notice there; the reading that holds a question or a
+    refusal (safety.confirmation, proving.commit.REFUSED_WORDS), so either is never missed, else the longer."""
+    level, turned = live.text_of(cam), ocr.text_in(upright(cam, k, shots), (0, 0, 480, 640))
+    for t in (level, turned):
+        if safety.confirmation(t) or REFUSED_WORDS.search(t):
+            return t
+    return max((level, turned), key=len)
 
 
 def af_point(cam, link, hdmi, run, cycle, model, row, k, labels, axes, grip):
@@ -165,7 +183,10 @@ def af_point(cam, link, hdmi, run, cycle, model, row, k, labels, axes, grip):
     in Spot; on the shooting screen the control wheel's keys do what they are assigned, so only the
     multi-selector is pressed), then a download diffed against the one after Spot was chosen."""
     spot = next(n for n, lab in enumerate(labels) if axis_of(lab, axes) == "Spot")
-    base = choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, spot)["dat"]
+    got = choose(cam, link, hdmi, run, cycle, model, row, k, labels, axes, spot)
+    if not got["outcome"].applied:
+        raise Failed(f"{row}: the camera refused Spot (its notice closed with MENU): no AF point to move")
+    base = got["dat"]
     cam.refresh("af-point-start")
     frames = [cam.frame.path.name]
     presses = ["ms_left"] * 4 + ["ms_up"] * 3
@@ -212,9 +233,11 @@ def main():
 
         def record(i, got, base, extra):
             ch = camset.diff(camset.read(base), camset.read(got["dat"]))
+            done = got["outcome"]
             r = {"path": [row], **extra, "shown": got["shown"], "vlm": settled(got["vlm"]), "chosen_frame": got["chosen_frame"],
                  "row_frame": got["row_frame"], "dat": got["dat"].name, "base": base.name,
-                 "changes": changes_of(ch), "applied": True, "upright": True}
+                 "changes": changes_of(ch), **({"notice": done.notice} if done.notice else {}), "applied": done.applied,
+                 "upright": True}
             out.write(json.dumps(r) + "\n")
             out.flush()
             print(f"  {extra.get('option', row)} [{extra['index']}] {extra['label']!r} (read {got['shown']!r}): "

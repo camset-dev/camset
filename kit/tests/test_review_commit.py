@@ -505,3 +505,69 @@ def test_scale_records_a_refused_number_as_refused_and_goes_on(monkeypatch):
     assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
         ("0", True, None), ("1", False, REFUSAL), ("2", True, None), ("4", True, None), ("3", True, None)]
     assert "notice" not in lines[0] and cam.saved == 3 and cam.presses.count("menu") == 1
+
+
+class PortraitCam(Shots):
+    """Focus Area's carousel held vertically, saved on Wide: Up steps back through Wide, Zone, Center Fix (round); OK
+    keeps the option and closes the menu (the shooting screen, as the a1 II's Focus Area does); OK on an option in
+    `refuse` brings the camera's refusal, `turned` its words read only upright (a notice drawn in portrait)."""
+    LABELS = ["Wide", "Zone", "Center Fix"]
+
+    def __init__(self, refuse=(), turned=False):
+        super().__init__()
+        self.saved = self.at = 0
+        self.refuse, self.turned = set(refuse), turned
+
+    def open(self):
+        self.kind, self.at = "dialog", self.saved
+        self.shot("right")
+
+    def press(self, key, **kw):
+        self.presses.append(key)
+        if key == "up" and self.kind == "dialog":
+            self.at = (self.at - 1) % len(self.LABELS)
+        elif key == "enter" and self.at in self.refuse:
+            self.refused_here()
+        elif key == "enter":
+            self.kind, self.saved = "shooting", self.at
+        elif key == "menu":
+            self.kind, self.text = "shooting", ""
+        self.shot(key)
+
+    def level(self):
+        return "Ⅎ⅁ʇou ʎɐʍ" if self.turned and self.text else self.text
+
+
+def orient_world(monkeypatch, cam, link):
+    """orient_run's seams on a PortraitCam: the map's options, no second axis, the portrait readings made up (OCR on
+    the level frame reads cam.level(), made upright cam.text)."""
+    import orient_run as O
+    reads(monkeypatch, lambda f: cam.level())
+    no_diffs(monkeypatch, O)
+    for name, value in (("load_scan", lambda scan: ([], {})), ("eyes_from_config", lambda run: None),
+                        ("prover_session", lambda run, hdmi, **kw: session_of(cam, link)),
+                        ("labels_of", lambda path: (PortraitCam.LABELS, "dialog")), ("read_json", lambda p: {}),
+                        ("open_row", lambda c, cycle, model, row, k, shots: c.open()),
+                        ("reading", lambda c, k, shots: ("Focus Area", PortraitCam.LABELS[c.at])),
+                        ("upright", lambda c, k, shots: lines_of(c.text)), ("vlm_option", lambda c: "made up"),
+                        ("close_screen", lambda c, link: None), ("to_shooting", lambda link, hdmi, why: None)):
+        monkeypatch.setattr(O, name, value)
+    monkeypatch.setattr(O.time, "sleep", lambda s: None)
+    monkeypatch.setattr(sys, "argv", ["orient_run.py", "--grip", "down", "--scan", "made-up"])
+    return O
+
+
+@pytest.mark.parametrize("turned", [False, True], ids=["level", "portrait"])
+def test_orient_records_a_refused_option_as_refused(monkeypatch, turned):
+    """orient_run went to the download straight after OK and wrote "applied": true, a refusal crediting the label with
+    the option kept before. Now the screen after OK goes through the step, the notice's words read level and made
+    upright (a notice drawn either way): the refused option's line says "applied": false with the notice, closed with
+    MENU; the others say the menu closed after OK, as Focus Area's OK does."""
+    cam, link = PortraitCam(refuse={1}, turned=turned), downloads()
+    O = orient_world(monkeypatch, cam, link)
+    O.main()
+    lines = proof_lines()
+    closed = "the menu closed after OK"
+    assert [(x["label"], x["applied"], x.get("notice", {}).get("text")) for x in lines] == [
+        ("Zone", False, REFUSAL), ("Center Fix", True, closed), ("Wide", True, closed)]
+    assert cam.presses.count("menu") == 1 and cam.saved == 0
