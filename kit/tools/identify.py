@@ -23,11 +23,12 @@ and firmware, docs/decisions/0019). A known fingerprint names the definition and
 unknown one means a new model or firmware, mapped as docs/REMAPPING_PLAYBOOK.md's "New model: first day" says, whose
 definition kit/schema_update.py --write writes.
 
---camera reads ModelName, SoftwareVersion and the lens from the SDK (the firmware is not written in
-the file), then downloads the settings and identifies that file. The body's serial number is never
-printed. The download goes into that camera's own folder, runs/<ModelName>_fw<SoftwareVersion>/kit2_identify/
-(camkit.paths), whichever camera the config names: identify.py is how a new camera's folder starts. It prints the
-camera's key, and what to put in private/config.json when the config names another camera or none.
+--camera reads ModelName, SoftwareVersion and the lens from the SDK, then downloads the settings and identifies that
+file. The body's serial number is never printed. The download goes into that camera's own folder,
+runs/<ModelName>_fw<SoftwareVersion>/kit2_identify/ (camkit.paths), named by what the SDK says, whichever camera the
+config names (a file whose header names another model or firmware is noted): identify.py is how a new camera's folder
+starts. It prints the camera's key, and what to put in private/config.json when the config names another camera or
+none.
 Over USB (CAMSET_USB=1 in the shell) the camera's USB Connection Mode must be PC Remote and the computer must see it:
 `ioreg -p IOUSB` lists it on a Mac, `lsusb | grep 054c` (Sony's USB vendor id) on Linux, and Device Manager shows
 "Sony Remote Control Camera" on Windows. Over the network the camera's Remote Shoot Function must be On.

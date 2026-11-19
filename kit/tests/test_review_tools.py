@@ -204,6 +204,18 @@ def test_a_step_that_ends_at_once_costs_no_wait(tmp_path, monkeypatch):
     assert chain.run_step(step, None, sys.stdout) == 3
 
 
+# ---------------------------------------------------------------- finding 25: identify.py's docstring and its code
+
+def test_identify_says_what_it_does_with_the_firmware_in_the_file():
+    """Its docstring said both that a file's firmware bytes are read and that the firmware is not written in the file;
+    the code reads them from the header (describe), and --camera names the folder by the SDK's SoftwareVersion, noting
+    a header that says otherwise."""
+    import identify
+    assert "firmware 4.00 by the header" in identify.describe(SAMPLE)
+    assert "not written in" not in " ".join(identify.__doc__.split())
+    assert "SoftwareVersion" in identify.__doc__ and "header" in identify.__doc__.split("--camera reads")[1]
+
+
 # ---------------------------------------------------------------- finding 21: no test reaches the real camera
 
 def test_a_test_sees_neither_the_clones_config_nor_the_built_camlink(own_runs):
