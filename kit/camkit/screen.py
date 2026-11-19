@@ -187,6 +187,13 @@ OPTION_BODY = (58, 422)
 # of them to the screen's edge holds nothing else from OPTION_SIDE_ABOVE px above the first box down to the footer, and
 # the footer draws its MENU key with the back arrow alone
 OPTION_SIDE, OPTION_SIDE_TOL, OPTION_SIDE_PAD, OPTION_SIDE_ABOVE = (376, 615), 4, 20, 4
+# a slider drawn over a picture (Playback > Aspect Marker Disp. > Aspect Marker Level with HDMI Info. Display Off, over
+# the camera's sample photograph, its footer's rule hidden: kit2_fin_crawl_amdisp_off 00028): its scale's ticks on the
+# line of the − and +, light bars 1-4 px wide and 8-16 tall (2 x 12 at a 22 px pitch there), at least PIC_TICKS of them
+# a whole number of pitches apart (within PIC_TOL px), the pitch 12-40 px; the marker an orange square 9-17 px a side
+# whose foot is 8-40 px above that line and whose middle is on the ticks' grid (PIC_TOL); the value orange digits 20-34
+# px tall on one line 50-130 px above that line, centred within PIC_MID px of x 320
+PIC_TICKS, PIC_TOL, PIC_MID = 6, 3, 30
 
 
 @dataclass
@@ -514,7 +521,58 @@ def features(a: np.ndarray) -> dict:
     # boxed options alone ("buttons"): looked for only under a title's rule and over a footer's, with no tab column
     f["option_boxes"] = (_option_boxes(a, g, o) if f["title_line"] > 0.9 and f["footer_line"] > 0.9 and f["tab_sat"] < 8
                          else None)
+    # a slider over a picture: looked for only where the − and + stand alone and the footer's rule is too faint for the
+    # slider rule (classify reads it last)
+    f["picture_slider"] = (_picture_slider(a, g, o) if f["slider_buttons"] and not f["slider_buttons_boxed"]
+                           and f["footer_line"] <= 0.45 else None)
     return f
+
+
+def _picture_slider(a, g, o) -> dict | None:
+    """A slider drawn over a picture (PIC_TICKS: its parts there), or None: {"marker": the marker's middle x, "value":
+    the value's box (x0, y0, x1, y1)}. All of: the − and + alone, mirrored (_bare_signs); the scale's ticks on their
+    line, evenly a whole number of pitches apart; exactly one orange marker on that grid above the line; orange digits
+    on one line above the marker, centred on the screen, and nothing else orange from the value's line down to the
+    scale's between the − and the +; the footer's OK key (footer_keys, a template a picture does not match). A
+    photograph's orange, a missing tick or a second marker, and it is none: never a guess at the marker's place."""
+    import cv2
+    signs = _bare_signs(g)
+    if signs is None or "ok_key" not in footer_keys(a):
+        return None
+    sx, sy, sw, sh = signs
+    cy, x0, x1 = sy + sh // 2, sx + sw + 4, 640 - sx - sw - 20        # clear of the + (wider than the −)
+    band = (g[cy - 15:cy + 15, x0:x1] > 150).astype(np.uint8)
+    _, _, st, _ = cv2.connectedComponentsWithStats(band, connectivity=8)
+    ticks = sorted(x0 + x + w / 2 for x, y, w, h, area in st[1:] if 1 <= w <= 4 and 8 <= h <= 16 and area >= 0.7 * w * h)
+    if len(ticks) < PIC_TICKS:
+        return None
+    pitch = min(b - a_ for a_, b in zip(ticks, ticks[1:]))       # noqa: B905 (each tick with the next)
+
+    def on_grid(x) -> bool:
+        k = (x - ticks[0]) / pitch
+        return abs(k - round(k)) * pitch <= PIC_TOL
+    if not 12 <= pitch <= 40 or not all(on_grid(t) for t in ticks):
+        return None
+    m = o.astype(np.uint8)
+    m[:max(0, cy - 130)] = 0
+    m[cy + 15:] = 0
+    m[:, :x0] = 0
+    m[:, x1:] = 0
+    _, _, st, _ = cv2.connectedComponentsWithStats(m, connectivity=8)
+    comps = [tuple(int(v) for v in r) for r in st[1:] if r[4] >= 6]
+    marks = [c for c in comps if 9 <= c[2] <= 17 and 9 <= c[3] <= 17 and cy - 40 <= c[1] + c[3] <= cy - 8]
+    if len(marks) != 1 or not on_grid(marks[0][0] + marks[0][2] / 2):
+        return None
+    mark = marks[0]
+    digits = [c for c in comps if 20 <= c[3] <= 34 and 3 <= c[2] <= 24 and cy - 130 <= c[1] and c[1] + c[3] <= cy - 50
+              and c[1] + c[3] < mark[1]]
+    if not digits or max(c[1] for c in digits) - min(c[1] for c in digits) > PIC_TOL or len(digits) + 1 != len(comps):
+        return None
+    vx0, vx1 = min(c[0] for c in digits), max(c[0] + c[2] for c in digits)
+    if abs((vx0 + vx1) / 2 - 320) > PIC_MID:
+        return None
+    vy0, vy1 = min(c[1] for c in digits), max(c[1] + c[3] for c in digits)
+    return {"marker": int(mark[0] + mark[2] // 2), "value": (vx0 - 4, vy0 - 4, vx1 + 4, vy1 + 4)}
 
 
 def _option_boxes(a, g, o) -> tuple | None:
@@ -993,7 +1051,8 @@ def classify(f: dict) -> str:
     list's ↩ is only found alone (PP1 > Black Level at -10, 2026-11-08). Real tables read by their buttons (My
     Dial's and Image Quality Settings' OK, Rec. Media Settings, Mode Dial Control Set's Set All) can become
     nothing else. Last of all, a screen both readings leave unknown is a "buttons" screen where its boxed options are
-    found (_option_boxes): that reading never takes a screen any rule above places (2026-11-16)."""
+    found (_option_boxes): that reading never takes a screen any rule above places (2026-11-16); and one still unknown is
+    a slider where it is one drawn over a picture (_picture_slider, 2026-11-19), likewise read last."""
     boxed = {**f, **{k: f[b] for k, b in _ALONE_KEYS.items() if b in f}, "cell_grid": False}
     kind = _classify(boxed)
     if kind == "unknown":
@@ -1002,6 +1061,8 @@ def classify(f: dict) -> str:
         kind = "sidelist"
     if kind == "unknown" and f.get("option_boxes"):
         kind = "buttons"
+    if kind == "unknown" and f.get("picture_slider"):
+        kind = "slider"
     return kind
 
 
@@ -1252,6 +1313,14 @@ def _slider(a, s: Screen):
     import cv2
     g = _grey(a)
     o = _orange(a)
+    pic = (s.features or {}).get("picture_slider")
+    if pic:
+        # over a picture (_picture_slider): the marker as found on the ticks' grid; the ◂ ▸ are not read, for a cloud as
+        # light as they are hides them, and an arrow read False where it is only hidden would say an end that is none
+        s.marker, s.glyphs = pic["marker"], {}
+        _sig(s, b"slider", np.array([s.marker // 2]), np.array([False, False]),
+             _binarize_small(g, (0, 0, 640, 52), (80, 6), 150), _binarize_small(np.where(o, 255, 0), pic["value"], (20, 8), 150))
+        return
     signs = _bare_signs(g) if _slider_boxes(g) is None else None
     m = o.astype(np.uint8)
     m[:290] = 0

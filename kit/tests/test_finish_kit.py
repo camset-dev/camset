@@ -420,3 +420,95 @@ def test_the_cameras_select_media_card_screens_read_as_buttons(path):
     s = screen.read(load(need(path)))
     assert s.kind == "buttons" and (s.count, s.row) == (2, 0) and s.boxes == [(376, 615)] * 2
     assert s.rows[1][0] - s.rows[0][0] == 70
+
+
+# ---------------------------------------------------------------- 3b. a slider drawn over a picture
+
+CY, PITCH, FIRST = 347, 22, 155          # the scale's line, its pitch, the place of its low end (Aspect Marker Level's)
+
+
+def picture_slider(at=12, ticks=True, uneven=False, marks=1, mark_off=0, value_x=320, ok=True, blob=False,
+                   footer_rule=False, seed=3) -> np.ndarray:
+    """Aspect Marker Level over a picture as the a1 II draws it with HDMI Info. Display Off (kit2_fin_crawl_amdisp_off
+    00028): a bright, textured "sky" over a darker "field", the sides dimmed; the title; the value in orange between
+    white ◂ ▸ (each outlined in black, as the camera draws them over a picture); the scale on the line of the bare −
+    and + (0 to 15, ticks 2 x 12 at a 22 px pitch, the end numbers and every fifth drawn as digits); an orange 13 x 13
+    marker over the value `at`; the footer's Help button and OK key. The other arguments make its neighbours."""
+    rng = np.random.default_rng(seed)
+    a = np.zeros((480, 640, 3), np.uint8)
+    light = rng.integers(0, 60, (300, 424, 1))
+    a[:300, 108:532] = np.concatenate([120 + light, 160 + light // 2, 195 + light], axis=2).astype(np.uint8)   # sky
+    dark = rng.integers(0, 50, (180, 424, 1))
+    a[300:480, 108:532] = np.concatenate([30 + dark, 80 + dark, 20 + dark // 2], axis=2).astype(np.uint8)     # field
+    a[:, :108] = a[:, 532:] = rng.integers(0, 30, (480, 108, 1)).astype(np.uint8)           # dimmed sides
+    for x in range(20, 300, 12):                                                            # the title
+        a[12:40, x:x + 4] = 221
+    digits = 2 if at >= 10 else 1
+    for i in range(digits):                                                                 # the value, orange
+        x = value_x - 10 * digits + 20 * i
+        a[236:266, x:x + 12] = (230, 100, 0)
+    for x0, step in ((258, 1), (382, -1)):                                                  # ◂ ▸, outlined
+        for j in range(10):
+            ys = slice(252 - j // 2 - 2, 252 + j // 2 + 3)
+            a[ys, x0 + step * j - 1:x0 + step * j + 2] = 0
+        for j in range(10):
+            a[252 - j // 2:252 + j // 2 + 1, x0 + step * j] = 221
+    a[CY - 2:CY + 2, 50:77] = 221                                                          # − alone
+    a[CY - 2:CY + 2, 563:590] = 221                                                         # + alone, mirrored
+    a[CY - 13:CY + 14, 575:579] = 221
+    for v in range(16):
+        x = FIRST + PITCH * v + (5 if uneven and v == 7 else 0)
+        if v % 5 == 0:                                                                      # a number: a digit's block
+            a[CY - 13:CY + 13, x - 6:x - 3] = 221
+            a[CY - 13:CY + 13, x + 3:x + 6] = 221
+        elif ticks:
+            a[CY - 7:CY + 7, x - 2:x + 2] = 0
+            a[CY - 6:CY + 6, x - 1:x + 1] = 221
+    for k in range(marks):                                                                  # the marker
+        x = FIRST + PITCH * (at + 2 * k) + mark_off
+        a[CY - 37:CY - 24, x - 6:x + 7] = (230, 100, 0)
+    if blob:
+        a[CY - 70:CY - 55, 150:175] = (230, 100, 0)                                         # the picture's orange
+    if footer_rule:
+        a[426, 5:635] = 119
+    for name, x in (("help_only", 281), *((("ok_key", 561),) if ok else ())):
+        g = glyph(name)
+        a[437:437 + g.shape[0], x:x + g.shape[1]] = g[..., None]
+    return a
+
+
+@pytest.mark.parametrize("at", [0, 12, 15])
+def test_a_slider_over_a_picture_reads_as_a_slider_with_its_marker(at):
+    s = kind_of(picture_slider(at))
+    assert s.kind == "slider" and s.marker == FIRST + PITCH * at
+    assert s.glyphs == {}, "the ◂ ▸ are not read over a picture: no end said where one may only be hidden"
+
+
+def test_two_places_of_the_marker_are_two_states():
+    a, b = kind_of(picture_slider(11)), kind_of(picture_slider(12))
+    assert a.kind == b.kind == "slider" and not screen.same_state(a, b)
+
+
+@pytest.mark.parametrize("case, kw", [
+    ("no ticks", dict(ticks=False)), ("ticks unevenly apart", dict(uneven=True)), ("two markers", dict(marks=2)),
+    ("the marker off the ticks' grid", dict(mark_off=9)), ("the value off centre", dict(value_x=420)),
+    ("no OK key", dict(ok=False)), ("the picture's orange beside the scale", dict(blob=True)),
+], ids=lambda v: v if isinstance(v, str) else "")
+def test_what_a_picture_could_fake_leaves_it_unknown(case, kw):
+    """Each part a photograph could fake or hide is required: without it the screen reads as before, unknown."""
+    f = screen.features(picture_slider(**kw))
+    assert f["picture_slider"] is None and screen.classify(f) == "unknown", case
+
+
+def test_a_slider_with_its_footer_rule_is_read_as_before():
+    """Where the footer's rule shows, the rules read it as they always have; the picture's reading is not looked for."""
+    f = screen.features(picture_slider(footer_rule=True))
+    assert f["picture_slider"] is None and screen.classify(f) == screen.classify({**f, "picture_slider": None})
+
+
+def test_the_aspect_marker_level_over_the_sample_photograph_is_a_slider():
+    """The frame the crawl called an unknown screen (kit2_fin_crawl_amdisp_off 00028): a slider, its marker over 12 (the
+    scale's low end at x 155, 22 px a step), its ◂ ▸ not read."""
+    s = screen.read(load(need(A1 / "kit2_fin_crawl_amdisp_off" / "shots" / "00028_right.png")))
+    assert s.kind == "slider" and s.marker == 418 and s.glyphs == {}
+    assert round((s.marker - 155) / 22) == 12
