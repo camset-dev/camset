@@ -2126,7 +2126,8 @@ function drawExposure(j) {
         el("div", { class: "strong" }, cell.text),
         chip(cell.who),
         scale ? exStrip(cell, scale) : null,
-        ...cell.notes.map((t) => el("div", { class: "small weak" }, t))));
+        ...cell.notes.map((t) => el("div", { class: "small weak" }, t)),
+        ...(cell.odd || []).map((t) => el("div", { class: "small warn", "data-odd": "" }, t))));
     });
     grid.append(el("div", { class: "ex-cell", style: at(3 + j.sides.length, col) }, lab("Exposure comp."),
       el("div", { class: "strong" }, c.comp.text),

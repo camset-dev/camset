@@ -153,6 +153,9 @@ struct App {
     /// The places (set, slot) the rows of that copy set themselves, before `pin_families` pins the rest: a switch that
     /// keeps copies apart, changed by the copy, asks first unless they set its whole family (`untick_ask`).
     rows_set: std::cell::RefCell<Vec<(usize, Slot)>>,
+    /// What the last step `apply` made moved besides what it was asked, to keep two limits in order (`limit_moves`):
+    /// each place moved (set, setting index) and the words that say so, for the page's reply and its status line.
+    limits_moved: (Vec<(usize, usize)>, Option<String>),
     /// The window's changes held back by the question before a switch that keeps copies apart is unticked
     /// (`hold_untick`), until it is answered (`untick_window`).
     untick_pending: Option<UntickPending>,
@@ -336,6 +339,7 @@ impl App {
             copy_skipped: Default::default(),
             rows_copied: Default::default(),
             rows_set: Default::default(),
+            limits_moved: Default::default(),
             untick_pending: None,
             last_edit: None,
             window_changed: None,

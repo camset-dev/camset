@@ -1811,3 +1811,24 @@ def test_copy_details_falls_back_to_the_copy_command(tmp_path):
     assert got["copied"] is True and got["ran"] == ["copy"]
     assert got["left"] == [0, 0], "the text box is taken away both times"
     assert got["toast"] == "This browser did not let the page copy: select the lines above and copy them"
+
+
+@needs_node
+def test_the_exposure_page_marks_a_pair_out_of_order(tmp_path):
+    """The Exposure page draws a limit pair as the editor sends it, as the file holds it, and its line saying the pair
+    is out of order in the caution colour, apart from the plain notes; a cell with none draws none."""
+    got = run(tmp_path, """
+const cell = (odd) => ({ who: "you", text: "ISO 800", at: 3, band: null, bound: null, notes: ["Range: ISO 6400 to ISO 3200"], hover: "h", ...(odd ? { odd } : {}) });
+const side = (odd) => ({ aperture: cell(), shutter: cell(), iso: cell(odd) });
+const j = { title: "Exposure", intro: "i", sides: [["aperture", "Aperture"], ["shutter", "Shutter speed"], ["iso", "ISO"]], decides: [],
+  scales: { aperture: null, shutter: null, iso: null },
+  columns: [{ section: 0, name: "Live", mode: "M", control: null, mode_note: null, cells: side(["Range: out of order, the lower end above the upper one."]), comp: { text: "0", note: "n" }, exposes: null },
+            { section: 1, name: "Memory 1", mode: "M", control: null, mode_note: null, cells: side(), comp: { text: "0", note: "n" }, exposes: null }] };
+const box = document.createElement("div");
+box.append(...drawExposure(j));
+const odd = box.querySelectorAll("[data-odd]").map((n) => [n.textContent, n.className]);
+const notes = box.querySelectorAll(".small.weak").map((n) => n.textContent).filter((t) => t.startsWith("Range:"));
+console.log(JSON.stringify({ odd, notes }));
+""")
+    assert got["odd"] == [["Range: out of order, the lower end above the upper one.", "small warn"]]
+    assert got["notes"].count("Range: ISO 6400 to ISO 3200") == 6, "every cell's notes as sent, the pair as the file holds it"

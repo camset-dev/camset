@@ -78,6 +78,8 @@ pub(crate) struct Cell {
     pub(crate) bound: Option<(f64, String)>,
     /// The limits in force, in words.
     pub(crate) notes: Vec<String>,
+    /// What is odd about a limit, in words: a pair the file holds out of order, shown as it is, its band not drawn.
+    pub(crate) odd: Vec<String>,
 }
 
 impl App {
@@ -123,7 +125,7 @@ impl App {
         }
     }
 
-    pub(super) fn ex_cell(&self, ex: &Exposure, section: usize, side: Side, mode: Option<&str>, iso_who: Who) -> Cell {
+    pub(crate) fn ex_cell(&self, ex: &Exposure, section: usize, side: Side, mode: Option<&str>, iso_who: Who) -> Cell {
         let def = Self::ex_side(ex, side);
         let key = if section == 0 || def.memory_key.is_empty() && def.memory_numerator_key.is_empty() { &def.key } else { &def.memory_key };
         let mut value = self.ex_value(section, key);
@@ -156,13 +158,18 @@ impl App {
             None if key.is_empty() => if def.live_note.is_empty() { "not in the file".into() } else { def.live_note.clone() },
             None => "—".into(),
         };
-        let (mut band, mut bound, mut notes) = (None::<(f64, f64)>, None, Vec::new());
+        let (mut band, mut bound, mut notes, mut odd) = (None::<(f64, f64)>, None, Vec::new(), Vec::new());
         for l in def.limits.iter().filter(|l| Self::ex_applies(l, who, iso_who)) {
             if !l.min_key.is_empty() {
                 let (Some((_, a)), Some((_, b))) = (self.ex_value(section, &l.min_key), self.ex_value(section, &l.max_key)) else { continue };
                 notes.push(format!("{}: {a} to {b}{}", l.name, self.ex_unproved(&[&l.min_key, &l.max_key])));
-                if let (Some(x), Some(y)) = (stops::stops(side, &a), stops::stops(side, &b)) {
-                    let (x, y) = (x.min(y), x.max(y));
+                // a lower end above the upper (by the definition's pair of limits, `at_most`, or by the stops) is shown as
+                // the file holds it, and said: it is never swapped into a band, which the camera's own reading of such a
+                // file would not be known to give
+                let stops_at = (stops::stops(side, &a), stops::stops(side, &b));
+                if self.ex_crossed(section, &l.min_key, &l.max_key) || matches!(stops_at, (Some(x), Some(y)) if x > y) {
+                    odd.push(format!("{}: out of order, the lower end above the upper one, which no camera writes; no band is drawn for it. The Before saving and Write windows offer to put it back in order.", l.name));
+                } else if let (Some(x), Some(y)) = stops_at {
                     band = Some(band.map_or((x, y), |(p, q)| (p.max(x), q.min(y))));
                 }
             } else if let Some((_, lab)) = self.ex_value(section, &l.key) {
@@ -172,7 +179,15 @@ impl App {
                 }
             }
         }
-        Cell { who, text, at, band: band.filter(|(p, q)| p <= q), bound, notes }
+        Cell { who, text, at, band: band.filter(|(p, q)| p <= q), bound, notes, odd }
+    }
+
+    /// Whether the two limits keyed `min` and `max` are a pair the camera keeps in order (`Setting::at_most`) that file
+    /// A holds out of order in set `section` (`crossed_in`).
+    fn ex_crossed(&self, section: usize, min: &str, max: &str) -> bool {
+        let Some(d) = &self.doc else { return false };
+        let pair = self.ex_setting(min).filter(|lo| lo.at_most.as_ref().is_some_and(|l| l.setting == max)).and_then(|lo| Some((self.index_of_key(&lo.key)?, self.index_of_key(max)?)));
+        pair.is_some_and(|(lower, upper)| self.crossed_in(&d.edited, section, lower, upper) == Some(true))
     }
 
     /// The page's heading.
@@ -214,7 +229,7 @@ impl App {
     pub(crate) fn ex_hover(name: &str, c: &Cell) -> String {
         let mut hover = format!("{name}: {}", c.text);
         if let Some(s) = c.at { hover += &format!(" ({s:+.1} stops)"); }
-        for n in &c.notes { hover += &format!("\n{n}"); }
+        for n in c.notes.iter().chain(&c.odd) { hover += &format!("\n{n}"); }
         if let Some((_, how)) = &c.bound { if !how.is_empty() { hover += &format!("\nthe bar: the {how} the camera goes"); } }
         hover
     }
@@ -343,6 +358,7 @@ impl App {
                                 Self::ex_strip(ui, cell_w, (lo, hi), c, Self::ex_hover(side_name, c));
                             }
                             for n in &c.notes { ui.label(RichText::new(n).small().color(tone::weak(ui.visuals()))); }
+                            for n in &c.odd { ui.add(egui::Label::new(RichText::new(n).small().color(tone::caution(ui.visuals()))).wrap()); }
                         });
                     }
                     ui.end_row();

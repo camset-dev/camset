@@ -145,6 +145,16 @@ pub struct Setting {
     /// the family to `untick_sets`. Empty: not a switch, or what it does is not proved.
     #[serde(default)]
     pub keeps_apart: Vec<KeepsApart>,
+    /// This setting is the lower of two limits the camera keeps in order (`OtherLimit`: the upper, whose `at_least`
+    /// names this one back): never past the upper by place in their value lists, which list the same values. A value
+    /// chosen past it moves the upper to it (`App::apply`); `moves_it`, where a proof showed the camera do so. None: no
+    /// such limit.
+    #[serde(default)]
+    pub at_most: Option<OtherLimit>,
+    /// This setting is the upper of two limits the camera keeps in order (`OtherLimit`: the lower, whose `at_most`
+    /// names this one back); `moves_it`, where a proof showed the camera move the lower down to a value chosen below it.
+    #[serde(default)]
+    pub at_least: Option<OtherLimit>,
     /// The values the camera's menus offer under one video system only, by the system's name as the container block
     /// names it (`camera.file.video_system.names`): a value listed under one is offered only in a file saved under
     /// that one, a value listed under none under both. None: every value under both.
@@ -182,6 +192,15 @@ pub struct KeepsApart {
     pub apart: Vec<i64>,
     #[serde(default)]
     pub untick_sets: Option<i64>,
+}
+
+/// The other limit of two the camera keeps in order (`Setting::at_most`, `at_least`): its key (`setting`), and whether
+/// a proof on the camera showed a value chosen past it move it to that value (`moves_it`; false: not tried).
+#[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
+pub struct OtherLimit {
+    pub setting: String,
+    #[serde(default)]
+    pub moves_it: bool,
 }
 
 /// One coordinate of a focus frame's centre (`Setting::frame`): which (`axis`, "x" across or "y" down), the setting that
@@ -1708,6 +1727,7 @@ impl Schema {
             f.check().map_err(|e| format!("its file block does not hold together: {e}"))?;
         }
         self.check_keeps_apart()?;
+        self.check_limits()?;
         self.check_frames()
     }
 
@@ -1818,6 +1838,35 @@ impl Schema {
                     if let Some(p) = std::iter::once(fam).chain(copies).find(|p| !holds(p, code)) {
                         return why(format!("the value it says the camera sets them to, {code}, is not one of {}'s values", p.name));
                     }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Two limits the camera keeps in order (`at_most`, `at_least`) as the kit writes them: each names another setting of
+    /// the definition whose own field names it back, the two read as one number by the same named values in the same
+    /// order (the order is their places) and kept in the same sets. A definition that says otherwise is refused, saying
+    /// which, so the editor never moves a value by it.
+    fn check_limits(&self) -> Result<(), String> {
+        let by_key: std::collections::HashMap<&str, &Setting> = self.settings.iter().map(|s| (s.key.as_str(), s)).collect();
+        for s in &self.settings {
+            for (other, lower) in [(&s.at_most, true), (&s.at_least, false)] {
+                let Some(l) = other else { continue };
+                let why = |w: String| Err(format!("{} is kept {} {}, but {w}", s.name, if lower { "at or below" } else { "at or above" }, l.setting));
+                let Some(o) = by_key.get(l.setting.as_str()) else { return why("the definition holds no such setting".into()) };
+                if o.key == s.key {
+                    return why("that is the setting itself".into());
+                }
+                let back = if lower { &o.at_least } else { &o.at_most };
+                if back.as_ref().is_none_or(|b| b.setting != s.key) {
+                    return why(format!("{} does not name it back", o.name));
+                }
+                if !s.scalar || !o.scalar || s.values.len() < 2 || s.values != o.values {
+                    return why("the two do not list the same values".into());
+                }
+                if s.area != o.area || s.in_sets != o.in_sets {
+                    return why("the two are not kept in the same sets".into());
                 }
             }
         }
@@ -2088,6 +2137,19 @@ mod tests {
             KeepsApart { setting: "global:0x0020".into(), apart: vec![1, 2], untick_sets: None },
         ]);
         assert!(made(serde_json::json!({})).keeps_apart.is_empty());
+    }
+
+    /// `at_most` and `at_least`, as the kit writes them on two limits the camera keeps in order: the other limit, and
+    /// `moves_it` where a proof showed the camera move it (false without it). Without the fields, a setting is no limit.
+    #[test]
+    fn two_limits_name_each_other() {
+        let lower = made(serde_json::json!({ "at_most": { "setting": "global:0x0002", "moves_it": true } }));
+        let upper = made(serde_json::json!({ "key": "global:0x0002", "at_least": { "setting": "global:0x0001" } }));
+        assert_eq!(lower.at_most, Some(OtherLimit { setting: "global:0x0002".into(), moves_it: true }));
+        assert_eq!(upper.at_least, Some(OtherLimit { setting: "global:0x0001".into(), moves_it: false }));
+        assert!(lower.at_least.is_none() && upper.at_most.is_none());
+        let plain = made(serde_json::json!({}));
+        assert!(plain.at_most.is_none() && plain.at_least.is_none());
     }
 
     /// The a1 II's definition carries how far each focus frame travels, as the kit writes it: the spot's places with
@@ -2880,6 +2942,36 @@ mod tests {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("definitions");
         for p in std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.path()).filter(|p| p.extension().is_some_and(|x| x == "json")) {
             assert!(Schema::from_file(&p).is_ok(), "{}: {:?}", p.display(), Schema::from_file(&p).err());
+        }
+    }
+
+    /// Two limits kept in order that do not hold together refuse the whole definition, saying why: a limit the
+    /// definition does not hold, or that does not name this one back, two that list other values, or are kept in other
+    /// sets. Two as the kit writes them are taken (the a1 II's ISO Range Limit ends, by their keys here).
+    #[test]
+    fn two_limits_that_do_not_hold_together_refuse_the_definition() {
+        let (lower, upper) = ("global:0x0b65", "global:0x0b63");
+        let with = |f: &dyn Fn(&mut serde_json::Value)| a1_with(|v| {
+            for s in v["settings"].as_array_mut().unwrap() {
+                if s["key"] == lower { s["at_most"] = serde_json::json!({ "setting": upper, "moves_it": true }); }
+                if s["key"] == upper { s["at_least"] = serde_json::json!({ "setting": lower }); }
+                f(s);
+            }
+        });
+        let schema = Schema::from_text(&with(&|_| {})).unwrap();
+        let s = schema.settings.iter().find(|s| s.key == lower).unwrap();
+        assert_eq!(s.at_most.as_ref().map(|l| (l.setting.as_str(), l.moves_it)), Some((upper, true)));
+        type Change<'a> = &'a dyn Fn(&mut serde_json::Value);
+        let refused: [(Change, &str); 5] = [
+            (&|s| if s["key"] == lower { s["at_most"]["setting"] = "global:0x7ffe".into(); }, "the definition holds no such setting"),
+            (&|s| if s["key"] == upper { s.as_object_mut().unwrap().remove("at_least"); }, "does not name it back"),
+            (&|s| if s["key"] == lower { s["at_most"]["setting"] = s["key"].clone(); }, "that is the setting itself"),
+            (&|s| if s["key"] == upper { s["values"].as_array_mut().unwrap().pop(); }, "the two do not list the same values"),
+            (&|s| if s["key"] == upper { s["in_sets"] = (!s["in_sets"].as_bool().unwrap_or(false)).into(); }, "the two are not kept in the same sets"),
+        ];
+        for (f, words) in refused {
+            let e = Schema::from_text(&with(f)).unwrap_err();
+            assert!(e.contains("is kept at or") && e.contains(words), "{words}: {e}");
         }
     }
 

@@ -331,11 +331,17 @@ impl App {
     /// What a row or tile says beside a setting the camera keeps in more than one record (`copies`, `copy_of`) in set
     /// `section`, and its hover: what the copies rule says (`copies_note`), then, while a switch of the camera's own
     /// keeps the family apart there (`keeps_apart`), what the camera does then and that the editor does not follow it
-    /// (`apart_note`). None for any other setting.
+    /// (`apart_note`); and beside a limit of two the camera keeps in order (`at_most`, `at_least`), what a value past
+    /// the other does, or that the file holds them out of order (`limit_note`). None for any other setting.
     pub(crate) fn copy_note(&self, s: &Setting, section: usize) -> Option<(String, String)> {
-        match (self.copies_note(s, section), self.apart_note(s, section)) {
+        let note = match (self.copies_note(s, section), self.apart_note(s, section)) {
             (Some((words, hover)), Some(apart)) => Some((format!("{words} {apart}"), hover)),
             (None, Some(apart)) => Some((apart, "The camera keeps this value in more than one record, and a setting of its own decides whether each shooting mode has its own; what that setting did when it was tried on the camera is said here.".into())),
+            (note, None) => note,
+        };
+        match (note, self.limit_note(s, section)) {
+            (Some((words, hover)), Some((limit, why))) => Some((format!("{words} {limit}"), format!("{hover} {why}"))),
+            (None, limit) => limit,
             (note, None) => note,
         }
     }
@@ -696,10 +702,12 @@ impl App {
     }
 
     /// Make the changes the views asked for on this frame, as one undo step, keeping the copies the camera keeps of a
-    /// value (`Setting::copies`) and the definition's mirrors as the camera keeps them. Returns why nothing was changed,
-    /// when the changes were refused (the status line says it too): outside Expert mode, a value for a view-only setting
-    /// (`locked_why`), or a step that would leave a setting at a value none of its copies holds (`CopyRule::holds`).
+    /// value (`Setting::copies`), two limits it keeps in order (`limit_moves`) and the definition's mirrors as the
+    /// camera keeps them. Returns why nothing was changed, when the changes were refused (the status line says it too):
+    /// outside Expert mode, a value for a view-only setting (`locked_why`), or a step that would leave a setting at a
+    /// value none of its copies holds (`CopyRule::holds`); a step that would move a limit that cannot be changed.
     pub(crate) fn apply(&mut self, mut actions: Vec<Action>) -> Option<String> {
+        self.limits_moved = Default::default();
         // rows a copy left alone (`copy_row`): said once, after what the copy itself said
         let skipped = self.copy_skipped.replace(Left::default());
         // a copy of several rows at once (`pin_families`): a refusal says what to do about the copy
@@ -727,7 +735,7 @@ impl App {
         // one setting kept in several records (a row of linked records, `Setting::twin_of`): each other record takes the
         // value of the same name, or its Revert, in this same step, whichever view asked; one with no value of that name
         // is left as it was, and said, and the save and write windows list the row (`linked_apart`)
-        let left = self.with_twins(&mut actions, &at);
+        let mut left = self.with_twins(&mut actions, &at);
         // a copy whose record the file holds in another shape than mapped takes no value, whichever view asked (a
         // put-back, a copy taken along): it is left as it was, and said
         let mut odd_copies: std::collections::HashSet<(usize, Slot)> = Default::default();
@@ -835,6 +843,42 @@ impl App {
                 return why;
             }
         }
+        // two limits the camera keeps in order (`at_most`, `at_least`), whichever view asked: a step that changes one
+        // past the other moves the other to it, as the camera does, in this same step (`limit_moves`), with its other
+        // records (`with_twins`) and its copies in step (below, as an edit of it takes them). A limit to move that is
+        // view only, or whose record has another shape than mapped, refuses the whole step, with why
+        let moves = self.limit_moves(&actions);
+        if !moves.is_empty() {
+            let asked = actions.len();
+            actions.extend(moves.iter().map(|m| Action::Set(m.section, self.schema.settings[m.moved].slot(), m.value)));
+            for w in self.with_twins(&mut actions, &at) {
+                if !left.contains(&w) {
+                    left.push(w);
+                }
+            }
+            let blocked = self.doc.as_ref().and_then(|d| actions[asked..].iter().find_map(|a| {
+                let Action::Set(si, slot, _) = a else { return None };
+                let s = at.get(slot)?.iter().map(|&i| &self.schema.settings[i]).find(|s| kept_in(s, *si))?;
+                let why = if !shape_ok_for(&d.edited, *si, s) {
+                    Some("Its record in this file does not have the shape it was mapped with, so the editor cannot change it.".to_string())
+                } else if !expert {
+                    self.lock_at(*si, *slot, &at)
+                } else {
+                    None
+                };
+                why.map(|w| (s.name.clone(), w))
+            }));
+            if let Some((name, why)) = blocked {
+                // the move that needs it: the limit of that name (its other records share it)
+                let m = moves.iter().find(|m| self.schema.settings[m.moved].name == name).unwrap_or(&moves[0]);
+                let (moved, chosen) = (&self.schema.settings[m.moved], &self.schema.settings[m.chosen]);
+                let (lower, upper) = if moved.at_least.is_some() { (chosen, moved) } else { (moved, chosen) };
+                let words = format!("Not changed: the camera keeps {} at or below {}, so {} would have to move to {} too, and {name} cannot be changed here. {why}", lower.name, upper.name, moved.name, Self::describe(moved, Some(m.value)));
+                self.status = words.clone();
+                return Some(words);
+            }
+        }
+        let moved: Vec<String> = moves.iter().map(|m| self.moved_words(m)).collect();
         let mirrors = self.doc.as_ref().map(|d| self.mirrors_for(&d.edited)).unwrap_or_default();
         let modes = self.modes();
         let Some(doc) = &mut self.doc else { return None };
@@ -1016,8 +1060,11 @@ impl App {
             self.status = words.clone();
             return Some(words);
         }
-        if !left.is_empty() {
-            self.status = left.join(" ");
+        if !left.is_empty() || !moved.is_empty() {
+            self.status = left.iter().chain(&moved).cloned().collect::<Vec<String>>().join(" ");
+        }
+        if !moved.is_empty() {
+            self.limits_moved = (moves.iter().map(|m| (m.section, m.moved)).collect(), Some(moved.join(" ")));
         }
         if !odd_copies.is_empty() {
             self.status = with_left(&self.status, Left { copies_shape: odd_copies.len(), ..Default::default() });

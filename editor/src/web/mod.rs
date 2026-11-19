@@ -209,7 +209,7 @@ impl App {
                 if let Some(why) = self.apply(linked.iter().map(|l| Action::Revert(target, l.slot())).collect()) {
                     return WebReply::error(409, &why);
                 }
-                self.status = format!("{} reverted {from}", linked[0].name);
+                self.status = self.with_moved(format!("{} reverted {from}", linked[0].name));
                 WebReply::json(json!({ "ok": true }))
             }
             // what the camera keeps, put back where the plain Revert changes nothing (`put_back_choice`): a value a Save
@@ -233,7 +233,7 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() });
+                self.status = self.with_moved(with_left(&format!("{}: {} {from}", linked[0].name, words.to_lowercase()), Left { copies_shape: odd, ..Default::default() }));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_record" => {
@@ -245,7 +245,7 @@ impl App {
                 if let Some(why) = self.apply(vec![Action::Revert(si, (id, None))]) {
                     return WebReply::error(409, &why);
                 }
-                self.status = format!("Record 0x{id:04x} reverted {from}");
+                self.status = self.with_moved(format!("Record 0x{id:04x} reverted {from}"));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_flagged" => {
@@ -255,7 +255,7 @@ impl App {
                 if let Some(why) = self.apply(fixes.into_iter().flatten().collect()) {
                     return WebReply::error(409, &why);
                 }
-                self.status = format!("{n} flagged value(s) reverted {from}");
+                self.status = self.with_moved(format!("{n} flagged value(s) reverted {from}"));
                 WebReply::json(json!({ "ok": true }))
             }
             "activate" => {
@@ -536,7 +536,7 @@ impl App {
                 }
                 let (f, t) = (self.col_name(src), dsts.iter().map(|d| self.col_name(*d)).collect::<Vec<_>>().join(", "));
                 let said = if action == "copy" { format!("{name} copied from {f} into {t} {from}") } else { format!("{n} row(s) copied from {f} into {t} {from}") };
-                self.status = with_left(&said, left);
+                self.status = self.with_moved(with_left(&said, left));
                 WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
             }
             // the three-way buttons: Merge B into A, Conflicts: take B, Conflicts: take Base, over the
@@ -575,7 +575,7 @@ impl App {
                     Err(Ok(ask)) => return WebReply::json(json!({ "ask": ask })),
                     Err(Err(why)) => return WebReply::error(409, &why),
                 }
-                self.status = with_left(&format!("{n} {said} {from}"), left);
+                self.status = self.with_moved(with_left(&format!("{n} {said} {from}"), left));
                 WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
             }
             "file" => {
@@ -1383,8 +1383,12 @@ impl App {
                 return refuse(self, 409, &why);
             }
             shown = Self::describe(s, Some(v));
-            // another record of the setting with no value of that name, left as it was: said, as the window says it
+            // another record of the setting with no value of that name, left as it was: said, as the window says it; and
+            // a limit moved to keep two in order (`limit_moves`), as the window's status says it
             message = self.twins_left(s, v, target);
+            if let Some(m) = &self.limits_moved.1 {
+                message = Some(message.map_or_else(|| m.clone(), |t| format!("{t} {m}")));
+            }
         }
         self.status = format!("{} set to {shown} {from}", s.name);
         if let Some(m) = &message {
@@ -1413,6 +1417,15 @@ impl App {
         for (k, slot, was) in &copies {
             if self.doc.as_ref().and_then(|d| d.value(target, *slot)) != *was && !keys.contains(k) && !linked.iter().any(|l| &l.key == k) {
                 keys.push(k.clone());
+            }
+        }
+        // every limit moved to keep two in order (`limit_moves`), with its copies
+        for &(si, i) in &self.limits_moved.0 {
+            let m = &self.schema.settings[i];
+            for k in std::iter::once(&m.key).chain(&m.copies) {
+                if si == target && !keys.contains(k) && !linked.iter().any(|l| &l.key == k) {
+                    keys.push(k.clone());
+                }
             }
         }
         // every setting an untick as the camera does set with it
@@ -1930,7 +1943,7 @@ impl App {
         }
         let from = format!(" {from}");
         let (_, _, said) = if recall { self.recall_words(m, "", &from) } else { self.register_words(m, "", &from) };
-        self.status = with_left(&said, left);
+        self.status = self.with_moved(with_left(&said, left));
         WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
     }
 
@@ -1962,7 +1975,7 @@ impl App {
         }
         let cam = &self.schema.camera;
         let said = format!("{}: the value from {} put into {} {from}", linked[0].name, cam.target_name(a), cam.target_name(b));
-        self.status = with_left(&said, left);
+        self.status = self.with_moved(with_left(&said, left));
         WebReply::json(json!({ "ok": true, "n": n, "left": left.total(), "message": left_alone(left) }))
     }
 
@@ -2031,6 +2044,7 @@ impl App {
             "band": c.band.map(|(a, b)| json!([a, b])),
             "bound": c.bound.as_ref().map(|(x, how)| json!([x, how])),
             "notes": c.notes,
+            "odd": c.odd,
             "hover": Self::ex_hover(name, c),
         })
     }
@@ -2120,7 +2134,7 @@ impl App {
                         Err(why) => WebReply::error(409, &why),
                     };
                 }
-                self.status = format!("{name} put back as it was before edit {} {from}", step + 1);
+                self.status = self.with_moved(format!("{name} put back as it was before edit {} {from}", step + 1));
                 ok()
             }
             "sample" => {

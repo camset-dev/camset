@@ -41,6 +41,8 @@ pub(crate) enum IssueKind {
     Copy,
     /// A setting kept in several records whose records an edit left naming different values (`App::linked_apart`).
     Apart,
+    /// Two limits the camera keeps in order, the lower above the upper here (`Setting::at_most`, `App::out_of_order`).
+    Order,
     /// No proof on the camera checked it (`Setting::checked_on_camera`).
     NotChecked,
     /// A text typed in the editor.
@@ -62,6 +64,7 @@ impl IssueKind {
             IssueKind::OtherSystem => ("Another video system's values", "The camera's menus offer these only when it is set to another video system than this file was saved with."),
             IssueKind::Copy => ("Copies out of step", "The camera keeps each of these values in other records too, and every file it writes holds the value in at least one of them; here none does."),
             IssueKind::Apart => ("Kept in several places, now apart", "The camera keeps each of these settings in more than one place in the file. An edit changed one place and left another, which has no value of that name, so they disagree as no camera was seen to write them."),
+            IssueKind::Order => ("Limits out of order", "The camera keeps each of these pairs in order, the lower limit at or below the upper one, and moves the other when one is set past it; here the lower is above, which no camera writes."),
             IssueKind::NotChecked => ("Not checked on the camera", "No proof on the camera chose these values, so nobody knows whether the camera takes them."),
             IssueKind::Text => ("Texts", "Typed here: the camera was not seen to take these texts."),
             IssueKind::Raw => ("Raw edits", "Changed byte by byte, so the editor cannot say what they hold or whether the camera takes them."),
@@ -114,7 +117,8 @@ impl App {
     /// (`REVERT_TO_CAMERA`, `Doc::baseline`); for a setting none of whose copies holds its value, the copies in step with
     /// it put back at its value (`App::back_in_step`). None for what is not put back by itself: recovered edits, what only
     /// the camera's copy shows, a setting out of step with its copies since the file was opened (no copy was in step with
-    /// it to put back), a value already where the camera wrote it.
+    /// it to put back), a value already where the camera wrote it. For two limits out of order, the one step that puts
+    /// them back in order (`order_fix`).
     pub(crate) fn issue_fix(&self, is: &Issue) -> Option<(String, Vec<Action>)> {
         let doc = self.doc.as_ref()?;
         let si = is.section;
@@ -125,6 +129,10 @@ impl App {
             let main = self.schema.settings.iter().find(|s| s.slot() == is.slot && !s.copies.is_empty() && kept_in(s, si))?;
             let acts = self.back_in_step(main, si);
             return (!acts.is_empty()).then(|| (COPIES_BACK_IN_STEP.to_string(), acts));
+        }
+        if is.kind == IssueKind::Order {
+            let lower = self.schema.settings.iter().position(|s| s.slot() == is.slot && s.at_most.is_some() && kept_in(s, si))?;
+            return self.order_fix(si, lower);
         }
         if is.kind == IssueKind::Apart {
             // every record of the setting back: to the file as last opened or saved, else as the camera wrote it
@@ -184,8 +192,10 @@ impl App {
     /// alone and cannot be vouched for (`IssueKind::CameraOnly`), the records the camera changes on every load
     /// (`camera.volatile_records`) and the values it keeps for itself (`unproved_reason` "state") left out; every value
     /// of another video system than the file was saved under in its live settings, changed or not; and every setting
-    /// the file holds at a value none of its copies holds (`App::out_of_step`), changed or not; and every setting kept in
-    /// several records whose records an edit left naming different values (`App::linked_apart`). A record passes only
+    /// the file holds at a value none of its copies holds (`App::out_of_step`), changed or not; every setting kept in
+    /// several records whose records an edit left naming different values (`App::linked_apart`); and every pair of
+    /// limits the camera keeps in order that the file holds the other way round (`App::out_of_order`), changed or not,
+    /// which no camera writes. A record passes only
     /// when each setting covering its differing bytes was checked on the camera (`Setting::checked_on_camera`) and none
     /// of them refuses, rewrites or never offers its value; a copy the camera keeps of a value (`copy_of`) passes while
     /// it holds its setting's value, and bytes a mirror keeps in step with its copy are judged where that copy is. Edits
@@ -337,6 +347,14 @@ impl App {
             let held: Vec<String> = row.iter().map(|&j| Self::describe(&self.schema.settings[j], doc.value(si, self.schema.settings[j].slot()))).collect();
             let reason = format!("the camera keeps this setting in {} places in the file, and here they name different values; revert it, or choose a value every place has", row.len());
             out.push(Issue { section: si, slot: s.slot(), name: named(s, si), value: held.join(" / "), reason, kind: IssueKind::Apart });
+        }
+        // two limits the camera keeps in order, the lower above the upper here (`out_of_order`), changed or not: no camera
+        // writes a file so
+        for o in self.out_of_order() {
+            let (si, lo, up) = (o.section, &self.schema.settings[o.lower], &self.schema.settings[o.upper]);
+            let then = if o.as_opened { "; it was so when the file was opened or read" } else { "" };
+            let reason = format!("the camera keeps this at or below {}, which holds {} here, and never above it{then}", up.name, Self::describe(up, doc.value(si, up.slot())));
+            out.push(Issue { section: si, slot: lo.slot(), name: named(lo, si), value: Self::describe(lo, doc.value(si, lo.slot())), reason, kind: IssueKind::Order });
         }
         out.sort_by_key(|i| i.kind);
         out
@@ -1413,6 +1431,18 @@ pub(crate) mod safety_tests {
         app.pending = pending;
         let out = ctx.run(egui::RawInput::default(), |ctx| app.pending_window(ctx));
         crate::test_support::texts(&out.shapes)
+    }
+
+    /// Two limits a file holds out of order are listed in the Before saving window under their own heading, the row's
+    /// button its fix, and no all-clear shows (`IssueKind::Order`, `order_fix`); the window's button puts them in order.
+    #[test]
+    fn the_window_lists_limits_out_of_order_with_their_fix() {
+        let mut app = crate::document::limits::limits_tests::with_pairs(20, 8);
+        app.pending = Some((Review::Save, app.acceptance_issues()));
+        let drawn = window_texts(&mut app);
+        assert!(drawn.iter().any(|t| t == IssueKind::Order.heading().0) && drawn.iter().any(|t| t == IssueKind::Order.heading().1), "{drawn:?}");
+        assert!(drawn.iter().any(|t| t.starts_with("Set ") && t.contains(" to ")), "the fix is the row's button: {drawn:?}");
+        assert!(!drawn.iter().any(|t| t == ALL_CLEAR) && drawn.iter().any(|t| t == "Revert all flagged"), "{drawn:?}");
     }
 
     /// The Write and Before saving windows' verdict is true: every record the session changed was checked on the camera
