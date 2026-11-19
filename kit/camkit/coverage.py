@@ -966,7 +966,44 @@ def _seen_paths(src: Sources, led: Ledger) -> list:
         for sub in r.get("submenu") or []:
             if isinstance(sub, dict) and sub.get("label"):
                 out.append(([r.get("decided") or r.get("label") or "", sub["label"]], None, tab))
-    return [(p, m, t) for p, m, t in out if all(isinstance(x, str) and x for x in p)]
+    return [(p, m, t) for p, m, t in out if all(isinstance(x, str) and x for x in p) and not named_placeholder(src, p)]
+
+
+def placeholder_label(label) -> bool:
+    """A label a look lap or a --network walk kept no name for (kit/crawl_run.py's WITHHELD_LABEL, "(withheld)";
+    camkit.first_open.placeholder): no row the kit knows, docs/decisions/0024."""
+    return str(label or "").startswith("(")
+
+
+def named_placeholder(src: Sources, path) -> bool:
+    """Whether a path holds a placeholder that the crawls name: under the row before its first placeholder, every
+    position a crawl's submenu holds a placeholder at is, in another crawl of that row, a known label (a submenu of the
+    same length): one of the rows the kit knows by name, so the placeholder is no row of its own. A placeholder no crawl
+    names, or one under a row no crawl walked with it, stays a row (and so in view)."""
+    cut = next((i for i, x in enumerate(path or []) if placeholder_label(x)), None)
+    if not cut:
+        return False
+    if getattr(src, "_named_ph", None) is None:
+        lists = {}
+
+        def walk(node, parent):
+            label = node.get("decided") or node.get("label") or ""
+            path_ = (*parent, plain(label))
+            subs = [s for s in node.get("submenu") or [] if isinstance(s, dict)]
+            if subs and label and not placeholder_label(label):
+                lists.setdefault(path_, []).append([s.get("decided") or s.get("label") or "" for s in subs])
+            for s in subs:
+                walk(s, path_)
+        for _run, _line, r in src.crawls:
+            walk(r, ())
+        named = set()
+        for key, ls in lists.items():
+            spots = {(len(ls_), i) for ls_ in ls for i, x in enumerate(ls_) if placeholder_label(x)}
+            known = {(len(ls_), i) for ls_ in ls for i, x in enumerate(ls_) if x and not placeholder_label(x)}
+            if spots and spots <= known:
+                named.add(key)
+        src._named_ph = named
+    return tuple(plain(x) for x in path[:cut]) in src._named_ph
 
 
 def _crumbs(src: Sources) -> dict:
@@ -1252,8 +1289,8 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
     volatile = _volatile(src)
     # looks: the latest per (row, did, option) alone (a retraction leaves none)
     for line, lk in latest_looks(src.looks):
-        if lk.get("did") == "lap":
-            continue
+        if lk.get("did") == "lap" or named_placeholder(src, lk.get("path")):
+            continue                        # a lap; a placeholder the crawls name (no row of its own)
         e = _look_entry(led, lk)
         if e is None:
             led.unresolved.append({"line": line, "path": lk.get("path"), "tab": lk.get("tab")})

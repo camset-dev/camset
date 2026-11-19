@@ -1461,6 +1461,31 @@ def test_todo_counts_each_value_once_on_the_row_that_holds_its_setting(camera, m
         assert "Tango > Sub > Leaf: proved; 2 values still to try" in out and "> Tango: " not in out
 
 
+def test_a_withheld_label_named_by_a_sibling_crawl_is_no_row(camera):
+    """A look lap keeps no label it does not know (decision 24: "(withheld)"), so a placeholder is no row the kit knows:
+    where every position a placeholder stands at under its row is named in another crawl of that row (a submenu of the
+    same length with a known label there), the ledger makes no row of it, nor of a look written under it; a placeholder
+    no crawl names stays a row of its own, visible."""
+    rows = {"kit2_look": [{"label": "Uniform", "outcome": "submenu", "submenu": [
+                              {"label": "(withheld)", "outcome": "notice"}, {"label": "Two", "outcome": "ok"}]},
+                          {"label": "Victor", "outcome": "submenu", "submenu": [{"label": "(withheld)"},
+                                                                                {"label": "(withheld)"}]}],
+            "kit2_named": [{"label": "Uniform", "outcome": "submenu", "submenu": [{"label": "One"}, {"label": "Two"}]},
+                           {"label": "Victor", "outcome": "submenu", "submenu": [{"label": "A"}]}]}
+    with extra_settings(camera, setting("global:0x0170", "Uniform", ["Uniform"], ONOFF, tab="Setup", group="G2"),
+                        setting("global:0x0171", "Victor", ["Victor"], ONOFF, tab="Setup", group="G2")):
+        for run, rs in rows.items():
+            (camera.runs / run).mkdir()
+            (camera.runs / run / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rs), encoding="utf-8")
+        add_looks(camera, look(["Uniform", "(withheld)"], result="looked", by="crawl"),
+                  look(["Victor", "(withheld)"], result="looked", by="crawl"))
+        led = ledger()
+        paths_ = {tuple(e["path"]) for e in led.rows}
+        assert ("Uniform", "(withheld)") not in paths_ and ("Uniform", "One") in paths_
+        assert ("Victor", "(withheld)") in paths_
+        assert not any(u.get("path") == ["Uniform", "(withheld)"] for u in led.unresolved)
+
+
 def test_todo_lists_what_is_left_by_need_and_yield(camera):
     led = ledger()
     items = coverage.todo(led)
