@@ -116,7 +116,9 @@ STATUSES = (
                                     "setting, and the definition's writer named it from another setting's proof (a "
                                     "shared list: a picker's slots, one array's elements, a hold and its live setting, "
                                     "a copy; the whole proof's name source \"derived\", camkit.definitions.inferred, "
-                                    "docs/decisions/0025). It takes the place of greyed in state, closed by rule or not "
+                                    "docs/decisions/0025); or, on a view-only readout the camera writes, a proof chose "
+                                    "the value on the setting of its row whose codes it holds (readout_follows). It "
+                                    "takes the place of greyed in state, closed by rule or not "
                                     "yet tried, whose citations the private form keeps beside the setting of its shared "
                                     "list it was proved on, where the ledger's own grouping finds one "
                                     "(kit/tools/coverage.py --shared, which also says where that list's own proof "
@@ -1786,6 +1788,7 @@ def _one_row(e: dict, fx: dict, by_key: dict, sony: dict, header: set, frame: di
 def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) -> None:
     sony, _header = save_load(src.camera_file)
     frame = src.hand.get("FRAME_PROOFS") or {}
+    follows = readout_follows(settings) if src.private else {}      # INFERRED is the private form's alone
     for s in settings:
         p = s.get("proved") if isinstance(s.get("proved"), dict) else None
         linear = bool(p and (p.get("sampled") or {}).get("linear") is True)
@@ -1826,10 +1829,53 @@ def _option_statuses(led: Ledger, settings: list, facts: Facts, src: Sources) ->
                 st = "closed by rule"
             else:
                 st = "not yet tried"
-            values[v] = INFERRED if st in INFERABLE and v in inferred else st
+            on = (follows.get(s["key"]) or {}).get(v)
+            values[v] = INFERRED if st in INFERABLE and (v in inferred or on) else st
+            if on and values[v] == INFERRED:
+                cites[v] = [{"proved_on": on}] + list(cites.get(v) or [])
         if values:
             led.options.append({"key": s["key"], "path": row, "mode": s.get("row_mode") or MENU_MODE,
                                 "values": values, "cites": cites})
+
+
+# a setting whose note says so is a live readout the camera writes, which no choice tries (pass2_report's readouts)
+VIEW_ONLY = "view only"
+
+
+def readout_follows(settings: list) -> dict:
+    """{readout key: {value: the key of the setting a proof chose it on}} for each view-only readout (VIEW_ONLY in its
+    note) that holds the codes of a setting placed on its own menu row: one that is no readout, whose values give two
+    names at least of the readout's the readout's codes, and no name of the readout's another code. A value of the
+    readout that a proof chose on such a setting (proof_values' proved: a whole proof's own choices, no shared list's
+    names, no sample between points) is "inferred from a shared list" in the private form (_option_statuses); never
+    proved, nor anything the definition holds (ISO in use, which the ISO setting's choices write, 2026-11-19). A value
+    with no such namesake stays as it is."""
+    by_row = {}
+    for s in settings:
+        if s.get("row"):
+            by_row.setdefault(tuple(s["row"]), []).append(s)
+
+    def readout(s):
+        return VIEW_ONLY in str(s.get("note") or "").lower()
+    out = {}
+    for s in settings:
+        if not readout(s) or not s.get("row"):
+            continue
+        mine = {v: lab for v, lab in s.get("values") or [] if isinstance(lab, str)}
+        got = {}
+        for o in by_row[tuple(s["row"])]:
+            if o is s or readout(o) or not isinstance(o.get("proved"), dict):
+                continue
+            theirs = {v: lab for v, lab in o.get("values") or [] if isinstance(lab, str)}
+            same = {v for v, lab in mine.items() if v in theirs and same_label(lab, theirs[v])}
+            elsewhere = any(same_label(lab, t) for v, lab in mine.items() for w, t in theirs.items() if w != v)
+            if len(same) < 2 or elsewhere:
+                continue
+            for v in sorted(same & proof_values(o["proved"])[0]):
+                got.setdefault(v, o["key"])
+        if got:
+            out[s["key"]] = got
+    return out
 
 
 def proof_values(p: dict | None) -> tuple:
@@ -1877,7 +1923,8 @@ def _values_left(led: Ledger) -> None:
 
 def _cite_shared(led: Ledger) -> None:
     """In the full build (the proof lines are this computer's): a value the writer named from a shared list (INFERRED,
-    _option_statuses, from the definition's names: the ledger infers nothing itself, docs/decisions/0025) cites the
+    _option_statuses, from the definition's names: the ledger infers no shared list itself, docs/decisions/0025; a
+    readout's value, readout_follows, cites its setting there) cites the
     setting of its shared list (shared_lists) it is proved on, before what it was (a notice that greyed it, its
     blocker), where the ledger's grouping finds one; the option carries the list's other settings and its own grounds
     (shared_list). The list's own check (unborne) is said by kit/tools/coverage.py --shared and decides nothing."""

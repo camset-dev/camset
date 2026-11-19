@@ -1,8 +1,11 @@
 """Rules of pass 2's report (kit/pass2_report.py) that the proofs of 2026-11-19 turned into wrong results, each on
 made-up proof lines (a row, a session or two, the lines that matter): a side list's put-back the camera would not let
 back ends its attempt and re-arms no older failure (rule A); a line that changed nothing in a record is credited with
-what its session started from only where that session's lines move the record (rule B). Synthetic runs, made-up
-records and values; no camera."""
+what its session started from only where that session's lines move the record (rule B); a put-back never takes the
+place of the proof before it (rule C), and a refusal takes the place of an applied line that moved nothing of its own.
+Beside them, two of the write's and the ledger's: a value of the other video system is no list one value short
+(kit/writer/listgaps.py), and a view-only readout's value proved by choice on the setting it follows is inferred in the
+ledger's private form (kit/camkit/coverage.py). Synthetic runs, made-up records and values; no camera."""
 import json
 import sys
 from pathlib import Path
@@ -259,3 +262,68 @@ def test_a_value_of_the_other_video_system_is_no_gap(tmp_path):
     assert {x["key"]: v for x, v in listgaps.one_short(doc)} == \
         {"global:0x02b4": 2, "global:0x02b5": 7, "global:0x02b6": 7}
     assert {q["key"] for q in listgaps.questions(doc, tmp_path)} == {"global:0x02b4", "global:0x02b5", "global:0x02b6"}
+
+
+# ---------------------------------------------------------------- the ledger: a view-only readout's values
+
+ISO_LIKE = [(0, "AUTO"), (2, "ISO 50"), (3, "ISO 64"), (5, "ISO 100")]
+
+
+def readout_camera(tmp_path, monkeypatch):
+    """test_coverage's made-up camera; given(readout values, the ISO-like setting's whole proof as {value: name source},
+    the readout's note) puts two settings on its row Kilo, an ISO-like setting a proof chose on (its whole proof in
+    the evidence) and a readout of the ISO the camera uses, and returns build(public=False): (ledger, {key: values'
+    statuses}, the row Kilo)."""
+    import test_coverage as T
+    from camkit import coverage
+    cam = T.camera.__wrapped__(tmp_path, monkeypatch)
+    doc0 = json.loads(cam.defn.read_text(encoding="utf-8"))
+    ev = cam.defn.with_name(f"{T.CAM}.evidence.json")
+    ev0 = json.loads(ev.read_text(encoding="utf-8"))
+    records = dict(T.RECORDS, **{"global:0x0110": (1, 1), "global:0x0111": (1, 1)})
+
+    def given(readout_values, follows_proof, note="The value the camera is using; it holds Kilo's own codes. View only."):
+        chosen = sorted(int(v) for v, src in follows_proof.items() if src != "derived")
+        doc = dict(doc0, settings=doc0["settings"] + [
+            T.setting("global:0x0110", "Kilo", ["Kilo"], ISO_LIKE, proved={"values": chosen}),
+            T.setting("global:0x0111", "Kilo in use", ["Kilo"], readout_values, scalar=False, note=note)])
+        cam.defn.write_text(json.dumps(doc), encoding="utf-8")
+        ev.write_text(json.dumps({"settings": dict(ev0["settings"], **{"global:0x0110": {"proved": {
+            "run": "kit2_pass2", "values": chosen, "names": {str(v): s for v, s in follows_proof.items()}}}})}),
+            encoding="utf-8")
+
+        def build(public=False):
+            led = coverage.build(T.CAM, src=coverage.load_sources(T.CAM, public=public, records=records))
+            return led, {o["key"]: o["values"] for o in led.options}, T.row(led, "Kilo")
+        return build
+    return given
+
+
+def test_a_readouts_value_proved_by_choice_on_the_setting_it_follows_is_inferred(tmp_path, monkeypatch):
+    """A view-only readout (the camera writes it: no choice tries it) on the row of the setting whose codes it holds
+    (its names at the same codes there, AUTO aside, which the readout never lists): each of its values a proof chose
+    on that setting is "inferred from a shared list", in the private form alone; a value no proof chose there stays
+    "not yet tried", and so does every value in the public form. Never "proved": the definition is not touched."""
+    build = readout_camera(tmp_path, monkeypatch)(ISO_LIKE[1:], {"0": "two readers", "2": "two readers",
+                                                                  "5": "one reader"})
+    led, values, kilo = build()
+    assert values["global:0x0111"] == {2: "inferred from a shared list", 3: "not yet tried",
+                                       5: "inferred from a shared list"}
+    assert kilo["values_left"] == 2 and kilo["values_inferred"] == 2      # 3, on the setting and on the readout
+    assert led.options[-1]["cites"][2] == [{"proved_on": "global:0x0110"}]
+    led, values, kilo = build(public=True)
+    assert set(values["global:0x0111"].values()) == {"not yet tried"} and kilo["values_left"] == 4
+
+
+def test_a_readouts_value_stays_as_it_was_without_a_proved_namesake_at_its_code(tmp_path, monkeypatch):
+    """No inference where the readout does not hold the setting's codes (a name of its own at another code there), where
+    the setting's value was named from another setting's proof and not chosen on it, or where the setting is no readout
+    (its note says nothing of view only)."""
+    given = readout_camera(tmp_path, monkeypatch)
+    every = {"2": "two readers", "3": "two readers", "5": "two readers"}
+    _, values, _ = given([(2, "ISO 50"), (3, "ISO 100"), (5, "ISO 64")], every)()
+    assert set(values["global:0x0111"].values()) == {"not yet tried"}
+    _, values, _ = given(ISO_LIKE[1:], {"2": "two readers", "3": "derived", "5": "derived"})()
+    assert values["global:0x0111"] == {2: "inferred from a shared list", 3: "not yet tried", 5: "not yet tried"}
+    _, values, _ = given(ISO_LIKE[1:], every, note="The value the camera is using.")()
+    assert set(values["global:0x0111"].values()) == {"not yet tried"}
