@@ -186,6 +186,7 @@ impl App {
                 self.fit_cols(c.sections.len());
                 self.doc = Some(Doc { path, original: c.clone(), baseline: c.clone(), edited: c, signature, source: Source::Disk, unchecked_ok: false, how: o.how, override_def: None, opened: next_open(), rev: next_open(), saved: false, recovered: 0 });
                 self.last_edit = None;
+                self.close_unlike_compare();
                 self.remember_session();
                 Ok(())
             }
@@ -225,6 +226,7 @@ impl App {
                 self.fit_cols(c.sections.len());
                 self.doc = Some(Doc { path: PathBuf::from("Sample camera (built in)"), original: c.clone(), baseline: c.clone(), edited: c, signature, unchecked_ok: false, how: o.how, override_def: None, source: Source::Sample, opened: next_open(), rev: next_open(), saved: false, recovered: 0 });
                 self.last_edit = None;
+                self.close_unlike_compare();
                 self.remember_session();
             }
             Err(e) => self.status = format!("The sample could not be read: {}", self.load_words(&path, &e)),

@@ -1513,10 +1513,19 @@ pub(crate) mod safety_tests {
         assert_eq!(a_look(&app), before, "Memory 1 ➡ Live left the Creative Look alone");
         assert!(app.status.contains("left alone"), "{}", app.status);
         assert_eq!(app.copy_skipped.get(), Left::default(), "said once");
-        // file B from a checked firmware: its rows go into A's live settings, the Creative Look stays as it was
-        let b = dir.join("NEW.DAT");
-        std::fs::write(&b, SAMPLE).unwrap();
+        // file B from a checked firmware is not compared with this one at all (`compare_refusal`)
+        let new = dir.join("NEW.DAT");
+        std::fs::write(&new, SAMPLE).unwrap();
+        app.open_compare(new);
+        assert!(app.compare.is_none() && app.status.starts_with("Not compared: file B is from firmware 4.00"), "{}", app.status);
+        // file B from the same firmware, its live Creative Look another: its rows go into A's live settings, the
+        // Creative Look stays as it was
+        let b = dir.join("B.DAT");
+        let mut other = older.clone();
+        for v in other.sections[0].get_mut(0x0cde).unwrap().value.iter_mut() { *v = v.wrapping_add(2); }
+        std::fs::write(&b, other.to_bytes()).unwrap();
         app.open_compare(b.clone());
+        assert!(app.compare.is_some(), "{}", app.status);
         let acts: Vec<Action> = app.matrix_rows_for("", None).iter().flat_map(|r| app.copy_row(&r.2, Col::b(0), Col::a(0))).collect();
         app.apply(acts);
         assert_eq!(a_look(&app), before, "copying file B's rows left the Creative Look alone");

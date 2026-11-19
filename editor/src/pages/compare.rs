@@ -164,9 +164,44 @@ impl App {
         Ok(())
     }
 
+    /// Why file `c` cannot be compared with file A, as file B or as the base (`what` names it): Compare reads it with
+    /// file A's definition, record by record, and copies its values into A, so it must be from the same camera model
+    /// and hold its settings in the same places (`CamSet::layout_signature`, the firmware's layout), as the Write gate
+    /// asks of the camera (`write_check`). What it is and why, in plain words; None when it may be compared, or no
+    /// file A is open.
+    pub(crate) fn compare_refusal(&self, c: &CamSet, what: &str) -> Option<String> {
+        let a = &self.doc.as_ref()?.edited;
+        if c.model() != a.model() {
+            return Some(format!("Not compared: {what} is from a {} (firmware {}) and file A from a {}. The editor compares files of one camera model only: it reads both with file A's camera definition, and another model keeps other settings in the same places.", c.model(), c.firmware(), a.model()));
+        }
+        if c.layout_signature() != a.layout_signature() {
+            let why = if c.firmware() != a.firmware() { format!("{what} is from firmware {} of the {} and file A from firmware {}", c.firmware(), c.model(), a.firmware()) } else { format!("{what} holds its settings in other places than file A, though both say firmware {}", a.firmware()) };
+            return Some(format!("Not compared: {why}. The editor compares files that hold their settings in the same places only: it reads both with file A's camera definition, and a firmware that moved a setting would show it under another's name. Open a file saved by the same firmware as file A."));
+        }
+        None
+    }
+
+    /// After file A changed (another file opened or read, the sample, a recovery): file B and the base close where they
+    /// are not like it (`compare_refusal`), and the status says why.
+    pub(crate) fn close_unlike_compare(&mut self) {
+        if let Some(why) = self.compare.as_ref().and_then(|(_, c)| self.compare_refusal(c, "file B")) {
+            self.compare = None;
+            self.status = format!("{} {why}", self.status).trim_start().to_string();
+        }
+        if let Some(why) = self.base.as_ref().and_then(|(_, c)| self.compare_refusal(c, "the base file")) {
+            self.base = None;
+            self.status = format!("{} {why}", self.status).trim_start().to_string();
+        }
+        self.prune_cols();
+    }
+
     pub(crate) fn open_compare(&mut self, path: PathBuf) {
         match self.load(&path) {
             Ok(c) => {
+                if let Some(why) = self.compare_refusal(&c, "file B") {
+                    self.status = why;
+                    return;
+                }
                 self.status = format!("Comparing with {} (saved {})", path.display(), self.stamp_words(&c.timestamp()));
                 self.prefs.remember(&path);
                 self.compare = Some((path, c));
@@ -188,6 +223,10 @@ impl App {
     pub(crate) fn open_base(&mut self, path: PathBuf) {
         match self.load(&path) {
             Ok(c) => {
+                if let Some(why) = self.compare_refusal(&c, "the base file") {
+                    self.status = why;
+                    return;
+                }
                 self.status = format!("Three-way compare against base {} (saved {})", path.display(), self.stamp_words(&c.timestamp()));
                 self.prefs.remember(&path);
                 self.base = Some((path, c));
@@ -530,6 +569,44 @@ impl App {
 #[cfg(test)]
 pub(crate) mod copy_tests {
     use super::*;
+
+    /// File B and the base are read with file A's definition and copied from into A, so Compare takes only a file of
+    /// file A's model and layout: another model's file, or one from another firmware, is not compared, and the status
+    /// (the page: its refusal) says what it is and why; nothing can then be copied from it. A file A opened after B
+    /// that B is not like closes B, and says so.
+    #[test]
+    fn compare_takes_only_a_file_like_file_a() {
+        use crate::write::safety_tests::{other_firmware, other_model};
+        let dir = std::env::temp_dir().join(format!("camset_compare_like_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = |name: &str, c: &CamSet| { let p = dir.join(name); std::fs::write(&p, c.to_bytes()).unwrap(); p };
+        let (model, firmware) = (file("MODEL.DAT", &other_model()), file("OLD.DAT", &other_firmware()));
+        let mut app = App::new(vec![], Prefs::default());
+        app.open_sample_now();
+        let a = app.doc.as_ref().unwrap().edited.clone();
+        app.open_compare(model.clone());
+        assert!(app.compare.is_none() && app.mode != Mode::Compare, "not opened");
+        assert!(app.status.starts_with("Not compared: file B is from a ILCE-0TEST (firmware 4.00) and file A from a ILCE-1M2.") && app.status.contains("camera definition"), "{}", app.status);
+        app.open_compare(firmware.clone());
+        assert!(app.compare.is_none() && app.status.starts_with("Not compared: file B is from firmware 2.00 of the ILCE-1M2 and file A from firmware 4.00."), "{}", app.status);
+        // the same model and layout: compared; then the base, held to the same rule
+        let same = file("SAME.DAT", &a);
+        app.open_compare(same.clone());
+        assert!(app.compare.is_some() && app.mode == Mode::Compare, "{}", app.status);
+        app.open_base(firmware.clone());
+        assert!(app.base.is_none() && app.status.starts_with("Not compared: the base file is from firmware 2.00"), "{}", app.status);
+        // the page: refused in the same words, file B left as it was
+        let r = crate::web::tests::upload(&mut app, "open_b", &other_model().to_bytes(), "MODEL_B.DAT");
+        let j: serde_json::Value = serde_json::from_slice(&r.body).unwrap();
+        assert!(r.status == 409 && j["error"].as_str().unwrap().starts_with("Not compared: file B is from a ILCE-0TEST"), "{j}");
+        assert_eq!(app.compare.as_ref().map(|(p, _)| p.clone()), Some(same.clone()));
+        // file A of another firmware opened while B is open: B closes, and the status says why
+        app.open(firmware);
+        assert!(app.compare.is_none() && app.status.contains("Not compared: file B is from firmware 4.00"), "{}", app.status);
+        assert!(app.cols.iter().all(|c| c.src == Src::A));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     /// Copying a memory's value into Live (and Live into every memory) really changes file A.
     #[test]

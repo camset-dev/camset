@@ -116,6 +116,10 @@ impl App {
         let recovered = if kept_original { 0 } else { meta.edits.max(1) };
         self.doc = Some(Doc { path, baseline, original, edited: o.set, signature, source, unchecked_ok: meta.edit_anyway, how: o.how, override_def: None, opened, rev: next_open(), saved: meta.saved, recovered });
         self.last_edit = None;
+        // file B and the base, where they are not like this file (said by the status below only when one closes)
+        let was = std::mem::take(&mut self.status);
+        self.close_unlike_compare();
+        let closed = std::mem::replace(&mut self.status, was);
         self.remember_session();
         self.journal.adopt(base.to_string(), opened);
         let n = self.unsaved();
@@ -124,6 +128,9 @@ impl App {
         } else {
             format!("Recovered the edits to {name}. The file as it was opened was not kept with them, so they do not show as edits; save them with Save As….")
         };
+        if !closed.is_empty() {
+            self.status = format!("{} {closed}", self.status);
+        }
         Ok(())
     }
 
