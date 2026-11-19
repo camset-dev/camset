@@ -22,7 +22,7 @@ from .labels import clean
 from .offered import check_video_systems, with_video_systems
 from .proofs import (axis_value_rows, box_numbers, disputed_out, kept_proof, menu_row, mixed, note_readers, print_kept,
                      reworded, sampled_scale, with_allowances, with_drawn, with_in_sets_proved, with_menu_rows,
-                     with_names, written_values, with_option_trees, with_scales, without_observed)
+                     with_names, written_values, with_option_trees, with_scales, without_observed, without_set_twins)
 
 
 def newest_download(run: Path) -> Path:
@@ -423,6 +423,7 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
                       definitions.sample(doc, target))
     print(f"in sets: {with_in_sets_proved(doc, mirrors)} settings whose memory copy a registration took; allowances: "
           f"{with_allowances(doc, allowed)} settings took the owner's word into their evidence")
+    without_set_twins(doc)          # a record a memory set's own setting describes is shown once in a set
     # the rows a definition kept, named so too; the patterns said applied are those that match a row
     with_menu_rows(doc, axis_value_rows(option_tree.read_proofs(run)), len(tables.CONTEXT_WORDS) - len(unmatched))
     with_option_trees(doc, run)

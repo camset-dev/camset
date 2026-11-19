@@ -154,7 +154,7 @@ from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEY
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
                            box_numbers, disputed_out, kept_proof, mixed, note_readers, one_slot_table, print_kept,
                            reader_source, with_drawn, sampled_scale, scaled_numbers, shown, menu_row, with_allowances, written_values,
-                           with_in_sets_proved,
+                           with_in_sets_proved, without_set_twins,
                            with_menu_rows, with_names, with_option_trees, with_scales, with_shown_as, without_held,
                            without_observed, without_written_with)
 from writer.offered import check_video_systems, cut_to_walks, not_offered_marks, with_video_systems  # noqa: E402
@@ -1771,6 +1771,7 @@ def main():
         print(f"  registered {k}: {len(registered[k]['values'])} values registered ({registered[k]['run']}), but no "
               "hand table's proof of it takes them in; not credited")
     in_sets, took = with_in_sets_proved(doc, mirrors), with_allowances(doc, allowed)
+    without_set_twins(doc)              # a record a memory set's own setting describes is shown once in a set
     # every setting whose note says the owner's word, from the proof lines (with_allowances) or a hand table's own
     # "allowance" (FRAME_PROOFS), its evidence split from the note or not yet
     carry = sum(1 for s in doc["settings"] if ALLOWANCE.search(f"{s.get('note_evidence') or ''} {s.get('note') or ''}"))

@@ -5,7 +5,8 @@ on the values no option was seen to write taken out (without_held), the records 
 (without_written_with), a list of numbers sampled on a line (sampled_scale), a box's numbers and their names as the
 camera draws them (box_numbers, drawn_values), one code table for an array's slots
 (one_slot_table), the mark on a record pass2_report found not one to one, a live setting's memory copy seen taken by a
-registration (in_sets_proved), and the owner's allowance a proof carries in the note's evidence (with_allowances)."""
+registration (in_sets_proved), a live setting kept out of the memory sets where a set's own setting describes its
+record (without_set_twins), and the owner's allowance a proof carries in the note's evidence (with_allowances)."""
 import collections
 import contextlib
 import json
@@ -581,6 +582,29 @@ def with_in_sets_proved(doc: dict, mirrors: dict) -> int:
             if k == "in_sets" and want:
                 s["in_sets_proved"] = want
     return n
+
+
+def without_set_twins(doc: dict) -> list:
+    """A live setting kept in the memory sets (in_sets) whose record a memory set's own setting describes (area "set",
+    the same id) is kept out of them (in_sets false): in a set that record is the set's own setting's, never shown
+    twice. The a1 II's 0x0b8d (review 2026-11-18): each registration wrote the mode in use into the set and into the
+    live record alike, whatever the live record held before, so a set never took the live record's value. One a
+    registration was seen to copy (in_sets_proved, with_in_sets_proved first) is left as it is and printed: its record
+    is described twice. Returns the keys taken out, each printed."""
+    own = {s.get("id") for s in doc["settings"] if s.get("area") == "set"}
+    out = []
+    for s in doc["settings"]:
+        if s.get("area") != "global" or not s.get("in_sets") or s.get("id") not in own:
+            continue
+        if s.get("in_sets_proved"):
+            print(f"  in sets   {s['key']} {s['name'][:50]}: a registration took its copy, and a memory set's own setting "
+                  "describes the same record: described twice, left as it is")
+            continue
+        s["in_sets"] = False
+        out.append(s["key"])
+        print(f"  in sets   {s['key']} {s['name'][:50]}: kept out of the memory sets, whose own setting of the record is "
+              f"set:0x{s['id']:04x}")
+    return out
 
 
 def with_allowances(doc: dict, allowed: dict) -> int:

@@ -267,3 +267,45 @@ def test_the_box_probes_file_is_the_provers_own():
     import optboxes_run
     from writer import fromdata
     assert fromdata.BOX_PROBES == optboxes_run.PROBES
+
+
+# ---------------------------------------------------------------- 6. one record, one row in a memory set
+
+def test_a_live_setting_whose_record_a_sets_own_setting_describes_is_kept_out_of_the_sets(capsys):
+    """Review 2026-11-18, item 6: global:0x0b8d (the exposure mode last registered) was marked kept in the memory sets
+    (in_sets, carried from the first kit) while set:0x0b8d is the sets' own setting of that record, so a set showed two
+    rows for one value. The registrations (2026-11-09) wrote the mode in use into the set and into the live record
+    alike, whatever the live record held before: the set never takes the live value. Both passes keep such a live
+    setting out of the sets (writer.proofs.without_set_twins), but one a registration was seen to copy, which is said;
+    made-up settings."""
+    from writer import proofs
+    doc = {"settings": [
+        {"key": "global:0x0100", "area": "global", "id": 0x100, "name": "Last registered", "in_sets": True, "scalar": True},
+        {"key": "set:0x0100", "area": "set", "id": 0x100, "name": "Stored in the memory", "in_sets": True},
+        {"key": "global:0x0101", "area": "global", "id": 0x101, "name": "Kept", "in_sets": True},
+        {"key": "global:0x0102", "area": "global", "id": 0x102, "name": "Copied", "in_sets": True,
+         "in_sets_proved": {"run": "r", "date": "d", "slot": "1"}},
+        {"key": "set:0x0102", "area": "set", "id": 0x102, "name": "Also its own", "in_sets": True}]}
+    assert proofs.without_set_twins(doc) == ["global:0x0100"]
+    by = {s["key"]: s for s in doc["settings"]}
+    assert by["global:0x0100"]["in_sets"] is False and list(by["global:0x0100"]) == ["key", "area", "id", "name",
+                                                                                      "in_sets", "scalar"]
+    assert by["global:0x0101"]["in_sets"] is True and by["global:0x0102"]["in_sets"] is True
+    said = capsys.readouterr().out
+    assert "global:0x0100" in said and "set:0x0100" in said and "described twice" in said
+    assert proofs.without_set_twins(doc) == [], "again: nothing"
+
+
+def test_the_a1_pass_keeps_0x0b8d_out_of_the_memory_sets(tmp_path, monkeypatch, capsys):
+    """The ILCE-1M2's pass applies it: on a made-up run, the committed definition's global:0x0b8d is kept out of the
+    sets (said), its sets' own setting set:0x0b8d as it is."""
+    from test_definitions import A1_PROOFS, A1_REPORT, a1_run
+    S, _target, _write = a1_run(tmp_path, monkeypatch, A1_REPORT, A1_PROOFS)
+    got = []
+    real = S.from_data
+    monkeypatch.setattr(S, "from_data", lambda doc: got.append(real(doc)) or got[-1])
+    monkeypatch.setattr(sys, "argv", ["schema_update.py"])
+    S.main()
+    assert "global:0x0b8d" in capsys.readouterr().out
+    by = {s["key"]: s for s in got[-1]["settings"]}
+    assert by["global:0x0b8d"]["in_sets"] is False and by["set:0x0b8d"]["in_sets"] is True
