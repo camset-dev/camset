@@ -168,3 +168,48 @@ def test_nothing_changed_within_a_session_that_moves_the_record_is_credited_as_b
     alone = [iso(0, "ISO100", 61, "00060_before.DAT", [(MOVIE, 7, 5)]),
              iso(1, "ISO125", 63, "00060_before.DAT", [(MOVIE, 7, 6)]), iso(2, "ISO160", 71, "00050_before.DAT")]
     assert credit(alone)[MOVIE] == {"ISO100": 5, "ISO125": 6, "ISO160": 9}
+
+
+# ---------------------------------------------------------------- rule C: a put-back and the proof before it
+
+EV, EV_MOVIE = "global:0x0011", "global:0x0012"          # made up: Exposure Comp. and its movie copy
+
+
+def ev(index, label, frame, base, changes=(), kind="list", **more):
+    """An Exposure Comp. proof line (a list row; made-up records)."""
+    return {"path": ["Exposure Comp."], "kind": kind, "index": index, "label": label, "base": base,
+            "chosen_frame": f"{frame:05d}_down.png", "dat": f"{frame + 2:05d}_x.DAT", "applied": True,
+            "changes": [{"key": k, "before": b, "after": a} for k, b, a in changes], **more}
+
+
+def test_a_put_back_never_takes_the_place_of_the_proof_before_it():
+    """+2.7 EV chosen from +0.0 EV wrote both records; a later session started on +2.7 EV, chose +0.0 EV and put +2.7
+    EV back, a line that changes nothing against its own start. The put-back is no proof of +2.7 EV, and it does not
+    unmake the one that is: +2.7 EV stays credited with what it wrote (the report of 2026-11-19: line 9129 hid line
+    8930). A table's put-back ("planned": false) holds back alike."""
+    first = [ev(31, "+2.7 EV", 11, "00010_base.DAT", [(EV, 20, 31), (EV_MOVIE, 20, 31)]),
+             ev(20, "+0.0 EV", 13, "00010_base.DAT")]
+    later = [ev(20, "+0.0 EV", 21, "00020_base.DAT", [(EV, 31, 20), (EV_MOVIE, 31, 20)]),
+             ev(31, "+2.7 EV", 23, "00020_base.DAT")]
+    (name, opts), = R.rows_of(None, first + later).items()
+    assert opts[31]["dat"] == "00013_x.DAT" and opts[20]["dat"] == "00023_x.DAT"
+    got = R.values_of(opts)
+    assert got[EV] == got[EV_MOVIE] == {"+2.7 EV": 31, "+0.0 EV": 20}
+    table = [dict(r, kind="table", option="Exposure Comp.", planned=True) for r in first] + \
+        [ev(31, "+2.7 EV", 21, "00020_base.DAT", kind="table", option="Exposure Comp.", planned=False),
+         ev(20, "+0.0 EV", 23, "00020_base.DAT", [(EV, 31, 20)], kind="table", option="Exposure Comp.", planned=True)]
+    (_, opts), = R.rows_of(None, table).items()
+    assert opts[31]["dat"] == "00013_x.DAT"
+
+
+def test_a_later_proof_that_wrote_still_takes_the_options_place():
+    """What stays as it was: a later line that changed something is its option's latest, whatever the earlier one
+    wrote; a put-back takes the place of an earlier line of its option that wrote nothing (a put-back of an earlier
+    session); and a session's line that changed nothing but is not its last choice is no put-back."""
+    first = [ev(31, "+2.7 EV", 11, "00010_base.DAT", [(EV, 20, 31)]), ev(20, "+0.0 EV", 13, "00010_base.DAT")]
+    again = [ev(31, "+2.7 EV", 31, "00030_base.DAT", [(EV, 20, 31)]), ev(20, "+0.0 EV", 33, "00030_base.DAT")]
+    (_, opts), = R.rows_of(None, first + again).items()
+    assert opts[31]["dat"] == "00033_x.DAT" and opts[20]["dat"] == "00035_x.DAT"
+    missed = [ev(31, "+2.7 EV", 41, "00040_base.DAT"), ev(20, "+0.0 EV", 43, "00040_base.DAT", [(EV, 25, 20)])]
+    (_, opts), = R.rows_of(None, first + missed).items()
+    assert opts[31]["dat"] == "00043_x.DAT"

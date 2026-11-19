@@ -1047,8 +1047,17 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
     option's latest where the row holds it at another index, and else goes under (index, label), the earlier proof
     kept (option_key): before 2026-11-11 it took the other option's place, and options of the a1 II's pass 2 lost
     their proof so, the two hold values among them kept only from an older definition. A number field's index is its
-    value, the same option whatever its label shows of the other fields."""
+    value, the same option whatever its label shows of the other fields. A later line the camera refused, and one that
+    only put its session's own start back (put_back_only), never takes the place of an applied line of its option:
+    the first wrote nothing, the second wrote nothing against its own start, and a put-back is never a sample, nor does
+    it unmake one (2026-11-19: Exposure Comp.'s +2.7 EV put back last in a session that began on it hid the line that
+    chose it from +0.0 EV and wrote all four records)."""
     proofs = proofs_of(run) if proofs is None else proofs
+    last = {}               # (row, base) -> its session's last download, by number (put_back_only)
+    for i, r in enumerate(proofs):
+        if i not in skip and r.get("dat") and r.get("applied") is not False:
+            s = (row_name(r), r.get("base"))
+            last[s] = max(last.get(s, -1), dat_number(r.get("dat")))
     rows = collections.defaultdict(dict)
     for i, r in enumerate(proofs):
         if i in skip:
@@ -1057,8 +1066,26 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
         k = option_key(r, opts)
         if r.get("applied") is False and r.get("kind") != "fields" and k in opts and opts[k].get("applied") is not False:
             continue        # refused or drawn grey later: the option's proof the camera applied stays its latest
+        if k in opts and opts[k].get("applied") is not False and wrote(opts[k]) and put_back_only(r, last):
+            continue        # the session's own start put back: the option's proof that wrote stays its latest
         opts[k] = r
     return rows
+
+
+def wrote(r: dict) -> bool:
+    """Whether a proof line changed a record (element_changes; a display proof's held records count)."""
+    return bool(element_changes(r)) if "changes" in r or r.get("proof") == "display" else False
+
+
+def put_back_only(r: dict, last: dict) -> bool:
+    """A line of a list, side list, carousel or table row the camera applied that changed nothing against its session's
+    start and was chosen to put the saved option back: its session's last choice (`last`: {(row, base): the session's
+    last download number}, rows_of) or a table's put-back ("planned": false). Its value is only what the session
+    started from."""
+    if r.get("applied") is False or r.get("kind") not in ("list", "sidelist", "dialog", "table") or wrote(r):
+        return False
+    return r.get("planned") is False or (bool(r.get("dat")) and
+                                         dat_number(r.get("dat")) == last.get((row_name(r), r.get("base"))))
 
 
 def option_key(r: dict, opts: dict):
