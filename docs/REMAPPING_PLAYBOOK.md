@@ -158,8 +158,7 @@ which `kit/tools/identify.py` checks and drafts. Look for, on any body:
 ## 4. Setup
 
 `QUICKSTART.md`, steps 0 to 6, sets everything up, from the owner's three answers to the eyes checked. Lens cap on (the
-live view behind dialogs is then plain black), test cards in both slots, and the same eyes for the scans as for the
-runs.
+live view behind dialogs is then plain black) and test cards in both slots.
 
 ## 5. Readers: accuracy before speed
 
@@ -200,6 +199,11 @@ putting the start file back and checking it took; a row whose state cannot be pu
 at once. A proof made in a switched state (Movie mode, a blocker off, the camera grip down) carries `--context`, with a
 start file downloaded in that state.
 
+**Reaching a state.** With a switch waiting (`kit/provers/mode_switch.py --keep`), `mode_switch.py --set "ROW=OPTION"`
+puts a list row, or a two-box row's box, on that option, and `--restore` puts back the file from before the switch.
+Or load a file the camera wrote in that state: `kit/tools/upload_check.py FILE`. Keep one switch waiting at a time,
+whatever the run folder: `--keep` does not always refuse a second made with another `--run`.
+
 **Seen, or inferred.** A value is *seen* when choosing its option changed the record to it. A row's own start is
 inferred (its visit changes nothing), and that is sound: one option per row. Where two or more options leave a record
 alone, the report lists them (`inferred`) and the definition does not, since one is the owner's own value (decision
@@ -213,6 +217,11 @@ against the proofs. Unattended runs go through `kit/tools/chain.py`, never a she
 
 Every kit command here runs with the venv's Python, as `.venv/bin/python -u kit/page_scan.py …`
 (`.venv\Scripts\python` on Windows).
+
+**What the kit cannot yet do on a body other than the a1 II (ILCE-1M2).** Plan without these: pass 3
+(`kit/pass3_run.py` stops before it connects, since its blocker table is the a1 II's; Phase 3 says the way round); the
+camera's own help text, which reaches only the a1 II's definition (section 16, step 9); and the provers built on the
+a1 II's record ids, `kit/provers/framepos_run.py` and `kit/provers/memreg_run.py` (which stops on another body).
 
 **Where runs go.** In `runs/<model>_fw<fw>/`, one folder per camera; a run named on a command line (`<scan>`,
 `<crawl>` below) is a folder there ([QUICKSTART, "Where the runs go"](QUICKSTART.md#where-the-runs-go)).
@@ -230,7 +239,9 @@ build pass 1's map must not skip.**
 ### Phase 1: map the menu
 
 1. **Page scan,** Down only, one full lap: `kit/page_scan.py --mode Stills|Movie|S&Q --run kit2_page_scan[_movie|_sq]`,
-   `--mode` naming the mode the camera is in, each mode's scan in a run of its own.
+   `--mode` naming the mode the camera is in, each mode's scan in a run of its own. A scan matches only frames from
+   the eyes it was made with (HDMI or the camera's own picture), and no tool checks that: scan with the eyes the runs
+   will use. A run refuses a scan of another mode, or one without its page model (step 3), and says what to run.
 2. **The cycle file.** Check that it printed `cycle written`; without a full lap no prover takes the scan: scan again.
 3. **Page labels.** `kit/page_model.py --vlm <scan>`. Labels the readers disagree on are read by eye off the frame into
    `checked_labels.json` (`{page: {slot: {label, frame, note}}}`), the owner's own confirmations into
@@ -360,9 +371,11 @@ and `kit/tools/coverage.py --record` for the row it settles.
   through the menus, never by a file (rule 12), and never sound, light, motion, network, keys or dials. (The a1 II's
   owner allowed Camera Settings Reset only, decision 5; ask yours.) Then write
   `data/<model>_fw<fw>/settings_reset_<model>_fw<fw>.json` by hand
-  ([its shape](DATA_CONTRACTS.md#the-reset-file-what-each-reset-puts-back)).
+  ([its shape](DATA_CONTRACTS.md#the-reset-file-what-each-reset-puts-back)). After Initialize: section 14.
 
 ### Phase 6: report and definition
+
+After new proofs, run these in order.
 
 1. `kit/tools/replay_proofs.py` after any change to the parser, the container block or the volatile list.
 2. `kit/pass2_report.py`: per row, records and value labels against the definition (agrees, wording, missing, conflict,
@@ -381,8 +394,8 @@ and `kit/tools/coverage.py --record` for the row it settles.
    The pull request carries the gate's count line.
 5. Stage the definition (`git add editor/definitions/<model>_fw<fw>.json`), run the report and `--write` again:
    `git diff --exit-code editor/definitions/<model>_fw<fw>.json` must print nothing.
-6. `kit/tools/coverage.py --write` (commit what it writes; never edit it by hand), then `cd editor && cargo test`, `.venv/bin/python kit/tools/build_docs.py` and
-   `.venv/bin/zensical build --strict`.
+6. `kit/tools/build_docs.py`, `kit/tools/leads.py --write`, then `kit/tools/coverage.py --write` (commit what it
+   writes; never edit it by hand), then `cd editor && cargo test` and `.venv/bin/zensical build --strict`.
 
 ## 8. Pitfalls already paid for
 
@@ -453,7 +466,7 @@ Each line is a symptom, then its cause, then what to do.
   only, Phase 3), `kit/provers/boxes_run.py --first BOX=VALUE`, or
   `kit/prove_run.py --first "ROW / OPTION=VALUE" --rows "ROW / OPTION"` for a carousel option's second axis.
 - **Every row fails on the way to it ("a screen was not the one the scan recorded") after a camera reset** → the page
-  count changed, so every stored scan is stale: make the scans again (Phase 1, steps 1 to 3, for each mode's scan).
+  count changed, so every stored scan is stale: section 14.
 - **"Back on the saved value, records still differ"** → a first-use record, a record written on
   every OK, or a one-way flag. Note it as found; the upload restores the camera.
 - **An information screen after OK** (it may have a "Don't show this again" box) → leave it with MENU; its OK goes
@@ -562,6 +575,19 @@ A map is only useful if a file the editor writes loads on the camera as intended
    sent (`EDITOR.md`, "The camera link").
 3. Check that every edit took and nothing else moved. Anything rejected or rewritten goes into the
    definition's notes.
+
+## 14. After a camera reset
+
+After the owner's Initialize, before the next run (after Reset Network Set., the first item alone):
+
+- **The login.** The camera now shows a new fingerprint, so the link sends it no login and says what to do. The owner
+  forgets the camera in the editor (Connect to the camera, Known cameras) or removes its lines from
+  `~/.config/camset/known_cameras.json`, sets up the camera's access authentication again, and types the new user name
+  and password into `~/.config/camset/network.json` themselves.
+- **HDMI.** Both outputs are back on Auto: set them to 1080p again (QUICKSTART, step 5).
+- **New files.** Where the owner keeps the reset, download a new owner's file before anything else changes: an old
+  one, uploaded, would undo the reset. Then make a new start file (QUICKSTART, step 5).
+- **New page scans** of each mode (Phase 1, steps 1 to 3): the page count changed, so no stored scan matches.
 
 ## 15. What "done" looks like
 
