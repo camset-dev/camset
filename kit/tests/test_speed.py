@@ -1283,6 +1283,119 @@ def test_a_menu_judged_on_a_menu_page_is_not_watched(tmp_path, monkeypatch):
     assert cam.read().kind == "shooting" and now[0] == pytest.approx(0.2) and not events_of(cam, "menu_watch")
 
 
+class ReaderEyes:
+    """HDMI eyes on a fake clock over a menu page whose lit row (`row`) OCR reads nothing in; `shown` the screen's kind
+    (the menu has closed when it reads "shooting"). A frame's picture is (kind, lit row)."""
+    name = "hdmi"
+
+    def __init__(self, now):
+        self.now, self.shown, self.row, self.grabs, self.settled_from, self.timing = now, "menu", 2, [], [], {}
+
+    def grab(self, tag, save=True):
+        self.grabs.append(tag)
+        f = WatchFrame(self.shown, self.now[0], len(self.grabs))
+        f.image = (self.shown, self.row)
+        return f
+
+    def settle(self, before, tag, expect_change=None, sent_at=None, **k):
+        self.settled_from.append(before)
+        self.now[0] += 0.2
+        return self.grab(tag), True
+
+
+def reader_camera(tmp_path, monkeypatch, takes, closes=False, moves_to=None, by_row=True, steps=False):
+    """A LiveCamera on a fake clock, on a menu page whose lit row OCR reads nothing in, so Right asks the reader for
+    its label; the fake reader takes `takes` s (one per question, the last for any more), and while it reads the menu
+    closes (`closes`) or the cursor moves to row `moves_to` (with `steps`, down a row at every question). by_row: the screen's reading tells lit rows apart (as
+    camkit.screen's structure does); otherwise only the lit row's box does. (camera, presses sent, labels judged by
+    open_refused, frames the reader was asked about, the clock's now); cam.guarded, the keys the first guard
+    (inside_refused) judged."""
+    from camkit import live
+    from camkit.runs import Run
+    now, clock = menu_clock()
+    now[0] = 10.0                           # a frame's time is a monotonic clock's, never 0
+    monkeypatch.setattr(live, "time", clock)
+    cam = live.LiveCamera.__new__(live.LiveCamera)
+    cam.run = Run(f"reader_{len(list(tmp_path.iterdir()))}", root=tmp_path)
+    cam.hdmi = eyes = ReaderEyes(now)
+    cam.reading = lambda f: SimpleNamespace(kind=f.image[0], focus="rows", signature=str(f.image if by_row else f.image[0]),
+                                            struct=f.image if by_row else f.image[0])
+    cam.frame = eyes.grab("start")
+    cam.screen = cam.reading(cam.frame)
+    cam.network, cam.owner, cam.permit, cam.network_open, cam.may_open_exact = frozenset(), {}, None, None, None
+    cam.may_open, cam.presses, cam._seen = frozenset(), 0, 0
+    monkeypatch.setattr(live, "lit_text", lambda image, path: "")
+    monkeypatch.setattr(live, "lit_box", lambda image, kind=None: (8, 40 + 32 * image[1], 600, 70 + 32 * image[1])
+                        if image[0] == "menu" else None)
+    sent, judged, asked, waits = [], [], [], list(takes) if isinstance(takes, list) else [takes]
+
+    def reader(path, timeout=live.READER_TIMEOUT):
+        asked.append(Path(path).name)
+        now[0] += waits.pop(0) if len(waits) > 1 else waits[0]
+        if closes:
+            eyes.shown = "shooting"
+        if moves_to is not None:
+            eyes.row = moves_to
+        if steps:
+            eyes.row += 1
+        return "Grid Line", ""
+
+    real = live.open_refused
+
+    def counted(lit, *a, **k):
+        judged.append(lit)
+        return real(lit, *a, **k)
+
+    monkeypatch.setattr(live, "reader_label", reader)
+    monkeypatch.setattr(live, "open_refused", counted)
+    cam.guarded, inside = [], cam.inside_refused
+    cam.inside_refused = lambda key, permit=None: (cam.guarded.append(key), inside(key, permit))[1]
+    cam.link = SimpleNamespace(moves=0, menus=0, press=lambda key, hold, screen=None, **k: sent.append(
+        (key, screen.kind, round(now[0], 2))))
+    return cam, sent, judged, asked, now
+
+
+def test_a_menu_that_closes_while_the_reader_names_its_lit_row_gets_no_right(tmp_path, monkeypatch):
+    """Inside a press, the reader names the lit row OCR read nothing in (about a second): where the frame it read is by
+    then older than STALE_S the screen is looked at again, and a menu that closed meanwhile refuses the press as a
+    changed screen (safety.ScreenChanged): no key goes out on the shooting screen, and the fresh frame is the camera's."""
+    from camkit import safety
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, 1.0, closes=True)
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and len(asked) == 1 and judged == [] and cam.read().kind == "shooting"
+    assert events_of(cam, "screen_changed_before_press") and events_of(cam, "press_refused")
+
+
+def test_a_press_whose_reader_took_long_is_judged_again_on_a_fresh_frame_without_asking_again(tmp_path, monkeypatch):
+    """The same screen after the reader's second: the press is judged again from the top on a fresh frame (every guard
+    again, the never-open check on the fresh frame), the reader not asked again for the same lit row, and the press
+    measured from that fresh frame. A reader that answers within STALE_S changes nothing; a lit row that moved while it read gets its own
+    question, or the press is refused where the screen's reading tells the rows apart."""
+    from camkit import live, safety
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, 1.0)
+    cam.press("right")
+    assert len(asked) == 1 and cam.guarded == ["right", "right"] and judged == ["Grid Line"]
+    assert sent == [("right", "menu", 11.0)] and events_of(cam, "lit_row_label_kept")
+    assert "right-judged" in cam.hdmi.settled_from[0].path.name and events_of(cam, "press_judged_again")
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, live.STALE_S / 5)
+    cam.press("right")
+    assert len(asked) == 1 and cam.guarded == ["right"] and judged == ["Grid Line"] and len(sent) == 1
+    assert not events_of(cam, "press_judged_again")
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, 1.0, moves_to=3)
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and len(asked) == 1
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, [1.0, 0.1], moves_to=3, by_row=False)
+    cam.press("right")
+    assert len(asked) == 2 and cam.guarded == ["right", "right"] and judged == ["Grid Line"] and len(sent) == 1
+    # a lit row that moves at every slow question: judged at most 1 + REJUDGES times, then refused, nothing sent
+    cam, sent, judged, asked, now = reader_camera(tmp_path, monkeypatch, 1.0, by_row=False, steps=True)
+    with pytest.raises(safety.ScreenChanged):
+        cam.press("right")
+    assert sent == [] and judged == [] and len(asked) == len(cam.guarded) == 1 + live.REJUDGES
+
+
 # ---------------------------------------------------------------- a carousel's title, read once its strip is still
 
 

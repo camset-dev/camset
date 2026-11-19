@@ -29,7 +29,9 @@ MENU alone, asks no reader, and the eyes write every frame of it black (withhold
 the presses handed to the link, which drive.py says in its log of an armed press that failed.
 It fails closed as drive.py does: when an orange bar is drawn but OCR reads no text in it, the vision reader is
 asked once for the row's label (reader_label), and the label it gives is judged the same way; when it gives none, the
-press is refused, since the never-open check cannot judge a row it cannot read (2026-11-08).
+press is refused, since the never-open check cannot judge a row it cannot read (2026-11-08). The reader takes about a
+second: where its frame is by then older than STALE_S, the press is judged again on a fresh frame, or refused where the
+screen changed meanwhile (lit_by_reader).
 
 The screen read last goes with every press and dial to the link, whose guards judge C4 on it (decision 7) and every key
 but MENU on the shooting screen (decision 21: refused there unless the caller names the key for that press,
@@ -690,7 +692,7 @@ def osd_wait(moved_at, now: float | None = None) -> float:
     return max(0.0, moved_at + OSD_LAG - (time.monotonic() if now is None else now))
 
 
-def look_again(eyes, judged, tag: str, moved_at=None) -> tuple:
+def look_again(eyes, judged, tag: str, moved_at=None, read=None) -> tuple:
     """(why the screen on show now is not the screen judged, or "", the frame grabbed, None when none could be): the
     screen `judged` (a camkit.screen.Screen) compared with one fresh grab of `eyes`, read again (same_screen:
     screen.same_state), so a question the camera raised by itself while the kit read, or a popup drawn after the
@@ -700,14 +702,15 @@ def look_again(eyes, judged, tag: str, moved_at=None) -> tuple:
     caught the same and cost 3.5 s on every Enter; a question the camera raises by itself within OSD_LAG of the press is
     missed by both). Nothing is pressed or saved. A grab or a reading that fails is a refusal. "Same state" compares the
     screen's kind and structure (a list: its title strip and lit row), not every word: the caller judges the frame
-    returned (LiveCamera.confirm_refused reads its text afresh)."""
+    returned (LiveCamera.confirm_refused reads its text afresh). read: how the fresh frame is read (camkit.screen.read
+    by default; a LiveCamera's own reading, LiveCamera.lit_by_reader)."""
     if getattr(eyes, "name", "") == "osd":
         wait = osd_wait(moved_at)
         if wait > 0:
             time.sleep(wait)
     try:
         f = eyes.grab(f"{tag}-again", save=False)
-        now = screen.read(f)
+        now = (read or screen.read)(f)
     except Exception as e:
         return f"the screen could not be looked at again before the press ({type(e).__name__})", None
     if not same_screen(now, judged):
@@ -721,6 +724,12 @@ def same_picture(a, b) -> bool:
     then, whose text is read already); a frame without a picture is no such proof."""
     x, y = getattr(a, "image", None), getattr(b, "image", None)
     return isinstance(x, np.ndarray) and isinstance(y, np.ndarray) and x.shape == y.shape and np.array_equal(x, y)
+
+
+def same_box(a, b, tol: int = 4) -> bool:
+    """Whether two lit boxes (lit_box) mark one place, each edge within `tol` pixels (a row is about 30 tall); no box
+    is no proof."""
+    return a is not None and b is not None and len(a) == len(b) and all(abs(x - y) <= tol for x, y in zip(a, b, strict=True))
 
 
 def same_screen(a, b) -> bool:
@@ -793,6 +802,8 @@ STALE_S = 0.5
 MENU_LATE = 1.5        # s a MENU from the shooting screen is given before a fresh frame may say it was not taken
 MENU_PAGES = ("menu", "submenu", "tiles")
 MENU_POLL = 0.05       # s between two looks while a MENU from the shooting screen is watched (menu_watch, menu_check)
+# times a press is judged again from the top after the reader named its lit row on a frame by then stale (lit_by_reader)
+REJUDGES = 2
 # a frame this dark on average shows no screen to read: HDMI blanked (camkit.session.osd_shooting's level)
 BLACK = 6.0
 
@@ -819,6 +830,16 @@ def osd_kind(link, folder=None) -> str:
         for left in (path, path.with_name(path.name + ".part")):
             with contextlib.suppress(OSError):
                 left.unlink()
+
+
+class _Rejudge(Exception):
+    """Inside LiveCamera.press, nothing sent: the reader named the lit row on a frame by then older than STALE_S, and a
+    fresh frame of the same screen is now the camera's, so the press is judged again on it from the top
+    (LiveCamera.lit_by_reader); known, the label and the screen and lit row it was read on."""
+
+    def __init__(self, known: dict):
+        super().__init__("judged again on a fresh frame")
+        self.known = known
 
 
 class LiveCamera:
@@ -936,7 +957,9 @@ class LiveCamera:
         (confirm_refused). require_notice: an Enter meant for the notice that has just refused MENU (leave_notice) and
         nothing else: refused unless the screen is that notice. row: on a look lap, the row the caller is about to
         open ({"expected", "seen", "first"}: bar_is_row), its first open counted only while its RESTORE_BY_HAND is on
-        disk; None names none, and a never-open bar then opens on a look lap to no one's word."""
+        disk; None names none, and a never-open bar then opens on a look lap to no one's word. A press whose lit row
+        the reader named (about a second) on a frame by then older than STALE_S is judged again from the top on a fresh
+        frame, or refused where the screen changed (lit_by_reader); the one-press words below are spent once, here."""
         exact = getattr(self, "may_open_exact", None)
         if exact is not None:
             self.may_open_exact = None      # one press only, whatever it is
@@ -948,6 +971,23 @@ class LiveCamera:
         self.answer_once = None             # a prover's consent for one press: used up likewise
         menu_refused = getattr(self, "menu_refused", None)
         self.menu_refused = None            # a refused MENU vouches for the press right after it alone
+        known = None
+        for _ in range(1 + REJUDGES):
+            try:
+                self._press(key, allow, hold_ms, on_shooting, notice_ok, require_notice, row, seen_enough,
+                            (exact, permit, confirmed, answer, menu_refused), known)
+                return
+            except _Rejudge as again:
+                known = again.known
+        self.refuse(key, "the screen kept changing while the reader named its lit row: the press is not sent on a screen "
+                         "nobody judged; read the screen again and choose afresh", changed=True)
+
+    def _press(self, key: str, allow, hold_ms, on_shooting, notice_ok: str, require_notice: bool, row,
+               seen_enough: bool, once: tuple, known):
+        """press's judging, from the top, and the press sent once every guard passes. once: the one-press words press
+        spent (may_open_exact, permit, confirm_once, answer_once, menu_refused); known: the lit row's label the reader
+        gave on the pass before, with the screen and lit row it was read on (lit_by_reader), or None."""
+        exact, permit, confirmed, answer, menu_refused = once
         arming = self.inside_refused(key, permit)       # inside a network row: look only, or MENU alone
         # a MENU, or an Enter inside_refused let through (an option the decision names), may close the row once it has
         # gone out: only then can the lock end (_inside_after)
@@ -972,7 +1012,7 @@ class LiveCamera:
         if safety.canonical_input(key) in OPENS and self.screen.kind in ROW_SCREENS:
             lit = lit_text(self.frame.image, self.frame.path)
             if not lit.strip() and lit_box(self.frame.image) is not None:
-                lit = self.unread_row(key)          # a bar OCR read nothing in: the reader names it, or no press
+                lit = self.lit_by_reader(key, known)    # a bar OCR read nothing in: the reader names it, or no press
             why = open_refused(lit, self.may_open, network, screens, values, readings, getattr(self, "labels", None),
                                look, row)
             if why and owner and getattr(self, "network_open", None) is None:
@@ -1682,6 +1722,34 @@ class LiveCamera:
         self.link.dial(name, steps, screen=self.judged_screen(name), on_shooting=on_shooting)
         time.sleep(0.6)
         return self.refresh("dial")
+
+    def lit_by_reader(self, key: str, known=None) -> str:
+        """The label of the lit row OCR read nothing in, inside a press: the reader's on this press's pass before, where
+        the screen and its lit row are the ones it was read on (`known`); else the reader's now (unread_row), after
+        which, the reader taking about a second, a frame by then older than STALE_S is looked at again (look_again):
+        where it is no longer the screen the label was read on, the press is refused as a changed screen, nothing sent
+        (safety.ScreenChanged, the fresh frame the camera's); else press judges it again from the top on the fresh frame
+        (_Rejudge), every guard again, the label kept for that lit row (a gap found 2026-11-18: the key went out about
+        a second after its frame, on whatever the camera showed by then)."""
+        box = lit_box(self.frame.image)
+        if known is not None and same_screen(self.screen, known["screen"]) and same_box(box, known["box"]):
+            self.run.log("lit_row_label_kept", key=key, frame=self.frame.path.name)
+            return known["label"]
+        on, t = self.screen, getattr(self.frame, "t", None)
+        label = self.unread_row(key)
+        age = time.monotonic() - t if isinstance(t, (int, float)) and t > 0 else 0.0
+        if age <= STALE_S:
+            return label
+        stale, fresh = look_again(getattr(self, "hdmi", None), on, key, getattr(self.link, "moved_at", None),
+                                  read=self.reading)
+        if fresh is None:
+            self.refuse(key, stale)
+        self.judge_fresh(fresh, key, changed=bool(stale))
+        if stale:
+            self.refuse(key, f"{stale} (the reader named the lit row on a frame {age:.1f} s old); read the screen again "
+                             "and choose afresh", changed=True)
+        self.run.log("press_judged_again", key=key, frame=fresh.path.name, age=round(age, 3))
+        raise _Rejudge({"screen": self.screen, "box": box, "label": label})
 
     def unread_row(self, key: str) -> str:
         """The label of the lit row OCR read nothing in, as the vision reader reads it once (reader_label); Refused
