@@ -2524,6 +2524,14 @@ ACTION_CLASSES = frozenset({LIFT_CARDS, LIFT_ACTION})
 # "logged", every frame from the opening press until the row is left is saved blacked out, no OCR text of it is kept,
 # no reader is asked and only MENU goes out (kit/drive.py, camkit.live.LiveCamera's blank)
 BLANKED = frozenset({LIFT_CREDENTIALS, LIFT_SERIAL, LIFT_FIXED})
+
+
+def blanked(cls, logged) -> bool:
+    """Whether an owner row of class `cls` is blanked (BLANKED: its frames saved black from its opening, no text read,
+    MENU alone), its decision saying "values": "logged" or not (`logged`): the body's serial number screen always (the
+    playbook's rule 3: it opens only on a look lap or the owner route, which save its frames black; nobody decided its
+    values may be logged); a credentials row or a closed identity row unless its values are logged (decision 9)."""
+    return cls == LIFT_SERIAL or (cls in BLANKED and not logged)
 # the only keys that go out inside an owner row, each in its own spelling (name_refused): up and down read it, MENU
 # leaves it, Enter is judged (owner_enter); never ms_enter, Right, Left, a dial or C4
 OWNER_KEYS_INSIDE = frozenset({"up", "down", "menu", "enter"})
@@ -3335,7 +3343,8 @@ def owner_said(info) -> str:
                         if registers(info.get("label")) else [])
                      + (["the owner waived the terminal question in the decision (\"unattended\")"]
                         if info.get("unattended") else [])
-                     + (["values logged in runs/"] if info.get("logged") else ["values withheld"]))
+                     + (["values logged in runs/"] if info.get("logged") and info.get("class") != LIFT_SERIAL
+                        else ["values withheld"]))
 
 
 def asks_person(info) -> bool:

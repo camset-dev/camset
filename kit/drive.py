@@ -140,7 +140,7 @@ the start file restored, the marker taken away once the restore checks out, driv
 cancelled" with the question's frame, and the run exits EXIT_NOT_CONFIRMED (6): nothing was confirmed; a question MENU
 does not clear stays for a person, exit 5; any other screen, the link still answering, gets the MENU-only close and the
 remote restore, the marker taken away only when that restore checks out, else exit 5. Without "values": "logged" a
-credentials, serial number or closed identity row is blanked:
+credentials or closed identity row is blanked, and the serial number screen always (safety.blanked):
 every frame from its opening is written black by the eyes (camkit.frames), no OCR text of it is kept, no reader is
 asked, MENU alone; an action's screens are shown and kept as their field names and row labels. With it the screens'
 text goes to drive.jsonl only, the console showing their field names and "(values in drive.jsonl)". A --owner run asks
@@ -1933,7 +1933,7 @@ def main():
                         # the owner row: looked at from here (owner_press_decision), MENU alone from its opening where
                         # its values are withheld (blanked) or it is an address or serial number screen
                         cls = owner_info["class"]
-                        blank = cls in safety.BLANKED and not owner_info["logged"]
+                        blank = safety.blanked(cls, owner_info["logged"])
                         owner_opened = True
                         inside = {"row": owner_label, "class": cls, "address": cls == safety.LIFT_ADDRESS,
                                   "identity": blank or cls in (safety.LIFT_ADDRESS, safety.LIFT_SERIAL),

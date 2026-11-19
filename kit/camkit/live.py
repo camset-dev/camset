@@ -1213,7 +1213,7 @@ class LiveCamera:
             self.menu_went_out()
         if owner_row is not None:
             info = owner[owner_row]
-            blank = cls in safety.BLANKED and not info.get("logged")
+            blank = safety.blanked(cls, info.get("logged"))
             self.owner_opened = True
             self.network_open = {"row": owner_row, "address": address, "class": cls, "frame": self.frame.path.name,
                                  "from": before, "closing": False, "menus": getattr(self.link, "menus", None),

@@ -559,3 +559,30 @@ def test_what_each_run_does_at_the_two_rows():
     for label in ACTING:
         with pytest.raises(SystemExit, match="a row whose opening acts"):
             drive.look_path_or_exit([label], None)
+
+
+# ---------------------------------------------------------------- 5. the serial number screen always black
+
+@pytest.mark.parametrize("cls, logged, blank", [
+    (safety.LIFT_SERIAL, True, True), (safety.LIFT_SERIAL, False, True),
+    (safety.LIFT_CREDENTIALS, True, False), (safety.LIFT_CREDENTIALS, False, True),
+    (safety.LIFT_FIXED, True, False), (safety.LIFT_FIXED, False, True),
+    (safety.LIFT_ACTION, True, False), (safety.LIFT_CARDS, False, False), (None, True, False)])
+def test_values_logged_unblank_a_credentials_screen_never_the_serial_number(cls, logged, blank):
+    assert safety.blanked(cls, logged) is blank
+
+
+def test_the_owner_route_saves_the_serial_number_screen_black_whatever_its_decision_says(tmp_path, monkeypatch):
+    """A decision naming Display Serial Number with "values": "logged": its frames saved black from its opening all the
+    same, and the run's words about the row say its values are withheld."""
+    from PIL import Image
+    from test_owner_decisions import SERIAL, camera, info_of
+    info = info_of("Display Serial Number", {"rows": ["Display Serial Number"], "values": "logged"})
+    assert info["class"] == safety.LIFT_SERIAL and info["logged"]
+    assert "values withheld" in safety.owner_said(info) and "values logged" not in safety.owner_said(info)
+    states = {"page": ("submenu", "Setup > Setup Option Display Serial Number", "Display Serial Number"),
+              "serial": ("notice", f"Serial Number {SERIAL}", "")}
+    cam = camera(tmp_path, monkeypatch, info, states, {("page", "right"): "serial"}, label="Display Serial Number")
+    cam.press("right")
+    assert cam.blank and cam.hdmi.withheld and np.asarray(Image.open(cam.frame.path)).max() == 0
+    assert cam.network_open["blank"] is True
