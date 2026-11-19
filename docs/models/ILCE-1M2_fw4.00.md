@@ -22,8 +22,8 @@ proof was made with.
   link at a time, so unplug USB to use the LAN (the Network remote and USB row). With the rear screen folded in, HDMI
   goes black and the camera refuses the remote session.
 - **HDMI:** a full-size port, through an Elgato Cam Link 4K at 1080p59.94, cropped (150, 0, 1620,
-  1080) to 640x480. HDMI follows the movie format in Movie mode; HDMI Resolution set to Auto gives
-  2160p29.97, which the capture cannot open.
+  1080) to 640x480. HDMI follows the movie format in Movie mode. On Auto, HDMI Resolution gives 2160p29.97; both
+  outputs are set to 1080p for mapping (QUICKSTART, step 5).
 - **OSD:** the SDK's OSD image is a usable second pair of eyes (about 0.8 s for the first grab).
   It cannot be matched against a scan made over HDMI. As the only eyes, in Movie mode:
   - the page scan makes one full lap, the same pages as over HDMI, about a fifth slower;

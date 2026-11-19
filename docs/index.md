@@ -54,8 +54,8 @@ has the details and what has not been tried yet.
 ## How a setting is proved
 
 The mapping kit changes each setting on the camera itself, downloads the file the camera then saves and sees which
-records changed. What it proves goes into the camera's definition with its proof: which values the camera showed and
-wrote, and when. The proof viewer lays out the camera's own screens beside each value. It exists only where the kit
+records changed. What it proves goes into the camera's definition: which values the camera showed and wrote. How and
+when each was proved stays with the camera's owner. The proof viewer lays out the camera's own screens beside each value. It exists only where the kit
 has run, since it shows that camera's own pictures; the one below shows the a1 II's sample file. The
 [definition viewer](viewer/) is the same page without the pictures, for anyone: each value with whether a proof
 checked it.

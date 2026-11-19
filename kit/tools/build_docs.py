@@ -252,9 +252,8 @@ def header_rows(cs) -> list:
 
 
 def memory_map_md(doc, sample=None) -> str:
-    """The byte layout of a settings file with what every record holds (kit/memory_map_doc.py's, ported from the
-    archived kit and keyed to the proof states). The header's parts come from the file's container block, the
-    contract (docs/decisions/0020)."""
+    """The byte layout of a settings file with what every record holds, keyed to the proof states. The header's parts
+    come from the file's container block, the contract (docs/decisions/0020)."""
     sample = sample or definitions.sample(doc)
     cs, recs = camset.read(sample), Records(doc)
     d = cs.data

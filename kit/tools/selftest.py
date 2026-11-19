@@ -1,8 +1,8 @@
-"""Step-1 check of the new kit on the camera: link, frames, pixel reader, OCR.
+"""QUICKSTART step 6's check of the kit on the camera: link, frames, pixel reader, OCR.
 
     .venv/bin/python kit/tools/selftest.py [--no-press] [--eyes osd|hdmi]     # default: the configured eyes
 
-Connects over the LAN, reads the firmware and the property count, grabs a frame and classifies it.
+Connects over the configured link (the LAN, or USB with CAMSET_USB=1), reads the firmware and the property count, grabs a frame and classifies it.
 With --eyes hdmi it grabs the start screen from both the OSD and the HDMI dongle (private/config.json "hdmi")
 and compares them, then watches the presses through HDMI.
 Unless --no-press: presses MENU (expects a menu page), reads its breadcrumb, presses MENU again

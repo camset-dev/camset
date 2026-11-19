@@ -72,7 +72,7 @@ what to search for yourself).
    capture dongle; once the person has put Sony's SDK zip into `kit/sdk/`, run `python3 kit/setup.py`, then check the
    body.
 2. The playbook's [section 1](docs/REMAPPING_PLAYBOOK.md#1-rules-that-are-never-broken), the rules, before QUICKSTART
-   step 5.
+   step 4, the first command that opens the camera's link.
 3. [The playbook](docs/REMAPPING_PLAYBOOK.md) for everything after: its section 16, "New model: first day", first, then sections 2 to 15 as the work reaches them.
 
 ## Where things go

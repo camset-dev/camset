@@ -1,8 +1,9 @@
 # Remapping a Sony camera's settings file: playbook for an agent
 
 This is for an AI agent asked to map the CAMSET `.DAT` settings file of a Sony body other than the a1 II (ILCE-1M2,
-firmware 4.00) this project was built on. Read all of it before touching the camera, and the safety rules twice. A
-mapping begun with an older clone is updated first
+firmware 4.00) this project was built on. Read section 1, the rules, before the first command that opens the camera's
+link (QUICKSTART's step 4), and the other sections as the work reaches them. A mapping begun with an older clone is
+updated first
 ([CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md)).
 
 **Goal:** for every record in the file, prove on the camera which menu setting it holds and what each stored value
@@ -94,8 +95,8 @@ on their own camera. Those allowances are not yours to assume: ask your owner, a
    (`kit/camkit/runs.py` names wider ones), or, once its link is open, one Ctrl-C, after which it cancels and
    restores; a second Ctrl-C stops at once, which is not safe. Never disconnect with a dialog open: a dropped session
    can apply it (decision 15).
-7. **Long runs go through the tool's background mode, never `&`.** Never pipe a camera run through
-   `head`: SIGPIPE kills it mid-run.
+7. **Start a long camera run in your agent's own background mode** (Claude Code's `run_in_background`, for one),
+   **never with a shell `&`.** Never pipe a camera run through `head`: SIGPIPE kills it mid-run.
 8. **A press happens only on a screen the reader recognises.**
    - Fail closed: an unknown screen gets MENU (cancel), never Enter.
    - Enter only on a screen that asks nothing, whatever its words or language: never on a notice, a screen of no known

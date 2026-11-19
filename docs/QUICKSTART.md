@@ -1,7 +1,8 @@
 # Quick start: from nothing to a first proved setting
 
 This page takes an agent, or a person, from a fresh machine to one setting proved on the camera, in about an hour.
-**Read the [playbook](REMAPPING_PLAYBOOK.md)'s section 1 (the rules) before step 5.** Mapping with an older clone?
+**Read the [playbook](REMAPPING_PLAYBOOK.md)'s section 1 (the rules) before step 4, the first command that opens the
+camera's link.** Mapping with an older clone?
 [CONTRIBUTING](https://github.com/camset-dev/camset/blob/main/CONTRIBUTING.md) says how to take in a newer kit.
 
 ## What you need
@@ -19,8 +20,8 @@ The body check at the end of step 1 says, from Sony's SDK tables, what the kit c
 - **A USB-C data cable,** with the camera's USB Connection Mode set to PC Remote. Wired LAN (Remote Shoot Function and
   Access Authen. on, set up by the owner) can replace USB; the kit has no Wi-Fi mode yet.
 - **Eyes,** how the kit sees the screen: the camera's own OSD image through the SDK (`"eyes": "osd"`), on bodies that
-  have it (the body check says). **An HDMI capture dongle is optional** (Elgato Cam Link 4K, the camera's HDMI at
-  1080p, a micro-to-full HDMI cable for micro-HDMI): faster, and needed only without the OSD image. Scan the menu with
+  have it (the body check says). **An HDMI capture dongle is optional** (Elgato Cam Link 4K, and a micro-to-full HDMI
+  cable for micro-HDMI): faster, and needed only without the OSD image. Scan the menu with
   the same eyes as the runs.
 - **A reader:** at least one vision-language model (VLM) besides the built-in OCR. You choose it, and pay for it if it
   costs money ([Choosing a reader](#choosing-a-reader)).
@@ -192,9 +193,11 @@ uploading it back. Leave it where it is: the link uploads only files the camera 
 OWNER=$(ls -t runs/$CAM/kit2_identify/dat/*_identify.DAT | head -1) && echo "$OWNER"
 ```
 
-Next, the **start file**, the state the runs start from. With `"eyes": "hdmi"` the camera's HDMI output must be at
-1080p: if it is not, set HDMI Resolution on the camera, then download the new state and compare it with the owner's
-file:
+Next, the **start file**, the state the runs start from. With `"eyes": "hdmi"` the camera's HDMI output is held at
+1080p for mapping: the kit can open a 2160p capture (`capture`, step 3), but its pixel reader misreads option screens
+at that size, where a one-pixel line comes out too dim. Two records hold it, both in Setup > External Output: HDMI
+Resolution for stills, and HDMI Output Settings > Output Resolution for Movie mode. Set each to 1080p on the camera
+where it is not, then download the new state and compare it with the owner's file:
 
 ```sh
 .venv/bin/python kit/tools/upload_check.py --diff "$OWNER" start --run kit2_pass2
