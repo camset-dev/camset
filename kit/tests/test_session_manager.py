@@ -268,7 +268,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/help_run.py": 1, "kit/axis_walk.py": 1, "kit/table_walk.py": 1, "kit/page_scan.py": 1,
+NOT_YET = {"kit/axis_walk.py": 1, "kit/table_walk.py": 1, "kit/page_scan.py": 1,
            "kit/prove_run.py": 1, "kit/pass3_run.py": 1, "kit/tools/card_actions.py": 1,
            "kit/provers/mymenu_run.py": 1, "kit/provers/mode_switch.py": 2, "kit/provers/shootmode_run.py": 1}
 
@@ -333,9 +333,9 @@ def test_help_runs_session(world, monkeypatch):
     monkeypatch.setattr(help_run, "walk", lambda cam, cycle, model, done, out, a: world.say("body"))
     run_main(monkeypatch, help_run, "--context", "Stills mode", "--run", "kit2_help_pin")
     assert world.said == [
-        "check readers", "link", "attach", "press menu (cleanup)", "sleep 1", "wait_for: the settings download",
-        "download before", "sleep 5", "camera", "body", "close", "wait_for: the settings download after the walk",
-        "finish after []", "link closed", "check []", "eyes closed"]
+        "check readers", "link", "attach", "press menu (cleanup)", "wait_for: the settings download",
+        "download before", "lock wait (5 s at most)", "camera", "body", "close",
+        "wait_for: the settings download after the walk", "finish after []", "link closed", "check []", "eyes closed"]
 
 
 @pytest.mark.parametrize("found", [True, False])

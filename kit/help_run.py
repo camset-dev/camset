@@ -20,23 +20,18 @@ import difflib
 import json
 import re
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from camkit import ocr, safety, screen  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
-from camkit.live import LiveCamera  # noqa: E402
-from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from camkit.screen import same_position  # noqa: E402
-from camkit.session import wait_for  # noqa: E402
 from drive import help_refused, highlighted  # noqa: E402
 from page_model import key_text  # noqa: E402
 from prove_run import Failed  # noqa: E402   (one class: a row prove_run --help-text cannot read is skipped)
-from runner import (EXIT_UNRESTORED, add_scan_argument, close_for_restore, end_session, load_scan,  # noqa: E402
-                    menu_from_shooting, restore_checked, wait_shooting)
+from runner import (add_scan_argument, close_menu_and_wait, load_scan, menu_from_shooting,  # noqa: E402
+                    prover_session, wait_shooting)
 
 TITLE, BODY = (40, 0, 640, 46), (0, 46, 640, 420)      # the guide: orange name, text, OK in the footer
 SKIP_PAGES = re.compile(r"^(My Menu|Playback > Delete)")   # repeats of other tabs; the Delete menu, by hand
@@ -116,32 +111,22 @@ def main():
                 r = json.loads(line)
                 if r.get("context") == a.context and r.get("text") is not None:
                     done.add((r["breadcrumb"], r["label"]))
-    check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
-    ending, had = None, len(done)
-    try:
-        with Link(run) as link, open(out_path, "a", encoding="utf-8", newline="\n") as out:
-            hdmi.attach(link)
-            if screen.read(hdmi.grab(save=False)).kind in ("menu", "tiles"):
-                link.press("menu", cleanup=True)
-                time.sleep(1.0)
-            wait_for(hdmi, ("shooting",), "the settings download", link=link)
-            before = link.download("before")
-            time.sleep(5)
-            cam = LiveCamera(link, hdmi, run)
+    had = len(done)
+    # the session every runner runs (runner.prover_session): the readers checked before the link opens, a plain menu
+    # page closed and the shooting screen waited for, the start file, the camera closed after the walk; a help walk
+    # changes nothing, and if it did, the start goes back, even when the shooting screen does not come (a camera not
+    # known to be as the start file exits EXIT_UNRESTORED)
+    with prover_session(run, hdmi, reach=close_menu_and_wait, start_why="the settings download", say_start=False,
+                        end_reach=wait_shooting, end_why="the settings download after the walk",
+                        watch_restart=False) as s:
+        with open(out_path, "a", encoding="utf-8", newline="\n") as out:
             try:
-                walk(cam, cycle, model, done, out, a)
+                walk(s.cam, cycle, model, done, out, a)
             except Exception as e:                  # a dropped link or anything else too: the guide is closed first
                 print(f"stopped: {type(e).__name__}: {e}", flush=True)
-            close_for_restore(cam, link, before)
-            print(f"{len(done) - had} rows read", flush=True)
-            # a help walk changes nothing; if it did, the start goes back, even when the shooting screen does not come
-            ending = end_session(link, hdmi, before, "the settings download after the walk", reach=wait_shooting)
-        restored = restore_checked(run, ending, before)
-    finally:
-        hdmi.close()
-    if not restored:
-        sys.exit(EXIT_UNRESTORED)            # the camera is not known to be as the start file (runner)
+        s.close()
+        print(f"{len(done) - had} rows read", flush=True)
 
 
 def walk(cam, cycle, model, done, out, a) -> None:
