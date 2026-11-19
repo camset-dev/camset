@@ -3484,8 +3484,11 @@ def counts(led: Ledger, public: bool = False) -> dict:
 
 def needs_of(e: dict) -> str:
     """What the next step on an entry left to do needs (NEEDS): equipment, a kit fix, an owner decision (the opener a
-    closed row names), the owner's hand (a row nothing opens, a blocker only the owner's hand changes), a remote proof
-    (a row with a setting no proof established, or one a look saw change records no setting maps) or a remote look."""
+    closed row names), the owner's hand (a row nothing opens, a blocker only the owner's hand changes, a row no look
+    lap chooses in once looked at), a remote proof (a row with a setting no proof established, or one a look saw change
+    records no setting maps) or a remote look. A row no look lap chooses in (never_choose: decision 8), not yet tried
+    or greyed, needs a look only until one has opened it ("looked", the private form's) and only where a look lap
+    opens it (its opener holds --network): another look settles nothing there, and what is left is the owner's."""
     st = e.get("status")
     if e.get("changed_in_looks"):
         return "remote-proof"
@@ -3495,6 +3498,8 @@ def needs_of(e: dict) -> str:
         return "kit"
     if st == "closed by rule":
         return "hand" if (e.get("opener") or ["never"]) == ["never"] or e.get("never_choose") else "decision"
+    if e.get("never_choose") and st in ("not yet tried", "greyed in state"):
+        return "hand" if e.get("looked") or "--network" not in (e.get("opener") or []) else "remote-look"
     if st == "greyed in state":
         return "hand" if (e.get("blocker") or {}).get("remote") else "remote-look"
     return "remote-proof" if e.get("settings") or e.get("tied") or e.get("through") else "remote-look"

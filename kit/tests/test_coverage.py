@@ -1571,6 +1571,56 @@ def test_todo_lists_what_is_left_by_need_and_yield(camera):
     assert not any("cites" in x for x in coverage.row_view(led, "Foxtrot", public=True))
 
 
+def never_choose_entry(status, opener, looked=None, **kw) -> dict:
+    """A made-up ledger entry as _one_row leaves a network row no remote run chooses in (safety.never_choose): its rule
+    and opener from its never-open label, "never_choose", no settings, and "looked" (the private form's count of looks
+    that opened it) when given."""
+    e = {"path": ["Made-up Remote Row"], "status": status, "rule": "identity/by hand", "opener": list(opener),
+         "never_choose": True, "settings": [], "tied": [], **kw}
+    if looked:
+        e["looked"] = looked
+    return e
+
+
+@pytest.mark.parametrize("status", ["not yet tried", "greyed in state"])
+@pytest.mark.parametrize("opener", [["--network", "--owner"], ["--owner"]], ids=["look-lap", "owner-only"])
+def test_a_never_choose_row_once_looked_at_needs_the_owners_hand_not_another_look(status, opener):
+    """Remote Shoot Function, Manage Paired Device, Access Authen. Info, Wi-Fi Direct Settings and Pairing on the a1 II
+    (2026-11-19): looked at as far as a look lap may go, several times, and no look lap chooses in them (decision 8): the
+    to-do sends them to the owner's hand, never back to a look, whatever their status or blocker."""
+    for e in (never_choose_entry(status, opener, looked=5),
+              never_choose_entry(status, opener, looked=11, rule="credentials"),
+              never_choose_entry(status, opener, looked=1, blocker={"row": "Some Row"})):
+        assert coverage.needs_of(e) == "hand", e
+
+
+@pytest.mark.parametrize("status", ["not yet tried", "greyed in state"])
+def test_a_never_choose_row_nobody_looked_at_needs_a_look_where_a_look_lap_opens_it_else_the_owner(status):
+    """Not yet looked at: a look first where a look lap may open it (its opener holds --network); where only the owner's
+    own run opens it (--owner), nothing remote is left to do: the owner's hand."""
+    assert coverage.needs_of(never_choose_entry(status, ["--network", "--owner"])) == "remote-look"
+    assert coverage.needs_of(never_choose_entry(status, ["--owner"])) == "hand"
+    assert coverage.needs_of(never_choose_entry(status, ["--network", "--owner"], looked=0)) == "remote-look"
+
+
+def test_needs_of_is_as_before_for_rows_a_remote_run_may_choose_in_and_for_the_other_statuses():
+    """Without never_choose, a looked-at row with no settings still needs a look, one with settings a proof, a greyed one
+    a look unless its blocker is the owner's hand; a never-choose row a look saw change records still needs a proof (or
+    the records named), and closed, equipment or kit rows answer as before."""
+    plain = {k: v for k, v in never_choose_entry("not yet tried", ["--network", "--allow"], looked=8).items()
+             if k != "never_choose"}
+    assert coverage.needs_of(plain) == "remote-look"
+    assert coverage.needs_of({**plain, "settings": ["global:0x0001"]}) == "remote-proof"
+    assert coverage.needs_of({**plain, "status": "greyed in state", "blocker": {"row": "X"}}) == "remote-look"
+    assert coverage.needs_of({**plain, "status": "greyed in state", "blocker": {"remote": True}}) == "hand"
+    nc = never_choose_entry("not yet tried", ["--network", "--owner"], looked=3)
+    assert coverage.needs_of({**nc, "changed_in_looks": ["global:0x0002"]}) == "remote-proof"
+    assert coverage.needs_of({**nc, "status": "needs equipment"}) == "equipment"
+    assert coverage.needs_of({**nc, "status": "kit cannot read"}) == "kit"
+    assert coverage.needs_of({**nc, "status": "closed by rule"}) == "hand"
+    assert coverage.needs_of({**plain, "status": "closed by rule", "opener": ["--owner"]}) == "decision"
+
+
 def test_the_public_sources_alone_give_the_generated_statuses(camera):
     """Without the private overlay: no look, crawl or lead counts, the statuses that rest on them fall to the next."""
     led = ledger(public=True)
