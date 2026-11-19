@@ -2260,13 +2260,22 @@ class ProbeEyes:
 
 class ProbeCam:
     """A LiveCamera stand-in for the probe: a press goes out through the link (the probe's hook notes when), then
-    the kit's own settle looks for 0.3 s; the screen reads as `kinds` says, its focus `focus`."""
-    def __init__(self, link, eyes, clock, kind="menu", focus="rows"):
+    the kit's own settle looks for 0.3 s; the screen reads as `kind`, its focus `focus`, as of the last reading
+    (read: the reading kept; refresh: a fresh one, of the camera's focus now, `live`, which a late redraw can have
+    moved from what the settle read: then the kept reading is stale). Left settles on the groups and moves the focus
+    there unless `left_lands` says where it really went."""
+    def __init__(self, link, eyes, clock, kind="menu", focus="rows", left_lands="groups"):
         self.link, self.eyes, self.clock, self.kind, self.focus, self.pressed = link, eyes, clock, kind, focus, []
+        self.live, self.left_lands, self.refreshed = focus, left_lands, []
         self.frame = SimpleNamespace(path=Path("00001_x.png"))
 
     def read(self):
         return SimpleNamespace(kind=self.kind, focus=self.focus)
+
+    def refresh(self, tag):
+        self.refreshed.append(tag)
+        self.focus = self.live
+        return self.read()
 
     def press(self, key, **kw):
         self.link.press(key)
@@ -2276,7 +2285,7 @@ class ProbeCam:
         while self.clock.now < end:
             self.eyes.grab("settle", save=False)
         if key == "left":
-            self.focus = "groups"
+            self.focus, self.live = "groups", self.left_lands
 
 
 @pytest.mark.parametrize("name", ["hdmi", "osd"])
@@ -2304,9 +2313,11 @@ def test_the_probe_notes_each_presss_first_and_last_change_and_keeps_the_late_on
     assert f"eyes {name}, connection lan, shooting mode Stills" in text and "down   menu" in text
 
 
-def test_the_probe_presses_right_only_from_the_group_column(tmp_path):
-    """"left-right": Left, then Right only where the screen reads its focus in the group column; a screen that does not
-    (a submenu's Left goes back to its page, with the rows focused) stops the run before Right."""
+def test_the_probe_presses_right_only_from_the_group_column_read_afresh(tmp_path):
+    """"left-right": Left, then Right only where a reading taken just before it (refresh, never the one the settle
+    left, which can be a mid-slide frame or the late redraw the probe looks for) is a menu page with its focus in the
+    group column; a screen that does not (a submenu's Left goes back to its page, with the rows focused; a focus that
+    moved back after the settle read the groups) stops the run before Right."""
     import settle_probe as P
     from camkit.runs import Run
     clock = ProbeClock()
@@ -2316,11 +2327,35 @@ def test_the_probe_presses_right_only_from_the_group_column(tmp_path):
     cam = ProbeCam(link, eyes, clock)
     rows = P.probe_presses(cam, link, eyes, run, ["left-right"], 1, hold=0.1, clock=clock)
     assert cam.pressed == ["left", "right"] and [r["key"] for r in rows] == ["left", "right"]
-    cam = ProbeCam(link, eyes, clock)
-    cam.press = lambda key, **k: cam.pressed.append(key)           # a Left that leaves the rows focused
-    with pytest.raises(RuntimeError, match="Right goes only from the group column"):
-        P.probe_presses(cam, link, eyes, run, ["left-right"], 1, hold=0.1, clock=clock)
-    assert cam.pressed == ["left"]
+    assert cam.refreshed == ["before-right"]
+    for stale in (ProbeCam(link, eyes, clock, left_lands="rows"),          # the settle read the groups; it moved back
+                  ProbeCam(link, eyes, clock, kind="submenu", left_lands="groups")):
+        with pytest.raises(RuntimeError, match="Right goes only from the group column"):
+            P.probe_presses(stale, link, eyes, run, ["left-right"], 1, hold=0.1, clock=clock)
+        assert stale.pressed == ["left"]
+
+
+def test_the_probes_path_is_refused_before_its_session_where_a_row_it_opens_is_not_seen(monkeypatch, tmp_path):
+    """settle_probe --path opens each row above the last with Right (prove_run.enter_any): where this body has not been
+    seen to open one (camkit.first_open), that Right would be its first open with no blank-cards statement, no
+    RESTORE_BY_HAND first and no check after; the probe stops before anything connects, with drive.py's own words
+    (drive.first_open_or_exit). A path whose rows above the last are all seen goes on."""
+    import runner
+    import settle_probe as P
+    from camkit import first_open
+    started = []
+    monkeypatch.setattr(first_open, "seen_record", lambda camera=None: first_open.Seen())
+    monkeypatch.setattr(runner, "load_scan", lambda scan, **k: started.append("scan") or ([], {}))
+    monkeypatch.setattr(runner, "prover_session", lambda *a, **k: started.append("session"))
+    with pytest.raises(SystemExit) as e:
+        P.main(["presses", "--path", "Bracket Settings", "--path", "Bracket Type"])
+    assert "'Bracket Settings' has not been seen opened on this body: open it first in a run of its own" in str(
+        e.value.code) and "nothing was sent to the camera" in str(e.value.code) and not started
+    monkeypatch.setattr(first_open, "seen_record", lambda camera=None: first_open.Seen(opened={("bracket settings",)}))
+    monkeypatch.setattr(P, "Run", lambda name: (_ for _ in ()).throw(SystemExit("went on")))
+    with pytest.raises(SystemExit, match="went on"):
+        P.main(["presses", "--path", "Bracket Settings", "--path", "Bracket Type"])
+    assert started == ["scan"]
 
 
 def test_the_lock_probe_sends_one_menu_per_trial_and_closes_only_a_menu_that_opened(monkeypatch, tmp_path):

@@ -9,11 +9,13 @@ anything; it changes no setting of the kit's.
     CAMSET_EYES=osd .venv/bin/python -u kit/tools/settle_probe.py presses     # the camera's own picture over the link
 
 presses: from the menu (one MENU from the shooting screen, camkit.live.menu_from_shooting; --path walks to a row
-first, Right only into submenus, as the provers walk: prove_run.enter_any), `--count` presses of `--keys` in turn,
-each through camkit.live.LiveCamera (the screen read and judged before it, every guard of a run). Up and Down move a
-menu page's or a submenu's cursor and choose nothing; "left-right" presses Left, then Right only once the screen reads
-its focus in the group column (Right leaves the groups for the rows, opening nothing; a screen that does not read so
-stops the run before Right). Every frame the eyes give while the press settles, and for `--hold` s after the kit's own
+first, Right only into submenus, as the provers walk: prove_run.enter_any, and only where this body has been seen to
+open each row above the last, else it stops before anything connects, as drive.py does: drive.first_open_or_exit),
+`--count` presses of `--keys` in turn, each through camkit.live.LiveCamera (the screen read and judged before it,
+every guard of a run). Up and Down move a menu page's or a submenu's cursor and choose nothing; "left-right" presses
+Left, then Right only once a reading taken just before it shows a menu page with its focus in the group column (Right
+leaves the groups for the rows, opening nothing; a screen that does not read so stops the run before Right). Every
+frame the eyes give while the press settles, and for `--hold` s after the kit's own
 settle has ended (a change the kit would have missed), is looked at: when the picture first and last changed after the
 press went out (camlink's command, Link.press), by key and by the screen kind before it; the frames either side of
 every change later than LATE_KEPT are kept in the run's late/ folder (a slow redraw, a scroll bar, a blinking mark);
@@ -143,9 +145,14 @@ def probe_presses(cam, link, eyes, run, keys, count: int, hold: float, clock=tim
             print("STOP file: no more presses", flush=True)
             break
         for key in (["left", "right"] if keys[i % len(keys)] == "left-right" else [keys[i % len(keys)]]):
-            if key == "right" and getattr(cam.read(), "focus", None) != "groups":
-                raise RuntimeError(f"Right goes only from the group column, and the screen reads its focus "
-                                   f"{getattr(cam.read(), 'focus', None)!r} ({cam.frame.path.name}): no Right")
+            if key == "right":
+                # read afresh just before it, never the reading the settle left (a mid-slide frame, or the late redraw
+                # this probe looks for, can read as the groups while the rows are focused, and Right opens a row)
+                now = cam.refresh("before-right")
+                if now.kind != "menu" or getattr(now, "focus", None) != "groups":
+                    raise RuntimeError(f"Right goes only from the group column, and the screen read just before it is "
+                                       f"a {now.kind} page, its focus {getattr(now, 'focus', None)!r} "
+                                       f"({cam.frame.path.name}): no Right")
             n += 1
             still = still_pair(eyes, clock)
             before = cam.read().kind
@@ -295,6 +302,14 @@ def main(argv=None) -> int:
     keys = [k.strip() for k in a.keys.split(",") if k.strip()]
     if any(k not in KEYS for k in keys) or not keys:
         sys.exit(f"--keys takes {', '.join(KEYS)}: nothing was sent to the camera")
+    if a.mode == "presses" and a.path:
+        # the walk opens each row above the last with Right: one this body has not been seen to open would be its first
+        # open, which goes only under drive.py's procedure (camkit.first_open), so the probe stops here as drive.py does
+        from types import SimpleNamespace
+
+        from camkit import first_open
+        from drive import first_open_or_exit
+        first_open_or_exit(SimpleNamespace(path=a.path, press=[], owner=False), first_open.seen_record())
     delays = [float(x) for x in a.delays.split(",") if x.strip()]
     from runner import load_scan, prover_session
     cycle, model = load_scan(a.scan)            # the menu's map, and the shooting mode it was made in (session.MODE)
