@@ -273,7 +273,7 @@ LEFT = {
     "kit/provers/filter_run.py": "found after the review, outside this change's files: its own retrying download",
 }
 # runners not moved yet: each one's own commit takes it off
-NOT_YET = {"kit/provers/shootmode_run.py": 1}
+NOT_YET = {}
 
 
 def kit_sources():
@@ -555,9 +555,22 @@ def test_shoot_modes_first_session(world, monkeypatch, tmp_path):
         RuntimeError("off the scan")))
     run_main(monkeypatch, shootmode_run, "--start", str(start), "--families", "0")
     assert world.said == [
-        "check readers", "link", "attach", "to_shooting: the start download", "download before", "sleep 5", "camera",
-        "close", "to_shooting: the restore after a stop", "finish stop []", "link closed", "check []", "eyes closed",
+        "check readers", "link", "attach", "to_shooting: the start download", "download before",
+        "lock wait (5 s at most)", "camera", "close", "to_shooting: the restore after a stop", "finish stop []", "link closed", "check []", "eyes closed",
         "verify"]
+
+
+def test_shoot_mode_stops_on_a_camera_off_its_start_file_before_any_wait(world, monkeypatch, tmp_path):
+    from camkit import camset
+    world.wire(shootmode_run)
+    start = tmp_path / "00001_start.DAT"
+    shutil.copy(fake_camlink.SAMPLE, start)
+    monkeypatch.setattr(shootmode_run, "load_scan", lambda scan: ([], {}))
+    monkeypatch.setattr(camset, "diff", lambda a, b: [CHANGE])
+    with pytest.raises(SystemExit, match="the camera is not on 00001_start.DAT \\(1 records differ\\): load it first"):
+        run_main(monkeypatch, shootmode_run, "--start", str(start), "--families", "0")
+    assert world.said == ["check readers", "link", "attach", "to_shooting: the start download", "download before",
+                          "link closed", "eyes closed"]
 
 
 def test_the_grids_wait_after_its_download(world, monkeypatch, tmp_path):

@@ -37,7 +37,7 @@ from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
-                    restoring, scan_mode, scan_position)
+                    restoring, scan_mode, scan_position, session_start)
 
 CONTEXT = "Mode Dial Control Set = Set with Menu"
 FAMILIES = ["Stills", "Movie", "S&Q Motion", "Time-lapse"]       # Down order from stills, round
@@ -111,6 +111,14 @@ def look(cam, link, cycle, model, f: int) -> list:
     return modes
 
 
+def on_start_or_exit(base, here: Path, start: Path) -> None:
+    """The run stops, before anything is pressed, when the camera's download `here` differs from the start file
+    `start` (read as `base`): the proofs are made from that file alone."""
+    now = camset.read(here)
+    if camset.diff(base, now):
+        sys.exit(f"the camera is not on {start.name} ({len(camset.diff(base, now))} records differ): load it first")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--start", required=True, type=paths.run_arg,
@@ -130,11 +138,10 @@ def main():
     try:
         with Link(run) as link:
             hdmi.attach(link)
-            to_shooting(link, hdmi, "the start download")
-            now = camset.read(link.download("before"))
-            if camset.diff(base, now):
-                sys.exit(f"the camera is not on {start.name} ({len(camset.diff(base, now))} records differ): load it first")
-            time.sleep(5)
+            # the session's start (runner.session_start): the shooting screen, the download, which must hold the start
+            # file's settings (else the run stops before anything is pressed), then the menu's lock waited out
+            session_start(link, hdmi, reach=to_shooting, say=False,
+                          prepare=lambda here: on_start_or_exit(base, here, start))
             cam = LiveCamera(link, hdmi, run)
             fams = [int(x) for x in a.families.split(",")]
             looked = None
