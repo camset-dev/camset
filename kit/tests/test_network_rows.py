@@ -332,6 +332,19 @@ def events(cam) -> list:
     return [json.loads(x) for x in (cam.run.dir / "events.jsonl").read_text(encoding="utf-8").splitlines()]
 
 
+def pictured(cam):
+    """`cam` with a picture on its frame (a dark page, no orange bar drawn), so the look before Right compares it."""
+    import numpy as np
+    cam.frame = SimpleNamespace(image=np.zeros((480, 640, 3), np.uint8), path=cam.frame.path)
+    return cam
+
+
+def looked_again(monkeypatch, camera_now):
+    """The look before a Right (live.look_again) finding the camera's frame as it stands (camera_now(): the camera at the
+    press), as the real look does on a still screen, so the press goes through LiveCamera.look_before_right."""
+    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", camera_now().frame))
+
+
 def test_the_press_check_opens_a_decided_setting_and_refuses_the_rest(tmp_path, monkeypatch):
     rows = decided(DECISION)
     monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
@@ -685,8 +698,8 @@ def test_once_an_address_screen_opens_only_menu_goes_out(tmp_path, monkeypatch):
     from camkit import vlm
     rows = decided(DECISION)
     monkeypatch.setattr(live, "lit_text", lambda image, path: "Display Wi-Fi Info.")
-    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
-    cam = camera(tmp_path, rows, screens=True)
+    cam = pictured(camera(tmp_path, rows, screens=True))
+    looked_again(monkeypatch, lambda: cam)          # the look before Right: the camera's own frame, as it stands
     with pytest.raises(RuntimeError, match="sent"):                          # the press went out, then the settle
         cam.press("right")
     assert cam.address_open == "00001_down.png" and events(cam)[-1]["kind"] == "address_screen_opened"
@@ -2121,13 +2134,13 @@ def test_the_runners_give_the_page_models_readings_and_values_to_the_lift(tmp_pa
     assert values == {"Wired LAN Connect": ["On"]}
     # the camera's own press check opens it, and the walk takes the page model's row
     monkeypatch.setattr(live, "lit_text", lambda image, path: "LANWired LAN Connect  On")
-    monkeypatch.setattr(live, "look_again", lambda eyes, judged, tag, moved_at=None: ("", None))  # the screen judged
-    cam = camera(tmp_path, decided_rows, values=values, page="menu")
+    cam = pictured(camera(tmp_path, decided_rows, values=values, page="menu"))
+    looked_again(monkeypatch, lambda: cam)          # the look before Right: the camera's own frame, as it stands
     cam.readings = readings
     with pytest.raises(RuntimeError, match="sent"):
         cam.press("right")
     assert cam.link.sent == ["right"] and cam.network_open["row"] == "Wired LAN Connect"
-    cam = camera(tmp_path, decided_rows, values=values, page="menu")                 # no readings: refused
+    cam = pictured(camera(tmp_path, decided_rows, values=values, page="menu"))       # no readings: refused
     with pytest.raises(safety.Refused, match="never opened"):
         cam.press("right")
     assert crawl.network_open(row, decided_rows, "Wired LAN")
