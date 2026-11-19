@@ -24,7 +24,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, paths, safety  # noqa: E402
+from camkit import camset, ocr, paths, safety, session  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import Link  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
@@ -37,7 +37,7 @@ from proving.commit import after_ok  # noqa: E402
 from proving.screens import later, settled  # noqa: E402
 from runner import (EXIT_UNRESTORED, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
                     close_screen, end_session, load_scan, menu_from_shooting, proofs_file, restore_checked,
-                    restoring, scan_position)
+                    restoring, scan_mode, scan_position)
 
 CONTEXT = "Mode Dial Control Set = Set with Menu"
 FAMILIES = ["Stills", "Movie", "S&Q Motion", "Time-lapse"]       # Down order from stills, round
@@ -121,6 +121,7 @@ def main():
     a = ap.parse_args()
     start = Path(a.start)
     cycle, model = load_scan(a.scan)
+    started = session.MODE              # the start's mode, as load_scan set it: the lock's rule after its restore
     run = Run("kit2_pass2")
     out = proofs_file(run, CONTEXT)
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
@@ -179,6 +180,10 @@ def main():
                         # closed with MENU, never OK, and only the refusal is no applied mode (before 2026-11-19 any
                         # notice was); the menu closed, as a mode chosen closes it
                         got = after_ok(cam, "Shoot Mode", label=modes[f][m])
+                        if got.applied:
+                            # the camera is in the family's mode from here: the menu's lock after a download goes by
+                            # it (camkit.session.MODE, as kit/provers/mode_switch.py sets it)
+                            session.MODE = scan_mode(FAMILIES[f])
                         notice = got.notice
                         to_shooting(link, hdmi, "the download after OK")
                         time.sleep(1)
@@ -204,6 +209,7 @@ def main():
                     if failed is None and ch:
                         with restoring("the restore after the proof"):      # refused or unanswered: exit 4
                             link.upload(start)
+                session.MODE = started          # the start file's mode again: put back, or never left
                 if failed is not None:
                     restore_checked(run, ending, start)
                     raise Failed(f"{FAMILIES[f]}: {modes[f][m]}: {failed}") from failed

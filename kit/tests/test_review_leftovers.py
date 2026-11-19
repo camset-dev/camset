@@ -213,3 +213,67 @@ def test_a_pushed_press_that_may_have_gone_stops_the_run(error):
     with pytest.raises(type(error)):
         F.push(cam, [["ms_left", 3]], gap=0)
     assert cam.presses == 2
+
+
+# ---------------------------------------------------------------- 4. the Shoot Mode prover follows the mode it sets
+
+@pytest.mark.parametrize("family, started, switched", [(0, "Movie", "Stills"), (1, "Stills", "Movie"),
+                                                       (2, "Stills", "S&Q"), (3, "Movie", "S&Q")],
+                         ids=["stills", "movie", "s&q", "time-lapse"])
+def test_the_shoot_mode_prover_follows_the_mode_it_leaves_the_camera_in(monkeypatch, tmp_path, family, started,
+                                                                        switched):
+    """shootmode_run: a mode the camera applies after OK puts it in that family's shooting mode, so camkit.session.MODE
+    (the mode the menu's lock after a download goes by) is that family's (runner.scan_mode: S&Q Motion and Time-lapse
+    are S&Q) from there to the restore, and the start's again once the start file is back (as mode_switch.py does); a
+    mode the camera refused leaves it in the start's. A made-up chooser (test_review_commit.ModeCam), its second mode
+    refused."""
+    import shootmode_run as S
+    from camkit import session
+    from test_review_commit import ModeCam, reads
+    cam, seen = ModeCam(refuse={1}), []
+
+    class Link:
+        def __init__(self, run):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+        def download(self, tag):
+            seen.append((tag, session.MODE))
+            return Path(f"{len(seen):05d}_{tag}.DAT")
+
+        def upload(self, path):
+            seen.append(("upload", session.MODE))
+
+    def load_scan(scan):
+        session.MODE = started              # as runner.load_scan sets it: the mode the run's scan was made in
+        return [], {}
+    reads(monkeypatch, lambda f: cam.text)
+    monkeypatch.setattr(S.camset, "read", lambda p: SimpleNamespace(path=Path(p)))
+    monkeypatch.setattr(S.camset, "diff", lambda a, b: [SimpleNamespace(key="global:0x0001", before=0, after=1)]
+                        if b.path.name.endswith(".DAT") and "shootmode" in b.path.name else [])
+    for name, value in (("load_scan", load_scan), ("check_readers", lambda: None),
+                        ("eyes_from_config", lambda run: SimpleNamespace(attach=lambda link: None, close=lambda: None)),
+                        ("Link", Link), ("LiveCamera", lambda link, hdmi, run: cam),
+                        ("look", lambda c, link, cycle, model, f: list(ModeCam.MODES)),
+                        ("open_row", lambda c, cycle, model: c.open()), ("mode_name", lambda c: ModeCam.MODES[c.mode]),
+                        ("vlm_option", lambda c: "made up"), ("close_screen", lambda c, link: None),
+                        ("to_shooting", lambda link, hdmi, why: None), ("verify_restore", lambda run, start: 0)):
+        monkeypatch.setattr(S, name, value)
+    monkeypatch.setattr(S.time, "sleep", lambda s: None)
+    start = tmp_path / "00001_dialmenu.DAT"
+    start.write_bytes(b"made up")
+    monkeypatch.setattr(sys, "argv", ["shootmode_run.py", "--start", str(start), "--scan", "made-up",
+                                      "--families", str(family)])
+    S.main()
+    order = [1, 2, 0] if family == 0 else [0, 1, 2]           # the stills family's remembered mode last
+    want = [("before", started)]
+    for m in order:
+        now = started if m == 1 else switched                  # the refused mode left the camera as it was
+        want += [(f"shootmode-{family}-{m}", now), ("upload", now)]
+    left_in = session.MODE
+    assert seen == want and left_in == started
