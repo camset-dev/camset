@@ -1653,6 +1653,203 @@ def _values_left(led: Ledger) -> None:
             e["values_left"] = first["values_left"]
 
 
+# ---------------------------------------------------------------- shared lists (one picker's slots, one table of codes)
+
+# the statuses that say a value is proved on a setting: what a shared list lends, and what a setting's own record shows
+PROVED_VALUE = ("proved", "proved by hand")
+
+
+def shared_lists(led: Ledger) -> list:
+    """The shared lists, settings that store one table of codes, as the definition draws them: settings that list the
+    same values under the same names, two at least, and either sit on one menu row (placed on it, or tied to it; none a
+    copy of another setting, copy_of: a picker's slots) or are elements of one array record (a profile's parameter, one
+    element a profile), none of them a readout or a copy the camera writes with another setting (scalar false); settings
+    joined by either way are one list. Each {"row": the first setting's row entry (None for none), "rows", "keys",
+    "values": [[value, name]], "proved": {value: [the keys it is proved on]}, "own": {key: {"proved": [its proved
+    values], "proofs": [{"proof", "run", "value"}: its own proof lines that agree with the list]}}, "contradictions":
+    [{"key", "proof", "run", "wrote", "reads_as"}], "never_proved": [values none is proved on, that a setting still has
+    to try], "no_own": [keys with a value still to try whose own record shows no value]}; the proof lines where this
+    computer holds the runs (_list_proofs). Kept on the ledger: its statuses before any value is inferred
+    (_infer_shared)."""
+    if getattr(led, "_shared", None) is not None:
+        return led._shared
+    by_key = {s["key"]: s for s in led.src.definition.get("settings") or []}
+    opts = {o["key"]: o for o in led.options}
+    order = {k: i for i, k in enumerate(by_key)}
+    found, names, row_of = {}, {}, {}
+    for e in led.rows:
+        if e.get("_first") is not None:
+            continue
+        for k in dict.fromkeys(e["settings"] + e["tied"]):
+            s = by_key.get(k)
+            if s is None or k not in opts or (k not in e["tied"] and (s.get("row") or []) != e["path"]):
+                continue                            # a setting of a deeper row, counted on its own
+            row_of.setdefault(k, e)
+            for v, lab in s.get("values") or []:
+                if isinstance(lab, str):
+                    names.setdefault(id(e), {}).setdefault(v, set()).add(lab)
+            if not s.get("copy_of") and s.get("scalar") is not False:
+                found.setdefault(("row", id(e), json.dumps(s.get("values"))), []).append(k)
+    for k, s in by_key.items():
+        m = re.fullmatch(r"(.+)\[\d+\]", k)
+        if m and k in opts and s.get("scalar") is not False:
+            found.setdefault(("array", m.group(1), json.dumps(s.get("values"))), []).append(k)
+    # settings joined by a row or an array are one list (the same values, either way)
+    parent = {}
+
+    def root(k):
+        while parent.setdefault(k, k) != k:
+            k = parent[k]
+        return k
+    for keys in found.values():
+        for k in keys[1:]:
+            parent[root(k)] = root(keys[0])
+    joined = {}
+    for keys in found.values():
+        if len(keys) >= 2:
+            joined.setdefault(root(keys[0]), set()).update(keys)
+    out = []
+    for members in joined.values():
+        keys = sorted(members, key=order.get)
+        values = [list(x) for x in by_key[keys[0]]["values"]]
+        rows = list({id(row_of[k]): row_of[k] for k in keys if k in row_of}.values())
+        named = {}
+        for e in rows:
+            for v, labs in names.get(id(e), {}).items():
+                named.setdefault(v, set()).update(labs)
+        for v, lab in values:
+            named.setdefault(v, set()).add(lab)
+        proved = {v: [k for k in keys if opts[k]["values"].get(v) in PROVED_VALUE] for v, _ in values}
+        # what is left to try: the values some setting still has to try, the settings with such a value
+        left = {(k, v) for k in keys for v, _ in values if opts[k]["values"].get(v) in LEFT}
+        out.append({"row": rows[0] if rows else None, "rows": rows, "keys": keys, "values": values,
+                    "proved": {v: ks for v, ks in proved.items() if ks},
+                    "own": {k: {"proved": [v for v, _ in values if opts[k]["values"].get(v) in PROVED_VALUE],
+                                "proofs": []} for k in keys},
+                    "contradictions": [], "never_proved": [v for v, _ in values if not proved[v]
+                                                           and any((k, v) in left for k in keys)],
+                    "_names": named, "_left": {k for k, _ in left}})
+    out.sort(key=lambda x: order[x["keys"][0]])
+    _list_proofs(led, out)
+    for x in out:
+        x["no_own"] = [k for k in x["keys"] if not own_values(x, k) and k in x["_left"]]
+        x.pop("_names")
+        x.pop("_left")
+    led._shared = out
+    return out
+
+
+def own_values(lst: dict, key: str) -> set:
+    """The values a setting's own record shows agreeing with its shared list: those it is proved on, and those its own
+    proof lines wrote and read as the list names them."""
+    own = lst["own"][key]
+    return set(own["proved"]) | {c["value"] for c in own["proofs"]}
+
+
+def _list_proofs(led: Ledger, lists: list) -> None:
+    """Each shared list's proof lines (the runs' proofs.jsonl, where this computer holds them): a line that changed a
+    slot of the list (a record, or an element of an array record) is that slot's own; it agrees when one of its readings
+    (pass 1's map label, the OCR reading, the reader's, a vote) names the value it wrote as a setting of the row names
+    it (camkit.match.same), or reads as another slot's proof of that value read. A line that agrees with nothing and
+    changed one slot alone contradicts the list when two independent readings (readings, _independent) name one other
+    value of it, a name the row gives the written value aside; a line that changed several slots counts only where it
+    agrees (the others moved with it). A value written that the list does not hold contradicts the slot too."""
+    member = {k: x for x in lists for k in x["keys"]}
+    lines = []
+    for run, line, p in led.src.proofs:
+        if p.get("applied") is False:
+            continue
+        hits = []
+        for ch in p.get("changes") or []:
+            if not isinstance(ch, dict):
+                continue
+            a, b = ch.get("after"), ch.get("before")
+            if isinstance(a, list):
+                hits += [(f"{ch.get('key')}[{i}]", y) for i, y in enumerate(a)
+                         if not isinstance(b, list) or i >= len(b) or b[i] != y]
+            else:
+                hits.append((ch.get("key"), a))
+        hits = [(k, v) for k, v in hits if k in member and isinstance(v, int) and not isinstance(v, bool)]
+        texts = [t for t in [p.get("label")] + [t for _, t in readings(p)] if isinstance(t, str) and t.strip()]
+        for k, v in hits:
+            lines.append({"key": k, "value": v, "run": run, "proof": line, "texts": texts, "alone": len(hits) == 1,
+                          "p": p})
+    by_value = {}
+    for c in lines:
+        by_value.setdefault((id(member[c["key"]]), c["value"]), []).append(c)
+    for c in lines:
+        x = member[c["key"]]
+        held = c["value"] in {v for v, _ in x["values"]}
+        named = x["_names"].get(c["value"], set())
+        others = [t for o in by_value[(id(x), c["value"])] if o["key"] != c["key"] for t in o["texts"]]
+        if held and (any(match.same(t, n) for t in c["texts"] for n in named)
+                     or any(match.same(t, o) for t in c["texts"] for o in others)):
+            x["own"][c["key"]]["proofs"].append({"proof": c["proof"], "run": c["run"], "value": c["value"]})
+            continue
+        if not c["alone"]:
+            continue
+        reads_as = None
+        if held:
+            indep = readings(c["p"])
+            for v, n in x["values"]:
+                if v == c["value"] or n in named:
+                    continue
+                srcs = [s for s, t in indep if match.same(t, n)]
+                if any(_independent(a, b) for i, a in enumerate(srcs) for b in srcs[i + 1:]):
+                    reads_as = v
+                    break
+            if reads_as is None:
+                continue                            # unconfirmed: no two readings name it otherwise
+        x["contradictions"].append({"key": c["key"], "proof": c["proof"], "run": c["run"], "wrote": c["value"],
+                                    "reads_as": reads_as})
+
+
+def shared_view(led: Ledger) -> list:
+    """The lines kit/tools/coverage.py --shared prints: each shared list (its row, settings, values, how many are proved
+    on some setting of it, how many settings show values of their own, its contradictions), then the values no setting
+    of its list is proved on and the settings whose own record shows no value, the camera work each needs."""
+    lists = shared_lists(led)
+    by_key = {s["key"]: s for s in led.src.definition.get("settings") or []}
+    opts = {o["key"]: o for o in led.options}
+
+    def place(x):
+        e = x["row"]
+        where = f"{e['mode']} > {e['tab']} > {e['group']} > {' > '.join(e['path'])}" if e else "no row"
+        return where + (f" and {len(x['rows']) - 1} more rows" if len(x["rows"]) > 1 else "") + \
+            f" ({x['keys'][0]}, {by_key[x['keys'][0]]['name']}, ...)"
+    out = [f"{len(lists)} shared list{'s' if len(lists) != 1 else ''} (settings listing the same values on one row, "
+           f"or one array record's elements), {sum(len(x['keys']) for x in lists)} settings; each with a value still "
+           "to try on one of its settings:"]
+    quiet = 0
+    for x in lists:
+        sts = [opts[k]["values"].get(v) for k in x["keys"] for v, _ in x["values"]]
+        if not any(st in LEFT for st in sts) and not x["contradictions"] and not x["no_own"]:
+            quiet += 1
+            continue
+        own = [len(own_values(x, k)) for k in x["keys"]]
+        out.append(f"  {place(x)}: {len(x['keys'])} settings, {len(x['values'])} values; proved on some setting: "
+                   f"{len(x['proved'])}; settings showing values of their own: {sum(1 for n in own if n)} (from "
+                   f"{min(own)} to {max(own)} each); still to try: {sum(1 for st in sts if st in LEFT)}; "
+                   f"contradictions: {len(x['contradictions'])}")
+        for c in x["contradictions"]:
+            name = dict((v, n) for v, n in x["values"])
+            out.append(f"      {c['key']} {by_key[c['key']]['name']}: proof {c['run']} line {c['proof']} wrote "
+                       f"{name.get(c['wrote'], c['wrote'])!r} but reads as "
+                       f"{name.get(c['reads_as']) if c['reads_as'] is not None else 'a value the list does not hold'!r}")
+    out.append(f"  ({quiet} other lists: every value proved, or settled otherwise, on every setting)")
+    never = [(x, v) for x in lists for v in x["never_proved"]]
+    out.append(f"values no setting of their list is proved on: {len(never)}")
+    for x in lists:
+        if x["never_proved"]:
+            name = dict((v, n) for v, n in x["values"])
+            out.append(f"  {place(x)}: " + "; ".join(f"{name[v]} ({v})" for v in x["never_proved"]))
+    none = [(x, k) for x in lists for k in x["no_own"]]
+    out.append(f"settings whose own record shows no value of their list: {len(none)}")
+    for x, k in none:
+        out.append(f"  {k} {by_key[k]['name']} ({place(x)})")
+    return out
+
+
 def records_covered(settings: list) -> dict:
     """{record key: [the settings on it]}: a setting covers its own record (record_base of its key), and a live one the
     memory sets copy (in_sets) the sets' record of the same id too. A record it does not name is one no setting covers

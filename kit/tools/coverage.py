@@ -14,6 +14,8 @@
     .venv/bin/python kit/tools/coverage.py --bundles           # per run folder: frames and downloads backing a valid
                                                                # proof, and those that back none (nothing deleted)
     .venv/bin/python kit/tools/coverage.py --proofs            # the proofs' validity: valid, inferred, unchecked
+    .venv/bin/python kit/tools/coverage.py --shared            # the shared lists (a picker's slots): what each slot
+                                                               # shows of its own, the values no slot is proved on
 
 The camera is the one the kit works on (--camera, CAMSET_CAMERA or private/config.json: camkit.paths). The ledger is
 generated each time from the definition, the hand tables, the camera file, the Help Guide's list, camkit.safety and,
@@ -166,6 +168,9 @@ def main():
     ap.add_argument("--note", help="with --record: words of your own (no value)")
     ap.add_argument("--bundles", action="store_true", help="per run folder: what backs a valid proof (nothing deleted)")
     ap.add_argument("--proofs", action="store_true", help="the proofs' validity, repeats and evidence bundles")
+    ap.add_argument("--shared", action="store_true",
+                    help="the shared lists (one row's settings listing the same values): their proofs, the values no "
+                         "setting of a list is proved on, the settings whose own record shows no value")
     ap.add_argument("--leads", type=Path, help="the mining's leads file (leads.json's shape)")
     a = ap.parse_args()
     camera = camera_or_exit()
@@ -183,6 +188,9 @@ def main():
         return
     if a.todo:
         show_todo(led, a)
+        return
+    if a.shared:
+        print("\n".join(ledger.shared_view(led)))
         return
     if a.bundles:
         rows = ledger.bundles_report(led)

@@ -7,6 +7,7 @@ allow-list alone, so no state seen reaches it, and kit/tools/check_public.py ref
 date, a hash or a word outside its closed vocabulary; settled() never settles a row with values still to try, nor one
 of another mode, nor anything when the ledger is missing or stale; the runs only print what it says unless given
 --skip-settled (drive.py never skips), and a ledger error or a look that cannot be written never breaks a run."""
+import contextlib
 import json
 import os
 import sys
@@ -41,7 +42,9 @@ MENU = [("Shooting", "G1", "Alpha"), ("Shooting", "G1", "Bravo"), ("Shooting", "
         ("Shooting", "G1", "Golf"), ("Shooting", "G1", "Hotel"), ("Shooting", "G1", "India"),
         ("Shooting", "G1", "Juliet"), ("Shooting", "G1", "Kilo"), ("Shooting", "G3", "Alpha"),
         ("Network", "G4", "Display Wi-Fi Info."), ("Setup", "G2", "Setting Reset"), ("Setup", "G2", "IP Address Setting"),
-        ("Setup", "G2", "Display Serial Number"), ("Setup", "G2", "Version")]
+        ("Setup", "G2", "Display Serial Number"), ("Setup", "G2", "Version"), ("Setup", "G2", "November")]
+# one picker's list: November's slots store one table of codes (a shared list), slot 1 proved whole, slot 2 on two
+PICK = ((10, "Ant"), (11, "Bee"), (12, "Cat"), (13, "Dog"), (14, "Elk"))
 SETTINGS = [
     setting("global:0x0100", "Alpha", ["Alpha"], ((0, "Off"), (1, "On"), (2, "Auto")), in_sets=True,
             proved={"values": [0, 1]}, not_offered=[{"value": 2, "label": "Auto", "why": "never offered"}]),
@@ -56,9 +59,13 @@ SETTINGS = [
     setting("global:0x0107", "Mike", ["Mike"], ONOFF, row_mode="Movie", proved={"values": [0, 1]}),
     setting("global:0x0108", "My Menu 1: item 1", None, ONOFF, tab="Setup", group="My Menu", proved={"values": [0, 1]}),
     setting("global:0x0300@0", "Block field", None, (), size=320, proved={"sampled": {"linear": True}}),
+    setting("global:0x0120", "November slot 1", ["November"], PICK, tab="Setup", group="G2",
+            proved={"values": [10, 11, 12, 13, 14]}),
+    setting("global:0x0121", "November slot 2", ["November"], PICK, tab="Setup", group="G2",
+            proved={"values": [10, 11]}),
 ]
 RECORDS = {f"global:0x{i:04x}": (1, 1) for i in (0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107,
-                                                  0x0108, 0x0200, 0x0201, 0x0202)}
+                                                  0x0108, 0x0120, 0x0121, 0x0200, 0x0201, 0x0202)}
 RECORDS.update({"global:0x0300": (320, 1), "set:0x0100": (1, 1)})
 HELP = [{"tab": "My Menu", "group": "My Menu Setting", "item": "Add Item", "modes": "still image, movie"},
         {"tab": "Shooting", "group": "G1", "item": "Alpha: Sub", "modes": "still image"}]
@@ -1068,6 +1075,139 @@ def test_no_proof_possible_needs_every_setting_known(camera):
     coverage._one_row(e, {}, by_key, {}, set(), {})
     assert e["status"] == "not yet tried"
     assert not coverage.decide(led, e).skip
+
+
+# ---------------------------------------------------------------- shared lists: one picker's slots, one table of codes
+
+@contextlib.contextmanager
+def extra_settings(camera, *settings, evidence=None):
+    """The made-up camera with more settings (and, given, the private evidence of its definition: {key: {field}})."""
+    SETTINGS.extend(settings)
+    ev = camera.defn.with_name(camera.defn.stem + ".evidence.json")
+    try:
+        camera.doc["settings"] = SETTINGS
+        camera.defn.write_text(json.dumps(camera.doc), encoding="utf-8")
+        if evidence:
+            ev.write_text(json.dumps({"settings": evidence}), encoding="utf-8")
+        yield
+    finally:
+        del SETTINGS[len(SETTINGS) - len(settings):]
+        ev.unlink(missing_ok=True)
+
+
+def pick_proof(key, before, after, *reads, label=None, path=("November",)):
+    """A picker proof line on November's row: the slot `key` from `before` to `after`, read as `reads` (the OCR
+    reading under the cursor, then the reader's)."""
+    out = {"path": list(path), "kind": "table", "opens": "picker", "label": label or reads[0],
+           "changes": [{"key": key, "before": before, "after": after}]}
+    out.update(dict(zip(("shown", "vlm"), reads, strict=False)))       # one reading or two
+    return out
+
+
+SLOTS = (setting("global:0x0122", "November slot 3", ["November"], PICK, tab="Setup", group="G2",
+                 proved={"sampled": {"linear": None}}),
+         setting("global:0x0124", "November slot 4", ["November"], PICK, tab="Setup", group="G2",
+                 proved={"sampled": {"linear": None}}),
+         setting("global:0x0125", "November slot 1 (movie)", ["November"], PICK, tab="Setup", group="G2",
+                 copy_of="global:0x0120", proved={"values": [10]}),
+         setting("global:0x0126", "November readout", ["November"], PICK, tab="Setup", group="G2", scalar=False),
+         setting("global:0x0127", "November short", ["November"], PICK[:2], tab="Setup", group="G2",
+                 proved={"values": [10, 11]}),
+         setting("global:0x0128", "Oscar", ["Oscar"], PICK, tab="Setup", group="G2", proved={"values": [10, 11]}),
+         setting("global:0x0129", "Papa 1", ["Papa"], ((0, "X"), (1, "Y"), (2, "Z")), tab="Setup", group="G2",
+                 proved={"values": [0, 1]}),
+         setting("global:0x012a", "Papa 2", ["Papa"], ((0, "X"), (1, "Y"), (2, "Z")), tab="Setup", group="G2"))
+SLOT_PROOFS = [pick_proof("global:0x0122", 10, 12, "Cat", "Cat"),           # slot 3: its own two values, as the list
+               pick_proof("global:0x0122", 10, 14, "• Elk", "Elk"),
+               pick_proof("global:0x0124", 12, 10, "Ant"),                  # slot 4: one value of its own
+               pick_proof("global:0x0124", 12, 11, "Dog", "Dog")]           # ... and 11 read twice as Dog (13)
+
+
+def test_a_shared_list_is_one_rows_settings_listing_the_same_values(camera):
+    """The settings placed on one row that list the same values under the same names, two at least, and neither a copy
+    of another setting nor a readout: each with the values it is proved on, the proof lines that showed its own record
+    agree with the list, and the proofs whose two independent readings name another value than the one written."""
+    with extra_settings(camera, *SLOTS):
+        write_proofs(camera, "kit2_pass2", SLOT_PROOFS)
+        led = ledger()
+        lists = {tuple(x["row"]["path"]): x for x in coverage.shared_lists(led)}
+        assert set(lists) == {("November",), ("Papa",)}
+        nov = lists[("November",)]
+        assert nov["keys"] == ["global:0x0120", "global:0x0121", "global:0x0122", "global:0x0124"]
+        assert nov["proved"][12] == ["global:0x0120"] and nov["proved"][10] == ["global:0x0120", "global:0x0121"]
+        assert nov["own"]["global:0x0121"]["proved"] == [10, 11]
+        assert [(c["run"], c["proof"]) for c in nov["own"]["global:0x0122"]["proofs"]] == [("kit2_pass2", 1),
+                                                                                          ("kit2_pass2", 2)]
+        assert [c["proof"] for c in nov["own"]["global:0x0124"]["proofs"]] == [3]
+        assert [(c["key"], c["proof"], c["wrote"], c["reads_as"]) for c in nov["contradictions"]] == \
+            [("global:0x0124", 4, 11, 13)]
+        assert nov["never_proved"] == [] and nov["no_own"] == []
+        papa = lists[("Papa",)]
+        assert papa["never_proved"] == [2] and papa["no_own"] == ["global:0x012a"]
+        lines = coverage.shared_view(led)
+        assert any("November" in x and "4 settings" in x and "contradictions: 1" in x for x in lines)
+        assert any("Papa" in x and "Z (2)" in x for x in lines)                      # never proved on any setting
+        assert any("global:0x012a" in x for x in lines)                              # no value of its own shown
+        # the public sources alone: the definition's proofs, no proof line
+        pub = {tuple(x["row"]["path"]): x for x in coverage.shared_lists(ledger(public=True))}
+        assert pub[("November",)]["own"]["global:0x0122"]["proofs"] == [] and not pub[("November",)]["contradictions"]
+
+
+def test_a_reading_agrees_by_the_lists_names_or_a_reading_of_the_same_value(camera):
+    """A slot's own proof agrees with the list when a reading names the value it wrote, as any setting of the row
+    names it, or reads as another slot's proof of that value read (an icon OCR reads alike on both); a proof that changed
+    two slots counts for the one it agrees with and contradicts nothing; one reading naming another value, or two that
+    are one reader, contradict nothing."""
+    proofs = [pick_proof("global:0x0120", 11, 12, "Ca7 icon", "Cat"),
+              pick_proof("global:0x0122", 10, 12, "Ca7 icon"),
+              {**pick_proof("global:0x0122", 10, 13, "Dog", "Dog"),
+               "changes": [{"key": "global:0x0122", "before": 10, "after": 13},
+                           {"key": "global:0x0124", "before": 10, "after": 11}]},
+              pick_proof("global:0x0124", 10, 14, "Ant", "Elk"),
+              {**pick_proof("global:0x0124", 10, 12, "Ant"), "votes": [{"source": "ocr:one", "text": "Ant"}]}]
+    with extra_settings(camera, *SLOTS):
+        write_proofs(camera, "kit2_pass2", proofs)
+        nov = next(x for x in coverage.shared_lists(ledger()) if x["row"]["path"] == ["November"])
+        assert [c["proof"] for c in nov["own"]["global:0x0122"]["proofs"]] == [2, 3]
+        assert [c["proof"] for c in nov["own"]["global:0x0124"]["proofs"]] == [4]
+        assert nov["contradictions"] == []
+
+
+ARRAY = (setting("global:0x0130[0]", "Quebec", ["Quebec", "One", "Mode"], PICK, tab="Setup", group="G2", index=0,
+                 proved={"values": [10, 11, 12]}),
+         setting("global:0x0130[1]", "Quebec", ["Quebec", "Two", "Mode"], PICK, tab="Setup", group="G2", index=1,
+                 proved={"values": [13, 14]}),
+         setting("global:0x0130[2]", "Quebec", None, PICK[:4], tab="Setup", group="G2", index=2,
+                 unproved_reason={"kind": "not_on_camera", "why": "No such profile on this body."}),
+         setting("global:0x0131[0]", "Quebec (stills)", ["Quebec", "One", "Mode"], PICK, tab="Setup", group="G2",
+                 index=0, copy_of="global:0x0130[0]", proved={"values": [10, 11, 12]}),
+         setting("global:0x0131[1]", "Quebec (stills)", ["Quebec", "Two", "Mode"], PICK, tab="Setup", group="G2",
+                 index=1, copy_of="global:0x0130[1]", proved={"values": [13, 14]}),
+         setting("global:0x0132[0]", "Quebec (movie)", ["Quebec", "One", "Mode"], PICK, tab="Setup", group="G2",
+                 index=0, copy_of="global:0x0130[0]", scalar=False, proved={"values": [10, 11, 12]}),
+         setting("global:0x0132[1]", "Quebec (movie)", ["Quebec", "Two", "Mode"], PICK, tab="Setup", group="G2",
+                 index=1, copy_of="global:0x0130[1]", scalar=False, proved={"values": [13, 14]}))
+
+
+def test_an_array_records_elements_listing_the_same_values_are_one_list(camera):
+    """A profile's parameter, one element a profile on a row of its own: the elements that list the same values are one
+    list, a copy array's elements one of their own (never joined to the setting they copy), a copy the camera writes
+    with another setting (scalar false) none."""
+    with extra_settings(camera, *ARRAY):
+        lists = {tuple(x["keys"]): x for x in coverage.shared_lists(ledger())}
+        assert ("global:0x0130[0]", "global:0x0130[1]") in lists
+        assert ("global:0x0131[0]", "global:0x0131[1]") in lists
+        assert not any(k.startswith("global:0x0132") for ks in lists for k in ks)
+        q = lists[("global:0x0130[0]", "global:0x0130[1]")]
+        assert len(q["rows"]) == 2 and q["proved"][14] == ["global:0x0130[1]"] and q["never_proved"] == []
+
+
+def test_the_tool_prints_the_shared_lists(camera, monkeypatch, capsys):
+    import coverage as tool
+    monkeypatch.setattr(sys, "argv", ["coverage.py", "--shared"])
+    tool.main()
+    out = capsys.readouterr().out
+    assert "1 shared list" in out and "November" in out and "2 settings" in out
 
 
 # ---------------------------------------------------------------- 8: a valid proof
