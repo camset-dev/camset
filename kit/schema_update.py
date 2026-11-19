@@ -1772,7 +1772,9 @@ def main():
     check_video_systems(doc, RUN_ROOT)          # no download of one system holds a value listed as the other's
     with_copies(doc, COPIES, RUN_ROOT, modes=COPY_MODES, unknown=COPY_MODES_UNKNOWN)
     with_keeps_apart(doc, KEEPS_APART, RUN_ROOT)   # the switches that keep a family's copies apart, on those copies
-    with_limit_pairs(doc, LIMIT_PAIRS, RUN_ROOT)   # the limits the camera keeps in order, the lower never past the upper
+    # the limits the camera keeps in order, the lower never past the upper; with the hand evidence, a marked direction
+    # held to the evidence put back into its entry
+    with_limit_pairs(doc, LIMIT_PAIRS, RUN_ROOT, {} if HAND_EVIDENCE else None)
     with_frames(doc, FRAME_TRAVEL)                 # how far each focus frame travels, on the records of its places
     spelled_names(by_key, spelled, over, derived)
     with_menu_rows(doc, axis_rows)      # the rows the definition kept from an older run, named so too

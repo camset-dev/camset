@@ -202,6 +202,33 @@
       }
      }
     },
+    "LIMIT_PAIRS": {
+     "type": "object",
+     "description": "What proved each direction in which the camera moved the other limit (LIMIT_PAIRS), by the lower limit's key: \"evidence\", by the field the public table marks the direction with. Where this file is there, a direction the table marks is written with moves_it only where its evidence is given here; the evidence never sets moves_it (the public table's alone) and reaches no field of the definition.",
+     "propertyNames": {
+      "$ref": "#/$defs/key"
+     },
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+       "evidence": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+         "lower_moves_upper": {
+          "type": "string",
+          "description": "What showed the lower limit chosen above the upper move the upper up to it: the runs and the day."
+         },
+         "upper_moves_lower": {
+          "type": "string",
+          "description": "What showed the upper limit chosen below the lower move the lower down to it: the runs and the day."
+         }
+        }
+       }
+      }
+     }
+    },
     "FRAME_TRAVEL": {
      "type": "object",
      "description": "What measured each focus frame's travel (FRAME_TRAVEL), by the entry's name: its runs, day and the states the camera was held and set in. It reaches no field of the definition, but without it the entry is not written.",

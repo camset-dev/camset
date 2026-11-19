@@ -4,7 +4,7 @@ the camera is, the same for every owner of that model and firmware who maps it (
 and families, the notes that say what a record holds, the rules the writer applies). How, when, in which run and from
 which state each of its facts was proved (a hand proof's values, run, day and menu row, a sample's count, the owner's
 allowance, a note's evidence, what shows a not-offered mark, how a picker's list was walked whole, what showed a switch keeping copies apart,
-what measured a focus frame's travel) is the mapping's
+what measured a focus frame's travel, what showed the camera move a limit kept in order) is the mapping's
 evidence, and is kept in the private overlay beside the definition's own evidence:
 
     private/evidence/<model>_fw<fw>.hand.json   by table name, the fields each entry's evidence adds or replaces

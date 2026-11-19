@@ -448,7 +448,8 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     # the limits the camera keeps in order (LIMIT_PAIRS), where its downloads bear the order out; a definition whose
     # table is emptied loses them
     if tables.LIMIT_PAIRS or any({"at_most", "at_least"} & set(s) for s in doc["settings"]):
-        with_limit_pairs(doc, tables.LIMIT_PAIRS, run.parent)
+        with_limit_pairs(doc, tables.LIMIT_PAIRS, run.parent,     # a marked direction held to its evidence, if any
+                         ((evidence or {}).get("LIMIT_PAIRS") or {}) if tables.HAND_EVIDENCE else None)
     # how far each focus frame travels (FRAME_TRAVEL), on the records of its places; a definition whose table is emptied
     # loses it
     if tables.FRAME_TRAVEL or any("frame" in s for s in doc["settings"]):

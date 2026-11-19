@@ -27,7 +27,7 @@ EVIDENCE_FIELDS = {"FRAME_PROOFS": {"note+", "proved", "sampled", "linear", "run
                    "NEW_RECORDS": {"note+"}, "FILTER_FLAGS": {"note+"}, "RECORD_FIXES": {"note+"},
                    "NOT_OFFERED": {"$key", "$values", "evidence", "files"}, "VIDEO_SYSTEM_VALUES": {"evidence"},
                    "PICKER_LISTS": {"evidence"}, "KEEPS_APART": {"$setting", "evidence", "untick"},
-                   "FRAME_TRAVEL": {"evidence"},
+                   "FRAME_TRAVEL": {"evidence"}, "LIMIT_PAIRS": {"evidence"},
                    "UNPROVED": {"1"}, "MY_MENU_EMPTY": {"line+"}}
 # the tables whose evidence goes one place deeper: a switch's entries, by place
 BY_PLACE = ("KEEPS_APART",)

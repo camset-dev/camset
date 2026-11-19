@@ -47,6 +47,7 @@ A1_FIELDS = {
     "global:0x0dfe": ("at_most", {"setting": "global:0x0e04", "moves_it": True}),
     "global:0x0e04": ("at_least", {"setting": "global:0x0dfe"}),
 }
+UNSHOWN = "global:0x0dfe"           # the pair whose marked direction the a1 pass's made-up hand evidence leaves out
 
 
 # ---------------------------------------------------------------- the hand table
@@ -252,8 +253,9 @@ def test_the_plain_pass_writes_the_pairs_from_the_hand_table(tmp_path, monkeypat
 def a1_written(tmp_path_factory):
     """The a1 II's full pass (main, --write --force) on a made-up run (test_definitions.a1_run: a copy of the committed
     definition, the sample as every download), with a copy of its data folder, so the settings reset file it writes
-    follows the names in the copy and never in data/. Returns (what it printed, the definition written by key, the
-    reset file written)."""
+    follows the names in the copy and never in data/. The hand evidence is there (made up), put back into the pairs'
+    entries for each direction the table marks but the last pair's (UNSHOWN). Returns (what it printed, the definition
+    written by key, the reset file written)."""
     import contextlib
     import io
     import shutil
@@ -266,6 +268,9 @@ def a1_written(tmp_path_factory):
         mp.setattr(definitions, "DATA", tmp / "data")
         _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
         mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+        mp.setattr(S, "LIMIT_PAIRS", {k: e if k == UNSHOWN else {**e, "evidence": {
+            f: "made up" for f in ("lower_moves_upper", "upper_moves_lower") if e.get(f)}}
+            for k, e in S.LIMIT_PAIRS.items()})
         mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
         said = io.StringIO()
         with contextlib.redirect_stdout(said):
@@ -277,10 +282,14 @@ def a1_written(tmp_path_factory):
 
 def test_the_a1_pass_writes_the_pairs_and_the_lower_name(a1_written):
     """The a1 II's own pass writes its LIMIT_PAIRS onto the definition (at_most and at_least, moves_it where the table
-    says so), and names the lower ISO Range Limit's three records by their end, as the settings reset file then does;
-    nothing else carries either field."""
+    says so and the hand evidence shows it: a marked direction it does not show is written without, said), and names
+    the lower ISO Range Limit's three records by their end, as the settings reset file then does; nothing else carries
+    either field."""
     said, by, reset = a1_written
-    assert {k: (f, by[k][f]) for k in A1_FIELDS for f in ("at_most", "at_least") if f in by[k]} == A1_FIELDS
+    want = {**A1_FIELDS, UNSHOWN: ("at_most", {"setting": A1_PAIRS[UNSHOWN]["upper"]})}
+    assert {k: (f, by[k][f]) for k in A1_FIELDS for f in ("at_most", "at_least") if f in by[k]} == want
+    assert (f"limit pair {UNSHOWN} <= {A1_PAIRS[UNSHOWN]['upper']}: nothing in the hand evidence shows lower_moves_upper "
+            "(its \"evidence\" in LIMIT_PAIRS); written without moves_it") in said
     assert sorted(k for k, s in by.items() if {"at_most", "at_least"} & set(s)) == sorted(A1_FIELDS)
     assert [by[k]["name"] for k in LOWERS] == ["ISO Range Limit (lower)"] * 3
     assert [by[k]["name"] for k in UPPERS] == ["ISO Range Limit (upper)"] * 3

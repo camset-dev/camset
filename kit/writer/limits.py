@@ -74,7 +74,19 @@ def order_contradictions(files: list, pairs: list, by_key: dict) -> tuple:
     return bad, read, unread, checked
 
 
-def with_limit_pairs(doc: dict, table: dict, run_root: Path | None = None, most: int = SAMPLE) -> int:
+def moved_proof(e: dict, part) -> dict:
+    """What proved each direction a LIMIT_PAIRS entry `e` says the camera moved the other limit in, {direction field:
+    words}: its "evidence", from the entry itself (the ILCE-1M2's pass, the hand evidence put back) and from `part`,
+    its part of the hand evidence read apart (the plain pass)."""
+    said = {}
+    for src in (part, e):
+        got = (src if isinstance(src, dict) else {}).get("evidence")
+        said.update({f: w for f, w in (got if isinstance(got, dict) else {}).items() if w})
+    return said
+
+
+def with_limit_pairs(doc: dict, table: dict, run_root: Path | None = None, evidence: dict | None = None,
+                     most: int = SAMPLE) -> int:
     """The hand table's pairs of limits the camera keeps in order (LIMIT_PAIRS: the lower limit's key, its upper, and
     the directions a proof showed the camera move the other) written as "at_most" on the lower, naming the upper, and
     "at_least" on the upper, naming the lower, each with "moves_it": true where the table says a value chosen past the
@@ -85,9 +97,12 @@ def with_limit_pairs(doc: dict, table: dict, run_root: Path | None = None, most:
     every section a download holds both in must hold the lower at or before the upper in their value lists: one that
     does not stops the write (exit 1, the pair, the file and the section named, nothing written), as with_copies stops
     it, for the hand table is then wrong for a state the camera wrote; a download that cannot be read is skipped and
-    counted; with no downloads that is said and the pairs are written as the table gives them. The fields an entry's
-    hand evidence adds (the ILCE-1M2's pass puts it back into the entries) are never written. Keys only, never a value
-    a file held (docs/decisions/0016). Returns how many pairs are written."""
+    counted; with no downloads that is said and the pairs are written as the table gives them. `evidence`: None where
+    the camera's hand evidence file is not there; else the plain pass's LIMIT_PAIRS part of it read apart ({lower key:
+    {"evidence": {direction field: words}}}), or {} from the ILCE-1M2's pass, whose entries carry it put back. With the
+    file, a direction the table marks gets moves_it only where the evidence shows it (moved_proof), said otherwise; the
+    evidence never sets moves_it, and the fields it adds are never written. Keys only, never a value a file held
+    (docs/decisions/0016). Returns how many pairs are written."""
     by_key = {s["key"]: s for s in doc["settings"]}
     kept, taken = [], set()
     for lower, e in table.items():
@@ -114,9 +129,15 @@ def with_limit_pairs(doc: dict, table: dict, run_root: Path | None = None, most:
               + (f", {unread} that could not be read skipped" if unread else ""))
     want = {}
     for lower, e in kept:
+        proof = moved_proof(e, (evidence or {}).get(lower))
         for flag, field in MOVES:
             mine, other = (lower, e["upper"]) if field == "at_most" else (e["upper"], lower)
-            want[mine] = (field, {"setting": other, **({"moves_it": True} if e.get(flag) is True else {})})
+            moves = e.get(flag) is True
+            if moves and evidence is not None and not proof.get(flag):
+                print(f"  limit pair {lower} <= {e['upper']}: nothing in the hand evidence shows {flag} (its "
+                      "\"evidence\" in LIMIT_PAIRS); written without moves_it")
+                moves = False
+            want[mine] = (field, {"setting": other, **({"moves_it": True} if moves else {})})
     for s in doc["settings"]:
         got = want.get(s["key"])
         for field in ("at_most", "at_least"):
