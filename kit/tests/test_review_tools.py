@@ -97,6 +97,21 @@ def test_a_camera_already_on_the_file_is_sent_no_upload(monkeypatch, own_runs, c
     assert U.main() == 0 and U.sent == ["upload", "check"]
 
 
+@pytest.mark.parametrize("fault", [ValueError("records checksum does not hold"), OSError("unreadable")])
+def test_a_comparison_that_cannot_be_made_falls_through_to_the_upload(monkeypatch, own_runs, capsys, fault):
+    """The camera's download downloaded but not comparable with the file (a records checksum that does not hold, a
+    layout the reader does not know: ValueError; a file that cannot be read: OSError): said in one line, and the upload
+    and its check go as they did before the comparison existed, never a traceback that leaves the file not loaded."""
+    U, start = upload(monkeypatch, own_runs, (), held=())
+
+    def broken(*a, **k):
+        raise fault
+    monkeypatch.setattr(U, "compared", broken)
+    assert U.main() == 0 and U.sent == ["download", "upload", "check"]
+    out = capsys.readouterr().out
+    assert f"could not be compared with {start.name} ({type(fault).__name__}" in out and "uploading it" in out
+
+
 def test_a_record_no_file_sets_back_differing_still_gets_the_upload(monkeypatch, own_runs):
     """Only a camera on which no record differs is spared the upload: one differing in a record no settings file sets
     back as a whole (0x1126) is uploaded as before (another part of such a record may take)."""

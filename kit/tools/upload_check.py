@@ -166,14 +166,20 @@ def held_already(link, f: Path) -> Path | None:
     the restore check's comparison (camkit.session.compared): the download where no record differs, so the camera
     already holds the file and an upload would only restart it (about 45 s with its check, 2026-11-19, which a chain of
     small runs paid before and after each); else None, said with the count. None too where the camera refuses the
-    download: said, and the upload goes as before."""
+    download, or where the two cannot be compared (a records checksum that does not hold, a layout the reader does not
+    know, a file that cannot be read): said in one line, and the upload goes as before."""
     try:
         got = link.download("held")
     except LinkError as e:
         print(f"the camera refused the download that compares it with {f.name} ({e}): uploading it as before",
               flush=True)
         return None
-    changes = compared(f, got, say=lambda m: print(m, flush=True))
+    try:
+        changes = compared(f, got, say=lambda m: print(m, flush=True))
+    except (ValueError, OSError) as e:
+        print(f"the camera's download {got.name} could not be compared with {f.name} ({type(e).__name__}: {e}): "
+              "uploading it as before", flush=True)
+        return None
     if changes:
         print(f"{len(changes)} records on the camera differ from {f.name}: uploading it", flush=True)
         return None
