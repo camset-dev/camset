@@ -117,8 +117,9 @@ your owner, and the default is no.
     ([decision 21](decisions/0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md)).
 15. **A user LUT** ([decision 26](decisions/0026-a-user-lut-reaches-the-camera-only-through-the-kit-s-import-tool.md)).
     `kit/tools/lut_import.py` takes your owner's word for the run as `--allow "Manage User LUTs"`: pass it only when
-    they gave it for that run. (The a1 II's owner allowed one import into User16 on 2026-11-19; ask yours: the default
-    is no.)
+    they gave it for that run. It imports into user place 16 only where the camera's own Import/Edit table was seen to
+    show it empty since the last import (`--seen-empty`, a frame of the look the tool prints how to make). (The a1 II's
+    owner allowed one import into User16 on 2026-11-19; ask yours: the default is no.)
 
 ## 2. What carries over to a new model, and what does not
 

@@ -224,7 +224,8 @@ MUST_SAY = {
     26: ["A user LUT reaches the camera only through `kit/tools/lut_import.py`", "on the owner's word for that run",
          "which the run carries as `--allow \"Manage User LUTs\"`", "a `.cube` file from that clone's `private/lut/`",
          "Sony's documented ImportLUTFile",
-         "into user place 16, and only while the camera does not list it as holding a LUT", "never as a settings file",
+         "into user place 16, and only where the camera's own Import/Edit table was seen to show it empty since the last "
+         "import", "never as a settings file",
          "never through Manage User LUTs' Import on the camera's menu, which no run opens",
          "it stays on the camera until the owner deletes it there by hand", "On every camera the default is no"],
 }
@@ -249,7 +250,7 @@ PINNED = {
     10: ("The camera is free for tests, which run", "20b96a6faaa7d4ff"),
     15: ("Every run starts from a known file and", "c7b674b8bf12dddd"),
     16: ("The owner's values never reach a definition, the", "0c97dcd1abcccd27"),
-    26: ("A user LUT reaches the camera only through", "78575244aeb8d7de"),
+    26: ("A user LUT reaches the camera only through", "045009aae9a25bc8"),
 }
 
 

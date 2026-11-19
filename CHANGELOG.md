@@ -166,8 +166,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
-- **`kit/tools/lut_import.py --allow "Manage User LUTs"` imports one user LUT, a `.cube` file from `private/lut/`, into
-  user place 16 through Sony's ImportLUTFile** (camlink's new `importlut`, decision 26), prints the settings records it
+- **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
+  `private/lut/`, into user place 16 through Sony's ImportLUTFile, and only where the camera's own Import/Edit table was
+  seen to show it empty since the last import** (camlink's new `importlut`, decision 26), prints the settings records it
   changed, and fails its restore on any that did not go back. Only on the camera owner's word: the LUT stays until they
   delete it on the camera by hand.
 - **Before a Right the kit looks at the screen once more, as before an Enter,** so the never-open check reads the lit
