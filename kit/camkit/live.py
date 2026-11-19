@@ -92,7 +92,7 @@ from pathlib import Path
 import numpy as np
 
 from . import ocr, safety, screen, vlm
-from .frames import MENU, MENU_ROWS, SUBMENU_ROWS, keep
+from .frames import MENU, MENU_ROWS, OSD_LATE, SUBMENU_ROWS, OsdSource, keep, window
 from .link import CameraRefused, LinkError
 from .session import playback_kind
 from .vlm import PROMPTS, ask_role, log_to, scrub
@@ -1308,7 +1308,7 @@ class LiveCamera:
             f, moved = self.hdmi.settle(self.frame, key, expect_change=True, sent_at=t, **({"on": on} if on else {}))
             self.frame, self.screen = f, self.reading(f)
             self.rest(f"{key}-rest")
-            f = self.look_late(key, before, moved, seen_enough)
+            f = self.look_late(key, before, moved, seen_enough, on=on, sent_at=t)
             if canon == "menu" and getattr(judged, "kind", None) == "shooting":
                 f = self.menu_watch(t, f)       # its result a menu page if one shows within MENU_LATE s of the press
         except LinkError as e:
@@ -1325,7 +1325,7 @@ class LiveCamera:
                      timing=self.hdmi.timing)
         self._inside_after()
 
-    def look_late(self, key: str, before, moved: bool, seen_enough: bool = False):
+    def look_late(self, key: str, before, moved: bool, seen_enough: bool = False, on=None, sent_at=None):
         """After a press settled: where its screen reads in the state it had before, look again a little later; the
         frame the press ends on. Live view behind a dialog that previews each option (Picture Profile) keeps changing,
         which can end the settle before the cursor has moved (2026-10-28). OK that applies a setting can hold the OSD
@@ -1335,11 +1335,18 @@ class LiveCamera:
         (kit/provers/optboxes_run.py, boxes_run.py), whose screen has no live view behind it and whose state does not
         hold the value, so that every step read as nothing happened and waited 0.5 s (201 of 285 presses, 2026-11-18):
         there a change the settle saw (`moved`) is the press's, and no look again goes; a step whose change was not
-        seen still gets it. Never the default."""
+        seen still gets it. Never the default. With OSD eyes a step that went out on a page's rows (`on`: step_place's
+        MENU_ROWS or SUBMENU_ROWS, where the press must move the cursor) is looked at until OSD_LATE has passed since it
+        went (`sent_at`): a scroll step of the lit row's long label can set the settle's `moved` and its 0.25 s window
+        end before the press's own change (the review of 2026-11-19), and a change taken for "nothing happened" passes
+        unnoticed in places (frames.OSD_LATE's comment)."""
         f = self.frame
         if not screen.same_state(self.screen, before) or (seen_enough and moved):
             return f
         end = time.monotonic() + (OK_LATE if key == "enter" else 0.5)
+        if on in (MENU_ROWS, SUBMENU_ROWS) and getattr(self.hdmi, "name", "") == "osd":
+            went = sent_at if isinstance(sent_at, (int, float)) else time.monotonic()
+            end = max(end, went + window(OSD_LATE, key, OsdSource.LATE))
         while True:
             time.sleep(0.5)
             f2 = self.hdmi.grab(f"{key}-late", save=False)

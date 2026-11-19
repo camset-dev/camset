@@ -2478,6 +2478,42 @@ def test_a_live_press_hands_its_settle_the_screen_it_went_out_on(tmp_path, monke
         assert told[-1] == place, (key, place)
 
 
+@pytest.mark.parametrize("name,found", [("osd", True), ("hdmi", False)])
+def test_a_step_on_a_pages_rows_whose_state_stayed_is_looked_at_until_the_osd_deadline(tmp_path, monkeypatch, name,
+                                                                                         found):
+    """With OSD eyes a step that went out on a page's rows (step_place: it must move the cursor) and settled on the state
+    it went out on (a scroll step of the lit row's long label set `moved`, and the 0.25 s window ended before the
+    press's own change) is looked at again until OSD_LATE has passed since the press (look_late), not only 0.5 s more:
+    a change 3 s after the press is the press's result, never "nothing happened". HDMI eyes, whose settle leaves out
+    the blocks that changed by themselves before the press, look 0.5 s more, as before. On the probe's OSD frames of
+    Shoot Mode's page: Up from row 2 to row 1."""
+    from camkit import frames, live
+    shots = RUNS / "kit2_probe_osd_presses" / "shots"
+    if not shots.exists():
+        pytest.skip(f"{shots} not present")
+    row2, row1 = (frames.load(shots / n).image for n in ("00003_menu.png", "00004_up.png"))
+    cam, sent, read_on, sleeps = fresh_camera(tmp_path, monkeypatch, row2, [row2], settles=row2, name=name)
+    assert live.step_place(cam.read(), "up") == frames.MENU_ROWS
+    pressed_at = []
+    real_press = cam.link.press
+    cam.link.press = lambda *a, **k: pressed_at.append(cam.hdmi.now[0]) or real_press(*a, **k)
+
+    def grab(tag="f", save=True):
+        from camkit.frames import Frame, keep
+        cam.hdmi.grabs.append(tag)
+        late = pressed_at and cam.hdmi.now[0] - pressed_at[0] >= 3.0
+        f = Frame(row1 if late else row2, cam.hdmi.now[0], None, name)
+        if save:
+            keep(f, cam.run.shot_path(tag))
+        return f
+    cam.hdmi.grab = grab
+    cam.press("up")
+    assert sent == [("up", "menu", "rows")]
+    assert (cam.read().row == 1) is found
+    waited = cam.hdmi.now[0] - pressed_at[0]
+    assert (3.0 <= waited <= frames.OSD_LATE["up"] + 0.6) if found else waited < 1.5
+
+
 @pytest.mark.parametrize("table,key,attr", [("HDMI_QUIET", "down", None), ("HDMI_NOTHING", "down", None),
                                             ("HDMI_QUIET", "enter", "QUIET"), ("HDMI_NOTHING", "menu", "NOTHING")])
 def test_hdmi_settle_takes_its_windows_from_the_table_by_key(monkeypatch, table, key, attr):
