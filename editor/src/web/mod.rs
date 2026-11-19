@@ -4262,6 +4262,17 @@ pub(crate) mod tests {
         let (r, h) = (row(&mut app), step(&mut app));
         assert_eq!((&r["was"], &r["now"]), (&json!(format!("{l0} [{cur}]")), &json!(format!("{l1} [{other}]"))));
         assert_eq!((&h["before"], &h["after"]), (&json!(format!("{l0} [{cur}]")), &json!(format!("{l1} [{other}]"))));
+        // a record no setting names, changed: named in plain words outside Expert mode, as the window names it
+        // (`unnamed`), its number in Expert mode only, and reverted by its record
+        let free = app.doc.as_ref().unwrap().edited.sections[0].records.iter().find(|r| r.elem_size == 1 && r.count == 1 && app.schema.find(false, r.id).is_none()).unwrap().id;
+        let was = app.doc.as_ref().unwrap().edited.sections[0].get(free).unwrap().get(None).unwrap();
+        app.doc.as_mut().unwrap().edited.sections[0].get_mut(free).unwrap().put(None, (was + 1) % 100).unwrap();
+        let unnamed = |app: &mut App| ask(app, "changes", json!({}))["changes"].as_array().unwrap().iter().find(|x| x["id"] == free).unwrap().clone();
+        let u = unnamed(&mut app);
+        assert_eq!((&u["name"], &u["key"]), (&json!(app.unnamed(free)), &Value::Null));
+        assert!(!u["name"].as_str().unwrap().contains("0x"), "{u}");
+        app.prefs.expert = true;
+        assert_eq!(unnamed(&mut app)["name"], json!(format!("record 0x{free:04x}")));
     }
 
     /// My Menu from a row: added to the first page with room, shown on the row, removed again; a setting the

@@ -769,6 +769,14 @@ pub const DEFINITION_FORMAT: u32 = 2;
 /// checked values another way, so it is refused with what to do (write it again with the kit).
 pub const OLDEST_DEFINITION_FORMAT: u32 = 2;
 
+/// How `Schema::from_text` begins a refusal whose cause is the JSON reader's own text (a syntax error), which follows
+/// in brackets: a caller words it plainly and keeps that text for Expert mode.
+pub const NOT_JSON: &str = "not a readable JSON file";
+
+/// How `Schema::from_text` begins a refusal whose cause is the typed reader's own text (a field missing or of the
+/// wrong kind, with its line and column), which follows after ": ".
+pub const NOT_A_DEFINITION: &str = "does not read as a camera definition";
+
 /// Where a definition was found: among the ones shipped with the editor (read-only), or in the user's own folder,
 /// `definitions/` beside the preferences (the only folder the editor writes).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
@@ -1649,7 +1657,7 @@ impl Schema {
     /// A definition read from its text, checked: the format first (a newer one is refused with what to do), then
     /// the typed reading (its message names the line and column), then `check`.
     pub fn from_text(text: &str) -> Result<Schema, String> {
-        let v: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("not a readable JSON file ({e})"))?;
+        let v: serde_json::Value = serde_json::from_str(text).map_err(|e| format!("{NOT_JSON} ({e})"))?;
         if !v.is_object() || v.get("settings").is_none() {
             return Err("not a camera definition (it has no settings list)".into());
         }
@@ -1667,7 +1675,7 @@ impl Schema {
             },
         }
         drop(v);
-        let s: Schema = serde_json::from_str(text).map_err(|e| format!("does not read as a camera definition: {e}"))?;
+        let s: Schema = serde_json::from_str(text).map_err(|e| format!("{NOT_A_DEFINITION}: {e}"))?;
         s.check()?;
         Ok(s)
     }

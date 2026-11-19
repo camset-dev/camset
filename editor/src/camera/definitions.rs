@@ -103,7 +103,15 @@ impl App {
         let s = match Schema::from_text(&text) {
             Ok(s) => s,
             Err(e) => {
-                self.status = format!("{shown} was not added: it is not a camera definition this editor can use: {e}.");
+                // the readers' own text (a JSON syntax error, a field missing at a line and column) only in Expert mode;
+                // the editor's own reasons (no settings list, a newer format) are plain words already
+                use camset_editor::schema::{NOT_A_DEFINITION, NOT_JSON};
+                let (plain, reader) = match (e.strip_prefix(NOT_JSON), e.strip_prefix(NOT_A_DEFINITION)) {
+                    (Some(r), _) => ("it is not a readable definition file: it may be damaged, or another kind of file".to_string(), Some(r.trim().trim_start_matches('(').trim_end_matches(')'))),
+                    (_, Some(r)) => ("it is not a camera definition this editor can use: a part every camera definition has is missing or not in the form this editor reads, so it may be damaged, or made for another version of the editor".to_string(), Some(r.trim_start_matches(':').trim())),
+                    _ => (format!("it is not a camera definition this editor can use: {e}"), None),
+                };
+                self.status = format!("{shown} was not added: {plain}.{}", reader.map(|r| details(self.prefs.expert, r)).unwrap_or_default());
                 return;
             }
         };
@@ -384,6 +392,27 @@ pub(crate) mod definitions_tests {
         let mut app = App::new(vec![], Prefs::default());
         app.defs = Definitions::load(Some(shipped()), vec![shipped()], user.to_path_buf(), &[]);
         app
+    }
+
+    /// Add definition… refusing a file says in plain words what is wrong with it; the reader's own text ("missing field
+    /// `area` at line 1 column …", a JSON syntax error) only in Expert mode, as its details.
+    #[test]
+    fn add_definition_refuses_in_plain_words() {
+        let (dir, user) = (scratch("add_plain_src"), scratch("add_plain_user"));
+        let mut app = app_with(&user);
+        let write = |name: &str, text: &str| { let p = dir.join(name); std::fs::write(&p, text).unwrap(); p };
+        let no_area = write("no_area.json", &a1_with(|v| { v["settings"][0].as_object_mut().unwrap().remove("area"); }));
+        let broken = write("broken.json", "{\"settings\": [");
+        for (p, plain) in [(&no_area, "a part every camera definition has is missing"), (&broken, "not a readable definition file")] {
+            app.prefs.expert = false;
+            app.add_definition(p, false);
+            assert!(app.status.contains(plain) && !app.status.contains("line 1") && !app.status.contains('`') && !app.status.contains("Details"), "{}", app.status);
+            app.prefs.expert = true;
+            app.add_definition(p, false);
+            assert!(app.status.contains(plain) && app.status.contains("(Details: ") && app.status.contains("line"), "{}", app.status);
+        }
+        assert_eq!(std::fs::read_dir(&user).unwrap().count(), 0, "nothing copied");
+        let _ = (std::fs::remove_dir_all(&dir), std::fs::remove_dir_all(&user));
     }
 
     /// Add definition… checks a file before it copies it, under the name its model and firmware give it; a definition
