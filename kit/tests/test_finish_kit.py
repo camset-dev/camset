@@ -1222,3 +1222,552 @@ def test_no_comment_says_the_playbooks_rules_hold_a_default():
     for f in (kit / "camkit" / "safety.py", kit / "tests" / "test_guards.py"):
         text = " ".join(f.read_text(encoding="utf-8").replace("#", " ").split())
         assert not re.search(r"playbook's rules? (?:3|1-4)\b(?! how)", text), f.name
+
+
+# ---------------------------------------------------------------- 13. an option drawn grey is never chosen
+
+def option_line(text_grey, kind="sidelist", ink=True, lit=True):
+    """A list's or side list's option line as the a1 II draws it: on its orange bar where lit (else on black), its text
+    letter strokes at `text_grey` (~120 greyed, ~225 white), a dark outline round them."""
+    a = np.zeros((480, 640, 3), np.uint8)
+    t, b = 236, 282
+    x0 = 305 if kind == "sidelist" else 110
+    if lit:
+        a[t:b, x0 - 2:595] = (170, 51, 0)
+    if ink:
+        for x in range(x0 + 10, x0 + 160, 9):
+            a[t + 12:b - 12, x - 1:x + 4] = 10                     # the outline
+            a[t + 12:b - 12, x:x + 3] = text_grey
+    return a, (t, b)
+
+
+def grey_cam(a, bar, kind="sidelist"):
+    return SimpleNamespace(frame=frame_of(a), read=lambda: SimpleNamespace(kind=kind, bar=bar))
+
+
+@pytest.mark.parametrize("kind", ["sidelist", "list"])
+@pytest.mark.parametrize("level, lit, want", [(120, True, True), (134, True, True), (225, True, False),
+                                              (245, True, False), (120, False, True), (225, False, False),
+                                              (170, True, None), (160, True, None), (185, True, None)])
+def test_an_option_is_told_grey_or_white_by_the_greyed_rows_measure(kind, level, lit, want):
+    from proving import screens as PS
+    a, bar = option_line(level, kind, lit=lit)
+    grey, p = PS.drawn_grey(grey_cam(a, bar, kind))
+    assert grey is want and p is not None, (level, p)
+
+
+def test_where_the_measure_cannot_read_an_option_it_says_nothing():
+    from proving import screens as PS
+    a, bar = option_line(225, ink=False)
+    assert PS.drawn_grey(grey_cam(a, bar)) == (None, None), "no text on the line"
+    assert PS.drawn_grey(grey_cam(a, None)) == (None, None), "no bar"
+    assert PS.drawn_grey(grey_cam(a, bar, "dialog")) == (None, None), "a carousel: not judged"
+    assert PS.drawn_grey(SimpleNamespace(frame=frame_of(None), read=lambda: SimpleNamespace(kind="list", bar=bar))) \
+        == (None, None)
+
+
+PP4_HLG = {"260193_down.png": True, "260212_down.png": True, "260232_down.png": True, "260253_down.png": True,
+           "260272_up.png": True, "260291_up.png": True, "260308_up.png": True, "260324_up.png": True,
+           "260339_up.png": True, "260354_down.png": False, "260368_up.png": False}
+# PP10's Color Mode in Movie mode with Gamma Movie: BT.2020 and 709 grey, the others white; Flash Sync Spd. Prty.'s On
+# grey with Electronic Shutter, its Off white; Shading Comp.'s list, none grey
+OTHERS = {"257814_down.png": True, "257831_down.png": True, "257693_down.png": False, "257848_down.png": False,
+          "14373_down.png": True, "14389_up.png": False, "00011_down.png": False}
+
+
+@pytest.mark.parametrize("name, grey", [*PP4_HLG.items(), *OTHERS.items()])
+def test_the_cameras_options_are_told_grey_or_white(name, grey):
+    """The frames the PP4 Color Mode run of 2026-11-19 chose each option on (nine drawn grey, two white), and the other
+    lists of the runs (a side list with two grey, a list with one, a list with none)."""
+    from proving import screens as PS
+    f = load(need(A1 / "kit2_pass2" / "shots" / name))
+    s = screen.read(f)
+    assert PS.drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[0] is grey, name
+
+
+REFUSAL = "This operation or setting not available as follows Gamma HLG • OK"
+COLOR = ["Movie", "Still", "S-Cinetone", "709", "BT.2020"]
+
+
+class SideCam:
+    """A Picture Profile side list (COLOR, saved on BT.2020) as prove_side_row meets it: Right opens it on the saved
+    value, Down and Up move the cursor, Enter on an option in `refuse` brings the camera's refusal (MENU closes it, the
+    value kept), any other Enter saves it and goes back to the row, MENU on the list goes back to the row; the options in
+    `grey` are drawn grey (drawn_grey's answer, `unsure` none). C4 is the guide's (help_run.guide, faked)."""
+
+    def __init__(self, grey=(0, 1, 2), refuse=(0, 1, 2), saved=4, unsure=()):
+        self.grey, self.refuse, self.unsure = set(grey), set(refuse), set(unsure)
+        self.where, self.option, self.saved, self.keys, self.n = "row", saved, saved, [], 1
+        self.frame = SimpleNamespace(path=Path("00001_row.png"), image=None)
+
+    def shoot(self, tag):
+        self.n += 1
+        self.frame = SimpleNamespace(path=Path(f"{self.n:05d}_{tag}.png"), image=None)
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        if key == "right":
+            self.where, self.option = "list", self.saved
+        elif key in ("down", "up") and self.where == "list":
+            self.option = (self.option + (1 if key == "down" else -1)) % len(COLOR)
+        elif key == "enter":
+            if self.option in self.refuse:
+                self.where = "notice"
+            else:
+                self.where, self.saved = "row", self.option
+        elif key == "menu":
+            self.where = "row"
+        self.shoot(key)
+
+    def read(self):
+        return SimpleNamespace(kind={"row": "submenu", "list": "sidelist", "notice": "notice"}[self.where], bar=(236, 282))
+
+
+def side_world(monkeypatch, cam, help_text="Sets the color mode. This function is currently disabled.", help_ok=True):
+    """prove_side_row's seams faked round `cam`; returns (run, its proof lines, what it printed, the guides asked for)."""
+    import contextlib
+    import io
+    import json
+
+    import drive as D
+    import help_run
+    from camkit.ocr import Line
+    from proving import greyed, sidelists as SL
+    guides = []
+
+    def guide(c, label):
+        guides.append((label, c.option))
+        c.keys.append("c4")
+        c.shoot("guide")
+        return {"title": label, "text": help_text, "frames": [c.frame.path.name], "popup": False}
+    monkeypatch.setattr(help_run, "guide", guide)
+    monkeypatch.setattr(D, "help_refused", lambda kind, image: "" if help_ok else "the footer shows no help button")
+    monkeypatch.setattr(greyed, "drawn_grey", lambda c: ((None, 170.0) if c.option in cam.unsure else
+                                                         (c.option in cam.grey, 120.0 if c.option in cam.grey else 225.0))
+                        if c.read().kind == "sidelist" else (None, None))
+    monkeypatch.setattr(greyed, "REASONS", {})
+    monkeypatch.setattr(greyed, "LABELS", {"Gamma", "Color Mode", "Black Level"})
+    for name, value in (("place", lambda c: "here"), ("same_place", lambda a, b: True), ("to_row", lambda *a: None),
+                        ("after_download", lambda c, done: None), ("side_index", lambda c, job: c.option),
+                        ("side_text", lambda c: COLOR[c.option]), ("later", lambda read, c: COLOR[c.option]),
+                        ("settled", lambda v: v)):
+        monkeypatch.setattr(SL, name, value)
+    monkeypatch.setattr(SL.ocr, "read", lambda paths: {p: [Line(REFUSAL, 1.0, 0, 200, 600, 40)] if cam.where == "notice"
+                                                       else [] for p in paths})
+    state = {"saved": cam.saved}
+    monkeypatch.setattr(SL.camset, "read", lambda p: {"global:0x073b": state["saved"]} if p else {})
+    monkeypatch.setattr(SL.camset, "diff", lambda a, b: [SimpleNamespace(key=k, before=a[k], after=b[k])
+                                                         for k in a if a[k] != b[k]])
+
+    def download(tag):
+        state["saved"] = cam.saved
+        return Path(f"{tag}.DAT")
+    out, said = io.StringIO(), io.StringIO()
+    job = {"path": ["Picture Profile", "PP4", "Color Mode"], "values": COLOR, "plan": list(range(len(COLOR)))}
+    with contextlib.redirect_stdout(said):
+        SL.prove_side_row(cam, SimpleNamespace(download=download), None, job, Path("start.DAT"), out)
+    return [json.loads(x) for x in out.getvalue().splitlines()], said.getvalue(), guides
+
+
+def by_label(lines):
+    return {x["label"]: x for x in lines}
+
+
+def test_a_side_lists_grey_options_get_help_once_one_enter_for_the_reason_and_no_key_after(monkeypatch):
+    """PP4's Color Mode with Gamma on HLG, as this morning: the first grey option (Movie) gets the camera's Help, which
+    says only that it is disabled, then the row's one Enter, to read the notice (Gamma); Still and S-Cinetone get no key
+    at all, written greyed as drawn with that reason, no download, no diff; 709 and BT.2020 are proved as before."""
+    cam = SideCam()
+    lines, said, guides = side_world(monkeypatch, cam)
+    assert guides == [("Picture Profile > PP4 > Color Mode: Movie", 0)]
+    assert cam.keys.count("enter") == 3 and cam.keys.count("c4") == 1
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert entered == ["Movie", "709", "BT.2020"], cam.keys
+    got = by_label(lines)
+    movie = got["Movie"]
+    assert (movie["applied"], movie["changes"], movie["greyed"], movie["entered"]) == (False, [], "drawn", "for its reason")
+    assert movie["blocker"] == {"row": "Gamma"} and movie["reason"]["from"] == "notice" and movie["notice"]["text"]
+    for label in ("Still", "S-Cinetone"):
+        x = got[label]
+        assert (x["applied"], x["changes"], x["dat"], x["notice"], x["greyed"]) == (False, [], None, None, "drawn")
+        assert x["blocker"] == {"row": "Gamma"} and x["reason"] == {"from": "notice", "frame": movie["reason"]["frame"],
+                                                                     "entry": "Movie"}
+        assert "entered" not in x
+    assert got["709"]["applied"] and got["709"]["changes"] and "greyed" not in got["709"]
+    assert got["BT.2020"]["applied"] and got["BT.2020"]["changes"] == []
+    assert "the one Enter of this row on an option drawn grey, to read why it is greyed, not to choose" in said
+    assert "'Still'                  greyed as drawn, never entered: blocked by Gamma (the camera's notice on 'Movie'" in said
+    assert "applied ['709', 'BT.2020']; greyed as drawn, never entered ['Still', 'S-Cinetone']; entered once to read why: ['Movie']" in said
+
+
+def enter_options(cam):
+    """The option the cursor was on at each key the camera got, replayed from its keys (SideCam's own moves)."""
+    out, where, option, saved = [], "row", 4, 4
+    for k in cam.keys:
+        out.append(option)
+        if k == "right":
+            where, option = "list", saved
+        elif k in ("down", "up") and where == "list":
+            option = (option + (1 if k == "down" else -1)) % len(COLOR)
+        elif k == "enter":
+            if option in cam.refuse:
+                where = "notice"
+            else:
+                where, saved = "row", option
+        elif k == "menu":
+            where = "row"
+    return out
+
+
+def test_never_enter_grey_presses_no_enter_on_any_grey_option(monkeypatch):
+    from proving import greyed
+    monkeypatch.setattr(greyed, "NEVER_ENTER", True)
+    cam = SideCam()
+    lines, said, guides = side_world(monkeypatch, cam)
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert entered == ["709", "BT.2020"] and len(guides) == 1
+    got = by_label(lines)
+    for label in ("Movie", "Still", "S-Cinetone"):
+        assert (got[label]["greyed"], got[label]["applied"], got[label]["dat"]) == ("drawn", False, None), label
+        assert "blocker" not in got[label] and got[label]["reason"]["from"] == "help", label
+    assert "--never-enter-grey: no Enter on it" in said
+
+
+def test_help_that_names_the_blocker_spares_every_enter(monkeypatch):
+    cam = SideCam()
+    lines, said, guides = side_world(monkeypatch, cam, help_text=REFUSAL)
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert entered == ["709", "BT.2020"]
+    assert all(by_label(lines)[x]["blocker"] == {"row": "Gamma"} and by_label(lines)[x]["reason"]["from"] == "help"
+               for x in ("Movie", "Still", "S-Cinetone"))
+    assert "why greyed: blocked by Gamma (the camera's Help on 'Movie'" in said
+
+
+def test_a_help_description_naming_equipment_or_rows_is_no_blocker():
+    from proving import greyed
+    for text in ("Assigns functions to the function ring of the lens. This function is currently disabled.",
+                 "Sets the Gamma and the Black Level of the flash. This function is currently disabled.", ""):
+        assert greyed.help_blocker(text) is None, text
+
+
+def test_where_help_is_not_allowed_the_one_enter_reads_the_reason(monkeypatch):
+    cam = SideCam()
+    lines, said, guides = side_world(monkeypatch, cam, help_ok=False)
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert guides == [] and "c4" not in cam.keys and entered == ["Movie", "709", "BT.2020"]
+    assert "no Help on it (the footer shows no help button)" in said
+
+
+def test_a_grey_option_the_camera_applies_was_misjudged_and_the_rows_others_are_entered(monkeypatch):
+    cam = SideCam(refuse=())
+    lines, said, guides = side_world(monkeypatch, cam)
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert entered == COLOR, "every option entered: the drawing was misjudged"
+    assert all(x["applied"] and "greyed" not in x for x in lines)
+    assert "was drawn grey, yet the camera applied it" in said
+
+
+def test_a_second_visit_to_the_row_in_the_run_tries_nothing_again(monkeypatch):
+    from proving import greyed
+    cam = SideCam()
+    side_world(monkeypatch, cam)
+    kept = dict(greyed.REASONS)
+    cam2 = SideCam()
+    monkeypatch.setattr(greyed, "REASONS", kept)
+    import proving.sidelists as SL
+    import contextlib
+    import io
+    job = {"path": ["Picture Profile", "PP4", "Color Mode"], "values": COLOR, "plan": list(range(len(COLOR)))}
+    monkeypatch.setattr(SL.ocr, "read", lambda paths: {p: [] for p in paths})
+    with contextlib.redirect_stdout(io.StringIO()):
+        SL.prove_side_row(cam2, SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")), None, job, Path("s.DAT"),
+                          io.StringIO())
+    entered = [COLOR[o] for o, k in zip(enter_options(cam2), cam2.keys, strict=False) if k == "enter"]
+    assert entered == ["709", "BT.2020"] and "c4" not in cam2.keys
+
+
+def test_the_rows_one_enter_is_spent_even_where_what_follows_it_fails(monkeypatch):
+    """The row's one Enter is counted as it is decided: should the row fail after it (a question, a lost row), a later
+    visit to the row in the run tries no second Enter and no second Help."""
+    from proving import greyed
+    monkeypatch.setattr(greyed, "REASONS", {})
+    monkeypatch.setattr(greyed, "drawn_grey", lambda c: (True, 120.0))
+    helps = []
+    monkeypatch.setattr(greyed, "by_help", lambda cam, name, label, back: helps.append(label) or
+                        greyed.Reason(None, "help", "00002_guide.png", label))
+    cam = SimpleNamespace()
+    said = []
+    assert greyed.judge(cam, "Row", "A", 0, 3, None, say=said.append) == greyed.TRY
+    assert greyed.judge(cam, "Row", "B", 1, 3, None, say=said.append) == greyed.SKIP and helps == ["A"]
+
+
+def test_the_saved_value_drawn_grey_is_still_its_put_back_and_an_unsure_drawing_is_entered(monkeypatch):
+    cam = SideCam(grey=(0, 4), refuse=(0,), unsure=(1,))
+    lines, said, guides = side_world(monkeypatch, cam)
+    entered = [COLOR[o] for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter"]
+    assert entered == ["Movie", "Still", "S-Cinetone", "709", "BT.2020"]
+    assert "'BT.2020': drawn grey, but it is the value the row was saved on: entered as its put-back" in said
+    assert "'Still': whether it is drawn grey cannot be told (its text reads 170): entered as before" in said
+
+
+SHUTTER = ["Auto", "On", "Off"]
+SYNC_REFUSAL = "This operation or setting not available as follows Shutter Type Electronic Shutter • OK"
+
+
+class ListCam(SideCam):
+    """A list (SHUTTER, saved on Auto) as prove_row meets it: Flash Sync Spd. Prty. with the electronic shutter, On drawn
+    grey and refused."""
+
+    def read(self):
+        return SimpleNamespace(kind={"row": "submenu", "list": "list", "notice": "notice"}[self.where], bar=(145, 191))
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        if key == "right":
+            self.where, self.option = "list", self.saved
+        elif key in ("down", "up") and self.where == "list":
+            self.option = (self.option + (1 if key == "down" else -1)) % len(SHUTTER)
+        elif key == "enter":
+            if self.option in self.refuse:
+                self.where = "notice"
+            else:
+                self.where, self.saved = "row", self.option
+        elif key == "menu":
+            self.where = "row"
+        self.shoot(key)
+
+
+def list_world(monkeypatch, cam, help_text="Gives priority to the flash sync speed. This function is currently disabled."):
+    import contextlib
+    import io
+    import json
+
+    import drive as D
+    import help_run
+    import prove_run as P
+    from camkit import ocr as O
+    from camkit.ocr import Line
+    from camkit.runs import Run
+    from proving import greyed
+    guides = []
+
+    def guide(c, label):
+        guides.append(label)
+        c.keys.append("c4")
+        c.shoot("guide")
+        return {"text": help_text, "frames": [c.frame.path.name]}
+    monkeypatch.setattr(help_run, "guide", guide)
+    monkeypatch.setattr(D, "help_refused", lambda kind, image: "")
+    monkeypatch.setattr(greyed, "drawn_grey", lambda c: (c.option in cam.grey, 120.0) if c.read().kind == "list"
+                        else (None, None))
+    monkeypatch.setattr(greyed, "REASONS", {})
+    monkeypatch.setattr(greyed, "LABELS", {"Shutter Type", "Flash Mode"})
+    for name, value in (("place", lambda c: "here"), ("same_place", lambda a, b: True), ("to_row", lambda *a: None),
+                        ("which_option", lambda c, job: c.option), ("vlm_option", lambda c: SHUTTER[c.option]),
+                        ("bar_text", lambda c: SHUTTER[c.option]), ("after_download", lambda c, done: None),
+                        ("finish_attempt", lambda *a, **k: None)):
+        monkeypatch.setattr(P, name, value)
+    monkeypatch.setattr(O, "read", lambda frames, eng=None: {f: [Line(SYNC_REFUSAL, 0.9, 0, 0, 10, 10)]
+                                                            if cam.where == "notice" else [] for f in frames})
+    monkeypatch.setattr(P.camset, "read", lambda p: SimpleNamespace())
+    monkeypatch.setattr(P.camset, "diff", lambda a, b: [])
+    out, said = io.StringIO(), io.StringIO()
+    with contextlib.redirect_stdout(said):
+        P.prove_row(cam, SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")), Run("pass2", root=Path(".")),
+                    {"path": ["Flash Sync Spd. Prty."], "kind": "list", "labels": SHUTTER}, Path("base.DAT"), out)
+    return [json.loads(x) for x in out.getvalue().splitlines()], said.getvalue(), guides
+
+
+def test_the_list_prover_reads_the_reason_of_its_rows_first_grey_option_once(monkeypatch, tmp_path):
+    """prove_row: On drawn grey, Help names no reason, the row's one Enter reads Shutter Type from the notice; the line
+    says not applied, greyed as drawn, entered for its reason, no diff; Off and the put-back Auto proved as before."""
+    monkeypatch.chdir(tmp_path)
+    cam = ListCam(grey=(1,), refuse=(1,), saved=0)
+    lines, said, guides = list_world(monkeypatch, cam)
+    on = by_label(lines)["On"]
+    assert (on["applied"], on["changes"], on["greyed"], on["entered"], on["blocker"]) == (
+        False, [], "drawn", "for its reason", {"row": "Shutter Type"})
+    assert guides == ["Flash Sync Spd. Prty.: On"] and cam.keys.count("enter") == 3
+    assert "entered once to read why: ['On']; blocked by Shutter Type (the camera's notice on 'On'" in said
+
+
+def test_the_list_prover_presses_nothing_on_a_grey_option_once_its_rows_reason_is_known(monkeypatch, tmp_path):
+    from proving import greyed
+    monkeypatch.chdir(tmp_path)
+    cam = ListCam(grey=(1,), refuse=(1,), saved=0)
+    lines, said, guides = list_world(monkeypatch, cam)
+    kept = dict(greyed.REASONS)
+    cam2 = ListCam(grey=(1,), refuse=(1,), saved=0)
+    import contextlib
+    import io
+    import json
+
+    import prove_run as P
+    from camkit.runs import Run
+    monkeypatch.setattr(greyed, "REASONS", kept)
+    out = io.StringIO()
+    with contextlib.redirect_stdout(io.StringIO()):
+        P.prove_row(cam2, SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")), Run("pass2", root=Path(".")),
+                    {"path": ["Flash Sync Spd. Prty."], "kind": "list", "labels": SHUTTER}, Path("base.DAT"), out)
+    on = by_label([json.loads(x) for x in out.getvalue().splitlines()])["On"]
+    assert on["greyed"] == "drawn" and on["dat"] is None and "entered" not in on and on["blocker"] == {"row": "Shutter Type"}
+    assert cam2.keys.count("enter") == 2 and "c4" not in cam2.keys
+
+
+def test_a_refused_line_carries_no_diff_that_is_another_options(monkeypatch):
+    """Movie mode, PP10, Gamma Movie (kit2_pass2 9010-9011, 8459-8460): BT.2020 and 709 refused after S-Gamut3 applied;
+    their lines say not applied and carry no diff, though the record still differs from the row's base."""
+    cam = SideCam(grey=(), refuse=(3,), saved=0)
+    lines, said, guides = side_world(monkeypatch, cam)
+    got = by_label(lines)
+    assert got["Still"]["changes"] and got["709"]["applied"] is False and got["709"]["changes"] == []
+    assert "'709'                    not applied" in said
+
+
+# what the readers are fed: an old refused line carrying another option's diff (kit2_pass2 8459-8460's shape, its
+# record the row's own and one no setting covers, its readings agreeing), and a line of an option drawn grey that no key
+# was pressed on (proving.greyed.line)
+OLD_REFUSED = {"path": ["Bravo"], "kind": "list", "index": 1, "label": "On", "shown": "On", "vlm": "On",
+               "chosen_frame": "00010_down.png", "row_frame": "00012_menu.png", "dat": "00013_Bravo-1.DAT",
+               "base": "00001_base.DAT", "attempt": "A",
+               "notice": {"text": "This operation or setting not available as follows Alpha On • OK", "frame": "00011_enter.png"},
+               "changes": [{"key": "global:0x0101", "before": 0, "after": 1},
+                           {"key": "global:0x0202", "before": 0, "after": 7}], "applied": False}
+GREY_LINE = {"path": ["Bravo"], "kind": "list", "index": 0, "label": "Off", "shown": "Off", "vlm": "Off",
+             "chosen_frame": "00020_down.png", "row_frame": "00020_down.png", "dat": None, "base": "00001_base.DAT",
+             "attempt": "A", "changes": [], "notice": None, "applied": False, "greyed": "drawn",
+             "blocker": {"row": "Alpha"}, "reason": {"from": "notice", "frame": "00011_enter.png", "entry": "On"}}
+
+
+def test_the_ledger_never_credits_a_line_the_camera_did_not_apply(ledger_camera):
+    """Both lines leave the row and its options greyed in state, the blocker named (the notice's, else the line's own);
+    neither is a proof (valid, inferred or unchecked), a record changed, a choice with no change, nor an evidence bundle."""
+    import json
+
+    import test_coverage as T
+    hand = ledger_camera.data / f"hand_tables_{T.CAM}.json"           # Bravo not proved by hand here
+    hand.write_text(json.dumps({**json.loads(hand.read_text(encoding="utf-8")), "FRAME_PROOFS": {}}), encoding="utf-8")
+    T.write_proofs(ledger_camera, "kit2_pass2", [OLD_REFUSED, GREY_LINE], attempts=["A"])
+    led = T.ledger(validity=True)
+    e = T.row(led, "Bravo")
+    assert e["status"] == "greyed in state" and e["blocker"] == {"row": "Alpha"}
+    assert {o["key"]: o for o in led.options}["global:0x0101"]["values"] == {0: "greyed in state", 1: "greyed in state"}
+    assert {r["key"]: r for r in led.records}["global:0x0202"]["status"] == "unmapped, not examined"
+    assert led.proof_summary["proofs"] == 0 and not [b for b in led.bundles if b["path"] == ["Bravo"]]
+    assert not any(c["path"] == ["Bravo"] for c in led.proof_checks)
+
+
+def test_the_rows_look_after_a_prove_run_is_refused_where_nothing_applied_changed(tmp_path):
+    """camkit.coverage.ProveLooks: a row whose lines the camera refused or drew grey, beside a put-back that changed
+    nothing, is refused with its blocker, never tested with no record changes; a refused line's diff is never a record
+    the row changed; a row where an applied option changed a record is changed, as before."""
+    import json
+
+    from camkit import coverage
+    from conftest import TEST_CAMERA
+    run = SimpleNamespace(root=tmp_path / TEST_CAMERA, dir=tmp_path / TEST_CAMERA / "kit2_pass2")
+    run.dir.mkdir(parents=True)
+    proofs, fails = run.dir / "proofs.jsonl", run.dir / "failures.jsonl"
+    looks = coverage.ProveLooks(run, proofs, fails)
+    put_back = {**OLD_REFUSED, "index": 0, "label": "Off", "notice": None, "applied": True, "changes": []}
+    proofs.write_text("".join(json.dumps(x) + "\n" for x in (OLD_REFUSED, GREY_LINE, put_back)), encoding="utf-8")
+    looks.after({"path": ["Bravo"], "kind": "list"})
+    with open(proofs, "a", encoding="utf-8") as f:
+        f.write(json.dumps({**put_back, "label": "On", "changes": [{"key": "global:0x0101", "before": 0, "after": 1}]})
+                + "\n")
+    looks.after({"path": ["Bravo"], "kind": "list"})
+    got = [json.loads(x) for x in coverage.looks_file(TEST_CAMERA).read_text(encoding="utf-8").splitlines()][-2:]
+    assert (got[0]["result"], got[0]["blocker"], got[0]["records_changed"]) == ("refused", {"row": "Alpha"}, [])
+    assert got[1]["result"] == "changed" and got[1]["records_changed"] == ["global:0x0101"]
+
+
+def test_the_proof_viewer_shows_no_value_from_a_line_the_camera_did_not_apply(tmp_path, monkeypatch):
+    """kit/tools/proof_viewer.py: the old refused line's diff (another option's) and the grey line show as no value's
+    evidence; an applied line of the same record does, as before."""
+    import collections
+    import json
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import proof_viewer as pv
+    run = tmp_path / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    applied = {**OLD_REFUSED, "label": "Off", "applied": True, "notice": None,
+               "changes": [{"key": "global:0x0101", "before": 1, "after": 0}]}
+    (run / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (OLD_REFUSED, GREY_LINE, applied)),
+                                      encoding="utf-8")
+    monkeypatch.setattr(pv, "RUN_ROOT", tmp_path)
+    ev = collections.defaultdict(list)
+    pv.from_proofs(run, pv.Keys([{"key": "global:0x0101"}, {"key": "global:0x0202"}]), tmp_path / "_viewer", ev)
+    assert [(e["label"], e["v"]) for e in ev["global:0x0101"]] == [("Off", 0)] and not ev["global:0x0202"]
+
+
+def report_line(label, index, changes, **kw):
+    return {"path": ["Bravo"], "kind": "list", "index": index, "label": label, "shown": label, "vlm": label,
+            "chosen_frame": f"{index:05d}_c.png", "row_frame": f"{index:05d}_r.png", "dat": f"{10 + index:05d}_d.DAT",
+            "base": "00001_base.DAT", "attempt": "A", "notice": None, "applied": True, "changes": changes, **kw}
+
+
+def test_the_report_credits_no_line_the_camera_did_not_apply():
+    """kit/pass2_report.py: the option's applied proof stays its latest beside a later refused or grey line (rows_of);
+    neither is credited (credited, values_of, record_runs, record_allowances), and a number field's refusal, which says
+    what the camera kept, is credited as before."""
+    import pass2_report as R
+    on = report_line("On", 1, [{"key": "global:0x0101", "before": 0, "after": 1}], allowance="the owner allowed On")
+    refused = {**OLD_REFUSED, "allowance": "the owner allowed it"}
+    grey = {**GREY_LINE, "index": 1, "label": "On"}
+    rows = R.rows_of(None, [on, refused, grey])
+    assert rows["Bravo"][1] is on
+    assert not R.credited(refused) and not R.credited(grey) and R.credited(on)
+    assert R.credited({"kind": "fields", "applied": False, "kept": "10", "value": "11"})
+    vals = R.values_of({0: {**refused, "index": 0, "label": "Off"}, 1: on})
+    assert vals.get("global:0x0202") is None and "Off" not in (vals.get("global:0x0101") or {}), vals
+    assert R.record_allowances({0: refused, 1: on}, {"On": 1}, {}) == ["the owner allowed On"]
+    assert R.record_allowances({0: refused}, {"On": 1}, {}) == []
+
+
+def test_a_grey_line_is_no_step_of_the_carried_over_sequence():
+    """carried_over: A writes the two records, a grey option of the row is skipped, C keeps A's value of one record while
+    the other moves: C's kept value is carried over (not C's), as it is without the grey line between them."""
+    import pass2_report as R
+    a = report_line("A", 0, [{"key": "global:0x0101", "before": 0, "after": 1}, {"key": "global:0x0103", "before": 0,
+                                                                                 "after": 1}])
+    grey = {**GREY_LINE, "index": 1, "label": "B", "chosen_frame": "00011_c.png"}
+    c = report_line("C", 2, [{"key": "global:0x0101", "before": 0, "after": 1}, {"key": "global:0x0103", "before": 0,
+                                                                                 "after": 2}],
+                    chosen_frame="00012_c.png")
+    d = report_line("D", 3, [{"key": "global:0x0101", "before": 0, "after": 3}], chosen_frame="00013_c.png")
+    with_grey, without = R.carried_over([a, grey, c, d]), R.carried_over([a, c, d])
+    assert with_grey == without and [x["label"] for x in with_grey] == ["C"], with_grey
+
+
+def test_the_report_lists_what_was_not_applied_and_how():
+    import pass2_report as R
+    assert R.not_applied_entry(GREY_LINE) == {"label": "Off", "index": 0, "how": "greyed as drawn",
+                                              "blocker": {"row": "Alpha"}, "reason_from": "notice"}
+    tried = {**OLD_REFUSED, "greyed": "drawn", "entered": "for its reason", "changes": [], "blocker": {"row": "Alpha"},
+             "reason": {"from": "notice", "frame": "00011_enter.png", "entry": "On"}}
+    assert R.not_applied_entry(tried)["how"] == "entered for its reason"
+    assert R.not_applied_entry(OLD_REFUSED) == {"label": "On", "index": 1, "how": "refused"}
+    assert R.same_proof(GREY_LINE) is not None and R.same_proof({**GREY_LINE, "greyed": None}) is None
+
+
+def test_the_writer_reads_a_grey_lines_blocker_and_credits_no_refused_diff(tmp_path):
+    """kit/schema_update.py: the grey line's option is blocked with its row's blocker in the camera's own sentence (the
+    row alone, never a value); a refused line's diff names no record the row went through."""
+    import json
+
+    import schema_update as SU
+    (tmp_path / "proofs.jsonl").write_text(json.dumps(GREY_LINE) + "\n", encoding="utf-8")
+    assert SU.blocked(tmp_path)["Bravo"] == [("Off", "This operation or setting not available as follows Alpha")]
+    assert not SU.proved_rows([OLD_REFUSED]) and SU.proved_rows([report_line("On", 1, [{"key": "global:0x0101",
+                                                                                        "before": 0, "after": 1}])])
+
+
+def test_replay_counts_a_line_the_camera_did_not_apply_apart(tmp_path):
+    import json
+
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+    import replay_proofs
+    (tmp_path / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in (OLD_REFUSED, GREY_LINE)),
+                                           encoding="utf-8")
+    assert replay_proofs.replay(tmp_path) == ([], [], [], 2, 0)

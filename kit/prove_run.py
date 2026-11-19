@@ -17,6 +17,13 @@ A list that offers a single option (Rec Frame Rate under PAL with XAVC HS 8K) ca
 display proves it instead (prove_by_display), the option read by OCR and the vision model, nothing chosen, and the
 value its row's records hold in the download the proof starts from (a proof line with "proof": "display").
 
+An option the list or side list draws grey is never chosen (proving.greyed, 2026-11-19): the row's first one gets the
+camera's own Help through the kit's guarded Help (C4 where the footer draws the help button, its In-Camera Guide, OK),
+and where that names no reason, one Enter to read the camera's notice, said as such (--never-enter-grey: none); the
+others get no key and are written greyed as drawn, not applied, no download, no diff, with that reason. A refused
+option's line carries no diff ("changes": []): what still differs from the row's base is another option's. The run
+says, option by option, what was applied, what was greyed as drawn and where the reason came from.
+
 Fails closed: any screen the proof did not expect (a warning, a confirmation) is cancelled with
 MENU, never OK. The row is logged in failures.jsonl and skipped on later runs (--retry-failed);
 if anything differs from the start file, the start file is uploaded and the restore checked, and
@@ -108,6 +115,7 @@ from runner import add_info_ok_argument, definition, info_ok_or_exit, row_labels
 # proving.sidelists.SPREAD); the tests point proving.base's and proving.tables' places at their own files
 import proving.base  # noqa: E402
 import proving.checklists  # noqa: E402
+from proving import greyed  # noqa: E402
 import proving.jobs  # noqa: E402
 import proving.sidelists  # noqa: E402
 import proving.tables  # noqa: E402,F401
@@ -224,6 +232,7 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             print(message, flush=True)
     keys = set()                        # a network row's: the records its proofs changed, said by key after the loop
     last, prev = base_path, c
+    applied_k, greyed_k, tried_k = [], [], []       # what the run says of the row at its end (proving.greyed)
     for step, k in enumerate(order):
         if step > 0:
             to_row(cam, path, top, row_place)
@@ -252,7 +261,28 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if network_row:         # inside a network row only the map's own option names are kept (KEPT)
                 now = kept_option(now, labels)
             return frame, seen, now
-        chosen, seen_vlm, shown = enter_chosen(cam, chosen_now(), chosen_now)
+        # an option the list draws grey is never chosen (proving.greyed): the row's first one, the camera's Help on it,
+        # then, where Help names no reason, its one Enter to read the notice; the others no key at all. Not inside a
+        # network row, whose screens take no key but its own (camkit.live)
+        evidence = chosen_now()                 # the cursor on option k, checked before anything is pressed on it
+        what = greyed.ENTER if network_row else greyed.judge(
+            cam, name, labels[k], k, c, lambda k=k: cam.read().kind == kind and which_option(cam, job) == k, say=tell)
+        if what == greyed.TRY:
+            evidence = chosen_now()             # after the camera's Help on it: the option on the frame the Enter is on
+        if what == greyed.SKIP:
+            frame, seen, now = evidence
+            reason = greyed.REASONS.get(name)
+            rec = greyed.line({"path": path, "kind": kind, "index": k, "label": labels[k], "shown": now,
+                               "chosen_frame": frame, "vlm": None, "base": base_path.name, "attempt": attempt}, reason)
+            rec["vlm"] = settled(seen)
+            out.write(json.dumps(rec) + "\n")
+            out.flush()
+            tell(f"   {labels[k]!r:24s} greyed as drawn, never entered"
+                 + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else ""))
+            greyed_k.append(k)
+            greyed.leave(cam, name)
+            continue
+        chosen, seen_vlm, shown = enter_chosen(cam, evidence, chosen_now)
         if network_row:
             print(f"   proof {step + 1} of {len(order)}", flush=True)
         # the screen after OK (proving.commit.after_ok): a refusal ("not available as follows <blocker>": Flash Mode =
@@ -271,6 +301,7 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                                                                   KEPT["labels"], KEPT["values"], (), KEPT["by_row"]))
                        if network_row else None)
         notice, refused = got.notice, got.refused
+        reason = greyed.tried(name, labels[k], notice, not refused, say=tell) if what == greyed.TRY else None
         back = cam.frame.path.name                     # the row showing its new value (or the notice)
         dat = link.download(f"{path[-1]}-{k}")
         done = time.monotonic()
@@ -278,13 +309,21 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         history.append({ch.key: ch.after for ch in changes})
         rec = {"path": path, "kind": kind, "index": k, "label": labels[k], "shown": shown, "chosen_frame": chosen, "vlm": None,
                "row_frame": back, "dat": dat.name, "base": base_path.name,
-               "changes": changes_of(changes),
+               # a refused choice changed nothing of its own: what differs from the base is another option's
+               "changes": [] if refused else changes_of(changes),
                "notice": notice, "applied": not refused, "attempt": attempt,
+               **({"greyed": "drawn", "entered": "for its reason", **(reason.kept() if reason else {})}
+                  if what == greyed.TRY and refused else {}),
                # the class a network decision lifted the row from: the tools that read the proof's frames later keep
                # no reader's text of an identity row's (kit/tools/reread_proofs.py, kit/tools/reader_census.py)
                **({"network": job.get("network_class") or safety.LIFT_IDENTITY} if network_row else {})}
-        brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
-        tell(f"   {labels[k]!r:24s} {brief}{' ...' if len(changes) > 6 else ''}")
+        if what == greyed.TRY and refused:
+            tried_k.append(k)
+        elif not refused:
+            applied_k.append(k)
+        brief = ("not applied" if refused else
+                 ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change")
+        tell(f"   {labels[k]!r:24s} {brief}{' ...' if len(changes) > 6 and not refused else ''}")
         keys |= {ch.key for ch in changes}
         last, prev = dat, (cur if refused else k)
         try:
@@ -300,6 +339,11 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if put_back is None:
                 raise Failed(f"{name}: back on the saved value, {len(changes)} records still differ from the start")
             say_put_back(name, put_back)
+    if greyed_k or tried_k:
+        reason = greyed.REASONS.get(name)
+        tell(f"{name}: applied {[labels[k] for k in applied_k]}; greyed as drawn, never entered "
+             f"{[labels[k] for k in greyed_k]}; entered once to read why: {[labels[k] for k in tried_k]}"
+             + (f"; {reason.said()}" if isinstance(reason, greyed.Reason) else ""))
     finish_attempt(run, attempt, name, put_back)
     if network_row:
         # the options in their own order and the records by key alone, never which changed what; then the session's
@@ -944,7 +988,12 @@ def main():
                          "proofs through the SDK's OSD image, HDMI read again after the row; osd-all: the same rows "
                          "with the whole run through the OSD (an OSD page scan and map, no --start), for when the "
                          "capture may not come back between rows, and for another mode's rows")
+    ap.add_argument("--never-enter-grey", action="store_true",
+                    help="no Enter on a list's or side list's option drawn grey, ever: each is recorded greyed as drawn "
+                         "with what the camera's Help on the row's first one said, or no reason (by default that first "
+                         "one takes one Enter to read the camera's notice where Help names no reason: proving.greyed)")
     a = ap.parse_args()
+    greyed.NEVER_ENTER = a.never_enter_grey
     if a.allow and not a.rows:
         sys.exit("--allow opens a never-open row for the rows named with --rows only")
     if a.network and not a.rows:

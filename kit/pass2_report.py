@@ -554,12 +554,32 @@ def latest_run(came, main: str, main_date: str) -> tuple:
     return name, day
 
 
+def credited(o: dict) -> bool:
+    """Whether a proof line may be credited with what its option wrote: one the camera applied, or a number field's,
+    whose "applied": false says the value the camera kept ("kept"); never a line refused, nor one of an option drawn
+    grey that no key was pressed on (proving.greyed), whatever it carries."""
+    return o.get("applied") is not False or o.get("kind") == "fields"
+
+
+def not_applied_entry(o: dict) -> dict:
+    """What the report says of a line the camera did not apply: its option, how ("greyed as drawn": drawn grey, no key
+    pressed on it; "entered for its reason": the one Enter of its row on an option drawn grey, to read the camera's
+    notice; "refused"), the blocker its row's reason named (proving.greyed; a refused line's notice is in the entry's
+    "notices") and where that reason was read."""
+    how = ("entered for its reason" if o.get("entered") else "greyed as drawn") if o.get("greyed") == "drawn" \
+        else "refused"
+    b = o.get("blocker") if isinstance(o.get("blocker"), dict) else None
+    reason = o.get("reason") if isinstance(o.get("reason"), dict) else {}
+    return {"label": str(o.get("label")), "index": o.get("index"), "how": how, **({"blocker": b} if b else {}),
+            **({"reason_from": reason.get("from")} if reason.get("from") else {})}
+
+
 def record_runs(opts: dict, vals: dict, label_of: dict, main: str, root: Path) -> dict:
     """{run: the day of its latest proof} of the proofs a record's values come from (each proof's "run", qualified, with
     proof_day; the main run's proofs as {main: None}): the options credited with a label of `vals`, else every option of
     the row that applied."""
     labels = {str(lab) for lab in vals}
-    hit = [o for i, o in opts.items() if str(label_of.get(i, name_of(o)[0])) in labels]
+    hit = [o for i, o in opts.items() if str(label_of.get(i, name_of(o)[0])) in labels and credited(o)]
     out = {}
     for o in hit or [o for o in opts.values() if o.get("applied") is not False]:
         run, day = o.get("run") or main, proof_day(o, root) if o.get("run") else None
@@ -637,7 +657,7 @@ def record_allowances(opts: dict, vals: dict, label_of: dict) -> list:
     """The owner's allowances (a proof line's "allowance") of the proofs a record's values come from: the options
     credited with a label of `vals`, else every option of the row that applied (as record_runs picks them)."""
     labels = {str(lab) for lab in vals}
-    hit = [o for i, o in opts.items() if str(label_of.get(i, name_of(o)[0])) in labels]
+    hit = [o for i, o in opts.items() if str(label_of.get(i, name_of(o)[0])) in labels and credited(o)]
     return sorted({o["allowance"] for o in hit or [o for o in opts.values() if o.get("applied") is not False]
                    if o.get("allowance")})
 
@@ -652,8 +672,12 @@ def own_changes(r: dict) -> dict:
 
 def same_proof(r: dict) -> tuple | None:
     """What one proof is, whichever run folder it was read from: its run's files, row, option and label. A proof copied
-    into a second folder is counted once (report_proofs). None for a proof that names no download."""
+    into a second folder is counted once (report_proofs). An option drawn grey that no key was pressed on (no download)
+    is one by its frame. None for any other proof that names no download."""
     if not r.get("dat"):
+        if r.get("greyed") == "drawn" and r.get("chosen_frame"):
+            return (r.get("run"), r["chosen_frame"], r.get("base"), row_name(r), json.dumps(r.get("index")),
+                    str(r.get("label")))
         return None
     return (r.get("run"), r["dat"], r.get("base"), row_name(r), json.dumps(r.get("index")), str(r.get("label")))
 
@@ -1012,7 +1036,10 @@ def rows_of(run: Path, proofs: list | None = None, skip: set = frozenset()) -> d
         if i in skip:
             continue
         opts = rows[row_name(r)]
-        opts[option_key(r, opts)] = r
+        k = option_key(r, opts)
+        if r.get("applied") is False and r.get("kind") != "fields" and k in opts and opts[k].get("applied") is not False:
+            continue        # refused or drawn grey later: the option's proof the camera applied stays its latest
+        opts[k] = r
     return rows
 
 
@@ -1077,14 +1104,17 @@ def carried_over(proofs: list, skip: set = frozenset()) -> list:
     the camera left that record as it was (ISO AUTO Maximum following Minimum, a hold's speed kept under a bracket,
     the format flag 0x16ae kept from an HD format by the next one): the value is not this option's, and is not
     credited to its label. A record every option of the attempt leaves at one value is the row's own, never carried."""
+    # a line the camera did not apply (refused, or an option drawn grey never tried) is no step of the sequence: its
+    # diff is none (or, on an older line, another option's), so the next option's kept value would pass for its own
     groups = collections.defaultdict(list)
     for i, r in enumerate(proofs):
-        if i in skip or r.get("kind") not in ("list", "dialog", "sidelist", "table") or r.get("proof") == "display":
+        if i in skip or r.get("applied") is False or r.get("kind") not in ("list", "dialog", "sidelist", "table") \
+                or r.get("proof") == "display":
             continue
         groups[(row_name(r), r.get("attempt") or r.get("base"))].append(r)
     by_base = collections.defaultdict(list)          # every counted proof of a row, by its row without context or
     for i, r in enumerate(proofs):                    # option (a carousel option's axis proofs choose it too)
-        if i not in skip and r.get("changes"):
+        if i not in skip and r.get("changes") and r.get("applied") is not False:
             by_base[base_row(row_name(r))].append(r)
     out = []
     for (row, _), rs in groups.items():
@@ -1530,7 +1560,10 @@ def values_of(opts: dict, elsewhere: frozenset = frozenset(), names: dict | None
     # option among all of them there, credited from that line as a whole walk's own start is; left out, it would be
     # the slot's one value named from elsewhere among values its readers named (decision 16)
     whole_table = whole_but_start(opts)
-    opts = {i: {**o, "changes": [c for c in element_changes(o) if c["key"] not in side_kept(o)]} for i, o in opts.items()}
+    # a line the camera did not apply wrote nothing (an older refused line's diff is another option's); a number field
+    # refused says what the camera kept, its own diff
+    opts = {i: {**o, "changes": [] if o.get("applied") is False and o["kind"] != "fields" else
+                [c for c in element_changes(o) if c["key"] not in side_kept(o)]} for i, o in opts.items()}
     screens = screen_records(opts, carried | kept_over)
     if screens:
         opts = {i: {**o, "changes": [c for c in o["changes"] if c["key"] not in screens]} for i, o in opts.items()}
@@ -1717,7 +1750,10 @@ def start_lines(opts: dict) -> frozenset:
         return frozenset()
     sessions = collections.defaultdict(list)
     for i, o in opts.items():
-        sessions[o.get("base")].append((dat_number(o.get("dat")), i))
+        # the camera's own value is shown by a line it applied, with a download: never an option drawn grey (no
+        # download) nor one it refused
+        if o.get("dat") and o.get("applied") is not False:
+            sessions[o.get("base")].append((dat_number(o.get("dat")), i))
     return frozenset(x for lines in sessions.values() for x in (min(lines)[1], max(lines)[1]))
 
 
@@ -1838,8 +1874,12 @@ def main():
         # the kinds of proof the row holds (list, axis, wbgrid...): the writer takes a grid's records as sampled scales
         from_start = sampled_from_start(opts)
         samples += from_start
-        entry = {"row": name, "options": len(opts), "kinds": sorted({o["kind"] for o in opts.values()}), "records": {},
-                 "notices": notices}
+        # the options proved: a line the camera refused, or an option drawn grey never tried, is none (credited); they
+        # are listed apart, greyed or refused, with what named the blocker
+        not_applied = [o for o in opts.values() if not credited(o)]
+        entry = {"row": name, "options": len(opts) - len(not_applied), "kinds": sorted({o["kind"] for o in opts.values()}),
+                 "records": {}, "notices": notices,
+                 **({"not_applied": [not_applied_entry(o) for o in not_applied]} if not_applied else {})}
         if name in UNWALKED_CELLS:
             entry["cell_name"] = f"its own reading, with its place: {UNWALKED_CELLS[name]}"
         boxes = box_row(opts)
@@ -1898,7 +1938,8 @@ def main():
             if from_start:
                 entry["records"][key]["sampled_from_start"] = True     # a count in the definition, never these values
                 # how many proofs: the lines that chose an option for its own sake, never a put-back ("planned": false)
-                entry["records"][key]["sample_proofs"] = sum(1 for o in opts.values() if o.get("planned") is not False)
+                entry["records"][key]["sample_proofs"] = sum(1 for o in opts.values() if o.get("planned") is not False
+                                                             and credited(o))
             if held_back.get(key):
                 # what a start line would have credited (start_lines), for a person reading this report: the writer
                 # keeps none of these values from an older definition unless a line proves it
@@ -1972,7 +2013,9 @@ def main():
             print(f"\n{verdict} ({counts[verdict]}):")
             print("\n".join(lines))
     for e in report:
-        if not e["records"]:
+        if not e["records"] and not e["options"] and e.get("not_applied"):
+            print(f"\nnothing applied: {e['row']} (every option refused or greyed: {len(e['not_applied'])})")
+        elif not e["records"]:
             print(f"\nchanged nothing: {e['row']} ({e['options']} options)")
     mixed = [(e["row"], k, n) for e in report for k, r in e["records"].items() for n in r["notes"]
              if n["kind"] == "not one to one"]
@@ -2008,6 +2051,12 @@ def main():
         for o in opts.values():
             if o.get("applied") is False and o["kind"] == "fields":
                 print(f"\nrefused: {name} = {o['value']!r}; the camera kept {o['kept']!r} (a limit)")
+            elif o.get("applied") is False and o.get("greyed") == "drawn":
+                x = not_applied_entry(o)
+                b = x.get("blocker") or {}
+                print(f"\n{x['how']}: {name} = {o['label']!r}"
+                      + (f"; blocked by {b.get('row') or b.get('equipment') or 'a remote session'}" if b else "")
+                      + (f" (read from the camera's {x['reason_from']})" if x.get("reason_from") else "; no reason read"))
             elif o.get("applied") is False:
                 why = re.sub(r"\s+", " ", (o.get("notice") or {}).get("text") or "")
                 print(f"\nrefused: {name} = {o['label']!r}: {why[:120]!r}")

@@ -261,6 +261,12 @@ def blocked(run: Path) -> dict:
         if r.get("applied") is False and not str(r.get("via") or "").startswith("SDK "):
             why = re.sub(r"\s+", " ", (r.get("notice") or {}).get("text") or "").replace(" •OK", "").strip()
             why = plain_reason(why)
+            b = r.get("blocker") if isinstance(r.get("blocker"), dict) else {}
+            if not why and isinstance(b.get("row") or b.get("equipment"), str):
+                # an option drawn grey that no key was pressed on (proving.greyed): its row's blocker in the camera's
+                # own sentence, the blocking row alone (never a value), or the equipment it wants
+                why = (f"This operation or setting not available as follows {b['row']}" if isinstance(b.get("row"), str)
+                       else f"Needs {b['equipment']}")
             out[row].append((clean(r["label"]), why))
     return out
 
@@ -736,6 +742,8 @@ def proved_rows(proofs) -> dict:
     counted ones (attach_help, and kit/tools/proof_viewer.py by counted_proofs)."""
     went = collections.defaultdict(set)
     for r in proofs:
+        if r.get("applied") is False and r.get("kind") != "fields":
+            continue            # the camera did not apply it: an older refused line's diff is another option's
         for c in r.get("changes") or []:
             went[c["key"]].add(row_name(r))
     return went

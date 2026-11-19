@@ -23,7 +23,8 @@ names when it stored no change (its before is the
 download before that registration, which the prover may not have named as the base: framepos_run.py's zone sweep
 diffed each place against the place before and, until 2026-11-09, named the sweep's first download as every place's
 base). A proof whose files are gone is listed as missing; a proof that names no files (a held value, a
-display proof) is counted apart. The main run (kit2_pass2) is replayed with the camera's other proof runs, the ones its
+display proof, an option drawn grey never tried) is counted apart, and so is a line the camera did not apply ("applied":
+false, a number field's aside), which stores no diff of its own. The main run (kit2_pass2) is replayed with the camera's other proof runs, the ones its
 report reads (pass2_report.proof_runs), each run's summary on its own line; --alone replays the one run. Exit status 1
 when any proof differs or a file is missing, else 0.
 
@@ -85,7 +86,10 @@ def replay(run: Path, limit: int = None):
         if p.get("base") and p.get("dat"):
             together[(p.get("run"), p.get("diffed_with") or p["base"], p["dat"])].update(as_map(p.get("changes") or []))
     for p in lines:
-        if not p.get("base") or not p.get("dat"):
+        if not p.get("base") or not p.get("dat") or (p.get("applied") is False and p.get("kind") != "fields"
+                                                       and p.get("kind") != "registration mirror"):
+            # also a line the camera did not apply (refused, or an option drawn grey never tried: no download): it
+            # stores no diff of its own, where today's diff against its base holds another option's records
             unfiled += 1
             continue
         base = p.get("diffed_with") or p["base"]       # a proof diffed against another download says which
@@ -172,7 +176,7 @@ def replay_one(run: Path, a) -> int:
         print("records most often involved: " + ", ".join(f"{k} ({n})" for k, n in by_key.most_common(10)))
     print(f"{paths.shown(run)}: {checked} proofs diffed again, {checked - len(differing) - len(shared)} the same, "
           f"{len(shared)} sharing a download with other proofs, {len(differing)} differ, {len(missing)} with a file "
-          f"missing, {unfiled} name no files")
+          f"missing, {unfiled} name no files or were not applied")
     return 1 if differing or missing else 0
 
 

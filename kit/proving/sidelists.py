@@ -14,6 +14,7 @@ from camkit import camset, ocr, safety, screen
 from camkit.frames import load
 from runner import changes_of
 
+from . import greyed
 from .base import Failed, frame_file
 from .nav import after_download, move_to, to_row
 from .screens import later, option_key, place, refuse_or_fail, same_place, settled, vlm_option
@@ -215,7 +216,8 @@ def by_neighbours(cam, vals: list, hits: list) -> list:
 
 def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     """A PP side list: its sampled values (or every value, for text), then back to the value it opened
-    on. Its own base is downloaded first: opening the PP1 panel committed PP1 as the Picture Profile."""
+    on. Its own base is downloaded first: opening the PP1 panel committed PP1 as the Picture Profile. A value the list
+    draws grey is never chosen (proving.greyed), and a refused value's line carries no diff."""
     path, name, vals = job["path"], " > ".join(job["path"]), job["values"]
     n = len(vals)
     row_place = place(cam)
@@ -224,6 +226,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
     to_row(cam, path, top, row_place)
     base = camset.read(base_path)
     last, order, c, prev = base_path, None, None, None
+    applied_k, greyed_k, tried_k = [], [], []       # what the run says of the row at its end (proving.greyed)
     while True:
         if order is not None:
             to_row(cam, path, top, row_place)
@@ -238,7 +241,7 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         if cur is None:
             raise Failed(f"{name}: could not tell which value the side list opened on ({side_text(cam)!r})")
         if order is None:
-            c = cur
+            c = prev = cur                  # the value the side list opened on: what a grey option's MENU leaves it on
             plan = job["plan"]
             if SPREAD and len(plan) > 3:                    # a long text list: its first, middle and last
                 plan = sorted({0, len(vals) // 2, len(vals) - 1})
@@ -250,6 +253,22 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, "sidelist")
         if side_index(cam, job) != k:
             raise Failed(f"{name}: the cursor is not on {vals[k]!r} ({side_text(cam)!r})")
+        # an option the side list draws grey is never chosen (proving.greyed): the row's first one, the camera's Help on
+        # it, then, where Help names no reason, its one Enter to read the notice; the others no key at all
+        what = greyed.judge(cam, name, vals[k], k, c,
+                            lambda k=k: cam.read().kind == "sidelist" and side_index(cam, job) == k)
+        if what == greyed.SKIP:
+            reason = greyed.REASONS.get(name)
+            rec = greyed.line({"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": side_text(cam),
+                               "chosen_frame": cam.frame.path.name, "vlm": settled(later(vlm_option, cam)),
+                               "base": base_path.name, "sampled": job["plan"] != list(range(n))}, reason)
+            out.write(json.dumps(rec) + "\n")
+            out.flush()
+            print(f"   {vals[k]!r:24s} greyed as drawn, never entered"
+                  + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else ""), flush=True)
+            greyed_k.append(k)
+            greyed.leave(cam, name)
+            continue
         chosen, shown, seen_vlm = cam.frame.path.name, side_text(cam), later(vlm_option, cam)
         cam.press("enter")
         s = cam.read()
@@ -266,22 +285,36 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             cam.press("menu")
         elif not same_place(place(cam), row_place):
             raise Failed(f"{name}: after OK the screen is {s.kind} ({cam.frame.path.name}), not the row")
+        reason = greyed.tried(name, vals[k], notice, not refused) if what == greyed.TRY else None
         dat = link.download(f"{path[-1]}-{k}")
         done = time.monotonic()
         changes = camset.diff(base, camset.read(dat))
         rec = {"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": shown, "chosen_frame": chosen, "vlm": settled(seen_vlm),
                "row_frame": cam.frame.path.name, "dat": dat.name, "base": base_path.name, "notice": notice,
-               "changes": changes_of(changes),
-               "sampled": job["plan"] != list(range(n)), "applied": not refused}
+               # a refused choice changed nothing of its own: what differs from the base is another option's
+               "changes": [] if refused else changes_of(changes),
+               "sampled": job["plan"] != list(range(n)), "applied": not refused,
+               **({"greyed": "drawn", "entered": "for its reason", **(reason.kept() if reason else {})}
+                  if what == greyed.TRY and refused else {})}
         out.write(json.dumps(rec) + "\n")
         out.flush()
-        brief = ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change"
-        print(f"   {vals[k]!r:24s} {brief}{' ...' if len(changes) > 6 else ''}", flush=True)
+        brief = ("not applied" if refused else
+                 ", ".join(f"{ch.key} {ch.before!r}->{ch.after!r}" for ch in changes[:6]) or "no change")
+        print(f"   {vals[k]!r:24s} {brief}{' ...' if len(changes) > 6 and not refused else ''}", flush=True)
+        if what == greyed.TRY and refused:
+            tried_k.append(k)
+        elif not refused:
+            applied_k.append(k)
         last, prev = dat, (cur if refused else k)
         after_download(cam, done)
         if k == c:
             if changes:
                 raise Failed(f"{name}: back on its value, {len(changes)} records still differ")
             break
+    if greyed_k or tried_k:
+        reason = greyed.REASONS.get(name)
+        print(f"{name}: applied {[vals[k] for k in applied_k]}; greyed as drawn, never entered "
+              f"{[vals[k] for k in greyed_k]}; entered once to read why: {[vals[k] for k in tried_k]}"
+              + (f"; {reason.said()}" if isinstance(reason, greyed.Reason) else ""), flush=True)
     to_row(cam, path, top, row_place)
     return last

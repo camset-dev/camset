@@ -1192,6 +1192,18 @@ def blocker_of(text, labels) -> dict | None:
     return {"remote": REMOTE} if safety.NOTICE_REMOTE.search(t) else None
 
 
+def proof_blocker(p: dict, labels) -> dict | None:
+    """The blocker of a proof line the camera did not apply: its notice's (blocker_of), else the one the line carries
+    (an option drawn grey that no key was pressed on: proving.greyed), as blocker_of gives one: a row, equipment or a
+    remote session, each a text."""
+    n = p.get("notice") if isinstance(p.get("notice"), dict) else {}
+    b = blocker_of(n.get("text") or n.get("notice"), labels)
+    if b is None and isinstance(p.get("blocker"), dict):
+        b = {k: v for k, v in p["blocker"].items() if k in ("row", "equipment", "remote") and isinstance(v, str)
+             and v.strip()} or None
+    return b
+
+
 def info_fields(lk: dict, vocab: Vocab, public: bool = False) -> list:
     """The field names that make a look one of an information screen, or [] for a look that is none: a look that opened
     the row (did "open") and changed nothing, on a screen of a classified read-only kind (INFO_KINDS: never "unknown",
@@ -1429,7 +1441,9 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
         path = p.get("path") or []
         es = led.find(path)
         cite = {"proof": line, "run": run}
-        changes = [c for c in p.get("changes") or [] if isinstance(c, dict)]
+        # a line the camera refused, or one never tried (an option drawn grey), is never credited, whatever it carries: an
+        # older refused line's diff is another option's, the record still differing from the row's base
+        changes = [c for c in p.get("changes") or [] if isinstance(c, dict)] if p.get("applied") is not False else []
         keys = {record_base(c.get("key")) for c in changes} - volatile - {None}
         for k in keys - covered:
             f.changed_records.setdefault(k, []).append(cite)
@@ -1438,7 +1452,9 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
         e = es[0]
         label = p.get("label")
         if p.get("applied") is False:
-            b = blocker_of((p.get("notice") or {}).get("text") or (p.get("notice") or {}).get("notice"), labels)
+            # the camera's notice names the blocker; an option drawn grey that no key was pressed on carries the row's
+            # (proving.greyed: from the camera's Help or the one notice its row was entered for)
+            b = proof_blocker(p, labels)
             f.row(e, "proof_refused", {**cite, "blocker": b, "option": label})
             if isinstance(label, str):
                 _option_fact(f, led, e, by_key, label, "greyed", {**cite, "blocker": b})
@@ -1510,7 +1526,7 @@ def _closing_proofs(src: Sources) -> set:
     last = {}
     for run, line, p in src.proofs:
         a = p.get("attempt")
-        if a:
+        if a and p.get("applied") is not False:         # the put-back is a choice the camera applied, never a refusal
             last[a] = (run, line, p)
     out = {(run, line) for run, line, p in last.values() if unchanged(p)}
     group, at = None, None
@@ -2252,13 +2268,14 @@ def _validity(led: Ledger, by_key: dict, src: Sources) -> None:
     """Each proof checked by PROOF_VALIDITY from what proofs.jsonl holds: "valid", "inferred" (the saved option chosen
     again, an attempt's last, changing nothing: its value is the start file's) or "unchecked" naming the conditions
     missing; per (row, context, option) the first valid proof is its evidence bundle, and every proof beside it a
-    repeat."""
+    repeat. A line the camera did not apply ("applied": false: refused, or an option drawn grey never tried) is no
+    proof, whatever it carries (an older refused line's diff is another option's)."""
     volatile = _volatile(src)
     closing = _closing_proofs(src)
     groups = {}
     checked = []
     for run, line, p in src.proofs:
-        if not isinstance(p.get("path"), list):
+        if not isinstance(p.get("path"), list) or p.get("applied") is False:
             continue
         path = p["path"]
         changes = [c for c in p.get("changes") or [] if isinstance(c, dict)]
@@ -3338,8 +3355,12 @@ class ProveLooks:
             proofs, fails = self._new(self.proofs), self._new(self.fails)
             if not proofs and not fails:
                 return
-            changed = sorted({c.get("key") for p in proofs for c in p.get("changes") or [] if isinstance(c, dict)
+            # only a line the camera applied tells what the row changed: a refused or a grey option's line never counts
+            # (an older refused line's diff is another option's)
+            applied = [p for p in proofs if p.get("applied") is not False]
+            changed = sorted({c.get("key") for p in applied for c in p.get("changes") or [] if isinstance(c, dict)
                               and RECORD_KEY.match(str(c.get("key")))})
+            refused = [p for p in proofs if p.get("applied") is False]
             blocked = next((f for f in fails if f.get("blocked")), None)
             note = None
             if blocked:
@@ -3348,6 +3369,12 @@ class ProveLooks:
                 why = fails[-1].get("why")
                 result = "kit_failed" if KIT_DETERMINISTIC.match(str(why or "")) else "not_reached"
                 blocker, msg = None, kit_words(why)
+            elif refused and not changed:
+                # nothing applied changed anything, and the camera refused or greyed options: the row was not tested
+                # (what applied may be the put-back alone), it was refused, its blocker the first one named
+                labels = _label_set(self.camera)
+                result, msg = "refused", None
+                blocker = next((b for b in (proof_blocker(p, labels) for p in refused) if b), None)
             else:
                 result, blocker, msg = ("changed" if changed else "no_change"), None, None
             if self.context and result in ("changed", "no_change"):

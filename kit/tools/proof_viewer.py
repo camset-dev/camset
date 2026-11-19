@@ -234,7 +234,9 @@ def from_proofs(run: Path, keys: Keys, here: Path, ev):
     if (run / "report.json").exists():
         report = {r["row"]: r["records"] for r in json.loads((run / "report.json").read_text(encoding="utf-8"))}
     for r in read_log(run / "proofs.jsonl"):
-        if not r.get("path"):
+        # a line the camera did not apply (refused, or an option drawn grey never tried) is no value's evidence: an
+        # older refused line's diff is another option's, and its frames show the option refused, never written
+        if not r.get("path") or r.get("applied") is False:
             continue
         row = row_name(r)
         # in the order a person reads them (2026-11-06, the owner: a picture "with JPEG selected"): after OK first,

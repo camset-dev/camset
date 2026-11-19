@@ -133,7 +133,9 @@ def moved_by(root: Path, keys: set) -> dict:
     seen = collections.defaultdict(collections.Counter)
     for f in sorted(Path(root).glob("*/proofs.jsonl")):
         for r in jsonl.read(f):
-            hit = {c.get("key") for c in r.get("changes") or [] if isinstance(c, dict)}
+            # a line the camera did not apply moved nothing (an older refused line's diff is another option's)
+            hit = {c.get("key") for c in r.get("changes") or [] if isinstance(c, dict)} \
+                if r.get("applied") is not False or r.get("kind") == "fields" else set()
             hit |= {k for k in r.get("side_effects") or [] if isinstance(k, str)}
             row = " > ".join(str(x) for x in r.get("path") or [])
             for k in hit & keys:

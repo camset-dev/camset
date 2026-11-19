@@ -766,7 +766,7 @@ def row_systems(report: list, proofs: list, run_root: Path, run: Path) -> dict:
     rows = {e["row"] for e in report if set(e["records"]) & named}
     files = {}
     for r in proofs:
-        if row_name(r) in rows:
+        if row_name(r) in rows and r.get("dat"):           # an option drawn grey that was never tried has no download
             files.setdefault(row_name(r), []).append(proof_file(run_root, run, r.get("dat")))
     out, seen = {}, {}
     for row in sorted(rows):

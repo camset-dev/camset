@@ -116,6 +116,37 @@ def pass_note(cam, row: str, lit_before: str, words: bool = True) -> dict:
     return {"row": row, "frame": frame, "by": "a lone OK after MENU was refused"}
 
 
+# An option drawn grey (the camera's own greyed state: Color Mode's entries with Gamma on HLG, 2026-11-19), told as
+# camkit.screen._page_rows tells a greyed menu row: the 95th percentile of the text's pixels (grey above GREY_INK, not
+# orange) on the option's own line, ~120 on a greyed entry and ~225 on a white one, the lit bar's included (kit2_pass2
+# 260193-260368: 118-134 grey, 225-245 white); within GREY_TELL of GREY_LINE either way, or with fewer than GREY_MIN
+# such pixels, it cannot be told
+GREY_INK, GREY_LINE, GREY_TELL, GREY_MIN = 60, 170, 20, 150
+OPTION_X = {"list": BAR_X["list"], "sidelist": (305, 595)}      # an option's text, beside its radio or scroll bar
+
+
+def drawn_grey(cam) -> tuple:
+    """(whether the option under the cursor of a list or side list is drawn grey: True, False, or None where it cannot
+    be told; the measure, or None) on the screen on show, by GREY_LINE's rule on its lit bar's band (6 px in from
+    either edge); None on any other screen or without a bar."""
+    s = cam.read()
+    bar = getattr(s, "bar", None)
+    if getattr(s, "kind", None) not in OPTION_X or not bar or getattr(cam.frame, "image", None) is None:
+        return None, None
+    x0, x1 = OPTION_X[s.kind]
+    t, b = bar
+    g, o = screen._grey(cam.frame.image)[t + 6:b - 6, x0:x1], screen._orange(cam.frame.image)[t + 6:b - 6, x0:x1]
+    ink = g[(g > GREY_INK) & ~o]
+    if len(ink) < GREY_MIN:
+        return None, None
+    p = float(np.percentile(ink, 95))
+    if p <= GREY_LINE - GREY_TELL:
+        return True, p
+    if p >= GREY_LINE + GREY_TELL:
+        return False, p
+    return None, p
+
+
 def frame_lines(cam) -> list:
     """OCR's lines of the whole frame on show (a notice after OK: proving.commit reads it here)."""
     return ocr.read([cam.frame.path])[cam.frame.path]
