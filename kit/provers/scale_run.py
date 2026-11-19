@@ -34,7 +34,9 @@ two frames may be the reader's: open_row); the value is the number in the middle
 its "selected", or its "value" where "selected" holds no digit), one question a frame, and its answer counts only when
 it is a number (single digits on the volume scales: OCR read some and gave nothing for others, 2026-11-09); every
 proof line says which of the two read the value chosen ("read_by": "ocr" or "reader"). A frame neither reads a number
-on stops the row, naming the frame: two such frames in a row are never the number that stopped changing. A slider
+on stops the row, naming the frame: two such frames in a row are never the number that stopped changing. Nor is a
+number read on a frame that no longer reads as the screen the scale opened as (the pixel reader's kind, and whether a
+slider drawn over a picture): that stops the row before the next press, its screen closed (reading). A slider
 drawn over a picture (Aspect Marker Level with HDMI Info. Display Off: camkit.screen's picture_slider, 2026-11-19) is
 read by its marker instead, its place on the scale's own ticks and numbers, cross-checked with the number drawn where
 OCR reads it alone (picture_value). Where OCR reads that number otherwise (over the photograph it read the 12 as "92"
@@ -330,7 +332,32 @@ class Reading(NamedTuple):
     by_reader: bool
 
 
-def reading(cam, link, path) -> Reading:
+def reads_as(cam) -> tuple:
+    """How the screen on show reads: (the pixel reader's kind, whether it is a slider drawn over a picture: picture_of),
+    the screen a scale's walk must keep (reading)."""
+    return getattr(cam.read(), "kind", None), picture_of(cam) is not None
+
+
+def said_as(state) -> str:
+    kind, picture = state
+    return "a slider drawn over a picture" if picture else "a screen of no known kind" if kind == "unknown" else \
+        f"a {kind} screen"
+
+
+def reading(cam, link, path, opened=None) -> Reading:
+    """The number on the frame on screen (number()), its frame and who read it. With `opened` (reads_as on the frame the
+    row's scale opened on, ends and choose), the frame must still read as that screen before anything is read on it:
+    one that reads otherwise stops the row before any key more, its screen closed, the frame named, as a list's walk
+    stops where a step leaves the list (proving.nav.move_to). A scale that opens as no known kind (the volumes, a
+    panel's slider) is walked as one; Aspect Marker Level, opened as a slider over a picture, went on Left by OCR over
+    two frames the pixel reader called unknown (kit2_pass2 261808 and 261810, 2026-11-19)."""
+    if opened is not None:
+        now = reads_as(cam)
+        if now != opened:
+            frame = cam.frame.path.name
+            close_screen(cam, link)
+            raise Failed(f"{path[-1]}: the scale opened as {said_as(opened)}, but frame {frame} reads as "
+                         f"{said_as(now)}: no key goes out on a screen that no longer reads as the one its row opened")
     v = number(cam, link, path)
     return Reading(v, cam.frame.path.name, cam.frame.path in _by_reader)
 
@@ -469,10 +496,12 @@ def ends(cam, link, cycle, model, path, panel=False) -> tuple[list, str]:
     place further, so a number read a second time is a look gone wrong; whole numbers must step evenly (steps_even); a
     scale has two values at least; and a held number the reader alone read must stand as many places above the low end
     as Left presses changed the number. Each stops the row, its screen closed, the frames named where one is to
-    blame."""
-    def read() -> Reading:
-        return reading(cam, link, path)
+    blame. Every reading must be on the screen the scale opened as (reading's `opened`)."""
     open_row(cam, cycle, model, path, panel)
+    opened = reads_as(cam)
+
+    def read() -> Reading:
+        return reading(cam, link, path, opened)
     held = prev = now = read()
     lefts = 0                                   # Left presses that changed the number: the held number's place
     for _ in range(30):
@@ -530,11 +559,13 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
     the camera dropped, and the walk presses again); with a place so known, a number OCR reads elsewhere stops the row.
     With no `start`, the first number read sets the place, and OCR's, once read, makes it known. When the number on
     the frame before OK is one the reader alone read, the count must put the scale on `target` too, or the screen is
-    closed, nothing chosen, and the row stops."""
+    closed, nothing chosen, and the row stops. Every reading must be on the screen the scale opened as (reading's
+    `opened`): no OK goes out on another."""
     open_row(cam, cycle, model, path, panel)
+    opened = reads_as(cam)
     keys = [key(v) for v in vals]
     place, known = start, start is not None     # where the presses put the scale; known: counted from a known place
-    now, was, way, presses = reading(cam, link, path), None, None, 0    # was, way: the reading before the last press
+    now, was, way, presses = reading(cam, link, path, opened), None, None, 0    # was, way: the reading before the press
     while True:
         k = key(now.text)
         if k not in keys:
@@ -563,7 +594,7 @@ def choose(cam, link, hdmi, cycle, model, path, vals, target, start=None, panel=
         if k == keys[target] or presses > len(vals):
             break
         way, was = ("right" if keys.index(k) < target else "left"), now
-        now = pressed(cam, way, was, lambda: reading(cam, link, path))
+        now = pressed(cam, way, was, lambda: reading(cam, link, path, opened))
         presses += 1
     if k != keys[target]:
         raise Failed(f"{path[-1]}: {vals[target]!r} never came up")

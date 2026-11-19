@@ -921,8 +921,9 @@ def scale_main(monkeypatch, tmp_path):
     return test_scale_run.drive.__wrapped__(monkeypatch, tmp_path)
 
 
-def picture_slider_cam(held, top=15):
-    """test_scale_run's Slider, each scale frame Aspect Marker Level over a picture at the place it shows."""
+def picture_slider_cam(held, top=15, unknown=()):
+    """test_scale_run's Slider, each scale frame Aspect Marker Level over a picture at the place it shows; at the places
+    in `unknown` the pixel reader reads it as no known kind (as kit2_pass2 261808 to 261812 once read)."""
     import test_scale_run
     from camkit.frames import Frame
     cache: dict = {}
@@ -935,7 +936,7 @@ def picture_slider_cam(held, top=15):
 
         def read(self):
             at = self.truth.get(self.frame.path)
-            if self.screen != "scale" or at is None or self.lit == "setup":
+            if self.screen != "scale" or at is None or self.lit == "setup" or at in unknown:
                 return super().read()
             if at not in cache:
                 cache[at] = screen.read(Frame(image=picture_slider(at), t=0.0))
@@ -999,6 +1000,49 @@ def test_main_stops_a_slider_over_a_picture_whose_number_reads_otherwise(monkeyp
     assert "the marker stands on '9' on the scale, but the number drawn reads '92' by OCR" + (
         f" and {said!r} by the reader" if said else ", and the reader read no number") in got.out
     assert got.cam.oks == [] and got.lines == [] and got.attempts == []
+
+
+@pytest.mark.parametrize("held", [6, 12])
+def test_main_stops_a_slider_over_a_picture_where_it_turns_unknown_before_the_next_left(monkeypatch, scale_main, held):
+    """The slider over a picture opened on `held`, its frames from 3 down reading as no known kind (as kit2_pass2 261808
+    to 261812 did, 2026-11-19), OCR reading the number on every frame: the look stops on the first such frame, before
+    another Left, its screen closed with MENU (the slider's place not applied), no OK and no line, and the session's
+    restore puts the start back. A scale's walk goes on only while its screen reads as the one its row opened."""
+    S = scale_run_module()
+    cam = picture_slider_cam(held, unknown={0, 1, 2, 3})
+    monkeypatch.setattr(S, "masked_lines", scale_ocr())
+    got = scale_main(held, set(range(16)), lambda place, i: str(place), cam=cam)
+    (frame,) = [p.name for p, at in got.cam.truth.items() if at == 3]
+    assert (f"Made-up Scale stopped: Failed: Made-up Scale: the scale opened as a slider drawn over a picture, but frame "
+            f"{frame} reads as a screen of no known kind") in got.out
+    assert got.cam.presses == ["left"] * (held - 3), "no key after the frame that read otherwise"
+    assert got.cam.oks == [] and got.lines == [] and got.attempts == []
+    assert got.cam.screen == "shooting" and got.cam.pos == held, "closed with MENU, nothing applied"
+    assert got.cam.restored_from == Path("start.DAT") and got.cam.setting == held
+
+
+def test_a_choice_stops_where_its_slider_turns_unknown_before_any_ok(monkeypatch):
+    """A choice from 6 down to 0 on the slider over a picture, the frame of 3 reading as no known kind: the row stops
+    there, before another Left and before any OK, its screen closed, the frame named."""
+    from camkit.ocr import Line
+    S = scale_run_module()
+    cam = picture_slider_cam(6, unknown={3})
+    closed = []
+
+    def open_row(c, cycle, model, path, panel=False):
+        cam.screen, cam.pos = "scale", cam.setting
+        cam.shoot()
+    monkeypatch.setattr(S, "open_row", open_row)
+    monkeypatch.setattr(S, "close_screen", lambda c, link: closed.append(c.frame.path.name))
+    monkeypatch.setattr(S, "masked_lines", scale_ocr())
+    monkeypatch.setattr(S.ocr, "read", lambda paths, eng=None: {p: [Line(str(cam.truth[p]), 1.0, 311, 287, 18, 29)]
+                                                                for p in paths})
+    reader_says(monkeypatch, S, None)
+    with pytest.raises(S.Failed, match=r"the scale opened as a slider drawn over a picture, but frame \d+_slider\.png "
+                                       r"reads as a screen of no known kind"):
+        S.choose(cam, None, None, None, None, ["Made-up Scale"], [str(v) for v in range(16)], 0, 6)
+    (three,) = [p.name for p, at in cam.truth.items() if at == 3]
+    assert cam.presses == ["left"] * 3 and cam.oks == [] and closed == [three]
 
 
 AM_LEVEL = [A1 / "kit2_pass2" / "shots" / "259951_right.png",
