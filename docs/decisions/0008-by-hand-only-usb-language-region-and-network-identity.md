@@ -167,8 +167,9 @@ is there until `kit/tools/upload_check.py` has put that file back, and the run t
 was refused before it went, or when the row only asked its question, cancelled with MENU (exit status 6), or the link
 still answered, and its restore then checked out (decision 5). Screens that take MENU alone stay so whatever is decided of
 values: a keyboard or an entry screen, an address or serial number screen, credentials, a connection or a pairing in
-the making. Without `"values": "logged"` a credentials, serial number or closed identity row's frames are saved black
-from its opening, never read, and its screens kept as nothing but their kind; an action's frames are kept as they are,
+the making. Without `"values": "logged"` a credentials or closed identity row's frames are saved black
+from its opening, never read, and its screens kept as nothing but their kind; a serial number row's are saved black
+whatever its decision says of values ([decision 24](0024-a-look-lap-opens-every-row-to-look-at.md)); an action's frames are kept as they are,
 read for the checks above, and its screens printed and kept as their field names and whole row labels; with it every
 frame is kept, the run keeps the screens' text in its `drive.jsonl`, and the console shows their field names alone
 (decision 9). Such a run asks local readers only, and no tool reads its frames with a reader afterwards.
@@ -180,7 +181,8 @@ decides for theirs, and the default stays by hand (the Rule line above; how an o
 Before 2026-11-19 AGENTS.md and the playbook's rule 3 each stated the rule by hand beside a shorter Rule line; the
 playbook's rule said that a `--network` run never chooses in a row whose choice drops a link, starts a connection or a
 pairing, or changes what no file puts back, which the Rule line now says beside the one way an owner decision reaches
-such a row, as this Decision gives it.
+such a row, as this Decision gives it; and `"values": "logged"` kept a serial number row's frames as it keeps a
+credentials row's, which no owner had asked for and the playbook's rule for that screen ruled out.
 Before 2026-11-15 a run given `--network` opened only the rows a dated network decision named, and stopped where none
 named one. Before 2026-11-14 IP Address Setting and the region and USB rows (USB Connection Mode, USB LUN Setting, USB Power
 Supply, Language, NTSC/PAL, Area/Date/Time) were liftable to look at, listed as rows whose opening starts or ends
