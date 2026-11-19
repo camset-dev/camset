@@ -141,3 +141,34 @@ def test_drives_armed_press_whose_screen_read_meets_a_dropped_session_keeps_the_
     assert code == EXIT_RESTORE_BY_HAND and restore == [] and restore_pending(tmp_path) is not None
     assert pressed_keys == ["menu"] and line["restore"] == "by hand" and "handed to the link" in line["outcome"]
     assert (tmp_path / RESTORE_BY_HAND).exists() and "upload_check.py" in out
+
+
+# ---------------------------------------------------------------- finding 8: drive.py's end is runner.end_session
+
+
+def test_drives_end_restores_after_a_stop_or_a_link_error_while_it_waits_for_the_shooting_screen(tmp_path, monkeypatch,
+                                                                                               scope_file):  # noqa: F811
+    """Finding 8: drive.py ended its run with an old copy of runner.end_session, which took only a RuntimeError from the
+    wait for the shooting screen: a STOP (or a first Ctrl-C) during that wait, or a link error there (OSD eyes), left
+    the restore undone and exited 4. Through end_session the restore goes on all the same, over a screen it may go
+    over (restorable_now: a menu page here)."""
+    import drive as D
+    import runner
+    from camkit import safety
+    from camkit.link import NET_ERROR_SAID, NetworkError, StopRequested
+    monkeypatch.setattr(runner, "restorable_now", lambda link, eyes: ("menu", ""))
+    monkeypatch.setattr(runner, "hold_for_owner", lambda *a, **k: pytest.fail("held for the owner over a menu page"))
+
+    def refused(state, key, cam):
+        if state == "page" and key == "right":
+            raise safety.Refused("right: the camera's own check refused it")
+    for name, raised in (("stop", StopRequested("a stop was asked for while waiting")),
+                         ("link", NetworkError(NET_ERROR_SAID))):
+        def wait(link, eyes, why, wait=None, raised=raised):
+            raise raised
+        monkeypatch.setattr(D, "wait_shooting", wait)
+        _, line, _, code, restore, out, _ = drive_run(
+            tmp_path / name, monkeypatch, scope_file, ["right"], ["Reset Network Set."], RESET_DECISION, RESET_STATES,
+            RESET_MOVES, more=["--confirm"], fails=refused)
+        assert code == 0 and restore == ["closed", "ended"], (name, code, restore)
+        assert "restoring all the same" in out and line["completed"] is False and line["before"]

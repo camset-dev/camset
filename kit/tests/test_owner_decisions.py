@@ -992,6 +992,7 @@ def drive_run(tmp_path, monkeypatch, scope_file, presses, path, decision, states
     person types at the terminal ("auto": the owner row's name; None: no terminal at all); walk: the real walk to a
     deep owner row (drive.owner_walk) instead of none; put_back_fails: the restore's upload raises after the download."""
     import drive as D
+    import runner
     from runner import EXIT_UNRESTORED
     scope_file(decision)
     run = Run("kit2_drive", root=tmp_path)
@@ -1093,11 +1094,11 @@ def drive_run(tmp_path, monkeypatch, scope_file, presses, path, decision, states
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("black", lambda f: at["s"] in blacks),
                         ("close_for_restore", close_for_restore),
-                        ("session", SimpleNamespace(ended=lambda link, before, show=30, **kw: restore.append("ended") or extra.update(ended_kw={"show": show, **kw})
-                                                    or ending,
-                                                    put_back=put_back)),
                         ("restore_checked", restore_checked)):
         monkeypatch.setattr(D, name, value)
+    # the session's end (runner.end_session, drive.py's since 2026-11-18): its download and put-back
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, tag="after", show=30, **kw: put_back(
+        link, restore.append("ended") or extra.update(ended_kw={"show": show, **kw}) or ending, before))
     if not walk:
         monkeypatch.setattr(D, "owner_walk", lambda cam, path, grip, place=(): extra.setdefault(
             "flag_at_walk", getattr(cam, "owner_only", False)) and "")

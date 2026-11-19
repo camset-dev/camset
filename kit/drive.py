@@ -181,7 +181,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ocr, safety, screen, session  # noqa: E402
+from camkit import ocr, safety, screen  # noqa: E402
 from camkit import coverage, first_open  # noqa: E402
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.link import CameraRefused, Link, StopRequested  # noqa: E402
@@ -196,10 +196,10 @@ from prove_run import enter_any  # noqa: E402
 from runner import (EXIT_INCOMPLETE, EXIT_NOT_CONFIRMED, EXIT_RESTORE_BY_HAND, EXIT_UNRESTORED, LOOK_LAP,  # noqa: E402
                     add_info_ok_argument, add_network_argument, add_owner_argument, add_scan_argument,
                     cards_statement_refused, changes_kept, close_for_restore, confirm_phrase_or_exit, defined_values,
-                    definition, hold_for_owner, info_ok_or_exit, row_labels,
+                    definition, end_session, info_ok_or_exit, row_labels,
                     known_labels, known_values, label_readings, load_scan, log_network_decided, log_owner_decided,
                     menu_from_shooting,
-                    network_decided_or_exit, network_readings, network_values, owner_decided_or_exit, restorable_now,
+                    network_decided_or_exit, network_readings, network_values, owner_decided_or_exit,
                     restore_checked, restoring, row_readings, row_values, screen_named, values_withheld, wait_shooting)
 
 
@@ -1869,20 +1869,15 @@ def main():
                 try:
                     with restoring("drive.py's restore", withhold=private):
                         close_for_restore(cam, link, before)
-                        try:
-                            # the camera's playback view left with its Playback button once (runner.wait_shooting)
-                            wait_shooting(link, hdmi, "the settings download after the presses", wait=wait_for)
-                        except RuntimeError as e:
-                            # the wait gave up: the restore is still tried (decision 15), the download closing a menu
-                            # itself, over a screen that asks nothing, judged on a fresh frame; over any other the owner
-                            # clears it first, the link kept open (runner.hold_for_owner, as end_session does)
-                            print(f"   {say(str(e))}; restoring all the same", flush=True)
-                            kind, why_not = restorable_now(link, hdmi)
-                            if kind is None:
-                                hold_for_owner(link, hdmi, before, why_not, keys=private)
-                        time.sleep(1)
-                        ending = session.ended(link, before, **(values_withheld(private) or {"show": 30}))
-                        session.put_back(link, ending, before)      # first: a log that cannot be written skips nothing
+                        # the session's end every runner shares (runner.end_session): the shooting screen waited for
+                        # (its playback view left with its Playback button once: runner.wait_shooting); a wait that
+                        # gives up, a STOP or a first Ctrl-C meanwhile, or a link error there restores all the same over
+                        # a screen that asks nothing, and over any other the owner clears it first (hold_for_owner);
+                        # then the download, the diff, and the start file put back, before the log is written (a log
+                        # that cannot be written skips nothing)
+                        ending = end_session(link, hdmi, before, "the settings download after the presses",
+                                             reach=functools.partial(wait_shooting, wait=wait_for),
+                                             **(values_withheld(private) or {"show": 30}))
                         log.write(json.dumps({"path": a.path, "presses": a.press, "note": a.note, "completed": ok,
                                               **({"on_shooting": sorted(on_shooting)} if on_shooting else {}),
                                               **({"c4_allowed": c4_allowed} if c4_allowed else {}),

@@ -973,10 +973,10 @@ def drive_on_shooting(tmp_path, monkeypatch, presses: list, named: list = (), ki
                         ("screen_text", lambda cam, grip: text), ("highlighted", lambda image, path: lit),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("close_for_restore", lambda cam, link, start: sent.append(("closed",))),
-                        ("session", SimpleNamespace(ended=lambda link, before, show=30: ending,
-                                                    put_back=lambda link, e, before: e)),
                         ("restore_checked", lambda r, e, before: True)):
         monkeypatch.setattr(drive, name, value)
+    import runner
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, tag="after", show=30: ending)  # end_session's
     argv = ["drive.py", "--path", "Drive Mode"] + [x for p in presses for x in ("--press", p)]
     monkeypatch.setattr(sys, "argv", argv + [x for k in named for x in ("--on-shooting", k)] + list(more))
     drive.main()

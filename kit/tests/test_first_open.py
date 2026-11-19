@@ -925,12 +925,12 @@ def drive_run(tmp_path, monkeypatch, path=("Drive Mode",), presses=("right",), c
                         ("highlighted", lambda image, p: now()[1]), ("time", SimpleNamespace(sleep=lambda s: None, monotonic=lambda: 0.0)),
                         ("after_armed", lambda cam, grip, kinds=None: ("list", "Single Shooting", "")),
                         ("close_for_restore", lambda cam, link, start: None),
-                        ("session", SimpleNamespace(ended=lambda link, before, **k: ending,
-                                                    put_back=lambda link, e, before: e)),
                         ("restore_checked", lambda r, e, before, **k: True),
                         ("row_values", lambda model: values or {}),
                         ("Link", lambda r, **k: contextlib.nullcontext(link))):
         monkeypatch.setattr(drive, name, value)
+    import runner
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, **k: ending)     # end_session's (drive.py's end)
     # the page's labels as drive.shown_labels reads them: a submenu page's live (`live`, else `shown`), a top-level
     # page's from the page model (`shown`)
     sub = list(live if live is not None else shown)

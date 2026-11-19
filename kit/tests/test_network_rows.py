@@ -1094,9 +1094,10 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
     whether the scan reaches the path's first label (crawl_run.go_to); exits: a list that takes the exit status main()
     exits with, where it exits (else the exit is raised); end_raises: what the session's end raises (the link gone);
     end_wait_raises: what the wait for the shooting screen after the closing presses raises; patches: more (name, value)
-    pairs set on drive. A read without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys
+    pairs set on runner (end_session's: restorable_now, hold_for_owner). A read without a press (the wait's) finds the open screen drawn, a slow camera's included. Returns (the keys
     pressed, the console, drive.jsonl's line, the run's events)."""
     import drive as D
+    import runner
     from camkit import definitions, vlm
     scope_file(decision)
     if definition is not None:
@@ -1192,10 +1193,13 @@ def drive_fake(tmp_path, monkeypatch, scope_file, presses: list, path, decision,
                         ("network_values", lambda rows, model: {r: v for r, v in VALUES.items() if r in rows}),
                         ("time", SimpleNamespace(sleep=lambda s: None)),
                         ("close_for_restore", lambda cam, link, start: sent.append(("closed",))),
-                        ("session", SimpleNamespace(ended=ended, put_back=lambda link, e, before: e)),
-                        ("restore_checked", lambda r, e, before, **kw: seen.update(checked=kw) or True),
-                        *patches):
+                        ("restore_checked", lambda r, e, before, **kw: seen.update(checked=kw) or True)):
         monkeypatch.setattr(D, name, value)
+    # the session's end (runner.end_session, drive.py's since 2026-11-18): its download and put-back; `patches` set on
+    # runner, whose end_session reads them (restorable_now, hold_for_owner)
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, tag="after", **kw: ended(link, before, **kw))
+    for name, value in patches:
+        monkeypatch.setattr(runner, name, value)
     argv = ["drive.py", "--network", *[x for p in path for x in ("--path", p)], *[x for p in presses for x in ("--press", p)]]
     monkeypatch.setattr(sys, "argv", argv)
     try:

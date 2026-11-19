@@ -419,6 +419,7 @@ def drive_run(tmp_path, monkeypatch, rows, path, presses, extra=(), seen=(), roo
     --network); `seen` the labels the camera's records show opened cleanly (TEST_CAMERA's, which drive.py reads);
     `root` the run root (by default one no coverage gate reads; TEST_CAMERA's own under runs_top for one that does)."""
     import drive as D
+    import runner
     root = root or tmp_path / "cam"
     root.mkdir(parents=True, exist_ok=True)
     run = Run("kit2_drive", root=root)
@@ -429,8 +430,7 @@ def drive_run(tmp_path, monkeypatch, rows, path, presses, extra=(), seen=(), roo
     local = []
     nothing_but(monkeypatch, D, sim, run, eyes, factory, sim.scan(), local)
     ending = SimpleNamespace(after=root / "after.DAT", uploaded=False, changes=[])
-    monkeypatch.setattr(D, "session", SimpleNamespace(ended=lambda link, before, **k: ending,
-                                                      put_back=lambda link, e, before: e))
+    monkeypatch.setattr(runner.session, "finish", lambda link, before, **k: ending)     # end_session's
     argv = [*extra, *[x for p in path for x in ("--path", p)], *[x for p in presses for x in ("--press", p)]]
     code, out = run_main(D, argv)
     lines = (run.dir / "drive.jsonl").read_text(encoding="utf-8").splitlines() if (run.dir / "drive.jsonl").exists() \
