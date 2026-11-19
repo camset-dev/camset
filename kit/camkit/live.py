@@ -2034,5 +2034,8 @@ def close(cam, link):
         except LinkError as e:
             print(f"closing: {withheld_on(cam, e)}; trying again", flush=True)
         time.sleep(1.5)
-        cam.refresh("closing")
+        try:
+            cam.refresh("closing")              # the look the next try starts from: one that fails is one more try
+        except LinkError as e:
+            print(f"closing: {withheld_on(cam, e)}; trying again", flush=True)
     raise SystemExit("could not get back to the shooting screen: please close it on the camera by hand")

@@ -472,3 +472,30 @@ def test_the_words_after_a_recovery_do_not_say_hdmi_eyes_avoid_the_stall(tmp_pat
     out = capsys.readouterr().out
     assert "recovered" in out and "do not ask for it" not in out
     assert "OSD Image Mode" in out and "stays on" in out and "HDMI eyes" in out
+
+
+def test_a_failed_look_between_two_tries_of_the_close_is_one_more_try(monkeypatch, capsys):
+    """Track 1 B7: in camkit.live.close the look between two tries sat outside the try's guard, so one screen picture
+    that failed there (OSD eyes: a LinkError) ended the close after its first try instead of its eight. Now it is said
+    and the next try goes."""
+    monkeypatch.setattr(live.time, "sleep", lambda s: None)
+    looks = {"n": 0}
+
+    class Cam:
+        kind = "unknown"
+
+        def cancel_to_menu(self, tries=3):
+            return True
+
+        def read(self):
+            return SimpleNamespace(kind=self.kind)
+
+        def refresh(self, tag):
+            looks["n"] += 1
+            if looks["n"] == 2:                 # the look between the first try and the second
+                raise LinkError('osd "x.png": no OSD image')
+            if looks["n"] >= 3:
+                self.kind = "shooting"
+            return self.read()
+    live.close(Cam(), SimpleNamespace(press=lambda *a, **k: None))
+    assert looks["n"] >= 3 and "no OSD image" in capsys.readouterr().out
