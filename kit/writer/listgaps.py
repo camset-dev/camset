@@ -5,8 +5,9 @@ after the names and the marks are set (questions), and the gate counts each as a
 (writer/gate.py): one whose missing value no start file holds, or where no start file is here to tell, a person may
 accept by its key in the camera's accepted file; one whose missing value a start file holds is never accepted, and
 --write refuses while it stands (OneShort). What the camera's own list never offers is no gap: a value a not_offered
-mark names (held or not) and a setting an unproved_reason covers say publicly, and the same for every owner, why the
-list stops short. Keys and counts only in what is printed, never the value."""
+mark names (held or not), a value video_system_values lists under the other video system than the proof's (a proof made
+under NTSC never chooses a PAL rate) and a setting an unproved_reason covers say publicly, and the same for every
+owner, why the list stops short. Keys and counts only in what is printed, never the value."""
 import collections
 from pathlib import Path
 
@@ -33,8 +34,10 @@ class OneShort(SystemExit):
 def one_short(doc: dict) -> list:
     """[(setting, the value its public list lacks)] for each setting whose public proof (camkit.definitions.lean_proof,
     after the names and the marks) lists every value of its list but one: the values a not_offered mark names (held or
-    not) aside, nothing for a setting an unproved_reason covers, a proof that lists no values or a scale proved on a
-    line (every value)."""
+    not) aside, and those its video_system_values list under the other video system than the one whose values the
+    proof lists (its values of one system only: a proof made under that system, which never offers the other's);
+    nothing for a setting an unproved_reason covers, a proof that lists no values or a scale proved on a line (every
+    value)."""
     out = []
     for s in doc.get("settings") or []:
         p = s.get("proved")
@@ -44,6 +47,10 @@ def one_short(doc: dict) -> list:
         if "values" not in lean:
             continue
         marked = {m.get("value") for m in s.get("not_offered") or [] if isinstance(m, dict)}
+        systems = {vs: set(vals) for vs, vals in (s.get("video_system_values") or {}).items() if isinstance(vals, list)}
+        under = [vs for vs, vals in systems.items() if vals & set(lean["values"])]
+        if len(under) == 1:
+            marked |= {v for vs, vals in systems.items() if vs != under[0] for v in vals}
         listed = {v for v, _ in s.get("values") or [] if not isinstance(v, (list, dict))}
         missing = listed - set(lean["values"]) - marked
         if len(missing) == 1:

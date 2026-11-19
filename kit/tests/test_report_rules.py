@@ -213,3 +213,27 @@ def test_a_later_proof_that_wrote_still_takes_the_options_place():
     missed = [ev(31, "+2.7 EV", 41, "00040_base.DAT"), ev(20, "+0.0 EV", 43, "00040_base.DAT", [(EV, 25, 20)])]
     (_, opts), = R.rows_of(None, first + missed).items()
     assert opts[31]["dat"] == "00043_x.DAT"
+
+
+# ---------------------------------------------------------------- the write's lists one value short
+
+def test_a_value_of_the_other_video_system_is_no_gap(tmp_path):
+    """writer/listgaps.py: USB Streaming's Output Res/Frame Rate (made-up codes) lists its PAL rate, which its menus
+    offer under PAL only, as its public video_system_values say, the same for every owner. A proof made under NTSC
+    lists every NTSC value and stops short of the PAL one: no gap, as a value a not_offered mark names is none. A gap
+    stays where the proof's values are of both systems (the missing one is a system's whose values the proof chose),
+    where no mark lists the missing value, and where the proof chose another value of the missing one's system."""
+    from writer import listgaps
+
+    def s(key, proved, systems=None, extra=()):
+        vals = [[0, "4K 30p"], [2, "HD 60p"], *extra, [7, "HD 25p (PAL)"]]
+        return {"key": key, "area": "global", "id": int(key[-4:], 16), "name": "Output Res/Frame Rate", "values": vals,
+                "proved": {"values": proved}, **({"video_system_values": systems} if systems else {})}
+    doc = {"settings": [
+        s("global:0x02b3", [0, 2], {"NTSC": [0, 2], "PAL": [7]}),                          # made under NTSC: no gap
+        s("global:0x02b4", [0, 7], {"NTSC": [0, 2], "PAL": [7]}),                          # both systems: 2 short
+        s("global:0x02b5", [0, 2]),                                                        # no mark: 7 short
+        s("global:0x02b6", [0, 2, 9], {"NTSC": [0, 2], "PAL": [7, 9]}, [[9, "HD 50p (PAL)"]])]}  # PAL's 9 chosen
+    assert {x["key"]: v for x, v in listgaps.one_short(doc)} == \
+        {"global:0x02b4": 2, "global:0x02b5": 7, "global:0x02b6": 7}
+    assert {q["key"] for q in listgaps.questions(doc, tmp_path)} == {"global:0x02b4", "global:0x02b5", "global:0x02b6"}

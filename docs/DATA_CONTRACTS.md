@@ -109,8 +109,9 @@ write's proofs and tables: a name no rule gives any more leaves the list. A valu
 `kit/writer/proofs.py` (`without_observed`, `without_written_with`, `without_held`) and `kit/pass2_report.py`
 (`start_lines`, `sampled_from_start`) say what each write leaves out, and the schema refuses those fields. Nor does a
 public list ever stop one value short of a value its own camera held, for the gap would name it: every write, a look
-or `--write`, counts each list one value short in its gate line, a value a `not_offered` mark names or an
-`unproved_reason` covers aside (the mark says why, the same for every owner), and lists it with whether a start file of
+or `--write`, counts each list one value short in its gate line, a value a `not_offered` mark names, one its
+`video_system_values` list under the other video system than the proof's values, or an `unproved_reason` covers aside
+(the mark says why, the same for every owner), and lists it with whether a start file of
 the camera held the missing value (`kit/writer/listgaps.py`, never which value). One no start file held, or with none
 here to tell, a ruling of kind "one value short" in the accepted file accepts by its key; one a start file held is
 never accepted, and `--write` refuses until the value is proved from another start, a held `not_offered` mark says the
