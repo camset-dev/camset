@@ -1,16 +1,27 @@
 """Import one user LUT into the camera, and print which records of its settings file that changed: the evidence for the
 camera's Manage User LUTs rows (Movie > Exposure/Color > Color/Tone), by Sony's documented ImportLUTFile, only as
-docs/decisions/0026 allows: a .cube file from the clone's own private/lut/, into user place 16, on the owner's word for
-the run, which the run carries as --allow "Manage User LUTs".
+docs/decisions/0026 allows: a .cube file from the clone's own private/lut/, into user place 16, and only where the
+camera's own Import/Edit table was seen to show it empty since the last import, on the owner's word for the run, which
+the run carries as --allow "Manage User LUTs".
 
-    .venv/bin/python -u kit/tools/lut_import.py private/lut/<pack>/<name>.cube --allow "Manage User LUTs" [--run kit2_lut]
+    .venv/bin/python -u kit/tools/lut_import.py private/lut/<pack>/<name>.cube --allow "Manage User LUTs" \\
+        --seen-empty <run>/shots/<frame>.png [--run kit2_lut]
 
 One session, as every run of the kit has (docs/decisions/0015): the link, the camera's own picture of its screen (OSD)
 as its eyes, no reader, and no key pressed nor anything answered on the camera's screen.
- 1. Without --allow "Manage User LUTs", the owner's word, it stops before anything connects, as a prover does without
+ 1. Before anything connects. Without --allow "Manage User LUTs", the owner's word, it stops, as a prover does without
     its row's allowance; the allowance goes into the run's events.jsonl and lut_import.jsonl. The file is checked
     (camkit.link.lut_refused): a .cube file under the clone's own private/lut/ (where its path really ends, never
-    through a link), a name Sony's reference takes, under 3,000,000 bytes, a .cube LUT's text. Refused, nothing sent.
+    through a link), a name Sony's reference takes, under 3,000,000 bytes, a .cube LUT's text. And place 16's emptiness,
+    which no camera property tells (DeleteUserBaseLook lists every place, held or empty: kit/common/lut_file.h): the
+    frame --seen-empty names is a look at the camera's own Manage User LUTs > Import/Edit table (seen_empty): under this
+    camera's runs, in a run's shots/, never a link; its run's drive.jsonl records that path and the frame, its
+    events.jsonl when it was taken; the kit's own OCR (camkit.ocr) reads the title "Import/Edit" and User16's own row
+    as "User16: (No Import)" (the row for 16, not User1's, spaces and a dropped colon as OCR gives them); taken after the
+    last import the SDK was asked for (any run's lut_import.jsonl) and at most LOOK_LIMIT (an hour) before now, on the
+    same day. Its path, SHA-256 and row as read go into events.jsonl ("lut_seen_empty") and lut_import.jsonl. The look
+    is made with kit/drive.py (look_command, which the tool prints when it refuses one), the camera in Movie: Right on
+    Import/Edit, Down to User16, MENU; nothing chosen. Any of this refused: said, with the command, nothing sent.
  2. The start file is downloaded first, and the menu's lock after it waited out (camkit.session.wait_lock: LOCK_S, as
     there is no HDMI picture to watch). The camera saves its settings only on the shooting screen with a card in: a
     refused download is said, and the run ends there, nothing changed.
@@ -18,8 +29,8 @@ as its eyes, no reader, and no key pressed nor anything answered on the camera's
     that is said with what the camera reads, and nothing is imported (Sony's reference allows the import only while it
     reads Enable; the camera may give it in Movie mode).
  4. The import (camkit.link.Link.import_lut: camlink's importlut, which checks the file again against the clone's
-    folder it was built with, reads the camera's recording state and whether place 16 already holds a LUT, then gives
-    ImportLUTFile a copy of the bytes it checked and waits for the camera's answer). Only the camera's
+    folder it was built with, reads the camera's recording state and its list of user places, then gives ImportLUTFile
+    a copy of the bytes it checked and waits for the camera's answer). Only the camera's
     ImportLUTFile_Result_OK is an import; a refusal is said as that. Where the answer did not come (camlink's
     "import_unconfirmed": the import may still be running) nothing more is sent, no download and no upload, which
     would restart the camera mid-import: RESTORE_BY_HAND is written naming the start file, the owner is told to look
@@ -45,7 +56,8 @@ as its eyes, no reader, and no key pressed nor anything answered on the camera's
     ("proved by hand"; its public form says only that the row changed a record), --did choose when none did ("tested,
     no record changes", private). The looks file's "by" says "hand", the one its vocabulary has for a change made
     outside the kit's walks; the note says it was this tool. No proof line is written: a proof's values would reach the
-    definition, and a LUT's records may hold its name (docs/decisions/0016).
+    definition, and a LUT's records may hold its name (docs/decisions/0016). And the same look at the Import/Edit table
+    again (look_command), so that the row for 16 is on record with its new reading; the tool presses nothing itself.
 The LUT stays in user place 16 until the owner deletes it on the camera by hand (Manage User LUTs); the kit deletes
 nothing.
 
@@ -55,10 +67,13 @@ and the camera is on its start file again; 7 (EXIT_REFUSED) when the kit's guard
 (EXIT_RESTORE_BY_HAND) when the import was not confirmed, or the end found a screen no restore may go over, or the
 camera was in Playback: put the start file back with kit/tools/upload_check.py, as RESTORE_BY_HAND names it; 4
 (EXIT_UNRESTORED) when the start file could not be put back or a record did not go back; 1 when nothing was sent at
-all (no allowance, the file refused, no link, the start download refused).
+all (no allowance, the file or the look refused, no link, the start download refused).
 """
 import argparse
+import datetime
+import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -66,7 +81,7 @@ import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import ROOT, camset, definitions, jsonl, paths, provenance, safety, screen, session  # noqa: E402
+from camkit import ROOT, camset, definitions, jsonl, ocr, paths, provenance, safety, screen, session  # noqa: E402
 from camkit.frames import OsdFeed  # noqa: E402
 from camkit.link import LUT_OK, LUT_PLACE, Link, LinkError, LutNotImported, StopRequested, lut_refused  # noqa: E402
 from camkit.not_by_file import USER_LUT  # noqa: E402
@@ -84,9 +99,155 @@ ELEMENTS_SAID = 32               # the most elements of one array record said
 WHERE = "Movie > Exposure/Color > Color/Tone > Manage User LUTs"
 UNCONFIRMED = "import_unconfirmed"      # camlink's cause when the camera's answer did not come (kit/common/lut_file.h)
 
+# The look that says place 16 is empty (seen_empty): the camera's own table, seen through kit/drive.py
+LOOK_PATH = ["Manage User LUTs", "Import/Edit"]
+LOOK_TITLE = "import/edit"              # the table's title, as seen_empty compares a line (no spaces, lower case)
+LOOK_LIMIT = 3600.0                     # s: the oldest a look may be when the import starts (and on the same day)
+LOOK_SKEW = 60.0                        # s: a look this far ahead of the clock is taken as now; any further, refused
+LOOK_DOWNS = 15                         # Down presses from User1 to User16 in the table
+ROW_GAP = 8                             # px: OCR lines this close in height are one row (camkit.ocr's own grouping)
+EMPTY_ROW = re.compile(r"user16[:;]?\(noimport\)")      # User16's row read empty, spaces taken out, lower case
+ROW_16 = re.compile(r"user16(?![0-9])")                  # a row that is User16's (never User1's, nor User160's)
+
+
+class NotSeenEmpty(Exception):
+    """seen_empty's refusal: why the frame does not establish that place 16 is empty."""
+
 
 def say(m: str) -> None:
     print(m, flush=True)
+
+
+def look_command(root: Path | None = None) -> str:
+    """The kit/drive.py command that makes the look --seen-empty takes, as the camera's operator runs it (the camera in
+    Movie, its OSD eyes): Right on Import/Edit, Down to User16, MENU; nothing chosen. Its --scan is the camera's latest
+    Movie page scan made with OSD eyes (runner.latest_scan, Intelligent Auto's first), or a placeholder."""
+    scan = None
+    try:
+        from runner import latest_scan
+        scan = latest_scan("Movie", root, auto=True, eyes="osd") or latest_scan("Movie", root, eyes="osd")
+    except Exception:           # noqa: BLE001 (a placeholder says what to put there)
+        scan = None
+    words = [".venv/bin/python", "-u", "kit/drive.py", "--scan", scan.name if scan else "<a Movie page scan, OSD eyes>",
+             "--run", "kit2_lut_look", "--note", "the user LUT table: is User16 empty; nothing chosen",
+             "--path", LOOK_PATH[0], "--path", LOOK_PATH[1], "--press", "right"]
+    words += ["--press", "down"] * LOOK_DOWNS + ["--press", "menu"]
+    return "CAMSET_EYES=osd " + shlex.join(words)
+
+
+def _local_time(text) -> float | None:
+    try:
+        return datetime.datetime.fromisoformat(str(text)).timestamp()
+    except ValueError:
+        return None
+
+
+def last_import_asked(root: Path) -> float | None:
+    """When the SDK was last asked to import a LUT on this camera, by any run (each run's lut_import.jsonl: asked_at, or
+    a line's own t where it is from before that field and says it was called or confirmed), whatever the camera
+    answered; None when none was asked."""
+    times = []
+    for f in sorted(Path(root).glob("*/lut_import.jsonl")):
+        try:
+            lines = [json.loads(x) for x in f.read_text(encoding="utf-8").splitlines() if x.strip()]
+        except (OSError, ValueError):
+            continue
+        for x in lines:
+            if not isinstance(x, dict):
+                continue
+            if isinstance(x.get("asked_at"), (int, float)):
+                times.append(float(x["asked_at"]))
+            elif x.get("called") is True or x.get("confirmed") is True or x.get("result") == LUT_OK:
+                t = _local_time(x.get("t"))
+                if t is not None:
+                    times.append(t)
+    return max(times) if times else None
+
+
+def ocr_rows(lines) -> list:
+    """The frame's OCR lines as rows, top to bottom: lines within ROW_GAP px of each other in height joined left to
+    right by a space, as camkit.ocr groups RapidOCR's (a LUT's name in another column joins its row)."""
+    rows: list = []
+    for ln in sorted(lines, key=lambda ln: ln.y):
+        if rows and abs(rows[-1][0].y - ln.y) <= ROW_GAP:
+            rows[-1].append(ln)
+        else:
+            rows.append([ln])
+    return [" ".join(ln.text for ln in sorted(row, key=lambda ln: ln.x)).strip() for row in rows]
+
+
+def seen_empty(given, root: Path, now: float, last_asked: float | None) -> dict:
+    """That the frame `given` (a path, or one relative to `root`, the camera's run root) shows place 16 empty on the
+    camera's own Import/Edit table, seen after the last import asked (`last_asked`) and at most LOOK_LIMIT before `now`,
+    on the same day: {"frame": its path from the run root, "sha256", "row": User16's row as the kit's OCR read it,
+    "look_t": when the look's run says it was taken, "look_run"}. Raises NotSeenEmpty, saying why, otherwise."""
+    root = Path(root)
+    p = Path(given)
+    if not p.exists() and not p.is_absolute():
+        p = root / p
+    if p.is_symlink():
+        raise NotSeenEmpty(f"{p} is a link: name the frame itself")
+    try:
+        real, top = p.resolve(strict=True), root.resolve(strict=True)
+    except (OSError, RuntimeError):
+        raise NotSeenEmpty(f"{p} is not there") from None
+    if not real.is_relative_to(top):
+        raise NotSeenEmpty(f"{p} is not under this camera's runs ({paths.shown(top)}/)")
+    if real.parent.name != "shots" or real.parent.parent.parent != top:
+        raise NotSeenEmpty(f"{p} is not in a run's shots/ folder, where kit/drive.py keeps a look's frames")
+    if real.suffix.lower() != ".png" or not real.is_file():
+        raise NotSeenEmpty(f"{p} is not a .png frame")
+    run_dir, name = real.parent.parent, real.name
+    looked = None
+    try:
+        for x in (run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines():
+            e = json.loads(x) if x.strip() else {}
+            if isinstance(e, dict) and e.get("frame") == name and isinstance(e.get("t"), (int, float)):
+                looked = float(e["t"])
+    except (OSError, ValueError):
+        looked = None
+    if looked is None:
+        raise NotSeenEmpty(f"{run_dir.name}'s events.jsonl does not say when {name} was taken")
+    walked = False
+    try:
+        for x in (run_dir / "drive.jsonl").read_text(encoding="utf-8").splitlines():
+            d = json.loads(x) if x.strip() else {}
+            if (isinstance(d, dict) and d.get("path") == LOOK_PATH
+                    and any(isinstance(s, dict) and s.get("frame") == name for s in d.get("screens") or [])):
+                walked = True
+    except (OSError, ValueError):
+        walked = False
+    if not walked:
+        raise NotSeenEmpty(f"{run_dir.name}'s drive.jsonl does not record {name} on a look at "
+                           f"{' > '.join(LOOK_PATH)}")
+    if looked > now + LOOK_SKEW:
+        raise NotSeenEmpty(f"{name} was taken {looked - now:.0f} s ahead of this computer's clock")
+    if now - looked > LOOK_LIMIT:
+        raise NotSeenEmpty(f"{name} was taken {(now - looked) / 60:.0f} minutes ago, more than an hour before this "
+                           "import: look at the table again")
+    if time.localtime(looked)[:3] != time.localtime(now)[:3]:
+        raise NotSeenEmpty(f"{name} was taken on another day: look at the table again")
+    if last_asked is not None and looked <= last_asked:
+        raise NotSeenEmpty(f"{name} was taken before the last import the camera was asked for "
+                           f"({time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_asked))}); a look after the last "
+                           "import is needed")
+    try:
+        lines = ocr.read([real])[real]
+    except Exception as e:      # noqa: BLE001 (a frame the kit cannot read establishes nothing)
+        raise NotSeenEmpty(f"{name} could not be read by the kit's OCR ({type(e).__name__}: {e})") from None
+    rows = ocr_rows(lines)
+    flat = [re.sub(r"\s+", "", r).lower() for r in rows]
+    if LOOK_TITLE not in flat:
+        raise NotSeenEmpty(f"{name} does not read as the Import/Edit table (no title \"Import/Edit\" read on it)")
+    sixteen = [(r, f) for r, f in zip(rows, flat, strict=True) if ROW_16.match(f)]
+    if not sixteen:
+        raise NotSeenEmpty(f"User16's row is not on this frame ({name}): look down to User16 and name that frame")
+    row, f = sixteen[0]
+    if len(sixteen) > 1 or not EMPTY_ROW.fullmatch(f):
+        raise NotSeenEmpty(f"User16 reads {' / '.join(r for r, _ in sixteen)!r} on {name}, not \"User16: (No Import)\": "
+                           "place 16 is not seen empty")
+    return {"frame": real.relative_to(top).as_posix(), "sha256": provenance.sha256(real), "row": row,
+            "look_t": round(looked, 3), "look_run": run_dir.name}
 
 
 def allowed(allow) -> str:
@@ -202,6 +363,7 @@ def importing(link, lut: Path, out: dict) -> dict:
             got["code"] = EXIT_INCOMPLETE
             return got
         got["called"] = True                    # from here the camera may change, until an answer says otherwise
+        out["asked_at"] = round(time.time(), 3)     # a look must come after it (last_import_asked)
         try:
             r = link.import_lut(lut)
         except LutNotImported as e:
@@ -225,6 +387,7 @@ def importing(link, lut: Path, out: dict) -> dict:
             got["code"] = EXIT_INCOMPLETE
         else:
             got["confirmed"] = True
+            out["imported_at"] = round(time.time(), 3)
             out["result"] = r.get("result")
             say(f"{LUT_OK}: {out['file']} is in user place {LUT_PLACE} (the camera answered in {r.get('ms')} ms)")
     except Exception as e:      # noqa: BLE001 (the end runs whatever is raised, as prover_session's does)
@@ -304,6 +467,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("file", help="the .cube file, under the clone's own private/lut/")
     add_allow_argument(ap)
+    ap.add_argument("--seen-empty", required=True, metavar="FRAME",
+                    help="a frame of a look at the camera's own Manage User LUTs > Import/Edit table (kit/drive.py, the "
+                         "camera in Movie) on which User16's row reads \"(No Import)\", taken since the last import and "
+                         "at most an hour ago: a path, or one in the camera's runs (kit2_lut_look/shots/00034_down.png)")
     ap.add_argument("--run", default="kit2_lut", help="the run folder, in the camera's runs/<model>_fw<fw>/")
     a = ap.parse_args()
     allowance = allowed(a.allow)
@@ -312,10 +479,20 @@ def main() -> int:
     if why:
         say(f"nothing was sent: {why}")
         return 1
+    root = paths.run_root()
+    try:
+        seen = seen_empty(a.seen_empty, root, time.time(), last_import_asked(root))
+    except NotSeenEmpty as e:
+        say(f"nothing was sent: place 16 is not seen empty: {e}. Decision 26 imports only where the camera's own "
+            f"Import/Edit table was seen to show it empty since the last import. With the camera in Movie, look at it "
+            f"(nothing is chosen) and name the frame that shows User16 with --seen-empty:\n  {look_command(root)}")
+        return 1
+    say(f"place 16 seen empty: {seen['row']!r} on {seen['frame']}")
     run = Run(a.run)
     run.log("lut_allowance", allow=list(a.allow), allowance=allowance)
+    run.log("lut_seen_empty", **seen)
     out = {"t": time.strftime("%Y-%m-%dT%H:%M:%S"), "file": lut.resolve().name, "sha256": provenance.sha256(lut),
-           "place": LUT_PLACE, "allowance": allowance}
+           "place": LUT_PLACE, "allowance": allowance, "seen_empty": seen}
     code = 1
     try:
         code = session_run(run, lut, out)
@@ -376,6 +553,8 @@ def session_run(run, lut: Path, out: dict) -> int:
             "two once the lines above read right:")
         for line in record_commands(start, end.after, LUT_PLACE, bool(keys)):
             say(f"   {line}")
+        say("and look at the camera's Import/Edit table again, so that the row for 16 is on record with its new reading "
+            f"(the camera in Movie; nothing is chosen):\n   {look_command(run.root)}")
     return code
 
 

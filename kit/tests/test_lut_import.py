@@ -394,12 +394,59 @@ def stand_in(monkeypatch, cam: Camera):
 
 
 ALLOW = ["--allow", "Manage User LUTs"]
+EMPTY_ROWS = [f"User{n}: (No Import)" for n in range(11, 17)]       # the camera's table scrolled to User16, all empty
+LOOK_PATH = ["Manage User LUTs", "Import/Edit"]
 
 
-def tool(monkeypatch, luts, cam: Camera, *args, allow=ALLOW) -> int:
+def look(root: Path, rows=None, ago: float = 600.0, path=LOOK_PATH, title="Import/Edit", run="kit2_lut_look",
+         name="00034_down.png", now=None) -> Path:
+    """A look at the camera's Import/Edit table, as kit/drive.py leaves it in its run: the frame in shots/, its press in
+    events.jsonl `ago` s before `now`, and drive.jsonl's line naming the path and the frame. The frame's OCR lines (the
+    title, then one row each) are kept in OCR_LINES for the stand-in reader."""
+    now = time.time() if now is None else now
+    d = root / run
+    (d / "shots").mkdir(parents=True, exist_ok=True)
+    frame = d / "shots" / name
+    frame.write_bytes(b"\x89PNG\r\n\x1a\n a made-up frame " + name.encode() + str(now - ago).encode())
+    with open(d / "events.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"t": now - ago, "kind": "press", "key": "down", "frame": name, "screen": "unknown"}) + "\n")
+    with open(d / "drive.jsonl", "a", encoding="utf-8") as f:
+        f.write(json.dumps({"path": path, "presses": ["right", "down", "menu"], "completed": True,
+                            "screens": [{"after": "down", "frame": name, "kind": "unknown", "text": ""}]}) + "\n")
+    texts = ([title] if title else []) + list(EMPTY_ROWS if rows is None else rows)
+    OCR_LINES[frame.resolve()] = [L_OCR(t, 1.0, 25, 15 + 50 * i, 240, 30) for i, t in enumerate(texts)]
+    return frame
+
+
+OCR_LINES: dict = {}
+
+
+def L_OCR(text, conf, x, y, w, h):
+    from camkit.ocr import Line
+    return Line(text, conf, x, y, w, h)
+
+
+def fake_read(paths, eng=None):
+    """camkit.ocr.read's stand-in: each look's lines as look() made them; a frame it knows nothing of cannot be read."""
+    out = {}
+    for p in paths:
+        key = Path(p).resolve()
+        if key not in OCR_LINES:
+            raise RuntimeError(f"the OCR helper could not read {p}")
+        out[Path(p)] = OCR_LINES[key]
+    return out
+
+
+def tool(monkeypatch, luts, cam: Camera, *args, allow=ALLOW, seen="look") -> int:
+    """The tool run on the test's LUT with the owner's word and, unless `seen` says otherwise, a look at an empty table
+    taken just now (look()), so after any import a run before it in the test asked for; the kit's OCR stood in by
+    fake_read."""
+    from camkit import ocr, paths
     run, _, folder, lut = luts
     T = stand_in(monkeypatch, cam)
-    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *allow, *args])
+    monkeypatch.setattr(ocr, "read", fake_read)
+    seen_args = ["--seen-empty", str(look(paths.run_root(), ago=0) if seen == "look" else seen)] if seen else []
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *allow, *seen_args, *args])
     return T.main()
 
 
@@ -625,13 +672,16 @@ def test_nothing_is_sent_for_a_file_or_place_the_kit_does_not_import(monkeypatch
     """A file outside the clone's LUT folder: refused before any link opens, exit 1; the tool takes no other place than
     16 (no --place: argparse stops it, exit 2); a camera that refuses the start download: said, nothing imported,
     exit 1."""
+    from camkit import ocr, paths
     cam = Camera()
     outside = made(tmp_path / "elsewhere", NAME)
     T = stand_in(monkeypatch, cam)
-    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(outside), *ALLOW])
+    monkeypatch.setattr(ocr, "read", fake_read)
+    frame = str(look(paths.run_root()))
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(outside), *ALLOW, "--seen-empty", frame])
     assert T.main() == 1
     assert capsys.readouterr().out.count("nothing was sent") == 1
-    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(luts[3]), *ALLOW, "--place", "15"])
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(luts[3]), *ALLOW, "--seen-empty", frame, "--place", "15"])
     with pytest.raises(SystemExit) as e:
         T.main()
     assert e.value.code == 2 and cam.sent == []
@@ -673,7 +723,9 @@ def test_the_whole_run_through_the_link_and_the_stand_in_camlink(monkeypatch, lu
     monkeypatch.setattr(T, "wait_lock", lambda since, eyes=None, **kw: None)
     # the stand-in camlink writes no picture for osd: the screen it shows stood in as the shooting screen
     monkeypatch.setattr(T, "screen_kind", lambda link, eyes, tag="end-check": "shooting")
-    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *ALLOW])
+    from camkit import ocr
+    monkeypatch.setattr(ocr, "read", fake_read)
+    monkeypatch.setattr(sys, "argv", ["lut_import.py", str(lut), *ALLOW, "--seen-empty", str(look(paths.run_root()))])
     monkeypatch.setitem(T.USER_LUT, "ILCE-1M2", (key(STAYS),))     # as once the first run has named it
     assert T.main() == 0
     verbs = [raw.split(b" ", 2)[1].strip() for raw in received(log) if raw.startswith(b"@")]
@@ -737,4 +789,154 @@ def test_the_printed_record_command_writes_a_look_with_keys_alone(monkeypatch, l
     assert (lk["tab"], lk["group"], lk["path"]) == ("Exposure/Color", "Color/Tone", ["Manage User LUTs", "Import/Edit"])
     assert lk["records_changed"] == [key(SETS_BACK), key(STAYS)]
     assert "ImportLUTFile" in lk["note"] and " -> " not in json.dumps(lk)
+
+
+# ---------------------------------------------------------------- the look that says place 16 is empty (--seen-empty)
+
+def seen(monkeypatch, frame, root, now=None, last=None):
+    """lut_import.seen_empty on `frame` with the stand-in OCR: its result, or the refusal's words."""
+    import lut_import as T
+    from camkit import ocr
+    monkeypatch.setattr(ocr, "read", fake_read)
+    try:
+        return T.seen_empty(frame, root, time.time() if now is None else now, last)
+    except T.NotSeenEmpty as e:
+        return str(e)
+
+
+def test_a_look_at_an_empty_row_16_says_place_16_is_empty(monkeypatch, tmp_path):
+    """The camera's own Import/Edit table, seen: the frame under the camera's runs, its look's time and path from its
+    run's own records, the kit's OCR reading the title and User16's own row as "(No Import)". The result names the frame
+    from the camera's run root, its SHA-256, the row as read and when the look was."""
+    root = tmp_path / "TEST-CAM_fw9.99"
+    now = time.time()
+    frame = look(root, now=now)
+    got = seen(monkeypatch, frame, root, now)
+    assert got["frame"] == "kit2_lut_look/shots/00034_down.png" and got["row"] == "User16: (No Import)"
+    assert got["sha256"] == hashlib.sha256(frame.read_bytes()).hexdigest() and abs(got["look_t"] - (now - 600)) < 1
+    assert seen(monkeypatch, "kit2_lut_look/shots/00034_down.png", root, now)["row"] == "User16: (No Import)"
+    # OCR's spacing and a dropped colon are the same row
+    for n, row in enumerate(("User 16 : ( No Import )", "User16 (No Import)", "user16: (no import)")):
+        f = look(root, rows=["User15: (No Import)", row], now=now, name=f"0004{n}_down.png")
+        assert seen(monkeypatch, f, root, now)["row"] == row
+
+
+@pytest.mark.parametrize("rows,said", [
+    ([f"User{n}: (No Import)" for n in range(1, 7)], "User16's row is not on this frame"),        # User1 is not 16
+    (["User1: (No Import)", "User16: 1_test_look_to_709 S-Gamut3.Cine/S-Log3 0.0"], "User16 reads"),
+    (["User16: (No lmport)x"], "User16 reads"),
+    (["Userl6: (No Import)"], "User16's row is not on this frame"),
+    (["User160: (No Import)"], "User16's row is not on this frame"),
+])
+def test_a_row_16_not_read_as_empty_refuses(monkeypatch, tmp_path, rows, said):
+    root = tmp_path / "TEST-CAM_fw9.99"
+    got = seen(monkeypatch, look(root, rows=rows), root)
+    assert isinstance(got, str) and said in got
+
+
+def test_a_frame_that_is_not_such_a_look_refuses(monkeypatch, tmp_path):
+    """Refused, saying why: a frame outside the camera's runs, a link, not in a run's shots/, not a picture, not there;
+    no title "Import/Edit"; a look whose run does not record when it was taken or that it was Manage User LUTs >
+    Import/Edit; one the OCR cannot read."""
+    root = tmp_path / "TEST-CAM_fw9.99"
+    now = time.time()
+    good = look(root, now=now)
+    elsewhere = look(tmp_path / "OTHER-CAM_fw1.00", now=now)
+    assert "not under this camera's runs" in seen(monkeypatch, elsewhere, root, now)
+    (good.parent / "link.png").symlink_to(good)
+    assert "a link" in seen(monkeypatch, good.parent / "link.png", root, now)
+    stray = root / "kit2_lut_look" / "00034_down.png"
+    stray.write_bytes(good.read_bytes())
+    assert "a run's shots/" in seen(monkeypatch, stray, root, now)
+    assert "not there" in seen(monkeypatch, root / "kit2_lut_look" / "shots" / "00099_down.png", root, now)
+    text = good.with_name("00035_down.txt")
+    text.write_text("x", encoding="utf-8")
+    assert "not a .png" in seen(monkeypatch, text, root, now)
+    assert "Import/Edit" in seen(monkeypatch, look(root, title=None, now=now, name="00036_down.png"), root, now)
+    assert "Manage User LUTs > Import/Edit" in seen(monkeypatch, look(root, path=["Select LUT"], run="kit2_other",
+                                                                      now=now), root, now)
+    bare = root / "kit2_bare" / "shots" / "00001_down.png"
+    bare.parent.mkdir(parents=True)
+    bare.write_bytes(b"\x89PNG")
+    OCR_LINES[bare.resolve()] = OCR_LINES[good.resolve()]
+    assert "does not say when" in seen(monkeypatch, bare, root, now)
+    unread = look(root, now=now, name="00037_down.png")
+    del OCR_LINES[unread.resolve()]
+    assert "could not be read" in seen(monkeypatch, unread, root, now)
+
+
+def test_a_look_too_old_another_day_or_before_the_last_import_refuses(monkeypatch, tmp_path):
+    """The look must be no more than an hour before the import, on the same day, not ahead of the clock, and after the
+    last import the SDK was asked for (lut_import.jsonl's asked_at), whatever its answer."""
+    import datetime
+    root = tmp_path / "TEST-CAM_fw9.99"
+    now = time.time()
+    assert "more than an hour" in seen(monkeypatch, look(root, ago=3700, now=now, name="00001_down.png"), root, now)
+    assert "ahead of" in seen(monkeypatch, look(root, ago=-120, now=now, name="00002_down.png"), root, now)
+    midnight = datetime.datetime.combine(datetime.date.today(), datetime.time(0, 10)).timestamp()
+    assert "another day" in seen(monkeypatch, look(root, ago=1200, now=midnight, name="00003_down.png"), root, midnight)
+    frame = look(root, ago=600, now=now, name="00004_down.png")
+    assert "after the last import" in seen(monkeypatch, frame, root, now, last=now - 300)
+    assert seen(monkeypatch, frame, root, now, last=now - 900)["row"] == "User16: (No Import)"
+
+
+def test_the_last_import_asked_for_is_read_from_every_run(tmp_path):
+    """lut_import.jsonl in any run of the camera: the latest import the SDK was asked for (asked_at; a line from before
+    the field, its t), confirmed or not; a run that asked nothing counts for none."""
+    import datetime
+
+    import lut_import as T
+    root = tmp_path / "TEST-CAM_fw9.99"
+    for run, lines in (("kit2_lut", [{"t": "2026-11-19T15:00:00", "called": False},
+                                     {"t": "2026-11-19T16:00:00", "called": True, "asked_at": 1795130000.0}]),
+                       ("kit2_lut2", [{"t": "2026-11-19T17:00:00", "confirmed": True, "result": L.LUT_OK}])):
+        (root / run).mkdir(parents=True)
+        (root / run / "lut_import.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines), encoding="utf-8")
+    assert T.last_import_asked(root) == max(datetime.datetime(2026, 11, 19, 17).timestamp(), 1795130000.0)
+    assert T.last_import_asked(tmp_path / "none") is None
+
+
+def a1_look() -> Path:
+    from camkit import paths
+    return paths.a1ii_root() / "kit2_fin_lut_table"
+
+
+@pytest.mark.skipif(not (a1_look() / "shots" / "00034_down.png").exists(), reason="the a1 II's runs are not here")
+def test_the_camera_s_own_table_reads_empty_and_a_frame_without_row_16_refuses():
+    """The look made on the a1 II (2026-11-19, Movie): the kit's own OCR reads User16's row on 00034_down.png as empty,
+    and 00019_right.png, which shows User1 to User6, is refused."""
+    import lut_import as T
+    from camkit import paths
+    root, d = paths.a1ii_root(), a1_look()
+    looked = next(json.loads(x)["t"] for x in (d / "events.jsonl").read_text(encoding="utf-8").splitlines()
+                  if json.loads(x).get("frame") == "00034_down.png")
+    got = T.seen_empty(d / "shots" / "00034_down.png", root, looked + 120, None)
+    assert got["row"].replace(" ", "") == "User16:(NoImport)" and got["frame"] == "kit2_fin_lut_table/shots/00034_down.png"
+    with pytest.raises(T.NotSeenEmpty, match="User16's row is not on this frame"):
+        T.seen_empty(d / "shots" / "00019_right.png", root, looked + 120, None)
+
+
+def test_the_tool_needs_the_look_and_logs_it(monkeypatch, luts, capsys):
+    """The tool takes --seen-empty: without it argparse stops it; a look refused stops it before anything connects,
+    with how to make one; a good one goes into events.jsonl and lut_import.jsonl (frame, SHA-256, row), and after a
+    confirmed import the next steps include the same look again, so the row's new reading is on record."""
+    from camkit import paths
+    cam = Camera()
+    with pytest.raises(SystemExit) as e:
+        tool(monkeypatch, luts, cam, seen=None)
+    assert e.value.code == 2 and cam.sent == []
+    old = look(paths.run_root(), ago=7200, name="00001_down.png")
+    assert tool(monkeypatch, luts, cam, seen=old) == 1 and cam.sent == []
+    out = capsys.readouterr().out
+    assert "nothing was sent" in out and "more than an hour" in out
+    assert "kit/drive.py" in out and "--path 'Manage User LUTs' --path Import/Edit" in out
+    assert tool(monkeypatch, luts, Camera()) == 0
+    out = capsys.readouterr().out
+    line = jsonl_lines()[-1]
+    assert line["seen_empty"]["row"] == "User16: (No Import)" and line["seen_empty"]["frame"].endswith("00034_down.png")
+    assert isinstance(line["asked_at"], float) and isinstance(line["imported_at"], float)
+    logged = [x for x in events(Run("kit2_lut")) if x["kind"] == "lut_seen_empty"]
+    assert logged and logged[-1]["row"] == "User16: (No Import)" and len(logged[-1]["sha256"]) == 64
+    after = out.split("ImportLUTFile_Result_OK", 1)[1]
+    assert "kit/drive.py" in after and "Import/Edit" in after and "--press down" in after and "CAMSET_EYES=osd" in after
 
