@@ -24,7 +24,9 @@ its run folder so (LOCAL_MARKER); every tool that reads a run folder's frames af
 (local_only_runs) before it builds a reader, and make_reader builds no reader that is not local while LOCAL_ONLY is
 set. A run that opened a row an owner decision names (kit/drive.py --owner) marks its folder NO_READER_MARKER too, and
 local_only_runs stops a tool pointed at it before any reader is built: no reader reads those frames. PROMPTS holds the questions the kit asks today and, beside them, one question per kind of
-screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet.
+screen (the ".v2" keys, camkit.reading.QUESTIONS), which no run asks yet, and a ".grey" version of each question about
+a setting's options that also asks whether the item read is drawn grey, which a list prover asks for that alone
+(proving.greyed).
 """
 import base64
 import contextlib
@@ -231,6 +233,41 @@ PROMPTS.update({
         "This is a Sony camera screen. Copy its title exactly as drawn: the white text at the top, never the orange "
         "line under it. If the screen is drawn turned, read it turned. Leave out any icon before the title and the "
         "page counter at the top right. " + _JSON + '{"title": "<the title>"}'),
+})
+
+# Each question about a setting's options where the camera can draw the item read greyed out, as it draws one it will
+# not take (the owner, 2026-11-19: "the VLM text needs to include which text is grey, does it respond with that?"), in
+# a version that asks that too, in a field of its own, "greyed" (the menu question's name for it): the question's own
+# text word for word, with one sentence and the field added before its JSON. Named the question's key with ".grey"
+# after it, so the question it was made from is its name without ".grey": that one keeps its text, the answers cached
+# for it and its place in the census, which measures the two side by side (kit/tools/reader_census.py --questions,
+# variant "grey"); the numbers .v2 and .v3 already mean a question per kind of screen and a third measured better. On a
+# list the item's letters are drawn grey instead of white (kit2_pass2 260193: ~120 against ~225); on a carousel the
+# orange line stays orange, and the option's lit icon in the column at the left is drawn dim, dark red, instead of
+# bright (kit2_pass2 119947 against 119966). proving.greyed asks the kind's (camkit.reading.QUESTIONS) for its "greyed"
+# alone, beside its own pixel test, and only ever to be more careful.
+_GREY = "as the camera draws an item it will not take"
+_GREY_LETTERS = f"its letters drawn grey instead of white, {_GREY}"
+_GREY_ICON = ("in the column of icons at the left, its lit icon drawn dim, dark red or grey, instead of bright, " + _GREY)
+PROMPTS.update({
+    "option.grey": PROMPTS["option"][:-1] + (
+        f', "greyed": true if the item under the cursor is greyed out ({_GREY_LETTERS}; on a screen with a column of '
+        'icons at the left, its lit icon there drawn dim, dark red or grey, instead of bright), else false}'),
+    "dialog.grey": PROMPTS["dialog"][:-1] + (
+        f', "greyed": true if the selected option is greyed out ({_GREY_ICON}), else false}}'),
+    "lit.v2.grey": (
+        PROMPTS["lit.v2"][:PROMPTS["lit.v2"].rfind(_JSON)] + "Then say whether that item is greyed out: "
+        + _GREY_LETTERS + ". " + _JSON + '{"selected": "<the text>", "greyed": true or false}'),
+    "carousel.v2.grey": (
+        PROMPTS["carousel.v2"][:PROMPTS["carousel.v2"].rfind(_JSON)] + "Then say whether that option is greyed "
+        "out: " + _GREY_ICON + ". " + _JSON + '{"selected": "<the orange line>", "greyed": true or false}'),
+    "cell.v2.grey": (
+        PROMPTS["cell.v2"][:PROMPTS["cell.v2"].rfind(_JSON)] + "Then say whether that cell is greyed out: drawn "
+        "dim or grey instead of bright, " + _GREY + ". " + _JSON + '{"selected": "<the text>", "greyed": true or false}'),
+    "checklist.v2.grey": (
+        PROMPTS["checklist.v2"][:PROMPTS["checklist.v2"].rfind(_JSON)] + "Also say for every check box whether it is "
+        "greyed out: its label drawn grey instead of white, " + _GREY + ". "
+        + _JSON + '{"boxes": [{"label": "<the label>", "ticked": true or false, "greyed": true or false}]}'),
 })
 
 

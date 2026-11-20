@@ -1161,7 +1161,7 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
         assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
     for kind, q in reading.QUESTIONS.items():
         text = vlm.PROMPTS[q.prompt]
-        assert re.search(r"\.v[23]$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
+        assert re.search(r"\.v[23](?:\.grey)?$", q.prompt) and q.prompt not in OLD_PROMPTS, kind
         assert text.isascii() and "Reply with JSON only, on one line: {" in text and f'"{q.field}"' in text, kind
         assert q.expect in reading.EXPECTS and len(text) < 600, kind
     assert [k for k, v in vlm.PROMPTS.items() if k.endswith(".v2") and "write none" in v] == \
@@ -1226,9 +1226,60 @@ def test_no_reader_a_camera_run_builds_is_the_census_claude_command_line(monkeyp
 def test_read_asks_a_kinds_own_question_when_given_its_region(eyes):
     f = eyes.frame("00015_right.png")
     eyes.see(f, "1/25", box=CAROUSEL.box)
-    eyes.answer("carousel.v2", {"selected": "1/250"})
+    eyes.answer("carousel.v2.grey", {"selected": "1/250", "greyed": False})
     r = reading.read(f, reading.region("carousel"), "number", "proof", choices=["1/25", "1/250"])
-    assert eyes.asked == ["carousel.v2"] and r.raw["reader"] == "1/250"
+    assert eyes.asked == ["carousel.v2.grey"] and r.raw["reader"] == "1/250"
+
+
+# the questions a ".grey" version was made from, and the kinds of screen that ask one (camkit.vlm, 2026-11-19)
+GREY_OF = {"option.grey": "option", "dialog.grey": "dialog", "lit.v2.grey": "lit.v2", "carousel.v2.grey": "carousel.v2",
+           "cell.v2.grey": "cell.v2", "checklist.v2.grey": "checklist.v2"}
+GREY_KINDS = {"list": "lit.v2.grey", "side list": "lit.v2.grey", "table picker": "lit.v2.grey",
+              "checklist": "checklist.v2.grey", "carousel": "carousel.v2.grey", "axis": "carousel.v2.grey",
+              "axis cell": "cell.v2.grey"}
+
+
+def test_each_question_about_a_settings_options_has_a_grey_version_that_changes_nothing_else():
+    """A ".grey" version is the question it was made from word for word (that one keeps its text: the old pins above),
+    with one sentence and a "greyed" field added before its JSON (or, in the old JSON-template form, the field added
+    last); the kinds whose item can be drawn grey ask it (QUESTIONS, grey "greyed"), the others ask none."""
+    from camkit import vlm
+    assert {k: k.removesuffix(".grey") for k in vlm.PROMPTS if k.endswith(".grey")} == GREY_OF
+    json_line = "Reply with JSON only, on one line: "
+    for key, parent in GREY_OF.items():
+        grey, was = vlm.PROMPTS[key], vlm.PROMPTS[parent]
+        assert grey.isascii() and '"greyed": true' in grey and "greyed" not in was, key
+        assert "as the camera draws an item it will not take" in grey, key
+        if json_line in was:
+            assert grey.startswith(was[:was.rfind(json_line)]) and grey.count(json_line) == 1, key
+            assert grey[grey.rfind(json_line):].startswith(json_line + "{"), key
+            # the parent's JSON line, with the greyed field added inside it
+            assert re.sub(r', "greyed": true or false', "", grey[grey.rfind(json_line):]) == was[was.rfind(json_line):], key
+        else:
+            assert grey.startswith(was[:-1] + ', "greyed": true if ') and grey.endswith("else false}"), key
+    assert {k: q.prompt for k, q in reading.QUESTIONS.items() if q.grey} == GREY_KINDS
+    assert all(q.grey == "greyed" for q in reading.QUESTIONS.values() if q.grey)
+    assert all(".grey" not in q.prompt for q in reading.QUESTIONS.values() if not q.grey)
+
+
+def test_greyed_of_takes_a_true_or_false_and_only_where_something_was_read():
+    q, box = reading.QUESTIONS["list"], reading.QUESTIONS["checklist"]
+    assert reading.greyed_of({"selected": "Movie", "greyed": True}, q) is True
+    assert reading.greyed_of({"selected": "Movie", "greyed": False}, q) is False
+    assert reading.greyed_of({"selected": "Movie", "greyed": "True"}, q) is True
+    assert reading.greyed_of({"selected": "Movie", "greyed": " false "}, q) is False
+    assert reading.greyed_of({"selected": 5, "greyed": True}, q) is True           # a number read is a reading
+    for answer in ({"selected": "Movie"}, {"selected": "Movie", "greyed": "maybe"}, {"selected": "Movie", "greyed": 1},
+                   {"selected": "Movie", "greyed": None}, {"selected": "none", "greyed": True},
+                   {"selected": "", "greyed": True}, {"selected": None, "greyed": False},
+                   {"selected": True, "greyed": True}, None, "greyed", {"_unparsed": "x"}):
+        assert reading.greyed_of(answer, q) is None, answer
+    assert reading.greyed_of({"selected": "Movie", "greyed": True}, reading.QUESTIONS["scale"]) is None   # asks none
+    boxes = {"boxes": [{"label": "Movie", "ticked": True, "greyed": True}, {"label": "Still", "greyed": False}]}
+    assert reading.greyed_of(boxes, box, "Movie") is True and reading.greyed_of(boxes, box, "Still") is False
+    assert reading.greyed_of(boxes, box, "Cinema") is None and reading.greyed_of(boxes, box) is None
+    two = {"boxes": [{"label": "Movie", "greyed": True}, {"label": "Movie", "greyed": False}]}
+    assert reading.greyed_of(two, box, "Movie") is None and reading.greyed_of({"boxes": "x"}, box, "Movie") is None
 
 
 def test_the_options_are_handed_to_the_reader_before_its_json_line():
