@@ -936,8 +936,9 @@ def icons_disagree(doc: dict) -> list:
             row, at = place.get("row") or [], place.get("row_at") or []
             got = place.get("row_icons") if isinstance(place.get("row_icons"), list) else []
             for i in range(min(len(row), len(at))):
-                said[(menu, place.get("row_tab") or tab, tuple(map(str, row[:i + 1])), tuple(at[:i + 1]))].add(
-                    got[i] if i < len(got) else None)
+                where = place.get("row_tab") or tab          # a field no label is said apart (not_labels), never a crash here
+                said[(menu, str(where), tuple(map(str, row[:i + 1])), tuple(map(str, at[:i + 1])))].add(
+                    got[i] if i < len(got) and isinstance(got[i], (str, type(None))) else None)
     return [f"row {' > '.join(labels)}{f' in {menu}' if menu else ''}: its settings disagree on row_icons "
             f"({', '.join(sorted(map(str, words)))})" for (menu, _, labels, _), words in sorted(said.items(), key=str) if len(words) > 1]
 
