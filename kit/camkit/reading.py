@@ -1069,11 +1069,12 @@ def check_engines() -> tuple:
 
 
 # What in a model id only names a build of the weights, never another model: a quantisation (INT4, INT8, W4A16, FP8,
-# BF16, 4bit, 8-bit, Q4_K_M, Q8_0, IQ4_XS), a weights format or the tool that made it (GGUF, GGML, AWQ, GPTQ, EXL2, MLX,
-# DWQ, BNB, NF4, QAT), a snapshot's date (20261001), each a whole token between separators. A size, a version, a tune
-# (Instruct, VL, it) or any other token names the model and stays.
+# BF16, 4bit, 8-bit, Q4_K_M, Q8_0, IQ4_XS, and UD, Unsloth's dynamic quantisation: UD-Q6_K), a weights format or the
+# tool that made it (GGUF, GGML, AWQ, GPTQ, EXL2, MLX, DWQ, BNB, NF4, QAT), a snapshot's date (20261001), each a whole
+# token between separators. A size, a version, a tune (Instruct, VL, it, a derivative such as Heretic) or any other
+# token names the model and stays.
 _BUILD = re.compile(r"(?<![a-z0-9])(?:(?:u?int|fp|bf|f|nvfp|mxfp)\d{1,2}|w\d{1,2}a\d{1,2}|\d{1,2}-?bits?"
-                    r"|i?q\d(?:_[a-z0-9]+)*|gguf|ggml|awq|gptq|exl2|mlx|dwq|bnb|nf4|qat|20\d{6})(?![a-z0-9])")
+                    r"|i?q\d(?:_[a-z0-9]+)*|ud|gguf|ggml|awq|gptq|exl2|mlx|dwq|bnb|nf4|qat|20\d{6})(?![a-z0-9])")
 
 
 def model_id(model) -> str:

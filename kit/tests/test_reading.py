@@ -726,6 +726,24 @@ def test_a_reader_model_is_one_vote_whatever_its_case_and_spacing():
     assert reading.model_id("qwen3.8-27b") != reading.model_id("qwen3.8-8b")
 
 
+def test_a_build_is_one_model_as_the_owners_server_lists_them():
+    """The ids a reader server listed on 2026-11-19: Unsloth's dynamic quantisation ("UD") names a build, so
+    unsloth/Qwen3.8-27B-UD-Q6_K is the same model as ggml-org/Qwen3.8-27B-Q4_K_M, one vote (decision 22); a tune of the
+    weights (Heretic-RVN) is another model and keeps its own vote."""
+    got = {m: reading.model_id(m) for m in (
+        "ggml-org/Qwen3.8-27B-Q4_K_M", "unsloth/Qwen3.8-27B-UD-Q6_K", "unsloth/Qwen3.8-Flash-Next-UD-IQ3_XXS",
+        "ggml-org/gemma-4-26B-A4B-it-Q4_0", "ggml-org/GLM-4.6V-Flash-Q4_K_M", "0bserverx/Qwen3.8-27B-Heretic-RVN-Q4_K_M")}
+    assert got == {"ggml-org/Qwen3.8-27B-Q4_K_M": "qwen3.8-27b", "unsloth/Qwen3.8-27B-UD-Q6_K": "qwen3.8-27b",
+                   "unsloth/Qwen3.8-Flash-Next-UD-IQ3_XXS": "qwen3.8-flash-next",
+                   "ggml-org/gemma-4-26B-A4B-it-Q4_0": "gemma-4-26b-a4b-it", "ggml-org/GLM-4.6V-Flash-Q4_K_M": "glm-4.6v-flash",
+                   "0bserverx/Qwen3.8-27B-Heretic-RVN-Q4_K_M": "qwen3.8-27b-heretic-rvn"}
+    votes = [reading.Vote("reader", f"reader:{got['ggml-org/Qwen3.8-27B-Q4_K_M']}", "Auto"),
+             reading.Vote("third", f"reader:{got['unsloth/Qwen3.8-27B-UD-Q6_K']}", "Auto")]
+    assert reading.tally(votes, "label", ["Auto", "Manual"]) == (None, ())          # one model in two builds, one vote
+    # "ud" only as a whole token: a name that merely holds the letters keeps them
+    assert reading.model_id("Loud-7B") == "loud-7b" and reading.model_id("UDOP-7B-Q4_K_M") == "udop-7b"
+
+
 # ---------------------------------------------------------------------------------------------- read(), with the eyes faked
 
 def test_a_plain_reading_stands_on_ocr_alone_and_the_reader_is_not_asked(eyes):
