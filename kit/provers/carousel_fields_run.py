@@ -54,7 +54,8 @@ before any key steps them: a number the camera kept otherwise is a finding, as i
 
 Readings, as kit/provers/optboxes_run.py reads its boxes: the lit box by OCR, the second reader asked about the lit box
 itself on every doubt (camkit.reading.doubts) and always where the value decides a proof (the owner's rule: the reader is
-asked before a row fails), OCR plain and the reader apart stopping the row; the field's name by OCR, the reader where it
+asked before a row fails), OCR plain and the reader apart settled by the third role's readers where a reading stands by
+the kit's one counting rule (box_vote), else stopping the row; the field's name by OCR, the reader where it
 is not plain Latin; the title by OCR against the map's options, the reader on a doubt. Whether a press moved the box is
 told by its picture (white on orange, over 150 grey), which no reading decides. A value read the same as the one before while
 the picture changed (two values the readers cannot tell apart), a value seen before that is not the one held, a reader
@@ -67,7 +68,8 @@ as drawn ("Exposure Value"), "value" that field's value after the change as draw
 "fields" every field as drawn after it ([{"label", "value"}]), "label" all of them together (two fields of a step and a
 count in the words of the definition's Drive Mode bracket lists, "0.5 EV 3 Img.", as kit/provers/bracket_run.py forms
 them; any other, the fields' values joined " | "), "box" and "read_by" the lit box's reading and who gave it ("ocr",
-"both", "reader"), "shown" OCR's reading of it, "box_vlm" and "box_reader" the second reader's and its name, "final" on
+"both", "reader", "votes"), "shown" OCR's reading of it, "box_vlm" and "box_reader" the second reader's and its name,
+"box_votes" where the third role's readers settled it (every vote: "eye", "reader", "model", "text"), "final" on
 the put-back and with it "whole" (False where the deadline cut the walk short), "attempt", "changes". A grid's lines
 say "walk": "grid", "index" ["grid", box 0's place, box 1's place from its low end], "field" and "value" box 1's; a
 named number's "walk": "number", "index" ["number", N], "value" the number its boxes make.
@@ -85,7 +87,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, paths, reading, screen  # noqa: E402
+from camkit import camset, ocr, paths, reading, screen, vlm  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which says what to run where the kit's packages are missing)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
@@ -157,12 +159,19 @@ def key(text) -> str:
 
 class BoxRead(NamedTuple):
     """One reading of the lit box (lit_read): the value taken, OCR's reading as read, the second reader's (None: not
-    asked), the reader that answered, and which gave the value ("ocr", "both", "reader")."""
+    asked), the reader that answered, which gave the value ("ocr", "both", "reader", "votes": the third role's readers
+    settled it, box_vote), and then every vote cast (box_vote's)."""
     text: str
     ocr: str
     vlm: str | None = None
     reader: str | None = None
     by: str = "ocr"
+    votes: tuple = ()
+
+
+def votes_of(r: BoxRead) -> dict:
+    """What a proof line keeps of a vote that settled the box (BoxRead.votes): {"box_votes": [...]}, else nothing."""
+    return {"box_votes": list(r.votes)} if r.votes else {}
 
 
 def title_reads(cam, labels: list) -> str | None:
@@ -227,6 +236,56 @@ def ask_box(cam) -> tuple:
     return said, who
 
 
+def box_vote(cam, raw: str, said: str, who) -> tuple:
+    """Where OCR's plain reading of the lit box and the second reader's are two numbers (lit_read): the third role's
+    readers (camkit.vlm.voters, in the order private/config.json gives them) asked in turn the second reader's own
+    question about the same frame (PROMPTS["box"], through camkit.reading.ask under each one's role key), each only while
+    no reading stands and none where a reader of its model's family has read the box already (camkit.reading.family_voted:
+    it could make nothing stand). The votes are counted by the kit's one rule, camkit.reading.tally, a number's way: one
+    vote per OCR engine and per model family, a family that read two things casts none, and a reading neither OCR nor the
+    second reader gave never stands on later votes alone; here it stands only with a third reader's vote among those
+    behind it, OCR and the second reader having been read apart. A third reader that does not answer casts no vote.
+    Returns (the reading that stands, canonical, or None; every vote cast, {"eye", "reader", "model", "text"} and "why"
+    where one gave no answer, as the proof line keeps them). No fresh frame first: this prover reads the box on the frame
+    its picture was judged on, a doubtful reading included, and the proof line names that frame."""
+    frame = cam.frame.path.name
+    second = vlm.answered_by() or reading._reader_model("second")    # the model that answered the second's question
+    votes = [reading.Vote("ocr", f"ocr:{reading.engine_of(ocr.engine())}", raw, frame),
+             reading.Vote("reader", f"reader:{reading.model_id(second or who)}", said, frame)]
+    kept = [{"eye": "ocr", "reader": ocr.engine(), "model": None, "text": raw},
+            {"eye": "reader", "reader": who, "model": second, "text": said}]
+
+    def stands():
+        win, eyes = reading.tally(votes, "number")
+        return win if win is not None and any(vlm.voter_index(e) is not None for e in eyes) else None
+    for k in range(reading.MAX_THIRD):
+        if stands() is not None:
+            break
+        role = vlm.voter_key(k)
+        model = reading._reader_model(role)
+        if model is None:
+            break
+        if reading.family_voted(votes, model):
+            continue
+        got = reading.ask(cam.frame, "box", 25.0, role=role)
+        value = got.answer.get("value") if isinstance(got.answer, dict) else None
+        value = " ".join(value.split()) if isinstance(value, str) and value.strip() else None
+        votes.append(reading.Vote(role, f"reader:{reading.model_id(got.model or model)}", value, frame))
+        kept.append({"eye": role, "reader": got.name, "model": got.model or model, "text": value,
+                     **({"why": got.why} if got.why else {})})
+    win = stands()
+    return (None if win is None else reading.canonical(win.text)), tuple(kept)
+
+
+def voters_said(votes: tuple) -> str:
+    """The third readers' votes in words, for a refusal: each reader's reading, or that none was asked."""
+    third = [v for v in votes if vlm.voter_index(v["eye"]) is not None]
+    if not third:
+        return " (no third reader of another model family to ask)"
+    return " (the third readers: " + ", ".join(f"{v['reader'] or v['eye']} {v['text']!r}" for v in third) + \
+        ": no reading stands by the kit's rule)"
+
+
 def lit_read(cam, always: bool) -> BoxRead:
     """The lit box's value, as optboxes_run reads its boxes: OCR's reading (boxes_run.lines) stands alone where it is
     plain (camkit.reading.doubts, a number: four characters or more, no look-alike) and `always` is False. Otherwise,
@@ -234,7 +293,11 @@ def lit_read(cam, always: bool) -> BoxRead:
     reader is asked about the lit box itself (ask_box): where OCR was unsure, its reading is taken (the owner's rule,
     2026-11-06: the reader is right where OCR drops or mangles short digits, and it is asked before a row fails); where
     OCR was plain, both must hold the same number (key), and the reader's words are kept, OCR dropping letters of them.
-    A reader that does not answer where it must, or two numbers apart, stop the row: the kit does not guess."""
+    Where they hold two numbers, the third role's readers vote (box_vote: OCR read a bullet for the minus sign of the
+    second reader's "2 Images (-)", kit2_pass2 266268, 2026-11-20), and the reading that stands is taken, said so
+    ("votes"). A reader
+    that does not answer where it must, or two numbers apart that no vote settles, stop the row: the kit does not
+    guess."""
     frame = cam.frame.path.name
     raw = ocr.text_in(lines(cam), lit_box(cam)).strip()
     doubted = reading.doubts(raw, "number", lit=True)
@@ -249,8 +312,11 @@ def lit_read(cam, always: bool) -> BoxRead:
     if doubted:
         return BoxRead(reading.canonical(said), raw, said, who, "reader")
     if key(raw) != key(said):
-        raise Failed(f"the lit box on {frame}: OCR read {raw!r} and the second reader {said!r}: the kit does not guess "
-                     "which")
+        voted, votes = box_vote(cam, raw, said, who)
+        if voted is None:
+            raise Failed(f"the lit box on {frame}: OCR read {raw!r} and the second reader {said!r}: the kit does not "
+                         f"guess which{voters_said(votes)}")
+        return BoxRead(voted, raw, said, who, "votes", votes)
     return BoxRead(reading.canonical(said), raw, said, who, "both")
 
 
@@ -652,7 +718,7 @@ def keep(cam, link, eyes, path, option, labels, look_: Look, b, w: Walk, place_,
     final = what in ("round", "back")
     rec = {"path": [*path, option], "kind": "list", "via": VIA, "index": [b, place_], "field": look_.labels[b],
            "value": field["value"], "label": lab, "fields": fields, "box": r.text, "read_by": r.by, "shown": r.ocr,
-           "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen, "row_frame": row_frame,
+           "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), "chosen_frame": chosen, "row_frame": row_frame,
            "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}), "applied": got.applied,
            "final": final, **({"whole": not w.cut} if final else {}), "attempt": attempt, "changes": changes_of(ch)}
     if final or not got.applied:
@@ -868,8 +934,8 @@ def choose_pair(cam, link, eyes, path, option, labels, look_: Look, g: Grid, p: 
     ch = camset.diff(camset.read(base), camset.read(dat))
     rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "grid", "index": ["grid", p, i],
            "field": look_.labels[1], "value": r.text, "label": lab, "fields": fields, "box": r.text, "read_by": r.by,
-           "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen, "row_frame": row_frame,
-           "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}),
+           "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r), "chosen_frame": chosen,
+           "row_frame": row_frame, "dat": dat.name, "base": base.name, **({"notice": got.notice} if got.notice else {}),
            "applied": got.applied, "final": final, **({"whole": not g.cut} if final else {}), "attempt": attempt,
            "changes": changes_of(ch)}
     if final or not got.applied:
@@ -1122,8 +1188,8 @@ def named_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look,
             ch = camset.diff(camset.read(base), camset.read(dat))
             rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "number", "index": ["number", number],
                    "field": look_.labels[b0], "value": field["value"], "label": lab, "fields": fields, "box": r.text,
-                   "read_by": r.by, "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen,
-                   "row_frame": row_frame, "dat": dat.name, "base": base.name,
+                   "read_by": r.by, "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, **votes_of(r),
+                   "chosen_frame": chosen, "row_frame": row_frame, "dat": dat.name, "base": base.name,
                    **({"notice": got.notice} if got.notice else {}), "applied": got.applied, "final": final,
                    "attempt": attempt, "changes": changes_of(ch)}
             if final or not got.applied:

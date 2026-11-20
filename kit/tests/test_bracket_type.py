@@ -679,6 +679,75 @@ def test_the_lit_box_is_read_by_ocr_and_the_reader_where_ocr_is_unsure(monkeypat
     assert bool(asked) == (got[1] != "ocr")
 
 
+# the third role's readers where OCR's plain reading and the second reader's are two numbers (box_vote): OCR's bullet for
+# the minus sign, kit2_pass2 266268 (2026-11-20); the models as the a1 II's readers name them, the first two families apart
+SECOND, GEMMA, GLM = "RedHatAI/Qwen3.8-27B-INT4", "google/gemma-4-26b-it", "zai/GLM-4.6V-Flash"
+MINUS, PLUS, BULLET = "2 Images (-)", "2 Images (+)", "2 Images (•)"
+
+
+def voting_cam(eyes, monkeypatch, ocr_text, second, voters):
+    """lit_read's world for a vote: a frame with bytes of its own (the eyes fixture), OCR reading ocr_text in the lit box,
+    the second reader reading second (box_answer), and the third role's readers `voters`, [(model, its reading, or an
+    exception: no answer)], in the order private/config.json would give them."""
+    import carousel_fields_run as F
+    from camkit import vlm
+    from camkit.ocr import Line
+    cam = SimpleNamespace(frame=eyes.frame("266268_up.png"),
+                          read=lambda: SimpleNamespace(kind="dialog", field=1, boxes=[(137, 345), (354, 563)],
+                                                       bar=(351, 405)))
+    monkeypatch.setattr(F, "lines", lambda c: [Line(ocr_text, 1.0, 380, 360, 160, 30)])
+    monkeypatch.setattr(F, "box_answer", lambda c: (second, "vllm", False))
+    monkeypatch.setattr(F.time, "sleep", lambda s: None)
+    monkeypatch.setattr(vlm, "answered_by", lambda: None)
+    eyes.models = {"second": SECOND}
+    for k, (model, said) in enumerate(voters):
+        eyes.models[vlm.voter_key(k)] = model
+        eyes.answer("box", said if isinstance(said, BaseException) else {"value": said}, role=vlm.voter_key(k))
+    return F, cam
+
+
+def test_the_third_readers_settle_ocr_and_the_second_reader_apart(eyes, monkeypatch):
+    """OCR "2 Images (bullet)", the second reader "2 Images (-)": the third readers asked the second reader's own box
+    question, in turn while no reading stands; the first agreeing with the second reader makes two model families against
+    OCR's one, the kit's rule (camkit.reading.tally), so the second is not asked. The reading taken says so ("votes"), and
+    the proof line keeps every vote with its reader's model."""
+    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, [(GEMMA, MINUS), (GLM, MINUS)])
+    r = F.lit_read(cam, True)
+    assert (r.text, r.by, r.ocr, r.vlm, r.reader) == (MINUS, "votes", BULLET, MINUS, "vllm")
+    assert [(v["eye"], v["model"], v["text"]) for v in r.votes] == [
+        ("ocr", None, BULLET), ("reader", SECOND, MINUS), ("third", GEMMA, MINUS)]
+    assert eyes.asked == ["third box"]
+    assert F.votes_of(r) == {"box_votes": list(r.votes)} and F.votes_of(F.BoxRead(MINUS, MINUS)) == {}
+
+
+def test_a_third_reader_that_does_not_answer_casts_no_vote(eyes, monkeypatch):
+    from camkit import vlm
+    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, [(GEMMA, vlm.NoReader("down")), (GLM, MINUS)])
+    r = F.lit_read(cam, True)
+    assert (r.text, r.by) == (MINUS, "votes") and eyes.asked == ["third box", "third.2 box"]
+    assert r.votes[2]["text"] is None and r.votes[2]["why"] and r.votes[3]["model"] == GLM
+
+
+@pytest.mark.parametrize("voters, asked", [
+    ([(GEMMA, PLUS), (GLM, "2 Images")], ["third box", "third.2 box"]),   # split: each its own reading, backing neither
+    ([(GEMMA, PLUS), (GLM, PLUS)], ["third box", "third.2 box"]),         # agreed on a reading neither of the first two gave
+    ([("mlx-community/Qwen3.8-27B-4bit", MINUS)], []),                     # the second reader's family: never asked
+    ([], [])])                                                             # no third reader
+def test_a_vote_that_settles_nothing_stops_the_row_as_before(eyes, monkeypatch, voters, asked):
+    import re
+    F, cam = voting_cam(eyes, monkeypatch, BULLET, MINUS, voters)
+    with pytest.raises(F.Failed, match=re.escape(f"OCR read {BULLET!r} and the second reader {MINUS!r}: the kit does "
+                                                 "not guess which")):
+        F.lit_read(cam, True)
+    assert eyes.asked == asked
+
+
+def test_ocr_and_the_second_reader_agreeing_ask_nobody_else(eyes, monkeypatch):
+    F, cam = voting_cam(eyes, monkeypatch, "2 mages (-)", MINUS, [(GEMMA, PLUS), (GLM, PLUS)])
+    r = F.lit_read(cam, True)
+    assert (r.text, r.by, r.votes) == (MINUS, "both", ()) and eyes.asked == []
+
+
 @pytest.mark.parametrize("a, b, same", [("0.5EV", "0.5 EV", True), ("5 mages", "5 Images", True),
                                         ("4 (Standard)", "4(Standard)", True), ("2 Images +", "2 Images −", False),
                                         ("0.3EV", "0.5EV", False), ("0", "0", True), ("1", "10", False)])
