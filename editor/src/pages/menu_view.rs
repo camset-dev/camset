@@ -832,7 +832,7 @@ mod menus_window_tests {
         assert!(in_order(&drawn, &want), "{want:?} in {drawn:?}");
         let edit = app.bar_keys(false, 0, None, "", false);
         // Compare: file B with one value changed, two columns
-        let rows = app.build_matrix_rows("", None);
+        let rows = app.build_matrix_rows("", None, false);
         let changed = rows.iter().map(|r| r.2[0].clone()).find(|s| s.scalar && s.values.len() >= 2 && app.col_value(Col::a(0), s).is_some()).unwrap();
         let mut b = app.doc.as_ref().unwrap().original.clone();
         other_value(&app, &mut b, &changed);
@@ -841,13 +841,16 @@ mod menus_window_tests {
         let (drawn, said) = w.settle(&mut app);
         assert!(!drawn.contains(&label), "no selector");
         assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
-        // All settings: the rows Compare always had, and the records a Main tile shows that those leave out (a memory's
-        // own, a fraction's Expert-only parts: `tile_records`), each a row beside its group
-        let tiles: Vec<String> = app.tile_records("").into_iter().map(|s| s.key).collect();
-        assert!(!tiles.is_empty());
+        // All settings: the rows Compare always had, and the records a Main tile shows that those leave out (`tile_records`),
+        // each a row beside its group: with no memory among these columns (A's and B's live settings) those the live
+        // settings hold; a memory's own (a fraction's Expert-only parts too) wait for a memory column
+        let every: Vec<Setting> = app.tile_records("");
+        assert!(!every.is_empty());
+        let tiles: Vec<String> = every.iter().filter(|s| s.area != "set").map(|s| s.key.clone()).collect();
         let shown = names(&app.matrix_rows());
         assert_eq!(shown.iter().filter(|r| !tiles.contains(&r.2[0])).cloned().collect::<Vec<_>>(), names(&rows), "All settings: the rows Compare always had");
-        assert_eq!(shown.iter().filter(|r| tiles.contains(&r.2[0])).count(), tiles.len(), "and each tile record once");
+        assert_eq!(shown.iter().filter(|r| tiles.contains(&r.2[0])).count(), tiles.len(), "and each tile record the live settings hold once");
+        assert!(every.iter().filter(|s| s.area == "set").all(|s| !shown.iter().any(|r| r.2[0] == s.key)), "a memory's own records wait for a memory column");
         assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows), "the Memories page's and a recall's rows without them");
         // and those are the definition's live settings outside Expert mode, and My Menu's places as its page shows them
         // (Compare's left bar is Edit's for every definition: All holds My Menu's places too), each record in one row
@@ -875,9 +878,10 @@ mod menus_window_tests {
                 got.extend(r.2.iter().map(|s| s.key.clone()));
             }
             // the records of the rows Edit's own page lists under that tab (`tab_groups`), not Compare's code, and the
-            // records a Main tile shows (a memory's own) that it shows (`tile_records`)
+            // records a Main tile shows that it shows (`tile_records`), but a memory's own, which wait for a memory column
+            // (these columns are A's and B's live settings)
             let mut want: Vec<String> = app.tab_groups(t).into_iter().flat_map(|(_, _, rows)| rows.into_iter().flatten().map(|s| s.key)).collect();
-            want.extend(app.tile_records("").into_iter().filter(|s| app.entry_of(s) == *t).map(|s| s.key));
+            want.extend(app.tile_records("").into_iter().filter(|s| app.entry_of(s) == *t && s.area != "set").map(|s| s.key));
             got.sort();
             want.sort();
             want.dedup();

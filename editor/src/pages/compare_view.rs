@@ -281,7 +281,8 @@ impl App {
         // each row's values and standing, worked out once a frame for the counts, the filters, the change map and the cells
         let info: Vec<RowInfo> = rows.iter().map(|r| self.row_info(&cols, three, &r.2[0])).collect();
         // per-column difference counts for the headers
-        let counts: Vec<usize> = (0..cols.len()).map(|i| info.iter().filter(|x| x.stored[i] && x.vals[i] != x.vals[0]).count()).collect();
+        // (against each row's baseline, the first column that keeps its setting: `RowInfo::differs_at`)
+        let counts: Vec<usize> = (0..cols.len()).map(|i| info.iter().filter(|x| x.differs_at(i)).count()).collect();
         // a row changed with Compare's picker stays shown until a filter changes (`cmp_kept`)
         let kept = |k: usize| self.cmp_kept.as_ref().is_some_and(|(t, n)| rows[k].0 == *t && rows[k].2[0].key == *n);
         let picked: Vec<usize> = (0..rows.len())
@@ -346,6 +347,10 @@ impl App {
         if self.diff_cursor.is_some_and(|c| c >= shown.len()) { self.diff_cursor = None; }
         ui.horizontal(|ui| {
             ui.label(format!("{} of {} settings shown", shown.len(), rows.len()));
+            // a search that finds settings only the memories keep with no memory of the menu among the columns: why none is shown
+            if let Some(note) = self.compare_memory_note(self.compare_menu().as_deref(), &self.search, &cols) {
+                ui.label(RichText::new(note).small().color(tone::weak(ui.visuals())));
+            }
             // the same as Cmd/Ctrl+Shift+↑ / ↓ (`fold_all`)
             let ctx = ui.ctx().clone();
             let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
@@ -471,7 +476,7 @@ impl App {
                 let name = if on_cursor { RichText::new(title).strong().color(cursor_color) } else { RichText::new(title) };
                 // the name is a link, underlined under the pointer: a click opens the setting in Edit, in the first
                 // column of file A that keeps it (else the live settings)
-                let a_sec = cols.iter().find(|c| c.editable() && (c.section == 0 || s.in_sets)).map_or(0, |c| c.section);
+                let a_sec = cols.iter().find(|c| c.editable() && kept_in(s, c.section)).map_or(0, |c| c.section);
                 let name_r = ui.horizontal(|ui| {
                     ui.set_width(name_w);
                     let r = ui.add(egui::Label::new(name).truncate().selectable(false).sense(egui::Sense::click()));
@@ -502,7 +507,7 @@ impl App {
                     let shown_text = if s.text.is_some() { self.col_text(*c, s).unwrap_or_default() } else { Self::describe(s, v) };
                     let mut text = if stored { RichText::new(shown_text) } else { RichText::new("—").weak() };
                     if self.show_raw { if let Some(v) = v { text = RichText::new(format!("{}  [{v}]", Self::describe(s, Some(v)))); } }
-                    let differs_here = i > 0 && stored && v != x.vals[0];
+                    let differs_here = x.differs_at(i);
                     // one line per cell: long values are cut short, the full text is on hover
                     let r = Self::value_cell_w(ui, text, differs_here, edited, Some(cell_w)).interact(egui::Sense::click());
                     drawn_h = drawn_h.max(r.rect.height());

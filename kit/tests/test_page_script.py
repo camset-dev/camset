@@ -1717,6 +1717,32 @@ console.log(JSON.stringify({ before, rows: rows().length, head: a.classList.cont
 
 
 @needs_node
+def test_a_memory_only_row_is_never_the_live_settings(tmp_path):
+    """A setting only the memories keep (`live: false` on its row): its name opens it in Edit in the first column of
+    file A that keeps it, a memory's, never the live settings; a memory cell's menu copies into the other memory, never
+    into the live column; Open in Edit from a memory column opens that memory."""
+    got = run(tmp_path, MATRIX + """
+cmp.cols = [["a", 0], ["a", 3], ["a", 4]];
+setName[4] = "Memory 2";
+const j = answer();
+const memRow = { ...j.rows[0], key: "set:0x019c", name: "AF point position X (current)", live: false, in_sets: true,
+  cells: [{ text: "—", stored: false, editable: false, differs: false }, { text: "320", stored: true, editable: true, differs: false }, { text: "330", stored: true, editable: true, differs: true }] };
+j.rows = [memRow];
+cmp.last = j;
+const opened = [];
+cmpOpenInEdit = async (r, section) => { opened.push(section); };
+const tr = cmpRow(j, memRow, 0);
+tr.querySelector(".cmp-link").click();
+const items = cmpCellMenu(j, memRow, 1).filter((it) => Array.isArray(it)).map((it) => it[0]);
+const live = cmpCellMenu(j, memRow, 0);
+console.log(JSON.stringify({ opened, items, live: live.length }));
+""")
+    assert got["opened"] == [3], "the name opens the first memory column, never the live settings"
+    assert any("Memory 2" in i for i in got["items"]) and not any("Live" in i and "Copy" in i for i in got["items"]), got["items"]
+    assert got["live"] == 0, "the live column's cell keeps none of it: no menu"
+
+
+@needs_node
 def test_compare_column_headers_are_one_tab_stop_the_arrows_move_along(tmp_path):
     """Compare's column headers are one Tab stop (a roving tabindex): Tab lands on one, the arrows move to the header
     beside it (stopping at either end), Home and End to the first and the last, and the stop goes with the focus, which

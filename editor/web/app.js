@@ -2744,6 +2744,8 @@ function drawCompare() {
   const none = diffs ? "" : "No row shown differs from the baseline: there is no difference to step to.";
   out.push(el("div", { class: "cmp-tools" },
     el("span", {}, `${j.shown} of ${j.total} settings shown`),
+    // a search that finds settings only the memories keep, none shown with these columns: why (the editor's words)
+    j.memory_note ? el("span", { class: "small weak" }, j.memory_note) : null,
     el("button", { title: `Fold every tab; click a tab or group heading to open it (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
     el("button", { title: `Open every tab and group (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"),
     el("span", { class: "vsep" }),
@@ -2871,12 +2873,18 @@ function cmpTable(j) {
   return { table, marks };
 }
 
+/** Whether row `r`'s setting lives in set `section`, as the editor's `kept_in`: the live settings hold the live ones
+ *  (`live`, false for a setting only the memories keep), a memory the ones the memories keep (`in_sets`). */
+function keptIn(r, section) {
+  return section === 0 ? r.live !== false : !!r.in_sets;
+}
+
 /** One setting's row: its name (the record on hover), its three-way tag, and per column its value,
  *  filled where it differs from the baseline or was edited, with the copy arrows between columns. */
 function cmpRow(j, r, i) {
   const tag = r.three && j.three ? j.three.tags[r.three] : null;
   // the name is a link, as the window's: it opens the setting in Edit, in the first column of file A that keeps it
-  const into = j.cols.find((c) => c.editable && (c.section === 0 || r.in_sets));
+  const into = j.cols.find((c) => c.editable && keptIn(r, c.section));
   const section = into ? into.section : 0;
   // where it is kept, in the editor's words (the record in Expert mode only)
   const link = el("span", { class: "cmp-link", title: `${r.where}\nClick to open it in Edit` }, r.name);
@@ -2926,7 +2934,7 @@ function cmpCellMenu(j, r, ci) {
   // a value cut short in its cell, in full (a touch screen shows no hover text)
   const whole = cell.text_full && cell.text_full !== cell.text ? [cell.text_full, "-"] : [];
   // a set where the setting is view only outside Expert mode (`locked`, the editor's) takes no copy, as the window's menu offers none
-  const targets = j.cols.filter((t) => t.editable && !(t.src === c.src && t.section === c.section) && (t.section === 0 || r.in_sets) && !(r.locked || []).includes(t.section));
+  const targets = j.cols.filter((t) => t.editable && !(t.src === c.src && t.section === c.section) && keptIn(r, t.section) && !(r.locked || []).includes(t.section));
   const canCopy = j.editable && targets.length > 0;
   // a column of file A also opens the setting in Edit, in that column's set
   const open = c.editable ? [[`Open in Edit: ${c.name}`, "Open this setting in Edit, in this column's set", () => cmpOpenInEdit(r, c.section)]] : [];
@@ -3376,9 +3384,11 @@ async function cmpOpenInEdit(r, section) {
   cmpHideMenu();
   // the column's set where it keeps the setting, as the window opens it: one of file A's columns Compare shows (another
   // camera menu's memory set too, which the Editing row of the menu shown does not offer), or one the Editing row offers
-  const keeps = section === 0 || r.in_sets;
+  const keeps = keptIn(r, section);
   const known = ((cmp.last && cmp.last.cols) || []).some((c) => c.editable && c.section === section) || state.targets.some(([i]) => i === section);
-  const target = keeps && known ? section : 0;
+  // one only the memories keep, asked for in a set that does not keep it: the first memory of file A among the columns
+  const memory = r.live === false ? ((cmp.last && cmp.last.cols) || []).find((c) => c.editable && c.section !== 0) : null;
+  const target = keeps && known ? section : memory ? memory.section : 0;
   const ci = ((cmp.last && cmp.last.cols) || []).findIndex((c) => c.editable && c.section === target);
   const edited = ci >= 0 && !!r.cells[ci] && r.cells[ci].edited;
   if (view.only && !edited) {
