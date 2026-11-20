@@ -189,6 +189,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`kit/tiebreak.py` asks each third reader in turn and writes no line none of them answered, so a rerun asks it;**
   `kit/pass1_map.py` counts its new lines by model family, while older lines keep their winner until `kit/tiebreak.py
   RUN --revote --was MODEL` asks today's third readers about them (the old file kept beside it).
+- **`kit/prove_run.py`'s carousel axis proofs take the screen after OK as its list proofs do,** an information screen
+  left with MENU once the cursor is off its "Don't show this again." box (Framing Stabilizer = On: Manual), where the
+  row failed. With `--eyes osd` an axis of a row in the reviewed scope's OSD group is read through the camera's own
+  picture as that row's list is, not off a blanked HDMI frame.
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
