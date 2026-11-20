@@ -199,6 +199,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **The camera's menus rest on nothing of the owner's:** placement never reads My Menu's item pages, the kit reads a
   proof's context one way everywhere, and a write with no menu tree here leaves a definition's menus as they are. A
   menu's place always names its row and row_at, and a row given by hand never changes whether a record is shown.
+- **The writer refuses camera menus the editor could not show truly:** a MENUS table the menu tree does not match or
+  that leaves a mode without a menu, records of one row with overlapping menus, and a Main tile showing an Expert-only
+  setting. No place rests on where an option list's reading began, a silent proof's mode comes from the camera's own
+  files for placement alone, and a hand place's reason is the private hand evidence's.
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
