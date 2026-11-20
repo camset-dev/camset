@@ -1617,6 +1617,36 @@ def test_the_a1_pass_runs_its_tables_on_a_made_up_run(tmp_path, monkeypatch, cap
     assert dict(metering["values"])[2] == "Spot"
 
 
+@needs_evidence
+def test_the_a1_pass_lays_a_live_only_record_out_of_the_memory_sets_and_back(tmp_path, monkeypatch, capsys):
+    """The ILCE-1M2's own pass, run whole on a made-up run (a1_run), lays a NEW_RECORDS record out with in_sets as the
+    one rule both passes share says (writer/hand_facts.new_in_sets, laid_in_sets): out of the memory sets while its
+    entry says "live_only", back in at the next write once it no longer does (set 1 of the dial download holds the
+    id, and no memory set's own setting describes it); and it stops, nothing written, while a registration mirror line
+    names a record whose entry says "live_only"."""
+    S, target, write = a1_run(tmp_path, monkeypatch, A1_REPORT, A1_PROOFS)
+    S._hand()
+    key, entry = "global:0x00e1", {"like": "global:0x04e2", "name": "Found by hand", "values": [[0, "A"], [1, "B"]],
+                                   "note": ""}
+    assert camset.read(SAMPLE).get(1, 0xE1) is not None and key not in {s["key"] for s in DOC["settings"]}
+    monkeypatch.setattr(S, "NEW_RECORDS", {**S.NEW_RECORDS, key: {**entry, "live_only": True}})
+    said = write(capsys)
+    got = next(s for s in definitions.load(target)["settings"] if s["key"] == key)
+    assert f"wrote {target}" in said and got["in_sets"] is False
+    monkeypatch.setattr(S, "NEW_RECORDS", {**S.NEW_RECORDS, key: entry})
+    said = write(capsys)
+    got = next(s for s in definitions.load(target)["settings"] if s["key"] == key)
+    assert got["in_sets"] is True and f"{key} Found by hand" in said
+    monkeypatch.setattr(S, "NEW_RECORDS", {**S.NEW_RECORDS, key: {**entry, "live_only": True}})
+    (S.RUN / "proofs.jsonl").write_text("".join(json.dumps(r) + "\n" for r in A1_PROOFS + [
+        {"kind": "registration mirror", "applied": True, "live": key, "record": "set:0x00e1", "slot": "1",
+         "dat": "00001_x.DAT"}]), encoding="utf-8")
+    before = target.read_bytes()
+    with pytest.raises(SystemExit, match=rf"says \"live_only\" for {key}, but a registration was seen to copy it"):
+        write(capsys)
+    assert target.read_bytes() == before
+
+
 def test_a_rerun_keeps_only_old_values_a_counted_line_still_wrote():
     """kept_proof: of the proof a definition held, a rerun keeps beside the report's only the values a line the report
     counts still wrote (written_values: a hold's option numbered apart in two sessions, whose later line takes its

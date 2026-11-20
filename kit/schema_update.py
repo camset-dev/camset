@@ -1004,6 +1004,9 @@ def main():
     # the registrations seen copying a live setting into a memory set, and the values registered into a memory record
     # no live record holds (a frame's place): "registration mirror" lines, which no report row holds
     mirrors, registered = registration_mirrors(RUN), mirrored_values(RUN)
+    refused = hand_facts.live_only_refused(NEW_RECORDS, mirrors)     # "live_only" against a copy a proof showed
+    if refused:
+        sys.exit(hand_facts.live_only_stop(target.stem, refused))
     for k, m in mirrors.items():
         if m.get("allowance"):
             allowed[k].add(m["allowance"])
@@ -1484,7 +1487,7 @@ def main():
             if fix:
                 changed.append((k, by_key[k]["name"], ",".join(fix), None, info["name"]))
                 apply_fix(by_key[k], fix)
-            hand_facts.live_only(by_key[k], info, changed)       # "live_only": kept out of the memory sets
+            hand_facts.laid_in_sets(by_key[k], info, latest, changed)    # in_sets afresh, "live_only" both ways
             continue
         if info["like"] not in by_key:
             continue

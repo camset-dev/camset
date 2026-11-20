@@ -854,9 +854,10 @@ def test_a_reasons_day_or_a_marks_evidence_the_hand_evidence_no_longer_gives_is_
 def test_a_record_found_by_hand_can_be_live_only(tmp_path, monkeypatch, capsys):
     """The a1 II's 0x023c follows the video system in the live settings, while set 1 of every download holds a memory
     slot's filled mark under the same id: a NEW_RECORDS entry laid out from the download would say the memory sets keep
-    it. "live_only": true lays it out with in_sets false, in both passes (hand_facts.new_in_sets), and keeps a record
-    the table added before out of the sets once its entry says so (hand_facts.live_only); an entry without it is laid
-    out as before, from set 1. The reader refuses it false, or on a memory set's record."""
+    it. "live_only": true lays it out with in_sets false, in both passes (hand_facts.new_in_sets), and a record the
+    table laid out takes its in_sets afresh at every write, both ways (hand_facts.laid_in_sets): out of the sets once
+    its entry says so, back in once it no longer does, as the schema says. The reader refuses it false, or on a memory
+    set's record, and the pass refuses it on a record a registration was seen to copy into a memory set."""
     cs = camset.read(SAMPLE)
     assert cs.get(1, 0x023C) is not None and cs.get(1, 0x0240) is not None    # set 1 holds both ids
     assert hand_facts.new_in_sets({"live_only": True}, cs, 0x023C) is False
@@ -875,6 +876,16 @@ def test_a_record_found_by_hand_can_be_live_only(tmp_path, monkeypatch, capsys):
     assert published(c)[0]["global:0x0240"]["in_sets"] is False and "global:0x0240" in said
     _, said = c.write(capsys)
     assert published(c)[0]["global:0x0240"]["in_sets"] is False and "in_sets" not in said, "a rerun changes nothing"
+    c.tables(NEW_RECORDS={"global:0x023c": {**entry, "name": "Follows the video system", "live_only": True},
+                          "global:0x0240": {**entry, "name": "Another found record"}})
+    _, said = c.write(capsys)
+    assert published(c)[0]["global:0x0240"]["in_sets"] is True and "global:0x0240" in said, "the flag off: back in"
+    c.proofs([{"path": ["Shooting", "Drive Mode"], "kind": "list", "index": 0, "label": "Single Shooting",
+               "dat": "00002_ntsc.DAT", "base": "00001_before.DAT", "applied": True, "changes": []},
+              {"kind": "registration mirror", "applied": True, "live": "global:0x023c", "record": "set:0x023c",
+               "slot": "1", "dat": "00002_ntsc.DAT"}])
+    with pytest.raises(SystemExit, match=r"says \"live_only\" for global:0x023c, but a registration was seen to copy it"):
+        c.write(capsys)
     for bad, why in (({**entry, "name": "X", "live_only": False}, "only ever true"),
                      ({**entry, "name": "X", "live_only": "yes"}, "only ever true")):
         c.tables(NEW_RECORDS={"global:0x023c": bad})
@@ -883,10 +894,6 @@ def test_a_record_found_by_hand_can_be_live_only(tmp_path, monkeypatch, capsys):
     c.tables(NEW_RECORDS={"set:0x023c": {**entry, "name": "X", "live_only": True}})
     with pytest.raises(hand_tables.Refused, match="on a live record"):
         hand_tables.load(CAM, evidence=False)
-    import inspect
-    import schema_update as S                 # the ILCE-1M2's own pass lays its NEW_RECORDS out by the same rule
-    src = inspect.getsource(S.main)
-    assert "hand_facts.new_in_sets(info, latest, rid)" in src and "hand_facts.live_only(by_key[k], info, changed)" in src
 
 
 def test_a_record_found_by_hand_stays_while_a_report_row_names_it(tmp_path, monkeypatch, capsys):

@@ -420,6 +420,9 @@ def plain(target: Path, run: Path, write: bool, force: bool, accept_stale: bool,
     # a live setting's memory copy seen taken by a registration, and the owner's word for a never-open row in the
     # evidence of what it proved (a hand proof's registration among them), as the ILCE-1M2's pass has them
     mirrors = registration_mirrors(run)
+    refused = hand_facts.live_only_refused(tables.NEW_RECORDS, mirrors)     # "live_only" against a copy a proof showed
+    if refused:
+        sys.exit(hand_facts.live_only_stop(camera, refused))
     allowed = collections.defaultdict(set)
     for e in report:
         for k, r in e["records"].items():

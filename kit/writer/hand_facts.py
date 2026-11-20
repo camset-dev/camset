@@ -308,19 +308,39 @@ def new_in_sets(info: dict, cs, rid: int) -> bool:
     return not info.get("live_only") and cs.get(1, rid) is not None
 
 
-def live_only(s: dict, info: dict, changed: list) -> None:
-    """A record NEW_RECORDS added before, kept out of the memory sets (in_sets false) once its entry says "live_only";
-    the change said. An entry without it leaves the record as it is."""
-    if info.get("live_only") and s.get("in_sets"):
-        s["in_sets"] = False
-        changed.append((s["key"], s["name"], "in_sets", True, False))
+def laid_in_sets(s: dict, info: dict, cs, changed: list) -> None:
+    """A record a NEW_RECORDS entry (`info`) lays out, its in_sets set afresh at every write by new_in_sets from the
+    download it is laid out from (`cs`), both ways: false once the entry says "live_only", and back to what set 1 holds
+    once it no longer does, as the table's schema says; a change said. A live setting a memory set's own setting of
+    the same id describes is kept out of the sets later in the write as before (writer/proofs.without_set_twins)."""
+    m = WHOLE.fullmatch(s.get("key") or "")
+    want = new_in_sets(info, cs, int(m[2], 16)) if m else bool(s.get("in_sets"))
+    if bool(s.get("in_sets")) != want:
+        changed.append((s["key"], s["name"], "in_sets", s.get("in_sets"), want))
+        s["in_sets"] = want
+
+
+def live_only_refused(new_records: dict, mirrors: dict) -> list:
+    """The NEW_RECORDS keys that say "live_only" though a registration was seen to copy the record into a memory set
+    (`mirrors`: pass2_report.registration_mirrors, by live key): the flag would hide that copy. Both passes stop on
+    them before anything is written (live_only_stop)."""
+    return sorted(k for k, e in new_records.items() if e.get("live_only") and k in mirrors)
+
+
+def live_only_stop(camera: str, keys: list) -> str:
+    """Either pass's stop for live_only_refused, in plain words: the keys, why, and what to do."""
+    from camkit import datafiles
+    return (f"schema_update: nothing done. {paths.shown(datafiles.hand_tables_file(camera))} says \"live_only\" for "
+            f"{', '.join(keys)}, but a registration was seen to copy {'it' if len(keys) == 1 else 'each'} into a memory "
+            "set (a \"registration mirror\" proof line): the flag would keep out of the memory sets a copy a proof "
+            "showed. Take \"live_only\" off the entry, or the proof line if it is wrong, then run the command again.")
 
 
 def new_records(doc: dict, by_key: dict, tables, ev: dict, cs, over: dict, changed: list, reported: set) -> None:
     """NEW_RECORDS (FILTER_FLAGS' entries among them): a record found by hand, its values named by the table ("hand
     table", counted unless a proof covers them: named_not_proved). One the definition holds keeps the table's name,
-    values and note (a record FRAME_PROOFS fills keeps its values and note from there), and is kept out of the memory
-    sets when its entry says "live_only" (live_only); one it lacks is added, laid out like the record `like` names (its
+    values and note (a record FRAME_PROOFS fills keeps its values and note from there), its in_sets set afresh from the
+    entry and `cs` (laid_in_sets); one it lacks is added, laid out like the record `like` names (its
     area, tab, group, order and modes) and from the run's newest download (`cs`: size, count, memory-set presence by
     new_in_sets), when the definition holds that record and the download holds this one; else it is said and left out.
     A note's evidence goes into note_evidence alone (hand_note). A record this step added before (its source
@@ -346,7 +366,7 @@ def new_records(doc: dict, by_key: dict, tables, ev: dict, cs, over: dict, chang
                 apply_fix(by_key[k], fix)
             if k not in tables.FRAME_PROOFS:
                 hand_note(by_key[k], info["note"], words, changed)
-            live_only(by_key[k], info, changed)
+            laid_in_sets(by_key[k], info, cs, changed)
             continue
         m = WHOLE.fullmatch(k)                       # refusals() stops a key that is no whole record first
         rec = cs.get(1 if m[1] == "set" else 0, int(m[2], 16)) if m else None
