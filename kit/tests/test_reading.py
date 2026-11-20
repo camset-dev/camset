@@ -1220,8 +1220,9 @@ MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader
 # proving/greyed.py names QUESTIONS and the whole-list question's key ("entries.v2"), and nothing else of the list: it
 # asks a carousel's ".grey" version and a list's whole-list question for their "greyed" alone, beside its pixel test,
 # and only to be more careful (2026-11-19, measured by the reader census); it reads no option by them, and its own test
-# holds it to those two questions (test_greyed_asks_a_grey_question_for_its_grey_alone)
-MAY_NAME_QUESTIONS = {"kit/proving/greyed.py"}
+# holds it to those two questions (test_greyed_asks_a_grey_question_for_its_grey_alone). tools/label_audit.py, an audit
+# of recorded frames as the census is, which no camera run asks, names QUESTIONS alone, to ask each kind's question
+MAY_NAME_QUESTIONS = {"kit/proving/greyed.py", "kit/tools/label_audit.py"}
 BUT_QUESTIONS = re.compile(NEW_QUESTION_NAMES.pattern.replace(r"|\bQUESTIONS\b", ""))
 GREYED_MAY_ASK = '"entries.v2"'
 

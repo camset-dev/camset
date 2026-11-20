@@ -172,6 +172,9 @@ different families, so a third reader breaks ties without the agent's eye.
 - **Matching an option to a label is strict** (`camkit.match`): a close reading taken for another option registers
   the wrong one.
 - Answers are cached (`runs/<model>_fw<fw>/_cache/vlm`). Run page and option reading off the camera loop.
+- **When readers are added, read the weakest names again:** `kit/tools/label_audit.py` asks every reader about the
+  proof frames behind the names one reader or the vision model alone backs, and those of the hardest screens, and lists
+  privately the ones they do not confirm, to look at by eye.
 
 **The one reading rule comes in by stages**
 ([decision 22](decisions/0022-ocr-alone-only-for-a-plain-reading-the-reader-on-every-doubt.md);
