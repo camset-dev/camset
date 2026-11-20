@@ -301,6 +301,23 @@ def test_a_reading_that_kept_a_piece_of_the_icon_is_no_reading(monkeypatch):
     assert pm.covered_readings({0: (f.image, rows)}, pm.SUBMENU_LABEL, {"ocr": None}) == {0: {1: {"ocr": "Record Setting"}}}
 
 
+def test_ocr_right_of_the_icons_is_one_batch_an_engine(monkeypatch):
+    """Every covered frame of a scan read in one call per engine, as page_model reads the frames themselves."""
+    a = page()
+    end = box(a, 62)
+    letters(a, end + 6)
+    rows = {0: (BAND, ((62, end),), end + 6)}
+    calls = []
+
+    def read(paths, eng=None):
+        calls.append((len(paths), eng))
+        return {p: [ocr.Line("Text", 1.0, end + 2, BAND[0] + 10, 60, 30)] for p in paths}
+    monkeypatch.setattr(pm.ocr, "read", read)
+    got = pm.covered_readings({n: (a, rows) for n in range(5)}, pm.SUBMENU_LABEL, {"ocr": None, "ocr2": "rapidocr"})
+    assert calls == [(5, None), (5, "rapidocr")]
+    assert all(got[n] == {0: {"ocr": "Text", "ocr2": "Text"}} for n in range(5))
+
+
 @pytest.mark.parametrize("run,name", [("kit2_plan3_crawl_shd120", "00008_down.png"),
                                       ("kit2_plan3_crawl_shd30", "00010_down.png")])
 @pytest.mark.parametrize("read", ["S&Q Record Setting", "Saa Record Setting", "Record Setting"])

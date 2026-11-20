@@ -27,6 +27,7 @@ records a mode keeps it.
 """
 import argparse
 import collections
+import contextlib
 import json
 import re
 import sys
@@ -275,8 +276,8 @@ def covered_readings(frames: dict, column, engines: dict) -> dict:
     None for the configured one, "ocr2": the second). A reading is kept only where OCR's first line in the row starts
     where the label's text starts (from LEAD_SLACK px before the last icon's end, which OCR's box of a word takes in, to
     TEXT_SLACK px after text_x): never one that kept a piece of an icon, nor one that left the label's first word out. The
-    pictures are written to a folder of their own, gone after, and read once per engine; a frame or an engine that fails
-    gives no reading (the label stays as read)."""
+    pictures are written to a folder of their own, gone after, and read in one batch per engine (a frame the batch
+    cannot read, again alone); a frame or an engine that fails gives no reading (the label stays as read)."""
     import tempfile
 
     from camkit import screen
@@ -293,10 +294,16 @@ def covered_readings(frames: dict, column, engines: dict) -> dict:
             files[f] = Path(tmp) / f"{n:05d}.png"
             Image.fromarray(covered).save(files[f])
         for source, eng in engines.items():
+            try:
+                read = ocr.read(list(files.values()), eng) if files else {}
+            except Exception:               # one frame the helper cannot read: each frame alone, from the cache
+                read = {}
+                for p in files.values():
+                    with contextlib.suppress(Exception):        # an engine that will not run: no reading
+                        read.update(ocr.read([p], eng))
             for f, p in files.items():
-                try:
-                    lines = ocr.read([p], eng)[p]
-                except Exception:           # a frame the helper cannot read, an engine that will not run: no reading
+                lines = read.get(p)
+                if lines is None:
                     continue
                 for row, (band, boxes, text_x) in frames[f][1].items():
                     got = [ln for ln in lines if ln.inside((column[0], band[0], column[1], band[1]))]
