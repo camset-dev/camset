@@ -78,13 +78,14 @@ def fault(old, new) -> str | None:
     at most ICON_LEAD characters and the space after it left out ("Px Proxy Recording" -> "Proxy Recording", "S&Q Record
     Setting" -> "Record Setting"), or the kit's "#n" form of the older label less a one-word qualifier in brackets, the
     kit's own older name of one of two rows of a label ("Recording Media (Movie)" -> "Recording Media#1"; never a bare
-    label to its "#n", which would take the other row of that label too); and no label of either side one
-    the never-open list, the look lap's destructive list, the acts-on-open list or OWNER_NEVER names."""
+    label to its "#n", which would take the other row of that label too); and no label of either side, nor in the "#n"
+    form the label's base or the word in its brackets, one the never-open list, the look lap's destructive list, the
+    acts-on-open list or OWNER_NEVER names ("Format (Slot)" -> "Format#1" is refused for "Format")."""
     old, new = tuple(old), tuple(new)
     got = _FAULTS.get((old, new), False)
     if got is not False:
         return got
-    why = None
+    why, parts = None, ()
     if not old or not new or len(old) != len(new) or old[:-1] != new[:-1]:
         why = "only its last label may differ, every label above it the same"
     else:
@@ -99,8 +100,10 @@ def fault(old, new) -> str | None:
         elif not (iconed or (m and q and q[1] == base)):
             why = (f"the camera's last label is the older one less a leading token of at most {ICON_LEAD} characters "
                    "(an icon's letters), or its \"#n\" form")
+        elif m and q:
+            parts = (base, q[2])          # the "#n" form: the label's own base and the word in its brackets judged too
     if why is None:
-        listed = [(x, f) for x in (*old, *new) for f in _LISTS if getattr(safety, f)(x)]
+        listed = [(x, f) for x in (*old, *new, *parts) for f in _LISTS if getattr(safety, f)(x)]
         if listed:
             why = f"a safety list names {listed[0][0]!r} ({listed[0][1]}): no such row is renamed"
     _FAULTS[(old, new)] = why

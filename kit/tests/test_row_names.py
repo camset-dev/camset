@@ -130,6 +130,10 @@ def test_the_a1_iis_rows_that_fit_the_one_kind_and_the_three_a_safety_list_names
     ({"LANIP Address Setting": "IP Address Setting"}, "less a leading token"),              # glued, no space
     ({"Rec > Recording Media (Movie)": "Rec > Other#1"}, "less a leading token"),
     ({"Rec > Recording Media": "Rec > Recording Media#1"}, "less a leading token"),          # a bare label to its #n
+    ({"Rec. Media Settings > Format (Slot)": "Rec. Media Settings > Format#1"}, "a safety list names 'Format'"),
+    ({"Rec. Media Settings > Delete (Movie)": "Rec. Media Settings > Delete#1"}, "a safety list names 'Delete'"),
+    ({"Rec. Media Settings > Card (Delete)": "Rec. Media Settings > Card#1"}, "a safety list names 'Delete'"),
+    ({"Rec. Media Settings > Media (Format)": "Rec. Media Settings > Media#1"}, "a safety list names 'Format'"),
     ({"Px Format": "Format"}, "a safety list names"),                                      # a destructive row
     ({"S Initialize": "Initialize"}, "a safety list names"),                                 # OWNER_NEVER
     ({"A > Px B": "A > Px b"}, "renames the row to itself"),
