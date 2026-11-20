@@ -48,12 +48,12 @@ marked (camkit.vlm.LOCAL_MARKER), camkit.vlm.local_only_runs says so and only lo
 other (decision 8); a hosted reader (reader_census.is_hosted) is sent no frame reader_census.hosted_refused refuses
 for any reading it holds.
 
-Output. The console gets counts only, per source and per kind (no reading, label, value or file name: decision 16, as
-the census prints); --json prints them as one JSON object and nothing else on standard output. The names not every
-family confirmed go, one JSON line each, to <root>/_label_audit/labels.jsonl (LEDGER), owner-only (0600 in a 0700
-folder on POSIX): the setting's key, the value's code, the published name, its source, the kind, the report row, the
-frame's path from <root>, each reader's model, family, reading and vote, and the verdict, ordered by verdict (LISTED),
-"none agree, all on another reading" first. A run that read some name rewrites it whole, its own lines with every line
+Output. The console gets counts only, per source and per kind, and why each reader failed, by count (no reading,
+label, value or file name: decision 16, as the census prints); --json prints them as one JSON object and nothing else
+on standard output. The names not every family confirmed go, one JSON line each, to <root>/_label_audit/labels.jsonl
+(LEDGER), owner-only (0600 in a 0700 folder on POSIX): the setting's key, the value's code, the published name, its
+source, the kind, the report row, the frame's path from <root>, each reader's model, family, reading and vote, and the
+verdict, ordered by verdict (LISTED), "none agree, all on another reading" first. A run that read some name rewrites it whole, its own lines with every line
 of before whose name it did not read (outside its scope, or not answered about) and the definition still publishes as
 it was; a run that read none, and a dry run, leave it as it was. It is kept beside the
 frames it names, in the camera's run root, because it holds what the runs hold (the camera's labels, the readers'
@@ -713,8 +713,7 @@ def show(counts: dict, ledger: Path | None) -> None:
             print(f"    {s:24s} " + ", ".join(f"{v} {c[v]}" for v in VERDICTS if c.get(v)))
     print(f"\n  names by the model families that answered (of {len(set(counts['families'].values()))}): "
           + ", ".join(f"{k}: {v}" for k, v in counts["names by families that answered"].items()))
-    print("\nasked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items())
-                                  for r, a in counts["asked"].items()))
+    print("\n" + "\n".join(rc.asked_lines(counts["asked"])))
     if counts.get("dry run"):
         print("dry run: nothing was asked and nothing written ('would ask' is what a run would ask each reader; "
               "'from a cache' is free)")

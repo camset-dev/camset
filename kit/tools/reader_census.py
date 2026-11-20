@@ -50,7 +50,8 @@ one with the options expected there handed over ("new + options") or with every 
 pick handing it options can cause), through camkit.vlm.ask_named_reader. Each answer is judged against the option the
 proof's file proved: right, another option, no option, or no answer (it holds no reading there), which make the right
 rate; "reader failed" (an HTTP error, a timeout, a refusal, an answer that is no JSON object) and "not asked" (the
-reader's --minutes passed, or it failed FAIL_RUN times in a row and was asked nothing more) are counted apart. The
+reader's --minutes passed, or it failed FAIL_RUN times in a row and was asked nothing more) are counted apart, and
+each reader's failures by their reason (the server's words or the kit's, never what an answer held: ask_all). The
 answers are kept in --cache (by default a folder in the system's temporary folder); the camera's own answers' cache is
 looked in and never written; an answer already kept and usable is taken whatever the time (--minutes 0: those alone).
 A notice's and a title's truth is the text the run recorded, not a proof. --per-kind, --variants, --minutes and
@@ -463,6 +464,11 @@ FAIL_RUN = 8                         # failures in a row after which a reader is
 SKIP = object()                      # a question that judges nothing for this item (the old question, a box it skips)
 FAILED = object()                    # the reader failed, or answered nothing usable (camkit.vlm.usable)
 NOT_ASKED = object()                 # past the reader's time or after FAIL_RUN failures in a row, and in no cache
+NO_JSON = "an answer that is no usable JSON"     # a failure's reason: what the answer held is never said
+LIMITED = "a usage or rate limit"                # the Claude Code command line's (CliLimit)
+# a path or a file's name in a failure's words (the frame asked about, a cache file): taken out (failure_reason)
+PATH_WORD = re.compile(r"\S*[/\\]\S*")
+FILE_WORD = re.compile(r"[^\s'\"]+\.(?:png|jpe?g|bmp|gif|webp|json|jsonl|dat|txt|log|cube)\b", re.I)
 WB_SIDES = {"A-B": ("A", "B"), "G-M": ("G", "M")}    # each readout's letters: the first negative (proving.wbgrid)
 STAR_LABEL = re.compile(r"\u2605+")                  # a label of rating stars alone (BLACK STAR)
 BULLET = re.compile(r"^[\u2022\u00B7]\s*")           # the radio dot a picker's label is recorded with (BULLET, MIDDLE DOT)
@@ -1527,25 +1533,48 @@ def ask_cli(reader: CliReader, image: bytes, prompt: str, cache, read_only=(), a
     return vlm.keep(key, reader.answer(image, prompt), cache)
 
 
+def failure_reason(e: BaseException, timeout: float | None = None) -> str:
+    """Why a question to a reader failed, in words fit for the counts: camkit.vlm.failure's (scrubbed: an HTTP status
+    and the server's short message, a timeout, a refused connection, else the exception), with every path and file name
+    in them taken out (PATH_WORD, FILE_WORD), so that no frame's or file's name is printed (decision 16)."""
+    return FILE_WORD.sub("<file>", PATH_WORD.sub("<path>", vlm.failure(e, timeout)))
+
+
+def asked_lines(asked: dict) -> list:
+    """{reader: ask_all's counts} as text: the asked line (each reader's counts), then, where any reader failed, why,
+    each reader's reasons by count, most first: a server's or the kit's words, never a reading, a label, a value or a
+    file name (decision 16)."""
+    lines = ["asked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items() if k != "failures")
+                                   for r, a in asked.items())]
+    why = [f"{r}: " + ", ".join(f"{k} {v}" for k, v in a["failures"].items()) for r, a in asked.items()
+           if a.get("failures")]
+    if why:
+        lines.append("why the readers failed: " + "; ".join(why))
+    return lines
+
+
 def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple, timeout: float,
             say=print, max_questions: int | None = None, dry: bool = False, workers: int | None = None,
             fail_run: int = FAIL_RUN, cli: CliReader | None = None) -> tuple:
     """({(frame, question, transform): the answer, FAILED or NOT_ASKED}, {"asked", "from a cache", "failed", "not
-    asked", "stopped after failures", "seconds"}, {ask: the seconds the reader took to answer it, for each one asked
-    now}): each question to the reader cfg describes, about each frame (or the part image_of cuts out), once
+    asked", "stopped after failures", "failures", "seconds"}, {ask: the seconds the reader took to answer it, for each
+    one asked now}): each question to the reader cfg describes, about each frame (or the part image_of cuts out), once
     (camkit.vlm.ask_named_reader, its answers kept in cache), as many at once as its "parallel" allows. An answer
     already kept (in cache or read_only, and usable) is always taken; once `minutes` have passed (0: at once), once
     max_questions have been asked, or once the reader has failed FAIL_RUN times in a row (its server down, or short of
-    memory: the run says so once), nothing more is asked. dry: nothing is asked at all, and each question not kept is
-    counted "would ask" (the cost of a run, before it)."""
+    memory: the run says so once, with the last failure's reason), nothing more is asked. "failures", where any question
+    failed: {why: how many}, most first (failure_reason's words for an exception, NO_JSON for an answer that is not
+    usable, LIMITED), never what an answer held. dry: nothing is asked at all, and each question not kept is counted
+    "would ask" (the cost of a run, before it)."""
     import time
     from concurrent.futures import ThreadPoolExecutor
     t0 = time.monotonic()
     deadline = t0 + minutes * 60
-    tally = collections.Counter()
+    tally, reasons = collections.Counter(), collections.Counter()
     lock = threading.Lock()
     state = {"in a row": 0, "down": False, "asking": 0}
     took = {}
+    waited = cli.timeout if cli is not None else timeout
 
     def asked_of(image, prompt, ask):
         if cli is not None:
@@ -1570,25 +1599,27 @@ def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple
                 return a, got if got is not None else NOT_ASKED
             state["asking"] += 1
         t = time.monotonic()
-        limited = False
+        limited, why = False, None
         try:
             got = asked_of(image, prompt, True)
         except CliLimit:
-            got, limited = FAILED, True
-        except Exception:        # noqa: BLE001 - a failure is the reader's, counted apart from the question's
-            got = FAILED
+            got, limited, why = FAILED, True, LIMITED
+        except Exception as e:   # noqa: BLE001 - a failure is the reader's, counted apart from the question's
+            got, why = FAILED, failure_reason(e, waited)
         if got is not FAILED and not vlm.usable(got):
-            got = FAILED
+            got, why = FAILED, NO_JSON
         with lock:
             took[a] = time.monotonic() - t
             state["in a row"] = state["in a row"] + 1 if got is FAILED else 0
+            if why:
+                reasons[why] += 1
             if limited and not state["down"]:
                 state["down"] = True
                 tally["stopped at a usage or rate limit"] = 1
                 say(f"  {cfg.get('name')}: a usage or rate limit was reached: asked nothing more")
             if state["in a row"] >= fail_run and not state["down"]:
                 state["down"] = True
-                say(f"  {cfg.get('name')}: failed {fail_run} questions in a row: asked nothing more")
+                say(f"  {cfg.get('name')}: failed {fail_run} questions in a row: asked nothing more (the last: {why})")
             tally["failed" if got is FAILED else "asked"] += 1
             done = sum(tally.values())
         if done % 200 == 0:
@@ -1599,7 +1630,8 @@ def ask_all(cfg: dict, asks: list, minutes: float, cache: Path, read_only: tuple
         answers = dict(ex.map(one, asks))
     if state["down"] and "stopped at a usage or rate limit" not in tally:
         tally["stopped after failures"] = 1
-    return answers, {**tally, "seconds": round(time.monotonic() - t0)}, took
+    failures = {"failures": dict(reasons.most_common())} if reasons else {}
+    return answers, {**tally, **failures, "seconds": round(time.monotonic() - t0)}, took
 
 
 def answers_folder(given, places: list) -> Path:
@@ -2104,7 +2136,7 @@ def show_questions(out: dict) -> None:
         print(f"{r}: " + ", ".join(f"{k} {v}" for k, v in c.items()))
     if out.get("dry run"):
         print("dry run: nothing was asked ('would ask' is what a run would ask each reader; 'from a cache' is free)")
-    print("asked: " + "; ".join(f"{r}: " + ", ".join(f"{k} {v}" for k, v in a.items()) for r, a in out["asked"].items()))
+    print("\n".join(asked_lines(out["asked"])))
 
 
 def grey_rates(c: dict, truth: str) -> tuple:

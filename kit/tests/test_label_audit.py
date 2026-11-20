@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import urllib.error
 from pathlib import Path
 
 import pytest
@@ -466,6 +467,33 @@ def test_nothing_is_asked_twice_and_the_census_cache_is_used(own_runs, tmp_path,
     _, again = run_audit(args, capsys)
     assert len(asked) == n and again["asked"]["gm"]["from a cache"] == 9
     assert again["verdicts by source"] == got["verdicts by source"]
+
+
+def test_the_audit_says_why_each_reader_failed_by_count_and_never_what_it_read(own_runs, tmp_path, monkeypatch,
+                                                                                capsys):
+    """A reader that fails is counted with its reasons beside the asked line (reader_census.ask_all's "failures"): the
+    server's words, or "an answer that is no usable JSON", never the answer's text, a label or a frame's name; the
+    run of failures that stops a reader is said with its last reason."""
+    root, definition = camera(own_runs, tmp_path)
+    asked = []
+    readers(monkeypatch, root, asked)
+    frames = {p.read_bytes(): (p.parent.parent.name, p.name) for p in root.glob("*/shots/*.png")}
+
+    class Broken(FakeReader):
+        def answer(self, image: bytes, prompt: str, waits=None):
+            if self.name == "gm":
+                raise urllib.error.HTTPError(LOCAL, 507, "Insufficient Storage", {}, None)
+            if self.name == "qb":
+                return {"_unparsed": "Zqx Alpha 00001.png"}
+            return super().answer(image, prompt, waits)
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: Broken(cfg, frames, asked))
+    said, _ = run_audit(["--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    why = [ln for ln in said.out.splitlines() if ln.startswith("why the readers failed: ")]
+    assert why == ["why the readers failed: qb: an answer that is no usable JSON 8; gm: HTTP 507 Insufficient Storage 8"]
+    assert "gm: failed 8 questions in a row: asked nothing more (the last: HTTP 507 Insufficient Storage)" in said.err
+    assert "Zqx" not in said.out + said.err and "00001" not in said.out + said.err
+    _, got = run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    assert got["asked"]["gm"]["failures"] == {"HTTP 507 Insufficient Storage": 8} and "failures" not in got["asked"]["qa"]
 
 
 def test_a_local_only_run_in_scope_asks_local_readers_only_and_builds_no_other(own_runs, tmp_path, monkeypatch,

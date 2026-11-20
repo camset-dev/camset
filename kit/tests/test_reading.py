@@ -2153,6 +2153,99 @@ def test_a_readers_failures_are_its_own_and_stop_it_after_a_run_of_them(tmp_path
     assert a["not asked"] > 0 and "asked" not in a and "failed 8 questions in a row" in said.err
     every = collections_merge(got["scores"])
     assert set(every) == {"reader failed", "not asked"} and every["reader failed"] == reader_census.FAIL_RUN
+    assert a["failures"] == {"HTTP 507 Insufficient Storage": reader_census.FAIL_RUN}
+    assert "failed 8 questions in a row: asked nothing more (the last: HTTP 507 Insufficient Storage)" in said.err
+    # as text: the reasons by count beside the summary line
+    census_config(monkeypatch, FailingReader([]))
+    assert reader_census.main([str(root), "--questions", "--variants", "old,new,options,decoy",
+                               "--cache", str(tmp_path / "answers2")]) == 0
+    text = capsys.readouterr().out
+    assert "\nwhy the readers failed: fake: HTTP 507 Insufficient Storage 8\n" in text
+    assert "asked: fake: failed 8, not asked" in text and "{'HTTP" not in text
+
+
+class MixedReader:
+    """A reader that fails one way per question, by the frame asked about: a server short of memory, a timeout, a
+    refused connection, an answer that is no JSON object (it holds a made-up label and a frame's name), a refusal held
+    in the answer, an error whose words name a frame's path and one that names a frame's file; the next frame is
+    answered."""
+
+    def __init__(self, frames: dict):
+        self.frames = frames
+
+    def answer(self, image: bytes, prompt: str, waits=None):
+        name = self.frames[image]
+        if name == "00001.png":
+            raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+        if name == "00002.png":
+            raise TimeoutError("timed out")
+        if name == "00003.png":
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+        if name == "00004.png":
+            return {"_unparsed": "Zqx Alpha on 00004.png"}
+        if name == "00005.png":
+            return {"_error": "Zqx Beta"}
+        if name == "00006.png":
+            raise OSError(2, "No such file or directory", "/x/runs/TEST-CAM_fw9.99/kit2_pass2/shots/00006.png")
+        if name == "00007.png":
+            raise ValueError("cannot decode 00007_down.png")
+        return {"selected": "Zqx Delta"}
+
+
+def test_a_bulk_job_says_why_each_reader_failed_by_count_and_never_what_it_read(tmp_path, monkeypatch):
+    """ask_all keeps, per reader, why each question failed, by count ("failures", most first): camkit.vlm.failure's
+    plain words for an exception (an HTTP status, a timeout, a refused connection), with any path or file name in them
+    taken out, and an answer that is no usable JSON a reason of its own, never the answer's text; the summary's text
+    gives them beside the asked line, a reader with no failure has none, and no label or frame name is printed."""
+    import reader_census
+    root = questions_run(tmp_path)
+    shots = root / "kit2_pass2" / "shots"
+    frames = {p.read_bytes(): p.name for p in shots.glob("*.png")}
+    census_config(monkeypatch, MixedReader(frames))
+    cfg = {"name": "fake", "url": "http://127.0.0.1:9/v1", "model": "m", "parallel": 1}
+    asks = [(shots / f"0000{i}.png", vlm.PROMPTS["option"], None) for i in range(1, 9)]
+    said = []
+    answers, tally, _ = reader_census.ask_all(cfg, asks, 5, tmp_path / "answers", (), 7, say=said.append, fail_run=100)
+    assert tally["failed"] == 7 and tally["asked"] == 1 and "stopped after failures" not in tally
+    assert answers[asks[7]] == {"selected": "Zqx Delta"} and all(answers[a] is reader_census.FAILED for a in asks[:7])
+    assert tally["failures"] == {"HTTP 507 Insufficient Storage": 1, "no answer within 7 s (timed out)": 1,
+                                 "could not connect (Connection refused)": 1, reader_census.NO_JSON: 2,
+                                 "FileNotFoundError: [Errno 2] No such file or directory: <path>": 1,
+                                 "ValueError: cannot decode <file>": 1}
+    assert list(tally["failures"].values()) == sorted(tally["failures"].values(), reverse=True)
+    lines = reader_census.asked_lines({"fake": tally, "calm": {"asked": 3, "seconds": 1}})
+    text = "\n".join(lines)
+    assert lines[0] == f"asked: fake: failed 7, asked 1, seconds {tally['seconds']}; calm: asked 3, seconds 1"
+    assert lines[1].startswith("why the readers failed: fake: an answer that is no usable JSON 2, HTTP 507 ")
+    assert "calm" not in lines[1] and len(lines) == 2
+    for secret in ("Zqx", "0000", ".png", "/x/runs", "TEST-CAM"):
+        assert secret not in text + "\n".join(said), secret
+    assert reader_census.asked_lines({"calm": {"asked": 3, "seconds": 1}}) == ["asked: calm: asked 3, seconds 1"]
+
+
+def test_the_failed_in_a_row_line_names_the_last_reason(tmp_path, monkeypatch):
+    """A reader stopped after a run of failures is said once, with the last failure's reason: a server that went from
+    short of memory to refusing connections says the refusal."""
+    import reader_census
+    root = questions_run(tmp_path)
+    shots = root / "kit2_pass2" / "shots"
+    calls = []
+
+    class Failing:
+        def answer(self, image, prompt, waits=None):
+            calls.append(image)
+            if len(calls) < 3:
+                raise urllib.error.HTTPError("http://127.0.0.1:9/v1", 507, "Insufficient Storage", {}, None)
+            raise urllib.error.URLError(ConnectionRefusedError(61, "Connection refused"))
+    census_config(monkeypatch, Failing())
+    cfg = {"name": "fake", "url": "http://127.0.0.1:9/v1", "model": "m", "parallel": 1}
+    asks = [(shots / f"0000{i}.png", vlm.PROMPTS["option"], None) for i in range(1, 9)]
+    said = []
+    _, tally, _ = reader_census.ask_all(cfg, asks, 5, tmp_path / "answers", (), 7, say=said.append, fail_run=4)
+    assert len(calls) == 4 and tally["stopped after failures"] == 1 and tally["not asked"] == 4
+    assert tally["failures"] == {"HTTP 507 Insufficient Storage": 2, "could not connect (Connection refused)": 2}
+    assert said == ["  fake: failed 4 questions in a row: asked nothing more (the last: could not connect (Connection "
+                    "refused))"]
 
 
 def collections_merge(scores: dict) -> dict:
