@@ -2616,6 +2616,50 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's mend 3: on the Memories page a new search opens the groups of its hits, as a jump to a row under a
+    /// folded heading does in Edit, and a group folded during that search stays folded; a row control with egui's focus
+    /// whose group folds gives the focus to that group's heading, never left on a control no longer drawn.
+    #[test]
+    fn memories_a_search_opens_its_groups_and_a_fold_gives_the_focus_to_the_heading() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("mem_search_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        (app.view, app.prefs.memories_only_diff) = (View::Memories, false);
+        // a setting of the memories made to differ between Memory 1 and Live, so its row has arrows
+        let (tab, grp, s) = app.matrix_rows_shared("", None).iter().map(|r| (r.0.clone(), r.1.clone(), r.2[0].clone()))
+            .find(|(_, _, s)| s.in_sets && s.area == "global" && s.scalar && s.text.is_none() && s.values.len() >= 2 && s.copies.is_empty() && s.copy_of.is_none() && !app.locked(s, 0) && !app.locked(s, 1)).unwrap();
+        let cur = app.doc.as_ref().unwrap().value(1, s.slot()).unwrap();
+        let v = s.values.iter().map(|(v, _)| *v).find(|v| *v != cur).unwrap();
+        assert!(app.apply(vec![Action::Set(1, s.slot(), v)]).is_none());
+        let g = format!("{tab} > {grp}");
+        let settle = |w: &mut Win, app: &mut App| for _ in 0..3 { let _ = w.run(app, vec![]); };
+        settle(&mut w, &mut app);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(app.mem_closed.contains(&g), "every group folded");
+        app.search = s.name.clone();
+        settle(&mut w, &mut app);
+        assert!(!app.mem_closed.contains(&g), "the search opened its hit's group");
+        app.mem_closed.insert(g.clone());
+        settle(&mut w, &mut app);
+        assert!(app.mem_closed.contains(&g), "folded during the same search, it stays folded");
+        // the row's arrow focused, then every group folded by the keys: the heading has the focus
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        let back = App::arrow_words(&app.col_name(Col::a(1)), &app.col_name(Col::a(0)));
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (arrow, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && *l == back).expect("the row's arrow");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: arrow, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == arrow.0), "the arrow has the focus");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        settle(&mut w, &mut app);
+        let said = w.run(&mut app, vec![]);
+        let (head, ..) = *said.iter().find(|(_, r, l)| *r == Role::Label && *l == format!("⏵ {g}")).expect("the folded heading");
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == head.0), "the heading has the focus");
+        done(&dir, &user);
+    }
+
     /// The reviewer's mend 2: once a control holds egui's focus (as Tab or a screen reader leaves it), the arrows still move
     /// the menu's choice, in the items column and the groups column, and the control keeps the focus; Tab still moves
     /// through the controls; a text field with the caret keeps the arrows for its text.

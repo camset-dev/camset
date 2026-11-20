@@ -193,6 +193,11 @@ struct App {
     matrix_closed: std::collections::HashSet<(String, String)>,
     /// The Memories page's groups folded, by "tab > group" (all open to start with, as the page has always been drawn).
     mem_closed: std::collections::HashSet<String>,
+    /// The search the Memories page last opened its hits' groups for (`memories_view`): a new one opens them again.
+    mem_search_seen: String,
+    /// The Memories group whose row control had egui's focus last frame, so a fold that hides it gives the focus to the
+    /// group's heading.
+    mem_focus_group: Option<String>,
     /// The view in front's own folds (the exposure page's "What decides" sections, a family group's table, the record
     /// map's records), all to fold (true) or all to open (false) as it is drawn this frame (`fold_all`, by the keys before
     /// the panel, or a button above them); dropped after the central panel, so it never acts on a later view. Each keeps
@@ -382,6 +387,8 @@ impl App {
             mm_visible: None,
             matrix_closed: Default::default(),
             mem_closed: Default::default(),
+            mem_search_seen: String::new(),
+            mem_focus_group: None,
             head_fold: None,
             refocus: None,
             target: 0,

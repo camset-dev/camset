@@ -226,7 +226,7 @@ let searchTimer = null;    // the search box's wait for the typing to stop
 /** The Memories page's own view: the search it was opened with (the window's Memories page lists the
  *  rows its search box matches) and whether the file's other memory sets are columns too (null: as
  *  the editor's "all memory columns" preference has it). */
-const memView = { q: "", all: null, only: null, closed: new Set() };    // closed: the groups folded, by "tab > group"
+const memView = { q: "", all: null, only: null, closed: new Set(), seenQ: "" };    // closed: the groups folded, by "tab > group"; seenQ: the search whose hits' groups were opened
 /** The "What decides …" lists left open on the Exposure page. */
 const exOpen = new Set();
 
@@ -2123,6 +2123,12 @@ function drawMemories(j) {
   if (!j.groups.length) return [...kids, el("p", {}, j.only_diff ? "No memory holds another value than the live settings here." : "No settings match.")];
   // every group folded or open (`foldAll`), with their keys
   kids[0].append(foldButtons("Fold every group", "Open every group"));
+  // a new search opens the groups of its hits, as a jump to a row under a folded heading opens it in Edit; a group
+  // folded during the same search stays folded
+  if (memView.q !== memView.seenQ) {
+    if (memView.q) for (const g of j.groups) memView.closed.delete(`${g.tab} > ${g.group}`);
+    memView.seenQ = memView.q;
+  }
   const names = new Map(j.cols);
   const body = el("tbody");
   for (const g of j.groups) {
