@@ -645,7 +645,7 @@ impl App {
     /// them (`matrix_rows_for`: the Memories page and a recall compare the sets' own rows).
     fn rows_with(&self, menu: Option<&str>, entry: &BarKey, q: &str, tiles: bool) -> std::rc::Rc<Vec<Row>> {
         let menu = menu.filter(|m| self.menu_named(m).is_some());
-        let key: RowsKey = (self.schema_gen, q.to_lowercase(), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles);
+        let key: RowsKey = (self.schema_gen, Self::query(q), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles);
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }

@@ -222,6 +222,11 @@ impl App {
     }
 
     /// The name, group or a value label holds `q` (lower case).
+    /// The search as every answer takes it, the window's and the page's: trimmed and in lower case, once.
+    pub(crate) fn query(q: &str) -> String {
+        q.trim().to_lowercase()
+    }
+
     pub(crate) fn matches_query(s: &Setting, q: &str) -> bool {
         s.name.to_lowercase().contains(q) || s.group.to_lowercase().contains(q) || s.values.iter().any(|(_, l)| l.to_lowercase().contains(q))
     }
@@ -406,7 +411,7 @@ impl App {
     /// shown, every setting as before menus), with the search `q` (as the search box takes it) and Only edited, each as
     /// that menu lays it out (`listed`): what the bar counts and the entry's groups hold. The window and the page alike.
     pub(crate) fn visible_in(&self, target: usize, menu: Option<&str>, tab: Option<&str>, q: &str, only_changed: bool) -> Vec<Setting> {
-        let q = q.to_lowercase();
+        let q = Self::query(q);
         // by the setting's own name too, where a menu titles its row as the camera draws it
         let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
         match menu.filter(|m| self.menu_named(m).is_some()) {
@@ -733,7 +738,7 @@ impl App {
     /// while the Menu shows menu `now` (`jump_place`; None without menus): in the menus' order, then the Menu's order of
     /// tabs and the camera's order in that menu. The window's and the page's search alike.
     pub(crate) fn search_hits_in(&self, target: usize, now: Option<&str>, q: &str) -> Vec<(Setting, Option<String>)> {
-        let q = q.trim().to_lowercase();
+        let q = Self::query(q);
         if q.is_empty() { return Vec::new(); }
         let mut seen = std::collections::HashSet::new();
         let tab_idx = |t: &str| self.schema.tabs.iter().position(|x| x == t).unwrap_or(99);
@@ -981,9 +986,10 @@ impl App {
         }
     }
 
-    /// How set `target`'s rows pick the record they show (`Bind::Set`, by the set's shooting mode).
+    /// How set `target`'s rows pick the record they show (`Bind::Set`, by the set's shooting mode). A mode no menu
+    /// names counts as one not known: each row shows the setting itself, in every menu, which holds the live value.
     pub(crate) fn bind_for(&self, target: usize) -> Bind {
-        Bind::Set(self.set_mode(target))
+        Bind::Set(self.set_mode(target).filter(|m| self.menus().iter().any(|x| x.modes.contains(m))))
     }
 
     /// The definition's own setting a row shows (`s` itself, or the setting a menu laid `s` out from, by key).
@@ -1308,7 +1314,7 @@ impl App {
     /// settings (`text.my_menu_name`); Main the settings of the menu's tiles (`menu_tile_set`, else the first set) under
     /// each tile's caption, which the tabs list too. Compare lists them through `compare_rows`.
     pub(crate) fn entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
-        let q = q.trim().to_lowercase();
+        let q = Self::query(q);
         let menu = menu.filter(|m| self.menu_named(m).is_some());
         let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
         let link = |list: Vec<Setting>| -> Vec<Vec<Setting>> {
@@ -1964,6 +1970,63 @@ pub(crate) mod facts_tests {
                 }
             }
             s["row_menus"] = serde_json::json!(now);
+        }
+    }
+
+    /// Review finding 11: one trimming of the search, so "iso", "iso " and " ISO " give the same search hits, the same
+    /// rows and counts of each entry, in Edit and in Compare, with menus and without.
+    #[test]
+    fn the_search_is_trimmed_once_for_every_answer() {
+        for stub in [crate::test_support::strip_menus as fn(&mut serde_json::Value), crate::test_support::stub_menus] {
+            let (app, dir, user) = sample_app("menus_trim", Some(stub));
+            let menu = app.menu_shown();
+            let menu = menu.as_deref();
+            let answers = |q: &str| {
+                let hits: Vec<String> = app.search_hits_in(0, menu, q).into_iter().map(|(s, _)| s.key).collect();
+                let counts: Vec<Option<usize>> = app.edit_entries(0, menu, q, false).into_iter().map(|e| e.count).collect();
+                let shown: Vec<String> = app.visible_in(0, menu, None, q, false).into_iter().map(|s| s.key).collect();
+                let compare: Vec<usize> = app.bar_keys(true, 0, menu, q, false).iter().map(|k| app.compare_rows(menu, k, q).len()).collect();
+                (hits, counts, shown, compare)
+            };
+            let want = answers("iso");
+            assert!(!want.0.is_empty());
+            for q in ["iso ", " ISO "] {
+                assert!(answers(q) == want, "{q:?}");
+            }
+            done(&dir, &user);
+        }
+    }
+
+    /// Two menus, Still and Movie, and no menu for S&Q and Time-lapse.
+    fn no_sq_menu(v: &mut serde_json::Value) {
+        menus_as(v, serde_json::json!([{ "name": "Still", "modes": ["Stills"] }, { "name": "Movie", "modes": ["Movie"] }]),
+            &[("Still", &["Still"]), ("Movie", &["Movie"]), ("S&Q", &["Movie"])]);
+    }
+
+    /// Review finding 10: a file saved in a mode no menu names (S&Q, with menus for Still and Movie only) and one whose
+    /// live mode holds a value the definition does not name behave alike and lose no row: the first menu opens, and in
+    /// every menu each row shows the setting itself (no copy bound), which holds the live value; its copies are rows
+    /// of none.
+    #[test]
+    fn a_mode_no_menu_names_shows_the_setting_itself_in_every_menu() {
+        for (stub, value, tag) in [(no_sq_menu as fn(&mut serde_json::Value), 2, "menus_no_sq"), (crate::test_support::stub_menus, 9, "menus_odd_mode")] {
+            let (mut app, dir, user) = sample_app(tag, Some(stub));
+            let lm = app.schema.camera.live_mode.clone().unwrap();
+            let rec = setting(&app, &lm.key);
+            let mut c = crate::camera::job::test_parse(crate::test_support::SAMPLE_BYTES).unwrap();
+            c.sections[0].get_mut(rec.id).unwrap().put(rec.index, value).unwrap();
+            let f = dir.join("CAMSET03.DAT");
+            std::fs::write(&f, c.to_bytes()).unwrap();
+            app.open(f);
+            let first = app.menus()[0].name.clone();
+            assert_eq!(app.opening_menu(0), Some(first), "{tag}: the first menu");
+            let iso = setting(&app, "global:0x0334");
+            for m in app.menus().iter().map(|m| m.name.clone()).collect::<Vec<_>>() {
+                assert_eq!(app.listed_record(&iso, 0, &m).key, iso.key, "{tag}: {m}: the setting itself");
+                let rows = app.settings_in_menu(0, &m, None);
+                assert!(rows.iter().any(|s| s.key == iso.key) && !rows.iter().any(|s| iso.copies.contains(&s.key)), "{tag}: {m}: its row, no copy a row");
+            }
+            done(&dir, &user);
         }
     }
 

@@ -2545,10 +2545,8 @@ mod tests {
         let _ = (std::fs::remove_dir_all(ship), std::fs::remove_dir_all(user));
     }
 
-    /// `not_offered`: a value the camera's menus never offer is left out of the choice whatever "Offer values…" says,
-    /// is not counted among the values Expert mode would bring back, and its acceptance says why; a held one (a
-    /// factory value the camera writes itself) stays offered. The shipped definition marks the stills dials' surplus functions
-    /// and ISO AUTO Minimum's factory ISO 64, held.
+    /// The camera's menus (`camera.menus`): which hold a setting's row, the setting as a menu lays it out field by field
+    /// (`place_in`, a null `under_option` too), records of one name on one row, and one menu or none: no choice.
     #[test]
     fn a_setting_in_the_cameras_menus() {
         let s = |more: serde_json::Value| -> Setting {
@@ -2590,6 +2588,10 @@ mod tests {
         assert_eq!((one.text.menus_label(), one.text.menus_hover().ends_with("This changes nothing in the file.")), ("Camera menu:", true));
     }
 
+    /// `not_offered`: a value the camera's menus never offer is left out of the choice whatever "Offer values…" says,
+    /// is not counted among the values Expert mode would bring back, and its acceptance says why; a held one (a
+    /// factory value the camera writes itself) stays offered. The shipped definition marks the stills dials' surplus functions
+    /// and ISO AUTO Minimum's factory ISO 64, held.
     #[test]
     fn a_value_the_menus_never_offer_is_left_out_unless_held() {
         let s: Setting = serde_json::from_value(serde_json::json!({
