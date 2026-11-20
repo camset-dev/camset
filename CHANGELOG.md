@@ -251,9 +251,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   back in once it no longer does (the a1 II's 0x023c, which follows the video system), never against a copy a
   registration proved.
 - **`kit/tools/label_audit.py` has every reader read again, with each kind's new question, the proof frames behind the
-  names one reader or the vision model alone backs, and the checklists', star ratings' and table pickers',** one vote
-  per model family. It prints counts only and lists the names not every family confirmed in a private file under the
-  camera's runs, changing nothing.
+  names one reader or the vision model alone backs, and the checklists', star ratings' and table pickers',** and takes
+  a name as confirmed only where two model families or more spell it as published. It prints counts only and keeps the
+  names not every family confirmed in a private list under the camera's runs, changing nothing else.
 - **A reader's Unsloth dynamic build ("UD") counts as the same model,** one vote with its other builds (decision 22).
 - **A side list's options are told grey by the second reader's whole-list flag beside the pixels, a carousel's by its
   lit icon:** asked the whole list (`entries.v2`, once a screenful in the background) Qwen3.8-27B called 90.8% of grey
