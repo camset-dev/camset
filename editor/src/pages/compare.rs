@@ -590,7 +590,10 @@ impl App {
             .filter(|s| q.is_empty() || Self::matches_query(s, q))
             .filter(|s| tab.is_none_or(|t| s.tab == t))
             .collect();
-        let at = self.menu_at();
+        // the camera's order over every setting (`menu_rank`), never the menu the window shows: these rows are cached
+        // without it (`RowsKey`)
+        let rank = self.camera_layout().then(|| self.menu_rank());
+        let at = |s: &Setting| rank.as_ref().and_then(|r| r.get(&s.key).copied()).unwrap_or(s.order);
         list.sort_by_key(|s| (tab_idx(&s.tab), at(s)));
         // the settings of each name, where a setting's row partners are looked for
         let mut by_name: std::collections::HashMap<&str, Vec<&Setting>> = Default::default();

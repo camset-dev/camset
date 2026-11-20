@@ -2033,6 +2033,22 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// Integration review finding 3: the rows as before menus (Compare's rows without a menu, the Memories page,
+    /// recall, the page's copy lookup) come in one order, whatever menu the window shows and whatever was asked before.
+    #[test]
+    fn the_rows_as_before_menus_keep_one_order() {
+        let keys = |app: &App| app.matrix_rows_for("", None).iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>();
+        let (mut app, dir, user) = sample_app("menus_rows_order", Some(crate::test_support::stub_menus));
+        app.set_menu("Still");
+        let first = keys(&app);
+        app.set_menu("Movie");
+        assert_eq!(keys(&app), first, "asked again with Movie's menu shown");
+        app.rows_cache.borrow_mut().clear();
+        assert_eq!(keys(&app), first, "worked out afresh with Movie's menu shown");
+        assert_eq!(app.matrix_rows_for("", None).iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>(), first);
+        done(&dir, &user);
+    }
+
     /// Review finding 6: a row alone on its place keeps its full name where another row under the same heading would
     /// be titled alike (the a1 II's Recording Media and Recording Media (Movie), each alone on its place under Rec.
     /// Media Settings, both in Movie's menu); and a label the definition tells apart from another of the same words by
