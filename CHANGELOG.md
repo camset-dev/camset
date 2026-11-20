@@ -210,6 +210,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   by, where it gave up at 130 s; twice the camera had only been late.
 - **A restore's check says what it waits for,** the camera's restart and up to 5 minutes, before its first try, and a
   first Ctrl-C meanwhile says the check goes on and that a second one would leave it undone.
+- **`greyrow_run.py` takes a misread "This function is currently disabled." for no reason,** as OCR's "This tunction is
+  currently disabled." was taken for one on five rows, which then got no Right. A real reason is still a reason.
+- **`carousel_fields_run.py` walks the boxes of an option with a short name,** such as movie Self-timer's On: with a
+  box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
+  answers the lit box. A title naming another option still stops the walk, and so does a proof that moves the option's
+  own record, which each line now keeps beside the title read.
+- **`carousel_fields_run.py` judges a box lit on the frame its title was read from,** as it judges the option: a box
+  seen lit just after a Right and gone once the title settled no longer passes, so no walk ends on an empty look.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
