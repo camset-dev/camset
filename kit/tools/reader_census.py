@@ -66,7 +66,9 @@ OCR read an icon or a garbled letter; a fix that would make two of a reading's o
 counted. "cursor" (since 2026-11-20) asks the lit item's candidates the label audit's frames checked by eye called for
 (CURSOR: the option with the radio dot and the left column's category never the lit item; the stars, or the icon
 before the name, besides); --frames cuts the sample to a list of frames kept where --truth is (the audit's frames where
-its readers went wrong, and as many where they went right), every item on them taken.
+its readers went wrong, and as many where they went right), every item on them taken, an option drawn like another
+of its row too. "icon" asks the lit item's text with each icon written [icon] where it stands and said in words
+(lit.icon.v3), for the names two options drawn alike but for an icon share, asked of the local readers.
 Where a proof kept OCR's reading ("shown"), each answer is also counted against it (BOTH): a reader's wrong answer OCR
 reads alike is the dangerous case, which OCR-main and reader-backup (decision 22) would not catch. A self-check ("unsure")
 in an answer is counted against whether the answer was right; the seconds each question took are said.
@@ -427,7 +429,7 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
 VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare",
-            "cursor")
+            "cursor", "icon")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -884,6 +886,18 @@ CANDIDATES.update({
         "mark (X.FINE, STD) or RAW, is no part of the name: leave it out, but keep every word of the name itself, "
         "such as AF or ISO at its start." + _NONE),
 })
+# A question for the icon drawn on the lit item (2026-11-20), asked of the local readers on the frames behind names a
+# hosted model may not settle: two options a list draws alike but for an icon (the movie Custom Keys' two "AEL hold",
+# the Playback Fn Menu's two "FTP Trans. (This Img.)"). Each icon is written [icon] where it stands and said in words,
+# never copied as letters, so the readers' texts can be laid side by side, the icon's letters apart. Asked by the
+# census's variant "icon", with --frames; no kit caller asks it.
+CANDIDATES["lit.icon.v3"] = (
+    "This is a Sony camera menu screen. One item is highlighted: it sits on an orange bar or inside an orange box. Copy "
+    "that item's own text exactly as drawn, every letter, digit, sign and space, in its case, leaving out the radio "
+    "button before it. Where a small picture or symbol, an icon, is drawn before, inside or after the text, never copy "
+    "it as letters: write [icon] where it stands, and say in a few words what each icon shows. If no item is "
+    "highlighted, write none. " + _JSON + '{"selected": "<the text, with [icon] for each icon>", "icons": ["<what an '
+    'icon shows>"]}')
 QUESTION_TEXTS = {**vlm.PROMPTS, **CANDIDATES}
 
 
@@ -910,6 +924,9 @@ HYPOTHESES = {
 CURSOR_V3 = [("cursor", "lit.cursor.v3", _selected, None), ("cursor: stars", "lit.cursor.stars.v3", _selected, None),
              ("cursor: icons", "lit.cursor.icons.v3", _selected, None)]
 CURSOR = {"list": CURSOR_V3, "side list": CURSOR_V3, "table picker": CURSOR_V3}
+# the lit item's icon written where it stands (variant "icon"), on the same kinds
+ICON_V3 = [("icon", "lit.icon.v3", _field("selected"), None)]
+ICON = {"list": ICON_V3, "side list": ICON_V3, "table picker": ICON_V3}
 CROPS = {"lit crop": None, "scale crop": (540, 70, 640, 272)}   # the scale's ends: proving.looks.look_cell's boxes
 # "best": each kind's best measured question, one per reading: the new one (QUESTIONS), but where a v3 that is no
 # question of QUESTIONS measured better on both samples (the list's routing), that one in its place
@@ -1248,6 +1265,8 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
                 out.append((qid, _question(key(item) if callable(key) else key), v3_pick, transform))
     if "cursor" in variants:
         out += [(qid, _question(key), c_pick, transform) for qid, key, c_pick, transform in CURSOR.get(item.kind, ())]
+    if "icon" in variants:
+        out += [(qid, _question(key), i_pick, transform) for qid, key, i_pick, transform in ICON.get(item.kind, ())]
     if item.kind in NO_OPTIONS or not {"options", "decoy"} & set(variants):
         return out
     if item.kind == "number field":
@@ -1270,11 +1289,12 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
     return out
 
 
-def question_items(run: Path, lines: list, reread: dict) -> list:
+def question_items(run: Path, lines: list, reread: dict, alike: bool = False) -> list:
     """The Items of one run's proof lines, by kind (camkit.reading.QUESTIONS), each with the row's options: a proof
     line whose option is not on its own frame (an axis's last visit, which puts the carousel back on the option it
     opened on; a list proof that kept no OCR of its bar, a prover's that read the screen elsewhere) or whose frame is
-    missing gives none."""
+    missing gives none. An option drawn like another of its row (drawn_alike) gives none either, but with alike
+    (--frames: what the screen draws is asked, the judging against the proved option loose)."""
     from proving.screens import axis_lit_x, cell_code
 
     from camkit import screen
@@ -1316,7 +1336,7 @@ def question_items(run: Path, lines: list, reread: dict) -> list:
                 seen = screen.read(load(frame)).kind if site == "list" else None
                 if seen == "shooting":
                     continue                 # no menu up on the frame
-                if expect_of(r) == "label" and drawn_alike(lab, labels):
+                if expect_of(r) == "label" and drawn_alike(lab, labels) and not alike:
                     continue
                 # a list proof on a carousel whose second axis lights a strip cell (HYPOTHESES' route)
                 strip = seen == "dialog" and axis_lit_x(load(frame).image) is not None
@@ -1766,7 +1786,8 @@ def measure(places: list, args) -> dict:
         lines = [r for r in jsonl.read(run / "proofs.jsonl", bad="skip") if not identity_line(r)]
         reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
                   if r.get("frame") and r.get("reading")}
-        items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
+        items += [it for it in question_items(run, lines, reread, alike=bool(getattr(args, "frames", None)))
+                  if it.kind in kinds]
         if entry_variants:
             entry_all += [it for it in entry_items(run, lines) if it.kind in kinds]
     lit = {}

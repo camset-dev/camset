@@ -1233,6 +1233,37 @@ def test_the_census_takes_the_listed_frames_alone_and_the_list_only_from_outside
         reader_census.main(args)
 
 
+# the census's question for the icon drawn on the lit item (2026-11-20, for the held names), pinned as written
+ICON_CANDIDATE = {"lit.icon.v3": "3f386abb11056ade"}
+
+
+def test_the_lit_items_icon_question_says_where_an_icon_stands_and_listed_frames_take_options_drawn_alike(tmp_path):
+    """lit.icon.v3 asks for the lit item's text with each icon written [icon] in its place and said in words, never
+    copied as letters: what tells two options drawn alike apart (the movie Custom Keys' two "AEL hold", the Playback Fn
+    Menu's two "FTP Trans. (This Img.)"). It stays with the census, asked by its variant "icon" on a list, a side list
+    and a table's picker. With --frames, a listed frame's option drawn like another of its row is taken too (its
+    answers say what the screen draws), where the ordinary sample leaves it out."""
+    import hashlib
+
+    import reader_census as rc
+    for key, digest in ICON_CANDIDATE.items():
+        text = rc.CANDIDATES[key]
+        assert hashlib.sha1(text.encode()).hexdigest()[:16] == digest and key not in vlm.PROMPTS, key
+        assert "[icon]" in text and '"icons"' in text and '"selected"' in text and text.isascii(), key
+    picker = rc.Item("table picker", Path("f.png"), "A", ["A", "B"])
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"icon"})] == ["icon"] and "icon" in rc.VARIANTS
+    run = tmp_path / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    from PIL import Image
+    for i in (1, 2):
+        Image.new("RGB", (640, 480), (30 * i, 20, 20)).save(run / "shots" / f"0000{i}.png")
+    lines = [{"path": ["Zqx Keys"], "kind": "table", "option": "Zqx Button", "opens": "picker", "index": i,
+              "label": lab, "shown": lab, "chosen_frame": f"0000{i + 1}.png"}
+             for i, lab in enumerate(["\u2022 Zqx hold", "\u2022 E Zqx hold"])]       # BULLET; an icon read as E
+    assert {it.frame.name for it in rc.question_items(run, lines, {})} == set()
+    assert {it.frame.name for it in rc.question_items(run, lines, {}, alike=True)} == {"00001.png", "00002.png"}
+
+
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     """The old questions keep their text (the answers already cached are keyed by it, and every caller asks them); each
     kind of screen's new question is a key of its own and asks for its field in one pinned JSON line, in plain ASCII;
