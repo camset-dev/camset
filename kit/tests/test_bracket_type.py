@@ -1087,38 +1087,50 @@ PAIRS = {f"{ev[:3]} EV {'2 Img. +' if s == 0 else '2 Img. -' if s == 1 else SHOT
          CODES[e] + s for e, ev in enumerate(EVS) for s in range(TOPS[e] + 1)}
 
 
-def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False, drift=False, jump=False, wrap=False) -> FieldsCam:
+def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False, drift=False, jump=False, wrap=False, lose=False,
+             lose0=False, tops=None) -> FieldsCam:
     """Bracket Type with Cont. Bracket's pairs: box 1 offers what box 0's step allows. `strict`: box 0 moving while box
     1 stands off its low end fails the test (the grid moves box 0 only from there); else the camera clamps box 1 to what
     the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held). `apart`: beside the
     pair's record, one of the step alone and one of the count alone (made-up: every camera's rule, not the a1 II's).
     `drift`: the first Up on box 1 moves box 0 one step on too. `jump`: once 0.3 EV 9 Img. is chosen, the first Down on
-    box 1 from 9 Images skips 7 Images. `wrap`: box 1 comes round at both ends."""
+    box 1 from 9 Images skips 7 Images. `wrap`: box 1 comes round at both ends. `lose`: the first two Ups on box 1 from
+    0.5 EV 3 Img. go unanswered; `lose0`, the first two Ups on box 0 from 0.7EV. `tops`: box 1's top at each step, in
+    place of TOPS."""
     cam = FieldsCam()
     cam.spec = {0: [box("Exposure Value", EVS, EVS[held[0]]), box("Number of Shots", SHOTS_OF, SHOTS_OF[held[1]])],
                 2: FOCUS_BOXES}
     cam.at[0] = list(held)
     once = []
+    top = tops or TOPS
 
     def rule(opt, edit, field, key):
         ev, sh = edit
         d = 1 if key == "up" else -1
+        if field == 1 and lose and key == "up" and (ev, sh) == (1, 2) and once.count("lost") < 2:
+            once.append("lost")
+            cam.unanswered = once.count("lost")
+            return [ev, sh]
+        if field == 0 and lose0 and key == "up" and ev == 2 and once.count("lost0") < 2:
+            once.append("lost0")
+            cam.unanswered = once.count("lost0")
+            return [ev, sh]
         if field == 1 and drift and key == "up" and "drift" not in once:
             once.append("drift")
-            return [ev + 1, max(0, min(TOPS[ev + 1], sh + d))]
+            return [ev + 1, max(0, min(top[ev + 1], sh + d))]
         if field == 1 and jump and key == "down" and sh == 5 and cam.at[0] == [0, 5] and "jump" not in once:
             once.append("jump")
             return [ev, 3]
         if field == 1 and wrap:
-            return [ev, (sh + d) % (TOPS[ev] + 1)]
+            return [ev, (sh + d) % (top[ev] + 1)]
         if field == 1:
-            return [ev, max(0, min(TOPS[ev], sh + d))]
+            return [ev, max(0, min(top[ev], sh + d))]
         to = max(0, min(len(EVS) - 1, ev + d))
         if to != ev and sh:
             assert not strict, f"box 0 moved from {EVS[ev]} with box 1 on {SHOTS_OF[sh]}, off its low end"
-            if sh > TOPS[to] and not clamp:
+            if sh > top[to] and not clamp:
                 return [ev, sh]
-        return [to, min(sh, TOPS[to])]
+        return [to, min(sh, top[to])]
     cam.rule = rule
     cam.records = lambda: {"global:0x02bf": cam.saved, "global:0x13f9": CODES[cam.at[0][0]] + cam.at[0][1],
                            **({"global:0x9001": cam.at[0][0], "global:0x9004": cam.at[0][1]} if apart else {})}
@@ -1246,6 +1258,44 @@ def test_a_grid_is_the_same_whatever_box_0_does_with_a_count_its_step_refuses(ow
     F, root, _ = fields_world(monkeypatch, own_runs, cam)
     run_fields(F, root, "Cont. Bracket", "--grid")
     assert {x["label"] for x in fields_lines()} == set(PAIRS)
+
+
+def test_two_presses_lost_in_a_row_never_pass_for_an_end(own_runs, monkeypatch, capsys):
+    """The review of 2026-11-19: at 0.5EV the first two Ups from 3 Images go unanswered, a fresh frame between, which
+    took 3 Images for box 1's top: 0.5 EV 5, 7 and 9 Img. went unproved and the put-back still said whole. An end is
+    taken only once a step back and on again were both seen and one more press stood still: here that press moves on
+    to 5 Images, so the scan goes on and every pair is proved."""
+    cam = grid_cam(lose=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    assert {x["label"] for x in lines} == set(PAIRS) and lines[-1]["whole"] is True
+    assert cam.unanswered == 2, "the two Ups from 0.5 EV 3 Img. went unanswered"
+
+
+def test_two_presses_lost_in_a_row_on_box_0_never_pass_for_its_end(own_runs, monkeypatch, capsys):
+    """The same on box 0: the first two Ups from 0.7EV go unanswered; the press after the step back and on again
+    moves to 1.0EV, so 1.0 and 1.3EV are walked and no end but 1.3EV is said."""
+    cam = grid_cam(lose0=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    assert {x["label"] for x in lines} == set(PAIRS) and lines[-1]["whole"] is True and cam.unanswered == 2
+    out = capsys.readouterr().out
+    assert "box 0: '0.7EV' is its top end" not in out and "box 0: '1.3EV' is its top end" in out
+
+
+def test_an_end_no_answered_press_confirms_leaves_the_grid_not_whole(own_runs, monkeypatch, capsys):
+    """At 1.3EV box 1 offers 2 Images (+) alone (made up): it moves neither way, so no press the camera answered says
+    its end is one; the grid goes on, but its put-back does not say whole, and the record stays sampled."""
+    import pass2_report as R
+    cam = grid_cam(tops=[5, 5, 5, 5, 0])
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    lines = fields_lines()
+    assert "1.3 EV 2 Img. +" in {x["label"] for x in lines} and lines[-1]["whole"] is False
+    assert "moves neither way: an end no answered press confirms" in capsys.readouterr().out
+    assert R.option_fields_sampled(counted_rows(root)[CONT_ROW]) == {"global:0x13f9"}
 
 
 def test_a_grid_the_deadline_cuts_is_not_whole_and_stays_sampled(own_runs, monkeypatch, capsys):

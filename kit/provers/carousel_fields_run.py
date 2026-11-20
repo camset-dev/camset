@@ -39,9 +39,11 @@ stands, nothing chosen (Down until it stands still, then Up until it stands stil
 pairs are chosen from its top down to its low end, one visit each; box 0 moves only with box 1 on its low end, so a
 step that refuses a count never stands still for it (which pairs exist is the camera's: the Drive Mode lists name 60
 of the 72 crossings), Up from the value held one place at a time, then Down; the end it finds and the next place are
-reached in one visit. Each opening checks the pair the last OK chose, box 1 too before MENU takes the visit back to
-the option for box 0's move. The pair held is put back last; "whole" unless a deadline cut a list short. A pair the
-camera refuses stops the grid.
+reached in one visit. An end of either box is taken only after presses the camera was seen to answer (at_end: one
+step back and on again, each seen, then one more press that stands still), so two presses lost in a row never pass
+for an end. Each opening checks the pair the last OK chose, box 1 too before MENU takes the visit back to the option
+for box 0's move. The pair held is put back last; "whole" unless a deadline cut a list short or an end could not be
+confirmed (a box of one value moves neither way). A pair the camera refuses stops the grid.
 
 --number N (repeated), for an option with one field of digit boxes side by side (Focus Bracket's Number of Shots):
 each box of the field stepped to N's digit in turn, Up where it is higher, else Down, no Enter on the way, then Enter
@@ -359,6 +361,34 @@ def stood_still(cam, option: str, b: int, count: int, way: str, name: str) -> bo
         raise Failed(f"{name}: box {b} stood still on one {way.title()} and moved on the next "
                      f"({cam.frame.path.name}): a press went unanswered; nothing chosen")
     return True
+
+
+def at_end(cam, option: str, b: int, count: int, way: str, name: str) -> bool | None:
+    """Whether box b stands at its end `way` (the grid's), taken only after presses the camera was seen to answer: where
+    it stood still (stood_still: two presses, a fresh frame between), one step back must move it, one step on must
+    bring it back to that picture, and one more press must leave it standing still, on a fresh frame too. True: an end;
+    False: that last press moved it, so the stand-still before was presses lost (two in a row, the review of
+    2026-11-19), and the box stands on the next value; None: it moves neither way, an end no answered press confirms
+    (a box of one value, or a link that stopped answering), which the grid then calls not whole. Three presses an end."""
+    if not stood_still(cam, option, b, count, way, name):
+        return False
+    end = box_pic(cam, b)
+    step(cam, option, b, count, "down" if way == "up" else "up")
+    if same_pic(box_pic(cam, b), end):
+        cam.refresh("field-again")
+        if same_pic(box_pic(cam, b), end):
+            return None
+    step(cam, option, b, count, way)                    # back onto the end
+    if not same_pic(box_pic(cam, b), end):
+        cam.refresh("field-again")
+        if not same_pic(box_pic(cam, b), end):
+            raise Failed(f"{name}: box {b} did not come back onto its end on {way.title()} ({cam.frame.path.name}): a "
+                         "press went unanswered; nothing chosen")
+    step(cam, option, b, count, way)                    # beyond it once more
+    if not same_pic(box_pic(cam, b), end):
+        return False
+    cam.refresh("field-again")
+    return same_pic(box_pic(cam, b), end)
 
 
 def step_known(cam, option: str, b: int, count: int, way: str, want: tuple, name: str) -> None:
@@ -730,10 +760,11 @@ def expect(cam, b: int, want: tuple, name: str) -> None:
 
 def scan(cam, option: str, b: int, count: int, start: tuple, most: int, name: str) -> tuple:
     """Box b's values from `start` (the reading and picture of the value it shows) to both its ends, nothing chosen: Down
-    until it stands still (stood_still), then Up through those and on until it stands still again, each new value read
-    by both readers (lit_read: each decides a proof), `most` new values each way at most. Returns ([(reading,
-    picture)], its low end first, and whether the deadline cut it short); the box stands on the last of them. A value
-    seen before on the way (a box that comes round, or two values the readers cannot tell apart) stops the row."""
+    until it stands at its end (at_end), then Up through those and on to its other end, each new value read by both
+    readers (lit_read: each decides a proof), `most` new values each way at most. Returns ([(reading, picture)], its low
+    end first, and whether the list may be short: the deadline cut it, or an end no answered press confirmed); the box
+    stands on the last of them. A value seen before on the way (a box that comes round, or two values the readers
+    cannot tell apart) stops the row."""
     vals, cut = [start], False
     for way in ("down", "up"):
         if way == "up":
@@ -745,7 +776,12 @@ def scan(cam, option: str, b: int, count: int, start: tuple, most: int, name: st
                 print(f"   box {b}: {most} values {way} from {start[0]!r}, the deadline (--most): its "
                       f"{'top' if way == 'up' else 'low'} end not reached", flush=True)
                 break
-            if stood_still(cam, option, b, count, way, name):
+            end = at_end(cam, option, b, count, way, name)
+            if end is None:
+                cut = True
+                print(f"   box {b}: {vals[0 if way == 'down' else -1][0]!r} moves neither way: an end no answered press "
+                      "confirms, so the grid is not called whole", flush=True)
+            if end is not False:
                 break
             now = box_pic(cam, b)
             r = lit_read(cam, True)
@@ -769,8 +805,9 @@ def move_to(cam, option: str, b: int, count: int, vals: list, at: int, to: int, 
 
 def next_outer(cam, option: str, count: int, g: Grid, p: int, most: int, name: str) -> int | None:
     """Box 0, lit on its place p, stepped to its next new place: Up beyond the highest seen, then Down beyond the
-    lowest, each press onto a place seen before checked on the way. Where the box stands still (stood_still) or the
-    deadline (`most` places each way) is reached, that way is done and the other goes on in the same visit. Returns the
+    lowest, each press onto a place seen before checked on the way. Where the box stands at its end (at_end; one no
+    answered press confirms makes the grid not whole) or the deadline (`most` places each way, likewise) is reached,
+    that way is done and the other goes on in the same visit. Returns the
     new place, its value read by both readers; None once both ways are done, box 0 then stepped back to place 0."""
     at = p
     while g.phase != "done":
@@ -780,11 +817,16 @@ def next_outer(cam, option: str, count: int, g: Grid, p: int, most: int, name: s
             at += d
             step_known(cam, option, 0, count, way, g.outer[at], name)
         nxt = at + d
+        end = None if abs(nxt) > most else at_end(cam, option, 0, count, way, name)
         if abs(nxt) > most:
             g.cut = True
             print(f"   box 0: {most} values {way} from the one held, the deadline (--most): its "
                   f"{'top' if d > 0 else 'low'} end not reached", flush=True)
-        elif stood_still(cam, option, 0, count, way, name):
+        elif end is None:
+            g.cut = True
+            print(f"   box 0: {g.outer[at][0]!r} moves neither way: an end no answered press confirms, so the grid is "
+                  "not called whole", flush=True)
+        elif end:
             print(f"   box 0: {g.outer[at][0]!r} is its {'top' if d > 0 else 'low'} end (one more {way.title()} "
                   "changed nothing)", flush=True)
         else:
