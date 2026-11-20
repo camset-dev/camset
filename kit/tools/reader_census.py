@@ -90,6 +90,12 @@ Each grey answer is judged right, wrong or no answer, the frames drawn grey and 
 question's text against the option proved on the same frames, so that a wording that costs the reading shows beside
 the question it was made from. It measures the pixels of every list and side list proof frame once (about a minute on
 the first camera's runs) and takes the same sample with --held-out.
+"entries" (since 2026-11-19) measures the whole-list question (camkit.vlm's entries.v2: every option a list draws,
+each with its "greyed", and which one is highlighted) on up to --per-kind list and side list frames whose row's lines
+hold an option drawn grey and as many whose lines hold white ones alone, a question a frame. Each entry is judged
+against its own option's proof lines of the same row and start file and the pixels of the band it is drawn on
+(proving.screens.grey_rows, each band named by OCR through camkit.reading's seam), the lit entry apart from the
+others, with how often the reader's list is the one OCR names on the bands and its highlighted entry the lit one.
 
 What --questions decides: a kind's caller moves onto its new question only once, with each reader the owner uses, the
 new question names the proved option on nearly every sampled frame, never less often than the old one, and its wrong
@@ -410,7 +416,7 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 # no JSON object), "not asked" (past the reader's --minutes, or after it failed FAIL_RUN times in a row)
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
-VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey")
+VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -959,6 +965,138 @@ def grey_verdict(answer, item: Item, truth: str, question) -> str:
     return "no answer" if said is None else "right" if said == (truth == "grey") else "wrong"
 
 
+# "entries": a setting's whole list asked at once (camkit.vlm's entries.v2: every option drawn, each with its "greyed",
+# and which one is highlighted), judged entry by entry against a truth that needs no person: each option's own proof
+# lines of the row in the same run and state (the same row and start file; line_grey: greyed as drawn by the pixels or
+# refused "not available" for grey, applied for white), and the pixels of the band the option is drawn on
+# (proving.screens.grey_rows, GREY_SURE from GREY_LINE or more), each band named by OCR's reading of it. An option the
+# frame does not draw (scrolled off) is never judged; sources that disagree leave the entry out (counted). The lit
+# entry is counted apart from the others; how often the reader's list is the screen's (the options OCR names on the
+# bands, top to bottom) and whether it names the lit one highlighted are counted too. A list's and a side list's frames.
+ENTRY_KINDS = {"list": "list", "sidelist": "side list"}       # the proof's kind -> the census's
+ENTRIES = "entries.v2"
+ENTRY_PARTS = ("lit, grey", "lit, white", "others, grey", "others, white")
+ENTRY_VERDICTS = ("right", "wrong", "no answer", "not listed")
+
+
+def entry_items(run: Path, lines: list) -> list:
+    """One run's list and side list proof frames for the entries variant, an Item a line: truth, {option label: "grey"
+    or "white"} from the lines of the same row with the same start file ("base": the same state), a label its lines
+    disagree on left out; options, the row's labels in the run; extra, the line's own option ("lit": the one the cursor
+    is on) and how labels are compared ("expect")."""
+    rows, said = collections.defaultdict(list), collections.defaultdict(lambda: collections.defaultdict(set))
+    for r in lines:
+        if r.get("kind") in ENTRY_KINDS and r.get("label") is not None:
+            rows[row_of(run, r)].append(r)
+            grey = line_grey(r)
+            verdict = "grey" if grey.get("drawn") or grey.get("refused") else "white" if grey.get("applied") else None
+            if verdict:
+                said[(row_of(run, r), r.get("base"))][_bare(r["label"])].add(verdict)
+    out = []
+    for key, row in rows.items():
+        labels = list(dict.fromkeys(_bare(x["label"]) for x in row))
+        for r in row:
+            frame = run / "shots" / str(r.get("chosen_frame") or "")
+            if not r.get("chosen_frame") or not frame.is_file():
+                continue
+            truth = {lab: next(iter(v)) for lab, v in said.get((key, r.get("base")), {}).items() if len(v) == 1}
+            out.append(Item(ENTRY_KINDS[r["kind"]], frame, truth, labels,
+                            extra={"lit": _bare(r["label"]), "expect": expect_of(r),
+                                   "path": [str(x) for x in r.get("path") or ()]}))
+    return out
+
+
+def entry_sample(items: list, per_kind: int, usable=None) -> dict:
+    """{kind: [Item]}: of a list's and a side list's frames, up to per_kind whose row's lines hold an option drawn grey
+    and as many whose lines hold white ones alone, a frame once, chosen the same way every time (by a hash of the
+    frame's run and name), black frames (usable) left out."""
+    import hashlib
+    out = {}
+    for kind in dict.fromkeys(ENTRY_KINDS.values()):
+        mine = sorted({it.frame: it for it in items if it.kind == kind}.values(),
+                      key=lambda it: hashlib.sha1(f"{it.frame.parent.parent.name}/{it.frame.name}/entries".encode())
+                      .hexdigest())
+        grey, white = [], []
+        for it in mine:
+            bucket = grey if "grey" in it.truth.values() else white if it.truth else None
+            if bucket is None or len(bucket) >= per_kind or (usable is not None and not usable(it.frame)):
+                continue
+            bucket.append(it)
+        out[kind] = [x for pair in itertools.zip_longest(grey, white) for x in pair if x]
+    return out
+
+
+def entry_screen(frame: Path, item: Item, lines: list) -> list:
+    """[(the option of item's row OCR names on the band, an index or None; whether it is the lit band; the pixels'
+    verdict with a margin, "grey", "white" or None)] for each band of the list on the frame that draws something
+    (proving.screens.grey_rows), top to bottom; [] where the frame shows no list or side list with a bar. lines: OCR's
+    lines of the frame."""
+    from proving.screens import GREY_LINE, OPTION_X, grey_rows
+
+    from camkit import ocr, screen
+    from camkit.frames import load
+    f = load(frame)
+    s = screen.read(f)
+    out = []
+    for t, b, lit, _, level in grey_rows(SimpleNamespace(frame=f, read=lambda: s)):
+        if level is None:
+            continue                        # nothing drawn on the band
+        x0, x1 = OPTION_X[s.kind]
+        text = ocr.text_in(lines, (x0 - 20, t - 2, x1 + 20, b + 2))
+        sure = "grey" if level <= GREY_LINE - GREY_SURE else "white" if level >= GREY_LINE + GREY_SURE else None
+        out.append((names(text, item.options, item.extra.get("expect", "label")), lit, sure))
+    return out
+
+
+def _flag(v) -> bool | None:
+    """A JSON true or false, or the strings "true" and "false" in any case; None for anything else."""
+    if isinstance(v, bool):
+        return v
+    return {"true": True, "false": False}.get(v.strip().lower()) if isinstance(v, str) else None
+
+
+def entry_verdicts(answer, item: Item, drawn: list) -> collections.Counter:
+    """How a reader's whole-list answer (entries.v2) reads one frame's list, `drawn` its bands (entry_screen): for each
+    option drawn whose truth is known (its lines, its band's pixels; two that disagree leave it out), "<lit or others>,
+    <grey or white>: <right, wrong, no answer (no true or false), not listed (named by no entry, or by two)>", a band
+    OCR named as another band is unread; "lists: same, differ, screen unread" (the options its entries name, top to
+    bottom, against those OCR names on the bands); "highlighted: right, wrong, none or several, lit band unread"."""
+    c = collections.Counter()
+    if answer is NOT_ASKED or answer is FAILED:
+        c["frames: " + ("not asked" if answer is NOT_ASKED else "reader failed")] += 1
+        return c
+    entries = answer.get("entries") if isinstance(answer, dict) else None
+    if not isinstance(entries, list):
+        c["frames: no list in the answer"] += 1
+        entries = []
+    expect = item.extra.get("expect", "label")
+    named = [(names(e.get("label"), item.options, expect), e.get("greyed"), e.get("highlighted") is True)
+             for e in entries if isinstance(e, dict)]
+    twice = {j for j, n in collections.Counter(j for j, _, _ in drawn).items() if n > 1}
+    drawn = [(None if j in twice else j, lit, sure) for j, lit, sure in drawn]   # two bands OCR named alike: unread
+    for j, lit, sure in drawn:
+        if j is None:
+            continue
+        truths = {v for v in (item.truth.get(item.options[j]), sure) if v}
+        if len(truths) != 1:
+            c["entries: sources disagree" if truths else "entries: no truth"] += 1
+            continue
+        truth = truths.pop()
+        mine = [g for o, g, _ in named if o == j]
+        said = _flag(mine[0]) if len(mine) == 1 else None
+        verdict = ("not listed" if len(mine) != 1 else "no answer" if said is None
+                   else "right" if said == (truth == "grey") else "wrong")
+        c[f"{'lit' if lit else 'others'}, {truth}: {verdict}"] += 1
+    seq = [j for j, _, _ in drawn]
+    c["lists: " + ("screen unread" if not seq or None in seq else "same" if [o for o, _, _ in named] == seq
+                   else "differ")] += 1
+    lit_j = next((j for j, lit, _ in drawn if lit), None)
+    lit_named = [o for o, _, h in named if h]
+    c["highlighted: " + ("lit band unread" if lit_j is None else "none or several" if len(lit_named) != 1
+                         else "right" if lit_named[0] == lit_j else "wrong")] += 1
+    return c
+
+
 def image_of(frame: Path, transform=None) -> bytes:
     """The picture the reader is sent: the frame's file, or a part of it enlarged twice (CROPS: the lit item's box,
     camkit.live.lit_found, with a margin; a fixed region), as a PNG. A frame with nothing lit is sent whole."""
@@ -1456,7 +1594,7 @@ def measure(places: list, args) -> dict:
     if set(kinds) - set(reading.QUESTIONS):
         sys.exit(f"--kinds: some of {', '.join(reading.QUESTIONS)}")
     cache = answers_folder(args.cache, places)
-    items, read_only, runs, found_in = [], [], 0, []
+    items, read_only, runs, found_in, entry_all = [], [], 0, [], []
     for place in places:
         if not place.is_dir():
             sys.exit(f"{place} is not a folder")
@@ -1480,6 +1618,8 @@ def measure(places: list, args) -> dict:
         reread = {r["frame"]: str(r["reading"]) for r in jsonl.read(run / "readings.jsonl", bad="skip")
                   if r.get("frame") and r.get("reading")}
         items += [it for it in question_items(run, lines, reread) if it.kind in kinds]
+        if "entries" in variants:
+            entry_all += [it for it in entry_items(run, lines) if it.kind in kinds]
     lit = {}
 
     def usable(frame) -> bool:           # never asked about a black frame (camkit.reading.ask's rule)
@@ -1519,6 +1659,29 @@ def measure(places: list, args) -> dict:
             sampled = {k: [x for x in v if x[0].frame in keep] for k, v in sampled.items()}
         grey_plan = {k: [(it, corrected(it, fixes.get(k) or {}, fixes_left_out), truth, grey_questions(it))
                          for it, truth, _ in v] for k, v in sampled.items() if k in kinds and v}
+    # the whole-list sample (variant "entries"): kind -> [(item, the bands it draws: entry_screen)]
+    entry_plan, entry_frames = {}, {}
+    if "entries" in variants and entry_all:
+        sampled = entry_sample(entry_all, args.per_kind, usable)
+        if hosted:
+            kept, more = hosted_sample({k: [[it] for it in v] for k, v in sampled.items()})
+            left_out.update(more)
+            keep = {u[0].frame for units in kept.values() for u in units}
+            sampled = {k: [it for it in v if it.frame in keep] for k, v in sampled.items()}
+        print("entries: reading each sampled list's bands (OCR and pixels) for the truth", file=sys.stderr, flush=True)
+        read = {}
+        for it in (it for v in sampled.values() for it in v):
+            try:                    # OCR through camkit.reading's seam, a frame at a time
+                read.setdefault(it.frame, reading._ocr_lines(SimpleNamespace(path=it.frame)))
+            except Exception as e:  # noqa: BLE001 - no OCR, no band named: the variant cannot judge
+                sys.exit(f"--variants entries: OCR could not read the frames ({type(e).__name__}: {e}); it names "
+                         "each option's band (kit/ocr's helper on macOS, or CAMSET_OCR=rapidocr)")
+        for kind, v in sampled.items():
+            drawn = [(it, entry_screen(it.frame, it, read.get(it.frame) or [])) for it in v]
+            entry_frames[kind] = {"with grey": sum("grey" in it.truth.values() for it in v),
+                                  "white only": sum("grey" not in it.truth.values() for it in v),
+                                  "no list drawn": sum(not d for _, d in drawn)}
+            entry_plan[kind] = [(it, d) for it, d in drawn if d]
     asks = []
     for row in itertools.zip_longest(*[plans[k] for k in kinds]):
         for entry in row:
@@ -1529,6 +1692,8 @@ def measure(places: list, args) -> dict:
         for entry in row:
             if entry is not None:
                 asks += [(entry[0].frame, text, None) for _, text, _, _ in entry[3]]
+    for row in itertools.zip_longest(*entry_plan.values()):
+        asks += [(entry[0].frame, vlm.PROMPTS[ENTRIES], None) for entry in row if entry is not None]
     asks = list(dict.fromkeys(asks))
 
     def table():
@@ -1537,6 +1702,7 @@ def measure(places: list, args) -> dict:
     asked, timing, verdicts, cli_calls = {}, {k: collections.defaultdict(dict) for k in kinds}, {}, {}
     grey_scores = {k: collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.defaultdict(collections.Counter))) for k in grey_plan}
+    entry_scores = {k: collections.defaultdict(collections.Counter) for k in entry_plan}
     for cfg in cfgs:
         name = str(cfg["name"])
         if vlm.paid(cfg) and not args.dry_run:
@@ -1598,6 +1764,17 @@ def measure(places: list, args) -> dict:
             for key, secs in spent.items():
                 grey_scores[kind][key][name]["seconds"].update(
                     {"asked now": len(secs), "mean s": round(sum(secs) / len(secs), 2), "max s": round(max(secs), 2)})
+        for kind, plan in entry_plan.items():
+            secs = []
+            for it, drawn in plan:
+                ask = (it.frame, vlm.PROMPTS[ENTRIES], None)
+                if ask in took:
+                    secs.append(took[ask])
+                entry_scores[kind][name].update(entry_verdicts(answers.get(ask, NOT_ASKED), it, drawn))
+            if secs:
+                entry_scores[kind][name].update({"seconds: asked now": len(secs),
+                                                 "seconds: mean": round(sum(secs) / len(secs), 2),
+                                                 "seconds: max": round(max(secs), 2)})
 
     def plain(t):
         return {k: {q: {r: dict(c) for r, c in v.items()} for q, v in t[k].items()} for k in kinds}
@@ -1612,6 +1789,9 @@ def measure(places: list, args) -> dict:
             "sampled": {k: dict(collections.Counter(truth for _, _, truth, _ in v)) for k, v in grey_plan.items()},
             "scores": {k: {q: {r: {part: dict(c) for part, c in by.items()} for r, by in v.items()}
                            for q, v in grey_scores[k].items()} for k in grey_plan}}
+    if "entries" in variants:
+        out["entries"] = {"question": ENTRIES, "frames": entry_frames,
+                          "scores": {k: {r: dict(c) for r, c in v.items()} for k, v in entry_scores.items()}}
     if hosted:
         out["left out for hosted readers"] = dict(left_out)
     if cli_calls:
@@ -1840,6 +2020,8 @@ def show_questions(out: dict) -> None:
                 print(f"  {q}, {p}: " + ", ".join(f"{k} {v}" for k, v in sorted(c.items())))
     if "grey" in out:
         show_grey(out["grey"])
+    if "entries" in out:
+        show_entries(out["entries"])
     print(f"\nblack frames left out of the sample: {out['black frames left out']}")
     if out.get("truth fixes left out"):
         print("truth fixes not made, as they would make two options one (--truth): " + ", ".join(
@@ -1896,6 +2078,38 @@ def show_grey(g: dict) -> None:
                 if parts.get("seconds"):
                     s = parts["seconds"]
                     print(f"    seconds {q} ({r}): {s['asked now']} asked now, mean {s['mean s']}, max {s['max s']}")
+
+
+def show_entries(e: dict) -> None:
+    """The entries variant's counts, as text: per kind the frames sampled, then per reader the grey and white entries
+    told right, the lit entry and the others apart (not listed counted against), how often its list is the screen's and
+    its highlighted entry the lit one."""
+    print(f"\n== entries: a setting's whole list asked at once ({e['question']}), each entry's grey against its own "
+          "proof lines and its band's pixels; % right of the entries drawn whose truth is known (not listed counts "
+          "against)")
+    for kind, f in e["frames"].items():
+        print(f"\n  {kind}: sampled {f.get('with grey', 0)} frames with a grey option, {f.get('white only', 0)} with "
+              f"white ones alone, {f.get('no list drawn', 0)} drawing no list")
+        by_reader = e["scores"].get(kind, {})
+        if not by_reader:
+            continue
+        print(f"    {'reader':10s} " + " ".join(f"{p:>16s}" for p in ENTRY_PARTS)
+              + f" {'not listed':>11s} {'list same':>12s} {'lit named':>12s} {'failed':>7s}")
+        for r, c in by_reader.items():
+            cells = []
+            for part in ENTRY_PARTS:
+                of = sum(c.get(f"{part}: {v}", 0) for v in ENTRY_VERDICTS)
+                cells.append(f"{percent(c.get(f'{part}: right', 0), of).strip()} of {of}")
+            listed = sum(c.get(f"{p}: not listed", 0) for p in ENTRY_PARTS)
+            lists = sum(c.get(f"lists: {v}", 0) for v in ("same", "differ"))
+            lit = sum(c.get(f"highlighted: {v}", 0) for v in ("right", "wrong", "none or several"))
+            failed = c.get("frames: reader failed", 0) + c.get("frames: not asked", 0)
+            print(f"    {r:10s} " + " ".join(f"{x:>16s}" for x in cells) + f" {listed:11d} "
+                  f"{percent(c.get('lists: same', 0), lists).strip() + ' of ' + str(lists):>12s} "
+                  f"{percent(c.get('highlighted: right', 0), lit).strip() + ' of ' + str(lit):>12s} {failed:7d}")
+            if c.get("seconds: asked now"):
+                print(f"      seconds: {c['seconds: asked now']} asked now, mean {c['seconds: mean']}, "
+                      f"max {c['seconds: max']}")
 
 
 def percent(n: int, of: int) -> str:

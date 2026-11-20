@@ -274,6 +274,22 @@ PROMPTS.update({
         + _JSON + '{"boxes": [{"label": "<the label>", "ticked": true or false, "greyed": true or false}]}'),
 })
 
+# A setting's whole list, every option it draws, each with whether it is greyed out and which one is lit, in the menu
+# question's manner (its rows' "greyed" matched the pixels on 99% of a menu page's rows, where asked about the lit item
+# alone the readers saw no grey: a reader judges grey against the other rows it sees). A question for one kind of
+# screen, a list or a side list, hence ".v2". Measured by kit/tools/reader_census.py --questions, variant "entries",
+# against each entry's own proof lines and its row's pixels; no run asks it yet.
+PROMPTS.update({
+    "entries.v2": (
+        "This is a Sony camera screen showing the list of options of one setting. List every option the list draws, "
+        "from top to bottom, as many as are drawn, and copy each option's text exactly as drawn, every letter, digit, "
+        "sign and space, in its case, leaving out any icon, radio button or check box before it and any value written "
+        "to its right. For each option say whether it is greyed out: its letters drawn grey instead of white, " + _GREY
+        + "; judge the highlighted option's letters the same way. Say which option is highlighted: it sits on an "
+        "orange bar or inside an orange box. Leave out the title, the page counter and the buttons. "
+        + _JSON + '{"entries": [{"label": "<the text>", "greyed": true or false, "highlighted": true or false}]}'),
+})
+
 
 def with_options(prompt: str, options) -> str:
     """A question's text (a PROMPTS value) with the options expected there handed to the reader, said just before its

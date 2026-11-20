@@ -133,9 +133,14 @@ def drawn_grey(cam) -> tuple:
     bar = getattr(s, "bar", None)
     if getattr(s, "kind", None) not in OPTION_X or not bar or getattr(cam.frame, "image", None) is None:
         return None, None
-    x0, x1 = OPTION_X[s.kind]
-    t, b = bar
-    g, o = screen._grey(cam.frame.image)[t + 6:b - 6, x0:x1], screen._orange(cam.frame.image)[t + 6:b - 6, x0:x1]
+    return _grey_band(cam.frame.image, s.kind, *bar)
+
+
+def _grey_band(image, kind: str, t: int, b: int) -> tuple:
+    """GREY_LINE's rule on one option's band of a list or side list (t, b: its top and bottom, 6 px in from each):
+    (True, False or None, the measure or None)."""
+    x0, x1 = OPTION_X[kind]
+    g, o = screen._grey(image)[t + 6:b - 6, x0:x1], screen._orange(image)[t + 6:b - 6, x0:x1]
     ink = g[(g > GREY_INK) & ~o]
     if len(ink) < GREY_MIN:
         return None, None
@@ -145,6 +150,28 @@ def drawn_grey(cam) -> tuple:
     if p >= GREY_LINE + GREY_TELL:
         return False, p
     return None, p
+
+
+# where a list's and a side list's options stand: from the top of the first to the bottom of the last a screen can
+# draw (camkit.screen's LIST_SCROLL and SIDE_SCROLL tracks), one bar's height and 4 px apart (sidelists.from_neighbours)
+OPTION_Y = {"list": (screen.LIST_SCROLL[2], screen.LIST_SCROLL[3]), "sidelist": (screen.SIDE_SCROLL[1], screen.SIDE_SCROLL[2])}
+
+
+def grey_rows(cam) -> list:
+    """[(top, bottom, lit, drawn grey: True, False or None, the measure or None)] for each option band of the list or
+    side list on show, top to bottom: the lit bar's, and the bands a bar's height and 4 px apart above and below it
+    inside OPTION_Y, each by drawn_grey's rule (an empty band measures None). [] on any other screen or without a bar.
+    What the census judges a reader's whole-list answer by (kit/tools/reader_census.py, variant "entries")."""
+    s = cam.read()
+    bar = getattr(s, "bar", None)
+    if getattr(s, "kind", None) not in OPTION_X or not bar or getattr(cam.frame, "image", None) is None:
+        return []
+    t, b = bar
+    pitch = b - t + 4
+    top, bottom = OPTION_Y[s.kind]
+    bands = [(t + j * pitch, b + j * pitch) for j in range(-12, 13)]
+    return [(y0, y1, j == 12, *_grey_band(cam.frame.image, s.kind, y0, y1))
+            for j, (y0, y1) in enumerate(bands) if y0 >= top - 6 and y1 <= bottom + 6]
 
 
 def frame_lines(cam) -> list:

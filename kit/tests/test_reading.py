@@ -1151,6 +1151,9 @@ V2_PROMPTS = {"lit.v2": "77d0da5d7dc8da89", "carousel.v2": "3050c5f8b5f62d16", "
 GREY_PROMPTS = {"option.grey": "020ec469740c225b", "dialog.grey": "39b51c3f2eeffcd0", "lit.v2.grey": "f7d6aecf0b99f146",
                 "carousel.v2.grey": "7b822b0cb6bb2123", "cell.v2.grey": "e698101ce732967b",
                 "checklist.v2.grey": "f8594f57dfa9ad0a"}
+# the questions measured next (reader census, variants "entries" and "grey"): pinned from the start, so that what is
+# measured is what is pinned
+NEXT_PROMPTS = {"entries.v2": "0e8d5a88822362ca"}
 
 
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
@@ -1162,7 +1165,7 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     import hashlib
 
     from camkit import vlm
-    for key, digest in {**OLD_PROMPTS, **V2_PROMPTS, **GREY_PROMPTS}.items():
+    for key, digest in {**OLD_PROMPTS, **V2_PROMPTS, **GREY_PROMPTS, **NEXT_PROMPTS}.items():
         assert hashlib.sha1(vlm.PROMPTS[key].encode()).hexdigest()[:16] == digest, key
     assert set(GREY_PROMPTS) == {k for k in vlm.PROMPTS if k.endswith(".grey")}         # every grey version pinned
     for kind, q in reading.QUESTIONS.items():
@@ -1802,6 +1805,195 @@ def test_a_lines_grey_and_the_pixels_make_the_truth_and_disagree_out():
     assert rc.grey_truth(item({"applied": True}), None) == ("white", ("applied",), False)
     assert rc.grey_truth(item({"drawn": True, "refused": True}), 125.0) == ("grey", ("drawn", "refused", "pixels"),
                                                                             False)
+
+
+# --------------------------------------------------- the census's whole-list question (variant "entries", 2026-11-19)
+
+COLOR_MODE = ["Movie", "Still", "S-Cinetone", "Cinema", "Pro", "ITU709 Matrix", "Black & White", "S-Gamut3.Cine",
+              "S-Gamut3", "BT.2020", "709"]
+
+
+def color_lines(base: str, grey=(), white=(), drawn=(), frames=None) -> list:
+    """Side-list proof lines of a made-up row like PP4's Color Mode: refused ("not available") for grey, applied for
+    white, greyed as drawn (by the pixels) for drawn, each on a frame of its own."""
+    took = [{"key": "global:0x073b", "before": 0, "after": 1}]
+    refused = {"text": "This operation or setting not available as follows Gamma HLG OK", "frame": "x.png"}
+    out = []
+    for i, label in enumerate(COLOR_MODE):
+        line = {"path": ["Picture Profile", "PP4", "Color Mode"], "kind": "sidelist", "index": i, "label": label,
+                "shown": label, "chosen_frame": (frames or {}).get(label, f"{base[:5]}{i:02d}_down.png"), "base": base}
+        if label in grey:
+            line.update(applied=False, changes=[], notice=refused)
+        elif label in white:
+            line.update(applied=True, changes=took, notice=None)
+        elif label in drawn:
+            line.update(applied=False, changes=[], notice=None, dat=None, greyed="drawn", greyed_by="pixels")
+        else:
+            continue
+        out.append(line)
+    return out
+
+
+def test_the_entries_truth_is_each_options_own_lines_in_the_same_state(tmp_path):
+    """entry_items: a row's options told grey or white by its own lines with the same start file (the state), never by
+    another state's; a label two lines of one state disagree on is no truth; each line's frame an item, lit on its
+    own option."""
+    import reader_census as rc
+    run = tmp_path / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    hlg = color_lines("00100_base.DAT", grey=COLOR_MODE[:9], white=["709", "BT.2020"])
+    movie = color_lines("00200_base.DAT", white=COLOR_MODE[:4], drawn=["709"])
+    both = color_lines("00100_base.DAT", white=["Movie"], frames={"Movie": "00199_down.png"})   # disagrees with hlg
+    for line in hlg + movie + both:
+        (run / "shots" / line["chosen_frame"]).write_bytes(b"x")
+    items = rc.entry_items(run, hlg + movie + both)
+    assert {it.kind for it in items} == {"side list"} and len(items) == len(hlg) + len(movie) + len(both)
+    first = next(it for it in items if it.frame.name == hlg[1]["chosen_frame"])
+    assert first.extra["lit"] == "Still" and first.options[:3] == COLOR_MODE[:3]
+    assert first.truth == {**dict.fromkeys(COLOR_MODE[1:9], "grey"), "709": "white", "BT.2020": "white"}   # no Movie
+    other = next(it for it in items if it.frame.name == movie[0]["chosen_frame"])
+    assert other.truth == {**dict.fromkeys(COLOR_MODE[:4], "white"), "709": "grey"}
+    # every state here holds a grey option: up to 2 such frames and no white-only one; the same frames every time
+    sampled = rc.entry_sample(items, 2)["side list"]
+    assert len(sampled) == 2 and all("grey" in it.truth.values() for it in sampled)
+    assert [it.frame for it in rc.entry_sample(items, 2)["side list"]] == [it.frame for it in sampled]
+    white = [rc.Item("side list", Path(f"w{n}.png"), {"Movie": "white"}, COLOR_MODE) for n in range(3)]
+    assert len(rc.entry_sample(items + white, 2)["side list"]) == 4
+    assert rc.entry_sample(items, 2, usable=lambda f: False)["side list"] == []     # black frames left out
+
+
+def test_the_entries_answer_is_judged_entry_by_entry_the_lit_one_apart():
+    """entry_verdicts on a side list of six bands (Movie lit), the truth from its lines and its bands' pixels: each entry
+    drawn and known counted right, wrong, no answer or not listed, the lit one apart; the list the reader gives against
+    the one OCR names on the bands; the highlighted entry against the lit band; an entry whose sources disagree out."""
+    import reader_census as rc
+    it = rc.Item("side list", Path("f.png"), {**dict.fromkeys(COLOR_MODE[:9], "grey"), "709": "white"}, COLOR_MODE,
+                 extra={"lit": "Movie", "expect": "label"})
+    drawn = [(0, True, "grey"), (1, False, "grey"), (2, False, None), (3, False, "white"), (4, False, "grey"),
+             (5, False, "grey")]                       # Cinema's band reads white where its line says grey: left out
+    answer = {"entries": [{"label": "Movie", "greyed": False, "highlighted": True},
+                          {"label": "Still", "greyed": True, "highlighted": False},
+                          {"label": "S-Cinetone", "greyed": "true"}, {"label": "Cinema", "greyed": True},
+                          {"label": "Pro", "greyed": "maybe"}]}                          # ITU709 Matrix not listed
+    c = rc.entry_verdicts(answer, it, drawn)
+    assert c == {"lit, grey: wrong": 1, "others, grey: right": 2, "others, grey: no answer": 1,
+                 "others, grey: not listed": 1, "entries: sources disagree": 1, "lists: differ": 1,
+                 "highlighted: right": 1}
+    full = {"entries": [{"label": x, "greyed": True, "highlighted": x == "Still"} for x in COLOR_MODE[:6]]}
+    c = rc.entry_verdicts(full, it, drawn)
+    assert (c["lists: same"], c["highlighted: wrong"], c["lit, grey: right"]) == (1, 1, 1)
+    assert rc.entry_verdicts({"entries": "x"}, it, drawn)["frames: no list in the answer"] == 1
+    assert rc.entry_verdicts(rc.NOT_ASKED, it, drawn) == {"frames: not asked": 1}
+    unread = rc.entry_verdicts(full, it, [(0, True, "grey"), (None, False, "grey")])
+    assert unread["lists: screen unread"] == 1 and unread["lit, grey: right"] == 1
+    # two bands OCR named alike are unread, and a lit band unread judges no highlight
+    alike = rc.entry_verdicts(full, it, [(1, True, "grey"), (1, False, "grey"), (2, False, None)])
+    assert alike == {"others, grey: right": 1, "lists: screen unread": 1, "highlighted: lit band unread": 1}
+
+
+def side_frame(levels, lit: int):
+    """A side list's frame as the a1 II draws it: six option bands from y 86, 51 px apart, the lit one on the orange
+    bar, each band's letters at its level (~120 greyed, ~225 white)."""
+    import numpy as np
+    a = np.zeros((480, 640, 3), np.uint8)
+    bands = []
+    for j, level in enumerate(levels):
+        t = 86 + 51 * j
+        b = t + 47
+        if j == lit:
+            a[t:b, 303:595] = (170, 51, 0)
+        for x in range(315, 465, 9):
+            a[t + 12:b - 12, x - 1:x + 4] = 10
+            a[t + 12:b - 12, x:x + 3] = level
+        bands.append((t, b))
+    return a, bands
+
+
+def test_grey_rows_tells_each_band_of_a_side_list():
+    """proving.screens.grey_rows: every band of the side list on show, top to bottom, the lit one marked, each by the
+    lit option's rule; an empty band measures nothing; another screen gives none."""
+    from types import SimpleNamespace
+
+    from proving import screens as PS
+    a, bands = side_frame([120, 225, 122, 230, 118, 226], lit=2)
+    cam = SimpleNamespace(frame=SimpleNamespace(image=a), read=lambda: SimpleNamespace(kind="sidelist", bar=bands[2]))
+    rows = PS.grey_rows(cam)
+    assert [(t, lit, grey) for t, _, lit, grey, _ in rows] == [(86, False, True), (137, False, False), (188, True, True),
+                                                               (239, False, False), (290, False, True),
+                                                               (341, False, False)]
+    a2, bands2 = side_frame([120, 225], lit=0)
+    cam2 = SimpleNamespace(frame=SimpleNamespace(image=a2), read=lambda: SimpleNamespace(kind="sidelist", bar=bands2[0]))
+    assert [g for *_, g, _ in PS.grey_rows(cam2)][:2] == [True, False] and all(
+        lvl is None for *_, lvl in PS.grey_rows(cam2)[2:])
+    assert PS.grey_rows(SimpleNamespace(frame=SimpleNamespace(image=a), read=lambda: SimpleNamespace(kind="dialog",
+                                                                                                     bar=None))) == []
+
+
+@pytest.mark.parametrize("name, greys", [
+    ("260193_down.png", [True] * 6), ("260354_down.png", [True, True, True, True, False, False]),
+    ("57253_down.png", [False, False, False, False, True, True]), ("14373_down.png", [False, True, False])])
+def test_grey_rows_on_the_cameras_own_lists(name, greys):
+    """PP4's Color Mode with Gamma on HLG (all six bands grey, then four grey and two white), PP10's in Movie mode (two
+    grey at the bottom), Flash Sync Spd. Prty. with the electronic shutter (On grey between two white)."""
+    from types import SimpleNamespace
+
+    from camkit import paths, screen
+    from camkit.frames import load
+    from proving import screens as PS
+    frame = paths.a1ii_root() / "kit2_pass2" / "shots" / name
+    if not frame.exists():
+        pytest.skip(f"{frame} not present")
+    f = load(frame)
+    s = screen.read(f)
+    rows = [r for r in PS.grey_rows(SimpleNamespace(frame=f, read=lambda: s)) if r[4] is not None]
+    assert [g for *_, g, _ in rows] == greys and sum(lit for _, _, lit, _, _ in rows) == 1
+
+
+def test_the_census_measures_the_whole_list_question_entry_by_entry(tmp_path, monkeypatch, capsys):
+    """--variants entries on a made-up run of a Color Mode side list: each sampled frame asked entries.v2 once, its
+    bands (faked: entry_screen) joined to its row's lines, and the counts per reader, the lit entry apart."""
+    import numpy as np
+    import reader_census as rc
+    from PIL import Image
+    root = tmp_path / "TEST-CAM_fw9.99"
+    run = root / "kit2_pass2"
+    (run / "shots").mkdir(parents=True)
+    lines = color_lines("00100_base.DAT", grey=COLOR_MODE[:9], white=["709", "BT.2020"])
+    (run / "proofs.jsonl").write_text("".join(json.dumps(x) + "\n" for x in lines), encoding="utf-8")
+    for n, line in enumerate(lines):
+        Image.fromarray(np.full((480, 640, 3), 30 + n, np.uint8)).save(run / "shots" / line["chosen_frame"])
+    lit_of = {x["chosen_frame"]: x["index"] for x in lines}
+
+    def window(i):                               # six options drawn: the first six, or the last six for the lower ones
+        return list(range(6)) if i < 6 else list(range(5, 11))
+
+    def screen_of(frame, item, ocr_lines):
+        i = lit_of[frame.name]
+        return [(j, j == i, None) for j in window(i)]
+    monkeypatch.setattr(rc, "entry_screen", screen_of)
+    monkeypatch.setattr(reading, "_ocr_lines", lambda frame, eng=None: [])
+    asked = []
+    by_bytes = {(run / "shots" / x["chosen_frame"]).read_bytes(): x["index"] for x in lines}
+
+    class Reader:
+        def answer(self, image, prompt, waits=None):
+            asked.append(prompt)
+            i = by_bytes[image]
+            # every option drawn named in order, the lit one highlighted, each grey as its lines say but Movie (a slip)
+            return {"entries": [{"label": COLOR_MODE[j], "greyed": j < 9 and j != 0, "highlighted": j == i}
+                                for j in window(i)]}
+    census_config(monkeypatch, Reader())
+    assert rc.main([str(root), "--questions", "--json", "--variants", "entries", "--cache", str(tmp_path / "a")]) == 0
+    got = json.loads(capsys.readouterr().out)["entries"]
+    assert got["question"] == "entries.v2" and set(asked) == {vlm.PROMPTS["entries.v2"]} and len(asked) == 11
+    assert got["frames"]["side list"] == {"with grey": 11, "white only": 0, "no list drawn": 0}
+    c = {k: v for k, v in got["scores"]["side list"]["fake"].items() if not k.startswith("seconds")}
+    assert c == {"lit, grey: right": 8, "lit, grey: wrong": 1, "lit, white: right": 2, "others, grey: right": 42,
+                 "others, grey: wrong": 5, "others, white: right": 8, "lists: same": 11, "highlighted: right": 11}
+    assert rc.main([str(root), "--questions", "--variants", "entries", "--minutes", "0", "--cache",
+                    str(tmp_path / "a")]) == 0
+    text = capsys.readouterr().out
+    assert "== entries:" in text and "Movie" not in text and ".png" not in text
 
 
 def test_the_census_judges_each_answer_by_its_kind_of_screen():
