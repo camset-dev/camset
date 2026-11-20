@@ -1998,6 +1998,19 @@ def known_labels(model=None) -> set:
     return {x for x in labels if safety.plain(x) not in told}
 
 
+def blocker_labels(model=None) -> set:
+    """The labels a notice's blocker is named by (camkit.coverage.blocker_of, on what follows "as follows"): every row
+    label and setting name of the camera's definition, as the coverage ledger names a blocker (camkit.coverage.
+    known_labels: an item of a table among them, "Focus Mode Dial" under Mode Dial Control Set), and the menu's row
+    labels the kit knows (known_labels, the page model's among them). None is withheld for being some row's value too
+    ("Shoot Mode" and "Touch Operation" are Fn functions as well): blocker_of keeps the label alone, never what follows
+    it, and the longest label the notice starts with, so a missing longer one ("Focus Mode Dial") gave the shorter
+    ("Focus Mode") and a withheld one gave none (the first grey-row run on the a1 II, 2026-11-20). known_labels' own
+    withholding is for a screen's text a --network run keeps (safety.screen_fields)."""
+    from camkit import coverage
+    return coverage.known_labels(definition()) | known_labels(model)
+
+
 def known_groups(model=None) -> set:
     """The menu's group names the kit knows, for safety.group_refused: the camera's definition's menu groups and each
     page model page's group (its breadcrumb's second part, "Network > FTP Transfer")."""

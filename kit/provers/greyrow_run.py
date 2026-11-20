@@ -51,7 +51,7 @@ from crawl_run import go_to, target_of  # noqa: E402
 from proving import greyrow  # noqa: E402
 from proving.base import Failed  # noqa: E402
 from proving.nav import enter_any  # noqa: E402
-from runner import (LATEST_SCAN, add_in_argument, close_screen, in_mode, known_labels, load_scan,  # noqa: E402
+from runner import (LATEST_SCAN, add_in_argument, blocker_labels, close_screen, in_mode, load_scan,  # noqa: E402
                     menu_from_shooting, prover_session, scan_arg, scan_position)
 
 LINES = "greyrows.jsonl"
@@ -207,7 +207,7 @@ def main():
     out_path = run.dir / LINES
     tried = set() if a.look else spent_rows(out_path, a.in_mode, a.context)       # a look spends none
     seen = first_open.seen_record(run.root.name)
-    labels = known_labels(model)
+    labels = blocker_labels(model)
     hdmi = eyes_from_config(run)
     with open(out_path, "a", encoding="utf-8", newline="\n") as out, \
             prover_session(run, hdmi, reach=this_body_first(run.root.name)) as s:

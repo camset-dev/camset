@@ -295,7 +295,7 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
     help, after, notice, blocker, why). seen: camkit.first_open.Seen (seen, unseen); tried: the keys of the run's rows
     whose Right is spent; keys: the row's (by default its label_key; kit/provers/greyrow_run.py adds the row the page
     scan leads to), spent where any is in `tried`, all added to it before the press; stored: the page model's never-open
-    reason of its top-level row; labels: the row labels the kit knows (runner.known_labels), for the blocker. Raises
+    reason of its top-level row; labels: the labels a blocker is named by (runner.blocker_labels). Raises
     RowFailed (its line) where the row fails; a STOP, a refusal other than the lit row's and a lost link go up as
     raised."""
     path = [str(x) for x in path]

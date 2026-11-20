@@ -117,6 +117,49 @@ def test_a_table_added_between_two_runs_leaves_the_row_no_second_right(own_runs,
         row_names.forget()
 
 
+# what the camera's notices named on 2026-11-20 (kit2_greyrow, the prover's first camera run), by the grey row: the row
+# label alone; the notices' words are read from the run's own lines, never written here
+NAMED = {"ISO AUTO Min. SS": "Shoot Mode", "Framing Stabilizer": "Touch Operation", "Focus Mode": "Focus Mode Dial",
+         "Aspect Marker Level": "HDMI Info. Display", "Select LUT": "Log Shooting"}
+
+
+def test_the_camera_runs_notices_name_their_blockers_by_the_labels_the_runner_hands_over(monkeypatch):
+    """The first camera run's lines said no blocker for ISO AUTO Min. SS and Framing Stabilizer and "Focus Mode" for the
+    Focus Mode rows: runner.known_labels, a screen's allow-list, withholds a label that is also a value somewhere (Shoot
+    Mode and Touch Operation are Fn functions too) and holds no table's item (Focus Mode Dial, under Mode Dial Control
+    Set), so blocker_of found nothing or a shorter label. runner.blocker_labels, the ledger's own vocabulary beside the
+    page model's, names each one."""
+    from camkit import coverage
+    import runner
+    lines = paths.a1ii_root() / "kit2_greyrow" / "greyrows.jsonl"
+    scan = paths.a1ii_root() / "kit2_page_scan_1118p" / "model.json"
+    if not lines.exists() or not scan.exists():
+        pytest.skip("the a1 II's kit2_greyrow lines or its page scan are not here")
+    doc = json.loads((KIT.parent / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8"))
+    monkeypatch.setattr(runner, "definition", lambda: doc)
+    model = {p["key"]: p for p in json.loads(scan.read_text(encoding="utf-8"))}
+    labels, old = runner.blocker_labels(model), runner.known_labels(model)
+    notices = [(x["path"][-1], (x.get("notice") or {}).get("text") or "")
+               for x in (json.loads(t) for t in lines.read_text(encoding="utf-8").splitlines() if t.strip())]
+    named = [(row, text) for row, text in notices if "as follows" in text]
+    assert {row for row, _ in named} == set(NAMED)
+    for row, text in named:
+        assert coverage.blocker_of(text, labels) == {"row": NAMED[row]}, row
+    assert coverage.blocker_of(dict(named)["ISO AUTO Min. SS"], old) is None, "the defect, as it stood"
+    assert coverage.blocker_of(dict(named)["Focus Mode"], old) == {"row": "Focus Mode"}, "the shorter label, as it stood"
+
+
+def test_the_runner_hands_blocker_of_the_blocker_labels(monkeypatch):
+    seen = []
+    import runner
+    monkeypatch.setattr(runner, "definition", lambda: {"settings": [{"name": "Focus Mode Dial", "row": ["Mode Dial"]}]})
+    monkeypatch.setattr(runner, "known_labels", lambda model=None: {"Focus Mode"})
+    assert runner.blocker_labels({}) == {"Focus Mode", "Focus Mode Dial", "Mode Dial"}
+    monkeypatch.setattr(G, "blocker_labels", lambda model: seen.append(model) or {"Shoot Mode"})
+    run_main(monkeypatch, ["Framing Stabilizer"], spend, labels_too=False)
+    assert seen == [{}]
+
+
 def test_a_row_the_kit_may_not_open_is_passed_over_before_anything_is_pressed(monkeypatch):
     monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
     monkeypatch.setattr(G, "reach", lambda *a: pytest.fail("reached a row the kit may not open"))
@@ -135,13 +178,16 @@ def test_a_row_the_scan_does_not_lead_to_is_not_reached_and_asked_nothing(monkey
     assert (line["outcome"], line["right"]) == (G.NOT_REACHED, False)
 
 
-def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=(), real_one_row=False, cam="cam"):
+def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=(), real_one_row=False, cam="cam",
+             labels_too=True):
     """greyrow_run.main with its session and the camera's records stood in for; returns (the lines written, the keys
     each row was asked with and the rows spent before it, what was closed). real_one_row: the runner's own one_row,
-    whatever the test stood in for under it, `one_row` unused; cam: the session's camera."""
+    whatever the test stood in for under it, `one_row` unused; cam: the session's camera; labels_too: the blocker's
+    labels stood in for (none), else as the test left them."""
     asked, closed = [], []
     monkeypatch.setattr(G, "load_scan", lambda s: scan)
-    monkeypatch.setattr(G, "known_labels", lambda model: set())
+    if labels_too:
+        monkeypatch.setattr(G, "blocker_labels", lambda model: set())
     monkeypatch.setattr(first_open, "seen_record", lambda camera=None: Seen())
     monkeypatch.setattr(G, "eyes_from_config", lambda run: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(G, "close_screen", lambda cam, link: closed.append("menu"))
@@ -211,7 +257,7 @@ def test_two_spellings_get_one_right_on_the_made_up_camera(monkeypatch):
     cam = T.GreyCam()
     T.world(monkeypatch, cam)
     monkeypatch.setattr(G, "load_scan", lambda s: ([], {}))
-    monkeypatch.setattr(G, "known_labels", lambda model: {"Touch Operation"})
+    monkeypatch.setattr(G, "blocker_labels", lambda model: {"Touch Operation"})
     monkeypatch.setattr(first_open, "seen_record", lambda camera=None: first_open.Seen(opened={("framing stabilizer",)}))
     monkeypatch.setattr(G, "eyes_from_config", lambda run: SimpleNamespace(close=lambda: None))
     monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)

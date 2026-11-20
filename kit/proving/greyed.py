@@ -404,14 +404,15 @@ def drawing(cam, why_not=None, k: int | None = None, flags: Flags | None = None)
 
 
 def labels() -> set:
-    """The row labels a blocker is named by: the definition's and the page model's (runner.known_labels), read once."""
+    """The labels a blocker is named by: the definition's row labels and setting names and the page model's
+    (runner.blocker_labels), read once."""
     global LABELS
     if LABELS is None:
         try:
-            from runner import known_labels
+            from runner import blocker_labels
 
             from .nav import MODEL
-            LABELS = set(known_labels(MODEL))
+            LABELS = set(blocker_labels(MODEL))
         except Exception:       # noqa: BLE001 (no labels: a blocker is named by its equipment or not at all)
             LABELS = set()
     return LABELS
