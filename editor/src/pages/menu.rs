@@ -2616,6 +2616,45 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's mend 2: once a control holds egui's focus (as Tab or a screen reader leaves it), the arrows still move
+    /// the menu's choice, in the items column and the groups column, and the control keeps the focus; Tab still moves
+    /// through the controls; a text field with the caret keeps the arrows for its text.
+    #[test]
+    fn the_arrows_move_the_choice_with_a_control_focused() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("arrows_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let first = app.group_lines(&rows).iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (button, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && l == "Expand all").expect("a button");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: button, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        let focused = |w: &Win| w.ctx.memory(|m| m.focused()).map(|f| f.value());
+        assert_eq!(focused(&w), Some(button.0), "the button has the focus");
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert!(app.item_key.as_deref() != Some(first.key.as_str()) || app.item_head.is_some(), "Down moved the choice in the items column");
+        assert_eq!(focused(&w), Some(button.0), "and the button kept the focus");
+        app.focus = Focus::Groups;
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_ne!(app.group.as_deref(), Some(group), "Down moved to the next group");
+        assert_eq!(focused(&w), Some(button.0), "the button kept the focus");
+        // Tab moves through the controls from the one focused
+        w.key(&mut app, egui::Key::Tab);
+        assert!(focused(&w).is_some_and(|f| f != button.0), "Tab moved the focus to another control");
+        // a text field with the caret keeps the arrows
+        let now = app.group.clone();
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_eq!(app.group, now, "the search box with the caret kept the arrow");
+        done(&dir, &user);
+    }
+
     /// The reviewer's mend 1: a Collapse all the view in front does not take acts on no later view. On a family group,
     /// Cmd/Ctrl+Shift+↑ and a plain ↓ in the same frame: the ↓ moves to the next group, the request is dropped after that
     /// frame's panel, and the family's table, back in front, is open as it was.

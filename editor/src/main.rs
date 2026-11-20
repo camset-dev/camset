@@ -642,7 +642,8 @@ impl eframe::App for App {
             self.on_dialog(kind, path);
         }
         // shortcuts: undo / redo, and arrow keys between the menu columns
-        if !ctx.wants_keyboard_input() {
+        // a text field with the caret keeps them for its own text (`typing`)
+        if !typing(ctx) {
             let (undo, redo) = ctx.input(|i| (
                 i.modifiers.command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
                 (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z)) || (i.modifiers.command && i.key_pressed(egui::Key::Y)),
@@ -656,13 +657,16 @@ impl eframe::App for App {
         self.bar_nav(ctx);
         self.keyboard_nav(ctx);
         // compare view: F3 / Shift+F3 (also Alt+Down / Alt+Up) step through the differences
-        if self.mode == Mode::Compare && !ctx.wants_keyboard_input() {
+        if self.mode == Mode::Compare && !typing(ctx) {
             let (next, prev) = ctx.input(|i| (
                 (i.key_pressed(egui::Key::F3) && !i.modifiers.shift) || (i.modifiers.alt && i.key_pressed(egui::Key::ArrowDown)),
                 (i.key_pressed(egui::Key::F3) && i.modifiers.shift) || (i.modifiers.alt && i.key_pressed(egui::Key::ArrowUp)),
             ));
             if next { self.diff_step = 1; }
             if prev { self.diff_step = -1; }
+            if next || prev {
+                self.keep_focus(ctx);
+            }
         }
         // remember the window size and the session (files, mode, page) for the next start
         // (the window reports them in the editor's points, which the text size scales: kept at 100%, as it opens)
