@@ -143,14 +143,21 @@ def record(a, camera: str) -> None:
 
 def print_public(camera: str) -> None:
     """The public form on standard output: the public build of the public sources and the seen file as they stand
-    (never this computer's looks or runs), so any clone prints the same bytes; nothing written."""
+    (never this computer's looks or runs), so any clone prints the same bytes; nothing written. The bytes go under the
+    text layer, which on Windows would write each newline as CR LF."""
     if not definitions.path(camera).exists():
         sys.exit(f"no definition for {camera}: kit/schema_update.py --write makes one")
     t = ledger.public_build_text(camera)
     why = ledger.public_problems(json.loads(t), t, camera=camera)
     if why:
         sys.exit(f"the public form would hold what decision 16 keeps private, so it is not printed: {'; '.join(why[:3])}")
-    sys.stdout.write(t)
+    out = getattr(sys.stdout, "buffer", None)
+    if out is None:                         # a stream with no bytes under it: its text is all there is
+        sys.stdout.write(t)
+        return
+    sys.stdout.flush()
+    out.write(t.encode("utf-8"))
+    out.flush()
 
 
 def check(camera: str, led) -> None:

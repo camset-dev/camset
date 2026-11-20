@@ -31,9 +31,6 @@ lut/
 data/camsets/
 data/samples/
 /*.DAT
-# the coverage ledger's public form: kit/tools/coverage.py --print prints it from the public sources and the seen file,
-# the same in any clone, so it is never kept (docs/decisions/0023, since 2026-11-19)
-data/*/coverage_*_fw*.json
 # your own folder (config, camera files, the help text read off your camera, the SDK table): never published; keep it
 # in a repository of your own if you like (docs/decisions/0018)
 private/

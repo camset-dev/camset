@@ -290,9 +290,15 @@ def evidence_in_public(p, text: str = None) -> list:
         return [f"{p.name} is the coverage ledger's looks file, the mapper's own: it is kept in "
                 f"private/evidence/{p.parent.name}/ (docs/decisions/0023), never in data/"]
     if kind == "coverage":
-        return [f"{p.name} is the coverage ledger's public form, which is no longer kept (docs/decisions/0023): "
+        # one line, its fix right for where it is: a file in the tree, tracked or not (.gitignore does not name it, so
+        # git status shows it), or a commit's blob (check_public --commits), which only a branch without it mends
+        said = (f"{p.name} is the coverage ledger's public form, which is no longer kept (docs/decisions/0023); "
                 f"kit/tools/coverage.py --camera {p.parent.name} --print prints it from the public sources and the seen "
-                "file; delete this copy"]
+                "file. ")
+        return [said + ("Delete it, with git rm where git tracks it" if text is None else
+                        "No commit of a pull request may carry it: take it out of every commit (one commit of the final "
+                        "files on a fresh branch cut from the updated main, CONTRIBUTING.md, \"What a contribution must "
+                        "keep\")")]
     text = p.read_text(encoding="utf-8") if text is None else text
     if kind == "seen":
         # the coverage ledger's seen file: its schema, a closed vocabulary (the labels, groups and tabs of the camera's

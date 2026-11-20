@@ -491,8 +491,9 @@ def test_a_public_row_names_a_blocker_by_its_row_alone():
 
 
 def test_check_public_refuses_a_public_form_or_a_looks_file_in_data(camera, tmp_path, monkeypatch):
-    """No public form is kept in data/ (docs/decisions/0023): check_public's data check refuses a copy there in one
-    line, with the command that prints it, whether it holds private keys or is the build itself; the looks file too.
+    """No public form is kept in data/ (docs/decisions/0023): check_public's data check refuses a copy there, tracked or
+    not, in one line, with the command that prints it and the fix that holds either way (delete it, with git rm where
+    git tracks it, never git rm --cached), whether it holds private keys or is the build itself; the looks file too.
     A seen file of a camera with no definition is refused, as its words cannot be checked."""
     import check_public as C
     from camkit import datafiles
@@ -507,6 +508,7 @@ def test_check_public_refuses_a_public_form_or_a_looks_file_in_data(camera, tmp_
         found = C.data_problems()
         assert found == [f"data/{CAM}/coverage_{CAM}.json: {datafiles.evidence_in_public(f)[0]}"], found
         assert f"kit/tools/coverage.py --camera {CAM} --print" in found[0] and "carries evidence" not in found[0]
+        assert "Delete it, with git rm where git tracks it" in found[0] and "--cached" not in found[0]
     f.unlink()
     looks = d / f"looks_{CAM}.jsonl"
     looks.write_text("{}\n", encoding="utf-8")
@@ -563,8 +565,9 @@ def test_a_tree_without_runs_or_private_prints_the_a1_iis_public_form(tmp_path):
     """The gate of docs/decisions/0023's change of 2026-11-19, the public form no longer committed: a tree holding the
     kit's code (kit/camkit, kit/tools/coverage.py), schemas/, the a1 II's definition with its sample and its data
     folder, and no runs/ and no private/, prints the public form with kit/tools/coverage.py --print: a lean form (its
-    schema, its words, no evidence), the same bytes as this clone's own build (where the mapper's runs and evidence,
-    when they are here, change nothing), and nothing written into the tree."""
+    schema, its words, no evidence), byte for byte this clone's own public build, and nothing written into the tree.
+    A made-up looks file and run put into the tree's private/ and runs/ change none of those bytes, though --check
+    reads the looks and says they would change the seen file."""
     import shutil
     import subprocess
     tree = tmp_path / "clone"
@@ -585,14 +588,37 @@ def test_a_tree_without_runs_or_private_prints_the_a1_iis_public_form(tmp_path):
     env = {k: v for k, v in os.environ.items() if k not in ("CAMSET_RUNS", "CAMSET_LOOKS_DIR", "CAMSET_EVIDENCE_DIR",
                                                              "CAMSET_CAMERA")}
     env["PYTHONDONTWRITEBYTECODE"] = "1"
-    r = subprocess.run([sys.executable, str(tree / "kit" / "tools" / "coverage.py"), "--camera", A1, "--print"],
-                       cwd=tree, env=env, capture_output=True, text=True, encoding="utf-8", timeout=300)
-    assert r.returncode == 0, r.stderr[-2000:]
+
+    def tool(*argv):
+        # the bytes as the program wrote them: no text layer here turns a CR LF back into a newline
+        return subprocess.run([sys.executable, str(tree / "kit" / "tools" / "coverage.py"), "--camera", A1, *argv],
+                              cwd=tree, env=env, capture_output=True, timeout=300)
+    r = tool("--print")
+    assert r.returncode == 0, r.stderr.decode("utf-8", "replace")[-2000:]
     assert files() == before and not (tree / "runs").exists() and not (tree / "private").exists()
-    doc = json.loads(r.stdout)
-    assert coverage.public_problems(doc, r.stdout, camera=A1) == []
+    assert r.stdout == coverage.public_build_text(A1).encode("utf-8")
+    text = r.stdout.decode("utf-8")
+    doc = json.loads(text)
+    assert coverage.public_problems(doc, text, camera=A1) == []
     assert doc["model"] == "ILCE-1M2" and doc["firmware"] == "4.00" and doc["rows"] and doc["options"] and doc["records"]
-    assert r.stdout == coverage.public_build_text(A1)
+    # the mapper's own files, made up: a look that saw a row not yet tried act, and a crawl row the kit could not read
+    row = next(x for x in doc["rows"] if x["status"] == "not yet tried" and len(x["path"]) == 1)
+    looks = tree / "private" / "evidence" / A1 / f"looks_{A1}.jsonl"
+    looks.parent.mkdir(parents=True)
+    looks.write_text(json.dumps({"t": "2026-11-19T10:00:00", "run": "kit2_x", "kit": "abc1234", "by": "drive",
+                                 "mode": row["mode"], "tab": row["tab"], "group": row["group"], "path": row["path"],
+                                 "did": "open", "result": "acted", "records_changed": []}) + "\n", encoding="utf-8")
+    crawl = tree / "runs" / A1 / "kit2_crawl_x"
+    crawl.mkdir(parents=True)
+    (crawl / "rows.jsonl").write_text(json.dumps({"page": "1/1", "slot": 1, "label": row["path"][0],
+                                                  "outcome": "unknown screen", "kind": "unknown"}) + "\n",
+                                      encoding="utf-8")
+    before = files()
+    again = tool("--print")
+    assert again.returncode == 0 and again.stdout == r.stdout
+    seen = tool("--check")
+    assert seen.returncode == 1 and b"would change" in seen.stdout + seen.stderr, seen.stdout + seen.stderr
+    assert files() == before
 
 
 @pytest.mark.parametrize("key", sorted(p.stem for p in (ROOT / "editor" / "definitions").glob("*.json")
@@ -605,9 +631,10 @@ def test_every_definitions_public_form_is_lean_and_its_seen_file_clean(key):
     assert not (definitions.data_dir(key) / f"coverage_{key}.json").exists(), "the public form is printed, never kept"
 
 
-def test_gitignore_keeps_a_public_form_out_and_the_seen_file_in():
-    """A copy of the public form printed into data/ is ignored by git; the seen file and the camera file beside it are
-    not."""
+def test_git_shows_a_stray_copy_of_the_public_form():
+    """.gitignore does not name the public form, so a copy printed into data/ shows in git status, beside check_public's
+    one line refusing it (test_check_public_refuses_a_public_form_or_a_looks_file_in_data), and no path rule adds a
+    second line ("ignored, yet tracked") whose git rm --cached would leave it on disk."""
     import shutil
     import subprocess
     if shutil.which("git") is None or not (ROOT / ".git").exists():
@@ -615,8 +642,24 @@ def test_gitignore_keeps_a_public_form_out_and_the_seen_file_in():
 
     def ignored(f):
         return subprocess.run(["git", "check-ignore", "-q", "--no-index", f], cwd=ROOT).returncode == 0
-    assert ignored(f"data/{A1}/coverage_{A1}.json") and ignored("data/ILCE-0X0_fw1.00/coverage_ILCE-0X0_fw1.00.json")
-    assert not ignored(f"data/{A1}/seen_{A1}.json") and not ignored(f"data/{A1}/camera_{A1}.json")
+    for f in (f"data/{A1}/coverage_{A1}.json", "data/ILCE-0X0_fw1.00/coverage_ILCE-0X0_fw1.00.json",
+              f"data/{A1}/seen_{A1}.json"):
+        assert not ignored(f), f
+
+
+def test_print_writes_its_bytes_whatever_newline_the_console_turns_them_into(camera, monkeypatch):
+    """--print writes the public form's bytes under the console's text layer, so a Windows console, whose text layer
+    writes each newline as CR LF, gets the same bytes as every other clone (here a text layer that does so on any
+    computer)."""
+    import io
+    import coverage as tool
+    raw = io.BytesIO()
+    console = io.TextIOWrapper(raw, encoding="utf-8", newline="\r\n")
+    monkeypatch.setattr(sys, "stdout", console)
+    monkeypatch.setattr(sys, "argv", ["coverage.py", "--print"])
+    tool.main()
+    console.flush()
+    assert raw.getvalue() == coverage.public_build_text(CAM).encode("utf-8")
 
 
 def test_the_tool_prints_the_public_form_and_checks_the_seen_file(camera, monkeypatch, capsys):
@@ -1972,9 +2015,10 @@ def test_a_notice_info_ok_did_not_pass_is_greyed_and_one_it_passed_is_looked_at(
 
 def test_a_commit_range_refuses_a_public_form_in_any_commit_and_judges_the_seen_file(camera, tmp_path):
     """check_public --commits: a commit that adds the public form to data/ is refused, whatever it holds (the clean
-    build here) and whatever .gitignore says (this repository has none), even when a later commit of the range takes
-    it out again: the form is printed, never kept (docs/decisions/0023). A commit that changes the seen file is held
-    to the seen file's own rules: a clean one passes, one naming a group no public source has is refused."""
+    build here), even when a later commit of the range takes it out again, in one line saying what to do (take it out
+    of every commit: one commit of the final files on a fresh branch), as the form is printed, never kept
+    (docs/decisions/0023). A commit that changes the seen file is held to the seen file's own rules: a clean one
+    passes, one naming a group no public source has is refused."""
     import shutil
     import subprocess
     import check_public as C
@@ -2019,8 +2063,9 @@ def test_a_commit_range_refuses_a_public_form_in_any_commit_and_judges_the_seen_
     bad = git("rev-parse", "HEAD")[:12]
     found = C.commit_problems(f"{base}..HEAD", repo=repo)
     form = [x for x in found if f"data/{CAM}/coverage_{CAM}.json" in x]
-    assert form and all(x.startswith(f"{added} data/{CAM}/coverage_{CAM}.json: ") and "no longer kept" in x
-                        for x in form), found
+    assert len(form) == 1 and form[0].startswith(f"{added} data/{CAM}/coverage_{CAM}.json: "), found
+    assert "no longer kept" in form[0] and "take it out of every commit" in form[0], form
+    assert "one commit of the final files" in form[0] and "Delete it" not in form[0], form
     said = [x for x in found if f"data/{CAM}/seen_{CAM}.json" in x]
     assert said and all(x.startswith(bad) for x in said) and any("group 'Home'" in x for x in said), found
 

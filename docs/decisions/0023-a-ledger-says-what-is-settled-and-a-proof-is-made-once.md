@@ -46,7 +46,7 @@ form was committed in the data folder, and checked to be the build byte for byte
 
 ## Consequences
 
-`kit/tools/check_public.py` refuses a copy of the public form in `data/`, and `.gitignore` ignores one. A pull request
+`kit/tools/check_public.py` refuses a copy of the public form in `data/`, which `git status` shows. A pull request
 carries the seen file, not the ledger: `kit/tools/coverage.py --check` says whether the public form the public sources
 and the seen file give is lean and the seen file what the looks give, and the maintainer prints the ledger from the
 pull request's files. A change to the public ledger no longer shows in a diff of `data/`: it is seen by printing the
