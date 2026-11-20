@@ -12,8 +12,9 @@ The screen (camkit.screen's dialog with a lit field): Up and Down move between t
 option goes into its boxes (the first lit, filled orange, its field's name written above the row, the option's icon in
 the strip turned white), Right again to the next box, Up and Down step the lit box, MENU in the boxes goes back to the
 lit option with the carousel still open, Enter in the boxes chooses the option with what its boxes hold. Right is never
-pressed on the last box (what it does there was never seen), nor anything but MENU on a screen that stopped reading as
-expected.
+pressed on the last box (what it does there was never seen), nor onto Drive Mode's › box after the fields (outlined, so
+counted a box, where Touch Operation is On; Right reaching it once opened Bracket Settings, committing the option): the
+run is refused there (sub_panel_box). Nothing but MENU goes on a screen that stopped reading as expected.
 
 First a look, read only: the option lit (its title read against the map's options), Right into its boxes and through
 every one, each box's value read while it is lit and its field's name above it, then MENU twice, nothing chosen. Boxes
@@ -89,7 +90,7 @@ from pathlib import Path
 from typing import NamedTuple
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from camkit import camset, ocr, paths, reading, screen, vlm  # noqa: E402
+from camkit import camset, ocr, paths, reading, safety, screen, vlm  # noqa: E402
 import numpy as np  # noqa: E402  (after camkit, which says what to run where the kit's packages are missing)
 from camkit.frames import eyes_from_config  # noqa: E402
 from camkit.runs import Run  # noqa: E402
@@ -109,6 +110,7 @@ VIA = "a carousel option's own fields"      # kit/pass2_report.py reads these li
 MOST = 12                                   # values a walk proves each way at most (--most)
 WORD = (100, 280, 640, 342)                 # where the camera writes the lit box's field name (camkit.live.BOX_WORD)
 PIC_TOL = 20                                # pixels two pictures of one box value may differ by (OSD frames: none)
+SUB_PANEL_LINE = 200                        # grey a box's top line reaches where it is the › box (sub_panel_box)
 
 
 class Look(NamedTuple):
@@ -367,6 +369,29 @@ def same_pic(a, b) -> bool:
     return a is not None and b is not None and a.shape == b.shape and int(np.count_nonzero(a != b)) <= PIC_TOL
 
 
+def sub_panel_box(cam, k: int) -> bool:
+    """Whether box k on the lit box's line is the carousel's › box, which opens a sub-panel (Drive Mode's Cont., Single
+    and Focus Bracket): with Touch Operation On the camera outlines it white, as a touch button, and the pixel reader
+    counts it a box after the option's fields (kit2_pass2 177248/177249: x 573-624, its top line 249 grey, the value
+    boxes' 85-102); with Touch Operation Off it is drawn bare and is no box (261861). Right onto it is never pressed:
+    Right across Cont. Bracket's fields once reached its › and opened Bracket Settings, which committed the option
+    (camkit.crawl.walk_dialog_deep, 2026-10-28)."""
+    s = cam.read()
+    if s.bar is None or k >= len(s.boxes):
+        return False
+    x0, x1 = s.boxes[k]
+    top = screen._grey(cam.frame.image)[max(0, s.bar[0] - 1):s.bar[0] + 3, x0 + 6:x1 - 5]
+    return top.size > 0 and float(np.median(top.max(axis=0))) >= SUB_PANEL_LINE
+
+
+def no_right_onto_sub_panel(cam, option: str, k: int) -> None:
+    """Refused (camkit.safety.Refused: the run stops as on any press the guards will not send, its start file put back)
+    before a Right that would light box k where box k is the carousel's › box (sub_panel_box)."""
+    if sub_panel_box(cam, k):
+        raise safety.Refused(f"{option}: no Right to box {k}: it is the carousel's › box, which opens a sub-panel "
+                             f"(Touch Operation On draws it as a box; {cam.frame.path.name}); nothing pressed")
+
+
 # ------------------------------------------------------------------------------------------------ the way there
 
 def open_row(cam, cycle, model, path: list) -> tuple:
@@ -399,7 +424,8 @@ def to_option(cam, option: str, labels: list) -> None:
 def into_box(cam, option: str, labels: list, b: int, count: int | None) -> None:
     """From the option lit: Right into its boxes, then Right to box b. The frame before the first Right must be the
     option itself lit (option_refused), the frame before each further Right box b - 1 lit with a box after it: never a
-    Right on the last box. Each frame after a Right must read as the box meant (box_refused)."""
+    Right on the last box, nor onto the › box (no_right_onto_sub_panel). Each frame after a Right must read as the box
+    meant (box_refused)."""
     why = option_refused(cam, option, labels)
     if why:
         raise Failed(f"{option}: no Right into its boxes: {why} ({cam.frame.path.name})")
@@ -412,6 +438,7 @@ def into_box(cam, option: str, labels: list, b: int, count: int | None) -> None:
         if getattr(s, "field", None) != k - 1 or k >= len(s.boxes):
             raise Failed(f"{option}: no Right to box {k}: box {getattr(s, 'field', None)} of {len(s.boxes)} is lit "
                          f"({cam.frame.path.name})")
+        no_right_onto_sub_panel(cam, option, k)
         cam.press("right")
         why = box_refused(cam, option, [], k, count)
         if why:
@@ -535,10 +562,11 @@ def look(cam, link, cycle, model, path, option, labels) -> Look:
 
 
 def into_next(cam, option: str, k: int, count: int) -> None:
-    """Right from box k - 1 to box k (never from the last box)."""
+    """Right from box k - 1 to box k (never from the last box, nor onto the › box: no_right_onto_sub_panel)."""
     s = cam.read()
     if getattr(s, "field", None) != k - 1 or k >= count:
         raise Failed(f"{option}: no Right to box {k} ({cam.frame.path.name})")
+    no_right_onto_sub_panel(cam, option, k)
     cam.press("right")
     why = box_refused(cam, option, [], k, count)
     if why:

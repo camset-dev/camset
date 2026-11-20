@@ -394,6 +394,8 @@ class FieldsCam:
         elif self.where == "dialog" and key == "right" and boxes:
             if self.field is not None and self.field + 1 >= len(boxes):
                 raise AssertionError("Right on the last box")
+            if boxes[0 if self.field is None else self.field + 1].get("sub"):
+                raise AssertionError("Right onto the › box, which opens a sub-panel and commits the option")
             self.field = 0 if self.field is None else self.field + 1
         elif self.where == "dialog" and self.field is not None and key in ("up", "down") and self.rule:
             self.edit = list(self.rule(self.opt, self.edit, self.field, key))
@@ -487,6 +489,8 @@ def fields_world(monkeypatch, own_runs, cam):
             ("word_read", lambda c: c.spec[c.opt][c.field]["label"]),
             ("box_pic", lambda c, k: (c.opt, k, c.edit[k], c.field == k, c.field if c.lit_moves else None)
              if lit(c) and k < len(c.edit) else None),
+            ("sub_panel_box", lambda c, k: lit(c) and k < len(c.spec.get(c.opt, [])) and
+             bool(c.spec[c.opt][k].get("sub"))),
             ("same_pic", lambda a, b: a is not None and a == b),
             ("menu_from_shooting", lambda c, **k: setattr(c, "where", "menu")), ("scan_position", lambda c, cycle: 0),
             ("go_to", lambda c, cycle, model, j, row: 0), ("enter_any", enter_any),
@@ -1818,10 +1822,12 @@ def test_the_failed_runs_frames_take_every_number_and_the_put_back(eyes, monkeyp
 
 
 def frame_cam(name: str):
-    """One of the camera's frames on show, as box_pic reads it (the screen and the image of the frame on show)."""
+    """One of the camera's frames on show, as box_pic reads it (the screen and the image of the frame on show); each
+    key pressed is kept, the frame on show stays."""
     f = load(shot(name))
     s = screen.read(f)
-    return SimpleNamespace(frame=f, read=lambda: s)
+    keys = []
+    return SimpleNamespace(frame=f, read=lambda: s, keys=keys, press=lambda key, **kw: keys.append(key))
 
 
 @pytest.mark.parametrize("before, after", [("269127_right.png", "269128_right.png"),      # HDMI, the put-back
@@ -1850,6 +1856,88 @@ def test_with_one_box_lit_the_other_boxes_pictures_stand(before, after, lit):
     a, b = frame_cam(before), frame_cam(after)
     assert a.read().field == b.read().field == lit
     assert [F.same_pic(F.box_pic(a, k), F.box_pic(b, k)) for k in range(4)] == [k != lit for k in range(4)]
+
+
+# ------------------------------------------------------------------------------------- never Right onto the › box
+
+@pytest.mark.parametrize("name, lit, subs", [
+    ("177248_down-late.png", 0, [False, False, True]),        # Drive Mode's Single Bracket, Touch Operation On: › outlined
+    ("177249_right.png", 1, [False, False, True]),
+    ("261861_right.png", 0, [False, False]),                  # the same, Touch Operation Off: the › bare, no box
+    ("269029_right.png", 1, [False] * 4),                     # Bracket Type's Focus Bracket over HDMI: no › at all
+    ("269277_right.png", 2, [False] * 4)])                    # and over OSD
+def test_the_sub_panel_box_is_told_by_its_white_outline(name, lit, subs):
+    """The camera's own frames: the › box Touch Operation On outlines white after Drive Mode's bracket fields (its top
+    line 249 grey, the value boxes' 85-102) is the sub-panel box; with Touch Operation Off it is drawn bare and the
+    pixel reader counts no box there; Bracket Type's boxes hold none."""
+    import carousel_fields_run as F
+    cam = frame_cam(name)
+    assert cam.read().field == lit and len(cam.read().boxes) == len(subs)
+    assert [F.sub_panel_box(cam, k) for k in range(len(subs))] == subs
+
+
+@pytest.mark.parametrize("name", ["177249_right.png", "177248_down-late.png"])
+def test_no_right_onto_the_outlined_sub_panel_box(name):
+    """On the outlined › of 2026-10-31: a Right that would light it is refused (camkit.safety.Refused, the run's exit as
+    any press the guards will not send) before any key, where the box before it is lit; a Right to a value box goes."""
+    import carousel_fields_run as F
+    from camkit import safety
+    cam = frame_cam(name)
+    lit = cam.read().field
+    if lit == 1:
+        with pytest.raises(safety.Refused, match="no Right to box 2: it is the carousel's › box"):
+            F.into_next(cam, "Single Bracket", 2, 3)
+    else:
+        F.no_right_onto_sub_panel(cam, "Single Bracket", 1)       # the images box: no refusal
+        with pytest.raises(safety.Refused, match="no Right to box 2"):
+            F.no_right_onto_sub_panel(cam, "Single Bracket", 2)
+    assert cam.keys == []
+
+
+def test_the_bare_sub_panel_leaves_the_last_box_rule_to_stop_the_right():
+    """Touch Operation Off (2026-11-19): the › is no box, so the images box is the last box drawn, and a Right from it is
+    the one never pressed on the last box, as before; the guard has nothing to refuse."""
+    import carousel_fields_run as F
+    cam = frame_cam("261861_right.png")
+    F.no_right_onto_sub_panel(cam, "Single Bracket", 1)
+    with pytest.raises(F.Failed, match="no Right to box 2"):
+        F.into_next(cam, "Single Bracket", 2, 2)
+    assert cam.keys == []
+
+
+SUB = {"label": "", "values": ["›"], "held": 0, "wraps": False, "sub": True}      # the › box, Touch Operation On
+
+
+@pytest.mark.parametrize("way", [["--look"], ["--grid"]])
+def test_a_carousel_whose_fields_end_in_the_sub_panel_box_is_refused_in_the_look(own_runs, monkeypatch, capsys, way):
+    """Cont. Bracket drawn as Drive Mode draws it with Touch Operation On, its › box counted after the two fields: the
+    look reads box 0 and box 1, then refuses the Right that would light the ›, nothing chosen (the made-up camera fails
+    the test on a Right onto it), the run exits as refused once the session has put its start file back."""
+    import boxes_run
+    cam = FieldsCam()
+    cam.spec[0] = [*CONT_BOXES, SUB]
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit) as stop:
+        run_fields(F, root, "Cont. Bracket", *way)
+    assert stop.value.code == boxes_run.EXIT_REFUSED
+    assert "no Right to box 2: it is the carousel's › box, which opens a sub-panel" in capsys.readouterr().out
+    assert cam.keys.count("right") == 3 and "enter" not in cam.keys and fields_lines() == [] and downloads == []
+
+
+def test_the_number_and_grid_steps_refuse_the_sub_panel_box_too(own_runs, monkeypatch):
+    """into_box and into_next, which every walk's Right across the boxes goes through: box 1 lit and the › after it, no
+    Right to it, whether stepping on from box 1 or entering the boxes for box 2."""
+    from camkit import safety
+    cam = FieldsCam()
+    cam.spec[0] = [*CONT_BOXES, SUB]
+    F, _, _ = fields_world(monkeypatch, own_runs, cam)
+    on_box(cam, field=1)
+    with pytest.raises(safety.Refused, match="no Right to box 2"):
+        F.into_next(cam, "Cont. Bracket", 2, 3)
+    cam.field = None
+    with pytest.raises(safety.Refused, match="no Right to box 2"):
+        F.into_box(cam, "Cont. Bracket", OPTIONS, 2, 3)
+    assert cam.keys == ["right", "right"], "into the boxes and to box 1, never the third Right"
 
 
 def test_a_number_the_boxes_will_not_hold_is_said_and_nothing_is_chosen(own_runs, monkeypatch, capsys):
