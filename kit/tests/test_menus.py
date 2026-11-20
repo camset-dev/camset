@@ -1014,3 +1014,16 @@ def test_where_the_own_menu_never_read_the_rows_another_menus_order_is_not_writt
     assert placement.settings(copy.deepcopy(d), tree)["global:0x0001"]["row_at"] == [0, 0, 0]
     got = placement.by_menu(copy.deepcopy(d), tree, [MENUS[0], MENUS[2]])["global:0x0001"]
     assert got == {"row_menus": ["Still", "S&Q"]}, got
+
+
+def test_check_public_refuses_a_place_field_that_is_no_label_in_plain_words():
+    """A row_places entry or a setting whose row_tab, row_group or under_option is not a label (an object, a number) is
+    refused in plain words, never a crash."""
+    d = {**doc(), "camera": {"menus": MENUS, "text": {}}, "settings": [
+        {"key": "global:0x0001", "row": ["Drive Mode"], "row_at": [2], "row_menus": ["Still", "Movie"],
+         "row_places": {"Movie": {"row": ["Drive Mode"], "row_at": [1], "row_tab": {"x": 1}, "under_option": 3}}},
+        {"key": "global:0x0002", "row": ["Drive Mode"], "row_at": [2], "row_group": ["G"], "row_menus": ["Still"]}]}
+    got = "\n".join(check_public.menu_problems(d))
+    for words in ("global:0x0001: row_places['Movie']: row_tab is no label", "global:0x0001: row_places['Movie']: under_option is no label",
+                  "global:0x0002: row_group is no label"):
+        assert words in got, words

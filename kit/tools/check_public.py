@@ -859,7 +859,13 @@ def menu_problems(doc: dict) -> list:
             [f"{where}: {x!r} is one of {mine}'s item pages" for x in (*texts, option)
              if isinstance(x, str) and placement.item_page(x, mine)]
 
+    def not_labels(where, place):
+        return [f"{where}: {f} is no label" for f in ("row_tab", "row_group", "under_option")
+                if place.get(f) is not None and not isinstance(place[f], str)]
+
     def on_my_menu(where, tab, group):
+        if not isinstance(tab, str) or not isinstance(group, str):
+            return []                    # no label: not_labels says so
         if placement.norm(tab) == placement.norm(mine) and \
                 not placement.norm(group).startswith(placement.norm(mine) + "setting"):
             return [f"{where}: a row on {mine}'s tab outside its setting page ({group!r}): one of the owner's own items"]
@@ -870,6 +876,7 @@ def menu_problems(doc: dict) -> list:
             out.append(f"{k}: row_menus or row_places without camera.menus")
         if s.get("copy_of") and ("row_menus" in s or "row_places" in s):
             out.append(f"{k}: row_menus on a copy, which follows its setting ({s['copy_of']})")
+        out += not_labels(k, s)
         if s.get("row"):
             out += on_my_menu(k, s.get("row_tab") or s.get("tab"), s.get("row_group") or s.get("group"))
         out += [f"{k}: row_menus names {n!r}, no camera menu" for n in s.get("row_menus") or [] if n not in names]
@@ -883,6 +890,7 @@ def menu_problems(doc: dict) -> list:
                 continue
             out += [f"{where} holds {f!r}" for f in place if f not in MENU_PLACE]
             out += [f"{where}: row holds {x!r}, not a label" for x in place.get("row") or [] if not isinstance(x, str)]
+            out += not_labels(where, place)
             out += labels(where, *(place.get("row") or []), place.get("row_tab"), place.get("row_group"),
                           option=place.get("under_option"))
             out += on_my_menu(where, place.get("row_tab") or s.get("row_tab") or s.get("tab"),
