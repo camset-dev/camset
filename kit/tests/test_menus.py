@@ -412,3 +412,39 @@ def test_the_camera_file_may_word_the_menu_buttons_label():
     v = Draft202012Validator(text)
     assert not list(v.iter_errors({"menus_label": "Camera menu:", "menus_hover": "The camera's menu in each mode."}))
     assert list(v.iter_errors({"menus_label": ""}))
+
+
+@pytest.mark.parametrize("table", ["renamed", "none"])
+def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monkeypatch, table):
+    """A fresh clone or CI (no private menu tree): from_data cannot rebuild a setting's menus, so it touches none of
+    them, camera.menus included, whatever the MENUS table says now (a menu renamed, or the table gone): the
+    definition's menus, row_menus and row_places stay exactly as they were, and check_public finds nothing."""
+    import shutil
+    import schema_update as S
+    key = definitions.key(json.loads((definitions.ROOT / "editor" / "definitions" / "ILCE-1M2_fw4.00.json").read_text(encoding="utf-8")))
+    data = tmp_path / "data"
+    shutil.copytree(definitions.data_dir(key), data / key)
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(S.help_files, "OWN", data)
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: tmp_path / "no_tree.json")
+    hand = data / key / f"hand_tables_{key}.json"
+    tables = json.loads(hand.read_text(encoding="utf-8")) if hand.exists() else {"camera": key}
+    if table == "renamed":
+        tables["MENUS"] = [{"name": "Photo", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]},
+                           {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
+    else:
+        tables.pop("MENUS", None)
+    hand.write_text(json.dumps(tables), encoding="utf-8")
+    doc = json.loads((definitions.ROOT / "editor" / "definitions" / f"{key}.json").read_text(encoding="utf-8"))
+    menus = [{"name": "Still", "modes": ["Stills"]}, {"name": "Movie", "modes": ["Movie"]}, {"name": "S&Q", "modes": ["S&Q", "Time-lapse"]}]
+    doc["camera"]["menus"] = menus
+    placed = [s for s in doc["settings"] if s.get("row") and not s.get("copy_of")]
+    for i, s in enumerate(placed):
+        s["row_menus"] = ["Still", "Movie"] if i % 2 else ["Still"]
+    placed[0]["row_places"] = {"Still": {"row": placed[0]["row"], "row_at": [0] + placed[0]["row_at"][1:]}}
+    placed[0]["proved"] = {"menu": [" > ".join(placed[0]["row"])]}          # evidence there, the tree not
+    was = {s["key"]: {f: s.get(f) for f in ("row_menus", "row_places")} for s in doc["settings"]}
+    got = S.from_data(doc)
+    assert got["camera"]["menus"] == menus
+    assert {s["key"]: {f: s.get(f) for f in ("row_menus", "row_places")} for s in got["settings"]} == was
+    assert check_public.menu_problems(got) == []

@@ -306,12 +306,14 @@ def from_data(doc: dict) -> dict:
     Expert mode only), no setting's old `observed` (without_observed: it held the owner's own settings), and no mark on
     the values no option was seen to write (without_held), and no list of the records a proof wrote together
     (without_written_with: it told how the camera was set).
+    The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
+    where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
+    exactly as the definition has them, what the writer cannot rebuild left untouched.
     main() ends the same way, so on the committed data this gives the committed definition."""
+    kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
     tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
     menus = camera_menus(doc, tables.MENUS)
-    if "camera" in doc:
-        doc["camera"] = with_menus(doc["camera"], menus)
     without_observed(doc, say=False)
     without_held(doc)
     without_written_with(doc)
@@ -319,6 +321,8 @@ def from_data(doc: dict) -> dict:
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
     found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()})
+    if "camera" in doc:
+        doc["camera"] = with_menus(doc["camera"], menus if found is not None else kept)
     slots, mirror = mymenu_slots(doc), mirror_of(doc)
     names = sorted({s["name"] for s in doc["settings"]}, key=len, reverse=True)
 

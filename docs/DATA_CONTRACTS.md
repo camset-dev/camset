@@ -97,7 +97,9 @@ Movie and S&Q), the definition carries them as `camera.menus`, and each placed s
 holds its row (`row_menus`), with its place in a menu only where it differs from its own (`row_places`; the merged
 numbering of a tab's top rows serves every menu). Nothing in one menu is taken from another menu's rows
 (`kit/camkit/placement.py`, `by_menu`). `HAND_PLACES` gives the row of a record no proof path places: one a row's own
-function writes, or a row the walk can never read, seen on the camera. Without `MENUS` a definition has none of these.
+function writes, or a row the walk can never read, seen on the camera. A write with the menu tree on the computer
+writes these from `MENUS`, and none of them without it; with no menu tree there (a fresh clone, CI) it leaves the
+definition's as they are, as it does the places.
 
 ### What the editor offers outside Expert mode
 
