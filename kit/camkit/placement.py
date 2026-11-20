@@ -960,10 +960,10 @@ def guide_items(guide: list, tab: str, label: str) -> list:
 
 
 def proof_modes(paths: list, place: dict, every) -> set:
-    """The shooting modes a setting's proofs of its own row were made in: the modes the contexts of the paths naming the
-    row (_names_row) name; TOP_MODE where none names one (a path with no context was proved in the top-level menu's)."""
-    said = {mode_of(p, sorted(every)) for p in paths if _names_row(p, place)}
-    return (said - {None}) or {TOP_MODE}
+    """The shooting modes a setting's proofs of its own row were made in: for each path naming the row (_names_row), the
+    mode its context names, else TOP_MODE (a path whose context names no mode was proved in the top-level menu, as
+    by_menu's own paths take it), so a record proved from both rows has both; {TOP_MODE} where no path names the row."""
+    return {mode_of(p, sorted(every)) or TOP_MODE for p in paths if _names_row(p, place)} or {TOP_MODE}
 
 
 def split_by_guide(doc, top: dict, out: dict, menus: list, guide: list, paths_of, every) -> int:

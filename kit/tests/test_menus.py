@@ -327,17 +327,18 @@ def test_a_tree_takes_in_a_group_from_a_page_scan_never_the_owners_items(tmp_pat
 
 def test_records_that_differ_by_mode_on_one_row_are_kept_to_their_own_menus_by_the_help_guide():
     """The camera's Help Guide lists SteadyShot twice, a "still image" item and a "movie, slow&quick motion" one: of
-    the two records on that one row, the one proved in Movie mode goes to the Movie and S&Q menus, the one proved with
-    no mode named to the Still menu; a row the guide lists once, or under one set of modes, is left as the trees give
-    it, and so is a record no item fits."""
+    the records on that one row, the one proved in Movie mode goes to the Movie and S&Q menus, the one proved with no
+    mode named (in the Still menu) to the Still menu; one proved both ways, from both rows, keeps every menu, as no item
+    covers both; a row the guide lists once, or under one set of modes, is left as the trees give it."""
     rows = [page("1/1", "Image Stabilization", row("SteadyShot"), row("SteadyShot Adjust."))]
     tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}],
             "modes": [{"mode": m, "tabs": [{"tab": "Shooting", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
     d = {"model": "TEST", "tabs": ["Shooting"], "menu": [{"tab": "Shooting", "group": "Image Stabilization", "label": x, "order": i}
                                                          for i, x in enumerate(["SteadyShot", "SteadyShot Adjust."])],
          "settings": [setting("global:0x0001", "SteadyShot", "Image Stabilization", "SteadyShot"),
-                      setting("global:0x0002", "SteadyShot (Movie)", "Image Stabilization", "SteadyShot [Movie mode]", "SteadyShot"),
-                      setting("global:0x0003", "SteadyShot Adjust.", "Image Stabilization", "SteadyShot Adjust.")]}
+                      setting("global:0x0002", "SteadyShot (Movie)", "Image Stabilization", "SteadyShot [Movie mode]"),
+                      setting("global:0x0003", "SteadyShot Adjust.", "Image Stabilization", "SteadyShot Adjust."),
+                      setting("global:0x0004", "SteadyShot (both)", "Image Stabilization", "SteadyShot [Movie mode]", "SteadyShot")]}
     guide = [{"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot", "modes": "still image"},
              {"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot", "modes": "movie, slow&quick motion"},
              {"tab": "Shooting", "group": "Image Stabilization", "item": "SteadyShot Adjust.", "modes": "still image, movie, slow&quick motion"}]
@@ -346,6 +347,8 @@ def test_records_that_differ_by_mode_on_one_row_are_kept_to_their_own_menus_by_t
     assert got["global:0x0001"] == {"row_menus": ["Still"]}
     assert got["global:0x0002"] == {"row_menus": ["Movie", "S&Q"]}
     assert got["global:0x0003"] == {"row_menus": ["Still", "Movie", "S&Q"]}
+    assert got["global:0x0004"] == {"row_menus": ["Still", "Movie", "S&Q"]}
+    assert placement.proof_modes(["SteadyShot", "SteadyShot [Movie mode]"], {"row": ["SteadyShot"]}, {"Stills", "Movie", "S&Q"}) == {"Stills", "Movie"}
     assert placement.by_menu(d, tree, menus)["global:0x0001"] == {"row_menus": ["Still", "Movie", "S&Q"]}       # no guide
 
 
