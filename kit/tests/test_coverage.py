@@ -1504,6 +1504,22 @@ def test_a_row_a_proof_went_through_takes_the_setting_it_proved(camera):
         assert not any(r["path"][:2] == ["Romeo", "Auto"] for r in coverage.public_doc(led)["rows"])
 
 
+def test_a_registration_the_record_did_not_follow_greys_nothing(camera):
+    """A "registration mirror" line not applied (kit/provers/customshoot_values.py --follow: the hold's element did not
+    take the live row's code; framepos_run.py's place that did not read as routed) is no refusal, the camera refused
+    nothing: its row gets no "proof_refused" and its label no "greyed" fact, nor a "nothing changed" one. The same line
+    as a refused list option (the control) greys the row as before."""
+    mirror = {"path": ["Kilo"], "kind": "registration mirror", "record": "global:0x0c39", "key": "global:0x0c39",
+              "element": 0, "index": 0, "label": "Off", "applied": False,
+              "not_applied": "the element did not change at Register: what it holds may be the camera's own",
+              "changes": []}
+    write_proofs(camera, "kit2_pass2", [mirror])
+    led = ledger()
+    assert row(led, "Kilo")["status"] == "not yet tried" and not row(led, "Kilo").get("blocker")
+    write_proofs(camera, "kit2_pass2", [{**mirror, "kind": "list", "notice": {"text": "Not available: Alpha"}}])
+    assert row(ledger(), "Kilo")["status"] == "greyed in state"
+
+
 def test_the_tool_prints_the_shared_lists(camera, monkeypatch, capsys):
     import coverage as tool
     monkeypatch.setattr(sys, "argv", ["coverage.py", "--shared"])

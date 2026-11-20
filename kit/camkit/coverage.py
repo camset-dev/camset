@@ -1228,6 +1228,12 @@ def blocker_of(text, labels) -> dict | None:
     return {"remote": REMOTE} if safety.NOTICE_REMOTE.search(t) else None
 
 
+# a registration's proof line (kit/pass2_report.py's MIRROR_KIND: memreg_run.py, framepos_run.py --zone-grid,
+# customshoot_values.py --follow): one not applied says the record did not follow the registration, never that the
+# camera refused an option, so it is no "proof_refused" and no "greyed" fact
+MIRROR_KIND = "registration mirror"
+
+
 def reader_alone(p: dict) -> bool:
     """A proof line of an option only the second reader called grey, the camera never asked: written greyed as drawn
     with "greyed_by" "reader" and no notice of its own (proving.greyed: skipped with no key, its row's reason read on
@@ -1511,6 +1517,8 @@ def _facts(led: Ledger, src: Sources, by_key: dict) -> Facts:
         label = p.get("label")
         if reader_alone(p):
             continue                    # the reader alone called it grey and nobody tried it: no fact, the option open
+        if p.get("applied") is False and p.get("kind") == MIRROR_KIND:
+            continue                    # a registration whose record did not follow: the camera refused nothing
         if p.get("applied") is False:
             # the camera's notice names the blocker; an option drawn grey that no key was pressed on carries the row's
             # (proving.greyed: from the camera's Help or the one notice its row was entered for)
