@@ -4567,5 +4567,13 @@
     "global:0x12e7[9]": {"row": "Setup > Fn Menu Settings#1"},
     "global:0x12e7[10]": {"row": "Setup > Fn Menu Settings#1"},
     "global:0x12e7[11]": {"row": "Setup > Fn Menu Settings#1"}
+  },
+  "ROW_ICONS": {
+    "Setup > Custom Key/Dial Set.": "Still",
+    "Setup > Custom Key/Dial Set.#1": "Movie",
+    "Setup > Fn Menu Settings": "Still",
+    "Setup > Fn Menu Settings#1": "Playback",
+    "Shooting > Rec. Media Settings > Recording Media": "Still",
+    "Shooting > Rec. Media Settings > Recording Media#1": "Movie"
   }
 }
