@@ -74,10 +74,11 @@ def check_labels(s: dict, proved: dict, changed: list):
 def word_swapped(a: str, b: str) -> bool:
     """Two names of as many words where a word of one stands where the other has a word of its own, neither a slip of
     the other (alike at 0.75 or more) nor the other with letters glued on: "Av Auto/Manual Switch" and "Tv Auto/Manual
-    Switch" name two functions, where "Subject Reccgnition AF" and "faRegist. Face Priority" are slips."""
+    Switch" name two functions, where "Subject Reccgnition AF" and "faRegist. Face Priority" are slips. A word of one
+    character is never one ("S&d" for "S&Q" is a slip of one letter, mended as before)."""
     wa, wb = (re.findall(r"[a-z0-9★]+", str(x).lower()) for x in (a, b))
     return len(wa) == len(wb) and any(
-        x != y and not (x.startswith(y) or y.startswith(x) or x.endswith(y) or y.endswith(x))
+        x != y and min(len(x), len(y)) >= 2 and not (x.startswith(y) or y.startswith(x) or x.endswith(y) or y.endswith(x))
         and difflib.SequenceMatcher(None, x, y).ratio() < 0.75 for x, y in zip(wa, wb, strict=True))
 
 

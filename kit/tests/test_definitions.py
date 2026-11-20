@@ -1824,6 +1824,20 @@ def test_a_reading_far_from_the_schema_label_stays_a_conflict_whatever_words_it_
     assert R.close("Off", "Zqx Display Off") < 0.6 and [n["kind"] for n in notes] == ["conflict"] and verdict == "conflict"
 
 
+def test_a_single_letter_is_no_word_and_snap_still_mends_a_one_letter_slip(monkeypatch):
+    """The review of 2026-11-20: a stray single letter after a name ("Monitor Brightness l") is no word the name lacks,
+    and snap still mends a slip of one letter in a word of one ("S&d Record Setting" for "S&Q Record Setting", as it
+    did before the word rule), while it never takes "Av" for "Tv", two words of their own. Made-up labels."""
+    import pass2_report as R
+    import schema_update as S
+    from writer.labels import word_swapped
+    monkeypatch.setattr(R, "SURE", {"Zqx Brightness l"})
+    assert R.judge_functions({"Zqx Brightness l": 6}, {6: "Zqx Brightness"}) == ("agrees", [])
+    assert R.cut_words("Zqx Brightness", "Zqx Brightness l") is None and R.cut_words("Zqx", "Zqx 1") == "1"
+    assert S.snap("S&d Zqx Setting", ["S&Q Zqx Setting"]) == "S&Q Zqx Setting"
+    assert word_swapped("Av Zqx Switch", "Tv Zqx Switch") and not word_swapped("S&d Zqx", "S&Q Zqx")
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],

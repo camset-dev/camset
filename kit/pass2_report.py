@@ -393,8 +393,9 @@ def cut_words(name, label, options=()) -> str | None:
     bare = re.sub(r"[^a-z0-9]", "", part.casefold())
     others = [str(o).strip().casefold() for o in options if str(o).strip().casefold() not in (la, "")]
     column = lead and len(bare) >= 2 and others and all(o.startswith(part.casefold()[:3]) for o in others)
-    if not bare or TWIN_MARK.fullmatch(part) or (icon and icon[0] == part) or bare in re.sub(r"[^a-z0-9]", "", lb) \
-            or column:
+    letter = len(bare) == 1 and bare.isalpha()        # a stray letter ("Monitor Brightness l"): no word
+    if not bare or letter or TWIN_MARK.fullmatch(part) or (icon and icon[0] == part) \
+            or bare in re.sub(r"[^a-z0-9]", "", lb) or column:
         return None
     return part
 
