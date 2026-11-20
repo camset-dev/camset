@@ -1633,7 +1633,7 @@ pub(crate) mod safety_tests {
         app.open_sample();
         let all = app.memory_rows();
         let tab = all[0].0.clone();
-        (app.search, app.compare_tab) = ("a".into(), Some(tab));
+        (app.search, app.compare_entry) = ("a".into(), BarKey::Tab(tab));
         assert!(app.matrix_rows().len() < all.len(), "the filters narrow what is shown");
         assert_eq!(app.memory_rows().len(), all.len(), "but not what a recall copies");
         let m = app.dial_sets()[0];

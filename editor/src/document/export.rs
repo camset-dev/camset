@@ -34,8 +34,7 @@ impl App {
     pub(crate) fn export_csv_to(&mut self, p: PathBuf) {
         if self.doc.is_none() { return; }
         let compare = (self.mode == Mode::Compare && self.cols.len() >= 2).then_some((self.cols.as_slice(), self.matrix_only_diff, self.show_raw));
-        let tab = if compare.is_some() { self.compare_tab.as_deref() } else { None };
-        let (text, n) = self.csv_text(compare, self.target, &self.search, tab, self.only_changed);
+        let (text, n) = self.csv_text(compare, self.target, &self.search, &self.compare_key(), self.only_changed);
         match std::fs::write(&p, text) {
             Ok(_) => self.status = format!("Exported {n} rows to {}", p.display()),
             Err(e) => self.status = format!("Not exported: {}{}", io_words(&e, true), details(self.prefs.expert, format_args!("{}: {e}", p.display()))),
@@ -43,16 +42,16 @@ impl App {
     }
 
     /// The CSV export and its number of rows, Compare's in the camera's menu the window shows (`csv_text_in`).
-    pub(crate) fn csv_text(&self, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, tab: Option<&str>, only_changed: bool) -> (String, usize) {
-        self.csv_text_in(self.compare_menu().as_deref(), compare, target, q, tab, only_changed)
+    pub(crate) fn csv_text(&self, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, entry: &BarKey, only_changed: bool) -> (String, usize) {
+        self.csv_text_in(self.compare_menu().as_deref(), compare, target, q, entry, only_changed)
     }
 
     /// The CSV export and its number of rows. `compare`: the columns (the first is the baseline), only the rows that
-    /// differ, raw values beside the labels, the rows of Compare's Menu entry named `tab` (None: All settings) in the
-    /// camera's menu `menu` as Compare shows them (`compare_rows`): its Tab column the entry or tab a row is under, its
-    /// Group the group, Setting the row's title, each value the record the row shows in that menu. Else the settings of
-    /// set `target`. `q` is a search as the search box takes it, `only_changed` Edit mode's Only edited.
-    pub(crate) fn csv_text_in(&self, menu: Option<&str>, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, tab: Option<&str>, only_changed: bool) -> (String, usize) {
+    /// differ, raw values beside the labels, the rows of Compare's Menu entry `entry` in the camera's menu `menu` as
+    /// Compare shows them (`compare_rows`): its Tab column the entry or tab a row is under, its Group the group, Setting
+    /// the row's title, each value the record the row shows in that menu. Else the settings of set `target` (`entry`
+    /// unused). `q` is a search as the search box takes it, `only_changed` Edit mode's Only edited.
+    pub(crate) fn csv_text_in(&self, menu: Option<&str>, compare: Option<(&[Col], bool, bool)>, target: usize, q: &str, entry: &BarKey, only_changed: bool) -> (String, usize) {
         let Some(doc) = &self.doc else { return (String::new(), 0) };
         let quote = csv_cell;
         let mut lines: Vec<String> = Vec::new();
@@ -67,7 +66,7 @@ impl App {
             }
             head.extend(cols.iter().map(|c| quote(&self.col_name_with_file(*c))));
             lines.push(head.join(","));
-            for (tab, group, linked) in self.compare_rows(menu, &self.bar_key_named(tab), q).iter() {
+            for (tab, group, linked) in self.compare_rows(menu, entry, q).iter() {
                 let s = &linked[0];
                 let b = self.col_value(base, s);
                 let differs = cols[1..].iter().any(|c| (c.section == 0 || s.in_sets) && self.col_value(*c, s) != b);
@@ -170,7 +169,7 @@ mod tests {
         let list: Vec<Setting> = app.settings_in(0, None).cloned().collect();
         let rows = list.iter().enumerate().filter(|(i, s)| !list[..*i].iter().any(|o| o.twin_of(s))).count();
         assert!(rows > 1800, "{rows} rows for {} settings", list.len());
-        let (text, n) = app.csv_text(None, 0, "", None, false);
+        let (text, n) = app.csv_text(None, 0, "", &BarKey::All, false);
         assert_eq!(n, rows, "one row per setting, records of one setting once");
         let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().collect();
         assert_eq!((lines[0], lines.len()), ("Tab,Group,Setting,Value,Original", rows + 1));
@@ -183,14 +182,14 @@ mod tests {
         let drive = list.iter().find(|s| s.key == "global:0x02b5").unwrap();
         assert_eq!(lines.iter().filter(|l| l.contains(&format!("\"{}\",\"{}\",\"Drive Mode\",", drive.tab, drive.group))).count(), 1);
         app.prefs.expert = true;
-        let (text, n) = app.csv_text(None, 0, "", None, false);
+        let (text, n) = app.csv_text(None, 0, "", &BarKey::All, false);
         let lines: Vec<&str> = text.trim_start_matches('\u{feff}').lines().collect();
         assert_eq!(lines[0], "Tab,Group,Setting,Record,Value,Raw,Original,Note");
         assert!(n >= rows && text.contains(&noted.note));
         // the page's export is the same text
         app.prefs.expert = false;
         let r = crate::web::tests::answer(&mut app, "csv", serde_json::json!({ "target": 0 }));
-        assert_eq!(String::from_utf8(r.body).unwrap(), app.csv_text(None, 0, "", None, false).0);
+        assert_eq!(String::from_utf8(r.body).unwrap(), app.csv_text(None, 0, "", &BarKey::All, false).0);
     }
 
     /// E-29: a CSV cell a spreadsheet would take for a formula stays text; numbers and plain words are as they were.

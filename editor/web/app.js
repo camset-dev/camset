@@ -1038,7 +1038,8 @@ function drawSide() {
     ...(s.help_refused || []).map((r) => el("div", { class: "small warn", title: r.text }, `help: ${r.file} not used`))]));
   // Compare's bar: a click filters Compare to that entry; the badge is how many of its rows differ
   const pickEntry = (k) => () => { if (cmp.entry === k) return; cmp.entry = k; cmp.cursor = null; drawSide(); maybeDraw(); };
-  const entries = () => ((cmp.last && cmp.last.entries) || []).map((e) => item({ label: `${e.name}  (${cmpOnly() ? e.differ : e.count})`,
+  // each as the window's Compare bar draws it: its words, how many rows it lists, a badge of how many differ
+  const entries = () => ((cmp.last && cmp.last.entries) || []).map((e) => item({ label: `${e.name}  (${e.count})`,
     color: e.color || (e.key === "main" ? "var(--main-mark)" : null), on: cmp.entry === e.key, onclick: pickEntry(e.key),
     edited: e.differ, title: e.title || undefined, badgeTitle: "rows that differ here" }));
   side.replaceChildren(...(compare ? [menuSelector(), el("h1", { class: "menu-title" }, "Menu"), ...entries(), el("hr"), foot] : [
@@ -2500,6 +2501,8 @@ function drawCompareAnswer(j) {
 function cmpRender(s, f) {
   const on = view.mode === "compare";
   $("app").classList.toggle("compare", on);
+  // the record map has no Menu column, as the window's
+  $("app").classList.toggle("cmp-records", on && cmp.records);
   $("bar-compare").hidden = !on;
   $("b-edit").classList.toggle("on", !on);
   $("b-edit").setAttribute("aria-pressed", String(!on));

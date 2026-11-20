@@ -416,9 +416,8 @@ impl App {
             }
         });
         if let Some(s) = goto {
-            self.view = self.view_of(&s);          // the page that shows it in the layout in use
-            self.group = Some(self.shown_group_of(&s));          // the group that shows it in the layout in use
-            self.item = Some(s.name.clone());
+            // as every jump: the camera's menu, page, group and row that show it in the layout in use (`go_to`)
+            self.go_to(&s);
         }
         Vec::new()
     }

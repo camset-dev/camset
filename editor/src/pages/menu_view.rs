@@ -98,9 +98,10 @@ impl App {
     /// each with its edits), then the pages beside them (the search's results, the memories, the exposure page, All
     /// edits, and Expert mode's).
     pub(crate) fn side_bar(&mut self, ui: &mut egui::Ui) {
+        // the camera's menus head the Menu, as on the page
+        self.menu_selector(ui, None);
         ui.heading("Menu");
         ui.add_space(4.0);
-        self.menu_selector(ui, None);
         let menu = self.menu_shown();
         let entries = self.edit_entries(self.target, menu.as_deref(), &self.search, self.only_changed);
         let focused = self.focus == Focus::Tabs;
@@ -162,11 +163,9 @@ impl App {
 
     /// Compare's Menu, the same as Edit's: the camera's menus to pick one of, each with how many rows differ in it, then
     /// "All settings" and Edit's entries in the menu shown (`compare_bar`), each with how many rows it lists and how many
-    /// of them differ between the columns. A click shows that entry's rows (`compare_tab`); an entry the menu no longer
+    /// of them differ between the columns. A click shows that entry's rows (`compare_entry`); an entry the menu no longer
     /// lists gives way to All settings.
     pub(crate) fn compare_side_bar(&mut self, ui: &mut egui::Ui) {
-        ui.heading("Menu");
-        ui.add_space(4.0);
         let (differences, entries) = {
             let cols = self.cols.clone();
             // a row's standing worked out once a frame, whichever entries and menus list it
@@ -183,8 +182,10 @@ impl App {
             (differences, self.compare_bar(self.compare_menu().as_deref(), &self.search, &differs))
         };
         self.menu_selector(ui, differences);
+        ui.heading("Menu");
+        ui.add_space(4.0);
         if !entries.iter().any(|e| e.key == self.compare_key()) {
-            self.compare_tab = None;
+            self.compare_entry = BarKey::All;
         }
         let focused = self.focus == Focus::Tabs;
         let mut go = None;
@@ -196,7 +197,7 @@ impl App {
             }
         }
         if let Some(k) = go {
-            self.compare_tab = self.bar_key_name(&k);
+            self.compare_entry = k;
             self.diff_cursor = None;
             self.focus = Focus::Tabs;
         }
@@ -244,7 +245,7 @@ impl App {
                 self.group = None;
             }
             Mode::Compare => {
-                self.compare_tab = self.bar_key_name(&key);
+                self.compare_entry = key;
                 self.diff_cursor = None;
             }
         }
@@ -877,7 +878,7 @@ mod menus_window_tests {
         let modes_menus: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
         assert_eq!(modes_menus.iter().map(|m| lists(m)).collect::<Vec<_>>(), [false, true, true], "{modes_menus:?}");
         // an entry the menu shown no longer lists gives way to All settings
-        app.compare_tab = Some("A tab of no menu".into());
+        app.compare_entry = BarKey::Tab("A tab of no menu".into());
         let _ = w.settle(&mut app);
         assert_eq!(app.compare_key(), BarKey::All);
         done(&dir, &user);

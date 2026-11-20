@@ -34,10 +34,9 @@ pub(crate) const KEY_SETTINGS: egui::KeyboardShortcut = egui::KeyboardShortcut::
 pub(crate) const SEARCH_ID: &str = "search_box";
 
 impl App {
-    /// Arrow keys: Left/Right pick the column (the Menu's entries, groups, items); Up/Down move inside it. The Menu's
-    /// column steps through the bar's own entries (`bar_keys`: Main, My Menu, the tabs, Other and the entry for what
-    /// the camera's menus do not hold), from a tab's page or from Main's and My Menu's. Items are handled in
-    /// menu_view; the Menu's entries and groups here.
+    /// Arrow keys in Edit: Left/Right pick the column (the Menu's entries, groups, items), from a tab's page or from
+    /// Main's and My Menu's, where Left takes the Menu's; Up/Down move inside the groups' column here. Up/Down in the
+    /// Menu's column are `bar_nav`'s, which runs first and takes them (in Edit and Compare); the items' are menu_view's.
     pub(crate) fn keyboard_nav(&mut self, ctx: &egui::Context) {
         if self.mode != Mode::Edit || ctx.wants_keyboard_input() {
             return;
@@ -58,33 +57,15 @@ impl App {
             self.focus = match self.focus { Focus::Tabs => Focus::Groups, _ => Focus::Items };
         }
         let step: i32 = if down { 1 } else if up { -1 } else { 0 };
+        let (Some(tab), Focus::Groups) = (tab, self.focus) else { return };
         if step == 0 {
             return;
         }
-        match (self.focus, tab) {
-            (Focus::Tabs, _) => {
-                // the bar's entries, as it lists them in the menu shown
-                let keys = self.bar_keys(false, self.target, self.menu_shown().as_deref(), &self.search, self.only_changed);
-                let view_of = |k: &BarKey| match k {
-                    BarKey::MyMenu => View::MyMenu,
-                    BarKey::Tab(t) => View::Tab(t.clone()),
-                    BarKey::Main | BarKey::All => View::Main,
-                };
-                let pos = keys.iter().position(|k| view_of(k) == self.view).unwrap_or(0);
-                if let Some(k) = step_in(keys.len(), pos, step).and_then(|i| keys.get(i)) {
-                    self.view = view_of(k);
-                    self.group = None;
-                }
-            }
-            (Focus::Groups, Some(tab)) => {
-                let groups: Vec<String> = self.tab_groups(&tab).into_iter().map(|(n, _, _)| n).collect();
-                let pos = groups.iter().position(|g| Some(g) == self.group.as_ref()).unwrap_or(0);
-                if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)) {
-                    self.group = Some(g.clone());
-                    self.item = None;
-                }
-            }
-            _ => {}
+        let groups: Vec<String> = self.tab_groups(&tab).into_iter().map(|(n, _, _)| n).collect();
+        let pos = groups.iter().position(|g| Some(g) == self.group.as_ref()).unwrap_or(0);
+        if let Some(g) = step_in(groups.len(), pos, step).and_then(|i| groups.get(i)) {
+            self.group = Some(g.clone());
+            self.item = None;
         }
     }
 

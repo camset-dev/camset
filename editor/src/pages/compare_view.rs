@@ -4,9 +4,11 @@ use crate::*;
 
 impl App {
     /// The column picker shared by the settings matrix and the record map: one row of section
-    /// toggles per open file.
+    /// toggles per open file, the sets the camera's menu shown offers and any column chosen already (`picker_sets`, the
+    /// page's too).
     fn column_picker(&mut self, ui: &mut egui::Ui) {
         self.prune_cols();
+        let sections = self.picker_sets(self.compare_menu().as_deref(), &self.cols);
         let mut sources = vec![Src::A];
         if self.compare.is_some() { sources.push(Src::B); }
         if self.base.is_some() { sources.push(Src::Base); }
@@ -14,7 +16,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 let file = self.file_name_of(src);
                 ui.label(RichText::new(format!("{} {file}:", src.letter())).strong().color(src.tone(ui.visuals())));
-                for section in self.shown_sections() {
+                for &section in &sections {
                     let c = Col { src, section };
                     let mut on = self.cols.contains(&c);
                     let short = self.schema.camera.short_name(section);
@@ -243,7 +245,7 @@ impl App {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new("Whole sets:").strong());
                 // narrowed by the search, an entry of the Menu, or one of the camera's menus
-                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_tab.is_some() || self.compare_menu().is_some());
+                let every = self.whole_set_note(!self.search.trim().is_empty() || self.compare_entry != BarKey::All || self.compare_menu().is_some());
                 for section in self.dial_sets() {
                     let m = Col::a(section);
                     let live = Col::a(0);

@@ -191,8 +191,9 @@ struct App {
     target: usize,
     mode: Mode,
     view: View,
-    /// Compare mode: the Menu's entry shown, by its name (`bar_key_named`: a tab, Main, My Menu…; None = All settings).
-    compare_tab: Option<String>,
+    /// Compare mode: the Menu's entry shown, by its key (All settings, Main, My Menu, or a tab by its name), so a tab named
+    /// as the Main page or My Menu is never taken for them.
+    compare_entry: BarKey,
     /// The camera's menu the window shows, as last picked (`set_menu`, a jump) for a set and an opening of the file;
     /// None, or picked for another, the one the set edited opens on (`menu_shown`).
     menu: Option<MenuChoice>,
@@ -365,7 +366,7 @@ impl App {
             target: 0,
             mode: Mode::Edit,
             view: View::Tab(first_tab),
-            compare_tab: None,
+            compare_entry: BarKey::All,
             menu: None,
             menus_cache: Default::default(),
             main_set: 0,

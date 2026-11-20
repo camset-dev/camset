@@ -296,6 +296,9 @@ table.egrid { border-collapse: collapse; }
    row keeps the mode switch and (as a phone has no Cmd/Ctrl+Z) Undo and Redo, the files are on the Compare bar below it */
 #app.compare #bar2, #app.compare #memnote { display: none; }
 #app.compare #central { padding-right: 30px; }
+/* Compare's record map: no Menu column, as in the window */
+#app.cmp-records #side { display: none; }
+#app.cmp-records #central { grid-column: 1 / -1; }
 #app.compare #bar1 > :not(#mode, #b-undo, #b-redo, #b-more, .right, .vsep) { display: none; }
 #app.compare #bar1 > .vsep:not(#mode + .vsep) { display: none; }
 .cmp-src-a { color: var(--strong); } .cmp-src-b { color: var(--file-b); } .cmp-src-base { color: var(--cmp-base); }

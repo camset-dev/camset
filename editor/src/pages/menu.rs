@@ -67,7 +67,7 @@ pub(crate) enum BarKey {
     Tab(String),
 }
 
-/// An entry of the Menu as the bar draws it (`App::edit_entries`, `App::compare_entries`): its key, its words without a
+/// An entry of the Menu as the bar draws it (`App::edit_entries`, `App::compare_bar`): its key, its words without a
 /// count, its colour (None: Main's mark, the strong text colour, or no mark for All), its hover, how many it lists
 /// (None where the bar shows no count: Main, and My Menu, whose words say it) and its badge (Edit: the settings edited
 /// in it; Compare: the rows that differ).
@@ -163,7 +163,8 @@ pub(crate) type PlacedGroups = std::rc::Rc<std::collections::HashMap<String, std
 
 impl App {
     /// Edited settings, for the settings of one Menu entry (or all: `in_entry`), in the set and menu the window shows
-    /// (`counts_in`).
+    /// (`counts_in`, which the bar's entries count by: `edit_entries`).
+    #[cfg(test)]
     pub(crate) fn counts(&self, tab: Option<&str>) -> usize {
         self.counts_in(self.target, self.menu_shown().as_deref(), tab)
     }
@@ -215,10 +216,6 @@ impl App {
     /// mode.
     pub(crate) fn expert_only(s: &Setting) -> bool {
         s.expert
-    }
-
-    fn matches_search(&self, s: &Setting) -> bool {
-        self.search.is_empty() || Self::matches_query(s, &self.search.to_lowercase())
     }
 
     /// The name, group or a value label holds `q` (lower case).
@@ -354,15 +351,11 @@ impl App {
             .filter(|s| self.prefs.expert || !Self::expert_only(s))
     }
 
-    /// How many settings `visible_settings` lists, without copying them.
+    /// How many settings `visible_settings` lists, in the set and menu the window shows (`visible_count_in`, which the
+    /// bar's entries count by: `edit_entries`).
+    #[cfg(test)]
     pub(crate) fn visible_count(&self, tab: Option<&str>) -> usize {
-        if let Some(m) = self.menu_shown() {
-            return self.visible_in(self.target, Some(&m), tab, &self.search, self.only_changed).len();
-        }
-        self.settings_in(self.target, tab)
-            .filter(|s| self.matches_search(s))
-            .filter(|s| !self.only_changed || self.shown_edited(s))
-            .count()
+        self.visible_count_in(self.target, self.menu_shown().as_deref(), tab, &self.search, self.only_changed)
     }
 
     /// How many settings one Menu entry lists for set `target` in menu `menu`, with the search `q` and Only edited
@@ -371,13 +364,8 @@ impl App {
         self.visible_in(target, menu, tab, q, only_changed).len()
     }
 
-    /// Whether Only edited shows `s`: edited (or no file open), or, as on the camera, the row's own setting of an
-    /// edited sub-choice shown beside its option (`beside`), which is reached through it.
-    fn shown_edited(&self, s: &Setting) -> bool {
-        self.doc.is_none() || self.changed(s) || (self.camera_layout() && self.beside(s).iter().any(|(x, _)| self.changed(x)))
-    }
-
-    /// `shown_edited` for set `target` in menu `menu`.
+    /// Whether Only edited shows `s` in set `target` and menu `menu`: edited (or no file open), or, as on the camera, the
+    /// row's own setting of an edited sub-choice shown beside its option (`beside_in`), which is reached through it.
     fn shown_edited_in(&self, target: usize, menu: Option<&str>, s: &Setting) -> bool {
         let Some(d) = &self.doc else { return true };
         let changed = |x: &Setting| d.value(target, x.slot()) != d.original_value(target, x.slot());
@@ -485,6 +473,7 @@ impl App {
     /// Whether the side bar lists the Menu entry `tab` (`menu_tabs`): every tab the definition lists, but Other and the
     /// entry for what the camera's menus do not hold only while they show a setting. The golden Menu's test reads the
     /// entries by it too, so the kit's copy (kit/camkit/menu_rows.py) follows a change here.
+    #[cfg(test)]
     pub(crate) fn side_bar_lists(&self, tab: &str) -> bool {
         self.side_bar_lists_in(self.target, self.menu_shown().as_deref(), tab, &self.search, self.only_changed)
     }
@@ -1221,33 +1210,52 @@ impl App {
         }).collect()
     }
 
-    /// Compare's entries of the Menu (`bar_keys`) in menu `menu`, with the search `q`: "All settings", Main, My Menu and
-    /// the tabs as Edit has them, each with how many rows it lists (`entry_rows`) and as its badge how many of them
-    /// differ (`differs`, given the row's leading setting).
-    pub(crate) fn compare_entries(&self, menu: Option<&str>, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<BarEntry> {
-        let off = self.schema.camera.text.off_menu_name();
-        self.bar_keys(true, 0, menu, q, false).into_iter().map(|key| {
-            let rows = self.entry_rows(menu, &key, q);
-            let (count, badge) = (Some(rows.len()), rows.iter().filter(|r| differs(&r.2[0])).count());
-            let (label, color, hover) = match &key {
-                BarKey::All => (ALL_SETTINGS.to_string(), None, None),
-                BarKey::Main => (self.schema.camera.text.main_title().to_string(), None, None),
-                BarKey::MyMenu => {
-                    let name = self.schema.camera.text.my_menu_name();
-                    (name.to_string(), Some(tab_color(&self.schema.camera, name)), None)
+    /// The sets the "Editing:" row offers as buttons for set `target` in menu `menu`, the window's and the page's alike:
+    /// outside Expert mode in one of the camera's menus, the live settings and the memory sets of that menu's shooting
+    /// modes (`menu_sets`), and `target` should it be another, so the row always shows the set edited; else the live
+    /// settings and the dial's memories (in Expert mode the other memories are in a list of their own beside them).
+    pub(crate) fn editing_sets_in(&self, target: usize, menu: Option<&str>) -> Vec<usize> {
+        match menu.filter(|m| !self.prefs.expert && self.menu_named(m).is_some()) {
+            Some(m) => {
+                let mut v = self.menu_sets(Some(m));
+                if !v.contains(&target) && target < self.n_sections() {
+                    v.push(target);
+                    v.sort_unstable();
                 }
-                BarKey::Tab(t) => (t.clone(), Some(tab_color(&self.schema.camera, t)), (t == off).then(|| Self::off_menu_hover().to_string())),
-            };
-            BarEntry { key, label, color, hover, count, badge }
-        }).collect()
+                v
+            }
+            None => std::iter::once(0).chain(self.dial_sets()).collect(),
+        }
     }
 
-    /// Compare's rows of Menu entry `entry` in menu `menu` (None: as before menus), with the search `q`: (the entry's
-    /// name, the group, the row's linked records), the live settings, in the camera's layout as Edit shows the entry
-    /// (its groups in their order, a group's rows as `group_lines` lays them out, the choices beside an option right
-    /// after its row, a family's settings each a row under its own group), every row bound to the record for that menu
-    /// (`Bind::Menu`, so files saved in different modes compare like for like). All: every tab's; Main: the settings of
-    /// the menu's tiles (`menu_tile_set`, else the first set), under each tile's caption; My Menu: its places.
+    /// The sets Compare's column picker offers in menu `menu`, the window's and the page's alike: in one of the camera's
+    /// menus outside Expert mode, that menu's (`menu_sets`), so the picker holds as many as before menus; else every set
+    /// a column may show (`shown_sections`). A column chosen already stays whatever the menu.
+    pub(crate) fn column_sets_in(&self, menu: Option<&str>) -> Vec<usize> {
+        match menu.filter(|m| !self.prefs.expert && self.menu_named(m).is_some()) {
+            Some(m) => self.menu_sets(Some(m)),
+            None => self.shown_sections(),
+        }
+    }
+
+    /// The sets the column picker draws a toggle for in menu `menu`, the window's and the page's alike: those it offers
+    /// (`column_sets_in`) and any of the columns `cols` chosen already, in the sets' order.
+    pub(crate) fn picker_sets(&self, menu: Option<&str>, cols: &[Col]) -> Vec<usize> {
+        let mut v = self.column_sets_in(menu);
+        v.extend(cols.iter().map(|c| c.section));
+        v.sort_unstable();
+        v.dedup();
+        v
+    }
+
+    /// Compare's rows of Menu entry `entry` in menu `menu` laid out as Edit lays the entry out, the live settings with
+    /// the search `q`: (the entry's name, the group, the row's linked records), its groups in their order, a group's
+    /// rows as `group_lines` lays them out, the choices beside an option right after its row, a family's settings each a
+    /// row under its own group but those the page an option opens shows (which come with that page's group), every row
+    /// bound to the record for that menu (`Bind::Menu`, so files saved in different modes compare like for like). Each
+    /// setting under one entry once: All is every tab's and My Menu's, in the Menu's order; My Menu its own tab's
+    /// settings (`text.my_menu_name`); Main the settings of the menu's tiles (`menu_tile_set`, else the first set) under
+    /// each tile's caption, which the tabs list too. Compare lists them through `compare_rows`.
     pub(crate) fn entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
         let q = q.trim().to_lowercase();
         let menu = menu.filter(|m| self.menu_named(m).is_some());
@@ -1263,7 +1271,7 @@ impl App {
             rows
         };
         match entry {
-            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_))).flat_map(|k| self.entry_rows(menu, k, &q)).collect(),
+            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_) | BarKey::MyMenu)).flat_map(|k| self.entry_rows(menu, k, &q)).collect(),
             BarKey::Main => {
                 let Some(sets) = self.schema.camera.main_tiles.as_ref() else { return Vec::new() };
                 let at = menu.and_then(|m| self.menu_tile_set(m)).unwrap_or(0);
@@ -1272,28 +1280,31 @@ impl App {
                 for tile in &set.tiles {
                     let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).collect();
                     let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
-                        .filter(|s| s.area == "global").map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
+                        .filter(|s| s.area == "global" && (self.prefs.expert || !Self::expert_only(s))).map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
                         .filter(|s| matches(s)).collect();
                     out.extend(link(list).into_iter().map(|r| (self.schema.camera.text.main_title().to_string(), tile.caption.clone(), r)));
                 }
                 out
             }
             BarKey::MyMenu => {
+                // the settings of My Menu's own tab, as Edit's My Menu page lists them below its places, under its name
                 let name = self.schema.camera.text.my_menu_name().to_string();
-                let list: Vec<Setting> = self.schema.settings.iter().filter(|s| self.is_mymenu_place(s) && matches(s)).cloned().collect();
-                link(list).into_iter().map(|r| (name.clone(), r[0].group.clone(), r)).collect()
+                self.entry_rows(menu, &BarKey::Tab(name.clone()), &q)
             }
             BarKey::Tab(t) => {
                 let list: Vec<Setting> = match menu {
                     Some(m) => self.listed_in(0, m, &Bind::Menu, Some(t)),
                     None => self.settings_in(0, Some(t)).cloned().collect(),
                 }.into_iter().filter(|s| matches(s)).collect();
+                let groups = self.groups_of(list, t);
+                // a family's setting on the page an option opens comes with that page's group, not again in the family's
+                let on_pages: std::collections::HashSet<String> = groups.iter().filter(|(_, family, _)| !family).flat_map(|(_, _, rows)| rows.iter().flatten().map(|s| s.key.clone())).collect();
                 let mut out = Vec::new();
-                for (group, family, rows) in self.groups_of(list, t) {
+                for (group, family, rows) in groups {
                     if family {
                         // each setting of a family's table a row of its own, under its own group (a profile's)
                         let mut by_group: Vec<(String, Vec<Setting>)> = Vec::new();
-                        for s in rows.into_iter().flatten() {
+                        for s in rows.into_iter().flatten().filter(|s| !on_pages.contains(&s.key)) {
                             match by_group.iter_mut().find(|(g, _)| *g == s.group) {
                                 Some((_, v)) => v.push(s),
                                 None => by_group.push((s.group.clone(), vec![s])),
@@ -2133,15 +2144,19 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
-    /// Design point 9's keys: Up and Down in the Menu's column step through the bar's own entries, Main and My Menu
-    /// above the tabs and the entry for what the camera's menus do not hold below them, from a tab's page or Main's;
-    /// in a menu, only the tabs it holds.
+    /// Design point 9's keys, as the frame takes them (`bar_nav`, then `keyboard_nav`): Up and Down in the Menu's column
+    /// step through the bar's own entries, Main and My Menu above the tabs and the entry for what the camera's menus do
+    /// not hold below them; Left from Main's page takes the Menu's column; in a menu, only the tabs it holds. (Compare's
+    /// bar and Alt with the arrows: menu_view's `up_and_down_step_through_the_bars_own_entries`.)
     #[test]
-    fn up_and_down_step_through_the_bars_own_entries() {
+    fn the_menus_column_by_the_keys_in_edit() {
         let press = |app: &mut App, key: egui::Key| {
             let ctx = egui::Context::default();
             let input = egui::RawInput { events: vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
-            let _ = ctx.run(input, |ctx| app.keyboard_nav(ctx));
+            let _ = ctx.run(input, |ctx| {
+                app.bar_nav(ctx);
+                app.keyboard_nav(ctx);
+            });
         };
         let (mut app, dir, user) = sample_app("menus_keys", None);
         let first = app.menu_tabs()[0].clone();

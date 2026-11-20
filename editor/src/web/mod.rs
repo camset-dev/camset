@@ -517,10 +517,10 @@ impl App {
                 } else {
                     body["keys"].as_array().map(|a| a.iter().filter_map(Value::as_str).collect()).unwrap_or_default()
                 };
-                // a row of the page's Compare in a camera's menu holds the records for that menu (`entry_rows`): those
-                // its entry shows first, then any setting's own row
+                // a row of the page's Compare in a camera's menu holds the records for that menu (`compare_rows`):
+                // those its entry shows first, then any setting's own row
                 let shown = match menu {
-                    Some(_) => self.web_entry_rows(menu, &Self::web_entry(&body), ""),
+                    Some(_) => (*self.compare_rows(menu, &Self::web_entry(&body), "")).clone(),
                     None => Vec::new(),
                 };
                 let rows = self.matrix_rows_for("", None);
@@ -574,15 +574,15 @@ impl App {
                     "conflicts_base" => (Three::Conflict, tb, "conflicts reset to the base values"),
                     _ => return WebReply::error(400, "No such merge."),
                 };
-                // the rows the page's Compare shows: its entry of the Menu in its camera's menu, with its search
-                // (SEAM(E2): the window's merge goes over its own rows; re-check they are these once E2 lands)
+                // the rows the page's Compare shows, as the window's merge goes over its own (`compare_rows`): its entry
+                // of the Menu in its camera's menu, with its search
                 let entry = Self::web_entry(&body);
                 self.rows_set.take();
                 let (mut actions, mut n) = (Vec::new(), 0);
-                for (_, _, linked) in self.web_entry_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim()) {
+                for (_, _, linked) in self.compare_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim()).iter() {
                     if self.three_way((tb, ta, tbb), &linked[0]) == want {
                         n += 1;
-                        actions.extend(self.copy_row(&linked, take, ta));
+                        actions.extend(self.copy_row(linked, take, ta));
                     }
                 }
                 self.pin_families(None, ta.section, &mut actions);
@@ -722,7 +722,7 @@ impl App {
         // other sets (expert mode) share a list, as in the window's Editing row; in a camera's menu, outside Expert mode,
         // the live settings and the sets of that menu's shooting modes, each with a button of its own
         let in_menu = menu.is_some() && !self.prefs.expert;
-        let offered = match menu { Some(m) if in_menu => self.menu_sets(Some(m)), _ => self.shown_sections() };
+        let offered = match menu { Some(m) if in_menu => self.editing_sets_in(target, Some(m)), _ => self.shown_sections() };
         let targets: Vec<Value> = offered.into_iter()
             .map(|s| json!([s, self.schema.camera.target_name(s), s == 0 || self.schema.camera.is_dial(s) || in_menu])).collect();
         let menu_tabs = self.menu_tabs();
@@ -875,7 +875,8 @@ impl App {
             out["menus_label"] = json!(self.schema.camera.text.menus_label());
             out["menus_hover"] = json!(self.schema.camera.text.menus_hover());
             out["opened"] = json!(self.doc.as_ref().map(|d| d.opened));
-            // the sets a column of Compare can show (`shown_sections`): every menu's, though the Editing row offers this one's
+            // the sets a column of Compare may show (`shown_sections`): every menu's; the picker offers this menu's
+            // (`sections` in Compare's answer, `column_sets_in`, as the window's)
             out["column_sets"] = json!(self.shown_sections());
         }
         out
@@ -1209,18 +1210,6 @@ impl App {
             "mymenu" => BarKey::MyMenu,
             e => e.strip_prefix("tab:").map_or(BarKey::All, |t| BarKey::Tab(t.to_string())),
         }
-    }
-
-    /// Compare's rows of Menu entry `entry` in the camera's menu `menu` with the search `q`, the window's (`entry_rows`):
-    /// (the entry's name, the group, the row's linked records), each row holding the record for the menu.
-    fn web_entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
-        let mut rows = self.entry_rows(menu, entry, q);
-        // SEAM(E1): as on the camera `entry_rows` lists a family's group that is the page an option opens (Picture
-        // Profile PP1) twice, among the family's rows and as that page's group; the page keeps each row once, where it
-        // comes first. Once `entry_rows` lists each row once, this keeps every row and can go.
-        let mut seen = std::collections::HashSet::new();
-        rows.retain(|r| seen.insert((r.0.clone(), r.2[0].key.clone())));
-        rows
     }
 
     /// An entry of the Menu as the page names it (`web_entry`).
@@ -1899,14 +1888,15 @@ impl App {
 
     /// What the compare page and the record map share: the columns as headed (`col_name`, the
     /// file's letter and whether it takes values; the page colours a file by its letter), the files,
-    /// the sets a column can show (`shown_sections`: [set, short name, name]) and the dial memories
-    /// for the Whole sets row.
-    fn web_compare_frame(&self, cols: &[Col]) -> Value {
+    /// the sets the column picker offers in the camera's menu `menu` and those of the columns chosen (`picker_sets`, as
+    /// the window's picker: [set, short name, name]) and the dial memories for the Whole sets row.
+    fn web_compare_frame(&self, cols: &[Col], menu: Option<&str>) -> Value {
+        let sets = self.picker_sets(menu, cols);
         let cols: Vec<Value> = cols.iter().map(|c| json!({
             "src": Self::web_src(c.src), "section": c.section, "name": self.col_name(*c), "letter": c.src.letter(),
             "short": self.schema.camera.short_name(c.section), "editable": c.editable(),
         })).collect();
-        let sections: Vec<Value> = self.shown_sections().into_iter()
+        let sections: Vec<Value> = sets.into_iter()
             .map(|s| json!([s, self.schema.camera.short_name(s), self.schema.camera.target_name(s)])).collect();
         let dial: Vec<Value> = self.dial_sets().into_iter().map(|s| json!([s, self.schema.camera.target_name(s)])).collect();
         // in the window's words; the page's own "Only the rows shown" box says when a copy is narrowed
@@ -1928,11 +1918,12 @@ impl App {
     /// its cells (text, highlights, whether it takes a value in place), the arrows between its columns and its mark on the
     /// change map. The row of setting `keep` (the one last changed from the page's compare) stays shown whatever
     /// "Only rows that differ" and the three-way filter say, as the window's does (`cmp_kept`), so the rows and the
-    /// cursor do not move under the person's hand. The Menu as Compare's bar has it (`entries`: `compare_entries`, each
-    /// entry's rows and how many of them differ), the entry shown (`entry`: the one asked for while the bar lists it,
-    /// else "All settings") and, where the definition lists menus, each menu's rows that differ (`menus`).
+    /// cursor do not move under the person's hand. The Menu as the window's Compare bar has it (`entries`: `compare_bar`,
+    /// each entry's rows and how many of them differ), the entry shown (`entry`: the one asked for while the bar lists
+    /// it, else "All settings") and, where the definition lists menus, each menu's rows that differ (`menus`:
+    /// `menu_differences`). The rows are the window's (`compare_rows`), which of them differ its too (`row_differs`).
     fn web_compare(&self, cols: &[Col], q: &str, (menu, entry): (Option<&str>, &BarKey), (only_diff, keep): (bool, Option<&str>), raw: bool, three_filter: ThreeFilter) -> Value {
-        let mut out = self.web_compare_frame(cols);
+        let mut out = self.web_compare_frame(cols, menu);
         for (k, v) in [("total", json!(0)), ("shown", json!(0)), ("diffs", json!(0)), ("three", Value::Null), ("counts", json!([])), ("rows", json!([])), ("entries", json!([]))] {
             out[k] = v;
         }
@@ -1941,25 +1932,21 @@ impl App {
         out["entry"] = json!(Self::web_entry_key(&entry));
         let Some(doc) = &self.doc else { return out };
         let stored = |c: &Col, s: &Setting| c.section == 0 || s.in_sets;
-        let differs = |s: &Setting| {
-            let Some(base) = cols.first().filter(|_| cols.len() >= 2) else { return false };
-            let b = self.col_value(*base, s);
-            cols[1..].iter().any(|c| self.col_value(*c, s) != b && stored(c, s))
-        };
-        // the bar of Compare, one function with the window's (`compare_entries`), and each menu's differences
-        out["entries"] = json!(self.compare_entries(menu, q, &differs).into_iter().map(|e| json!({
+        let differs = |s: &Setting| self.row_differs(cols, s);
+        // the bar of Compare and each menu's differences, the window's own functions (`compare_bar`, `menu_differences`)
+        out["entries"] = json!(self.compare_bar(menu, q, &differs).into_iter().map(|e| json!({
             "key": Self::web_entry_key(&e.key), "name": e.label, "color": e.color.map(css_color), "count": e.count, "differ": e.badge, "title": e.hover,
         })).collect::<Vec<_>>());
         if menu.is_some() {
-            out["menus"] = json!(self.menus().iter().map(|m| json!({ "name": m.name,
-                "differ": self.web_entry_rows(Some(&m.name), &BarKey::All, q).iter().filter(|r| differs(&r.2[0])).count() })).collect::<Vec<_>>());
+            let counts = self.menu_differences(q, &differs);
+            out["menus"] = json!(self.menus().iter().zip(counts).map(|(m, n)| json!({ "name": m.name, "differ": n })).collect::<Vec<_>>());
         }
         if cols.len() < 2 {
             return out;
         }
         let base = cols[0];
-        // the entry's rows in the camera's layout, each holding the record for the menu (`entry_rows`)
-        let rows = self.web_entry_rows(menu, &entry, q);
+        // the entry's rows, the window's (`compare_rows`): in a camera's menu in its layout, each holding the record for it
+        let rows = self.compare_rows(menu, &entry, q);
         let counts: Vec<usize> = cols.iter().map(|c| rows.iter().filter(|r| {
             let s = &r.2[0];
             stored(c, s) && self.col_value(*c, s) != self.col_value(base, s)
@@ -2078,7 +2065,7 @@ impl App {
     /// for one not mapped), and each column's value, marked where it differs from the baseline; a setting's link lands
     /// where Edit shows it in the page's camera menu `menu` (`web_place`).
     fn web_compare_records(&self, cols: &[Col], q: &str, only_diff: bool, raw: bool, menu: Option<&str>) -> Value {
-        let mut out = self.web_compare_frame(cols);
+        let mut out = self.web_compare_frame(cols, menu);
         out["total"] = json!(0);
         out["rows"] = json!([]);
         let Some(&base) = cols.first() else { return out };
@@ -2234,7 +2221,7 @@ impl App {
         let q = body["q"].as_str().unwrap_or("").trim();
         let rows = if body["shown"].as_bool() == Some(true) && body["entry"].is_string() {
             let menu = self.web_menu(body, 0);
-            self.web_entry_rows(menu.as_deref(), &Self::web_entry(body), q).into_iter().filter(|r| r.2[0].in_sets).collect()
+            self.compare_rows(menu.as_deref(), &Self::web_entry(body), q).iter().filter(|r| r.2[0].in_sets).cloned().collect()
         } else if body["shown"].as_bool() == Some(true) {
             let tab = body["tab"].as_str().filter(|t| !t.is_empty());
             self.matrix_rows_for(q, tab).into_iter().filter(|r| r.2[0].in_sets).collect()
@@ -2741,14 +2728,12 @@ impl App {
             return WebReply::error(400, "Show at least two columns to export a comparison.");
         }
         let (only_diff, raw) = (body["only_diff"].as_bool().unwrap_or(self.matrix_only_diff), self.prefs.expert && body["raw"].as_bool().unwrap_or(self.show_raw));
-        // SEAM(E2): `csv_text` (document/export.rs) still filters Compare by a tab. The page's Compare shows an entry of
-        // the Menu in a camera's menu (`entry`, `menu`): until E2's export takes them, a tab's entry exports that tab
-        // and any other entry every tab, in the order before menus. Then: `csv_text` with the menu and the entry.
-        let entry_tab = match Self::web_entry(body) { BarKey::Tab(t) => Some(t), _ => None };
-        let tab = body["tab"].as_str().map(str::to_string).or(entry_tab).filter(|t| compare && !t.is_empty());
-        let tab = tab.as_deref();
+        // the rows the page's Compare shows, as the window exports its own (`csv_text_in`): its entry of the Menu
+        // (`entry`; an older page's `tab`, a tab's entry) in its camera's menu (`menu`)
+        let entry = match body["tab"].as_str().filter(|t| !t.is_empty()) { Some(t) => BarKey::Tab(t.to_string()), None => Self::web_entry(body) };
+        let menu = self.web_menu(body, target);
         let only = !compare && body["only"].as_bool().unwrap_or(false);
-        let (text, n) = self.csv_text(compare.then_some((cols.as_slice(), only_diff, raw)), target, q, tab, only);
+        let (text, n) = self.csv_text_in(menu.as_deref(), compare.then_some((cols.as_slice(), only_diff, raw)), target, q, &entry, only);
         let stem = self.doc.as_ref().and_then(|d| d.path.file_stem()).map_or_else(|| "CAMSET".into(), |s| s.to_string_lossy().to_string());
         let name = if compare { format!("{stem}_compare.csv") } else { format!("{stem}_{}.csv", self.schema.camera.target_name(target).replace(' ', "_").to_lowercase()) };
         self.status = format!("Exported {n} rows as {name} {from}");
@@ -3230,7 +3215,7 @@ pub(crate) mod tests {
         let (tab, word) = (rows[0].0.clone(), rows[0].2[0].name.split(' ').next().unwrap().to_uppercase());
         let all = names(rows);
         assert_eq!(names(app.matrix_rows()), all, "the window's rows with no search and every tab");
-        (app.search, app.compare_tab) = (word.clone(), Some(tab.clone()));
+        (app.search, app.compare_entry) = (word.clone(), BarKey::Tab(tab.clone()));
         let some = names(app.matrix_rows_for(&word, Some(&tab)));
         assert!(!some.is_empty() && some.len() < all.len());
         assert!(some.iter().all(|(t, _, _)| *t == tab));
@@ -3354,9 +3339,10 @@ pub(crate) mod tests {
         assert_eq!(r["cells"][1]["text"], format!("{}  [{other}]", App::describe(&s, Some(other))).as_str());
         // every row (All settings, the entry shown when the page names none), then an entry of the Menu and a search
         let keys = |j: &Value| j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap().to_string()).collect::<Vec<_>>();
-        let window = |app: &App, entry: &BarKey, q: &str| app.web_entry_rows(None, entry, q).iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>();
+        let window = |app: &App, entry: &BarKey, q: &str| app.compare_rows(None, entry, q).iter().map(|r| r.2[0].key.clone()).collect::<Vec<_>>();
         let all = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false }));
         assert_eq!((all["entry"].as_str(), keys(&all)), (Some("all"), window(&app, &BarKey::All, "")));
+        assert_eq!(all["total"], app.matrix_rows_for("", None).len(), "without menus, the rows Compare always had");
         assert_eq!(all["shown"], all["total"]);
         let tab = app.layout_tab(&s).to_string();
         let t = ask(&mut app, "compare", json!({ "cols": cols, "only_diff": false, "entry": format!("tab:{tab}") }));
@@ -3368,9 +3354,9 @@ pub(crate) mod tests {
         assert!(q["rows"].as_array().unwrap().iter().any(|r| r["key"] == s.key.as_str()));
         // an entry the Menu column does not list shows All settings, and says so
         assert_eq!(ask(&mut app, "compare", json!({ "cols": cols, "entry": "tab:No such tab" }))["entry"], "all");
-        // the Menu column as the window's Compare bar has it (`compare_entries`): each entry's rows and how many differ
-        let differs = |app: &App, x: &Setting| app.col_value(Col::b(0), x) != app.col_value(Col::a(0), x);
-        let want: Vec<Value> = app.compare_entries(None, "", &|x| differs(&app, x)).into_iter()
+        // the Menu column as the window's Compare bar has it (`compare_bar`): each entry's rows and how many differ
+        let cols2 = [Col::a(0), Col::b(0)];
+        let want: Vec<Value> = app.compare_bar(None, "", &|x| app.row_differs(&cols2, x)).into_iter()
             .map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
         let got: Vec<Value> = all["entries"].as_array().unwrap().iter().map(|e| json!([e["key"], e["name"], e["count"], e["differ"]])).collect();
         assert_eq!(got, want);
@@ -3718,7 +3704,7 @@ pub(crate) mod tests {
         // U-37: the window's words for the whole sets, on Memories and in Compare alike
         let (label, hover, _) = app.recall_words(dial[0], "", "");
         assert_eq!((&j["buttons"][0]["recall"], &j["buttons"][0]["recall_tip"]), (&json!(label), &json!(hover)));
-        let frame = app.web_compare_frame(&[Col::a(0), Col::a(dial[0])]);
+        let frame = app.web_compare_frame(&[Col::a(0), Col::a(dial[0])], None);
         assert_eq!(frame["whole_sets"][0]["recall"], json!(label));
         assert_eq!(frame["whole_sets"][0]["register"], j["buttons"][0]["register"]);
         // a setting kept in the memories, made to differ in the first memory
@@ -4355,9 +4341,9 @@ pub(crate) mod tests {
     /// The page follows the layout in use as the window does: as on the camera, Recall Custom hold 1's settings are in
     /// Shooting Mode under Reg. Custom Shoot Set (the hold's own group gone from the tab), TC/UB opens with "In Movie
     /// mode" and comes where the Movie menu has it, and every link to a setting (the record map, Compare, My Menu)
-    /// names the group that shows it now ("open_group"); in the flat list, the setting's own group, as before. Compare,
-    /// whose Menu column is Edit's (design of 2026-11-20, point 8), groups its rows as Edit does: an Fn Menu setting in
-    /// Operation Customize, where it opens (the decision it replaces kept the setting's own group in Compare).
+    /// names the group that shows it now ("open_group"); in the flat list, the setting's own group, as before. Without
+    /// the camera's menus Compare's rows are the ones it always had, each in its setting's own group (in a menu they are
+    /// grouped as Edit groups them there: `compare_has_edits_entries_with_the_rows_that_differ`).
     #[test]
     fn the_page_follows_the_layout_in_its_groups_and_links() {
         let mut app = App::new(vec![], Prefs { expert: true, ..Prefs::default() });
@@ -4386,7 +4372,7 @@ pub(crate) mod tests {
         let (rec, cmp) = link(&mut app);
         assert_eq!(rec, "Operation Customize");
         let (group, open) = cmp.expect("an Fn Menu setting in Compare");
-        assert_eq!((group.as_str(), open.as_str()), (Some("Operation Customize"), Some("Operation Customize")), "Compare groups it as Edit does, and opens it there");
+        assert_eq!((group.as_str(), open.as_str()), (Some("Fn Menu"), Some("Operation Customize")), "Compare keeps the setting's group, and opens it where Edit shows it");
         // the flat list: the hold's own group, in the tab and in the links
         ask(&mut app, "prefs", json!({ "name": "flat_list", "value": true }));
         let j = ask(&mut app, "tab", json!({ "target": 0, "tab": "Shooting" }));
@@ -4562,7 +4548,7 @@ pub(crate) mod tests {
         assert!(a.download.as_deref().unwrap().ends_with("_live_settings.csv"));
         let text = String::from_utf8(a.body).unwrap();
         assert!(text.starts_with("\u{feff}Tab,Group,Setting,Value,Original\n"), "no record numbers or notes outside Expert mode");
-        let (want, n) = app.csv_text(None, 0, "", None, false);
+        let (want, n) = app.csv_text(None, 0, "", &BarKey::All, false);
         assert_eq!(text, want);
         let shown: Vec<&Setting> = app.settings_in(0, None).collect();
         assert_eq!(n, shown.iter().enumerate().filter(|(i, s)| !shown[..*i].iter().any(|o| o.twin_of(s))).count(), "one line per setting shown");
@@ -4579,7 +4565,7 @@ pub(crate) mod tests {
             let c = answer(&mut app, "csv", json!({ "compare": true, "cols": [["a", 0], ["a", m]], "only_diff": false }));
             assert!(c.download.as_deref().unwrap().ends_with("_compare.csv"));
             let t = String::from_utf8(c.body).unwrap();
-            assert_eq!(t, app.csv_text(Some((&[Col::a(0), Col::a(m)], false, app.show_raw)), 0, "", None, false).0);
+            assert_eq!(t, app.csv_text(Some((&[Col::a(0), Col::a(m)], false, app.show_raw)), 0, "", &BarKey::All, false).0);
             assert_eq!(t.matches("\n\"").count(), app.matrix_rows_for("", None).len());
         }
         let l = answer(&mut app, "layout", json!({}));
@@ -5499,12 +5485,11 @@ pub(crate) mod tests {
         done(&dir, &user);
     }
 
-    /// Compare on the page in each of the camera's menus: the Menu column is the window's Compare bar in that menu
-    /// (`compare_entries`: All settings, Main, My Menu, the tabs, each with how many rows differ), the rows are that
-    /// menu's in the camera's layout, each holding the record for the menu (`entry_rows`, `Bind::Menu`), the selector says
-    /// how many rows differ in each menu, and every row's link lands where the window's jump does from that menu.
-    /// TODO(E2): once the window's Compare (pages/compare_view.rs, menu_view.rs) draws its bar and rows from these, also
-    /// compare the page's entries, rows and menu counts with what the window draws.
+    /// Compare on the page in each of the camera's menus is what the window draws, the two built by the same functions:
+    /// the Menu column is the window's Compare bar in that menu (`compare_bar`: All settings, Main, My Menu, the tabs,
+    /// each with how many rows it lists and how many differ, drawn as "Label  (rows)"), the rows the window's
+    /// (`compare_rows`: that menu's in the camera's layout, each holding the record for the menu), the selector's counts
+    /// the window's (`menu_differences`), and every row's link lands where the window's jump does from that menu.
     #[test]
     fn the_pages_compare_in_each_camera_menu() {
         use crate::test_support::{done, sample_app, stub_menus};
@@ -5513,19 +5498,27 @@ pub(crate) mod tests {
         let (b, _, _) = changed_sample(&app);
         ask_upload(&mut app, "open_b", &b, "wsa_menus_B.DAT");
         let cols = json!([["a", 0], ["b", 0]]);
-        let differs = |app: &App, x: &Setting| app.col_value(Col::b(0), x) != app.col_value(Col::a(0), x);
+        // the window in Compare with the same columns, in each menu in turn
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let ctx = egui::Context::default();
+        let mut frame = eframe::Frame::_new_kittest();
         for m in &names {
+            app.set_menu(m);
+            let drawn = crate::test_support::texts(&ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, &mut frame)).shapes);
+            let wcols = app.cols.clone();
             let j = ask(&mut app, "compare", json!({ "cols": cols, "menu": m, "only_diff": false }));
-            let want: Vec<Value> = app.compare_entries(Some(m), "", &|x| differs(&app, x)).into_iter()
-                .map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
+            let bar = app.compare_bar(app.compare_menu().as_deref(), &app.search, &|x| app.row_differs(&wcols, x));
+            let want: Vec<Value> = bar.iter().map(|e| json!([App::web_entry_key(&e.key), e.label, e.count, e.badge])).collect();
             let got: Vec<Value> = j["entries"].as_array().unwrap().iter().map(|e| json!([e["key"], e["name"], e["count"], e["differ"]])).collect();
             assert_eq!(got, want, "{m}");
+            for e in &bar {
+                assert!(drawn.contains(&format!("{}  ({})", e.label, e.count.unwrap())), "{m}: the window draws {} so: {drawn:?}", e.label);
+            }
             let keys: Vec<&str> = j["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect();
-            let window = app.web_entry_rows(Some(m), &BarKey::All, "");
-            assert_eq!(keys, window.iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>(), "{m}");
-            let counts: Vec<Value> = names.iter().map(|n| json!({ "name": n,
-                "differ": app.web_entry_rows(Some(n), &BarKey::All, "").iter().filter(|r| differs(&app, &r.2[0])).count() })).collect();
-            assert_eq!(j["menus"], json!(counts));
+            let window = app.matrix_rows();
+            assert_eq!(keys, window.iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>(), "{m}: the window's rows");
+            let counts = app.menu_differences(&app.search, &|x| app.row_differs(&wcols, x));
+            assert_eq!(j["menus"], json!(names.iter().zip(&counts).map(|(n, c)| json!({ "name": n, "differ": c })).collect::<Vec<_>>()));
             // (the columns' first of file A is the live settings: a row opens there)
             for r in j["rows"].as_array().unwrap().iter().take(300) {
                 let s = app.schema.settings.iter().find(|s| r["key"] == s.key.as_str()).unwrap();
@@ -5537,7 +5530,7 @@ pub(crate) mod tests {
             let t = ask(&mut app, "compare", json!({ "cols": cols, "menu": m, "entry": tab, "only_diff": false }));
             let entry = App::web_entry(&json!({ "entry": tab }));
             assert_eq!(t["rows"].as_array().unwrap().iter().map(|r| r["key"].as_str().unwrap()).collect::<Vec<_>>(),
-                app.web_entry_rows(Some(m), &entry, "").iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>());
+                app.compare_rows(Some(m), &entry, "").iter().map(|r| r.2[0].key.as_str()).collect::<Vec<_>>());
         }
         // a row of a setting the camera keeps a copy of per mode holds the copy for each menu (two files saved in
         // different modes compared like for like)

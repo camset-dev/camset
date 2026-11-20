@@ -404,22 +404,10 @@ impl App {
         }
     }
 
-    /// The sets the "Editing:" row offers as buttons: outside Expert mode, where the Menu shows one of the camera's
-    /// menus, the live settings and the memory sets of that menu's shooting modes (`menu_sets`), and the set edited
-    /// now should it be another, so the row always shows it; else the live settings and the dial's memories, Expert
-    /// mode's other memories in their own list beside them.
+    /// The sets the "Editing:" row offers as buttons, the window's: `editing_sets_in` for the set edited and the menu
+    /// shown, as the page's row has them.
     pub(crate) fn editing_sets(&self) -> Vec<usize> {
-        match self.menu_shown().filter(|_| !self.prefs.expert) {
-            Some(m) => {
-                let mut v = self.menu_sets(Some(&m));
-                if !v.contains(&self.target) && self.target < self.n_sections() {
-                    v.push(self.target);
-                    v.sort_unstable();
-                }
-                v
-            }
-            None => std::iter::once(0).chain(self.dial_sets()).collect(),
-        }
+        self.editing_sets_in(self.target, self.menu_shown().as_deref())
     }
 
     /// The File menu: opening (and the recent files), saving, exporting, the kept copies, the edit history, closing.
