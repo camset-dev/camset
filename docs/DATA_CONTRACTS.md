@@ -92,6 +92,13 @@ steps below it is on the page that option opens: "Picture Profile > PP2 > Black 
 rows, and a record the plain pass adds takes the number after the definition's highest. A setting no path places gets
 none of the six fields, and the editor lists it after the camera's rows, under "More settings in this group".
 
+Where the camera's hand tables hold `MENUS` (a menu for each position of its shooting-mode switch: the a1 II's Still,
+Movie and S&Q), the definition carries them as `camera.menus`, and each placed setting the menus whose own menu tree
+holds its row (`row_menus`), with its place in a menu only where it differs from its own (`row_places`; the merged
+numbering of a tab's top rows serves every menu). Nothing in one menu is taken from another menu's rows
+(`kit/camkit/placement.py`, `by_menu`). `HAND_PLACES` gives the row of a record no proof path places: one a row's own
+function writes, or a row the walk can never read, seen on the camera. Without `MENUS` a definition has none of these.
+
 ### What the editor offers outside Expert mode
 
 Outside Expert mode the editor offers a setting's values only where a proof on the camera established them, read from

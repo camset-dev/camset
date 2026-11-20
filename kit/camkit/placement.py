@@ -18,6 +18,10 @@ The tree's top-level "tabs" are the Stills menu; its "modes" hold the menus of t
 mode (its context names it) or, by a path with no context, on a row only a mode's menu has, hangs on that mode's row;
 the rows of a tab are numbered over the Stills menu's top rows with each mode's own rows slotted in where that mode's
 menu has them (merge_tops), so one number orders them all.
+
+Where the camera has menus of its own by shooting mode (camera.menus, its MENUS hand table), by_menu says which of them
+hold each setting's row, each from its own menu tree and nothing from another's, and the place where one differs
+(row_menus, row_places); with_hand places a record by a row given by hand (HAND_PLACES) instead of its proof paths.
 """
 import collections
 import difflib
@@ -123,8 +127,10 @@ class Place:
                 return hits[0]
         return None
 
-    def of(self, s) -> dict:
-        tab, menu = s.get("tab") or "Other", (s.get("proved") or {}).get("menu") or []
+    def of(self, s, menu=None) -> dict:
+        """`menu`: the setting's paths, where they are not its proof paths (proof_paths): its rows given by hand."""
+        tab = s.get("tab") or "Other"
+        menu = (s.get("proved") or {}).get("menu") or [] if menu is None else menu
         for path in [menu] if isinstance(menu, str) else menu:
             for seg in self.segments(path, tab)[:2]:
                 m = self.rows[tab].get(nth(seg)[0].lower())
@@ -597,13 +603,43 @@ def page_shape(m: "Tree", node: dict, options: set, shapes: dict, first: str) ->
     return shapes[node["id"]]
 
 
-def settings(doc, tree, boxes=None) -> dict:
+def proof_paths(s) -> list:
+    """A setting's proof paths (proved.menu, the mapper's evidence), as a list."""
+    m = (s.get("proved") or {}).get("menu") or []
+    return [m] if isinstance(m, str) else list(m)
+
+
+def with_hand(hand: dict):
+    """The paths settings() and by_menu() place a setting by: its rows given by hand (`hand`, {key: [row paths]}, the
+    camera's HAND_PLACES table: a record a row's own function writes, or a row the walk can never read, seen on the
+    camera) in place of its proof paths, else its proof paths (proof_paths)."""
+    return lambda s: list(hand[s["key"]]) if s.get("key") in hand else proof_paths(s)
+
+
+def shown_in(s, m: "Tree", tab: str, g: dict, g_tree: str, groups: dict, t: "Tree") -> str:
+    """The definition's name for the camera group `g` (of the menu `m`, named `g_tree` there) that holds a setting's
+    row: its own group's (the head of "Shutter/Silent › Target Function Settings") when that is the one, else a group
+    of the tab named so (or read with an icon), else the tree's. `groups`: tab -> the definition's groups; `t`: the
+    Stills menu's Tree, whose Place holds the definition's menu list."""
+    head = (s.get("group") or "").split(" › ")[0]
+    if m.group_of(tab, head) is g or head in (g["name"], g_tree):
+        return head
+    have = groups[tab] | set(t.place.groups.get(tab, ()))
+    for c in (g["name"], g_tree):
+        if c in have:
+            return c
+    hits = sorted({c for c in have if norm(c) and norm(c) in (norm(g["name"]), norm(g_tree), norm(g_tree)[1:])})
+    return hits[0] if len(hits) == 1 else g["name"]
+
+
+def settings(doc, tree, boxes=None, paths_of=None) -> dict:
     """Each setting's place on the camera: {key: {"row": [labels from its camera group's top row down], "row_at": [the
     top row's number in its tab (merge_tops), then each row's among its siblings], "under_option": the option of the
     row's own setting it is the choice for, "row_group": the definition's name for the camera group whose page holds
     the row, "row_tab": the tab whose menu holds it, "row_mode": the shooting mode whose menu holds it}} ("under_option"
     only when it is one, "row_tab" only when the tab is not the setting's own, "row_group" only when the group is not
-    the setting's own, "row_mode" only for a row the Stills menu does not have).
+    the setting's own, "row_mode" only for a row the Stills menu does not have). `paths_of`: the paths a setting is
+    placed by, its proof paths unless it says otherwise (with_hand: its rows given by hand).
 
     A setting hangs on the row its proof paths lead to in the Stills menu, in whichever group of its tab the row is
     (a screen the definition keeps as a group of its own, Fn Menu or Recall Custom hold 1, sits on its row: Fn Menu
@@ -644,33 +680,23 @@ def settings(doc, tree, boxes=None) -> dict:
         groups[s.get("tab") or "Other"].add(s.get("group") or "")
     leaves = leaf_rows([t] + [m for _, m in modes])
 
+    paths_of = paths_of or proof_paths
+
     def menus(s) -> list:
-        m = (s.get("proved") or {}).get("menu") or []
-        m = [m] if isinstance(m, str) else m
+        m = paths_of(s)
         if any((s.get("group") or "").startswith(p) for p in fams):
             return [x for x in m if INDEXED.search(x)]           # a family's setting: by an indexed path only
         return m
 
-    def shown_in(s, m, tab, g, g_tree) -> str:
-        """The definition's name for the camera group `g` that holds a setting's row: its own group's (the head of
-        "Shutter/Silent › Target Function Settings") when that is the one, else a group of the tab named so (or read
-        with an icon), else the tree's."""
-        head = (s.get("group") or "").split(" › ")[0]
-        if m.group_of(tab, head) is g or head in (g["name"], g_tree):
-            return head
-        have = groups[tab] | set(t.place.groups.get(tab, ()))
-        for c in (g["name"], g_tree):
-            if c in have:
-                return c
-        hits = sorted({c for c in have if norm(c) and norm(c) in (norm(g["name"]), norm(g_tree), norm(g_tree)[1:])})
-        return hits[0] if len(hits) == 1 else g["name"]
+    def group_shown(s, m, tab, g, g_tree) -> str:
+        return shown_in(s, m, tab, g, g_tree, groups, t)
 
     hung, near = {}, {}            # key -> (the menu, the row it hangs on), and the camera group its proof went through
     for s in doc["settings"]:
         tab, group = s.get("tab") or "Other", s.get("group") or ""
         if any(group.startswith(p) for p in fams) and not menus(s):
             continue
-        near[s["key"]] = t.place.of(s)["cg"]
+        near[s["key"]] = t.place.of(s, paths_of(s))["cg"]
         m, node = grown(t, modes, leaves, menus(s), tab, near[s["key"]], s.get("name") or "")
         if node:
             hung[s["key"]] = (m, node)
@@ -696,8 +722,7 @@ def settings(doc, tree, boxes=None) -> dict:
     values_of = lambda node: (own.get(node["id"]) or {}).get("values")          # noqa: E731
     drawn = {**page_orders(doc), **(boxes or {})}          # a page's rows as placed before, else as a probe read them
     for s in doc["settings"]:
-        tab, paths = s.get("tab") or "Other", (s.get("proved") or {}).get("menu") or []
-        paths = [paths] if isinstance(paths, str) else paths
+        tab, paths = s.get("tab") or "Other", paths_of(s)
         said = [mode_of(p, [n for n, _ in modes]) for p in paths]
         tries = [(t, x, paths) for x in [tab] + [o for o in t.by_tab if o != tab]] + \
             [(m, x, [p for p, w in zip(paths, said, strict=True) if w == mode]) for mode, m in modes for x in [tab] + [o for o in m.by_tab if o != tab]]
@@ -720,7 +745,7 @@ def settings(doc, tree, boxes=None) -> dict:
                  "under_option": opt}
         if rtab != tab:
             place["row_tab"] = rtab
-        shown = shown_in(s, m, rtab, g, g_tree)
+        shown = group_shown(s, m, rtab, g, g_tree)
         if rtab != tab and shown != (s.get("group") or ""):
             place["row_group"] = shown
         if m.mode:
@@ -764,10 +789,208 @@ def settings(doc, tree, boxes=None) -> dict:
                 place["under_option"] = said.pop()
         if tab != (s.get("tab") or "Other"):
             place["row_tab"] = tab
-        shown = shown_in(s, m, tab, g, g_tree)
+        shown = group_shown(s, m, tab, g, g_tree)
         if shown != (s.get("group") or ""):
             place["row_group"] = shown
         if m.mode:
             place["row_mode"] = m.mode
         out[s["key"]] = place
+    return out
+
+
+# ---------------------------------------------------------------- each camera menu's own places (camera.menus)
+
+TOP_MODE = "Stills"          # the shooting mode whose menu the tree's top-level "tabs" hold (kit/page_scan.py --mode
+                             # Stills; schemas/menu-tree.schema.json: "The Stills menu")
+PLACE_FIELDS = ("row", "row_at", "row_tab", "row_group", "under_option")          # a place, as a menu's differs
+
+
+def menu_modes(tree) -> dict:
+    """{a shooting mode the tree holds a menu of: that menu's key in placement's numbering (None for the top-level
+    menu, TOP_MODE; the mode's name for each of "modes")}."""
+    return {TOP_MODE: None, **{m["mode"]: m["mode"] for m in tree.get("modes") or [] if m.get("mode")}}
+
+
+def menu_of(menu: dict, tree) -> object:
+    """The key of the tree's menu a camera menu (camera.menus' entry) is drawn from: the first of its modes the tree holds
+    a menu of (menu_modes); False when the tree holds none of its modes (the menu then holds no setting)."""
+    have = menu_modes(tree)
+    return next((have[m] for m in menu.get("modes") or [] if m in have), False)
+
+
+def _nodes_at(m: "Tree", key, number: dict) -> dict:
+    """{(tab, the top row's number in the merged numbering): the row} of the menu `m` (its key in the numbering)."""
+    out = {}
+    for tb in m.tabs:
+        for g in tb["groups"]:
+            for node in g["rows"]:
+                at = m.where[node["id"]][2]
+                n = number.get((key, tb["tab"], at[0]))
+                if n is not None:
+                    out[(tb["tab"], n)] = node
+    return out
+
+
+def _options_at(doc) -> dict:
+    """{(tab, the owner row's labels norm()ed): the options (norm()ed) settings sit under on the pages they open}, from
+    the places the definition is being given (page_orders' rule: an option named inside a setting's row)."""
+    out = collections.defaultdict(set)
+    for s in doc["settings"]:
+        r, opt = s.get("row") or [], s.get("under_option")
+        if isinstance(opt, str) and opt in r[1:-1]:
+            i = r.index(opt, 1)
+            out[(s.get("row_tab") or s.get("tab"), tuple(norm(x) for x in r[:i]))].add(norm(opt))
+    return out
+
+
+def looked_up(m: "Tree", nodes: dict, s, place: dict, groups: dict, t: "Tree", options: dict) -> dict | None:
+    """The setting's place (`place`, the definition's) in another menu `m`, where `m`'s own rows hold it: the same top
+    row (the one the merged numbering gives the same number, merge_tops), then each label of the row among the rows `m`
+    read under it (of rows bearing one label, the one at the same place, else the one written alike), the page an
+    option opens as `m` holds it (its row named as that option, or as another option settings sit under there, with
+    rows under it). None where `m` lacks the top row, read the rows under one and the label is not among them, or never
+    read them (the row's own menu is not this one: nothing is taken from another menu's rows)."""
+    labels, at, opt = place["row"], place["row_at"], place.get("under_option")
+    tab = place.get("row_tab") or s.get("tab") or "Other"
+    node = nodes.get((tab, at[0]))
+    if node is None or norm(node["l"]) != norm(labels[0]):
+        return None
+    top, idx = node, [at[0]]
+    page = isinstance(opt, str) and opt in labels[1:-1]
+    for i in range(1, len(labels)):
+        kids = node["kids"]
+        if page and i == labels.index(opt, 1):
+            names = options.get((tab, tuple(norm(x) for x in labels[:i])), set()) | {norm(opt)}
+            shape = next((k for k in kids if norm(k["l"]) == norm(opt) and k["kids"]), None) or \
+                next((k for k in kids if norm(k["l"]) in names and k["kids"]), None)
+            if shape is None:
+                return None
+            node = shape
+            idx.append(at[i])
+            continue
+        same = [k for k in kids if norm(k["l"]) == norm(labels[i])] or \
+            [k for k in kids if _cut_short(k["l"], labels[i])][:1]
+        if not same:
+            return None
+        pick = kids[at[i]] if len(same) > 1 and at[i] < len(kids) and kids[at[i]] in same else \
+            next((k for k in same if strict(k["l"]) == strict(labels[i])), same[0])
+        idx.append(kids.index(pick))
+        node = pick
+    out = {"row": list(labels), "row_at": idx}
+    if opt is not None:
+        out["under_option"] = opt
+    (_, g, g_tree), _, _ = m.where[top["id"]]
+    if tab != (s.get("tab") or "Other"):
+        out["row_tab"] = tab
+    shown = shown_in(s, m, tab, g, g_tree, groups, t)
+    if shown != (s.get("group") or "") and (not page or tab != (s.get("tab") or "Other")):
+        out["row_group"] = shown
+    return out
+
+
+CUT = 16                     # letters and digits a label read cut short keeps at least (_cut_short)
+
+
+def _cut_short(a: str, b: str) -> bool:
+    """Two labels of one row, one read cut short ("Operation in Vertical Orientati"): one's letters and digits begin
+    the other's, the shorter keeping at least CUT of them."""
+    x, y = sorted((norm(a), norm(b)), key=len)
+    return len(x) >= CUT and x != y and y.startswith(x)
+
+
+def read_depth(m: "Tree", nodes: dict, s, place: dict, options: dict) -> int:
+    """How many of the place's labels the menu `m`'s own rows hold, from its top row down (looked_up's way; 0 where `m`
+    lacks the top row): the rows below them `m` never read."""
+    for n in range(len(place["row"]), 0, -1):
+        part = {**place, "row": place["row"][:n], "row_at": place["row_at"][:n]}
+        if part.get("under_option") not in part["row"][1:-1] and place.get("under_option") in place["row"][1:-1]:
+            part.pop("under_option", None)
+        if looked_up(m, nodes, s, part, collections.defaultdict(set), m, options) is not None:
+            return n
+    return 0
+
+
+def _names_row(path: str, place: dict) -> bool:
+    """Whether a path names the place's own row: its last label before any option (" / ") is the place's last."""
+    labels = []
+    for how, label in steps(path):
+        if how == "/":
+            break
+        labels.append(label)
+    return bool(labels) and norm(nth(labels[-1])[0]) == norm(place["row"][-1])
+
+
+def by_menu(doc, tree, menus: list, boxes=None, hand=None, top=None) -> dict:
+    """Each placed setting's camera menus (camera.menus, `menus`): {key: {"row_menus": [the menus, in their order, whose
+    own rows hold its row], "row_places": {menu: its place there}}}, "row_places" only for a menu whose place differs from
+    the setting's own (`top`, settings()'s: "row", "row_at", "row_tab", "row_group", "under_option"; the merged
+    numbering kept, so a row the menus share has one number), and only when there is one. A copy (copy_of) has none: it
+    follows its setting.
+
+    A setting is in the menu its place was found in (its "row_mode"'s, else the top-level menu's); in any other menu only
+    where that menu's own rows hold it: its place looked up there (looked_up), else placed by that menu's own paths alone,
+    the paths proved in one of its modes (a context naming it; for the top-level menu a path with no context too) and
+    those of the setting's copies for its modes (copy_for), or its rows given by hand (`hand`, every menu that has the row),
+    where such a path names the row it lands on (settings() on that menu's tree alone, the rows it does not know grown
+    from those paths only). A menu drawn from no menu of the tree holds nothing (menu_of). Nothing in a menu is taken
+    from another menu's rows."""
+    hand = hand or {}
+    paths_of = with_hand(hand)
+    top = settings(doc, tree, boxes, paths_of) if top is None else top
+    t = Tree(doc, tree)
+    modes = mode_trees(doc, tree)
+    number = merge_tops(t, modes)
+    trees = {None: t, **dict(modes)}
+    groups = collections.defaultdict(set)
+    for s in doc["settings"]:
+        groups[s.get("tab") or "Other"].add(s.get("group") or "")
+    by_key = {s["key"]: s for s in doc["settings"]}
+    options = _options_at({"settings": [{**s, **top.get(s["key"], {})} for s in doc["settings"]]})
+    every = set(menu_modes(tree)) | {m for menu in menus for m in menu.get("modes") or []}
+    out = {}
+    for menu in menus:
+        key = menu_of(menu, tree)
+        if key is False:
+            continue
+        m = trees[key]
+        nodes = _nodes_at(m, key, number)
+        own_modes = set(menu.get("modes") or [])
+
+        def own(s, own_modes=own_modes, key=key):
+            if s["key"] in hand:
+                return list(hand[s["key"]])
+            mine = list(proof_paths(s))
+            for c in s.get("copies") or []:
+                if own_modes & set((by_key.get(c) or {}).get("copy_for") or ()):
+                    mine += proof_paths(by_key[c])
+            said = [mode_of(p, sorted(every)) for p in mine]
+            return [p for p, w in zip(mine, said, strict=True) if w in own_modes or (w is None and key is None)]
+        alone = {"tabs": tree["tabs"] if key is None else next(x["tabs"] for x in tree["modes"] if x.get("mode") == key)}
+        theirs = settings(doc, alone, boxes, own)          # this menu's own paths on its own rows alone
+        for s in doc["settings"]:
+            k = s["key"]
+            if k not in top or s.get("copy_of"):
+                continue
+            place = top[k]
+            if place.get("row_mode", None) == key:
+                got = {f: place[f] for f in PLACE_FIELDS if f in place}
+            else:
+                got = looked_up(m, nodes, s, place, groups, t, options)
+                mine = theirs.get(k)
+                if got is None and mine is not None and any(_names_row(p, mine) for p in own(s)):
+                    tab = mine.get("row_tab") or s.get("tab") or "Other"
+                    got = {f: mine[f] for f in PLACE_FIELDS if f in mine}
+                    got["row_at"] = [number.get((key, tab, mine["row_at"][0]), mine["row_at"][0])] + mine["row_at"][1:]
+                    if [norm(x) for x in got["row"]] == [norm(x) for x in place["row"]]:
+                        # the same row the menu's own paths reach, through rows this menu never read: their order, and
+                        # whether the walk read a page as rows or as an option's, are not this menu's to give, so the
+                        # setting's own place (the camera's, read in the menu it was found in) stands below what it read
+                        d = read_depth(m, nodes, s, place, options)
+                        got = {**{f: place[f] for f in PLACE_FIELDS if f in place}, "row_at": got["row_at"][:d] + place["row_at"][d:]}
+            if got is None:
+                continue
+            entry = out.setdefault(k, {"row_menus": []})
+            entry["row_menus"].append(menu["name"])
+            if got != {f: place[f] for f in PLACE_FIELDS if f in place}:
+                entry.setdefault("row_places", {})[menu["name"]] = got
     return out

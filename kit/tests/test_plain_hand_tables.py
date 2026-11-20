@@ -377,7 +377,7 @@ def test_no_hand_tables_and_empty_tables_give_the_plain_pass_as_before(tmp_path,
     with that kit itself was made once by hand, its scenario in the round's notes)."""
     out = []
     for name, tables in (("none", None), ("empty", {n: [] if k in ("set", "frozenset", "values", "not_offered", "tuple",
-                                                                    "rows", "steps") else {} for n, k in
+                                                                    "rows", "steps", "menus") else {} for n, k in
                                                     hand_tables.TABLES.items() if k not in ("text", "pattern",
                                                                                             "my_menu_empty")})):
         c = Cam(tmp_path / name, monkeypatch)

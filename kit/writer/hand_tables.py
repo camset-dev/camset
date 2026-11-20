@@ -9,8 +9,9 @@ VALUE_FIXES, KEEP_LABELS, ...), the pickers whose lists were walked whole (PICKE
 offer (NOT_OFFERED), the copies the camera keeps (COPIES) and the switches that keep a family's copies apart
 (KEEPS_APART), the limits it keeps in order (LIMIT_PAIRS), how far each focus frame travels (FRAME_TRAVEL), why a
 record cannot be proved (UNPROVED), the rows the records name otherwise than the camera draws them (ROW_NAMES,
-which camkit.row_names reads for every comparison of a row's name), and the label fixes and proof-row rules the
-writer applies. The file holds what the camera is, the same for every owner of that model
+which camkit.row_names reads for every comparison of a row's name), the camera's menus by shooting mode (MENUS) and
+the rows given by hand (HAND_PLACES: a record a row's own function writes, a row the walk can never read, seen on the
+camera), which writer/fromdata.py reads, and the label fixes and proof-row rules the writer applies. The file holds what the camera is, the same for every owner of that model
 and firmware, and is written and edited by hand. How, when and in which run each hand fact was proved is the mapping's
 evidence, kept in the private overlay (private/evidence/<model>_fw<fw>.hand.json) and put back into the tables by
 load() (writer/hand_evidence.py). A camera with no file has every table empty.
@@ -57,14 +58,16 @@ TABLES = {
     "NOT_OFFERED": "not_offered", "VIDEO_SYSTEM_VALUES": "entries", "COPIES": "lists", "COPY_MODES": "tuple", "COPY_MODES_UNKNOWN": "frozenset",
     "KEEPS_APART": "keeps_apart", "LIMIT_PAIRS": "limit_pairs",
     "UNPROVED": "unproved", "CONTEXT_WORDS": "context_words", "ORIENTED": "pattern", "ROW_NAMES": "row_names",
+    "MENUS": "menus", "HAND_PLACES": "hand_places",
 }
 OWN_KEYS = ("$schema", "_comment", "camera")
 EMPTY = {"entries": dict, "new_records": dict, "new_like": dict, "words": dict, "lists": dict, "context_words": dict,
          "my_menu_empty": dict, "set": set, "frozenset": frozenset, "record_ids": dict, "values": list, "steps": dict,
          "rows": dict, "text": lambda: None, "not_offered": list, "tuple": tuple, "unproved": dict,
          "pattern": lambda: None, "picker_lists": dict, "keeps_apart": dict, "limit_pairs": dict,
-         "frame_travel": dict, "row_names": dict}
+         "frame_travel": dict, "row_names": dict, "menus": list, "hand_places": dict}
 REF = "#/FILTER_FLAGS/"         # the one $ref a file may hold: a NEW_RECORDS entry that is FILTER_FLAGS' own
+PLACED_KEY = re.compile(r"(global|set):0x[0-9a-f]{4}(\[\d+\]|@\d+)?")          # a setting's key (HAND_PLACES)
 # the fields of an entry the writer reads, by table, each with the JSON type it must have ("values": [code, name] pairs)
 NEW_RECORD = {"like": str, "name": str, "values": "values", "note": str}
 FIELDS = {"RECORD_FIXES": {"name": str}, "FILTER_FLAGS": NEW_RECORD, "NEW_RECORDS": NEW_RECORD,
@@ -567,6 +570,42 @@ def _shaped(name: str, kind: str, raw):
             else:
                 raise _Shape(f"{where} is neither a frame measured area by area (places and limits) nor boxes one rule "
                              "bounds (inside and boxes, and sizes_tried where known)")
+        return raw
+    if kind == "menus":
+        # the camera's menus, one per position of its shooting-mode switch, in order: {name, modes[, main_tiles][, hover]}
+        # (writer/fromdata.py camera_menus holds each mode and tile set to the camera file)
+        for i, e in enumerate(_need(raw, list, "the table")):
+            where = f"menu {i}"
+            _fields(e, ("name", "modes"), where)
+            if not _need(e["name"], str, f"{where}'s name").strip():
+                raise _Shape(f"{where} has no name")
+            if not _need(e["modes"], list, f"{where}'s modes"):
+                raise _Shape(f"{where} ({e['name']!r}) names no mode")
+            for j, m in enumerate(e["modes"]):
+                _need(m, str, f"{where}'s modes[{j}]")
+            for f in ("main_tiles", "hover"):
+                if f in e:
+                    _need(e[f], str, f"{where}'s {f}")
+            extra = sorted(set(e) - {"name", "modes", "main_tiles", "hover"})
+            if extra:
+                raise _Shape(f"{where} holds {', '.join(map(repr, extra))}, which a menu does not have")
+        _unique(raw, lambda e: e["name"])
+        return raw
+    if kind == "hand_places":
+        # a record's row given by hand, by key: {row: its tab, then the labels from the top row down, " > " between;
+        # why: what kind of fact it is, in a few words}
+        for k, e in _need(raw, dict, "the table").items():
+            if not PLACED_KEY.fullmatch(k):
+                raise _Shape(f"{k!r} is not a setting's key (\"global:0x....\", \"set:0x....\", with [n] or @n)")
+            _fields(e, ("row", "why"), repr(k))
+            labels = [x.strip() for x in _need(e["row"], str, f"{k!r}'s row").split(" > ")]
+            if len(labels) < 2 or not all(labels):
+                raise _Shape(f"{k!r}'s row, {e['row']!r}, is not its tab then its row's labels, \" > \" between")
+            if not _need(e["why"], str, f"{k!r}'s why").strip():
+                raise _Shape(f"{k!r} says no why")
+            extra = sorted(set(e) - {"row", "why"})
+            if extra:
+                raise _Shape(f"{k!r} holds {', '.join(map(repr, extra))}, which a hand place does not have")
         return raw
     if kind == "unproved":
         out = {}

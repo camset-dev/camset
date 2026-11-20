@@ -9,6 +9,7 @@ from pathlib import Path
 from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names
 from runner import read_json
 
+from . import hand_tables
 from .mirror import mirror_names, mirror_of, mirror_place
 from .notes import with_evidence_apart, with_tidy_note
 from .proofs import without_held, without_observed, without_written_with
@@ -155,25 +156,74 @@ def with_plain_words(s: dict, names: list = ()) -> dict:
     return s
 
 
-PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode")
+PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places")
 # what a definition written without the camera's menu tree keeps (places, menu_list), said once (a fresh clone, CI)
 NO_TREE = "the definition's menu list and each setting's place on the camera stay as the definition has them"
+MENU_FIELDS = ("name", "modes", "main_tiles", "hover")          # a camera menu, as camera.menus holds it
 
 
-def places(doc: dict) -> dict | None:
+def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
-    menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths
-    (camkit.placement, the proof viewer's placement): {key: {"row", "row_at"[, "under_option"][, "row_tab"][,
-    "row_group"][, "row_mode"]}}. None, so the places stay as they are, for a definition read without its evidence (no
-    setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu tree on this
-    computer (a fresh clone, CI: the places are what is public of the menus)."""
+    menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
+    given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
+    viewer's placement): {key: {"row", "row_at"[, "under_option"][, "row_tab"][, "row_group"][, "row_mode"]}}; with the
+    camera's menus (`menus`, camera.menus), each placed setting's "row_menus" and, where a menu places it otherwise,
+    "row_places" too (camkit.placement.by_menu). None, so the places stay as they are, for a definition read without its
+    evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu
+    tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
         return None
     tree = definitions.menu_tree_file(definitions.key(doc))
     if not tree.exists():
         datafiles.say_no_menu_tree(tree, NO_TREE)
         return None
-    return placement.settings(doc, datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)))
+    tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
+    found = placement.settings(doc, tree, boxes, placement.with_hand(hand) if hand else None)
+    for k in sorted(set(hand) - set(found)):
+        print(f"HAND_PLACES: {k}'s row ({' | '.join(hand[k])}) is not in the camera's menu tree: not placed")
+    if not menus:
+        return found
+    by = placement.by_menu(doc, tree, menus, boxes, hand, found)
+    return {k: {**v, **by.get(k, {})} for k, v in found.items()}
+
+
+def camera_menus(doc: dict, table: list) -> list | None:
+    """The camera's menus (camera.menus) from its MENUS hand table (`table`, as writer/hand_tables.py reads it), each
+    {name, modes[, main_tiles][, hover]} in the table's order; None for no table. Refused in plain words (hand_tables.
+    Refused) where a menu's mode is none the camera section names (its memory sets' modes, its live mode's values), a
+    mode is in two menus, a name is there twice, or main_tiles names no tile set of camera.main_tiles."""
+    if not table:
+        return None
+    cam = doc.get("camera") or {}
+    modes = set((cam.get("memory_sets") or {}).get("modes") or {}) | set(((cam.get("live_mode") or {}).get("modes") or {}).values())
+    tiles = {t.get("name") for t in cam.get("main_tiles") or []}
+    where = datafiles.hand_tables_file(definitions.key(doc))
+    seen, names = {}, set()
+    for menu in table:
+        if menu["name"] in names:
+            raise hand_tables._refused(where, f"MENUS names the menu {menu['name']!r} twice")
+        names.add(menu["name"])
+        for m in menu["modes"]:
+            if m not in modes:
+                raise hand_tables._refused(where, f"MENUS' {menu['name']!r} names the mode {m!r}, which the camera file "
+                                                  f"names nowhere (its memory sets' and live mode's modes: {', '.join(sorted(modes)) or 'none'})")
+            if m in seen:
+                raise hand_tables._refused(where, f"MENUS puts the mode {m!r} in two menus, {seen[m]!r} and {menu['name']!r}")
+            seen[m] = menu["name"]
+        if "main_tiles" in menu and menu["main_tiles"] not in tiles:
+            raise hand_tables._refused(where, f"MENUS' {menu['name']!r} names the tile set {menu['main_tiles']!r}, which "
+                                              "camera.main_tiles does not hold")
+    return [{f: menu[f] for f in MENU_FIELDS if f in menu} for menu in table]
+
+
+def with_menus(camera: dict, menus: list | None) -> dict:
+    """The camera section with "menus" after "main_tiles" (last where it has none), or without it for no menus."""
+    out = {k: v for k, v in camera.items() if k != "menus"}
+    if not menus:
+        return out
+    at = list(out).index("main_tiles") + 1 if "main_tiles" in out else len(out)
+    items = list(out.items())
+    return dict(items[:at] + [("menus", menus)] + items[at:])
 
 
 # the probe lines of the provers of an option's own row of boxes (kit/provers/optboxes_run.py's PROBES), in any run
@@ -255,13 +305,17 @@ def from_data(doc: dict) -> dict:
     (without_written_with: it told how the camera was set).
     main() ends the same way, so on the committed data this gives the committed definition."""
     doc = with_menu(with_camera(doc))
+    tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
+    menus = camera_menus(doc, tables.MENUS)
+    if "camera" in doc:
+        doc["camera"] = with_menus(doc["camera"], menus)
     without_observed(doc, say=False)
     without_held(doc)
     without_written_with(doc)
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found, slots, mirror = places(doc), mymenu_slots(doc), mirror_of(doc)
+    found, slots, mirror = places(doc, menus, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()}), mymenu_slots(doc), mirror_of(doc)
     names = sorted({s["name"] for s in doc["settings"]}, key=len, reverse=True)
 
     def placed(s):
