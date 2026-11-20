@@ -70,6 +70,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
   stays in the mapper's private ledger, never listed or counted in a public file (decision 27).
+- **The a1 II's definition lists the camera's three menus, Still, Movie and S&Q,** and the menus each of its 1380 placed
+  settings stands in, read from each mode's own menus; 165 settings take the row they lacked, among them Camera Set.
+  Memory's records, the focus positions under Focus Area and Preset Focus/Zoom's. It also names 340 values as the camera
+  draws them, says why eight rows are greyed (Focus Mode, ISO AUTO Min. SS, Select LUT, Aspect Marker Level), and adds
+  Save HEIF Size, the Recall Custom holds' Exposure step, Playback DISP Mode and whether Lock Operation Parts holds.
 - **The a1 II's definition proves Bracket Type's Cont. Bracket and Single Bracket whole,** each of their 60 choices
   and no longer a sample. Six rows take the names the camera draws (Proxy Recording, Proxy File Format, Proxy Rec.
   Settings, with Shutter Button, S&Q's Record Setting and the movie Recording Media row), and two value names are
@@ -201,6 +206,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   hold 3 restores the copy, and a hold that failed part way now exits 8 where it exited 0. A notice after Register
   counts only as the camera's "Registered." alone, and the coverage ledger no longer reads a registration mirror line
   not applied as a refusal.
+- **A restore's check keeps trying a camera slow to restart for up to 300 s,** the one limit every run and tool goes
+  by, where it gave up at 130 s; twice the camera had only been late.
+- **A restore's check says what it waits for,** the camera's restart and up to 5 minutes, before its first try, and a
+  first Ctrl-C meanwhile says the check goes on and that a second one would leave it undone.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.

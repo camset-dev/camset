@@ -362,6 +362,9 @@ SENT = 0
 _RUNS: list = []
 _SIGNALS = [getattr(signal, n) for n in ("SIGINT", "SIGTERM", "SIGBREAK", "SIGHUP") if hasattr(signal, n)]
 _PREVIOUS: dict = {}
+# What a first signal's line says instead of the usual one while the process waits on something a stop does not cut
+# short (camkit.session.verify_restore's check after an upload, which reads and changes nothing): None otherwise
+WAITING_ON: str | None = None
 
 
 def _on_signal(signum, frame):
@@ -372,7 +375,8 @@ def _on_signal(signum, frame):
     name = signal.Signals(signum).name
     for r in _RUNS:
         r.request_stop(f"signal {name}")
-    print(f"\n{name}: stopping cleanly; the run cancels any dialog and puts its start file back. "
+    print(f"\n{name}: {WAITING_ON}" if WAITING_ON else
+          f"\n{name}: stopping cleanly; the run cancels any dialog and puts its start file back. "
           "Press Ctrl-C again only to stop at once, which can leave the camera changed or a dialog open.",
           file=sys.stderr, flush=True)
 
