@@ -194,6 +194,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
   answers the lit box. A title naming another option still stops the walk, and so does a proof that moves the option's
   own record, which each line now keeps beside the title read.
+- **`carousel_fields_run.py` judges a box lit on the frame its title was read from,** as it judges the option: a box
+  seen lit just after a Right and gone once the title settled no longer passes, so no walk ends on an empty look.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.
