@@ -245,7 +245,9 @@ def vote(readings: dict) -> tuple:
 OCR_SOURCES = ("ocr", "ocr2")
 ICON_LEAD = 4               # characters (spaces aside) one icon is read as at most: "S&Q", "LAN", "Saa", "MR", "R"
 MENU_LABEL, SUBMENU_LABEL = (140, 470), (55, 470)       # the label's column on a menu page and on a submenu (x0, x1)
-LEAD_SLACK, TEXT_SLACK = 8, 4                           # how far OCR's first line may start before / after the text
+# how far OCR's first line may start before the last icon's end (Apple Vision's box of a word starts up to 12 px before
+# a painted icon's end; RapidOCR's within 1) and after the text's start (a line starting later lost the first word)
+LEAD_SLACK, TEXT_SLACK = 14, 4
 
 
 def page_icons(path: Path, n: int) -> tuple:

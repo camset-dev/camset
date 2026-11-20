@@ -103,6 +103,27 @@ def test_a_light_box_on_the_orange_bar_is_an_icon():
     assert screen.label_icons(a, BAND, 55) == (((62, end),), end + 6)
 
 
+def test_a_greyed_rows_box_on_the_orange_bar_is_an_icon():
+    """A greyed row lit: its text and its box are grey 119 on the bar, below the light the bar's ink is otherwise."""
+    grey = (119, 119, 119)
+    a = page(ORANGE)
+    end = box(a, 62, colour=grey)
+    letters(a, end + 6, colour=grey)
+    assert screen.label_icons(a, BAND, 55) == (((62, end),), end + 6)
+
+
+def test_a_second_box_is_an_icon_only_close_after_the_first():
+    """The movie mark and the S box are 6-7 px apart; a check box's text starts 20 px after it, and a B in that larger
+    font can be a light box with marks in it."""
+    for gap, want in ((7, 2), (20, 1)):
+        a = page()
+        a[118:134, 146:160] = LIGHT
+        end = box(a, 160 + gap, w=17)
+        letters(a, end + 7)
+        boxes, text_x = screen.label_icons(a, BAND, 140)
+        assert len(boxes) == want and text_x == (end + 7 if want == 2 else 160 + gap), gap
+
+
 def test_a_box_too_narrow_or_with_no_room_after_it_is_none():
     """A box under 16 px with marks is a letter's size (B, R); a box with nothing after it gives no label to read."""
     a = page()
@@ -222,6 +243,9 @@ def test_a_page_keeps_the_icon_where_it_tells_two_rows_apart():
     ("kit2_page_scan_1118p", "00102_down.png", 1, 1, 172),         # the stills mark before ISO
     ("kit2_page_scan_1118p", "00256_down.png", 1, 1, 172),         # LAN box
     ("kit2_page_scan", "00219_down.png", 1, 2, 199),               # the movie mark, then the S box
+    ("kit2_proxy3_crawl", "00019_down.png", 2, 1, 92),             # Px box of a greyed row on the orange bar
+    ("kit2_page_scan_1118p", "00057_down.png", 0, 1, 176),         # MR box of a greyed row on the orange bar
+    ("kit2_breadth_crawl", "00505_down.png", 2, 1, 117),           # a check box; the B of Bird (larger font) is no icon
 ])
 def test_the_icons_on_the_cameras_frames(run, name, row, count, text_x):
     f = frame(run, name)

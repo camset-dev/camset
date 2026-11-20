@@ -1926,11 +1926,15 @@ def box_stars(a: np.ndarray, s: Screen) -> int | None:
 # label_icons finds it by its pixels and the label is read to the right of it (page_model.covered_readings). Text is
 # never drawn so: no letter of the menu font is a filled block, nor a light box at least 16 px wide with dark marks in it.
 # Measured on the a1 II's HDMI and OSD frames: an icon is 20-24 px wide and its label's text starts 5-7 px after it; the
-# letters of a word are 1-3 px apart. An icon these tests do not know (the time-lapse dial, SteadyShot's hand) ends the
-# icons found: the label's text is taken to start there, and the label stays as read wherever that is wrong.
+# letters of a word are 1-3 px apart; a second icon comes 6-7 px after the first (the movie mark, then the S box of with
+# Shutter Button), while a check-list's text starts 20 px after its box, and in that larger font a B is a light box with
+# marks enclosed in it (kit2_breadth_crawl 00505_down.png, "Bird"): so a second icon is taken only that close to the
+# first. An icon these tests do not know (the time-lapse dial, SteadyShot's hand) ends the icons found: the label's text
+# is taken to start there, and the label stays as read wherever that is wrong.
 ICON_GAP = 4                  # empty columns that end an icon
 ICON_MAX_W = 34               # no icon is wider
 ICONS_MAX = 3                 # icons before one label (two seen: the movie mark, then the S box of with Shutter Button)
+ICON_NEXT = 10                # a further icon starts at most this far after the one before it
 
 
 def label_icons(a: np.ndarray, band, x0: int) -> tuple:
@@ -1938,21 +1942,24 @@ def label_icons(a: np.ndarray, band, x0: int) -> tuple:
     near x `x0` (a menu page's 140, a submenu's 55), each (x0, x1) left to right, and the x where the label's text starts
     after them; ((), None) where the row starts with no icon. An icon is an object at the row's left (its columns of ink,
     ICON_GAP empty ones ending it, no wider than ICON_MAX_W) holding a light box with dark marks enclosed in it (at least
-    16 px wide, 14 tall, 58% filled) or a solid part (9 px or more each way, 90% filled); the first object that is
-    neither is the label's text. Ink on the row's orange bar is what is light (grey over 130); elsewhere what is grey over
-    80 and unsaturated, so a greyed row's icon counts too."""
+    16 px wide, 14 tall, 58% filled) or a solid part (9 px or more each way, 90% filled), a further one only where it
+    starts within ICON_NEXT px of the one before; the first object that is not an icon is the label's text. Ink on the
+    row's orange bar is what is light (grey over 130) or grey over 95 and unsaturated (a greyed row's text and icon, grey
+    119 there, kit2_proxy3_crawl 00019_down.png); elsewhere what is grey over 80 and unsaturated, so a greyed row's icon
+    counts too."""
     import cv2
     t, b = int(band[0]) + 3, int(band[1]) - 3
     left = max(0, x0 - 6)
     if b - t < 10:
         return (), None
     lit = _orange(a)[t:b, x0:x0 + 200].mean() > 0.5
-    grey = _grey(a)[t:b, left:left + 200]
-    m = (grey > 130) if lit else ((grey > 80) & (_sat(a)[t:b, left:left + 200] < 60))
+    grey, sat = _grey(a)[t:b, left:left + 200], _sat(a)[t:b, left:left + 200]
+    m = ((grey > 130) | ((grey > 95) & (sat < 80))) if lit else ((grey > 80) & (sat < 60))
     m = m.astype(np.uint8)
     boxes = []
     for ox0, ox1 in _ink_objects(m.sum(axis=0)):
-        if len(boxes) >= ICONS_MAX or ox1 - ox0 > ICON_MAX_W or not _icon_like(cv2, m[:, ox0:ox1]):
+        if (len(boxes) >= ICONS_MAX or ox1 - ox0 > ICON_MAX_W or (boxes and ox0 + left - boxes[-1][1] > ICON_NEXT)
+                or not _icon_like(cv2, m[:, ox0:ox1])):
             return (tuple(boxes), ox0 + left) if boxes else ((), None)
         boxes.append((ox0 + left, ox1 + left))
     return (), None                 # icons and nothing after them: no label to read
