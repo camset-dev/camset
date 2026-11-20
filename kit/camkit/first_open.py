@@ -48,9 +48,22 @@ SKIPPED = f"skipped: {UNSEEN}"
 
 
 def key(path) -> tuple:
-    """A row's path as the seen records compare it: its labels as the camera draws them (camkit.row_names: a row the
-    records hold by an older name is the same row), compared plain."""
+    """A row's path as the first-open procedure compares it: the whole path as the camera draws it, renamed at once
+    (camkit.row_names: an older name an entry of the one kind names is the same row), compared plain."""
     return tuple(safety.plain(str(x)) for x in row_names.renamed(tuple(path or ())))
+
+
+def raw_key(path) -> tuple:
+    """A row's path as written, compared plain, no older name renamed: what a safety check judges (Seen.seen_as_drawn)."""
+    return tuple(safety.plain(str(x)) for x in path or ())
+
+
+def drawn(seen):
+    """The seen(path) a safety check asks of a seen record (`seen`: Seen): seen_as_drawn, the records under the label
+    as the camera draws it now, no older name folded onto it (the look lap's refusal of a format, delete or reset not
+    seen opened: camkit.crawl.look_open, the row a look lap's Right is told is seen, kit/drive.py look_path_or_exit); a
+    record without one (a test's stand-in), its seen; None for no record."""
+    return getattr(seen, "seen_as_drawn", None) or getattr(seen, "seen", None)
 
 
 def _with_parents(k: tuple) -> set:
@@ -63,14 +76,23 @@ class Seen:
     greyed, the rows the records hold greyed. A path with a label read as nothing (a page model row no vote named) or a
     placeholder is never seen: one such row's clean first open would else stand for every other."""
 
-    def __init__(self, opened=(), acting=(), unchecked=(), alone=(), greyed=()):
+    def __init__(self, opened=(), acting=(), unchecked=(), alone=(), greyed=(), drawn=None):
         self.opened, self.acting, self.unchecked = set(opened), set(acting), set(unchecked)
         self.alone, self.greyed = set(alone), set(greyed)
+        # the same records keyed as written (raw_key), where the camera's ROW_NAMES renames any: seen_as_drawn's
+        self.drawn = drawn
 
-    def seen(self, path) -> bool:
-        k = key(path)
+    def _holds(self, k) -> bool:
         return (bool(k) and all(k) and not placeholder(k) and k in self.opened and k not in self.acting
                 and k not in self.unchecked)
+
+    def seen(self, path) -> bool:
+        return self._holds(key(path))
+
+    def seen_as_drawn(self, path) -> bool:
+        """Whether the records show the row at `path` opened under the labels the camera draws now, no older name
+        renamed onto it (raw_key on the records as written): the one seen a safety check asks (drawn)."""
+        return (self.drawn if self.drawn is not None else self)._holds(raw_key(path))
 
     def unseen(self, path) -> list:
         return [tuple(path[:i]) for i in range(1, len(path or ()) + 1) if not self.seen(path[:i])]
@@ -109,11 +131,14 @@ def own_screen(look: dict) -> bool:
     return bool(kind) and kind not in safety.ROW_PAGES and look.get("result") not in ("greyed", "not_reached")
 
 
-def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
+def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set, keyed=key) -> None:
+    """The rows a crawl's row summary shows opened and greyed, into `opened` and `greyed`, each keyed (`keyed`: key, or
+    raw_key) on its whole path as the crawl wrote it (`parent`: the labels above, as written), renamed at once."""
     label = row.get("decided") or row.get("label") or ""
     if not isinstance(label, str) or not label.strip() or label.startswith("("):
         return
-    k = key((*parent, label))
+    here = (*parent, label)
+    k = keyed(here)
     out = str(row.get("outcome") or "")
     if out.startswith(OPENED):
         opened |= _with_parents(k)
@@ -121,7 +146,7 @@ def _crawl_rows(row: dict, parent: tuple, opened: set, greyed: set) -> None:
         greyed.add(k)
     for sub in row.get("submenu") or []:
         if isinstance(sub, dict):
-            _crawl_rows(sub, k, opened, greyed)
+            _crawl_rows(sub, here, opened, greyed, keyed)
 
 
 @budget.timed("rows seen opened")
@@ -132,11 +157,26 @@ def seen_record(camera: str | None = None) -> Seen:
     if not camera:
         return Seen()
     looks = coverage.read_looks(camera)
+    root = paths.runs_top() / camera
+    rows, proofs = [], []
+    for run in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else ():
+        rows += jsonl.read(run / "rows.jsonl", bad="skip")
+        proofs += jsonl.read(run / "proofs.jsonl", bad="skip")
+    seen = _seen_of(looks, rows, proofs, key)
+    if row_names.table(camera):
+        # older names renamed in seen(): the records as written kept beside them for the safety checks (seen_as_drawn)
+        seen.drawn = _seen_of(looks, rows, proofs, raw_key)
+    return seen
+
+
+def _seen_of(looks: list, rows: list, proofs: list, keyed) -> Seen:
+    """seen_record's Seen of the records given (the looks file, the crawls' row summaries and the proof lines), each row
+    keyed by `keyed` (key, or raw_key)."""
     gone = set(coverage.retracted(looks))
     opened, greyed, latest = set(), set(), {}
     stuck = {"acting": set(), "alone": set()}
     for _line, lk in looks:
-        k, did, res = key(lk.get("path")), lk.get("did"), lk.get("result")
+        k, did, res = keyed(lk.get("path")), lk.get("did"), lk.get("result")
         if k and placeholder(k):
             # a name rows share (placeholder()): never seen or greyed; a first open that failed under it, or that a
             # page's check could not clear, stands whatever look follows, until a retraction (read in the file's order)
@@ -159,13 +199,11 @@ def seen_record(camera: str | None = None) -> Seen:
         if did == "open" and (res in ACTED or res in SEEN_RESULTS["open"]
                               or (res == "not_reached" and lk.get("note") in (PENDING, PAGE))):
             latest[k] = lk
-    root = paths.runs_top() / camera
-    for run in sorted(p for p in root.iterdir() if p.is_dir()) if root.is_dir() else ():
-        for row in jsonl.read(run / "rows.jsonl", bad="skip"):
-            _crawl_rows(row, (), opened, greyed)
-        for proof in jsonl.read(run / "proofs.jsonl", bad="skip"):
-            if isinstance(proof.get("path"), list) and key(proof["path"]):
-                opened |= _with_parents(key(proof["path"]))
+    for row in rows:
+        _crawl_rows(row, (), opened, greyed, keyed)
+    for proof in proofs:
+        if isinstance(proof.get("path"), list) and keyed(proof["path"]):
+            opened |= _with_parents(keyed(proof["path"]))
     return Seen(opened, {k for k, lk in latest.items() if lk.get("result") in ACTED} | stuck["acting"],
                 {k for k, lk in latest.items() if lk.get("result") == "not_reached"},
                 {k for k, lk in latest.items() if lk.get("note") == PAGE} | stuck["alone"], greyed)
@@ -390,6 +428,9 @@ class FirstOpens:
         clear_restore_by_hand(self.run.root)
         self.run.log("first_open_checked", paths=[self.kept(p) for p in self.held + rows], how=how)
         self.seen.opened |= {key(p) for p in rows if key(p) not in self.notices and not placeholder(self.kept(p))}
+        if getattr(self.seen, "drawn", None) is not None:              # the records as written too (seen_as_drawn)
+            self.seen.drawn.opened |= {raw_key(p) for p in rows
+                                       if key(p) not in self.notices and not placeholder(self.kept(p))}
         self.marker, self.pending, self.deferred, self.notices, self.held = None, [], [], set(), []
 
     def _seen_now(self, p) -> bool:

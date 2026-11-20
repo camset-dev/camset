@@ -6,37 +6,52 @@ the label (page_model's icon_vote and camkit.crawl.icon_entry read it right of t
 crawls, seen records and walk patterns written before keep their names (nobody edits a run's line), and every
 comparison of a row's name exactly goes through here, so the older name and the camera's are one row: camkit.first_open's
 seen keys, kit/prove_run.py's --rows, kit/pass1_map.py's map, kit/tools/menu_tree.py, camkit.placement, the hand tables'
-walk patterns (writer/offered.py), the definition's proof rows (writer/proofs.menu_row) and kit/pass2_report.py's row
-names. An entry names a row and everything under it ("S&Q Settings > S&Q Record Setting" renames that row's paths and
-none above it). Labels are compared as the network checks compare them (safety.plain: case, spacing and the signs at
-either end aside). A camera whose file holds no ROW_NAMES, or no file, has every name as it is."""
+walk patterns (writer/offered.py), the definition's proof rows (writer/proofs.menu_row), kit/pass2_report.py's row
+names, kit/tools/proof_viewer.py and kit/tools/leads.py. No safety check ever sees a renamed name: the never-open list,
+the look lap's lists and its "seen" judge a row under the label the camera draws now (camkit.first_open.Seen.
+seen_as_drawn).
+
+The one kind of entry (fault): the camera's path is the older path with its last label less a leading token of at most
+ICON_LEAD characters, an icon's letters ("Proxy Settings > Px Proxy Recording" is "Proxy Settings > Proxy Recording"),
+or the kit's own "#n" form of that label ("Rec. Media Settings > Recording Media (Movie)" is "Rec. Media Settings >
+Recording Media#1", camkit.placement.nth); every label above the last the same, and no label of either side one a
+safety list names. A table is read once a process, before a run opens its link (table), and one that holds anything
+else is refused in plain words. A camera whose file holds no ROW_NAMES, or no file, has every name as it is."""
 import json
+import os
 import re
 
 from . import safety
 
 SEP = " > "
 TABLE = "ROW_NAMES"
+ICON_LEAD = 4           # characters an icon before a label is read as at most: "S&Q", "LAN", "Saa", "MR", "R"
 # where a row's path ends in a proof's or the report's name: an option of the row (" / "), or a field, an axis or a
 # context in brackets (camkit.placement.steps)
 _TAIL = re.compile(r" / | \[")
-_CACHE: dict = {}
+_NTH = re.compile(r"(.*\S)#(\d+)")                  # the kit's "#n" form of a label (camkit.placement.nth)
+_QUALIFIED = re.compile(r"(.*\S) \(([A-Za-z]+)\)")  # the kit's own older name of one of two rows: "Recording Media (Movie)"
+# the safety lists no side of an entry may hold a label of
+_LISTS = ("never_open", "look_destructive", "acts_on_open", "owner_never_listed")
+_TABLES: dict = {}       # (camera, file) -> its table, read once a process
+_CAMERA: dict = {}
+_RENAMED: dict = {}      # (camera, labels) -> renamed's answer
+_FAULTS: dict = {}
+
+
+def forget() -> None:
+    """Every table, camera and answer kept, dropped: the next call reads them again (a test that rewrites a file)."""
+    for d in (_TABLES, _CAMERA, _RENAMED, _FAULTS):
+        d.clear()
 
 
 def _camera(camera):
-    """The camera named, else the one the kit works on (camkit.paths.camera), worked out once for each state of what
-    names it (the environment's camera, the config file and its time, the runs' folder): a row's name is compared often."""
+    """The camera named, else the one the kit works on (camkit.paths.camera), worked out once for each camera the
+    environment names, config and runs' folder: a row's name is compared often."""
     if camera:
         return camera
-    import os
-
     from . import paths
-    cfg = paths._pkg().CONFIG                # camkit.CONFIG, which the tests set
-    try:
-        stamp = cfg.stat().st_mtime_ns
-    except OSError:
-        stamp = None
-    state = (os.environ.get(paths.ENV), str(cfg), stamp, str(paths.runs_top()))
+    state = (os.environ.get(paths.ENV), str(paths._pkg().CONFIG), os.environ.get("CAMSET_RUNS"))
     if _CAMERA.get("state") != state:
         try:
             got = (paths.camera() or (None,))[0]
@@ -44,9 +59,6 @@ def _camera(camera):
             got = None
         _CAMERA.update(state=state, camera=got)
     return _CAMERA["camera"]
-
-
-_CAMERA: dict = {}
 
 
 def labels(path) -> tuple:
@@ -66,28 +78,45 @@ def _key(path) -> tuple:
     return tuple(safety.plain(x) for x in path)
 
 
-def table(camera: str | None = None) -> dict:
-    """{older path compared plain (a tuple of plain labels): (the older path's labels as written, the camera's)} of the
-    camera `camera` (by default the one the kit works on); {} for a camera with no file or no ROW_NAMES. Read again
-    whenever the file changes. A table the kit cannot use is refused in plain words (ValueError): an entry that is no
-    two names, a name with an empty label, a row renamed to itself, or a camera name that is itself an older one."""
-    camera = _camera(camera)
-    if not camera:
-        return {}
-    from . import datafiles
-    p = datafiles.hand_tables_file(camera)
-    try:
-        stamp = p.stat().st_mtime_ns
-    except OSError:
-        return {}
-    if _CACHE.get(camera, (None,))[0] != (str(p), stamp):
-        doc = json.loads(p.read_text(encoding="utf-8-sig"))
-        _CACHE[camera] = ((str(p), stamp), read(doc.get(TABLE) or {}, p))
-    return _CACHE[camera][1]
+def fault(old, new) -> str | None:
+    """Why the entry (`old`, `new`: the older path's labels and the camera's) is not the one kind ROW_NAMES holds, or
+    None: every label above the last the same in both; the camera's last label the older one with its leading token of
+    at most ICON_LEAD characters and the space after it left out ("Px Proxy Recording" -> "Proxy Recording", "S&Q Record
+    Setting" -> "Record Setting"), or the kit's "#n" form of the older label left so, or of the older label less a
+    one-word qualifier in brackets ("Recording Media (Movie)" -> "Recording Media#1"); and no label of either side one
+    the never-open list, the look lap's destructive list, the acts-on-open list or OWNER_NEVER names."""
+    old, new = tuple(old), tuple(new)
+    got = _FAULTS.get((old, new), False)
+    if got is not False:
+        return got
+    why = None
+    if not old or not new or len(old) != len(new) or old[:-1] != new[:-1]:
+        why = "only its last label may differ, every label above it the same"
+    else:
+        lo, lc = old[-1], new[-1]
+        m = _NTH.fullmatch(lc)
+        base = m[1] if m else lc
+        token, _, rest = lo.partition(" ")
+        q = _QUALIFIED.fullmatch(lo)
+        iconed = bool(rest) and 0 < len(token) <= ICON_LEAD and rest == base
+        if safety.plain(lo) == safety.plain(lc):
+            why = "it renames the row to itself"
+        elif not (iconed or (m and q and q[1] == base)):
+            why = (f"the camera's last label is the older one less a leading token of at most {ICON_LEAD} characters "
+                   "(an icon's letters), or its \"#n\" form")
+    if why is None:
+        listed = [(x, f) for x in (*old, *new) for f in _LISTS if getattr(safety, f)(x)]
+        if listed:
+            why = f"a safety list names {listed[0][0]!r} ({listed[0][1]}): no such row is renamed"
+    _FAULTS[(old, new)] = why
+    return why
 
 
 def read(entries, where="ROW_NAMES") -> dict:
-    """table()'s shape of a ROW_NAMES object, refused in plain words (ValueError) where the kit cannot use it."""
+    """{older path compared plain (a tuple of plain labels): (the older path's labels as written, the camera's)} of a
+    ROW_NAMES object, refused in plain words (ValueError) where the kit cannot use it: an entry that is no two paths, or
+    not the one kind (fault), two older names alike, or an older path that is the start of another entry's camera path,
+    or a camera path the start of another entry's older path (no row is renamed twice)."""
     if not isinstance(entries, dict):
         raise ValueError(f"{where}: {TABLE} is no object of older row names and the camera's")
     out = {}
@@ -95,26 +124,57 @@ def read(entries, where="ROW_NAMES") -> dict:
         a, b = labels(old), (labels(new) if isinstance(new, str) else ())
         if not a or not b or SEP.join(a) != str(old).strip() or SEP.join(b) != str(new).strip():
             raise ValueError(f"{where}: {TABLE}'s {old!r}: each side is a row's path, its labels with ' > ' between")
-        if _key(a) == _key(b):
-            raise ValueError(f"{where}: {TABLE}'s {old!r} renames the row to itself")
+        why = fault(a, b)
+        if why:
+            raise ValueError(f"{where}: {TABLE}'s {old!r}: {why}")
+        if _key(a) in out:
+            raise ValueError(f"{where}: {TABLE} names {old!r} twice")
         out[_key(a)] = (a, b)
-    chained = [SEP.join(b) for _, b in out.values() if _key(b) in out]
-    if chained:
-        raise ValueError(f"{where}: {TABLE} renames {chained[0]!r}, which it also names as an older name: give each "
-                         "older name the camera's at once")
+    for ka, (a, b) in out.items():
+        for kc, (c, d) in out.items():
+            if ka != kc and (_key(d)[:len(a)] == ka or _key(c)[:len(b)] == _key(b)):
+                raise ValueError(f"{where}: {TABLE}'s {SEP.join(a)!r} and {SEP.join(c)!r}: one row's older or camera "
+                                 "path starts another's, so a row would be renamed twice")
     return out
 
 
+def table(camera: str | None = None) -> dict:
+    """read()'s table of the camera `camera` (by default the one the kit works on), read once a process (a run reads
+    it before its link opens, so a table refused, or half saved, stops it there); {} for a camera with no file or no
+    ROW_NAMES."""
+    camera = _camera(camera)
+    if not camera:
+        return {}
+    from . import datafiles
+    p = datafiles.hand_tables_file(camera)
+    k = (camera, str(p))
+    if k not in _TABLES:
+        try:
+            raw = p.read_text(encoding="utf-8-sig")
+        except OSError:
+            raw = None
+        _TABLES[k] = read(json.loads(raw).get(TABLE) or {}, p) if raw is not None else {}
+    return _TABLES[k]
+
+
 def renamed(path, camera: str | None = None) -> tuple:
-    """The path's labels (a tuple, a list or a name: labels()) as the camera draws them: the longest older path it
-    starts with put as the camera's (table), the labels after it kept; as they are where it starts with none."""
+    """The path's labels (a tuple, a list or a name: labels()) as the camera draws them: the older path it starts with
+    put as the camera's (table), the labels after it kept; as they are where it starts with none. An entry is applied
+    only where it is the one kind (fault), whatever handed the table in."""
     got = labels(path)
     names = table(camera)
-    k = _key(got)
-    for n in range(len(got), 0, -1) if names else ():
-        if k[:n] in names:
-            return (*names[k[:n]][1], *got[n:])
-    return got
+    if not names:
+        return got
+    k = (id(names), got)            # the table kept in _TABLES for the process, so its id names it
+    if k not in _RENAMED:
+        out, key = got, _key(got)
+        for n in range(len(got), 0, -1):
+            hit = names.get(key[:n])
+            if hit and fault(*hit) is None:
+                out = (*hit[1], *got[n:])
+                break
+        _RENAMED[k] = out
+    return _RENAMED[k]
 
 
 def renamed_name(name: str, camera: str | None = None) -> str:
@@ -122,6 +182,8 @@ def renamed_name(name: str, camera: str | None = None) -> str:
     or the report's name carries) with its path as the camera draws it (renamed), what follows as it is; the name as it
     is where its path is no older one."""
     name = str(name or "")
+    if not table(camera):
+        return name
     head, tail = _split(name)
     new = renamed(head, camera)
     return SEP.join(new) + tail if new != labels(head) else name
@@ -131,11 +193,13 @@ def names(name: str, camera: str | None = None) -> list:
     """The row's name as given, as the camera draws it (renamed_name) and as each older name the table gives the same
     row, what follows its path kept: what a pattern written with any of them is to match (writer/offered.py)."""
     name = str(name or "")
+    if not table(camera):
+        return [name]
     head, tail = _split(name)
     new = renamed(head, camera)
     out = [name, renamed_name(name, camera)]
     for old, cam in table(camera).values():
-        if _key(new[:len(cam)]) == _key(cam):
+        if _key(new[:len(cam)]) == _key(cam) and fault(old, cam) is None:
             out.append(SEP.join((*old, *new[len(cam):])) + tail)
     return list(dict.fromkeys(out))
 
@@ -146,9 +210,12 @@ def same(a, b, camera: str | None = None) -> bool:
 
 
 def as_in(asked, held, camera: str | None = None) -> list:
-    """Each name of `asked` as `held` writes the same row (what follows the path equal, the paths the same row), where
-    `asked` names it otherwise; as asked where held has no such name. A run asked for a row by an older name, or by the
-    camera's where its map still holds the older one, gets the map's own name (kit/prove_run.py --rows)."""
+    """Each name of `asked` as `held` writes the same row (what follows the path equal, the paths one row by the table),
+    where `asked` names it otherwise; as asked where held has no such name, and every name as asked with no table (a
+    name is then compared exactly, as kit/prove_run.py --rows compares it). A run asked for a row by an older name, or
+    by the camera's where its map still holds the older one, gets the map's own name."""
+    if not table(camera):
+        return list(asked)
     held = list(held)
     out = []
     for a in asked:

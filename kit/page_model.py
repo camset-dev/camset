@@ -37,7 +37,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import config, match, ocr, paths, safety  # noqa: E402
+from camkit import config, match, ocr, paths, row_names, safety  # noqa: E402
 from camkit.runs import private_if_marked  # noqa: E402
 from camkit.screen import MENU_ROW_PITCH, MENU_ROW_TOP  # noqa: E402
 from camkit.vlm import PROMPTS, NoReader, cache_key, cached, local_only_runs, make_reader, readers, role  # noqa: E402
@@ -244,7 +244,7 @@ def vote(readings: dict) -> tuple:
 # ones (2026-11-19: the reader read the S&Q box as "S&Q" on one crawl of S&Q Settings and not on another, and the row's
 # proof was refused under the name the map gave it).
 OCR_SOURCES = ("ocr", "ocr2")
-ICON_LEAD = 4               # characters (spaces aside) one icon is read as at most: "S&Q", "LAN", "Saa", "MR", "R"
+ICON_LEAD = row_names.ICON_LEAD          # characters (spaces aside) one icon is read as at most: "S&Q", "LAN", "MR"
 MENU_LABEL, SUBMENU_LABEL = (140, 470), (55, 470)       # the label's column on a menu page and on a submenu (x0, x1)
 # how far OCR's first line may start before the last icon's end (Apple Vision's box of a word starts up to 12 px before
 # a painted icon's end; RapidOCR's within 1) and after the text's start (a line starting later lost the first word)

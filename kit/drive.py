@@ -1238,8 +1238,9 @@ def look_path_or_exit(paths: list, seen, address=None) -> tuple:
     first open is the owner's own run. An address screen a look lap opens is looked at as one a decision names
     (`address`, network_path's), as the last label alone."""
     looked = []
+    judged = first_open.drawn(seen)         # the records under each label as the camera draws it, no older name renamed
     for i, label in enumerate(paths):
-        was = bool(seen is not None and seen.seen(paths[:i + 1]))
+        was = bool(judged is not None and judged(paths[:i + 1]))
         why = safety.look_lap_refused(label, was)
         if why:
             sys.exit(f"{label!r}: {why}: nothing was sent to the camera")
@@ -1862,8 +1863,10 @@ def main():
                     first_intent = bool(first_label) and key in RIGHTS and not inside and reads_row_spaced(lit, first_label)
                     # on a look lap the camera is told the row a press opens only where it is the --path's last row:
                     # its label, whether its whole path is seen opened, whether its first open is under way
-                    # (camkit.live.bar_is_row); any other opening press names no row (docs/decisions/0024)
-                    target = ({"expected": (a.path[-1],), "seen": bool(seen is not None and seen.seen(a.path)),
+                    # (camkit.live.bar_is_row), seen judged on the labels the camera draws now (first_open.drawn); any
+                    # other opening press names no row (docs/decisions/0024)
+                    judged = first_open.drawn(seen)
+                    target = ({"expected": (a.path[-1],), "seen": bool(judged is not None and judged(a.path)),
                                "first": first_intent}
                               if look and key in OPENERS and opening_row is not None
                               and list(opening_row) == list(a.path) else None)

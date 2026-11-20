@@ -907,7 +907,8 @@ def unseen_line(cycle, model, seen, skip_why: str, a, network=frozenset()) -> st
     # a start label not found: go_to says so, and the lap does not start
     known = not (a.start_label and start is None) and (
         a.limit is None or (start is not None and not getattr(a, "skip_settled", False)))
-    look = {"look": bool(getattr(a, "network", False)), "seen": getattr(seen, "seen", None)}      # a look lap's rows too
+    # a look lap's rows too, judged on the records under each label as the camera draws it (first_open.drawn)
+    look = {"look": bool(getattr(a, "network", False)), "seen": first_open.drawn(seen)}
     rows = lap_rows(cycle, model, tabs, network, start, a.limit, lambda x: not seen.skips([x], skip_why),
                     **look) if known else None
     fresh = [x for x in (rows if rows is not None else lap_rows(cycle, model, tabs, network, **look))

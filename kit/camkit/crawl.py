@@ -196,8 +196,11 @@ def left_unopened(page: dict, row: dict, network=frozenset(), first=None, look: 
 
 
 def seen_of(first):
-    """The seen(path) a first open's record gives (camkit.first_open.FirstOpens' seen.seen), or None."""
-    return getattr(getattr(first, "seen", None), "seen", None)
+    """The seen(path) a look lap's safety checks ask of a first open's record (camkit.first_open.FirstOpens' seen): the
+    records under each label as the camera draws it now, no older name renamed onto it (first_open.drawn:
+    Seen.seen_as_drawn), or None."""
+    from .first_open import drawn
+    return drawn(getattr(first, "seen", None))
 
 
 def crawl(cam, cycle: list, model: dict, tabs=LAP_TABS, stop=lambda: False, max_rows: int | None = None, on_row=None,

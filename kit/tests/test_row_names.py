@@ -20,9 +20,20 @@ from camkit import datafiles, definitions, row_names  # noqa: E402
 from conftest import TEST_CAMERA  # noqa: E402
 
 NAMES = {"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording",
-         "MR Camera Set. Memory": "Camera Set. Memory",
+         "S with Shutter Button": "with Shutter Button",
          "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting",
          "Rec. Media Settings > Recording Media (Movie)": "Rec. Media Settings > Recording Media#1"}
+# the a1 II's nine rows the records name otherwise than the camera draws them (the report of 2026-11-20)
+A1II_ROWS = {"S with Shutter Button": "with Shutter Button",
+             "Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording",
+             "Proxy Settings > Px Proxy Rec. Settings": "Proxy Settings > Proxy Rec. Settings",
+             "Proxy Settings > Px Proxy File Format": "Proxy Settings > Proxy File Format",
+             "MR Recall Camera Setting": "Recall Camera Setting",
+             "MR Camera Set. Memory": "Camera Set. Memory",
+             "MR Memory/Recall Media": "Memory/Recall Media",
+             "S&Q Settings > S&Q Record Setting": "S&Q Settings > Record Setting",
+             "Rec. Media Settings > Recording Media (Movie)": "Rec. Media Settings > Recording Media#1"}
+SAFETY_LISTED = ("MR Recall Camera Setting", "MR Camera Set. Memory", "MR Memory/Recall Media")
 
 
 def hand_tables(data: Path, **tables) -> Path:
@@ -30,6 +41,7 @@ def hand_tables(data: Path, **tables) -> Path:
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps({"$schema": "../../schemas/hand-tables.schema.json", "camera": TEST_CAMERA, **tables}),
                  encoding="utf-8")
+    row_names.forget()                      # a table is read once a process: this one afresh
     return p
 
 
@@ -37,27 +49,29 @@ def hand_tables(data: Path, **tables) -> Path:
 def named(tmp_path, monkeypatch):
     """The made-up camera's hand tables with NAMES as its ROW_NAMES, in the test's own data folder."""
     monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
-    return hand_tables(tmp_path / "data", ROW_NAMES=NAMES)
+    yield hand_tables(tmp_path / "data", ROW_NAMES=NAMES)
+    row_names.forget()
 
 
 @pytest.fixture
 def unnamed(tmp_path, monkeypatch):
     """The made-up camera with hand tables holding no ROW_NAMES."""
     monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
-    return hand_tables(tmp_path / "data")
+    yield hand_tables(tmp_path / "data")
+    row_names.forget()
 
 
 # ---------------------------------------------------------------- the table
 
 def test_an_older_name_is_the_cameras_and_so_is_every_row_under_it(named):
     assert row_names.renamed(["Proxy Settings", "Px Proxy Recording"]) == ("Proxy Settings", "Proxy Recording")
-    assert row_names.renamed(("MR Camera Set. Memory", "Slot 1")) == ("Camera Set. Memory", "Slot 1")
-    assert row_names.renamed(["mr camera set.  memory"]) == ("Camera Set. Memory",)          # compared plain
+    assert row_names.renamed(("S with Shutter Button", "Sub")) == ("with Shutter Button", "Sub")
+    assert row_names.renamed(["s with  shutter button"]) == ("with Shutter Button",)         # compared plain
     assert row_names.renamed(["Proxy Settings"]) == ("Proxy Settings",)                      # none above the row
     assert row_names.renamed(["Proxy Settings", "Proxy File Format"]) == ("Proxy Settings", "Proxy File Format")
     assert row_names.renamed_name("S&Q Settings > S&Q Record Setting [Movie mode, 120p]") == \
         "S&Q Settings > Record Setting [Movie mode, 120p]"
-    assert row_names.renamed_name("MR Camera Set. Memory / Slot 2") == "Camera Set. Memory / Slot 2"
+    assert row_names.renamed_name("S with Shutter Button / Add Shot Mark1") == "with Shutter Button / Add Shot Mark1"
     assert row_names.renamed_name("Drive Mode [Movie mode]") == "Drive Mode [Movie mode]"
     assert row_names.same("Proxy Settings > Px Proxy Recording", ("Proxy Settings", "Proxy Recording"))
     assert not row_names.same("Proxy Settings > Px Proxy Recording", "Proxy Settings > Proxy File Format")
@@ -82,17 +96,42 @@ def test_a_run_asking_by_either_name_gets_the_maps_own(named):
 
 
 def test_a_camera_with_no_table_has_every_name_as_it_is(unnamed):
+    """No table: every name as it is, and a run's --rows compared exactly (as_in never takes a name plain-alike)."""
     assert row_names.table() == {}
     assert row_names.renamed(["Proxy Settings", "Px Proxy Recording"]) == ("Proxy Settings", "Px Proxy Recording")
-    assert row_names.renamed_name("MR Camera Set. Memory [x]") == "MR Camera Set. Memory [x]"
+    assert row_names.renamed_name("S with Shutter Button [x]") == "S with Shutter Button [x]"
     assert row_names.as_in(["S&Q Settings > Record Setting"], ["S&Q Settings > S&Q Record Setting"]) == \
         ["S&Q Settings > Record Setting"]
+    assert row_names.as_in(["drive mode", "Exposure Comp"], ["Drive Mode", "Exposure Comp."]) == \
+        ["drive mode", "Exposure Comp"]
+
+
+def test_the_a1_iis_rows_that_fit_the_one_kind_and_the_three_a_safety_list_names():
+    """The one kind (row_names.fault): the camera's path the older one with its last label less a leading token of at
+    most ICON_LEAD characters, or the kit's "#n" form of it; the labels above the same; no label a safety list names.
+    Six of the a1 II's nine rows fit; the three MR rows do not, as the never-open list (Recall Camera Setting, Camera
+    Set. Memory) and OWNER_NEVER ("recall") name them."""
+    fit = {o: n for o, n in A1II_ROWS.items() if o not in SAFETY_LISTED}
+    assert len(row_names.read(fit)) == 6
+    for old in SAFETY_LISTED:
+        with pytest.raises(ValueError, match="a safety list names"):
+            row_names.read({old: A1II_ROWS[old]})
 
 
 @pytest.mark.parametrize("entries, words", [
-    ({"A > B": "A > C", "A > C": "A > D"}, "also names as an older name"),
-    ({"A > B": "a >  b"}, "a row's path"),
-    ({"A > B": "A > b"}, "renames the row to itself"),
+    ({"Format": "File Format"}, "less a leading token"),                                   # a word added
+    ({"Media Settings > Delete All": "Media Settings > Auto Switch Media"}, "less a leading token"),
+    ({"Network Option > IP Address Setting": "Network Option > Airplane Mode"}, "less a leading token"),
+    ({"Proxy Settings > Px Proxy Recording": "Network > Proxy Recording"}, "only its last label"),   # another parent
+    ({"A": "B", "B > C": "D > E"}, "less a leading token|only its last label"),
+    ({"X Proxy": "Proxy", "Proxy > Px Sub": "Proxy > Sub"}, "renamed twice"),               # a camera path starts another
+    ({"Px Proxy > Px Sub": "Px Proxy > Sub", "Px Proxy": "Proxy"}, "renamed twice"),        # an older path starts another
+    ({"Proxy Settings > Proxies Recording": "Proxy Settings > Recording"}, "less a leading token"),    # 7 characters
+    ({"LANIP Address Setting": "IP Address Setting"}, "less a leading token"),              # glued, no space
+    ({"Rec > Recording Media (Movie)": "Rec > Other#1"}, "less a leading token"),
+    ({"Px Format": "Format"}, "a safety list names"),                                      # a destructive row
+    ({"S Initialize": "Initialize"}, "a safety list names"),                                 # OWNER_NEVER
+    ({"A > Px B": "A > Px b"}, "renames the row to itself"),
     ({"A >  > B": "A > C"}, "a row's path"),
     ({"A > B": 3}, "a row's path"),
     (["A > B"], "no object"),
@@ -102,7 +141,7 @@ def test_a_table_the_kit_cannot_use_is_refused(entries, words):
         row_names.read(entries)
 
 
-def test_the_hand_tables_reader_and_schema_take_row_names_and_refuse_a_chain(tmp_path, monkeypatch):
+def test_the_hand_tables_reader_and_schema_take_row_names_and_refuse_another_kind(tmp_path, monkeypatch):
     from writer import hand_evidence, hand_facts, hand_tables as H
     monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
     p = hand_tables(tmp_path / "data", ROW_NAMES=NAMES)
@@ -110,9 +149,88 @@ def test_the_hand_tables_reader_and_schema_take_row_names_and_refuse_a_chain(tmp
     assert tables.ROW_NAMES == NAMES
     assert hand_evidence.schema_problems(json.loads(p.read_text(encoding="utf-8")), "hand-tables") == []
     assert not [x for x in hand_facts.refusals(tables) if "ROW_NAMES" in x]            # the plain pass takes it
-    hand_tables(tmp_path / "data", ROW_NAMES={"A > B": "A > C", "A > C": "A > D"})
+    hand_tables(tmp_path / "data", ROW_NAMES={"Format": "File Format"})
     with pytest.raises(H.Refused, match="ROW_NAMES"):
         H.load(TEST_CAMERA, evidence=False)
+    row_names.forget()
+
+
+# ---------------------------------------------------------------- no safety check sees a renamed name
+
+def made_up_records(own_runs):
+    """The made-up camera's crawl, its records showing File Format, Media Settings > Auto Switch Media, Network Option >
+    Airplane Mode and Proxy Settings > Proxy Recording opened, never Format, Delete All or IP Address Setting."""
+    run = own_runs / TEST_CAMERA / "kit2_crawl_seen"
+    run.mkdir(parents=True)
+    rows = [{"label": "File Format", "outcome": "walked"},
+            {"label": "Media Settings", "outcome": "submenu crawled",
+             "submenu": [{"label": "Auto Switch Media", "outcome": "walked"}]},
+            {"label": "Network Option", "outcome": "submenu crawled",
+             "submenu": [{"label": "Airplane Mode", "outcome": "walked"}]},
+            {"label": "Proxy Settings", "outcome": "submenu crawled",
+             "submenu": [{"label": "Proxy Recording", "outcome": "walked"}]}]
+    (run / "rows.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows), encoding="utf-8")
+
+
+INJECTED = {"Format": "File Format", "Media Settings > Delete All": "Media Settings > Auto Switch Media",
+            "Network Option > IP Address Setting": "Network Option > Airplane Mode",
+            "Proxy Settings > Px Proxy Recording": "Network > Proxy Recording"}
+
+
+@pytest.mark.parametrize("injected", [True, False], ids=["injected past the loader", "no table"])
+def test_a_look_lap_still_refuses_a_destructive_row_whatever_table_is_handed_in(own_runs, unnamed, monkeypatch,
+                                                                              injected):
+    """Entries the loader refuses, handed in past it (camkit.row_names.table replaced): the seen records fold none of
+    them (renamed applies an entry only of the one kind), the look lap's checks judge the records under the labels the
+    camera draws now (Seen.seen_as_drawn), and Format and Delete All are still refused, IP Address Setting still a
+    first open, and no parent counted seen for another's row; as with no table at all."""
+    import drive
+    from camkit import crawl, first_open
+    made_up_records(own_runs)
+    if injected:
+        monkeypatch.setattr(row_names, "table", lambda camera=None: {
+            row_names._key(row_names.labels(o)): (row_names.labels(o), row_names.labels(n)) for o, n in INJECTED.items()})
+    seen = first_open.seen_record(TEST_CAMERA)
+    assert seen.seen(("File Format",)) and seen.seen(("Media Settings", "Auto Switch Media"))
+    for path in (("Format",), ("Media Settings", "Delete All"), ("Network Option", "IP Address Setting"),
+                 ("Network",), ("Network", "Proxy Recording")):
+        assert not seen.seen(path) and not seen.seen_as_drawn(path), path
+    told = crawl.seen_of(SimpleNamespace(seen=seen))
+    assert told is not None and not told(("Format",))
+    assert crawl.look_open({"label": "Format"}, told, ()) and crawl.look_open({"label": "Delete All"}, told,
+                                                                               ("Media Settings",))
+    with pytest.raises(SystemExit, match="nothing was sent to the camera"):
+        drive.look_path_or_exit(["Format"], seen)
+
+
+def test_the_look_laps_seen_never_takes_an_older_name_even_of_the_one_kind(own_runs, tmp_path, monkeypatch):
+    """A table of the one kind folds Proxy Recording's older name in the first-open procedure's seen (key), while the
+    look lap's seen (seen_as_drawn) judges the records as written: "Px Proxy Recording" is seen there only where the
+    records hold that very name."""
+    from camkit import first_open
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    hand_tables(tmp_path / "data", ROW_NAMES={"Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording"})
+    made_up_records(own_runs)
+    seen = first_open.seen_record(TEST_CAMERA)
+    assert seen.seen(("Proxy Settings", "Px Proxy Recording"))                 # the first-open procedure: one row
+    assert not seen.seen_as_drawn(("Proxy Settings", "Px Proxy Recording"))   # a safety check: as the camera draws it
+    assert seen.seen_as_drawn(("Proxy Settings", "Proxy Recording"))
+    row_names.forget()
+
+
+def test_a_crawls_row_is_renamed_on_its_whole_path_at_once(named):
+    """first_open._crawl_rows keys a row on its whole path as the crawl wrote it, renamed at once (as kit/pass1_map.py's
+    unseen_only does), never a parent renamed and its rows then judged under the new parent."""
+    from camkit import first_open
+    opened, greyed = set(), set()
+    first_open._crawl_rows({"label": "Proxy Settings", "outcome": "submenu crawled", "submenu": [
+        {"label": "Px Proxy Recording", "outcome": "walked", "submenu": [{"label": "Deep", "outcome": "walked"}]}]},
+        (), opened, greyed)
+    assert ("proxy settings", "proxy recording", "deep") in opened
+    drawn = set()
+    first_open._crawl_rows({"label": "Proxy Settings", "outcome": "submenu crawled", "submenu": [
+        {"label": "Px Proxy Recording", "outcome": "walked"}]}, (), drawn, set(), first_open.raw_key)
+    assert ("proxy settings", "px proxy recording") in drawn
 
 
 # ---------------------------------------------------------------- what compares a row's name
@@ -192,13 +310,14 @@ def test_the_menu_tree_folds_an_older_name_into_the_cameras_row(own_runs, named,
     menu_tree.main(["--fold", "kit2_crawl_px", "--out", str(out)])
     rows = datafiles.load_menu_tree(out)["tabs"][0]["pages"][0]["rows"][0]["children"]
     assert [(r["label"], r["state"]) for r in rows] == [("Proxy Recording", "walked")]
-    assert menu_tree.camed({"label": "MR Camera Set. Memory", "submenu": [{"label": "x"}]})["label"] == "Camera Set. Memory"
+    assert menu_tree.camed({"label": "S with Shutter Button", "submenu": [{"label": "x"}]})["label"] == \
+        "with Shutter Button"
 
 
 def test_placement_reads_a_path_and_a_tree_written_with_older_names_as_the_cameras(named):
     from camkit import placement
     assert placement.split("Proxy Settings > Px Proxy Recording [Movie mode]") == ["Proxy Settings", "Proxy Recording"]
-    assert placement.steps("MR Camera Set. Memory / Slot 1")[0] == ("", "Camera Set. Memory")
+    assert placement.steps("S with Shutter Button / Add Shot Mark1")[0] == ("", "with Shutter Button")
     tree = {"tabs": [{"tab": "Shooting", "pages": [{"page": "4/9", "group": "Image Quality", "rows": [
         {"label": "Proxy Settings", "state": "submenu", "children": [{"label": "Px Proxy Recording", "state": "walked"}]}]}]}]}
     t = placement.Tree({"tabs": ["Shooting"], "menu": []}, tree)
