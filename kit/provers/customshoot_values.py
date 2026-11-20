@@ -20,6 +20,21 @@ Every Register also rewrites a hidden per-hold record (0x0c09), so the run regis
 unchanged first, and each item's proofs are diffed with a download made just before them; the start file (downloaded before that) goes back on at the end,
 and hold 3 is opened and cancelled as in kit/provers/customshoot_run.py. Proofs go to
 runs/<model>_fw<fw>/kit2_pass2/proofs.jsonl as kind "list", path ["Reg. Custom Shoot Set", "Recall Custom hold N", item].
+
+    .venv/bin/python -u kit/provers/customshoot_values.py --allow "Reg. Custom Shoot Set" --hold 1 --follow "Exposure step=0.5EV,0.3EV" --record global:0x0c39
+
+--follow ROW=OPTION,OPTION (2026-11-20), in place of --items: a record the hold writes at Register from a live setting no
+item of its screen shows (the lead: 0x0c39, the Exposure step). For each option in turn, in one session: the live list
+row ROW put on the option through its menu row (mode_switch.set_row), a download, the hold registered as it stands (no
+item changed), a download. Two registrations are needed in one session, so that the record is seen to change both ways:
+the restore at a run's end puts the start file back, so a second run would find the element as the first found it.
+One proof line per registration (kind "registration mirror", as kit/provers/memreg_run.py's and framepos_run.py's, so
+pass 2's report keeps it out of its rows and hands it to kit/schema_update.py as a value a registration wrote):
+"record" the --record key, "element" the hold's (hold 1's is 0), "index" the option's code in the camera's definition
+(the one setting at ROW), "label" the option; applied only when the live record holds that code in the
+download after it was set and the element changed to it at Register from the download before (one that held the code
+already may hold what the camera had). Nothing else of the item proofs runs: no unchanged Register first. A run that
+stopped part way exits EXIT_INCOMPLETE (a refusal EXIT_REFUSED) once its start file is back and checked, so a chain stops.
 """
 import argparse
 import json
@@ -33,7 +48,7 @@ from camkit import camset, definitions, ocr, paths, safety, screen  # noqa: E402
 # option matching: one set of rules for every prover (camkit/match.py has the slips it guards against)
 from camkit.match import clean as clean_option, index_of, norm, same  # noqa: E402,F401
 from camkit.frames import eyes_from_config  # noqa: E402
-from camkit.link import Link  # noqa: E402
+from camkit.link import Link, StopRequested  # noqa: E402
 from camkit.live import LiveCamera  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
@@ -41,8 +56,8 @@ from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines
 from prove_run import Failed, to_shooting, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
 from proving.screens import later  # noqa: E402
-from runner import (EXIT_UNRESTORED, add_allow_argument, add_scan_argument, changes_of, close_for_restore,  # noqa: E402
-                    close_screen, load_scan, proofs_file, prover_session, restoring)
+from runner import (EXIT_INCOMPLETE, EXIT_REFUSED, EXIT_UNRESTORED, add_allow_argument, add_scan_argument,  # noqa: E402
+                    changes_of, close_for_restore, close_screen, load_scan, proofs_file, prover_session, restoring)
 
 POP_Y0, POP_DY = 118, 50                 # the popup's first option centre and pitch
 # the live setting whose values, by code, are the camera's Focus Area options in the order a hold's list offers them
@@ -50,6 +65,106 @@ POP_Y0, POP_DY = 118, 50                 # the popup's first option centre and p
 # another body's. The ILCE-1M2 keeps them in 0x0f46; on another body, prove Focus Area and name its record --order-from
 ORDER_KEY = "global:0x0f46"
 FOCUS_AREA_ROW = "Focus Area"
+MIRROR_KIND = "registration mirror"     # --follow's proof lines: kit/pass2_report.py's MIRROR_KIND
+RECORD_KEY = re.compile(r"(global|set(\d+)):0x([0-9a-f]{4})")
+
+
+def follow_plan(follow: str, record: str | None, hold: int, where=None) -> dict:
+    """--follow ROW=OPTION,OPTION and --record KEY checked before the camera is touched: {"row" (its path), "live" (the
+    key of the one setting at that row in the definition of the camera the kit works on, or `where`), "options"
+    [(label, code)], "record", "element" (the hold's: hold 1's is 0)}. Exits, saying why, on a value missing, a record
+    that is no record key, a row the definition holds no one setting with values at, or an option not among them."""
+    row, _, opts = follow.partition("=")
+    path = [x.strip() for x in row.split(" > ") if x.strip()]
+    labels = [x.strip() for x in opts.split(",") if x.strip()]
+    if not path or not labels:
+        sys.exit(f"--follow {follow!r}: give the live row and its options, ROW=OPTION,OPTION ('Exposure step=0.5EV,"
+                 "0.3EV'); nothing was sent to the camera")
+    if not record or not RECORD_KEY.fullmatch(record):
+        sys.exit(f"--follow needs --record, the record the hold is claimed to write the row's value into, as a key "
+                 f"('global:0x0c39'), not {record!r}; nothing was sent to the camera")
+    p = definitions.active() if where is None else Path(where)
+    doc = definitions.load_public(p) if p.exists() else {"settings": []}
+    at = [s for s in doc["settings"] if s.get("row") == path and s.get("values")]
+    if len(at) != 1:
+        held = "no setting" if not at else f"{len(at)} settings ({', '.join(s['key'] for s in at)})"
+        sys.exit(f"--follow {' > '.join(path)!r}: the definition {paths.shown(p)} holds {held} with values at that row, "
+                 "where it needs one: its values name the codes the record must take. Nothing was sent to the camera")
+    values = [(v, str(lab)) for v, lab in at[0]["values"]]
+    out = []
+    for lab in labels:
+        j = index_of([n for _, n in values], lab)
+        if j is None:
+            sys.exit(f"--follow: {lab!r} is not among {' > '.join(path)}'s values in the definition "
+                     f"({', '.join(n for _, n in values)}); nothing was sent to the camera")
+        out.append((values[j][1], values[j][0]))
+    return {"row": path, "live": at[0]["key"], "options": out, "record": record, "element": hold - 1}
+
+
+def element_of(cs, key: str, i: int):
+    """Element i of the record `key` ("global:0x0c39", "set1:0x019a") in a settings file; None where it has none."""
+    m = RECORD_KEY.fullmatch(key)
+    rec = cs.get(int(m[2]) if m[2] else 0, int(m[3], 16)) if m else None
+    vals = rec.values() if rec is not None else []
+    return vals[i] if i < len(vals) else None
+
+
+def follow_line(h: int, plan: dict, label: str, code: int, before: Path, set_dat: Path, dat: Path, chosen: str,
+                said: str) -> dict:
+    """The proof line of one --follow registration: `before` the download before the live row was set, `set_dat` the
+    one after it, `dat` the one after Register. Applied only when the live record holds the option's code after it was
+    set, and the record's element for the hold changed to that code at Register; else "not_applied" says why."""
+    a, b, c = camset.read(before), camset.read(set_dat), camset.read(dat)
+    el, key = plan["element"], plan["record"]
+    was, now = element_of(b, key, el), element_of(c, key, el)
+    why = None
+    if element_of(b, plan["live"], 0) != code:
+        why = f"{' > '.join(plan['row'])} does not hold the option chosen in the download after it was set"
+    elif now is None:
+        why = f"the file has no element {el} of {key}"
+    elif was == now:
+        why = "the element did not change at Register: what it holds may be the camera's own"
+    elif now != code:
+        why = "the element changed at Register, but not to the code of the option chosen"
+    # "record" as the definition keys a whole record (a memory set's "set:"), as framepos_run.py's lines name theirs: a
+    # hold record's slots share one encoding (0x0e80, the holds' Cont. Bracket setting), and "element" says the hold's
+    return {"path": [ROW, f"Recall Custom hold {h}"], "menu": ROW, "kind": MIRROR_KIND,
+            "record": re.sub(r"^set\d+:", "set:", key), "key": key, "element": el, "index": code, "label": label, "hold": h,
+            "follows": {"row": plan["row"], "key": plan["live"]},
+            "via": f"{' > '.join(plan['row'])} = {label} chosen through its menu row, then Recall Custom hold {h} "
+                   "registered as it stood (Register on its screen, no item changed)",
+            "set_base": before.name, "set_dat": set_dat.name, "set_changes": changes_of(camset.diff(a, b)),
+            "base": set_dat.name, "dat": dat.name, "after": dat.name, "chosen_frame": chosen, "said": said,
+            "changes": changes_of(camset.diff(b, c)), "applied": why is None, **({"not_applied": why} if why else {})}
+
+
+def follow(cam, link, hdmi, cycle, model, h: int, plan: dict, start: Path, out) -> list:
+    """--follow's registrations, in one session: per option the live row set through its menu row and a download, the
+    hold registered as it stands and a download, a proof line (follow_line). Returns the lines written."""
+    from mode_switch import open_menu, set_row
+    say = lambda m: print(m, flush=True)     # noqa: E731
+    before, lines_written = start, []
+    for label, code in plan["options"]:
+        tag = re.sub(r"[^A-Za-z0-9]+", "-", label).strip("-")
+        open_menu(cam)
+        set_row(cam, cycle, model, plan["row"], label, say)
+        close_screen(cam, link)
+        to_shooting(link, hdmi, "the download after the live row")
+        set_dat = link.download(f"hold{h}-{tag}-set")       # camlink waits for the camera to allow it
+        wait_lock(time.monotonic(), hdmi, clock=time)       # the menu's lock after it (camkit.session.wait_lock)
+        open_hold(cam, cycle, model, h)
+        chosen, dat, said = register(cam, link, hdmi, f"hold{h}-at-{tag}")
+        line = follow_line(h, plan, label, code, before, set_dat, dat, chosen, said)
+        out.write(json.dumps(line) + "\n")
+        out.flush()
+        lines_written.append(line)
+        el = plan["element"]
+        print(f"   {' > '.join(plan['row'])} = {label} (code {code}): {plan['record']}[{el}] "
+              f"{element_of(camset.read(set_dat), plan['record'], el)!r} -> "
+              f"{element_of(camset.read(dat), plan['record'], el)!r} at Register; "
+              f"{'applied' if line['applied'] else 'not applied: ' + line['not_applied']}", flush=True)
+        before = dat
+    return lines_written
 
 
 def focus_area_order(key: str = ORDER_KEY, where=None) -> list:
@@ -400,7 +515,12 @@ def prove_item(cam, link, hdmi, cycle, model, h, k, opts, s0, wraps, base, base_
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--hold", type=int, required=True, choices=(1, 2, 3))
-    ap.add_argument("--items", required=True, help="item names, comma-separated (as on the hold's screen)")
+    ap.add_argument("--items", default=None, help="item names, comma-separated (as on the hold's screen)")
+    ap.add_argument("--follow", default=None, metavar="ROW=OPTION,OPTION",
+                    help="instead of --items: register the hold as it stands with the live list row ROW on each OPTION "
+                         "in turn, set through its menu row first, to see --record's element for the hold follow it")
+    ap.add_argument("--record", default=None, metavar="KEY",
+                    help="with --follow: the record the hold is claimed to write ROW's value into ('global:0x0c39')")
     add_scan_argument(ap)
     ap.add_argument("--context", default=None, help="the state these proofs are made in")
     ap.add_argument("--sample", type=int, default=0,
@@ -422,10 +542,20 @@ def main():
     if a.order_from and not a.counted:
         sys.exit("--order-from names the record --counted reads the Focus Area order from, and without --counted "
                  "nothing reads it: add --counted (Focus Area's list), or leave --order-from out")
+    if (a.items is None) == (a.follow is None):
+        sys.exit("give --items (the hold's items to prove) or --follow (a live row the hold's Register is seen to copy), "
+                 "one of them; nothing was sent to the camera")
+    if a.follow is not None and (a.prepare or a.counted or a.labels or a.sample):
+        sys.exit("--follow registers the hold as it stands: --prepare, --counted, --labels and --sample go with --items; "
+                 "nothing was sent to the camera")
+    if a.record and a.follow is None:
+        sys.exit("--record names the record --follow checks, and without --follow nothing checks it; nothing was sent "
+                 "to the camera")
     order = focus_area_order(a.order_from or ORDER_KEY) if a.counted else None      # before the camera is touched
+    plan = follow_plan(a.follow, a.record, a.hold) if a.follow is not None else None    # so is this
     allowance = allowed(a.allow, "customshoot_values")
     h = a.hold
-    want = [x.strip() for x in a.items.split(",") if x.strip()]
+    want = [x.strip() for x in (a.items or "").split(",") if x.strip()]
     prepare = None
     if a.prepare:
         item, _, option = a.prepare.partition("=")
@@ -439,6 +569,7 @@ def main():
     run = Run("kit2_pass2")
     check_readers()     # no reader listed: stop before the link opens, nothing pressed
     hdmi = eyes_from_config(run)
+    stopped = []                    # what stopped --follow's registrations part way, if anything
     try:
         with proofs_file(run, a.context, {"allowance": allowance}) as out, \
                 prover_session(run, hdmi, may_open=set(a.allow), say_start=False,    # may_open: the owner's word
@@ -446,11 +577,22 @@ def main():
                                end_why="the settings download after the hold",
                                note="the start file left records apart (see above)") as s:
             cam, link, start = s.cam, s.link, s.start
-            open_hold(cam, cycle, model, h)
-            _, base_path, _ = register(cam, link, hdmi, f"hold{h}-unchanged")
-            base = camset.read(base_path)
-            print(f"start file: {start.name}; base after one unchanged Register: {base_path.name} "
-                  f"({len(camset.diff(camset.read(start), base))} records apart)", flush=True)
+            if plan is not None:
+                print(f"start file: {start.name}; hold {h} registered as it stands with "
+                      f"{' > '.join(plan['row'])} on {', '.join(lab for lab, _ in plan['options'])} in turn, "
+                      f"{plan['record']}[{plan['element']}] watched", flush=True)
+                # no item proofs after it (want is empty): the session ends restoring the start file
+                try:
+                    follow(cam, link, hdmi, cycle, model, h, plan, start, out)
+                except Exception as e:
+                    stopped.append(e)          # prover_session says it, closes and restores; the exit status says it
+                    raise
+            else:
+                open_hold(cam, cycle, model, h)
+                _, base_path, _ = register(cam, link, hdmi, f"hold{h}-unchanged")
+                base = camset.read(base_path)
+                print(f"start file: {start.name}; base after one unchanged Register: {base_path.name} "
+                      f"({len(camset.diff(camset.read(start), base))} records apart)", flush=True)
             if prepare is not None:
                 # the preparing choice is a proof like any other, left in place for the items after it
                 k = ITEMS.index(prepare[0])
@@ -537,6 +679,9 @@ def main():
         # the first session's start file did not take, or the camera still differs after the working copy went
         # back: not as its start file, which the exit status says (runner.EXIT_UNRESTORED)
         sys.exit(EXIT_UNRESTORED)
+    if stopped and not isinstance(stopped[0], StopRequested):
+        # --follow stopped part way, its start file back and checked: a refusal or anything else, as boxes_run exits
+        sys.exit(EXIT_REFUSED if isinstance(stopped[0], safety.Refused) else EXIT_INCOMPLETE)
 
 
 if __name__ == "__main__":
