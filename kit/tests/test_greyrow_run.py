@@ -22,6 +22,7 @@ from camkit import first_open, paths  # noqa: E402
 from camkit.link import StopRequested  # noqa: E402
 from proving import greyrow  # noqa: E402
 
+REAL_ONE_ROW = G.one_row
 FS = ("labels", "framing stabilizer")
 LUT = ("labels", "select lut")
 # a page scan of one row, "Proxy Settings": "Px Proxy Settings" (its icon read as letters) is that row too (target_of)
@@ -80,10 +81,10 @@ def test_a_row_the_scan_does_not_lead_to_is_not_reached_and_asked_nothing(monkey
     assert (line["outcome"], line["right"]) == (G.NOT_REACHED, False)
 
 
-def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=(), real_one_row=False):
+def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), extra=(), real_one_row=False, cam="cam"):
     """greyrow_run.main with its session and the camera's records stood in for; returns (the lines written, the keys
     each row was asked with and the rows spent before it, what was closed). real_one_row: the runner's own one_row,
-    whatever the test stood in for under it, `one_row` unused."""
+    whatever the test stood in for under it, `one_row` unused; cam: the session's camera."""
     asked, closed = [], []
     monkeypatch.setattr(G, "load_scan", lambda s: scan)
     monkeypatch.setattr(G, "known_labels", lambda model: set())
@@ -94,14 +95,13 @@ def run_main(monkeypatch, rows, one_row, context="Touch Off", scan=([], {}), ext
     @contextlib.contextmanager
     def session(run, eyes, **kw):
         assert set(kw) == {"reach"}
-        yield SimpleNamespace(cam="cam", link="link", start=Path("00001_before.DAT"))
+        yield SimpleNamespace(cam=cam, link="link", start=Path("00001_before.DAT"))
     monkeypatch.setattr(G, "prover_session", session)
 
-    def one(cam, cycle, model, path, seen, tried, keys, labels, say=None):
+    def one(cam, cycle, model, path, seen, tried, keys, labels, say=None, **kw):
         asked.append((keys, set(tried)))
         return one_row(path, tried, keys)
-    if not real_one_row:
-        monkeypatch.setattr(G, "one_row", one)
+    monkeypatch.setattr(G, "one_row", REAL_ONE_ROW if real_one_row else one)
     argv = ["greyrow_run.py", "--in", "Movie", "--context", context, "--run", "kit2_greyrow_test", *extra]
     for r in rows:
         argv += ["--row", r]
@@ -207,6 +207,29 @@ def test_a_playback_view_stops_the_run_with_its_line_written(monkeypatch):
     assert asked == [["A"]]
     assert [(x["path"], x["outcome"], x["right"], x["spent"]) for x in lines_written()] == [
         (["A"], greyrow.PLAYBACK, True, True)]
+
+
+def test_a_look_run_presses_nothing_on_its_rows_and_spends_no_right(monkeypatch):
+    """--look: each row reached as ever (reach and close_screen, stood in for here, are the only keys) and looked at:
+    no Help, no Right, a line of a look's kind with no "spent", and the run's spent rows untouched, a spent row looked at
+    again all the same."""
+    cam = T.GreyCam()
+    T.world(monkeypatch, cam)
+    reached = []
+    monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
+    def reach(c, cycle, model, path):
+        reached.append(path)
+        c.where, c.lit = "row", path[-1]
+    monkeypatch.setattr(G, "reach", reach)
+    monkeypatch.setattr(greyrow, "ask_why", lambda *a, **k: pytest.fail("a look asked why"))
+    run_main(monkeypatch, ["Select LUT"], spend)                    # a row spent before, by an ordinary run
+    lines, asked, closed = run_main(monkeypatch, ["Framing Stabilizer", "Select LUT"], None, extra=["--look"],
+                                    real_one_row=True, cam=cam)
+    looks = [x for x in lines if x.get("kind") == "look"]
+    assert reached == [["Framing Stabilizer"], ["Select LUT"]] and cam.keys == []
+    assert [(x["path"], x["outcome"], "spent" in x, "right" in x) for x in looks] == [
+        (["Framing Stabilizer"], greyrow.DRAWN_GREY, False, False), (["Select LUT"], greyrow.DRAWN_GREY, False, False)]
+    assert G.spent_rows(paths.run_root() / "kit2_greyrow_test" / G.LINES, "Movie", "Touch Off") == {LUT}
 
 
 def test_another_body_stops_the_session_before_anything_is_sent(monkeypatch):

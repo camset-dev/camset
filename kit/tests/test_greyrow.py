@@ -372,6 +372,36 @@ def test_a_guide_that_does_not_leave_the_cursor_on_the_row_fails_it_with_no_righ
     assert cam.keys == ["c4"] and e.value.line["right"] is False and "not back on the row" in str(e.value)
 
 
+@pytest.mark.parametrize("grey, outcome", [(True, greyrow.DRAWN_GREY), (False, greyrow.NOT_GREY),
+                                           (None, greyrow.UNSURE)])
+def test_a_look_reads_the_rows_grey_and_presses_nothing_on_it(monkeypatch, grey, outcome):
+    """--look: drawn grey, white or unsure on a frame grabbed afresh, and no key at all on the row, Help's neither; its
+    line is a look's, which spends no Right."""
+    import help_run
+    cam = GreyCam(grey=grey)
+    guides = world(monkeypatch, cam)
+    monkeypatch.setattr(help_run, "guide", lambda *a: pytest.fail("Help on a look"))
+    line = greyrow.look(cam, ["Framing Stabilizer"], seen=Seen(), say=lambda m: None)
+    assert (line["kind"], line["outcome"], cam.keys, guides) == ("look", outcome, [], [])
+    assert "right" not in line and "spent" not in line and line["row_frame"] == "00002_look-row.png"
+
+
+@pytest.mark.parametrize("path, lit, outcome", [(["Format"], "Format", greyrow.PASSED),
+                                                (["Framing Stabilizer"], "Create New Folder", greyrow.PASSED),
+                                                (["Framing Stabilizer"], "Focal Length", greyrow.FAILED)])
+def test_a_look_checks_the_row_as_the_procedure_does_before_its_help(monkeypatch, path, lit, outcome):
+    """A row the kit may not open or reach, or a lit bar refused, is passed over; a lit bar that is another row fails:
+    no key in any of them."""
+    cam = GreyCam(label=path[-1])
+    world(monkeypatch, cam)
+    cam.lit = lit
+    try:
+        line = greyrow.look(cam, path, seen=Seen(), say=lambda m: None)
+    except greyrow.RowFailed as e:
+        line = e.line
+    assert (line["kind"], line["outcome"], cam.keys) == ("look", outcome, [])
+
+
 def test_the_screen_must_be_the_rows_menu_page(monkeypatch):
     cam = GreyCam()
     world(monkeypatch, cam)
@@ -504,6 +534,17 @@ def test_a_replayed_white_row_gets_no_key(monkeypatch):
     replay_world(monkeypatch, "Framing Stabilizer", set(), "")
     line, said, tried = ask(cam)
     assert (line["outcome"], cam.keys) == (greyrow.NOT_GREY, []) and line["grey"] > 200
+
+
+@pytest.mark.parametrize("rel, outcome", [("kit2_help/shots/00919_down.png", greyrow.DRAWN_GREY),
+                                          ("kit2_plan4_look_touch_on/shots/00026_down.png", greyrow.NOT_GREY)])
+def test_a_replayed_look_reads_grey_or_white_and_presses_nothing(monkeypatch, rel, outcome):
+    (row,) = frames_needed(rel)
+    label = "S&Q Shoot Mode" if "00919" in rel else "Framing Stabilizer"
+    cam = FrameCam(row, {}, label)
+    replay_world(monkeypatch, label, set(), "")
+    line = greyrow.look(cam, [label], seen=Seen(), say=lambda m: None)
+    assert (line["kind"], line["outcome"], cam.keys, line["row_frame"]) == ("look", outcome, [], Path(rel).name)
 
 
 @pytest.mark.parametrize("rel, grey", [("kit2_help/shots/00919_down.png", True), ("kit2_help/shots/01033_down.png", True),

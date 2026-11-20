@@ -4,6 +4,13 @@ owner, 2026-11-20).
     .venv/bin/python -u kit/provers/greyrow_run.py --in Movie --row "Framing Stabilizer"
     .venv/bin/python -u kit/provers/greyrow_run.py --in Stills --context "Stills mode, M" \\
         --row "ISO AUTO Min. SS" --row "Aspect Marker Level"
+    .venv/bin/python -u kit/provers/greyrow_run.py --in Movie --look --context "Touch Operation On" \\
+        --row "Framing Stabilizer"
+
+--look only looks: each row is reached as below and read, on a frame grabbed afresh, as drawn grey, white or unsure
+(proving.greyrow.look), nothing pressed on it, no Help, no Right, its line of the kind "look" spending none. A chain sets
+a blocker's value with kit/provers/mode_switch.py --set and looks, value by value: the runs a hand table's
+inactive_when takes its values from.
 
 Each --row (its path, ' > ' between submenus, as the other provers take it) is gone to through the page scan as the
 other runners go (MENU, the scan's Down cycle to its top-level row, each submenu's row by its label) and asked why it
@@ -88,7 +95,8 @@ def spent_rows(path: Path, mode: str, context: str) -> set:
     folded (same_words): each line's "keys", or its path's label_key where a line holds none."""
     out = set()
     for x in jsonl.read(path, bad="skip"):
-        if x.get("spent") and same_words(x.get("mode"), mode) and same_words(x.get("context"), context):
+        if x.get("spent") and x.get("kind") != greyrow.LOOK and same_words(x.get("mode"), mode) \
+                and same_words(x.get("context"), context):
             keys = x.get("keys") or [greyrow.label_key(x.get("path") or ())]
             out |= {tuple(k) for k in keys if isinstance(k, list | tuple)}
     return out
@@ -141,7 +149,7 @@ def reach(cam, cycle, model, path) -> None:
     enter_any(cam, path, 0)
 
 
-def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say) -> dict:
+def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say, look=False) -> dict:
     """The row's line: passed over before anything is pressed where the kit may not open or reach it (proving.greyrow.
     closed), else reached and asked (proving.greyrow.ask_why); a row that fails, or is not reached, says why. A row that
     leaves the camera on its playback view ends the run (greyrow.StopsRun, raised on with its line)."""
@@ -150,13 +158,17 @@ def one_row(cam, cycle, model, path, seen, tried: set, keys, labels, say=_say) -
     why = greyrow.closed(path, seen, stored)
     if why:
         say(f"{name}: passed over, nothing pressed: {why}")
-        return {"path": path, "right": False, "outcome": greyrow.PASSED, "why": why}
+        return {**({"kind": greyrow.LOOK} if look else {"right": False}), "path": path, "outcome": greyrow.PASSED,
+                "why": why}
     try:
         reach(cam, cycle, model, path)
     except Failed as e:
         say(f"{name}: not reached: {e}")
-        return {"path": path, "right": False, "outcome": NOT_REACHED, "why": str(e)}
+        return {**({"kind": greyrow.LOOK} if look else {"right": False}), "path": path, "outcome": NOT_REACHED,
+                "why": str(e)}
     try:
+        if look:
+            return greyrow.look(cam, path, seen=seen, stored=stored, say=say)
         return greyrow.ask_why(cam, path, seen=seen, tried=tried, keys=keys, stored=stored, labels=labels, say=say)
     except greyrow.StopsRun:
         raise                                   # the playback view: main writes its line, the session closes
@@ -178,6 +190,10 @@ def main():
                     help="the state the camera is in, in words (on every line; a row's one Right is spent per run "
                          "folder, mode and context)")
     ap.add_argument("--run", default="kit2_greyrow", help="the run folder in the camera's runs (default kit2_greyrow)")
+    ap.add_argument("--look", action="store_true",
+                    help="only look: reach each row and read whether it is drawn grey, white or unsure, pressing "
+                         "nothing on it (no Help, no Right) and spending no Right; for a chain that sets a blocker's "
+                         "value (mode_switch.py --set) and looks, value by value")
     a = ap.parse_args()
     rows = row_paths(a.rows)
     if not rows:
@@ -186,23 +202,24 @@ def main():
     rows = distinct_rows(cycle, model, rows)
     run = Run(a.run)
     out_path = run.dir / LINES
-    tried = spent_rows(out_path, a.in_mode, a.context)
+    tried = set() if a.look else spent_rows(out_path, a.in_mode, a.context)       # a look spends none
     seen = first_open.seen_record(run.root.name)
     labels = known_labels(model)
     hdmi = eyes_from_config(run)
     with open(out_path, "a", encoding="utf-8", newline="\n") as out, \
             prover_session(run, hdmi, reach=this_body_first(run.root.name)) as s:
         def write(line: dict, keys) -> None:
+            spent = {} if a.look else {"spent": any(k in tried for k in keys)}       # a look's line spends no Right
             out.write(json.dumps({"t": round(time.time(), 3), "mode": a.in_mode, "context": a.context,
-                                  "start": s.start.name, **line, "keys": [list(k) for k in keys],
-                                  "spent": any(k in tried for k in keys)}) + "\n")
+                                  "start": s.start.name, **line, "keys": [list(k) for k in keys], **spent}) + "\n")
             out.flush()
         for path, keys in rows:
             try:
-                line = one_row(s.cam, cycle, model, path, seen, tried, keys, labels)
+                line = one_row(s.cam, cycle, model, path, seen, tried, keys, labels, look=a.look)
             except Exception as e:      # a STOP, a refused press, a lost link, the playback view: the line, then the
                 # session's close (a row's own line where it ends the run: greyrow.StopsRun)
-                write(getattr(e, "line", None) or {"path": path, "right": None, "outcome": STOPPED,
+                write(getattr(e, "line", None) or {**({"kind": greyrow.LOOK} if a.look else {"right": None}),
+                                                   "path": path, "outcome": STOPPED,
                                                    "why": f"{type(e).__name__}: {e}"}, keys)
                 raise
             write(line, keys)

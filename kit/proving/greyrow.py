@@ -67,6 +67,8 @@ SENTENCE_END = re.compile(r"(?<=[.!?。])\s+")
 PASSED, NOT_GREY, UNSURE, NO_HELP, REASON, HELP_ONLY, TRIED, REFUSED, MOVED = (
     "passed over", "not drawn grey", "grey unsure", "help not offered", "help gave a reason", "help only",
     "right already pressed", "right refused", "no longer the grey row")
+DRAWN_GREY = "drawn grey"   # a look's (look): white and unsure are NOT_GREY and UNSURE
+LOOK = "look"               # a look's line's "kind"
 NOTICE, QUESTION, OPENED, NO_RESPONSE, MENU_CLOSED, FAILED, PLAYBACK = (
     "notice", "question", "opened after all", "no response to right", "menu closed", "failed", "playback view")
 
@@ -211,6 +213,54 @@ def label_key(path) -> tuple:
     return ("labels", *first_open.key(path))
 
 
+def on_the_row(cam, path, seen, stored, line: dict, tag: str, say=_say) -> dict | None:
+    """What ask_why and look check before anything else, nothing pressed: the row the kit may open and reach (closed)
+    and the screen a menu page, then on a frame grabbed afresh (`tag`, its frame noted in `line`) the lit bar judged
+    (bar_refused) and read as the row (on_row). Returns the line of a row passed over, else None with the cursor known
+    on the row; raises RowFailed (its line) where the screen or the lit row is not the row's."""
+    name, label = " > ".join(path), path[-1]
+
+    def failed(why: str):
+        raise RowFailed(f"{name}: {why}", {**line, "outcome": FAILED, "why": why})
+    why = closed(path, seen, stored)
+    if why:                                     # no key at all, Help's neither (kit/help_run.py passes these over)
+        say(f"{name}: passed over, nothing pressed: {why}")
+        return {**line, "outcome": PASSED, "why": why}
+    if cam.read().kind not in ROW_KINDS:
+        failed(f"the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
+    cam.refresh(tag)                            # drawn grey now, on a frame grabbed afresh
+    line["row_frame"] = cam.frame.path.name
+    if cam.read().kind not in ROW_KINDS:
+        failed(f"after a fresh look the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
+    lit = lit_of(cam)
+    why = bar_refused(lit, path, seen)
+    if why:                                     # the bar itself, before any key: no Help on it either
+        say(f"{name}: passed over, nothing pressed: {why}")
+        return {**line, "outcome": PASSED, "why": why}
+    if not on_row(lit, label):
+        failed(f"the lit row is not {label!r} ({cam.frame.path.name})")
+    return None
+
+
+def look(cam, path, *, seen, stored=None, say=_say) -> dict:
+    """A look (kit/provers/greyrow_run.py --look): whether the row at `path` under the cursor is drawn grey, white or
+    unsure now, on a frame grabbed afresh, nothing pressed on it, Help's neither, after the checks ask_why makes before
+    its Help (on_the_row). Its line: {"kind": LOOK, "path", "outcome": DRAWN_GREY, NOT_GREY, UNSURE or PASSED, "grey":
+    the measure, "row_frame"}; it spends no Right. A chain sets a blocker's value (kit/provers/mode_switch.py --set) and
+    looks, value by value: the runs a hand table's inactive_when takes its values from (docs/REMAPPING_PLAYBOOK.md,
+    Phase 3). Raises RowFailed (its line) as on_the_row does."""
+    path = [str(x) for x in path]
+    line = {"kind": LOOK, "path": path}
+    passed = on_the_row(cam, path, seen, stored, line, "look-row", say)
+    if passed is not None:
+        return passed
+    grey, measure = row_grey(cam)
+    outcome = DRAWN_GREY if grey is True else NOT_GREY if grey is False else UNSURE
+    say(f"{' > '.join(path)}: {outcome}{'' if measure is None else f' (its label reads {measure:.0f})'}, "
+        f"{line['row_frame']}: nothing pressed on it")
+    return {**line, "outcome": outcome, "grey": None if measure is None else round(measure, 1)}
+
+
 def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), say=_say) -> dict:
     """The module's procedure on the row at `path` under the cursor; returns the row's line (outcome, right, grey,
     help, after, notice, blocker, why). seen: camkit.first_open.Seen (seen, unseen); tried: the keys of the run's rows
@@ -226,23 +276,9 @@ def ask_why(cam, path, *, seen, tried: set, keys=None, stored=None, labels=(), s
 
     def failed(why: str):
         raise RowFailed(f"{name}: {why}", {**line, "outcome": FAILED, "why": why})
-    why = closed(path, seen, stored)
-    if why:                                     # no key at all, Help's neither (kit/help_run.py passes these over)
-        say(f"{name}: passed over, nothing pressed: {why}")
-        return {**line, "outcome": PASSED, "why": why}
-    if cam.read().kind not in ROW_KINDS:
-        failed(f"the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
-    cam.refresh("grey-row")                     # drawn grey now, on a frame grabbed afresh
-    line["row_frame"] = cam.frame.path.name
-    if cam.read().kind not in ROW_KINDS:
-        failed(f"after a fresh look the screen is {cam.read().kind!r} ({cam.frame.path.name}), not the row's menu page")
-    lit = lit_of(cam)
-    why = bar_refused(lit, path, seen)
-    if why:                                     # the bar itself, before any key: no Help on it either
-        say(f"{name}: passed over, nothing pressed: {why}")
-        return {**line, "outcome": PASSED, "why": why}
-    if not on_row(lit, label):
-        failed(f"the lit row is not {label!r} ({cam.frame.path.name})")
+    passed = on_the_row(cam, path, seen, stored, line, "grey-row", say)
+    if passed is not None:
+        return passed
     grey, measure = row_grey(cam)
     line["grey"] = None if measure is None else round(measure, 1)
     if grey is not True:

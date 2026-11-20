@@ -336,8 +336,9 @@ for the camera's notice, then MENU, or the notice's lone OK where it refuses MEN
 (decision 7). The blocker its notice names is a lead, the setting to try,
 never the values that grey the row: the value a start file holds is the owner's (decision 16), so `inactive_when`'s
 values and the value that un-greys the row come only from runs where the kit set each value of that setting itself from
-a known start file and saw the row grey or white, every value classified before the entry is written. The words stay in
-`runs/`.
+a known start file and saw the row grey or white (`kit/provers/mode_switch.py --set`, then `greyrow_run.py --look`,
+which reads the row's grey with nothing pressed on it), every value classified before the entry is written. The words
+stay in `runs/`.
 
 `kit/pass3_run.py` turns each blocker off in the menu, walks and proves what that opened, then restores. Its blockers
 that were switched by writing values into a file and uploading it are retired, and the script refuses them (rule 12).
