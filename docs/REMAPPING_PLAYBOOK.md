@@ -329,6 +329,12 @@ shown (section 1, rule 2).
 
 ### Phase 3: settings greyed by another setting
 
+To learn what greys a menu row, ask the camera: `kit/provers/greyrow_run.py --in MODE --row ROW` reads the row's Help
+first and, only where its guide says no more than "This function is currently disabled.", presses Right once on the row
+for the camera's notice, then MENU: never on a row the kit may not open (one not yet seen opened on the body gets its
+Help alone), never twice in a run, never Enter (decision 7). The blocker its notice names, the row label alone, with
+that row's record in the run's start file, is what the hand tables' `inactive_when` takes; the words stay in `runs/`.
+
 `kit/pass3_run.py` turns each blocker off in the menu, walks and proves what that opened, then restores. Its blockers
 that were switched by writing values into a file and uploading it are retired, and the script refuses them (rule 12).
 For a state that needs another start file (File Format slots swapped, a gamma that allows Black Gamma), set it on the
