@@ -61,11 +61,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **The camera's menu in each shooting mode, and Edit's Menu in Compare:** where a definition lists its camera's menus
   (`camera.menus`, each setting's `row_menus` and `row_places`), the window and the web page show one at a time under
-  Camera menu:, opening on the mode the file was saved in, each row titled as the camera draws it and showing that
-  mode's value of a setting kept per mode, the Editing row offering that mode's memories and every jump opening the
-  menu that shows its row. Compare has Edit's Menu on its left in place of its tab list, counting the rows that differ
-  in each entry and each menu and comparing files saved in different modes like for like; picking a menu changes
-  nothing in the file, and a definition that lists none is shown as before.
+  Camera menu:, opening on the file's mode, each row titled as the camera draws it, with that mode's value and a note
+  naming the other menus an edit changes too; Edit is otherwise as before, and picking a menu changes nothing in the
+  file. For every definition Compare has Edit's Menu on its left, so All settings (and its CSV) also holds My Menu's
+  places, changed on its page only, and every record a Main tile shows, a fraction's two parts being copied together
+  or not at all.
 - **"Unmapped" says what it means:** on the Unmapped records page and the record maps, in the app and the page, and in
   the docs and the ledger's public form, the mapping found no menu row that changes such a record, so it does not know
   what the record holds, and a change to it is unproved and at your own risk. Which unmapped records never changed
