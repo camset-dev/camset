@@ -521,7 +521,10 @@ def cut_form(n: Name, text: str) -> bool:
     """The published name is the reading less a leading or trailing word of the camera's (pass2_report.cut_words: an
     icon's capitals, an icon that repeats the name, a lead every line of the row draws and the kit's "(2)" are no word),
     where the name stands for the whole line: never a carousel axis's part after or before its colon, nor a look's code,
-    which are parts by design."""
+    which are parts by design, and never a reading that spells another option of the row, which names that option
+    ("S&Q Record Setting" where 765 and 767 are both functions of the list)."""
+    if any(same_text(text, o) for o in n.item.options if o != n.name):
+        return False
     return n.part in (None, "held") and n.kind != "look base" and bool(p2.cut_words(n.name, text, n.drawn))
 
 

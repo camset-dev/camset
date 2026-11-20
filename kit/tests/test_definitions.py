@@ -1803,6 +1803,17 @@ def test_a_picker_name_less_a_word_of_the_camera_is_no_agreement_and_the_reading
     assert S.snap("Zqx Reccgnition Mode", ["Zqx Recognition Mode"]) == "Zqx Recognition Mode"   # a slip in a word
 
 
+def test_a_reading_that_is_another_values_name_in_the_list_is_no_cut_form(monkeypatch):
+    """The review of 2026-11-20: a reading that is another value's schema name in the list ("S&Q Record Setting" for
+    765 while 767 is named so) is no cut form, or the writer would give 765 its neighbour's name: the schema's name
+    stands, as before the cut-word rule. Made-up labels."""
+    import pass2_report as R
+    monkeypatch.setattr(R, "SURE", {"S&Q Zqx Setting", "AF Zqx Speed"})
+    known = {765: "Zqx Setting", 767: "S&Q Zqx Setting", 1: "Zqx Speed"}
+    verdict, notes = R.judge_functions({"S&Q Zqx Setting": 765, "AF Zqx Speed": 1}, known)
+    assert [n["value"] for n in notes] == [1] and notes[0]["kind"] == "wording" and verdict == "wording"
+
+
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
 # Settings, which the a1 II's accepted file does not list)
 GATE_REPORT = [{"row": "Proxy Rec. Settings", "options": 2, "notices": [],

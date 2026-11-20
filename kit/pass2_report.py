@@ -404,12 +404,15 @@ def judge_functions(vals: dict, known: dict) -> tuple:
     camera's reading is loosely like it (OCR of icons and arrows), and only labels nothing like it
     are conflicts, for a person to look at. A schema label that is the reading less a word of the camera's (cut_words:
     "Transition Speed" for "AF Transition Speed") is no agreement but "wording": the camera's words replace it where two
-    readers read them (the writer, "sure"); until 2026-11-20 the likeness let it stand."""
+    readers read them (the writer, "sure"); until 2026-11-20 the likeness let it stand. A reading that is another
+    value's schema name in the list ("S&Q Record Setting" for 765 while 767 is named so) is no cut form: the writer
+    would give the value its neighbour's name."""
     notes, worst = [], "agrees"
     rank = ["agrees", "wording", "missing", "conflict"]
     for lab, v in vals.items():
         s = known.get(v)
-        lost = cut_words(s, lab, vals) if s else None
+        neighbour = any(w != v and same_label(str(t), lab) for w, t in known.items() if t)
+        lost = cut_words(s, lab, vals) if s and not neighbour else None
         if s and close(s, lab) >= 0.6 and not lost:
             continue
         kind = "missing" if not s else "wording" if lost else "conflict"

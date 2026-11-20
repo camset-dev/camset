@@ -335,6 +335,18 @@ def test_a_name_less_a_word_of_what_is_read_is_never_confirmed():
     assert la.LISTED.index("a cut form of what is read") == 1 and la.VERDICTS[1] == "a cut form of what is read"
 
 
+def test_a_reading_that_spells_another_option_names_that_option_never_a_cut_form():
+    """The review of 2026-11-20: a reading that spells another option of the list, of which the name is a cut form
+    ("S&Q Record Setting" for "Record Setting" where both are functions of the movie Custom Keys, "Spot AEL hold" for
+    "AEL hold"), names that option: "another option", never "cut form". Made-up rows, the camera's word pairs."""
+    two = {"qwen": None, "gemma": None}
+    assert judge_name("table picker", "Record Setting", "Record Setting", ["Record Setting", "S&Q Record Setting"],
+                      dict.fromkeys(two, "S&Q Record Setting")) == (["another option"] * 2,
+                                                                     "none agree, all on another reading")
+    assert judge_name("table picker", "AEL hold", "AEL hold", ["AEL hold", "Spot AEL hold", "AEL toggle"],
+                      dict.fromkeys(two, "Spot AEL hold"))[0] == ["another option"] * 2
+
+
 def test_all_agree_needs_two_families():
     import label_audit as la
     right, wrong = ("right", "Zqx", None), ("another option", "Zqy", ("option", 0))
