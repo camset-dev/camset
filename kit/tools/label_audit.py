@@ -40,9 +40,10 @@ Left out, and counted: a name the report credits no label with, or whose label h
 definition names nothing, two values of one record sharing a name, a line of an identity or connection row a network
 decision opened (decision 8), a frame of a run that opened a row an owner decision names (camkit.vlm.NO_READER_MARKER,
 decision 9: never read), a frame not on disk, a black frame, a frame the census would take no question from, a radio
-button's name, a checklist name that says no tick state. A frame of a run a --network run marked (camkit.vlm.LOCAL_MARKER) goes
-to local readers only (camkit.vlm.local_reader), and a hosted reader (reader_census.is_hosted) is sent no frame
-reader_census.hosted_refused refuses.
+button's name, a checklist name that says no tick state. Where a frame asked about is in a run folder a --network run
+marked (camkit.vlm.LOCAL_MARKER), camkit.vlm.local_only_runs says so and only local readers are asked and built, none
+other (decision 8); a hosted reader (reader_census.is_hosted) is sent no frame reader_census.hosted_refused refuses
+for any reading it holds.
 
 Output. The console gets counts only, per source and per kind (no reading, label, value or file name: decision 16, as
 the census prints); --json prints them as one JSON object and nothing else on standard output. The names not every
@@ -94,13 +95,13 @@ class Name:
     source (proved.names'), and once its proof is found, row (the report's), line (the proof line), after (a
     checklist line's: whether the value is the one the box's visit wrote), frame, kind (the census's), item (the
     reader_census.Item judged against the published name), question; why: the reason it is left out, or None;
-    local_only: its frame goes to local readers only; hosted_why: why a hosted reader is sent none, or None; part: how
-    the published name stands in the label the run recorded where it is not the whole of it (part_of), or None."""
+    hosted_why: why a hosted reader is sent its frame for no reading, or None; part: how the published name stands in
+    the label the run recorded where it is not the whole of it (part_of), or None."""
 
     def __init__(self, key, value, name, source):
         self.key, self.value, self.name, self.source = key, str(value), name, source
         self.row = self.line = self.after = self.frame = self.kind = self.item = self.question = None
-        self.why, self.local_only, self.hosted_why, self.part = None, False, None, None
+        self.why, self.hosted_why, self.part = None, None, None
 
 
 # ------------------------------------------------------------------------------------------------ the names
@@ -237,11 +238,12 @@ def in_scope(n: Name, sources, kinds, everything: bool) -> bool:
 
 # ------------------------------------------------------------------------------------------------ the frames
 
-def items_for(root: Path, proofs: list, names: list, on_key: dict) -> None:
+def items_for(root: Path, proofs: list, names: list, on_key: dict) -> dict:
     """Each name's Item as reader_census.question_items takes its proof line (its kind of screen, the row's options),
     judged against the published name (judged, the row's options named as on_key says), and its question; or why
     there is none. question_items is given every line of the names' runs, so a row's options are all there, and only
-    the names' own lines keep their frames, so only they give items (no line its notice: a notice names no value)."""
+    the names' own lines keep their frames, so only they give items (no line its notice: a notice names no value).
+    Returns {frame: every Item question_items took from it}: every reading the frame holds, for the hosted rule."""
     live = [n for n in names if n.why is None]
     for n in live:
         if rc.identity_line(n.line):
@@ -285,7 +287,7 @@ def items_for(root: Path, proofs: list, names: list, on_key: dict) -> None:
             n.why = why
             continue
         n.question = vlm.PROMPTS[reading.QUESTIONS[n.kind].prompt]
-        n.local_only = bool(vlm.marked_runs(n.frame))
+    return items
 
 
 def no_item(r: dict) -> str:
@@ -353,21 +355,25 @@ def judged(n: Name, item, fixes: dict) -> tuple:
     return rc.Item(k, item.frame, truth, options, None, item.box, item.old, item.extra), None
 
 
-def hosted_checks(names: list) -> None:
-    """For a hosted reader: why each name's frame may not go to one (reader_census.hosted_refused, by OCR of the whole
-    frame and the screen reader), in Name.hosted_why; fails closed, as the census does."""
-    frames = list(dict.fromkeys(n.frame for n in names if n.item is not None))
+def hosted_checks(names: list, items: dict) -> None:
+    """For a hosted reader: why each name's frame may not go to one, in Name.hosted_why: the frame is refused for any
+    reading it holds (reader_census.hosted_refused over every name asked about it and every Item question_items took
+    from it, as hosted_sample refuses a frame), by OCR of the whole frame and the screen reader; fails closed, as the
+    census does."""
+    on = collections.defaultdict(list)
+    for n in names:
+        if n.item is not None:
+            on[n.frame].append(n)
     try:
-        texts = reading.screen_texts(frames)
+        texts = reading.screen_texts(list(on))
     except Exception:            # noqa: BLE001 - no OCR to judge with: every frame is refused
         texts = {}
-    kinds = {}
-    for n in names:
-        if n.item is None:
-            continue
-        if n.frame not in kinds:
-            kinds[n.frame] = rc.screen_kind(n.frame)
-        n.hosted_why = rc.hosted_refused(n.item, texts.get(n.frame), kinds[n.frame])
+    for frame, here in on.items():
+        kind = rc.screen_kind(frame)
+        why = next((w for w in (rc.hosted_refused(it, texts.get(frame), kind)
+                                for it in [*(n.item for n in here), *items.get(frame, ())]) if w), None)
+        for n in here:
+            n.hosted_why = why
 
 
 # ------------------------------------------------------------------------------------------------ the readers
@@ -401,10 +407,29 @@ def family(cfg: dict) -> str:
 
 
 def may_ask(cfg: dict, n: Name) -> bool:
-    """A local-only run's frame to a local reader alone; a hosted reader never a frame hosted_refused refuses."""
-    if n.local_only and not vlm.local_reader(cfg):
-        return False
+    """A hosted reader is never sent a frame hosted_checks refused (a reader that is not local is not asked at all
+    where a run marked local-only is read: local_readers)."""
     return not (rc.is_hosted(cfg) and n.hosted_why)
+
+
+def local_readers(cfgs: list, names: list) -> tuple:
+    """(the readers asked, {a reader left out: why}): where a frame asked about is in a run folder a --network run
+    marked (camkit.vlm.local_only_runs, which says so and sets camkit.vlm.LOCAL_ONLY: make_reader then builds no reader
+    that is not local), local readers only, as the census and every tool that reads such a folder's frames do
+    (docs/decisions/0008); none left stops the tool, nothing asked. The frames of a run no reader reads are left out
+    before (items_for)."""
+    vlm.local_only_runs(*dict.fromkeys(n.frame for n in names if n.item is not None))
+    if not vlm.LOCAL_ONLY:
+        return cfgs, {}
+    kept = [c for c in cfgs if vlm.local_reader(c)]
+    out = {str(c["name"]): "not a local reader, and frames of a --network run are asked about (docs/decisions/0008)"
+           for c in cfgs if c not in kept}
+    for name, why in out.items():
+        print(f"{name!r}: {why}: not asked", file=sys.stderr, flush=True)
+    if not kept:
+        sys.exit("the frames asked about include a --network run's, which go to local readers only, and no reader to "
+                 "ask is local (docs/decisions/0008): nothing asked")
+    return kept, out
 
 
 def held(name, text) -> int:
@@ -546,9 +571,10 @@ def audit(root: Path, args) -> tuple:
     proofs, lines = option_lines(main, target.stem)
     on_key = find_lines(names, root, report, lines)
     scope = [n for n in names if in_scope(n, sources, kinds, args.all)]
-    items_for(root, proofs, scope, on_key)
+    items = items_for(root, proofs, scope, on_key)
+    cfgs, not_local = local_readers(cfgs, scope)
     if any(rc.is_hosted(c) for c in cfgs):
-        hosted_checks(scope)
+        hosted_checks(scope, items)
     read_only = (root / "_cache" / "vlm", *[Path(c).expanduser() for c in args.census_cache])
     asked, answers = {}, {}
 
@@ -569,6 +595,8 @@ def audit(root: Path, args) -> tuple:
               "by kind": dict(collections.Counter(n.kind or "no proof line" for n in scope).most_common()),
               "left out": dict(collections.Counter(n.why for n in scope if n.why).most_common()),
               "asked": asked, "verdicts by source": {}, "verdicts by kind": {}}
+    if not_local:
+        counts["readers left out"] = not_local
     if args.dry_run:
         counts["dry run"] = True
     lines_out, read_by = [], collections.Counter()
@@ -626,6 +654,8 @@ def show(counts: dict, ledger: Path | None) -> None:
     print(f"label audit: {counts['in scope']} of {counts['names']} value names in scope; readers "
           f"{', '.join(repr(r) for r in counts['readers'])} (counts only: no reading, label, value or file name is "
           "printed; docs/decisions/0016)")
+    for r, why in counts.get("readers left out", {}).items():
+        print(f"  {r!r} not asked: {why}")
     print("  by source: " + ", ".join(f"{k} {v}" for k, v in counts["by source"].items()))
     print("  by kind: " + ", ".join(f"{k} {v}" for k, v in counts["by kind"].items()))
     if counts["left out"]:

@@ -55,8 +55,9 @@ def proof_run(root: Path, name: str, lines: list, marker: str | None = None) -> 
 def camera(top: Path, tmp_path: Path) -> tuple:
     """(the run root, the definition file) of a made-up camera: a list row of four options named by one reader or the
     vision model, a checklist box (its names the schema's, in scope by its kind), a row two readers named (out of the
-    default scope, one of its frames black), an identity row's line, a frame not on disk, and a proof run of each:
-    one a --network run marked local-only, one an owner run no reader reads, one named for a network look."""
+    default scope, one of its frames black, another holding a second record's name no hosted reader is sent), an
+    identity row's line, a frame not on disk, a carousel axis, and a proof run of each: one a --network run marked
+    local-only, one an owner run no reader reads, one named for a network look (its name the vision model's)."""
     root = top / CAMERA
     main = root / runs.MAIN_RUN
     (main / "shots").mkdir(parents=True)
@@ -90,7 +91,8 @@ def camera(top: Path, tmp_path: Path) -> tuple:
         {"row": "Zqx Set", "kinds": ["checklist"], "options": 1,
          "records": {"global:0x0002": record({"Zqx Two: ticked": 1, "Zqx Two: unticked": 0}, "box")}},
         {"row": "Zqx Other", "kinds": ["list"], "options": 2,
-         "records": {"global:0x0003": record({"Zqx On": 1, "Zqx Off": 0}, "two readers")}},
+         "records": {"global:0x0003": record({"Zqx On": 1, "Zqx Off": 0}, "two readers"),
+                     "global:0x000a": record({"Zqx On": 1}, "two readers")}},
         {"row": "Zqx Ident", "kinds": ["list"], "options": 1, "records": {"global:0x0004": record({"Zqx Name": 0}, "one reader (map)")}},
         {"row": "Zqx Gone", "kinds": ["list"], "options": 1, "records": {"global:0x0005": record({"Zqx Lost": 0}, "one reader (map)")}},
         {"row": "Zqx Local", "kinds": ["list"], "options": 1, "records": {"global:0x0006": record({"Zqx Near": 0}, "one reader (map)")}},
@@ -111,8 +113,10 @@ def camera(top: Path, tmp_path: Path) -> tuple:
         setting("global:0x0005", [[0, "Zqx Lost"]], {"0": one}),
         setting("global:0x0006", [[0, "Zqx Near"]], {"0": one}),
         setting("global:0x0007", [[0, "Zqx Kept"]], {"0": one}),
-        setting("global:0x0008", [[0, "Zqx Wide"]], {"0": one}),
+        setting("global:0x0008", [[0, "Zqx Wide"]], {"0": "vision model"}),
         setting("global:0x0009", [[0, "Zqx Unproved"]], {"0": one, "1": one}),     # no line; code 1 no name at all
+        # a second record Zqx On's line wrote, named for a row no hosted reader is sent: its frame goes to none
+        setting("global:0x000a", [[1, "Zqx Wi-Fi Direct"]], {"1": "two readers"}),
         setting("global:0x000b", [[0, "S"], [1, "L"]], {"0": one, "1": one}),      # the axis's values alone
     ]}
     definition = tmp_path / "definition" / f"{CAMERA}.json"
@@ -186,7 +190,7 @@ def test_the_scope_is_the_sources_and_kinds_asked_for_or_every_name(own_runs, tm
     _, got = run_audit(base, capsys)
     # one reader and the vision model: four list names, the identity row's, the lost frame's, three proof runs', the
     # unproved setting's two and the axis's two; the checklist's two by their kind
-    assert got["by source"] == {"one reader": 12, "vision model": 1, "schema kept": 2} and got["in scope"] == 15
+    assert got["by source"] == {"one reader": 11, "vision model": 2, "schema kept": 2} and got["in scope"] == 15
     assert got["by kind"] == {"list": 9, "no proof line": 2, "checklist": 2, "axis": 2}
     assert got["left out"] == {"the report credits no label with it": 1, "the definition lists no name for it": 1,
                                "an identity or connection row (decision 8)": 1, "frame not on disk": 1,
@@ -197,11 +201,11 @@ def test_the_scope_is_the_sources_and_kinds_asked_for_or_every_name(own_runs, tm
     # the axis's two (Zqx Spot: S on its context row's visit, never its own row's put-back)
     assert a["qa"] == {"would ask": 9, "seconds": a["qa"]["seconds"], "questions": 9}
     _, got = run_audit([*base, "--sources", "two readers", "--kinds", ""], capsys)
-    assert got["by source"] == {"two readers": 2} and got["left out"] == {"a black frame": 1}
+    assert got["by source"] == {"two readers": 3} and got["left out"] == {"a black frame": 1}
     _, got = run_audit([*base, "--kinds", "checklist", "--sources", ""], capsys)
     assert got["by kind"] == {"checklist": 2} and got["asked"]["qa"]["questions"] == 1
     _, got = run_audit([*base, "--all"], capsys)
-    assert got["in scope"] == got["names"] == 17
+    assert got["in scope"] == got["names"] == 18
     with pytest.raises(SystemExit):
         run_audit([*base, "--sources", "no such source"], capsys)
     with pytest.raises(SystemExit):
@@ -221,9 +225,9 @@ def test_four_verdicts_one_vote_per_family_and_the_ledger_first_on_another_readi
     # Alpha: qa and gm right, qb (qa's model in another build) wrong but no vote of its own; Beta: some; Gamma (the
     # vision model's): both families on Delta; Delta: apart; the local-only and network-named runs' frames and the
     # axis's values, read on its whole line, all agree
-    assert v["one reader"] == {"all agree": 5, "some agree": 1, "none agree, apart": 1}
+    assert v["one reader"] == {"all agree": 4, "some agree": 1, "none agree, apart": 1}
     assert got["verdicts by kind"]["axis"] == {"all agree": 2}
-    assert v["vision model"] == {"none agree, all on another reading": 1}
+    assert v["vision model"] == {"none agree, all on another reading": 1, "all agree": 1}
     # gm reads Zqx Two unticked where the visit ticked it: both its names, Ticked and Not ticked, some agree
     assert v["schema kept"] == {"some agree": 2}
     assert got["names by families that answered"] == {"2": 10}
@@ -411,31 +415,52 @@ def test_nothing_is_asked_twice_and_the_census_cache_is_used(own_runs, tmp_path,
     assert again["verdicts by source"] == got["verdicts by source"]
 
 
-def test_hosted_and_local_only_frames_and_no_reader_runs(own_runs, tmp_path, monkeypatch, capsys):
-    """A frame of a run a --network run marked goes to local readers only; a hosted reader is sent no frame
-    reader_census.hosted_refused refuses (a run named for a network look); a run that opened a row an owner decision
-    names is never read, nor its frame sent anywhere; an identity row's line is left out."""
+def test_a_local_only_run_in_scope_asks_local_readers_only_and_builds_no_other(own_runs, tmp_path, monkeypatch,
+                                                                               capsys):
+    """Where a frame asked about is in a run folder a --network run marked, camkit.vlm.local_only_runs is told and a
+    reader that is not local is neither built nor asked about any frame (decision 8, as the census); a run that opened
+    a row an owner decision names is never read, nor its frame sent anywhere; an identity row's line is left out."""
+    root, definition = camera(own_runs, tmp_path)
+    asked, built = [], []
+    readers(monkeypatch, root, asked, far=True)
+    make = vlm.make_reader
+    monkeypatch.setattr(vlm, "make_reader", lambda cfg, **kw: built.append(cfg["name"]) or make(cfg, **kw))
+    said, got = run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    assert vlm.LOCAL_ONLY and "far" not in built and not [a for a in asked if a[0] == "far"]
+    assert got["readers"] == ["qa", "qb", "gm"] and set(got["readers left out"]) == {"far"}
+    assert "'far'" in said.err and "decision" in said.err
+    assert ("kit2_zqx_local", "00001.png") in {(a[1], a[2]) for a in asked if a[0] == "qa"}
+    assert not {a for a in asked if a[1] == "kit2_zqx_held" or a[2] in ("00007.png", "00008.png")}
+    # the only reader left being hosted, nothing is asked
+    monkeypatch.setattr(vlm, "config", lambda: {"readers": [{"name": "far", "url": FAR, "model": "far-9"}],
+                                                "roles": {"second": "far"}})
+    vlm.forget()
+    with pytest.raises(SystemExit):
+        run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+
+
+def test_a_hosted_reader_is_sent_no_frame_refused_for_any_reading_it_holds(own_runs, tmp_path, monkeypatch, capsys):
+    """With no local-only run in scope, a hosted reader is asked, but never about a frame reader_census.hosted_refused
+    refuses for any name asked about it (Zqx On's frame also holds a name of a row no hosted reader is sent) nor one of
+    a run named for a network look; with no OCR to judge a frame by, about none (fails closed, as the census)."""
     import reader_census
     root, definition = camera(own_runs, tmp_path)
     asked = []
     readers(monkeypatch, root, asked, far=True)
     monkeypatch.setattr(reading, "screen_texts", lambda frames: {f: "Zqx Menu Page" for f in frames})
     monkeypatch.setattr(reader_census, "screen_kind", lambda f: "list")
-    _, got = run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "answers")], capsys)
+    args = ["--json", "--definition", str(definition), "--sources", "two readers,vision model", "--kinds", ""]
+    _, got = run_audit([*args, "--cache", str(tmp_path / "answers")], capsys)
+    assert not vlm.LOCAL_ONLY and "readers left out" not in got
     far = {(a[1], a[2]) for a in asked if a[0] == "far"}
     near = {(a[1], a[2]) for a in asked if a[0] == "qa"}
-    assert ("kit2_zqx_local", "00001.png") in near and ("kit2_zqx_local", "00001.png") not in far
-    assert ("kit2_net_zqx", "00001.png") in near and ("kit2_net_zqx", "00001.png") not in far
-    assert ("kit2_pass2", "00001.png") in far
-    assert not {a for a in asked if a[1] == "kit2_zqx_held" or a[2] in ("00007.png", "00008.png")}
-    assert got["asked"]["far"]["questions"] == got["asked"]["qa"]["questions"] - 2
-    assert got["names by families that answered"] == {"2": 2, "3": 8}
-    # with no OCR to judge a frame by, a hosted reader is sent none (fails closed, as the census)
+    assert near == {("kit2_pass2", "00003.png"), ("kit2_pass2", "00006.png"), ("kit2_net_zqx", "00001.png")}
+    assert far == {("kit2_pass2", "00003.png")}
     def no_ocr(frames):
         raise OSError("no OCR")
     monkeypatch.setattr(reading, "screen_texts", no_ocr)
     asked.clear()
-    _, got = run_audit(["--json", "--definition", str(definition), "--cache", str(tmp_path / "other")], capsys)
+    _, got = run_audit([*args, "--cache", str(tmp_path / "other")], capsys)
     assert not [a for a in asked if a[0] == "far"] and got["asked"]["far"]["questions"] == 0
 
 

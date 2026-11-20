@@ -85,7 +85,7 @@ matches the row, so a misread that also looks like credentials or an action keep
 A run given `--network` asks only local readers, those whose address is this computer's or a private network's,
 never a paid service, and marks its run folder so; every tool that reads that folder's frames later
 (`pass1_labels.py`, `tiebreak.py`, `page_model.py --vlm`, `help_reads.py`, `tools/reread_proofs.py`,
-`tools/reader_census.py`) asks local readers only too, builds no other, and asks none about the frames of an identity
+`tools/reader_census.py`, `tools/label_audit.py`) asks local readers only too, builds no other, and asks none about the frames of an identity
 or connection row, and every tool that writes into that folder writes owner-only, as the run left it; and a prover's way back to the shooting screen sends no OK to a notice that refuses MENU during
 such a run, nor anywhere to one that names identity or credentials ("Connect to ...?"). A screen met inside such a row that names identity or credentials (a pairing screen, a connecting
 notice, an SSID, a keyboard) gets MENU alone, and no reader is asked; so does an address screen. From such a run's
