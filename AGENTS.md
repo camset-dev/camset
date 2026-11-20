@@ -101,7 +101,8 @@ what to search for yourself).
 
 ## Sending the results back
 
-A pull request with the submission bundle: the `data/<model>_fw<fw>/` folder, the camera's definition
+A pull request with the submission bundle: the `data/<model>_fw<fw>/` folder (with the coverage ledger's seen file,
+never the ledger itself, which `kit/tools/coverage.py --print` prints from these files), the camera's definition
 (`editor/definitions/<model>_fw<fw>.json`, as `kit/schema_update.py --write` wrote it), its record names
 (`docs/formats/sony_camset_ids_<model>_fw<fw>.ksy`; [what writes them](docs/DATA_CONTRACTS.md#what-a-mapping-delivers)),
 the model's page, and pasted into the description the pass-2 report's counts and conflicts and the gate line

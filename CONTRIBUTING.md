@@ -6,8 +6,9 @@ A pull request here is one of two kinds:
   firmware. Start with [AGENTS.md](AGENTS.md); an AI agent walks you through the mapping.
   To take in a newer kit, merge `origin/main` into your mapping branch (in a conflict, keep your own `data/` files and
   the project's version of everything else), then run `kit/pass2_report.py` and `kit/schema_update.py --write` again
-  (and `kit/tools/coverage.py --write` where `data/` holds a coverage file; the changelog's Read first says what
-  else). A clone made before 2026-11-11 shares no history with this one: clone afresh, copy `private/`, `runs/`,
+  (and `kit/tools/coverage.py --write`, which writes your seen file where your looks file is, then `--check`; a
+  coverage file your branch still tracks in `data/` is no longer kept, so `git rm` it; the changelog's Read first says
+  what else). A clone made before 2026-11-11 shares no history with this one: clone afresh, copy `private/`, `runs/`,
   `data/<model>_fw<fw>/` and your model page across, not your definition, and make again by hand any change you made
   to a kit file (the never-open list in `kit/camkit/safety.py`). Then write the definition afresh:
   `kit/pass2_report.py --no-schema`, `kit/schema_update.py --write`, then both again without `--no-schema`.
@@ -49,7 +50,10 @@ editor can edit; any other camera is **not mapped yet**, and the README's
   list (the template asks for it: the records' ids only, never the bytes a diff printed), and any record a pull
   request takes out of a camera's list or whose default bytes it changes, which the publish guard stops for this
   look. For a new camera the maintainer reads every `keep_text` entry as text that will be published and every
-  default's bytes as bytes that will be published: the guard has no older list to compare them with. And spot checks. The maintainer does not go through your runs, and the proof viewer is yours: it is
+  default's bytes as bytes that will be published: the guard has no older list to compare them with. The coverage
+  ledger, which a pull request does not carry: the maintainer prints it from the pull request's own files
+  (`kit/tools/coverage.py --camera <model>_fw<fw> --public-only` for the counts, `--print` for every row and value),
+  where the kit's tests check its schema and words for every definition. And spot checks. The maintainer does not go through your runs, and the proof viewer is yours: it is
   built only from the runs on your computer, to check each value against your camera's screens, and is never sent. A camera of the maintainer's own model, the ILCE-1M2, can be re-checked on the
   maintainer's body.
 

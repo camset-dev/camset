@@ -5,7 +5,7 @@
 **The writer's gate:** <!-- the "gate: … open questions …" line kit/schema_update.py prints without --write, pasted -->
 **The personal records:** <!-- each record listed in the camera file's personal_records and how it was found (which of the owner's own things changed it), or what was tried before an empty list; ids only, never the bytes the diff printed. For a new camera the maintainer reads every keep_text entry as text that will be published, and every default's bytes, read from the file the camera wrote right after Initialize, as bytes that will be published -->
 
-- [ ] `data/<model>_fw<fw>/` holds the files docs/DATA_CONTRACTS.md, "What a mapping delivers", marks as needed (`camera_…json`), with the optional ones the mapping made; the menu tree, the accepted rulings and the record shapes stay in `private/evidence/`.
+- [ ] `data/<model>_fw<fw>/` holds the files docs/DATA_CONTRACTS.md, "What a mapping delivers", marks as needed (`camera_…json`), with the optional ones the mapping made; the menu tree, the accepted rulings and the record shapes stay in `private/evidence/`, and no coverage file is sent (the maintainer prints the ledger from your files); `kit/tools/coverage.py --check` passes.
 - [ ] The definition, `editor/definitions/<model>_fw<fw>.json`, as `kit/schema_update.py --write` wrote it (lean, never edited by hand), and no other camera's definition changed (CONTRIBUTING.md, "What a contribution must keep").
 - [ ] The model's page, `docs/models/<model>_fw<fw>.md`, with its entry in `mkdocs.yml`'s nav.
 - [ ] The definition's record names, `docs/formats/sony_camset_ids_<model>_fw<fw>.ksy` (docs/DATA_CONTRACTS.md, "What a mapping delivers", says what writes it).
