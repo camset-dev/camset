@@ -263,9 +263,10 @@ def test_every_menu_names_modes_the_camera_has_and_tiles_it_holds():
     assert "menus" not in fromdata.with_menus({"model": "X", "menus": menus}, None)
 
 
-def test_without_the_menus_table_the_places_are_todays(tmp_path, monkeypatch):
-    """With no MENUS table the definition's places are exactly what they were (no row_menus, no row_places, no
-    camera.menus); with it, each placed setting gets its menus, its own place untouched."""
+def test_places_without_menus_are_todays_and_with_them_add_only_the_menus(tmp_path, monkeypatch):
+    """fromdata.places with no menus gives exactly today's places (no row_menus, no row_places); with them, each placed
+    setting gets its menus, its own place untouched. (camera.menus, and from_data's whole write with and without the
+    MENUS table: test_from_data_writes_the_menus_from_the_tables_and_the_tree.)"""
     d = doc(*copy.deepcopy(SETTINGS))
     tree = tmp_path / "tree.json"
     tree.write_text(json.dumps(TREE), encoding="utf-8")
@@ -706,3 +707,38 @@ def test_check_public_holds_the_menus_to_names_and_places_in_every_form(tmp_path
     assert "MENUS or HAND_PLACES" in menus[0]
     blob = check_public.blob_problems("editor/definitions/TEST_fw1.00.json", json.dumps(bad))          # a commit's copy
     assert blob and all(x.startswith("its camera menus say more than names and places") for x in blob)
+
+
+def test_from_data_writes_the_menus_from_the_tables_and_the_tree(tmp_path, monkeypatch):
+    """Through from_data, on a made-up camera with its own data folder and menu tree: the MENUS table read from the
+    hand tables becomes camera.menus, each placed setting gets its row_menus from the tree's menus, and a HAND_PLACES
+    row places its record in every menu that has the row; with no MENUS table there is no camera.menus and no
+    row_menus, the places as they were."""
+    import schema_update as S
+    key = "TEST_fw1.00"
+    data = tmp_path / "data"
+    (data / key).mkdir(parents=True)
+    camera = {"model": "TEST", **CAMERA, "main_tiles": [{"name": "Stills", "tiles": []}, {"name": "Movie", "tiles": []}]}
+    (data / key / f"camera_{key}.json").write_text(json.dumps(camera), encoding="utf-8")
+    tree = tmp_path / "tree.json"
+    tree.write_text(json.dumps(TREE), encoding="utf-8")
+    monkeypatch.setattr(definitions, "DATA", data)
+    monkeypatch.setattr(S.help_files, "OWN", data)
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: tree)
+    monkeypatch.setattr(fromdata, "box_orders", lambda k: {})
+    hand = {"global:0x0031": {"row": "Shooting > Anti-dust Function > Shutter When Pwr OFF", "why": "seen on the camera"}}
+
+    def written(**tables):
+        (data / key / f"hand_tables_{key}.json").write_text(json.dumps({"camera": key, **tables}), encoding="utf-8")
+        d = doc(*copy.deepcopy(SETTINGS), setting("global:0x0031", "Seen by hand", "Other settings"))
+        return S.from_data(d)
+    got = written(MENUS=MENUS, HAND_PLACES=hand)
+    assert got["camera"]["menus"] == MENUS
+    by = {s["key"]: s for s in got["settings"]}
+    assert by["global:0x0001"]["row_menus"] == ["Still"] and by["global:0x0002"]["row_menus"] == ["Movie", "S&Q"]
+    assert by["global:0x0031"]["row"] == ["Anti-dust Function", "Shutter When Pwr OFF"]
+    assert by["global:0x0031"]["row_menus"] == ["Still", "Movie", "S&Q"]
+    plain = written(HAND_PLACES=hand)
+    assert "menus" not in plain["camera"] and not any("row_menus" in s or "row_places" in s for s in plain["settings"])
+    assert {s["key"]: s.get("row") for s in plain["settings"]} == {s["key"]: s.get("row") for s in got["settings"]}
+    assert "row" not in {s["key"]: s for s in written()["settings"]}["global:0x0031"]          # no hand row, no row
