@@ -365,6 +365,10 @@ def _shaped(name: str, kind: str, raw):
             for f in MAYBE.get(name) or ():
                 if f in e:
                     _values(e[f], f"{k!r}'s {f!r}")
+            if "live_only" in e and name in ("NEW_RECORDS", "FILTER_FLAGS") and \
+                    (e["live_only"] is not True or not str(k).startswith("global:")):
+                raise _Shape(f"{k!r}'s 'live_only' is only ever true, on a live record (\"global:0x....\"): it keeps "
+                             "the record out of the memory sets")
         return raw
     if kind == "words":
         for k, v in _need(raw, dict, "the table").items():

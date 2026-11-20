@@ -1484,6 +1484,7 @@ def main():
             if fix:
                 changed.append((k, by_key[k]["name"], ",".join(fix), None, info["name"]))
                 apply_fix(by_key[k], fix)
+            hand_facts.live_only(by_key[k], info, changed)       # "live_only": kept out of the memory sets
             continue
         if info["like"] not in by_key:
             continue
@@ -1492,7 +1493,7 @@ def main():
         rec = latest.get(sec, rid)
         s = {f: base[f] for f in ("area", "tab", "group", "order", "scalar", "modes") if f in base}
         s.update(key=k, id=rid, name=info["name"], source="Derived", values=info["values"], note=info["note"],
-                 in_sets=latest.get(1, rid) is not None, size=rec.size, count=rec.count, scalar=rec.count == 1)
+                 in_sets=hand_facts.new_in_sets(info, latest, rid), size=rec.size, count=rec.count, scalar=rec.count == 1)
         doc["settings"].append(s)
         by_key[k] = s
         changed.append((k, s["name"], "new", None, info["values"]))

@@ -301,15 +301,31 @@ def hand_note(s: dict, note: str, words: list, changed: list) -> bool:
     return True
 
 
+def new_in_sets(info: dict, cs, rid: int) -> bool:
+    """Whether a record a NEW_RECORDS entry (`info`) adds is kept in the memory sets (in_sets), both passes' one rule:
+    never where the entry says "live_only" (the record of its id in a set is another setting's, the a1 II's 0x023c),
+    else where set 1 of the download it is laid out from (`cs`) holds its id."""
+    return not info.get("live_only") and cs.get(1, rid) is not None
+
+
+def live_only(s: dict, info: dict, changed: list) -> None:
+    """A record NEW_RECORDS added before, kept out of the memory sets (in_sets false) once its entry says "live_only";
+    the change said. An entry without it leaves the record as it is."""
+    if info.get("live_only") and s.get("in_sets"):
+        s["in_sets"] = False
+        changed.append((s["key"], s["name"], "in_sets", True, False))
+
+
 def new_records(doc: dict, by_key: dict, tables, ev: dict, cs, over: dict, changed: list, reported: set) -> None:
     """NEW_RECORDS (FILTER_FLAGS' entries among them): a record found by hand, its values named by the table ("hand
     table", counted unless a proof covers them: named_not_proved). One the definition holds keeps the table's name,
-    values and note (a record FRAME_PROOFS fills keeps its values and note from there); one it lacks is added, laid out
-    like the record `like` names (its area, tab, group, order and modes) and from the run's newest download (`cs`:
-    size, count, memory-set presence), when the definition holds that record and the download holds this one; else it
-    is said and left out. A note's evidence goes into note_evidence alone (hand_note). A record this step added
-    before (its source "Derived", in the definition's evidence) that the table no longer holds and no row of the report
-    names (`reported`: every key a row names, proved or not) is taken out, and said."""
+    values and note (a record FRAME_PROOFS fills keeps its values and note from there), and is kept out of the memory
+    sets when its entry says "live_only" (live_only); one it lacks is added, laid out like the record `like` names (its
+    area, tab, group, order and modes) and from the run's newest download (`cs`: size, count, memory-set presence by
+    new_in_sets), when the definition holds that record and the download holds this one; else it is said and left out.
+    A note's evidence goes into note_evidence alone (hand_note). A record this step added before (its source
+    "Derived", in the definition's evidence) that the table no longer holds and no row of the report names
+    (`reported`: every key a row names, proved or not) is taken out, and said."""
     for s in list(doc["settings"]):
         if s.get("source") == "Derived" and s["key"] not in tables.NEW_RECORDS and s["key"] not in reported \
                 and s["key"] not in tables.NEW_LIKE:
@@ -330,6 +346,7 @@ def new_records(doc: dict, by_key: dict, tables, ev: dict, cs, over: dict, chang
                 apply_fix(by_key[k], fix)
             if k not in tables.FRAME_PROOFS:
                 hand_note(by_key[k], info["note"], words, changed)
+            live_only(by_key[k], info, changed)
             continue
         m = WHOLE.fullmatch(k)                       # refusals() stops a key that is no whole record first
         rec = cs.get(1 if m[1] == "set" else 0, int(m[2], 16)) if m else None
@@ -342,7 +359,7 @@ def new_records(doc: dict, by_key: dict, tables, ev: dict, cs, over: dict, chang
         base = by_key[info["like"]]
         s = {f: base[f] for f in ("area", "tab", "group", "order", "scalar", "modes") if f in base}
         s.update(key=k, id=rid, name=info["name"], source="Derived", values=_copy(info["values"]), note=info["note"],
-                 in_sets=cs.get(1, rid) is not None, size=rec.size, count=rec.count, scalar=rec.count == 1)
+                 in_sets=new_in_sets(info, cs, rid), size=rec.size, count=rec.count, scalar=rec.count == 1)
         if words and k not in tables.FRAME_PROOFS:
             s["note_evidence"] = "; ".join(words)
         doc["settings"].append(s)
