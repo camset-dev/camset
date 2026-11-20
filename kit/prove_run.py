@@ -17,7 +17,8 @@ A list that offers a single option (Rec Frame Rate under PAL with XAVC HS 8K) ca
 display proves it instead (prove_by_display), the option read by OCR and the vision model, nothing chosen, and the
 value its row's records hold in the download the proof starts from (a proof line with "proof": "display").
 
-An option the list or side list draws grey is never chosen (proving.greyed, 2026-11-19): the row's first one gets the
+An option the list, side list or carousel draws grey (its pixels say so, or the second reader does: proving.greyed) is
+never chosen (2026-11-19): the row's first one gets the
 camera's own Help through the kit's guarded Help (C4 where the footer draws the help button, its In-Camera Guide, OK),
 and where that names no reason, one Enter to read the camera's notice, said as such (--never-enter-grey: none); the
 others get no key and are written greyed as drawn, not applied, no download, no diff, with that reason. A refused
@@ -262,9 +263,9 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             if network_row:         # inside a network row only the map's own option names are kept (KEPT)
                 now = kept_option(now, labels)
             return frame, seen, now
-        # an option the list draws grey is never chosen (proving.greyed): the row's first one, the camera's Help on it,
-        # then, where Help names no reason, its one Enter to read the notice; the others no key at all. Not inside a
-        # network row, whose screens take no key but its own (camkit.live)
+        # an option the list draws grey is never chosen (proving.greyed: grey by its pixels or by the second reader): the
+        # row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read the notice;
+        # the others no key at all. Not inside a network row, whose screens take no key but its own (camkit.live)
         evidence = chosen_now()                 # the cursor on option k, checked before anything is pressed on it
         what = greyed.ENTER if network_row else greyed.judge(
             cam, name, labels[k], k, c, lambda k=k: cam.read().kind == kind and which_option(cam, job) == k, say=tell)
@@ -274,12 +275,13 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
             frame, seen, now = evidence
             reason = greyed.REASONS.get(name)
             rec = greyed.line({"path": path, "kind": kind, "index": k, "label": labels[k], "shown": now,
-                               "chosen_frame": frame, "vlm": None, "base": base_path.name, "attempt": attempt}, reason)
+                               "chosen_frame": frame, "vlm": None, "base": base_path.name, "attempt": attempt}, reason,
+                              what)
             rec["vlm"] = settled(seen)
             out.write(json.dumps(rec) + "\n")
             out.flush()
             tell(f"   {labels[k]!r:24s} greyed as drawn, never entered"
-                 + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else ""))
+                 + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else "") + greyed.seen(what))
             greyed_k.append(k)
             greyed.leave(cam, name)
             continue
@@ -313,8 +315,9 @@ def prove_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                # a refused choice changed nothing of its own: what differs from the base is another option's
                "changes": [] if refused else changes_of(changes),
                "notice": notice, "applied": not refused, "attempt": attempt,
-               **({"greyed": "drawn", "entered": "for its reason", **(reason.kept() if reason else {})}
+               **({**greyed.marks(what), "entered": "for its reason", **(reason.kept() if reason else {})}
                   if what == greyed.TRY and refused else {}),
+               **greyed.readings(what),         # both eyes' readings of whether it is drawn grey (proving.greyed)
                # the class a network decision lifted the row from: the tools that read the proof's frames later keep
                # no reader's text of an identity row's (kit/tools/reread_proofs.py, kit/tools/reader_census.py)
                **({"network": job.get("network_class") or safety.LIFT_IDENTITY} if network_row else {})}

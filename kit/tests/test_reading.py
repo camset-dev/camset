@@ -1187,13 +1187,16 @@ def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
 NEW_QUESTION_NAMES = re.compile(r'\.v[23]["\']|\bicon_left_out\(|\bwithout_icon\(|\bfind=True\b|\breading\.region\('
                                 r'|\bQUESTIONS\b|\bask_named_reader\(|\bwith_options\(|\breading\.read\('
                                 r'|\bCliReader\b|claude-cli')
-MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py"}
+# proving/greyed.py asks a kind's ".grey" question (QUESTIONS) for its "greyed" alone, beside its pixel test, and only
+# to be more careful (2026-11-19); it reads no option by it, and its own test below holds it to that one question
+MAY_NAME_THEM = {"kit/camkit/reading.py", "kit/camkit/vlm.py", "kit/tools/reader_census.py", "kit/proving/greyed.py"}
 
 
 def test_no_caller_asks_the_new_questions_or_reads_by_the_rule_yet():
     """Every caller still asks the questions it asked before 2026-11-13: none names a ".v2" question, QUESTIONS,
     reading.region, reading.read, vlm.with_options or vlm.ask_named_reader (provers/pp_reset_run.py's own ask_reader is
-    another function, asking the old questions)."""
+    another function, asking the old questions); proving/greyed.py names QUESTIONS for a ".grey" question's grey alone
+    (test_greyed_asks_a_grey_question_for_its_grey_alone)."""
     found = sorted(p.relative_to(ROOT).as_posix() for p in (ROOT / "kit").rglob("*.py")
                    if "tests" not in p.parts and "__pycache__" not in p.parts
                    and p.relative_to(ROOT).as_posix() not in MAY_NAME_THEM
@@ -1280,6 +1283,17 @@ def test_greyed_of_takes_a_true_or_false_and_only_where_something_was_read():
     assert reading.greyed_of(boxes, box, "Cinema") is None and reading.greyed_of(boxes, box) is None
     two = {"boxes": [{"label": "Movie", "greyed": True}, {"label": "Movie", "greyed": False}]}
     assert reading.greyed_of(two, box, "Movie") is None and reading.greyed_of({"boxes": "x"}, box, "Movie") is None
+
+
+def test_greyed_asks_a_grey_question_for_its_grey_alone():
+    """proving/greyed.py, the one caller outside the reading modules that names QUESTIONS: it asks the ".grey" question
+    of a list's, a side list's or a carousel's kind, and reads its grey (greyed_of), never an option by it (no
+    reading.read, reading.region, with_options or choice_of)."""
+    text = (ROOT / "kit" / "proving" / "greyed.py").read_text(encoding="utf-8")
+    assert not re.search(r"reading\.(read|region|choice_of|agree|tally|outcome)\(|with_options|ask_named_reader", text)
+    from proving import greyed
+    assert {k: reading.QUESTIONS[v].prompt for k, v in greyed.ASKED.items()} == {
+        "list": "lit.v2.grey", "sidelist": "lit.v2.grey", "dialog": "carousel.v2.grey"}
 
 
 def test_the_options_are_handed_to_the_reader_before_its_json_line():

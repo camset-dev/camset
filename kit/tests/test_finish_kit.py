@@ -1813,7 +1813,8 @@ class ListCam(SideCam):
         self.shoot(key)
 
 
-def list_world(monkeypatch, cam, help_text="Gives priority to the flash sync speed. This function is currently disabled."):
+def list_world(monkeypatch, cam, help_text="Gives priority to the flash sync speed. This function is currently disabled.",
+               kind="list"):
     import contextlib
     import io
     import json
@@ -1850,7 +1851,7 @@ def list_world(monkeypatch, cam, help_text="Gives priority to the flash sync spe
     out, said = io.StringIO(), io.StringIO()
     with contextlib.redirect_stdout(said):
         P.prove_row(cam, SimpleNamespace(download=lambda tag: Path(f"{tag}.DAT")), Run("pass2", root=Path(".")),
-                    {"path": ["Flash Sync Spd. Prty."], "kind": "list", "labels": SHUTTER}, Path("base.DAT"), out)
+                    {"path": ["Flash Sync Spd. Prty."], "kind": kind, "labels": SHUTTER}, Path("base.DAT"), out)
     return [json.loads(x) for x in out.getvalue().splitlines()], said.getvalue(), guides
 
 
@@ -1898,6 +1899,221 @@ def test_a_refused_line_carries_no_diff_that_is_another_options(monkeypatch):
     got = by_label(lines)
     assert got["Still"]["changes"] and got["709"]["applied"] is False and got["709"]["changes"] == []
     assert "'709'                    not applied" in said
+
+
+# ------------------------------------------- 13b. the reader says which option is grey too, and only adds care (2026-11-19)
+
+def said_by_reader(monkeypatch, cam, said, kinds=("sidelist", "list", "dialog")):
+    """The second reader's "greyed" faked round cam (proving.greyed.reader_grey): said, {option: True, False or None};
+    an option it does not name gets no answer; on another kind of screen, no question."""
+    from proving import greyed
+    asked = []
+
+    def reader_grey(c):
+        if c.read().kind not in kinds:
+            return None, {}
+        asked.append(c.option)
+        got = said.get(c.option)
+        return got, {"question": "lit.v2.grey", "reader_name": "fake", **({"why": "no answer"} if got is None else {})}
+    monkeypatch.setattr(greyed, "reader_grey", reader_grey)
+    return asked
+
+
+def enters_on(cam, options):
+    """How many Enters the camera got on each option of `options` (SideCam's keys replayed)."""
+    return sum(1 for o, k in zip(enter_options(cam), cam.keys, strict=False) if k == "enter" and o in options)
+
+
+@pytest.mark.parametrize("pixels, level, reader, grey, told", [
+    (True, 120.0, True, True, "both"), (True, 120.0, False, True, "pixels"), (True, 120.0, None, True, "pixels"),
+    (False, 225.0, True, True, "reader"), (False, 225.0, False, False, None), (False, 225.0, None, False, None),
+    (None, 170.0, True, True, "reader"), (None, 170.0, False, False, None), (None, 170.0, None, False, None),
+    (None, None, True, True, "reader"), (None, None, False, False, None), (None, None, None, False, None)])
+def test_either_eye_saying_grey_makes_an_option_grey_and_the_reader_decides_where_the_pixels_cannot_tell(
+        monkeypatch, pixels, level, reader, grey, told):
+    """judge on one option of a row with nothing read yet: grey (never entered to choose it: Help first) where either
+    eye says grey, told by those that did; where the pixels cannot tell (a measure in between, or a carousel's, not
+    judged), the reader's answer decides; no answer from the reader leaves the pixels' rule as it was."""
+    from proving import greyed
+    monkeypatch.setattr(greyed, "REASONS", {})
+    helps = []
+    monkeypatch.setattr(greyed, "by_help", lambda cam, name, label, back: helps.append(label) or
+                        greyed.Reason({"row": "Gamma"}, "help", "00002_guide.png", label))
+    d = greyed.Drawing(pixels, level, reader, {"question": "lit.v2.grey"})
+    said = []
+    what = greyed.judge(SimpleNamespace(), "Row", "A", 0, 3, None, say=said.append, drawn=d)
+    assert (what == greyed.SKIP, what.told, bool(helps)) == (grey, told, grey), (what, said)
+    assert what == (greyed.SKIP if grey else greyed.ENTER) and what.drawing is d
+    if grey:
+        assert greyed.line({"label": "A", "chosen_frame": "00001_x.png"}, greyed.REASONS["Row"], what)["greyed_by"] == told
+    assert greyed.readings(what) == {"grey_readings": {"pixels": pixels, **({"level": level} if level else {}),
+                                                       "reader": reader, "question": "lit.v2.grey"}}
+
+
+def test_a_reader_calling_grey_options_white_presses_nothing_the_pixels_alone_would_not(monkeypatch):
+    """PP4's Color Mode with Gamma on HLG as before, the reader reading every option white (or giving no answer): the
+    camera gets exactly the keys it gets with no reader at all, and every grey line says the pixels told it."""
+    alone = SideCam()
+    lines0, _, _ = side_world(monkeypatch, alone)
+    for answer in (False, None):
+        cam = SideCam()
+        said_by_reader(monkeypatch, cam, dict.fromkeys(range(len(COLOR)), answer))
+        lines, said, guides = side_world(monkeypatch, cam)
+        assert cam.keys == alone.keys, answer
+        assert [x["label"] for x in lines] == [x["label"] for x in lines0]
+        grey = [x for x in lines if x.get("greyed") == "drawn"]
+        assert len(grey) == 3 and all(x["greyed_by"] == "pixels" for x in grey), grey
+        assert all(x["grey_readings"]["reader"] is answer and "pixels" in x["grey_readings"] for x in lines)
+
+
+def test_an_option_only_the_reader_calls_grey_is_never_chosen(monkeypatch):
+    """Movie drawn white by its pixels, the reader calling it grey, and the camera refusing it: the row's first grey
+    option it is, so it gets the camera's Help and the row's one Enter, to read why, never an Enter to choose it; Still
+    and S-Cinetone, drawn grey, get no key at all once that reason is read (with no reader, Still took the Enter)."""
+    alone = SideCam(grey=(1, 2), refuse=(0, 1, 2))
+    side_world(monkeypatch, alone)
+    cam = SideCam(grey=(1, 2), refuse=(0, 1, 2))
+    said_by_reader(monkeypatch, cam, {0: True})
+    lines, said, guides = side_world(monkeypatch, cam)
+    got = by_label(lines)
+    assert guides == [("Picture Profile > PP4 > Color Mode: Movie", 0)]
+    assert enters_on(cam, {1, 2}) == 0 < enters_on(alone, {1, 2}) and enters_on(cam, {0}) == 1
+    assert (got["Movie"]["greyed"], got["Movie"]["greyed_by"], got["Movie"]["entered"]) == ("drawn", "reader",
+                                                                                           "for its reason")
+    assert got["Movie"]["grey_readings"]["pixels"] is False and got["Movie"]["grey_readings"]["reader"] is True
+    assert all(got[x]["greyed_by"] == "pixels" and got[x]["dat"] is None for x in ("Still", "S-Cinetone"))
+    assert "'Movie': drawn grey: the camera's Help on it, to read why (told by the reader; the pixels read it white" in said
+
+
+def test_a_reader_that_misjudged_never_opens_the_pixels_grey_options(monkeypatch):
+    """The reader calls Movie grey, the camera applies it after all: the reader misjudged this row, and the options
+    drawn grey by their pixels are judged as with no reader at all (the first one Help and the one Enter for the
+    reason, the other no key), never entered as misjudged."""
+    alone = SideCam(grey=(1, 2), refuse=(1, 2))
+    side_world(monkeypatch, alone)
+    cam = SideCam(grey=(1, 2), refuse=(1, 2))
+    said_by_reader(monkeypatch, cam, {0: True, 1: False, 2: False, 3: True})
+    lines, said, guides = side_world(monkeypatch, cam)
+    got = by_label(lines)
+    assert enters_on(cam, {1, 2}) == enters_on(alone, {1, 2}) == 1 and enters_on(cam, {2}) == 0
+    assert got["Movie"]["applied"] and "greyed" not in got["Movie"] and got["Movie"]["grey_readings"]["reader"] is True
+    assert got["Still"]["entered"] == "for its reason" and got["Still"]["greyed_by"] == "pixels"
+    assert got["S-Cinetone"]["dat"] is None and got["709"]["applied"]       # 709: the reader's grey, no longer heard
+    assert [x[0] for x in guides] == ["Picture Profile > PP4 > Color Mode: Movie",
+                                      "Picture Profile > PP4 > Color Mode: Still"]
+    assert "'Movie' was drawn grey, yet the camera applied it (told by the reader)" in said
+    assert "'709': drawn grey, told by the reader alone, which misjudged an option of this row" in said
+
+
+def test_pixels_that_misjudged_leave_the_readers_grey_judged(monkeypatch):
+    """The pixels call Movie grey alone, the camera applies it: the pixels misjudged this row, and Still, which only
+    the pixels call grey, is entered as before; S-Cinetone, which the reader calls grey, is still never chosen."""
+    cam = SideCam(grey=(0, 1), refuse=(2,))
+    said_by_reader(monkeypatch, cam, {2: True})
+    lines, said, guides = side_world(monkeypatch, cam)
+    got = by_label(lines)
+    assert got["Movie"]["applied"] and got["Still"]["applied"] and "greyed" not in got["Still"]
+    assert (got["S-Cinetone"]["greyed"], got["S-Cinetone"]["greyed_by"], got["S-Cinetone"]["applied"]) == (
+        "drawn", "reader", False)
+    assert "'Still': drawn grey, told by the pixels alone, which misjudged an option of this row" in said
+
+
+def test_where_the_pixels_cannot_tell_the_reader_decides(monkeypatch):
+    """Still's text measures 170 (cannot be told): the reader calling it grey keeps it from being chosen; the reader
+    calling it white, or giving no answer, enters it as before."""
+    for answer, chosen in ((True, False), (False, True), (None, True)):
+        cam = SideCam(grey=(), refuse=(1,), unsure=(1,))
+        said_by_reader(monkeypatch, cam, {1: answer})
+        lines, said, guides = side_world(monkeypatch, cam)
+        got = by_label(lines)["Still"]
+        assert ("greyed" not in got or got.get("entered") == "for its reason") is True
+        assert (got.get("greyed_by") == "reader") is (not chosen), answer
+        assert got["grey_readings"] == {"pixels": None, "level": 170.0, "reader": answer, "question": "lit.v2.grey",
+                                        "reader_name": "fake", **({"why": "no answer"} if answer is None else {})}
+        assert ("the pixels cannot tell whether it is drawn grey (its text reads 170); the reader reads it white"
+                in said) is (answer is False)
+
+
+@pytest.mark.parametrize("pixels", [(), (0,), (1, 2), (0, 1, 2), (0, 2, 3), (0, 1, 2, 3)])
+@pytest.mark.parametrize("reader", [(), (3,), (0, 3), (1, 2, 3), (0, 1, 2, 3)])
+@pytest.mark.parametrize("refuse", ["pixels", "both", "none"])
+def test_the_reader_never_adds_an_enter_on_an_option_the_pixels_call_grey(monkeypatch, pixels, reader, refuse):
+    """Whatever the two eyes say and whatever the camera refuses, the options the pixels call grey get no more Enters
+    with the reader's answers than without them, nor does the row as a whole: the reader only ever takes an Enter
+    away (its Help aside). An option the reader alone calls grey gets at most the row's one try, but where the reader
+    misjudged the row (the camera applied one it called grey), when its others are entered as with no reader."""
+    pixel_grey, reader_grey = set(pixels), set(reader)
+    refused = {"pixels": pixel_grey, "both": pixel_grey | reader_grey, "none": set()}[refuse]
+    alone = SideCam(grey=pixel_grey, refuse=refused)
+    side_world(monkeypatch, alone)
+    cam = SideCam(grey=pixel_grey, refuse=refused)
+    said_by_reader(monkeypatch, cam, {o: o in reader_grey for o in range(len(COLOR))})
+    lines, said, guides = side_world(monkeypatch, cam)
+    assert enters_on(cam, pixel_grey - {4}) <= enters_on(alone, pixel_grey - {4}), (cam.keys, alone.keys)
+    assert cam.keys.count("enter") <= alone.keys.count("enter"), (cam.keys, alone.keys)
+    reader_only = reader_grey - pixel_grey - {4}
+    if not any(x["applied"] and COLOR.index(x["label"]) in reader_only for x in lines):
+        assert enters_on(cam, reader_only) <= 1, cam.keys
+
+
+class CarouselCam(ListCam):
+    """A carousel (SHUTTER) as prove_row meets it: its options' pixels are not judged (drawn_grey gives nothing)."""
+
+    def read(self):
+        return SimpleNamespace(kind={"row": "submenu", "list": "dialog", "notice": "notice"}[self.where], bar=None)
+
+
+def test_on_a_carousel_the_reader_alone_tells_an_option_grey(monkeypatch, tmp_path):
+    """prove_row on a carousel: On, which the reader calls grey and the camera refuses, gets the camera's Help and its
+    one Enter for the reason, written greyed as drawn by the reader; Off and Auto are proved as before; with no answer
+    from the reader every option is entered as today."""
+    import prove_run as P
+    from proving import greyed
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(P, "carousel_text", lambda c: SHUTTER[c.option])
+    cam = CarouselCam(grey=(), refuse=(1,), saved=0)
+    asked = said_by_reader(monkeypatch, cam, {1: True, 2: False, 0: False})
+    lines, said, guides = list_world(monkeypatch, cam, kind="dialog")
+    assert greyed.drawn_grey(cam) == (None, None)                       # a carousel's pixels are not judged
+    on = by_label(lines)["On"]
+    assert (on["greyed"], on["greyed_by"], on["entered"], on["applied"]) == ("drawn", "reader", "for its reason", False)
+    assert guides == ["Flash Sync Spd. Prty.: On"] and sorted(set(asked)) == [0, 1, 2]
+    assert by_label(lines)["Off"]["applied"] and by_label(lines)["Off"]["grey_readings"]["reader"] is False
+    cam2 = CarouselCam(grey=(), refuse=(1,), saved=0)
+    said_by_reader(monkeypatch, cam2, {})
+    lines2, said2, guides2 = list_world(monkeypatch, cam2, kind="dialog")
+    assert guides2 == [] and cam2.keys.count("enter") == 3 and "greyed" not in by_label(lines2)["On"]
+
+
+def test_the_reader_is_asked_the_kinds_grey_question_about_the_frame_on_show(eyes):
+    """proving.greyed.reader_grey: a list's and a side list's lit item asked lit.v2.grey, a carousel's carousel.v2.grey,
+    through camkit.reading.ask; its "greyed" read by camkit.reading.greyed_of; a failure, a black frame or an answer with
+    no grey is no answer, said why; any other screen is asked nothing."""
+    from proving import greyed
+    lit = eyes.frame("00010_down.png", bar=(305, 236, 595, 282))
+    eyes.answer("lit.v2.grey", {"selected": "Movie", "greyed": True})
+    eyes.answer("carousel.v2.grey", {"selected": "ISO 100", "greyed": "false"})
+
+    def on(kind, frame):
+        return SimpleNamespace(frame=frame, read=lambda: SimpleNamespace(kind=kind))
+    assert greyed.reader_grey(on("sidelist", lit)) == (True, {"question": "lit.v2.grey", "reader_name": "fake second",
+                                                              "read": "Movie"})
+    assert greyed.reader_grey(on("list", lit))[0] is True
+    other = eyes.frame("00011_down.png", bar=(110, 236, 556, 282))
+    assert greyed.reader_grey(on("dialog", other))[:1] == (False,)
+    assert eyes.asked == ["lit.v2.grey", "carousel.v2.grey"]                # one question a frame and question
+    assert greyed.reader_grey(on("checklist", other)) == (None, {}) and greyed.reader_grey(on("menu", other)) == (None, {})
+    eyes.answer("lit.v2.grey", {"selected": "none", "greyed": True})
+    third = eyes.frame("00012_down.png", bar=(305, 236, 595, 282))
+    said, kept = greyed.reader_grey(on("sidelist", third))
+    assert said is None and kept["why"] == "the answer says nothing of grey"
+    eyes.answer("lit.v2.grey", RuntimeError("down"))
+    said, kept = greyed.reader_grey(on("sidelist", eyes.frame("00013_down.png", bar=(305, 236, 595, 282))))
+    assert said is None and "the reader failed" in kept["why"]
+    eyes.models = {}                                                    # no reader configured
+    said, kept = greyed.reader_grey(on("sidelist", eyes.frame("00014_down.png", bar=(305, 236, 595, 282))))
+    assert said is None and kept["why"]
+    assert greyed.reader_grey(SimpleNamespace(frame=None, read=lambda: SimpleNamespace(kind="list")))[0] is None
 
 
 # what the readers are fed: an old refused line carrying another option's diff (kit2_pass2 8459-8460's shape, its
@@ -2025,6 +2241,11 @@ def test_the_report_lists_what_was_not_applied_and_how():
     assert R.not_applied_entry(tried)["how"] == "entered for its reason"
     assert R.not_applied_entry(OLD_REFUSED) == {"label": "On", "index": 1, "how": "refused"}
     assert R.same_proof(GREY_LINE) is not None and R.same_proof({**GREY_LINE, "greyed": None}) is None
+    # which eyes told it grey (proving.greyed, 2026-11-19), where the line says
+    for who in ("pixels", "reader", "both"):
+        assert R.not_applied_entry({**GREY_LINE, "greyed_by": who})["told"] == who
+    assert "told" not in R.not_applied_entry({**GREY_LINE, "greyed_by": "a guess"})
+    assert "told" not in R.not_applied_entry({**OLD_REFUSED, "greyed_by": "reader"})
 
 
 def test_the_writer_reads_a_grey_lines_blocker_and_credits_no_refused_diff(tmp_path):

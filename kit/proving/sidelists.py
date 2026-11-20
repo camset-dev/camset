@@ -253,19 +253,20 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
         move_to(cam, cur, k, n, "sidelist")
         if side_index(cam, job) != k:
             raise Failed(f"{name}: the cursor is not on {vals[k]!r} ({side_text(cam)!r})")
-        # an option the side list draws grey is never chosen (proving.greyed): the row's first one, the camera's Help on
-        # it, then, where Help names no reason, its one Enter to read the notice; the others no key at all
+        # an option the side list draws grey is never chosen (proving.greyed: grey by its pixels or by the second
+        # reader): the row's first one, the camera's Help on it, then, where Help names no reason, its one Enter to read
+        # the notice; the others no key at all
         what = greyed.judge(cam, name, vals[k], k, c,
                             lambda k=k: cam.read().kind == "sidelist" and side_index(cam, job) == k)
         if what == greyed.SKIP:
             reason = greyed.REASONS.get(name)
             rec = greyed.line({"path": path, "kind": "sidelist", "index": k, "label": vals[k], "shown": side_text(cam),
                                "chosen_frame": cam.frame.path.name, "vlm": settled(later(vlm_option, cam)),
-                               "base": base_path.name, "sampled": job["plan"] != list(range(n))}, reason)
+                               "base": base_path.name, "sampled": job["plan"] != list(range(n))}, reason, what)
             out.write(json.dumps(rec) + "\n")
             out.flush()
             print(f"   {vals[k]!r:24s} greyed as drawn, never entered"
-                  + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else ""), flush=True)
+                  + (f": {reason.said()}" if isinstance(reason, greyed.Reason) else "") + greyed.seen(what), flush=True)
             greyed_k.append(k)
             greyed.leave(cam, name)
             continue
@@ -294,8 +295,9 @@ def prove_side_row(cam, link, run, job, base_path: Path, out, top=None) -> Path:
                # a refused choice changed nothing of its own: what differs from the base is another option's
                "changes": [] if refused else changes_of(changes),
                "sampled": job["plan"] != list(range(n)), "applied": not refused,
-               **({"greyed": "drawn", "entered": "for its reason", **(reason.kept() if reason else {})}
-                  if what == greyed.TRY and refused else {})}
+               **({**greyed.marks(what), "entered": "for its reason", **(reason.kept() if reason else {})}
+                  if what == greyed.TRY and refused else {}),
+               **greyed.readings(what)}         # both eyes' readings of whether it is drawn grey (proving.greyed)
         out.write(json.dumps(rec) + "\n")
         out.flush()
         brief = ("not applied" if refused else

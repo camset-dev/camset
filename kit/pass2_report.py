@@ -571,13 +571,16 @@ def not_applied_entry(o: dict) -> dict:
     """What the report says of a line the camera did not apply: its option, how ("greyed as drawn": drawn grey, no key
     pressed on it; "entered for its reason": the one Enter of its row on an option drawn grey, to read the camera's
     notice; "refused"), the blocker its row's reason named (proving.greyed; a refused line's notice is in the entry's
-    "notices") and where that reason was read."""
+    "notices"), where that reason was read, and which eyes told it grey ("told": the line's "greyed_by", "pixels",
+    "reader" or "both", since 2026-11-19)."""
     how = ("entered for its reason" if o.get("entered") else "greyed as drawn") if o.get("greyed") == "drawn" \
         else "refused"
     b = o.get("blocker") if isinstance(o.get("blocker"), dict) else None
     reason = o.get("reason") if isinstance(o.get("reason"), dict) else {}
+    told = o.get("greyed_by") if o.get("greyed") == "drawn" and o.get("greyed_by") in ("pixels", "reader", "both") \
+        else None
     return {"label": str(o.get("label")), "index": o.get("index"), "how": how, **({"blocker": b} if b else {}),
-            **({"reason_from": reason.get("from")} if reason.get("from") else {})}
+            **({"reason_from": reason.get("from")} if reason.get("from") else {}), **({"told": told} if told else {})}
 
 
 def record_runs(opts: dict, vals: dict, label_of: dict, main: str, root: Path) -> dict:
@@ -2254,7 +2257,9 @@ def main():
                 b = x.get("blocker") or {}
                 print(f"\n{x['how']}: {name} = {o['label']!r}"
                       + (f"; blocked by {b.get('row') or b.get('equipment') or 'a remote session'}" if b else "")
-                      + (f" (read from the camera's {x['reason_from']})" if x.get("reason_from") else "; no reason read"))
+                      + (f" (read from the camera's {x['reason_from']})" if x.get("reason_from") else "; no reason read")
+                      + (f"; told grey by {'both eyes' if x['told'] == 'both' else 'the ' + x['told']}"
+                         if x.get("told") else ""))
             elif o.get("applied") is False:
                 why = re.sub(r"\s+", " ", (o.get("notice") or {}).get("text") or "")
                 print(f"\nrefused: {name} = {o['label']!r}: {why[:120]!r}")
