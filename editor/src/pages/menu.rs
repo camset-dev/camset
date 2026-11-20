@@ -2628,6 +2628,116 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's mend 3: on the Memories page a new search opens the groups of its hits, as a jump to a row under a
+    /// folded heading does in Edit, and a group folded during that search stays folded; a row control with egui's focus
+    /// whose group folds gives the focus to that group's heading, never left on a control no longer drawn.
+    #[test]
+    fn memories_a_search_opens_its_groups_and_a_fold_gives_the_focus_to_the_heading() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("mem_search_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        (app.view, app.prefs.memories_only_diff) = (View::Memories, false);
+        // a setting of the memories made to differ between Memory 1 and Live, so its row has arrows
+        let (tab, grp, s) = app.matrix_rows_shared("", None).iter().map(|r| (r.0.clone(), r.1.clone(), r.2[0].clone()))
+            .find(|(_, _, s)| s.in_sets && s.area == "global" && s.scalar && s.text.is_none() && s.values.len() >= 2 && s.copies.is_empty() && s.copy_of.is_none() && !app.locked(s, 0) && !app.locked(s, 1)).unwrap();
+        let cur = app.doc.as_ref().unwrap().value(1, s.slot()).unwrap();
+        let v = s.values.iter().map(|(v, _)| *v).find(|v| *v != cur).unwrap();
+        assert!(app.apply(vec![Action::Set(1, s.slot(), v)]).is_none());
+        let g = format!("{tab} > {grp}");
+        let settle = |w: &mut Win, app: &mut App| for _ in 0..3 { let _ = w.run(app, vec![]); };
+        settle(&mut w, &mut app);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(app.mem_closed.contains(&g), "every group folded");
+        app.search = s.name.clone();
+        settle(&mut w, &mut app);
+        assert!(!app.mem_closed.contains(&g), "the search opened its hit's group");
+        app.mem_closed.insert(g.clone());
+        settle(&mut w, &mut app);
+        assert!(app.mem_closed.contains(&g), "folded during the same search, it stays folded");
+        // the row's arrow focused, then every group folded by the keys: the heading has the focus
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        let back = App::arrow_words(&app.col_name(Col::a(1)), &app.col_name(Col::a(0)));
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (arrow, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && *l == back).expect("the row's arrow");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: arrow, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == arrow.0), "the arrow has the focus");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        settle(&mut w, &mut app);
+        let said = w.run(&mut app, vec![]);
+        let (head, ..) = *said.iter().find(|(_, r, l)| *r == Role::Label && *l == format!("⏵ {g}")).expect("the folded heading");
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == head.0), "the heading has the focus");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's mend 2: once a control holds egui's focus (as Tab or a screen reader leaves it), the arrows still move
+    /// the menu's choice, in the items column and the groups column, and the control keeps the focus; Tab still moves
+    /// through the controls; a text field with the caret keeps the arrows for its text.
+    #[test]
+    fn the_arrows_move_the_choice_with_a_control_focused() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("arrows_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let first = app.group_lines(&rows).iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (button, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && l == "Expand all").expect("a button");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: button, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        let focused = |w: &Win| w.ctx.memory(|m| m.focused()).map(|f| f.value());
+        assert_eq!(focused(&w), Some(button.0), "the button has the focus");
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert!(app.item_key.as_deref() != Some(first.key.as_str()) || app.item_head.is_some(), "Down moved the choice in the items column");
+        assert_eq!(focused(&w), Some(button.0), "and the button kept the focus");
+        app.focus = Focus::Groups;
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_ne!(app.group.as_deref(), Some(group), "Down moved to the next group");
+        assert_eq!(focused(&w), Some(button.0), "the button kept the focus");
+        // Tab moves through the controls from the one focused
+        w.key(&mut app, egui::Key::Tab);
+        assert!(focused(&w).is_some_and(|f| f != button.0), "Tab moved the focus to another control");
+        // a text field with the caret keeps the arrows
+        let now = app.group.clone();
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_eq!(app.group, now, "the search box with the caret kept the arrow");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's mend 1: a Collapse all the view in front does not take acts on no later view. On a family group,
+    /// Cmd/Ctrl+Shift+↑ and a plain ↓ in the same frame: the ↓ moves to the next group, the request is dropped after that
+    /// frame's panel, and the family's table, back in front, is open as it was.
+    #[test]
+    fn a_fold_request_not_taken_acts_on_no_later_view() {
+        let (mut app, dir, user) = sample_app("fold_stale", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = app.schema.tabs.iter().find_map(|t| app.tab_groups(t).into_iter().find(|(_, family, _)| *family).map(|(g, _, _)| (t.clone(), g))).expect("a family group");
+        app.select(Some(View::Tab(tab.clone())), Some(group.clone()), None);
+        app.focus = Focus::Groups;
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            w.drawn(app).iter().any(|t| t.contains("Values the camera never produces are not offered."))
+        };
+        assert!(open(&mut w, &mut app));
+        let key = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        let _ = w.run(&mut app, vec![key(egui::Key::ArrowUp, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), key(egui::Key::ArrowDown, egui::Modifiers::NONE)]);
+        assert_ne!(app.group.as_deref(), Some(group.as_str()), "the plain Down moved to the next group");
+        assert!(app.head_fold.is_none(), "the request the view in front did not take is gone after the panel");
+        let _ = w.run(&mut app, vec![]);
+        app.select(Some(View::Tab(tab)), Some(group), None);
+        assert!(open(&mut w, &mut app), "the family's table, back in front, is open as it was");
+        done(&dir, &user);
+    }
+
     /// The reviewer's inventory, B: the record map (Expert mode) folds and shows its records' bytes by the keys as by its
     /// own Collapse all and Expand all: Expand all the multi-byte records listed, Collapse all every one.
     #[test]

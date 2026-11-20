@@ -1212,8 +1212,11 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     import schema_update as S
     slots = S.mymenu_slots(DOC)
     mirror = S.mirror_of(DOC)
+    # a row given by hand counts as none for the mapping words (the memories' shutter parts on Camera Set. Memory's row
+    # since 2026-11-20 keep their mark), as from_data judges them
+    hand = frozenset(hand_tables.load(A1, evidence=False).HAND_PLACES)
     flagged = [s["key"] for s in DOC["settings"] if s.get("expert")]
-    assert flagged == [s["key"] for s in DOC["settings"] if S.expert(s, slots, mirror)]
+    assert flagged == [s["key"] for s in DOC["settings"] if S.expert(s, slots, mirror, hand)]
     # + 27 on no camera row with a mapping word in their name (the memories' shutter numerators and denominators,
     # 2 of the sets' own and 24 of the live copy, and the SDK's "Unknown"), 2026-11-07
     # + 4 copies written together with their main record (JPEG/HEIF Quality and Image Size, Slot 1 and 2), 2026-11-07
@@ -1230,8 +1233,8 @@ def test_the_expert_settings_are_the_78_the_editor_once_picked():
     # + 2 the single-slot JPEG/HEIF Quality's and Image Size's copies (0x01e0, 0x01e4), 2026-11-19
     # + 4 Custom 2's and Custom 3's height and width times 1000 (set:0x1490-0x1496), "(3:2 copy)" as Custom 1's two
     #   (set:0x148c, 0x148e), which the 78 held while they were taken for the box in use's, 2026-11-19
-    assert len([s for s in DOC["settings"] if S.expert(s)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
-    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4   # + the live copy
+    assert len([s for s in DOC["settings"] if S.expert(s, hand=hand)]) == 78 + 27 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
+    assert len([s for s in DOC["settings"] if S.expert(s, mirror=mirror, hand=hand)]) == 78 + 3 + 60 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4   # + the live copy
     assert len(flagged) == 78 + 3 + 60 + 42 + 4 + 1 + 2 + 12 - 3 + 1 + 2 + 4
     assert {s["key"] for s in DOC["settings"] if s["name"].endswith("copy)")} <= set(flagged)
     assert {s.get("expert") for s in DOC["settings"]} == {True, None}            # true, or no key
@@ -1841,36 +1844,72 @@ def test_a_single_letter_is_no_word_and_snap_still_mends_a_one_letter_slip(monke
     assert word_swapped("Av Zqx Switch", "Tv Zqx Switch") and not word_swapped("S&d Zqx", "S&Q Zqx")
 
 
-def af_crossing_row(option: str, key: str, sure: bool) -> dict:
+def af_crossing_row(option: str, key: str, sure: bool, schema: str | None = "Lvl for Crossing") -> dict:
     """A made-up pass-2 row of the stills Fn Menu's picker at `option`, its slot `key` proving code 294, which the
-    camera draws "AF Lvl for Crossing" and the definition names "Lvl for Crossing": a "wording" note, sure where two
-    readers read it."""
+    camera draws "AF Lvl for Crossing": against a definition naming it `schema` ("Lvl for Crossing", the first kit's
+    cut name), a "wording" note, sure where two readers read it; against one naming it as drawn (schema None, a pass
+    over its own output), no note, as pass2_report judges it."""
+    note = [{"value": 294, "camera": "AF Lvl for Crossing", "schema": schema, "kind": "wording", "sure": sure}]
     return {"row": f"Fn Menu Settings / {option}", "options": 1, "notices": [],
-            "records": {key: {"verdict": "wording", "proved": {"AF Lvl for Crossing": 294}, "linear": None,
+            "records": {key: {"verdict": "wording" if schema else "agrees", "proved": {"AF Lvl for Crossing": 294},
+                              "linear": None,
                               "names": {"AF Lvl for Crossing": "two readers" if sure else "one reader (ocr)"},
-                              "notes": [{"value": 294, "camera": "AF Lvl for Crossing", "schema": "Lvl for Crossing",
-                                         "kind": "wording", "sure": sure}]}}}
+                              "notes": note if schema else []}}}
+
+
+def test_a_reviewed_slots_source_is_its_reading_the_familys_or_the_schemas():
+    """writer.labels.kept_source: a picker slot whose own reading was not sure, its note listed for review, ends with
+    its readers' source where its reading agrees with the name it ends with (as pass 2's report would judge it, so a
+    pass over its own output, with no note, says the same), "derived" where that name is a sure reading of the code
+    on another slot of its family, else "schema kept". Made-up labels."""
+    from writer.labels import kept_source
+    assert kept_source("AF Zqx Speed", "AF Zqx Speed", set()) is None
+    assert kept_source("AF Zqx Speed", "Qq", {"AF Zqx Speed"}) == "derived"
+    assert kept_source("AF Zqx Speed", "Qq", {"Zqx Other"}) == "schema kept"
 
 
 @needs_evidence
-def test_a_name_a_family_correction_replaces_is_derived_never_schema_kept(tmp_path, monkeypatch, capsys):
-    """The review of 2026-11-20: a slot whose own reading was not sure keeps the schema's name for the moment ("schema
-    kept", listed for review), but where a sure slot of its family corrects that name, the correction reaches it and
-    its name is no longer the schema's: its source is "derived", as the family pass makes it, never "schema kept"."""
+def test_a_name_the_family_correction_gives_keeps_its_source_on_a_pass_over_its_own_output(tmp_path, monkeypatch,
+                                                                                            capsys):
+    """The review of 2026-11-20 and data pass 10: in a definition still holding the first kit's cut name ("Lvl for
+    Crossing", code 294, every stills Fn Menu slot), a slot whose own reading was not sure (OCR's alone, "AF Lvl for
+    Crossing") is listed for review, one line per code, while a sure slot of its family corrects the name on every
+    slot. The not-sure slot's name is then its own reading, so its source is its readers' ("one reader"), never "schema
+    kept"; the sure slot's is "two readers". A second pass over that output, whose report holds no note, changes no
+    name and no source."""
     report = [af_crossing_row("Still Upper / 1", "global:0x0445[0]", sure=False),
               af_crossing_row("Still Lower / 6", "global:0x0445[11]", sure=True)]
     proofs = [{"path": ["Fn Menu Settings"], "kind": "table", "option": o, "opens": "picker", "index": 0,
-               "label": "• AF Lvl for Crossing", "applied": True, "changes": []}
+               "label": "• AF Lvl for Crossing", "applied": True, "changes": []}       # BULLET
               for o in ("Still Upper / 1", "Still Lower / 6")]
     S, target, write = a1_run(tmp_path, monkeypatch, report, A1_PROOFS + proofs)
+    public = json.loads(target.read_text(encoding="utf-8"))          # the definition as it stood before pass 10
+    for s in public["settings"]:
+        if s["name"].startswith("Fn Menu (Still):"):
+            s["values"] = [[v, "Lvl for Crossing" if v == 294 else lab] for v, lab in s["values"]]
+    target.write_text(json.dumps(public, ensure_ascii=False, indent=1), encoding="utf-8")
     said = write(capsys)
-    doc = definitions.load(target)
-    by = {s["key"]: s for s in doc["settings"]}
-    for k in ("global:0x0445[0]", "global:0x0445[11]", "global:0x0445[5]"):
-        assert dict((v, lab) for v, lab in by[k]["values"])[294] == "AF Lvl for Crossing", k
-    names = by["global:0x0445[0]"]["proved"].get("names") or {}
-    assert names.get("294") == "derived", names.get("294")
+
+    def state():
+        by = {s["key"]: s for s in definitions.load(target)["settings"]}
+        return {k: (dict((v, lab) for v, lab in by[k]["values"])[294], (by[k]["proved"].get("names") or {}).get("294"))
+                for k in ("global:0x0445[0]", "global:0x0445[11]", "global:0x0445[5]")}
+    first = state()
+    assert first["global:0x0445[0]"] == ("AF Lvl for Crossing", "one reader"), first
+    assert first["global:0x0445[11]"] == ("AF Lvl for Crossing", "two readers"), first
+    assert first["global:0x0445[5]"][0] == "AF Lvl for Crossing", first
+    assert said.count("review global:0x0445[") == 1
     assert "review global:0x0445[0]   294: schema 'Lvl for Crossing', camera read 'AF Lvl for Crossing'" in said
+    again = [af_crossing_row("Still Upper / 1", "global:0x0445[0]", sure=False, schema=None),
+             af_crossing_row("Still Lower / 6", "global:0x0445[11]", sure=True, schema=None)]
+    (S.RUN / "report.json").write_text(json.dumps(again), encoding="utf-8")
+    said = write(capsys)
+    second = state()
+    # Lower 5, never proved here, takes its "derived" from this run's rules alone: the correction on the first pass;
+    # on the camera's runs the picker groups lend it each pass, which these made-up proofs (no changes) never form
+    assert {k: second[k] for k in ("global:0x0445[0]", "global:0x0445[11]")} == \
+        {k: first[k] for k in ("global:0x0445[0]", "global:0x0445[11]")} and second["global:0x0445[5]"][0] == \
+        "AF Lvl for Crossing" and "review global:0x0445" not in said
 
 
 # a made-up report of one row, a KEEP_LABELS record whose label stands against the camera's reading (Proxy Rec.
@@ -2604,7 +2643,7 @@ def test_an_add_item_proof_names_its_code_in_every_my_menu_slot():
     the table lacks is added to all; a name the report's rule finds the same as the proof's stays."""
     import schema_update as S
     slots = [{"key": f"global:0x{rec:04x}[{i}]", "area": "global", "id": rec, "index": i, "name": f"My Menu {p}: item {i + 1}",
-              "values": [[2, "(empty)"], [10, "Image Quality Settings"], [101, "APS-C/Super 35mm Shooting"]]}
+              "values": [[2, "(empty)"], [10, "Image Quality Settings"], [101, "APS-C S35 Shooting"]]}
              for p, rec in ((1, 0x0c8a), (2, 0x0c91)) for i in range(3)]
     doc = {"settings": slots}
     by_key = {s["key"]: s for s in slots}
@@ -3809,6 +3848,37 @@ def test_the_published_definition_carries_every_record_fix_and_no_reason_the_tab
             and s.get("group") not in pp] == []
 
 
+def altered_pass(tmp: Path, mp) -> tuple:
+    """altered_a1_run's pass, in the test's folder `tmp` with its monkeypatch `mp`: (what it printed, the definition
+    written by key, its evidence file)."""
+    import contextlib
+    import io
+
+    import schema_update as S
+    _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
+    definitions.evidence_path(target).unlink(missing_ok=True)
+    doc = json.loads(target.read_text(encoding="utf-8"))
+    by = {s["key"]: s for s in doc["settings"]}
+    for k, s in by.items():
+        if k.startswith(("global:0x0f9b[", "global:0x0fbb[")):
+            s["values"] = [[v, f"x{v}"] for v, _ in s["values"]]
+    by["global:0x04e2"]["range"] = [0, 255]
+    by["global:0x1672"]["unproved_reason"]["date"] = "2026-01-02"
+    by["set:0x0180@260"]["unproved_sets"]["date"] = "2026-01-03"
+    public, evidence = definitions.split(doc)
+    target.write_text(json.dumps(public, indent=1, ensure_ascii=False), encoding="utf-8")
+    definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
+    mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
+    mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
+    mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
+    said = io.StringIO()
+    with contextlib.redirect_stdout(said):
+        S.main()
+    written = json.loads(target.read_text(encoding="utf-8"))
+    ev = definitions.evidence_path(target).read_text(encoding="utf-8")
+    return said.getvalue(), {s["key"]: s for s in written["settings"]}, ev
+
+
 @pytest.fixture(scope="module")
 def altered_a1_run(tmp_path_factory):
     """The a1 II's full pass (main, --write --force) on a made-up run whose definition was changed where the hand
@@ -3816,34 +3886,26 @@ def altered_a1_run(tmp_path_factory):
     and a day on one reason and on one memory set's reason in the definition's evidence, which the hand tables
     (UNPROVED, every day taken away) no longer give. The public definition alone otherwise, whatever this computer
     holds. Returns (what it printed, the definition written, its evidence file)."""
-    import contextlib
-    import io
-
-    import schema_update as S
-    tmp = tmp_path_factory.mktemp("altered_a1")
     with pytest.MonkeyPatch.context() as mp:
-        _, target, _ = a1_run(tmp, mp, A1_REPORT, A1_PROOFS)
-        definitions.evidence_path(target).unlink(missing_ok=True)
-        doc = json.loads(target.read_text(encoding="utf-8"))
-        by = {s["key"]: s for s in doc["settings"]}
-        for k, s in by.items():
-            if k.startswith(("global:0x0f9b[", "global:0x0fbb[")):
-                s["values"] = [[v, f"x{v}"] for v, _ in s["values"]]
-        by["global:0x04e2"]["range"] = [0, 255]
-        by["global:0x1672"]["unproved_reason"]["date"] = "2026-01-02"
-        by["set:0x0180@260"]["unproved_sets"]["date"] = "2026-01-03"
-        public, evidence = definitions.split(doc)
-        target.write_text(json.dumps(public, indent=1, ensure_ascii=False), encoding="utf-8")
-        definitions.evidence_path(target).write_text(json.dumps(evidence, indent=1), encoding="utf-8")
-        mp.setattr(S, "UNPROVED", {k: (kind, None, why) for k, (kind, _, why) in S.UNPROVED.items()})
-        mp.setattr(S, "HAND_EVIDENCE", tmp / "made-up hand evidence")
-        mp.setattr(sys, "argv", ["schema_update.py", "--write", "--force"])
-        said = io.StringIO()
-        with contextlib.redirect_stdout(said):
-            S.main()
-        written = json.loads(target.read_text(encoding="utf-8"))
-        ev = definitions.evidence_path(target).read_text(encoding="utf-8")
-    return said.getvalue(), {s["key"]: s for s in written["settings"]}, ev
+        return altered_pass(tmp_path_factory.mktemp("altered_a1"), mp)
+
+
+@pytest.mark.parametrize("tree", ["a made-up menu tree", "no menu tree"])
+def test_the_altered_pass_keeps_the_committed_places_with_a_menu_tree_here_or_none(tree, tmp_path, monkeypatch):
+    """altered_a1_run's pass reads the public definition alone, then proves three rows: whether this computer holds a
+    menu tree or not, its write keeps every setting's place as the committed definition has them, for the definition
+    as read held no proof path (fromdata.places_rebuilt). On 2026-11-20 a computer with the tree took the row off every
+    setting but the few the pass proved, and the Main tile on Record Setting (XAVC S 4K, 60p) stopped the write."""
+    from writer.fromdata import PLACE_KEYS
+    path = tmp_path / "menu_tree.json"
+    if tree == "a made-up menu tree":
+        path.write_text(json.dumps({"model": "ILCE-1M2", "firmware": "4.00", "source": "made up", "tabs": [
+            {"tab": "Exposure/Color", "pages": [{"page": "1/1", "group": "Metering", "rows": [
+                {"label": "Metering Mode", "state": "walked", "why": "", "kind": "dialog"}]}]}]}), encoding="utf-8")
+    monkeypatch.setattr(definitions, "menu_tree_file", lambda k: path)
+    _, by, _ = altered_pass(tmp_path, monkeypatch)
+    assert {k: {f: s.get(f) for f in PLACE_KEYS} for k, s in by.items()} == \
+           {k: {f: s.get(f) for f in PLACE_KEYS} for k, s in PUB_BY.items()}
 
 
 def test_a_reason_whose_day_the_hand_evidence_does_not_give_is_written_without_one(altered_a1_run):

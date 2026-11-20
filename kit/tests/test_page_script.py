@@ -457,6 +457,33 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_memories_a_search_opens_the_groups_of_its_hits(tmp_path):
+    """The reviewer's mend 3: on the Memories page a new search opens the groups of its hits, as a jump to a row under a
+    folded heading does in Edit; a group folded during the same search stays folded."""
+    got = run(tmp_path, """
+const cell = (text, differs) => ({ text, differs, section: 1, takes: [true, true] });
+const r = (key, name) => ({ key, name, live: { text: "a" }, cells: [cell("b", true)] });
+const j = { title: "Memories", intro: "i", buttons: [], editable: true, others: [], cols: [[1, "M1"]], only_diff: false,
+  groups: [{ tab: "Shoot", group: "Drive", color: "#000", rows: [r("k:a", "Alpha")] }] };
+view.mode = "edit"; view.page = "memories"; view.q = "";
+const heads = () => $("content").querySelectorAll(".mem-fold").map((h) => h.getAttribute("aria-expanded"));
+memView.closed.add("Shoot > Drive"); memView.closed.add("Focus > AF");
+$("content").replaceChildren(...drawMemories(j));
+const out = { before: heads() };
+memView.q = "alp";
+$("content").replaceChildren(...drawMemories(j));
+out.searched = [heads(), [...memView.closed]];
+memView.closed.add("Shoot > Drive");
+$("content").replaceChildren(...drawMemories(j));
+out.same_search = heads();
+console.log(JSON.stringify(out));
+""")
+    assert got["before"] == ["false"]
+    assert got["searched"] == [["true"], ["Focus > AF"]], "the hit's group opened, the others left as they were"
+    assert got["same_search"] == ["false"], "folded during the same search, it stays folded"
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

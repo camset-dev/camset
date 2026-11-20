@@ -204,6 +204,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The definition viewer
 
+- **Where the camera has several menus, the viewer's Menu is the first (the a1 II's Still menu), named over the
+  column,** as the editor lays it out for the settings saved in that mode; Expert still lists every setting, the other
+  menus' rows among them. The proof viewer hangs every record on the row the definition places it on, rows given by
+  hand included.
 - A file the viewer refuses shows its size and first bytes as a hex dump, to paste into a problem report: the file was
   read in your browser and never left it, but check that the dump holds nothing of yours before pasting it anywhere
   public.
@@ -212,6 +216,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 - **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
   list names no blocker for Focus Mode Dial instead of the shorter one, and the test expects whichever its data gives.
+- **A picker slot listed for review keeps its name's source on a pass over the writer's own output:** its readers'
+  where its reading spells the name, "derived" where the name is its family's sure reading, else "schema kept".
 - **A stopped Recall Custom run (`customshoot_values.py`, `customshoot_run.py`) presses nothing more but MENU:** its
   start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names, or a working copy
   only a hand can put back), it gives `customshoot_values.py --put-back --against <its start file>` only where opening
@@ -270,6 +276,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   their row stands in, the mapping's open work.
 - **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
   counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
+- **A write from a definition read without its evidence keeps every place, menu tree or not:** a pass that proved a
+  few rows no longer takes the row off every other setting. The writer's refusal of a Main tile on an Expert-only
+  setting now says why that setting is Expert-only, and what to do about it.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

@@ -153,13 +153,14 @@ from runner import read_json  # noqa: E402
 import writer.gate  # noqa: E402,F401   (the tests point its accepted file at their own)
 from writer import proofs as writer_proofs  # noqa: E402   (menu_row reads the camera's reworded contexts from it)
 from writer.labels import (LATIN, MODE_LETTERS, PICKER_FAMILY, TICKED, UNTICKED, axis_tail_out,  # noqa: E402,F401
-                           check_labels, clean, ev_label, family_name, icon_word, one_name, option_prefix_out, picker_family,
+                           check_labels, clean, ev_label, family_name, icon_word, kept_source, one_name, option_prefix_out,
+                           picker_family,
                            same_option, snap, squashed, tick_values, value_order)
 from writer.mirror import (mirror_key, mirror_names, mirror_of, mirror_place)  # noqa: E402,F401
 from writer.notes import (ALLOWANCE, EVIDENCE, PAREN, TAIL, add_line, apply_fix, fix_differs, note_is,  # noqa: E402,F401
                           put_note, split_evidence, with_evidence_apart, with_tidy_note)
 from writer.fromdata import (BUTTON_WORD, EXPERT_WORDS, MAPPING_WORDS, PLACE_KEYS, RECORD_REF,  # noqa: E402,F401
-                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places,
+                             SETTING_GROUPS, expert, from_data, model_refused, mymenu_slots, own_help, places, places_rebuilt,
                              plain_reason, refresh_from_data, reset_names, say_stale, text, with_camera,
                              with_expert, with_menu, with_place, with_plain_words, write_definition)
 from writer.proofs import (NAME_SOURCES, READER_RANK, SCALES, SHOWN_NUMBER, axis_value_rows,  # noqa: E402,F401
@@ -983,6 +984,9 @@ def main():
     if gaps:
         sys.exit(hand_facts.hand_proof_stop(paths.A1II, gaps))
     doc = definitions.load(target)
+    # whether this write rebuilds the places, judged on the definition as read, before this pass's proofs: read without
+    # its evidence, it keeps every place it has (fromdata.places_rebuilt)
+    rebuild = places_rebuilt(doc)
     writer_proofs.CONTEXT_WORDS.update(CONTEXT_WORDS)      # this body's contexts the runs reworded (menu_row)
     why = model_refused(RUN, doc)
     if why:
@@ -1829,6 +1833,19 @@ def main():
                 derived[x["key"]][pair[0]] = "derived"
                 if over[x["key"]].get(pair[0]) == "schema kept":
                     over[x["key"]][pair[0]] = "derived"
+    # a slot listed for review, its name as it now stands: its readers' source where its reading agrees with that name,
+    # "derived" where the name is its family's sure reading, else "schema kept" (kept_source), the same on a pass over
+    # this output, whose report holds no note there
+    now = {x["key"]: x for x in doc["settings"]}
+    for k, v, _had, read in review:
+        final = dict((w, lab) for w, lab in now[k].get("values") or []).get(v)
+        fam = picker_family(now[k]["name"]) or now[k]["name"].split(":")[0]
+        sure = {lab for lab, src in reads.get((fam, v), {}).items() if src == "two readers"}
+        src = kept_source(str(final), clean(read), sure) if final is not None else "schema kept"
+        if src is None:
+            over[k].pop(v, None)
+        else:
+            over[k][v] = src
     disputed_out(doc, disputed & set(by_key))
     for k in disputed:
         proved.pop(k, None)
@@ -1912,7 +1929,7 @@ def main():
     # reads them (not the runs): a --from-data or a write without the runs places the settings alike
     print(f"menu modes: {with_menu_modes(doc, RUN, save=a.write and not a.dry_run)} settings with proofs whose context "
           "names no mode and that the camera's own files place in another mode (kept in their evidence)")
-    doc = from_data(doc)                 # the parts from data/, as --from-data gives them, last
+    doc = from_data(doc, rebuild)        # the parts from data/, as --from-data gives them, last
     print(f"expert: {sum(1 for s in doc['settings'] if s.get('expert'))} settings shown in Expert mode only")
     names = collections.Counter(src for s in doc["settings"] for src in ((s.get("proved") or {}).get("names") or {}).values())
     print(f"names: {dict(names.most_common())}")

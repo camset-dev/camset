@@ -193,9 +193,15 @@ struct App {
     matrix_closed: std::collections::HashSet<(String, String)>,
     /// The Memories page's groups folded, by "tab > group" (all open to start with, as the page has always been drawn).
     mem_closed: std::collections::HashSet<String>,
+    /// The search the Memories page last opened its hits' groups for (`memories_view`): a new one opens them again.
+    mem_search_seen: String,
+    /// The Memories group whose row control had egui's focus last frame, so a fold that hides it gives the focus to the
+    /// group's heading.
+    mem_focus_group: Option<String>,
     /// The view in front's own folds (the exposure page's "What decides" sections, a family group's table, the record
-    /// map's records), all to fold (true) or all to open (false) the next time it is drawn (`fold_all`); each keeps its
-    /// state where a click leaves it (egui's, the record map's).
+    /// map's records), all to fold (true) or all to open (false) as it is drawn this frame (`fold_all`, by the keys before
+    /// the panel, or a button above them); dropped after the central panel, so it never acts on a later view. Each keeps
+    /// its state where a click leaves it (egui's, the record map's).
     head_fold: Option<bool>,
     /// The control that had egui's focus when the fold keys were pressed, to have it back the next frame: egui moves the
     /// focus with an arrow whatever the modifiers (`fold_keys`).
@@ -381,6 +387,8 @@ impl App {
             mm_visible: None,
             matrix_closed: Default::default(),
             mem_closed: Default::default(),
+            mem_search_seen: String::new(),
+            mem_focus_group: None,
             head_fold: None,
             refocus: None,
             target: 0,
@@ -641,7 +649,8 @@ impl eframe::App for App {
             self.on_dialog(kind, path);
         }
         // shortcuts: undo / redo, and arrow keys between the menu columns
-        if !ctx.wants_keyboard_input() {
+        // a text field with the caret keeps them for its own text (`typing`)
+        if !typing(ctx) {
             let (undo, redo) = ctx.input(|i| (
                 i.modifiers.command && !i.modifiers.shift && i.key_pressed(egui::Key::Z),
                 (i.modifiers.command && i.modifiers.shift && i.key_pressed(egui::Key::Z)) || (i.modifiers.command && i.key_pressed(egui::Key::Y)),
@@ -655,13 +664,16 @@ impl eframe::App for App {
         self.bar_nav(ctx);
         self.keyboard_nav(ctx);
         // compare view: F3 / Shift+F3 (also Alt+Down / Alt+Up) step through the differences
-        if self.mode == Mode::Compare && !ctx.wants_keyboard_input() {
+        if self.mode == Mode::Compare && !typing(ctx) {
             let (next, prev) = ctx.input(|i| (
                 (i.key_pressed(egui::Key::F3) && !i.modifiers.shift) || (i.modifiers.alt && i.key_pressed(egui::Key::ArrowDown)),
                 (i.key_pressed(egui::Key::F3) && i.modifiers.shift) || (i.modifiers.alt && i.key_pressed(egui::Key::ArrowUp)),
             ));
             if next { self.diff_step = 1; }
             if prev { self.diff_step = -1; }
+            if next || prev {
+                self.keep_focus(ctx);
+            }
         }
         // remember the window size and the session (files, mode, page) for the next start
         // (the window reports them in the editor's points, which the text size scales: kept at 100%, as it opens)
@@ -809,6 +821,8 @@ impl eframe::App for App {
                 }
             })
             .inner;
+        // a Collapse all / Expand all request the view in front did not take this frame acts on no later one
+        self.head_fold = None;
         // a change that unticks a switch keeping copies apart waits for the question's answer (`untick_window`)
         let actions = self.hold_untick(actions);
         self.apply(actions);

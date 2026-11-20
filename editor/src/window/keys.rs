@@ -52,7 +52,7 @@ impl App {
     /// Main's and My Menu's, where Left takes the Menu's; Up/Down move inside the groups' column here. Up/Down in the
     /// Menu's column are `bar_nav`'s, which runs first and takes them (in Edit and Compare); the items' are menu_view's.
     pub(crate) fn keyboard_nav(&mut self, ctx: &egui::Context) {
-        if self.mode != Mode::Edit || ctx.wants_keyboard_input() {
+        if self.mode != Mode::Edit || typing(ctx) {
             return;
         }
         let tab = match self.view.clone() {
@@ -64,6 +64,9 @@ impl App {
             i.key_pressed(egui::Key::ArrowLeft), i.key_pressed(egui::Key::ArrowRight),
             i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown),
         ));
+        if left || right || up || down {
+            self.keep_focus(ctx);
+        }
         // a row of the camera's menu chosen in the items column (`item_head`): Enter or Space folds or shows what it
         // holds (unless a control has egui's focus, which takes them as a click), Left folds it and Right shows it
         if let (Focus::Items, Some(tab), Some(path)) = (self.focus, tab.as_ref(), self.item_head.clone()) {
@@ -124,6 +127,15 @@ impl App {
         }
     }
 
+    /// The arrows moved the menu's choice while a control had egui's focus (one reached by Tab or a screen reader): that
+    /// control has it back the next frame (`refocus`), as egui moves its own focus with an arrow too. So the arrows move
+    /// the choice, Tab and Shift+Tab move through the controls from the one focused, and Enter or Space press it.
+    pub(crate) fn keep_focus(&mut self, ctx: &egui::Context) {
+        if let Some(id) = ctx.memory(|m| m.focused()) {
+            self.refocus = Some(id);
+        }
+    }
+
     /// The keyboard shortcuts besides undo, zoom and the arrows (listed in Settings > Appearance): open, save,
     /// search, close, read, Settings, the next or previous edit (Edit mode), and Esc, which closes the topmost
     /// window or, with none open, clears the search.
@@ -137,7 +149,7 @@ impl App {
             if self.prefs.link.is_empty() { self.show_connect = true; } else { self.start_camera_job(None); }
         }
         if pressed(&KEY_SETTINGS) { self.show_settings = !self.show_settings; }
-        if self.mode == Mode::Edit && !ctx.wants_keyboard_input() {
+        if self.mode == Mode::Edit && !typing(ctx) {
             let (next, prev) = ctx.input(|i| (i.key_pressed(egui::Key::F3) && !i.modifiers.shift, i.key_pressed(egui::Key::F3) && i.modifiers.shift));
             if next { self.step_edit(1); }
             if prev { self.step_edit(-1); }

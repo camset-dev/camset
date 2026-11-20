@@ -306,9 +306,9 @@ def _unring(text: str) -> str:
     alike (camkit.match.clean does this for a label alone): a bullet or ring sign before it, a radio ring read as "o"
     or "O" before it (spaced, or glued to a digit or a sign) or after it, a ring read as a zero and a space before
     anything but a digit or an arrow ("0 +1 EV", "0 (empty)", '0 "Cancel" first'), and a stop or colon at its end;
-    canonical first. A zero before an arrow is the camera's own ("0 -> -(minus) -> +(plus)"). A zero glued to a digit,
-    or spaced before one, stays: it is a ring or a point lost ("04\"", "0 4\"" for 0.4"), which only the options can
-    tell apart (_variants)."""
+    canonical first. A zero before an arrow is the camera's own ("0\u2192-\u2192+", RIGHTWARDS ARROW: Bracket Order's
+    first option). A zero glued to a digit, or spaced before one, stays: it is a ring or a point lost ("04\"",
+    "0 4\"" for 0.4"), which only the options can tell apart (_variants)."""
     t = canonical(text)
     t = re.sub(r"^[\u2022\u00B7\u25E6\u25CF\u25CB]\s*", "", t)
     t = re.sub(r"^[oO]\s+(?=\S)|^[oO](?=[\d+\-\u00B1\u2021])", "", t)

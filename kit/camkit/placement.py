@@ -733,6 +733,15 @@ def with_modes(paths_of, modes: dict | None, every=()):
     return paths
 
 
+def placing_paths(doc: dict, tree: dict, hand: dict = None, menus=()):
+    """The paths a setting is placed by, one rule for the writer (writer.fromdata.places) and the proof viewer: its rows
+    given by hand (`hand`: HAND_PLACES, {key: [row paths]}, with_hand) in place of its proof paths, each path whose
+    context names no mode given the modes the camera's own files gave it (with_modes, menu_modes_of the definition's
+    evidence), the modes a context may name being the menu tree's and the camera menus' (`menus`: the MENUS table)."""
+    every = set(menu_modes(tree)) | {m for menu in menus or () for m in menu.get("modes") or ()}
+    return with_modes(with_hand(hand or {}), menu_modes_of(doc), every)
+
+
 def shown_in(s, m: "Tree", tab: str, g: dict, g_tree: str, groups: dict, t: "Tree") -> str:
     """The definition's name for the camera group `g` (of the menu `m`, named `g_tree` there) that holds a setting's
     row: its own group's (the head of "Shutter/Silent › Target Function Settings") when that is the one, else a group

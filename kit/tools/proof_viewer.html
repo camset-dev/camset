@@ -368,7 +368,7 @@ details.explain summary { cursor: pointer; color: var(--muted); font-size: .86re
 </header>
 <nav class="tabstrip" id="tabstrip" aria-label="Tabs"></nav>
 <div class="cols" id="cols" data-show="items">
-  <section class="col" id="menu" aria-label="Menu"><h2>Menu</h2><ul class="list" id="tabs"></ul></section>
+  <section class="col" id="menu" aria-label="Menu"><h2 id="mtitle">Menu</h2><ul class="list" id="tabs"></ul></section>
   <section class="col" id="groups" aria-label="Groups"><h2 id="gtitle"></h2><ul class="list" id="glist"></ul></section>
   <section class="col" id="items" aria-label="Rows"><h2><button class="back" id="back-groups">← Groups</button><span id="ititle"></span><span class="key" id="icount"></span></h2><div class="items" id="ilist"></div></section>
   <section class="col" id="detail" aria-label="The chosen row"><h2><button class="back" id="back-items">← Rows</button><span></span></h2><div id="dbody"></div></section>
@@ -598,10 +598,19 @@ for (const menu of MENUS ? [MENUS.off, MENUS.on] : [DATA.menu]) {
 }
 // the Expert switch, kept in this browser as the other preferences are
 const EXPERT = "camset-viewer-expert";
+// Where the definition lists the camera's menus, the default Menu is the first of them (DATA.menu_name), said over the
+// Menu column, the others named in its hover; Expert lists every setting, the other menus' rows among them
+function menuTitle(on) {
+  const name = !on && DATA.menu_name, others = (DATA.menu_names || []).filter((m) => m !== DATA.menu_name);
+  $("mtitle").textContent = name ? `${name} menu` : "Menu";
+  $("mtitle").title = name ? `The camera's ${name} menu, as the editor lays it out` +
+    (others.length ? `; the editor shows its ${others.join(" and ")} menus too, and Expert lists every setting` : "") : "";
+}
 function setExpert(on, chosen = false) {
   if (!MENUS) return;
   DATA.menu = on ? MENUS.on : MENUS.off;
   $("expert").setAttribute("aria-pressed", String(on));
+  menuTitle(on);
   if (chosen) store.set(EXPERT, on ? "1" : "0");          // a click on the switch; not a jump that needed it, nor a start
 }
 if (MENUS) setExpert(store.get(EXPERT) === "1");
