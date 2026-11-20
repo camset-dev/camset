@@ -284,6 +284,44 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_fold_keys_work_from_every_pane(tmp_path):
+    """The owner's report: the keys fold and open from wherever the focus is on the page (the Menu, a row's control, a
+    heading, a tick box, Compare's table), and only a box to type in keeps them."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+$("content").replaceChildren(...drawTab([drive, other], { places: true, flat: false }));
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const side = el("button", {}, "Shoot"); $("side").append(side);
+const tickBox = el("input", { type: "checkbox" }); $("side").append(tickBox);
+const textBox = el("input", { type: "search" }); $("side").append(textBox);
+const places = { menu: side, row: $("content").querySelector(".row:not(.rowhead) button, .row:not(.rowhead) .val") || $("content").querySelector(".row:not(.rowhead)"),
+  heading: $("content").querySelector(".rowhead > .name"), summary: $("content").querySelector("details.grp > summary"), tick: tickBox };
+const out = {};
+for (const [name, at] of Object.entries(places)) {
+  at.focus();
+  shortcut(key("ArrowUp")); const folded = groups();
+  shortcut(key("ArrowDown")); const opened = groups();
+  out[name] = [folded, opened];
+}
+textBox.focus();
+out.text = [shortcut(key("ArrowUp")), groups()];
+textBox.blur();
+view.mode = "compare"; cmp.records = false; cmp.folded.clear();
+cmp.last = { rows: [{ tab: "Shoot", group: "Drive" }] };
+redrawCompare = () => {};
+const cell = el("button", {}, "a cell"); $("content").replaceChildren(cell); cell.focus();
+shortcut(key("ArrowUp"));
+out.compare = [...cmp.folded];
+console.log(JSON.stringify(out));
+""")
+    for pane in ("menu", "row", "heading", "summary", "tick"):
+        assert got[pane] == [[False, False], [True, True]], pane
+    assert got["text"] == [False, [True, True]], "a box to type in keeps the keys"
+    assert got["compare"] == ["t\u0000Shoot"]
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an

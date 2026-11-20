@@ -4332,6 +4332,15 @@ function foldAll(collapse) {
   return true;
 }
 
+/** A text field with the caret in it (`a`, the focused element): a box to type in, not a tick box, a radio button or a
+ *  slider, which leave the shortcuts to the page as any other control does. */
+function textBox(a) {
+  if (!a) return false;
+  if (a.tagName === "TEXTAREA" || a.isContentEditable) return true;
+  const type = (a.getAttribute && a.getAttribute("type")) || a.type || "text";
+  return a.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file"].includes(type.toLowerCase());
+}
+
 /** The shortcuts, unless a text field has the keyboard: the text size (Cmd/Ctrl +, − and 0), and Undo and Redo
  *  (Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z, Cmd/Ctrl+Y) only while the page is in use, so a key on the login sends no request
  *  (one without the code counts as a wrong code) and none undoes an edit behind the window that is about it. Until
@@ -4339,7 +4348,7 @@ function foldAll(collapse) {
  *  that has the keyboard, so the list shows the value put back (`undoKeys`). True when the key was taken. */
 function shortcut(e) {
   const a = document.activeElement;
-  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return false;
+  if (textBox(a)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
   const k = e.key.toLowerCase();
   // Collapse all / Expand all (`foldAll`), with Shift; a list or a menu with the keyboard keeps its arrows
