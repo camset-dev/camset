@@ -230,12 +230,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   back in once it no longer does (the a1 II's 0x023c, which follows the video system), never against a copy a
   registration proved.
 - **A reader's Unsloth dynamic build ("UD") counts as the same model,** one vote with its other builds (decision 22).
-- **The readers were measured on which option is drawn grey:** asked about the lit item alone, Qwen3.8-27B and
-  GLM-4.6V-Flash called none of 60 grey side-list entries grey (2026-11-19), while the menu question's per-row flag
-  matched the pixels on 99% of rows, so a list and a side list keep their pixel test alone and only a carousel, whose
-  pixels are not judged, asks the reader (`carousel.v2.grey`), never sending an Enter the kit did not send before.
-  `reader_census.py --questions` measures the `.grey` questions (`--variants grey`) and a question for a setting's
-  whole list, `entries.v2`, which no run asks yet (`--variants entries`).
+- **A list's options are told grey by the second reader's whole-list flag beside the pixels, a carousel's by its lit
+  icon:** asked about the lit item alone the readers saw no grey, but asked the whole list (`entries.v2`, once a
+  screenful in the background) Qwen3.8-27B called 90.8% of grey side-list entries grey and no white one, so its flag
+  adds grey to the pixels' and never an Enter, while the third readers, who saw little grey, are never asked. A
+  carousel's lit icon, dim red where the camera greys the option, told all 13 refused and 221 applied options apart and
+  decides there, `carousel.v2.grey` asked only where it cannot tell (`reader_census.py --variants grey,entries`).
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
