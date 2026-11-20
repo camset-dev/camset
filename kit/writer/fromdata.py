@@ -9,6 +9,7 @@ from pathlib import Path
 from camkit import ROOT, datafiles, definitions, help_files, jsonl, models, paths, placement, row_names
 from runner import read_json
 
+from . import hand_tables
 from .mirror import mirror_names, mirror_of, mirror_place
 from .notes import with_evidence_apart, with_tidy_note
 from .proofs import without_held, without_observed, without_written_with
@@ -30,21 +31,22 @@ MAPPING_WORDS = re.compile(r"\brecord\b|slot memory|numerator|denominator|mirror
                            r"\bthird\b|second record|\bsdk\b", re.I)
 
 
-def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None) -> bool:
+def expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> bool:
     """Shown in Expert mode only: a derived working copy, a flag or an alternate numbering, by its name (the rule the
     editor held until 2026-11-05, decision 20, now the kit's); one of My Menu's places, a live setting of a record
     the camera's My Menu names (`slots`, mymenu_slots), which the editor's My Menu page edits place by place, so the
     raw places are a duplicate there; a field of the memories' live copy (`mirror`, mirror_of: each memory set holds
-    its own, which the editor shows); a setting on no camera row whose name holds a mapping word (MAPPING_WORDS); or a
-    copy named so ("JPEG/HEIF Quality (Slot 1, copy)", which the camera writes with Slot 1's on every choice): the main
-    one is the photographer's, the copy a duplicate."""
+    its own, which the editor shows); a setting on no camera row whose name holds a mapping word (MAPPING_WORDS), a row
+    given by hand (`hand`: the HAND_PLACES keys) counting as none, since a hand place never changes whether a record is
+    shown (it shows under its row in Expert mode only); or a copy named so ("JPEG/HEIF Quality (Slot 1, copy)", which
+    the camera writes with Slot 1's on every choice): the main one is the photographer's, the copy a duplicate."""
     if s.get("area") == "global" and s.get("id") in slots:
         return True
     if re.search(r"\bcopy\)$", s["name"]):
         return True
     if mirror_place(s["key"], mirror or {})[0] is not None:
         return True
-    if "row" not in s and MAPPING_WORDS.search(s["name"]):
+    if ("row" not in s or s.get("key") in hand) and MAPPING_WORDS.search(s["name"]):
         return True
     # how the record's meaning was found ("source") is evidence (camkit.definitions): a definition read without its
     # evidence keeps the mark it has for this last rule
@@ -57,9 +59,9 @@ def mymenu_slots(doc: dict) -> frozenset:
     return frozenset(((doc.get("camera") or {}).get("my_menu") or {}).get("records") or ())
 
 
-def with_expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None) -> dict:
+def with_expert(s: dict, slots: frozenset = frozenset(), mirror: dict = None, hand: frozenset = frozenset()) -> dict:
     """The setting with "expert": true after "in_sets" when expert() says so, and without the key otherwise."""
-    flag = expert(s, slots, mirror)
+    flag = expert(s, slots, mirror, hand)
     out = {}
     for k, v in s.items():
         if k == "expert":
@@ -155,25 +157,124 @@ def with_plain_words(s: dict, names: list = ()) -> dict:
     return s
 
 
-PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode")
+PLACE_KEYS = ("row", "row_at", "under_option", "row_tab", "row_group", "row_mode", "row_menus", "row_places")
 # what a definition written without the camera's menu tree keeps (places, menu_list), said once (a fresh clone, CI)
 NO_TREE = "the definition's menu list and each setting's place on the camera stay as the definition has them"
+MENU_FIELDS = ("name", "modes", "main_tiles", "hover")          # a camera menu, as camera.menus holds it
 
 
-def places(doc: dict) -> dict | None:
+def places(doc: dict, menus: list = None, hand: dict = None) -> dict | None:
     """Each setting's place on the camera, from the camera's menu tree (the Stills menu, and the other shooting modes'
-    menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths
-    (camkit.placement, the proof viewer's placement): {key: {"row", "row_at"[, "under_option"][, "row_tab"][,
-    "row_group"][, "row_mode"]}}. None, so the places stay as they are, for a definition read without its evidence (no
-    setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu tree on this
-    computer (a fresh clone, CI: the places are what is public of the menus)."""
+    menus it holds: the mapper's own, private whole, camkit.datafiles) and the setting's own proof paths, or its rows
+    given by hand (`hand`: HAND_PLACES, {key: [row paths]}, camkit.placement.with_hand) (camkit.placement, the proof
+    viewer's placement): {key: {"row", "row_at"[, "under_option"][, "row_tab"][, "row_group"][, "row_mode"]}}; with the
+    camera's menus (`menus`, the MENUS table's entries, each menu's Help Guide words with them), each placed setting's
+    "row_menus" and, where a menu places it otherwise, "row_places" too (camkit.placement.by_menu, the camera's Help Guide
+    menu list telling records that differ by mode apart). None, so the places stay as they are, for a definition read without its
+    evidence (no setting holds its proof paths, proved.menu, which are evidence: camkit.definitions) or with no menu
+    tree on this computer (a fresh clone, CI: the places are what is public of the menus)."""
     if not any("menu" in (s.get("proved") or {}) for s in doc["settings"]):
         return None
     tree = definitions.menu_tree_file(definitions.key(doc))
     if not tree.exists():
         datafiles.say_no_menu_tree(tree, NO_TREE)
         return None
-    return placement.settings(doc, datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)))
+    tree, boxes, hand = datafiles.load_menu_tree(tree), box_orders(definitions.key(doc)), hand or {}
+    modes = placement.menu_modes_of(doc)          # from the proofs' evidence, never the runs
+    every = set(placement.menu_modes(tree)) | {m for menu in menus or [] for m in menu.get("modes") or []}
+    found = placement.settings(doc, tree, boxes, placement.with_modes(placement.with_hand(hand), modes, every))
+    for k in sorted(set(hand) - set(found)):
+        print("HAND_PLACES: " + hand_unplaced(doc, k, hand[k]))
+    if not menus:
+        return found
+    why = placement.menus_refusal(tree, menus)
+    if why:
+        raise hand_tables.Refused(f"{paths.shown(datafiles.hand_tables_file(definitions.key(doc)))}: {why}. Nothing was "
+                                  "written: name MENUS' modes as the camera file and the menu tree name them (kit/tools/"
+                                  "menu_tree.py --mode), then run the command again.")
+    guide = definitions.data_dir(definitions.key(doc)) / f"help_guide_menu_{definitions.key(doc)}.jsonl"
+    guide = jsonl.read(guide, bad="skip") if guide.exists() else []
+    by = placement.by_menu(doc, tree, menus, boxes, hand, found, guide, modes)
+    out = {k: {**v, **by.get(k, {})} for k, v in found.items()}
+    say_fewer_menus(placement.fewer_menus(doc, tree, menus, out), [m["name"] for m in menus])
+    return out
+
+
+def say_fewer_menus(short: list, order: list = ()) -> None:
+    """On the console only (the tree is the mapper's own): how many settings, below how many top rows, are listed in
+    fewer camera menus than their row stands in (camkit.placement.fewer_menus), and each row with the menus it lacks:
+    the open work, seen at every pass, never a stop."""
+    if not short:
+        return
+    rows = {}
+    for _, tab, row, lack in short:
+        n, missing = rows.get((tab, row), (0, []))
+        rows[(tab, row)] = (n + 1, missing + [m for m in lack if m not in missing])
+    print(f"menus: {len(short)} settings below {len(rows)} rows are listed in fewer menus than their row stands in: "
+          "prove or crawl them there")
+    for (tab, row), (n, missing) in sorted(rows.items()):
+        missing = sorted(missing, key=lambda m: list(order).index(m) if m in order else len(order))
+        print(f"  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, not in {', '.join(missing)}")
+
+
+def hand_unplaced(doc: dict, key: str, rows: list) -> str:
+    """Why a HAND_PLACES entry placed nothing, in plain words: a key the definition does not hold (mistyped), a
+    family's setting (camera.families: its column follows its record's copies, never a row given by hand), or a row
+    the camera's menu tree lacks."""
+    s = next((x for x in doc["settings"] if x["key"] == key), None)
+    if s is None:
+        return f"{key} is no setting of the definition (a mistyped key, or a record it does not hold): not placed"
+    fams = [f["prefix"] for f in (doc.get("camera") or {}).get("families", []) if f.get("prefix")]
+    fam = next((p for p in fams if (s.get("group") or "").startswith(p)), None)
+    if fam:
+        return (f"{key} ({s['name']}) is a setting of the family {fam!r} (camera.families), whose column follows its "
+                "record's copies, never a row given by hand: not placed; take it out of HAND_PLACES")
+    return (f"{key}'s row ({' | '.join(rows)}) is not in the camera's menu tree: not placed (its labels as the camera "
+            "draws them, its tab first)")
+
+
+def camera_menus(doc: dict, table: list) -> list | None:
+    """The camera's menus (camera.menus) from its MENUS hand table (`table`, as writer/hand_tables.py reads it), each
+    {name, modes[, main_tiles][, hover]} in the table's order; None for no table. Refused in plain words (hand_tables.
+    Refused) where a menu's mode is none the camera section names (its memory sets' modes, its live mode's values), a
+    mode is in two menus, a mode of the camera's live mode is in none (every position of its switch has its menu), a
+    name is there twice, or main_tiles names no tile set of camera.main_tiles."""
+    if not table:
+        return None
+    cam = doc.get("camera") or {}
+    modes = set((cam.get("memory_sets") or {}).get("modes") or {}) | set(((cam.get("live_mode") or {}).get("modes") or {}).values())
+    tiles = {t.get("name") for t in cam.get("main_tiles") or []}
+    where = datafiles.hand_tables_file(definitions.key(doc))
+    seen, names = {}, set()
+    for menu in table:
+        if menu["name"] in names:
+            raise hand_tables._refused(where, f"MENUS names the menu {menu['name']!r} twice")
+        names.add(menu["name"])
+        for m in menu["modes"]:
+            if m not in modes:
+                raise hand_tables._refused(where, f"MENUS' {menu['name']!r} names the mode {m!r}, which the camera file "
+                                                  f"names nowhere (its memory sets' and live mode's modes: {', '.join(sorted(modes)) or 'none'})")
+            if m in seen:
+                raise hand_tables._refused(where, f"MENUS puts the mode {m!r} in two menus, {seen[m]!r} and {menu['name']!r}")
+            seen[m] = menu["name"]
+        if "main_tiles" in menu and menu["main_tiles"] not in tiles:
+            raise hand_tables._refused(where, f"MENUS' {menu['name']!r} names the tile set {menu['main_tiles']!r}, which "
+                                              "camera.main_tiles does not hold")
+    live = [m for m in dict.fromkeys(((cam.get("live_mode") or {}).get("modes") or {}).values()) if m not in seen]
+    if live:
+        raise hand_tables._refused(where, f"MENUS leaves the camera's mode {live[0]!r} without a menu (camera.live_mode "
+                                          "names it): give it to the menu the camera shows in it")
+    return [{f: menu[f] for f in MENU_FIELDS if f in menu} for menu in table]
+
+
+def with_menus(camera: dict, menus: list | None) -> dict:
+    """The camera section with "menus" after "main_tiles" (last where it has none), or without it for no menus."""
+    out = {k: v for k, v in camera.items() if k != "menus"}
+    if not menus:
+        return out
+    at = list(out).index("main_tiles") + 1 if "main_tiles" in out else len(out)
+    items = list(out.items())
+    return dict(items[:at] + [("menus", menus)] + items[at:])
 
 
 # the probe lines of the provers of an option's own row of boxes (kit/provers/optboxes_run.py's PROBES), in any run
@@ -234,6 +335,47 @@ def with_menu(doc: dict) -> dict:
     return doc
 
 
+def linked_refusal(doc: dict) -> str | None:
+    """Why the camera's menus would show a row twice, in one plain sentence, or None: records of one name in one place
+    (row, row_at, row_mode, under_option; no copy among them: the editor's linked records, a setting kept in several
+    records that a proof writes together) carry equal row_menus and row_places, or row_menus apart (kept to their own
+    modes' menus, camkit.placement.split_by_proofs and split_by_guide). Menus that overlap unequal, or equal menus with
+    places that differ, would show the row twice in a menu."""
+    rows = {}
+    for s in doc.get("settings") or []:
+        if s.get("row") and "row_menus" in s and not s.get("copy_of"):
+            k = (s.get("name"), tuple(s["row"]), tuple(s.get("row_at") or []), s.get("row_mode"), s.get("under_option"))
+            rows.setdefault(k, []).append(s)
+    for ss in rows.values():
+        for i, a in enumerate(ss):
+            for b in ss[i + 1:]:
+                ma, mb = a["row_menus"], b["row_menus"]
+                if ma != mb and set(ma) & set(mb):
+                    return (f"{a['key']} and {b['key']} ({a['name']}) are one row in the editor, but their row_menus "
+                            f"overlap unequal ({', '.join(ma)} and {', '.join(mb)}): the row would show twice in "
+                            f"{', '.join(m for m in ma if m in mb)}")
+                if ma == mb and (a.get("row_places") or {}) != (b.get("row_places") or {}):
+                    return (f"{a['key']} and {b['key']} ({a['name']}) are one row in the editor in the same menus, but "
+                            "their row_places differ: the row would show twice there")
+    return None
+
+
+def main_tile_refusal(doc: dict) -> str | None:
+    """Why the camera's Main tiles cannot stand beside the definition's Expert marks, in one plain sentence, or None: a
+    tile's own key (its keys, its memory_keys) is never a setting shown in Expert mode only, for the editor's Compare
+    lists Main's settings among those shown outside Expert mode, and the tile would show what Compare lacks. A fraction
+    tile's two parts (numerator_key, denominator_key) may be: the tile is the plain way to show them."""
+    expert = {s["key"]: s for s in doc.get("settings") or [] if s.get("expert")}
+    for page in (doc.get("camera") or {}).get("main_tiles") or []:
+        for tile in page.get("tiles") or []:
+            for k in list(tile.get("keys") or []) + list(tile.get("memory_keys") or []):
+                if k in expert:
+                    return (f"the {page.get('name')} page's tile {tile.get('caption')!r} shows {k} ({expert[k]['name']}), "
+                            "which the definition shows in Expert mode only, so the editor's Compare would lack it "
+                            "outside Expert mode")
+    return None
+
+
 def with_place(s: dict, place: dict) -> dict:
     """The setting with its place on the camera right after "order", and without one when it has none."""
     out = {}
@@ -253,21 +395,41 @@ def from_data(doc: dict) -> dict:
     Expert mode only), no setting's old `observed` (without_observed: it held the owner's own settings), and no mark on
     the values no option was seen to write (without_held), and no list of the records a proof wrote together
     (without_written_with: it told how the camera was set).
+    The camera's menus (camera.menus from the MENUS table, each setting's row_menus and row_places) are rebuilt only
+    where the places are (places: the menu tree and the proof paths here); elsewhere (a fresh clone, CI) they stay
+    exactly as the definition has them, what the writer cannot rebuild left untouched.
     main() ends the same way, so on the committed data this gives the committed definition."""
+    kept = (doc.get("camera") or {}).get("menus")          # the definition's own, for a write that cannot rebuild them
     doc = with_menu(with_camera(doc))
+    tables = hand_tables.load(definitions.key(doc), evidence=False)       # the public tables: MENUS, HAND_PLACES
+    menus = camera_menus(doc, tables.MENUS)
     without_observed(doc, say=False)
     without_held(doc)
     without_written_with(doc)
     mirror_names(doc)
     own_help(doc)
     doc["layouts"] = [with_evidence_apart(with_tidy_note(lay)) for lay in doc["layouts"]]
-    found, slots, mirror = places(doc), mymenu_slots(doc), mirror_of(doc)
+    found = places(doc, menus and tables.MENUS, {k: [e["row"]] for k, e in tables.HAND_PLACES.items()})
+    if "camera" in doc:
+        doc["camera"] = with_menus(doc["camera"], menus if found is not None else kept)
+    slots, mirror = mymenu_slots(doc), mirror_of(doc)
     names = sorted({s["name"] for s in doc["settings"]}, key=len, reverse=True)
 
     def placed(s):
         return s if found is None else with_place(s, found.get(s["key"], {}))
-    doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror)
+    by_hand = frozenset(tables.HAND_PLACES)
+    doc["settings"] = [with_expert(placed(with_plain_words(with_evidence_apart(with_tidy_note(s)), names)), slots, mirror, by_hand)
                        for s in doc["settings"]]
+    why = linked_refusal(doc)
+    if why:
+        raise hand_tables.Refused(f"{definitions.key(doc)}: {why}. Nothing was written: prove the row in the mode of each "
+                                  "menu the records share, or give them rows by hand (HAND_PLACES), then run the "
+                                  "command again.")
+    why = main_tile_refusal(doc)
+    if why:
+        raise hand_tables.Refused(f"{paths.shown(definitions.camera_file(definitions.key(doc)))}: {why}. Nothing was "
+                                  "written: take the key off the tile in the camera file, or make the setting one shown "
+                                  "outside Expert mode, then run the command again.")
     return doc
 
 

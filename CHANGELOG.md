@@ -219,6 +219,28 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`reader_census.py --questions` and `label_audit.py` say why each reader failed, by count:** an HTTP status and
   its reason phrase (never the server's body), a timeout, a refused connection or "an answer that is no usable JSON",
   beside the asked line and in the line that stops a reader after a run of failures, never what an answer held.
+- **A definition can say which of the camera's menus hold each setting:** a camera's `MENUS` hand table (a menu per
+  position of its shooting-mode switch) becomes `camera.menus`, and each placed setting gets `row_menus` and
+  `row_places` (a menu's tree holds its row, or that menu's own proofs reach it). `HAND_PLACES` places a record no
+  proof path can, and `kit/tools/menu_tree.py --add` takes one group's pages from a page scan into a tree.
+- **The camera's menus tell more records apart:** one setting kept in two records that Stills and Movie each move
+  alone keeps each in its own mode's menu, and a row given by hand reaches the second of two rows of one label (`#1`)
+  or a row named as its group. The camera file may word the menu buttons' label and hover (`camera.text.menus_label`,
+  `menus_hover`).
+- **The camera's menus rest on nothing of the owner's:** placement never reads My Menu's item pages, the kit reads a
+  proof's context one way everywhere, and a write with no menu tree here leaves a definition's menus as they are. A
+  menu's place always names its row and row_at, and a row given by hand never changes whether a record is shown.
+- **The writer refuses camera menus the editor could not show truly:** a MENUS table the menu tree does not match or
+  that leaves a mode without a menu, records of one row with overlapping menus, and a Main tile showing an Expert-only
+  setting. No place rests on where an option list's reading began, a silent proof's mode comes from the camera's own
+  files for placement alone, and a hand place's reason is the private hand evidence's.
+- **A menu holds the rows its walk read as a list's options:** where a mode's walk read a row as a list or checklist,
+  its options name the settings below it there (Movie's and S&Q's Playback Filter Condition).
+- **A definition's menus are rebuilt alike without the runs:** the modes the camera's files give silent proofs are kept
+  in their evidence, where placement reads them. At every pass the writer prints the settings listed in fewer menus than
+  their row stands in, the mapping's open work.
+- **`check_public.py` holds a definition's camera menus to names and places:** no row's state, option list, page
+  counter or My Menu item page in `camera.menus`, `row_menus` or `row_places`.
 - **Pass 2's report credits a record only `--number` lines move, each to the number named, by that number:** its
   label carries the other fields as they stood, so Drive Mode's Focus Bracket, its Step Width never walked there, left
   Number of Shots "missing" where it is now a number field the writer widens to what the camera stored.

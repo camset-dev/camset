@@ -92,6 +92,39 @@ steps below it is on the page that option opens: "Picture Profile > PP2 > Black 
 rows, and a record the plain pass adds takes the number after the definition's highest. A setting no path places gets
 none of the six fields, and the editor lists it after the camera's rows, under "More settings in this group".
 
+Where the camera's hand tables hold `MENUS` (a menu for each position of its shooting-mode switch: the a1 II's Still,
+Movie and S&Q), the definition carries them as `camera.menus`, and each placed setting the menus that hold it
+(`row_menus`; `kit/camkit/placement.py`, `by_menu`):
+
+- **Where a menu's own tree holds the setting's row.** The top row is matched by the merged numbering of a tab's top
+  rows, which serves every menu, and each row below by its label among the rows that menu read. A row that menu's
+  walk read as a list or checklist, with nothing read below it, holds a setting whose last label one of its options
+  names: Movie's Playback Filter Condition, a checklist of the items the Stills menu holds as rows.
+- **Where proofs made in one of the menu's modes reach the row.** A proof made in a mode is that mode's reading of
+  the row. The mode is the one a proof's context names; for a proof whose context names none, it is the one the
+  camera's own files say it was made in, which the writer keeps in the proof's evidence. A proof whose base download
+  is gone gives no mode: it adds no menu by its mode, not even the Still menu's, though it still places its setting.
+  Rows the menu never read are then taken from those proofs' paths, in the setting's own order.
+- **Rows given by hand.** `HAND_PLACES` gives the row of a record no proof path places: one a row's own function
+  writes, or a row the walk can never read, seen on the camera. Such a row is in every menu whose tree has its top
+  row. Its public entry is the row alone; why it is the record's is in the private hand evidence.
+
+`row_places` gives a menu's place where it differs from the setting's own: always with its `row` and `row_at`, and
+with `"under_option": null` where that menu has no option the setting's own place has. No place rests on My Menu's
+item pages. A menu's place keeps the setting's own order in two cases: among rows that menu read turned round (from
+the row the camera held), and below rows the setting's own menu never read. Nor does it rest on where an option
+list's reading began. The setting's own place takes its own menu's walk as it read the rows, and that walk may itself
+have begun at a held row.
+
+**`row_menus` follows the mapping.** It follows how deep each mode's walk read and in which modes the proofs were made.
+A setting proved only in Stills is not in the Movie menu until Movie's walk reads its row or a proof is made there, even
+where the camera shows it. So two owners of a model get the same `row_menus` only once the mapping is complete.
+`kit/schema_update.py` prints, at every pass, the settings listed in fewer menus than their top row stands in, and the
+menus each lacks.
+
+A write with the menu tree on the computer writes these from `MENUS`, and none of them without it. With no menu tree
+there (a fresh clone, CI) it leaves the definition's as they are, as it does the places.
+
 ### What the editor offers outside Expert mode
 
 Outside Expert mode the editor offers a setting's values only where a proof on the camera established them, read from

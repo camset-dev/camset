@@ -13,6 +13,8 @@ import re
 import sys
 from pathlib import Path
 
+from camkit import placement
+
 KEY = re.compile(r"(global|set):0x([0-9a-f]{4})(?:\[(\d+)\])?")
 # how many of the camera's downloads (runs/<model>_fw<fw>/downloads.jsonl) a write reads, spread evenly over the list:
 # the full check over every download was made once by hand, and a write reads a sample of it again
@@ -57,16 +59,14 @@ def section_mode(cs, section: int, camera: dict) -> str | None:
                 None)
 
 
+ROW_MODES = ("Stills", "Movie", "S&Q", "Time-lapse")          # the modes a row's context may name
+
+
 def row_mode(row: str) -> str:
-    """The shooting mode a proof row was made in, by its context ("ISO [Movie mode]": Movie; "[S&Q mode]": S&Q; a
-    Time-lapse context: Time-lapse); a row whose context names none is the Stills menu's."""
-    ctx = re.search(r"\[([^\]]*)\]\s*$", row)
-    words = ctx[1] if ctx else ""
-    if re.search(r"\bMovie mode\b|\bmovie\b", words):
-        return "Movie"
-    if re.search(r"\bS&Q mode\b", words):
-        return "S&Q"
-    return "Time-lapse" if re.search(r"Time-lapse", words) else "Stills"
+    """The shooting mode a proof row was made in, as the kit reads a proof's context everywhere (camkit.placement.
+    mode_of: "ISO [Movie mode]" is Movie, "[S&Q mode]" S&Q, "[Time-lapse mode]" Time-lapse); a row whose context names
+    none is the Stills menu's (the report names a silent proof's own mode in its row: pass2_report.with_mode)."""
+    return placement.mode_of(row, ROW_MODES) or placement.TOP_MODE
 
 
 def contradictions(files: list, table: dict, camera: dict | None = None, modes: list | None = None,

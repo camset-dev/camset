@@ -1283,13 +1283,16 @@ def test_mapping_words_never_reach_a_non_expert_field():
     """What a photographer reads holds none of the mapping's words (2026-11-07: 113 names and a group did, "Drive Mode
     (third record)", "Other (from SDK)"). The kit makes it so (schema_update: MAPPING_WORDS marks a setting on no
     camera row Expert-only, SETTING_GROUPS and RECORD_FIXES name, with_plain_words tidies), never the definition by
-    hand; and a dialog's button word never ends a refused option's reason."""
+    hand; and a dialog's button word never ends a refused option's reason. A row its proofs place a setting on shows
+    it; a row given by hand (HAND_PLACES) never changes its mark: it shows under that row in Expert mode only."""
     import schema_update as S
     bad = mapping_offenders(DOC)
     assert not bad, "mapping words a photographer reads:\n" + "\n".join(f"  {k} {f}: {t!r}" for k, f, t in bad)
     made = {"key": "global:0x0001", "name": "Drive Mode (third record)", "group": "Other (from SDK)"}
     assert mapping_offenders({"settings": [made]}) and mapping_offenders({"settings": [S.with_plain_words(made)]})
     assert S.expert(made) and not S.expert(dict(made, row=["Drive Mode"]))
+    assert S.expert(dict(made, row=["Drive Mode"]), hand=frozenset({made["key"]}))          # placed by hand: as it was
+    assert not S.expert(dict(made, name="Drive Mode", row=["Drive Mode"]), hand=frozenset({made["key"]}))
     assert S.with_plain_words(made)["group"] == "Other settings"
     assert not mapping_offenders({"settings": [dict(made, name="Record Setting (XAVC S HD, 60p)", group="Drive",
                                                     help="Lets the record button record a movie.")]})

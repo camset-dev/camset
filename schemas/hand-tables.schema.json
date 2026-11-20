@@ -1,7 +1,7 @@
 {
  "$schema": "https://json-schema.org/draft/2020-12/schema",
  "title": "Hand tables (data/<model>_fw<firmware>/hand_tables_<model>_fw<firmware>.json)",
- "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, the limits it keeps in order, how far each focus frame can travel, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, LIMIT_PAIRS, FRAME_TRAVEL, UNPROVED, CONTEXT_WORDS (kit/writer/hand_facts.py), every comparison of a row's name reads ROW_NAMES on every camera (kit/camkit/row_names.py), and the plain pass refuses, in plain words, a file that fills a table it does not read, each marked so below.",
+ "description": "What the mapping of one model and firmware found by hand about the camera, and the rules the writer applies to its definition: records whose name or note the camera proved wrong, records the menus never write, found by hand, value names no proof can give, the pickers whose lists were walked whole, the values the menus never offer, the copies the camera keeps and the switches that keep a family's copies apart, the limits it keeps in order, how far each focus frame can travel, and why a record cannot be proved. Public, and the same for every owner of that model and firmware who maps it: written and edited by hand, never by a kit step. kit/writer/hand_tables.py reads it for kit/schema_update.py, and a camera without the file has every table empty. How, when, in which run and from which state each hand fact was proved is the mapper's evidence: kept in private/evidence/<model>_fw<firmware>.hand.json and put back into the tables as the kit reads them (kit/writer/hand_evidence.py, docs/decisions/0016), so no entry here carries a run, a day, a hand proof's values or the owner's word. Every table is optional. kit/schema_update.py applies them to the camera's definition: the ILCE-1M2 firmware 4.00's own pass reads every table, and every other camera's plain pass reads RECORD_FIXES, FILTER_FLAGS, NEW_RECORDS, NEW_LIKE, NEW_WHOLE_LABELS, FRAME_PROOFS, CAROUSEL, VALUE_FIXES, PP7_VALUES, KEEP_LABELS, PICKER_LISTS, NOT_OFFERED, VIDEO_SYSTEM_VALUES, COPIES, COPY_MODES, COPY_MODES_UNKNOWN, KEEPS_APART, LIMIT_PAIRS, FRAME_TRAVEL, UNPROVED, CONTEXT_WORDS, MENUS, HAND_PLACES (kit/writer/hand_facts.py), every comparison of a row's name reads ROW_NAMES on every camera (kit/camkit/row_names.py), and the plain pass refuses, in plain words, a file that fills a table it does not read, each marked so below.",
  "type": "object",
  "required": [
   "camera"
@@ -441,6 +441,75 @@
    },
    "propertyNames": {
     "pattern": "^\\S(.*\\S)?$"
+   }
+  },
+  "MENUS": {
+   "type": "array",
+   "description": "The camera's menus, one for each position of its shooting-mode switch, in the camera's order: each its name as the switch says it, the shooting modes it covers (names of the camera file's memory_sets.modes or live_mode values; a mode in one menu only), the Main page's tile set it shows (a name of the camera file's main_tiles), a few plain words an editor shows on hover, and the Help Guide's words for its modes. kit/writer/fromdata.py copies it into the definition's camera.menus and gives every placed setting the menus whose own menu tree holds its row (row_menus, row_places). Without it, or empty, a definition carries none of these.",
+   "items": {
+    "type": "object",
+    "required": [
+     "name",
+     "modes"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "name": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The menu's name, as the camera's switch says it (\"Movie\")."
+     },
+     "modes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+       "type": "string",
+       "minLength": 1
+      },
+      "description": "The shooting modes whose menu this is, as the camera file names them (\"S&Q\", \"Time-lapse\")."
+     },
+     "main_tiles": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The camera file's main_tiles tile set this menu's Main page shows, by its name."
+     },
+     "hover": {
+      "type": "string",
+      "minLength": 1,
+      "description": "What the menu's button says on hover, in plain words."
+     },
+     "guide": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+       "type": "string",
+       "minLength": 1
+      },
+      "description": "The camera's Help Guide menu list's words for this menu's modes (its \"modes\" column: \"slow&quick motion\"): where the guide lists one row as an item per set of modes, a record of that row is kept to the menus of the item its proofs fit (kit/camkit/placement.py split_by_guide). The kit's alone, never copied into the definition."
+     }
+    }
+   }
+  },
+  "HAND_PLACES": {
+   "type": "object",
+   "description": "A setting's row on the camera's menus given by hand, by the setting's key, where no proof path can give it: a record a row's own function writes without being a choice on it (what a registration stores), or a row the walk can never read, seen on the camera by its owner. Each is the row as the camera draws it (its tab, then the labels from the top row down, \" > \" between) and nothing else: why the row is the record's is evidence, kept in the private hand evidence (private/evidence/<model>_fw<firmware>.hand.json, its tables' HAND_PLACES). kit/camkit/placement.py hangs the setting there, in every camera menu (MENUS) whose menu tree holds the row's top row, the rows under it the walk never read taken from it; a row given by hand never changes whether the record is shown outside Expert mode.",
+   "propertyNames": {
+    "pattern": "^(global|set):0x[0-9a-f]{4}(\\[\\d+\\]|@\\d+)?$"
+   },
+   "additionalProperties": {
+    "type": "object",
+    "required": [
+     "row"
+    ],
+    "additionalProperties": false,
+    "properties": {
+     "row": {
+      "type": "string",
+      "pattern": "^\\S(.*\\S)? > \\S(.*\\S)?$",
+      "description": "The tab, then the row's labels from its top row down, \" > \" between, as the camera draws them (\"Setup > Anti-dust Function > Shutter When Pwr OFF\")."
+     }
+    }
    }
   }
  },
