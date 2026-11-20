@@ -1151,7 +1151,10 @@ function clearSearch() {
 /** What the page's content is drawn for: it is fetched and drawn again when this changes. */
 function contentKey() {
   const what = view.q ? "?" + view.q : view.page === "main" ? "main:" + view.set : view.page === "tab" ? "tab:" + view.tab : "*" + view.page;
-  return [state.rev, view.target, what, view.only, extraKey()].join("|") + (view.menu ? "|" + view.menu : "");
+  // the camera's menu the page shows, picked or the editor's (a change that moves the set edited into another mode
+  // moves its menu too, and the rows are fetched again for it)
+  const menu = curMenu();
+  return [state.rev, view.target, what, view.only, extraKey()].join("|") + (menu ? "|" + menu : "");
 }
 
 /** More that a page's content depends on beyond `view`: Compare is fetched again when its columns or filters change

@@ -2215,6 +2215,24 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_page_is_fetched_again_for_the_menu_shown(tmp_path):
+    """The page's content is drawn for the camera's menu it shows, picked or the editor's: when the editor's changes
+    (an edit that moves the set into another mode, another set) the page is fetched again, though nothing was picked."""
+    got = run(tmp_path, MENUS + """
+view.menu = null; view.page = "tab"; view.tab = "Shoot";
+state.menu = "Still";
+const a = contentKey();
+state.menu = "Movie";
+const b = contentKey();
+view.menu = "S&Q";
+const c = contentKey();
+console.log(JSON.stringify({ a, b, c }));
+""")
+    assert got["a"] != got["b"], "the editor's menu changed: fetched again"
+    assert got["b"] != got["c"] and got["c"].endswith("|S&Q")
+
+
+@needs_node
 def test_picking_another_menu_keeps_the_set_edited(tmp_path):
     """A camera menu picked while a memory set of another menu is edited keeps that set: the editor lists it on the
     Editing row (as the window's, `editing_sets`), the page keeps editing it (`keepViewValid`), and the next requests
