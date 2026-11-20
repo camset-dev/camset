@@ -2227,44 +2227,10 @@ mod tests {
     fn the_default_menu_is_the_golden_one() {
         use crate::test_support::{done, sample_app};
         let (app, dir, user) = sample_app("menu_golden", None);
-        let mut groups_text = Vec::new();
-        let mut got = Vec::new();
-        for tab in app.menu_tabs() {
-            if !app.side_bar_lists(&tab) {
-                continue;
-            }
-            let mut groups = Vec::new();
-            for (name, family, rows) in app.tab_groups(&tab) {
-                let keys = |i: usize| rows[i].iter().map(|s| s.key.clone()).collect::<Vec<_>>();
-                let group = if family {
-                    serde_json::json!({ "group": name, "family": true, "keys": keys(0) })
-                } else {
-                    let lines: Vec<serde_json::Value> = app.group_lines(&rows).into_iter().map(|l| match l {
-                        Line::Heading { label, depth, .. } => serde_json::json!(["heading", label, depth]),
-                        Line::Row { index, depth } => serde_json::json!(["row", keys(index), depth]),
-                        Line::Mode(m) => serde_json::json!(["mode", m]),
-                        Line::More => serde_json::json!(["more"]),
-                    }).collect();
-                    serde_json::json!({ "group": name, "family": false, "lines": lines })
-                };
-                groups_text.push((tab.clone(), serde_json::to_string(&group).unwrap()));
-                groups.push(group);
-            }
-            got.push(serde_json::json!({ "entry": tab, "groups": groups }));
-        }
+        let (got, text) = golden_menu(&app, "ILCE-1M2_fw4.00");
         done(&dir, &user);
-        let got = serde_json::json!({ "definition": "ILCE-1M2_fw4.00", "entries": got });
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests").join("data").join("menu_ILCE-1M2_fw4.00.json");
         if std::env::var("CAMSET_BLESS").is_ok_and(|v| v == "1") {
-            // one group a line, so a change reads as a diff of the groups it touched
-            let mut text = String::from("{\"definition\": \"ILCE-1M2_fw4.00\", \"entries\": [\n");
-            let tabs: Vec<String> = got["entries"].as_array().unwrap().iter().map(|e| e["entry"].as_str().unwrap().to_string()).collect();
-            for (n, tab) in tabs.iter().enumerate() {
-                let lines: Vec<&String> = groups_text.iter().filter(|(t, _)| t == tab).map(|(_, g)| g).collect();
-                text += &format!(" {{\"entry\": {}, \"groups\": [\n  {}\n ]}}{}\n", serde_json::to_string(tab).unwrap(),
-                    lines.iter().map(|g| g.as_str()).collect::<Vec<_>>().join(",\n  "), if n + 1 < tabs.len() { "," } else { "" });
-            }
-            text += "]}\n";
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
             std::fs::write(&path, text).unwrap();
             return;
@@ -2272,5 +2238,69 @@ mod tests {
         let want: serde_json::Value = std::fs::read_to_string(&path).ok().and_then(|t| serde_json::from_str(&t).ok())
             .unwrap_or_else(|| panic!("{} is missing or unreadable: write it with CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one", path.display()));
         assert!(got == want, "the default Menu is not {}: if the definition or the layout changed on purpose, write it again with CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, look at its diff, and make kit/camkit/menu_rows.py lay it out the same (kit/tests/test_menu_rows.py)", path.display());
+    }
+
+    /// The golden Menu of `app`'s definition (`definition` its name), the value and the file's text, one group a line
+    /// so that a change reads as a diff of the groups it touched. Without the camera's menus: `{"definition", "entries"}`.
+    /// With them: `{"definition", "menus": [{"menu", "mode", "entries"}]}`, each menu laid out for the live settings,
+    /// `mode` the shooting mode the sample was saved in (by which a row picks its record: `Bind::Set`), and a row the
+    /// menu titles otherwise than the definition names its setting with that title last.
+    pub(crate) fn golden_menu(app: &App, definition: &str) -> (serde_json::Value, String) {
+        let def = serde_json::to_string(definition).unwrap();
+        let block = |entries: &[(String, Vec<String>)], pad: &str| -> String {
+            entries.iter().enumerate().map(|(n, (tab, groups))| format!("{pad}{{\"entry\": {}, \"groups\": [\n{pad} {}\n{pad}]}}{}\n", serde_json::to_string(tab).unwrap(),
+                groups.join(&format!(",\n{pad} ")), if n + 1 < entries.len() { "," } else { "" })).collect()
+        };
+        let parse = |entries: &[(String, Vec<String>)]| -> Vec<serde_json::Value> {
+            entries.iter().map(|(tab, groups)| serde_json::json!({ "entry": tab, "groups": groups.iter().map(|g| serde_json::from_str::<serde_json::Value>(g).unwrap()).collect::<Vec<_>>() })).collect()
+        };
+        if app.menus().is_empty() {
+            let entries = golden_entries(app, None);
+            let text = format!("{{\"definition\": {def}, \"entries\": [\n{}]}}\n", block(&entries, " "));
+            return (serde_json::json!({ "definition": definition, "entries": parse(&entries) }), text);
+        }
+        let mode = app.set_mode(0);
+        let menus: Vec<String> = app.menus().iter().map(|m| m.name.clone()).collect();
+        let mut text = format!("{{\"definition\": {def}, \"menus\": [\n");
+        let mut got = Vec::new();
+        for (n, m) in menus.iter().enumerate() {
+            let entries = golden_entries(app, Some(m));
+            text += &format!(" {{\"menu\": {}, \"mode\": {}, \"entries\": [\n{} ]}}{}\n", serde_json::to_string(m).unwrap(), serde_json::to_string(&mode).unwrap(),
+                block(&entries, "  "), if n + 1 < menus.len() { "," } else { "" });
+            got.push(serde_json::json!({ "menu": m, "mode": mode, "entries": parse(&entries) }));
+        }
+        text += "]}\n";
+        (serde_json::json!({ "definition": definition, "menus": got }), text)
+    }
+
+    /// The golden Menu's entries in menu `menu` (None: without menus), each with its groups as JSON text: each entry the
+    /// side bar lists, its groups, a family's table by its records' keys, every other group's lines (a row by the keys
+    /// of its linked records, and in a menu its title where it is not its setting's name).
+    fn golden_entries(app: &App, menu: Option<&str>) -> Vec<(String, Vec<String>)> {
+        let mut out = Vec::new();
+        for tab in app.menu_tabs() {
+            if !app.side_bar_lists_in(0, menu, &tab, "", false) {
+                continue;
+            }
+            let mut groups = Vec::new();
+            for (name, family, rows) in app.tab_groups_in(0, menu, &tab, "", false) {
+                let keys = |i: usize| rows[i].iter().map(|s| s.key.clone()).collect::<Vec<_>>();
+                let group = if family {
+                    serde_json::json!({ "group": name, "family": true, "keys": keys(0) })
+                } else {
+                    let lines: Vec<serde_json::Value> = app.group_lines(&rows).into_iter().map(|l| match l {
+                        Line::Heading { label, depth, .. } => serde_json::json!(["heading", label, depth]),
+                        Line::Row { index, depth } if menu.is_some() && rows[index][0].name != app.full_name(&rows[index][0]) => serde_json::json!(["row", keys(index), depth, rows[index][0].name]),
+                        Line::Row { index, depth } => serde_json::json!(["row", keys(index), depth]),
+                        Line::Mode(m) => serde_json::json!(["mode", m]),
+                        Line::More => serde_json::json!(["more"]),
+                    }).collect();
+                    serde_json::json!({ "group": name, "family": false, "lines": lines })
+                };
+                groups.push(serde_json::to_string(&group).unwrap());
+            }
+            out.push((tab, groups));
+        }
+        out
     }
 }

@@ -190,13 +190,24 @@ def test_the_a1s_public_definition_has_every_setting_in_one_entry():
 GOLDEN = definitions.ROOT / "editor" / "tests" / "data" / "menu_ILCE-1M2_fw4.00.json"
 
 
-def golden_shape(doc, expert: bool = False) -> list:
-    """The Menu as editor/src/pages/menu.rs's the_default_menu_is_the_golden_one writes it: each entry the side bar
-    lists (My Menu's tab has the My Menu page there), its groups, a family's table by its keys, every other group's
-    lines (a row by its records' keys)."""
+def golden_shape(doc, expert: bool = False, in_menu: str | None = None, mode: str | None = None) -> list:
+    """The Menu as editor/src/pages/menu.rs's the_default_menu_is_the_golden_one writes it (golden_entries): each entry
+    the side bar lists (My Menu's tab has the My Menu page there), its groups, a family's table by its keys, every other
+    group's lines (a row by its records' keys); in one of the camera's menus (`in_menu`, the live settings saved in
+    `mode`), as that menu lists them, a row titled otherwise than its setting with that title last."""
     menu = mr.Menu(doc)
+    if in_menu is None:
+        entries = menu.entries(mr.shown(doc, expert))
+    else:
+        listed = [s for s in menu.listed(in_menu, mode, expert) if expert or (s.get("area") == "global" and not s.get("expert"))]
+        entries = menu.entries(listed, in_menu=True)
+
+    def row_line(x, rows):
+        lead = rows[x[1]][0]
+        line = ["row", [y["key"] for y in rows[x[1]]], x[2]]
+        return line + [lead["name"]] if in_menu is not None and lead["name"] != menu.by_key[lead["key"]]["name"] else line
     out = []
-    for entry, settings in menu.entries(mr.shown(doc, expert)):
+    for entry, settings in entries:
         if menu.has_my_menu and entry == menu.my_menu:
             continue
         groups = []
@@ -204,7 +215,7 @@ def golden_shape(doc, expert: bool = False) -> list:
             if fam:
                 groups.append({"group": name, "family": True, "keys": [x["key"] for x in rows[0]]})
                 continue
-            lines = [["heading", x[1], x[2]] if x[0] == "heading" else ["row", [y["key"] for y in rows[x[1]]], x[2]] if x[0] == "row"
+            lines = [["heading", x[1], x[2]] if x[0] == "heading" else row_line(x, rows) if x[0] == "row"
                      else list(x) for x in mr.lay_out(rows)]
             groups.append({"group": name, "family": False, "lines": lines})
         out.append({"entry": entry, "groups": groups})
@@ -217,14 +228,29 @@ def test_the_default_menu_is_the_editors():
     again (CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, in editor/) and this one must then agree."""
     want = json.loads(GOLDEN.read_text(encoding="utf-8"))
     assert want["definition"] == paths.A1II
-    got = golden_shape(definitions.load_public(paths.A1II))
+    compare_with_golden(definitions.load_public(paths.A1II), want)
+
+
+def compare_with_golden(doc, want: dict) -> None:
+    """The kit's Menu of `doc` is the golden one `want`: without the camera's menus its entries; with them, each menu's
+    in the definition's order, laid out for the live settings saved in the golden's mode."""
     bless = ("cd editor && CAMSET_BLESS=1 cargo test the_default_menu_is_the_golden_one, then look at the diff and make "
              "kit/camkit/menu_rows.py agree")
-    assert [e["entry"] for e in got] == [e["entry"] for e in want["entries"]], f"not the editor's entries (after a change on purpose: {bless})"
-    for g, w in zip(got, want["entries"], strict=True):
-        assert [x["group"] for x in g["groups"]] == [x["group"] for x in w["groups"]], f"{g['entry']} (after a change on purpose: {bless})"
-        for a, b in zip(g["groups"], w["groups"], strict=True):
-            assert a == b, f"{g['entry']} > {a['group']}: the kit's layout is not the editor's (after a change on purpose: {bless})"
+    menus = mr.menu_list(doc)
+    if "menus" not in want:
+        assert not menus, f"the definition lists the camera's menus, the golden file none (after a change on purpose: {bless})"
+        plans = [(None, None, want["entries"])]
+    else:
+        assert [m["name"] for m in menus] == [m["menu"] for m in want["menus"]], f"not the editor's menus (after a change on purpose: {bless})"
+        plans = [(m["menu"], m["mode"], m["entries"]) for m in want["menus"]]
+    for in_menu, mode, entries in plans:
+        got = golden_shape(doc, in_menu=in_menu, mode=mode)
+        where = f"{in_menu} > " if in_menu else ""
+        assert [e["entry"] for e in got] == [e["entry"] for e in entries], f"{where}not the editor's entries (after a change on purpose: {bless})"
+        for g, w in zip(got, entries, strict=True):
+            assert [x["group"] for x in g["groups"]] == [x["group"] for x in w["groups"]], f"{where}{g['entry']} (after a change on purpose: {bless})"
+            for a, b in zip(g["groups"], w["groups"], strict=True):
+                assert a == b, f"{where}{g['entry']} > {a['group']}: the kit's layout is not the editor's (after a change on purpose: {bless})"
 
 
 def test_a_definition_that_places_nothing_keeps_its_tabs_and_groups():
