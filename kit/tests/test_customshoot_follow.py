@@ -145,6 +145,44 @@ def test_a_registration_the_element_did_not_follow_is_kept_unapplied_with_why(tm
     assert line["applied"] is False and why in line["not_applied"]
 
 
+@pytest.mark.parametrize("said,ok", [("Registered.", True), ("Registered", True), (" registered . ", True),
+                                     ("Not registered.", False), ("Not Registered", False), ("Unregistered.", False),
+                                     ("Registered. Slot 1", False), ("", False)])
+def test_a_notice_after_register_counts_only_as_the_cameras_word_alone(said, ok):
+    assert V.registered_said(said) is ok
+
+
+def test_register_stops_on_a_notice_that_is_not_the_cameras_word_and_downloads_nothing(monkeypatch):
+    """register(): a notice after Enter on Register that says anything but "Registered." alone ("Not registered.") stops
+    with Failed, before any download; the Reg. Custom Shoot Set list again (what every frame on disk shows after Enter)
+    goes on to the download."""
+    downloads, seen = [], {}
+
+    class Cam:
+        frame = SimpleNamespace(path=Path("00041_down.png"))
+
+        def press(self, key):
+            assert key == "enter"
+            self.frame = SimpleNamespace(path=Path("00042_enter.png"))
+
+        def read(self):
+            return SimpleNamespace(kind=seen["kind"])
+    link = SimpleNamespace(download=lambda tag: downloads.append(tag) or Path(f"00043_{tag}.DAT"))
+    monkeypatch.setattr(V, "to_register", lambda c: None)
+    monkeypatch.setattr(V, "lines", lambda c: c.frame.path.name)
+    monkeypatch.setattr(V.ocr, "text_in", lambda lines, box: seen["text"] if lines == "00042_enter.png" else "Register")
+    monkeypatch.setattr(V, "to_shooting", lambda link, eyes, why: None)
+    monkeypatch.setattr(V, "wait_lock", lambda since, eyes, clock=None: None)
+    seen.update(kind="notice", text="Not registered.")
+    with pytest.raises(V.Failed, match="after Register: 'Not registered.'"):
+        V.register(Cam(), link, None, "hold1-at-0-5EV")
+    assert downloads == []
+    seen.update(kind="submenu", text="Reg. Custom Shoot Set 1/1 Recall Custom hold 1 Recall Custom hold 2")
+    assert V.register(Cam(), link, None, "hold1-at-0-5EV")[1].name == "00043_hold1-at-0-5EV.DAT"
+    seen.update(kind="notice", text="Registered.")
+    assert V.register(Cam(), link, None, "hold1-at-0-3EV")[2] == "Registered." and len(downloads) == 2
+
+
 class FakeEyes:
     closed = 0
 
@@ -160,7 +198,6 @@ def world(tmp_path, monkeypatch):
     """customshoot_values.main over runner.prover_session as it is, a made-up link and camera: the start download, the
     live row set and the hold registered per option, the start file put back (session.finish) and checked, and the
     second session that puts the working copy back. The files the link hands out are made-up ones, in order."""
-    import mode_switch
     import proving.nav
     import runner
     defs = tmp_path / "defs"
@@ -215,13 +252,13 @@ def world(tmp_path, monkeypatch):
     monkeypatch.setattr(V, "wait_lock", lambda since, eyes, clock=None: None)
     monkeypatch.setattr(V, "close_screen", lambda c, link: log["events"].append("close"))
     monkeypatch.setattr(V, "cancel_hold", lambda c, link, cycle, model, h: log["events"].append(f"cancel hold {h}"))
-    monkeypatch.setattr(mode_switch, "open_menu", lambda c: log["events"].append("menu"))
+    monkeypatch.setattr(V, "open_menu", lambda c: log["events"].append("menu"))
 
     def set_row(c, cycle, model, path, option, say, mode="Stills"):
         if log["fail_on"] == option:
             raise V.Failed(f"{option!r} did not come round in its list")
         log["events"].append(f"set {' > '.join(path)} = {option}")
-    monkeypatch.setattr(mode_switch, "set_row", set_row)
+    monkeypatch.setattr(V, "set_row", set_row)
     monkeypatch.setattr(V, "open_hold", lambda c, cycle, model, h: log["events"].append(f"open hold {h}"))
 
     def register(c, link, hdmi, name):

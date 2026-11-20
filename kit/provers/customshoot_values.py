@@ -53,6 +53,7 @@ from camkit.live import LiveCamera  # noqa: E402
 from camkit.vlm import check_readers  # noqa: E402
 from camkit.runs import Run  # noqa: E402
 from customshoot_run import ITEMS, LAST_OPENED, ROW, allowed, cancel_hold, lines, open_hold, row_box, to_item, to_register  # noqa: E402
+from mode_switch import open_menu, set_row  # noqa: E402   (--follow's live row: an import failure shows before a session)
 from prove_run import Failed, to_shooting, vlm_option  # noqa: E402
 from proving.base import wait_lock  # noqa: E402
 from proving.screens import later  # noqa: E402
@@ -141,7 +142,6 @@ def follow_line(h: int, plan: dict, label: str, code: int, before: Path, set_dat
 def follow(cam, link, hdmi, cycle, model, h: int, plan: dict, start: Path, out) -> list:
     """--follow's registrations, in one session: per option the live row set through its menu row and a download, the
     hold registered as it stands and a download, a proof line (follow_line). Returns the lines written."""
-    from mode_switch import open_menu, set_row
     say = lambda m: print(m, flush=True)     # noqa: E731
     before, lines_written = start, []
     for label, code in plan["options"]:
@@ -431,6 +431,17 @@ def to_option(cam, opts: list, j: int, wraps: bool):
     raise Failed(f"option {opts[j]!r} never took the cursor ({cam.frame.path.name})")
 
 
+REGISTERED = "registered"       # the camera's word on its notice after Register, and the whole of it (registered_said)
+
+
+def registered_said(said: str) -> bool:
+    """A notice after Register says the hold was written only when it is the camera's own word alone, "Registered."
+    read by its letters (case, marks and spaces aside): "Not registered." or any other words are no registration. The
+    frames on disk show none on this screen: every one read after Enter on Register (kit2_pass2) is the Reg. Custom
+    Shoot Set list again; "Registered." is the camera's notice after Camera Set. Memory's registration."""
+    return re.sub(r"[^a-z]+", " ", said.lower()).split() == [REGISTERED]
+
+
 def register(cam, link, hdmi, name: str):
     to_register(cam)
     full = ocr.text_in(lines(cam), (0, 0, 640, 480))
@@ -439,7 +450,7 @@ def register(cam, link, hdmi, name: str):
     chosen = cam.frame.path.name
     cam.press("enter")
     said = ocr.text_in(lines(cam), (0, 0, 640, 480))
-    if cam.read().kind == "notice" and "registered" not in said.lower():
+    if cam.read().kind == "notice" and not registered_said(said):
         raise Failed(f"after Register: {said[:90]!r} ({cam.frame.path.name})")
     to_shooting(link, hdmi, "the download after Register")
     dat = link.download(name)                           # camlink waits up to 5 s for the camera to allow it
