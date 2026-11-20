@@ -801,6 +801,11 @@ def main():
     add_network_argument(ap)
     add_info_ok_argument(ap)
     coverage.add_skip_argument(ap, crawl=True)
+    ap.add_argument("--no-first-open", action="store_true",
+                    help="open no row this body has not been seen to open, whatever the owner's blank-cards statement: "
+                         "each is skipped and recorded, as without the statement. Beside --leave it is the second "
+                         "guard: a row --leave misses (its label read otherwise by every reader) opens only where it "
+                         "is seen opened already, and nothing under it that never was")
     ap.add_argument("--leave", action="append", default=[], metavar="PATH",
                     help="a row this lap leaves unopened, every row under it with it, nothing pressed on it (\" > \" "
                          "between labels, from the top-level row; repeatable): its outcome says so (camkit.crawl.LEFT), "
@@ -842,6 +847,8 @@ def main():
         skip_why = str(e.code)      # a scope that cannot be read makes no first open, and stops no lap
     if a.panels and not skip_why:
         skip_why = "--panels commits options, while a first open is a look: crawl without --panels first"
+    if a.no_first_open and not skip_why:
+        skip_why = "--no-first-open: this lap opens no row it has not been seen to open, whatever the cards statement"
     said = unseen_line(cycle, model, seen, skip_why, a, network)
     if said:
         print(said, flush=True)
