@@ -141,7 +141,7 @@ def bar_refused(lit: str, path, seen) -> str:
     why = safety.never_open(lit)
     if why:
         return f"the lit row reads as never-open ({why})"
-    why = safety.look_lap_refused(lit, bool(seen.seen(path)))
+    why = safety.look_lap_refused(lit, bool(first_open.drawn(seen)(path)))
     if why:
         return f"the lit row: {why}"
     return ""
@@ -176,17 +176,20 @@ def closed(path, seen, stored=None) -> str:
     action, a format, delete or reset, credentials, the camera's identity, a connection, a Wi-Fi or Bluetooth setting,
     sound, light or motion), or refused by the look lap's own list (safety.look_lap_refused: what never opens, the Screen
     Reader, a row whose opening acts, a format, delete or reset not seen opened), or a row above it this body has not
-    been seen to open (seen.unseen), which reaching it would open. No run's --allow lifts any of these here."""
+    been seen to open, which reaching it would open. No run's --allow lifts any of these here. Every "seen" here is
+    first_open.drawn's, the records under the labels the camera draws now: no row is seen through an older name
+    (camkit.row_names)."""
+    drawn = first_open.drawn(seen)
     if stored:
         return f"never-open ({stored})"
     for i, label in enumerate(path):
         why = safety.never_open(label)
         if why:
             return f"never-open ({why})"
-        why = safety.look_lap_refused(label, bool(seen.seen(path[:i + 1])))
+        why = safety.look_lap_refused(label, bool(drawn(path[:i + 1])))
         if why:
             return why
-    above = [p for p in seen.unseen(path) if len(p) < len(path)]
+    above = [tuple(path[:i]) for i in range(1, len(path)) if not drawn(path[:i])]
     if above:
         return (f"{' > '.join(above[0])!r} is not seen opened on this body: its first open is the crawl's procedure "
                 "(camkit.first_open), and reaching the row would open it")
@@ -201,15 +204,17 @@ def open_refused(path, lit: str, seen, stored=None) -> str:
     why = closed(path, seen, stored) or bar_refused(lit, path, seen)
     if why:
         return why
-    if not seen.seen(path):
+    if not first_open.drawn(seen)(path):    # as the camera draws it: never seen through an older name
         return ("not seen opened on this body: its first open is the crawl's procedure (camkit.first_open: RESTORE_BY_HAND "
                 "before, the settings checked after), which this run does not make")
     return ""
 
 
 def label_key(path) -> tuple:
-    """The key a row's one Right is spent under by its labels: each folded as camkit.first_open.Seen folds them
-    (first_open.key: safety.plain), so "framing  stabilizer" is Framing Stabilizer."""
+    """The key a row's one Right is spent under by its labels: the path as the first-open procedure compares it
+    (first_open.key: an older name ROW_NAMES gives the row renamed, each label folded by safety.plain), so "framing
+    stabilizer" is Framing Stabilizer, and a row's older name and the camera's are one row for "never twice". Never a
+    safety judgement's: those ask first_open.drawn."""
     return ("labels", *first_open.key(path))
 
 

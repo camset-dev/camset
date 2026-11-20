@@ -63,6 +63,29 @@ def test_a_rows_keys_are_its_folded_labels_and_the_row_the_scan_leads_to():
         ("labels", "proxy settings", "proxy format"), ("row", "k1", 0, "proxy format"))
 
 
+def test_an_older_and_a_newer_name_of_one_row_are_one_row_for_the_runner(own_runs, tmp_path, monkeypatch):
+    """With a ROW_NAMES entry in force, both row_keys of "Proxy Settings > Px Proxy Recording" are those of the camera's
+    "Proxy Settings > Proxy Recording" (the path renamed whole before the scan row's key drops its top label), so the
+    two named in one run are asked once."""
+    from camkit import datafiles, definitions, row_names
+    from conftest import TEST_CAMERA
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    p = datafiles.hand_tables_file(TEST_CAMERA)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"camera": TEST_CAMERA, "ROW_NAMES": {
+        "Proxy Settings > Px Proxy Recording": "Proxy Settings > Proxy Recording"}}), encoding="utf-8")
+    row_names.forget()
+    try:
+        older = G.row_keys(CYCLE, MODEL, ["Proxy Settings", "Px Proxy Recording"])
+        assert older == G.row_keys(CYCLE, MODEL, ["Proxy Settings", "Proxy Recording"]) == (
+            ("labels", "proxy settings", "proxy recording"), ("row", "k1", 0, "proxy recording"))
+        lines, asked, closed = run_main(monkeypatch, ["Proxy Settings > Px Proxy Recording",
+                                                      "Proxy Settings > Proxy Recording"], spend, scan=(CYCLE, MODEL))
+        assert [k for k, _ in asked] == [older]
+    finally:
+        row_names.forget()
+
+
 def test_a_row_the_kit_may_not_open_is_passed_over_before_anything_is_pressed(monkeypatch):
     monkeypatch.setattr(G, "stored_reason", lambda cycle, model, path: None)
     monkeypatch.setattr(G, "reach", lambda *a: pytest.fail("reached a row the kit may not open"))

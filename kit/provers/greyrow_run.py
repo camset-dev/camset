@@ -81,7 +81,7 @@ def row_keys(cycle, model, path) -> tuple:
     keys = [greyrow.label_key(path)]
     j = target_of(cycle, model, path[0])[0] if cycle else None
     if j is not None:
-        keys.append(("row", cycle[j]["page"], cycle[j]["row"], *first_open.key(path[1:])))
+        keys.append(("row", cycle[j]["page"], cycle[j]["row"], *first_open.key(path)[1:]))     # renamed whole
     return tuple(keys)
 
 

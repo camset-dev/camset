@@ -231,6 +231,80 @@ def test_one_row_spelled_another_way_is_the_same_row_and_gets_no_second_right(mo
     assert greyrow.label_key([spelled]) == FS
 
 
+# ---------------------------------------------------------------- a row's older name (camkit.row_names, ROW_NAMES)
+
+OLDER, DRAWN = ["Proxy Settings", "Px Proxy Recording"], ["Proxy Settings", "Proxy Recording"]
+
+
+@pytest.fixture
+def renaming(own_runs, tmp_path, monkeypatch):
+    """The made-up camera's hand tables naming Proxy Recording's older name (ROW_NAMES, the one kind: an icon's letters),
+    and its one crawl, which opened the row under that older name only. Returns the camera's seen record as a run reads
+    it (camkit.first_open.seen_record)."""
+    from camkit import datafiles, definitions, first_open, row_names
+    from conftest import TEST_CAMERA
+    monkeypatch.setattr(definitions, "DATA", tmp_path / "data")
+    p = datafiles.hand_tables_file(TEST_CAMERA)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps({"$schema": "../../schemas/hand-tables.schema.json", "camera": TEST_CAMERA,
+                             "ROW_NAMES": {" > ".join(OLDER): " > ".join(DRAWN)}}), encoding="utf-8")
+    run = own_runs / TEST_CAMERA / "kit2_crawl_older"
+    run.mkdir(parents=True)
+    (run / "rows.jsonl").write_text(json.dumps({"label": "Proxy Settings", "outcome": "submenu crawled", "submenu": [
+        {"label": "Px Proxy Recording", "outcome": "walked"}]}) + "\n", encoding="utf-8")
+    row_names.forget()                          # a table is read once a process: this one afresh
+    yield first_open.seen_record(TEST_CAMERA)
+    row_names.forget()
+
+
+def test_a_row_seen_only_under_its_older_name_is_not_seen_for_the_right(monkeypatch, renaming):
+    """With a ROW_NAMES entry in force, the first-open procedure's seen takes the row under either name (key), but every
+    safety judgement of the procedure asks the records under the label the camera draws (first_open.drawn): the row the
+    records hold opened only as "Px Proxy Recording" is not seen as Proxy Recording, so its Help is read and no Right
+    goes; the parent, opened under its own name, is seen."""
+    from camkit import first_open
+    seen = renaming
+    assert seen.seen(DRAWN) and not first_open.drawn(seen)(DRAWN) and first_open.drawn(seen)(DRAWN[:1])
+    cam = GreyCam(label=DRAWN[-1])
+    world(monkeypatch, cam)
+    assert greyrow.closed(DRAWN, seen) == ""
+    line, said, tried = ask(cam, path=DRAWN, seen=seen)
+    assert (line["outcome"], line["right"], cam.keys, tried) == (greyrow.HELP_ONLY, False, ["c4"], set())
+    assert "not seen opened" in line["why"]
+    assert greyrow.open_refused(DRAWN, DRAWN[-1], seen)     # the Right's own judgement, asked directly
+
+
+def test_a_parent_seen_only_under_an_older_name_is_not_reached(monkeypatch, own_runs, tmp_path):
+    """The unseen-parent check asks the records as drawn too: an older parent name in the records reaches no row under
+    the camera's (ROW_NAMES renames a path's last label only, so the stand-in seen here holds the case as one entry
+    would make it: seen by key, not as drawn)."""
+    seen = SimpleNamespace(seen=lambda p: True, unseen=lambda p: [], seen_as_drawn=lambda p: tuple(p) != ("Proxy Settings",))
+    cam = GreyCam(label=DRAWN[-1])
+    world(monkeypatch, cam)
+    line, said, tried = ask(cam, path=DRAWN, seen=seen)
+    assert (line["outcome"], cam.keys) == (greyrow.PASSED, []) and "'Proxy Settings' is not seen opened" in line["why"]
+
+
+def test_a_rows_right_spent_under_one_name_is_spent_under_the_other(monkeypatch, renaming):
+    """"Never twice" takes an older and a newer name of one row as one row (label_key: first_open.key, renamed by
+    ROW_NAMES); with no table in force the two would be two keys."""
+    cam = GreyCam(label=OLDER[-1])
+    world(monkeypatch, cam)
+    seen = SimpleNamespace(seen=lambda p: True, unseen=lambda p: [])        # every row seen, both names alike
+    line, said, tried = ask(cam, path=OLDER, seen=seen)
+    assert line["right"] and greyrow.label_key(OLDER) == greyrow.label_key(DRAWN) == (
+        "labels", "proxy settings", "proxy recording")
+    cam.where, cam.keys, cam.lit, cam.label = "row", [], DRAWN[-1], DRAWN[-1]
+    again, said, tried = ask(cam, path=DRAWN, seen=seen, tried=tried)
+    assert (again["outcome"], again["right"], cam.keys) == (greyrow.TRIED, False, ["c4"])
+
+
+def test_with_no_table_nothing_is_renamed(own_runs):
+    from camkit import row_names
+    row_names.forget()
+    assert greyrow.label_key(OLDER) != greyrow.label_key(DRAWN)
+
+
 @pytest.mark.parametrize("text", [
     "Sets how the function works. This operation or setting not available as follows Touch Operation Off",
     "Sets how the function works. Turn on the touch panel first.",
