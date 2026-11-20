@@ -1256,7 +1256,9 @@ def test_a_grid_takes_two_fields_of_one_box_each(own_runs, monkeypatch, capsys):
 
 
 @pytest.mark.parametrize("extra, said", [(["--grid", "--box", "1"], "--box and --grid"),
-                                         (["--look", "--grid"], "--look and --grid")])
+                                         (["--look", "--grid"], "--look and --grid"),
+                                         (["--look", "--number", "3"], "--look and --number"),
+                                         (["--number", "-1"], "a number of zero or more")])
 def test_one_way_of_proving_a_run(own_runs, monkeypatch, extra, said):
     cam = FieldsCam()
     F, root, _ = fields_world(monkeypatch, own_runs, cam)
@@ -1264,3 +1266,74 @@ def test_one_way_of_proving_a_run(own_runs, monkeypatch, extra, said):
         run_fields(F, root, "Focus Bracket", *extra)
     assert cam.keys == []
 
+
+# ------------------------------------------------------------------------------------- a named number (--number)
+
+def capped(opt, edit):
+    """Focus Bracket's number of shots kept as 2 below 2 (264148), and as 250 above it (a made-up top)."""
+    edit = lowest_two(opt, edit)
+    n = int("".join(b["values"][i] for b, i in zip(SHOTS[1:], edit[1:], strict=True))) if opt == 2 else 0
+    return [edit[0], 2, 5, 0] if n > 250 else edit
+
+
+def number_cam() -> FieldsCam:
+    cam = shots_cam()
+    cam.correct = capped
+    return cam
+
+
+def test_a_named_number_is_put_in_with_no_enter_on_the_way_one_download_each(own_runs, monkeypatch, capsys):
+    """--number 299 --number 2 --number 7 on Focus Bracket held on 003: each number's digits stepped box by box, Enter
+    once on the last box, one download; 299 is kept as 250 (the boxes and the record say so on the next opening: a
+    finding, "applied": false), 2 and 7 kept as asked; 003 put back last, its download the base's."""
+    cam = number_cam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--number", "299", "--number", "2", "--number", "7")
+    lines = fields_lines()
+    assert [(x["index"], x["value"], x["label"], x["applied"], x.get("asked"), x.get("kept"), x["final"],
+             [(c["key"], c["after"]) for c in x["changes"]]) for x in lines] == [
+        (["number", 299], "299", "4(Standard) | 299", False, "299", "250", False, [("global:0x9003", 250)]),
+        (["number", 2], "2", "4(Standard) | 2", True, None, None, False, [("global:0x9003", 2)]),
+        (["number", 7], "7", "4(Standard) | 7", True, None, None, False, [("global:0x9003", 7)]),
+        (["number", 3], "3", "4(Standard) | 3", True, None, None, True, [])]
+    assert all(x["walk"] == "number" and x["field"] == "Number of Shots" for x in lines)
+    assert len(downloads) == 5 and cam.keys.count("enter") == 5, "the base and one a number, no Enter on the way"
+    assert "the camera kept 250, not 299" in capsys.readouterr().out
+    assert cam.at[2] == [1, 0, 0, 3]
+
+
+def test_a_number_the_boxes_will_not_hold_is_said_and_nothing_is_chosen(own_runs, monkeypatch, capsys):
+    """--number 300: the hundreds box comes round after 2 without showing 3: said, closed with MENU, no Enter, no line;
+    the put-back goes on."""
+    cam = number_cam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--number", "300")
+    assert "300: not put in: box 1 came round to 0 without showing 3" in capsys.readouterr().out
+    assert [(x["value"], x["final"]) for x in fields_lines()] == [("3", True)]
+    assert cam.keys.count("enter") == 2 and len(downloads) == 2
+
+
+def test_a_number_wider_than_its_boxes_or_an_option_with_no_digit_field_is_refused(own_runs, monkeypatch, capsys):
+    cam = number_cam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--number", "1000")
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--number", "3")
+    out = capsys.readouterr().out
+    assert "--number [1000]: Number of Shots has 3 digit boxes" in out
+    assert "--number: Cont. Bracket draws no one field of digit boxes" in out and downloads == []
+
+
+def test_the_report_credits_named_numbers_by_their_field_and_never_the_put_back(own_runs, monkeypatch, capsys):
+    """Step Width walked whole, then --number 2 --number 7: the record of the number alone is credited 2 and 7 by the
+    field's value; the number held, put back last, is credited to nothing (it would stand out among numbers a run named),
+    and the record is not marked sampled for it."""
+    import pass2_report as R
+    cam = number_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--box", "0")
+    run_fields(F, root, "Focus Bracket", "--number", "2", "--number", "7")
+    opts = counted_rows(root)[f"Bracket Settings > Bracket Type > Focus Bracket [{CTX}]"]
+    assert R.values_of(opts)["global:0x9003"] == {"2": 2, "7": 7}
+    assert R.option_fields_sampled(opts) == set()

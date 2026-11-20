@@ -1482,7 +1482,8 @@ def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
     put-back (its attempt's lines left out), says nothing of whether the record holds it. A field's put-back ("final")
     changes nothing: its value is the record's before in its own session (its base), as a list's own start is, but only
     where its walk was whole ("whole" not False): in a walk the deadline cut short the value held would stand out, as a
-    list walked in part keeps its start uncredited (start_lines, docs/decisions/0016). A line the camera refused (its
+    list walked in part keeps its start uncredited (start_lines, docs/decisions/0016), and so it would among numbers a
+    run named ("walk": "number"), whose put-back is never credited. A line the camera refused (its
     changes already none), a value it did not keep ("applied": false with "asked" and "kept": its download holds the
     kept value's code, never the asked one's, and neither label is credited from it; the kept value is credited by its
     own line, where the walk reached it), a line whose value no opening confirmed ("applied": null) and any other line
@@ -1503,7 +1504,7 @@ def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
             if not both and o.get("field") not in moved_by:
                 continue
             after = next((c["after"] for c in o["changes"] if c["key"] == key), None)
-            if after is None and (not o.get("final") or o.get("whole") is False):
+            if after is None and (not o.get("final") or o.get("whole") is False or o.get("walk") == "number"):
                 continue
             if after is None:
                 after = befores.get(o.get("base"))

@@ -6,7 +6,7 @@ boxes (2026-11-19).
     CAMSET_EYES=osd .venv/bin/python -u kit/provers/carousel_fields_run.py --scan SCAN --map kit2_fin_crawl_brk/map.json \\
         --row "Bracket Settings > Bracket Type" --option "Cont. Bracket" --context "Drive Mode dial on BRK" --look
     (the same without --look; --box N proves the N-th box alone, counted from 0; --most N, the deadline; --grid every
-    pair of two fields)
+    pair of two fields; --number N a named number in a digit field, repeated for more)
 
 The screen (camkit.screen's dialog with a lit field): Up and Down move between the carousel's options, Right on the lit
 option goes into its boxes (the first lit, filled orange, its field's name written above the row, the option's icon in
@@ -43,6 +43,13 @@ reached in one visit. Each opening checks the pair the last OK chose, box 1 too 
 the option for box 0's move. The pair held is put back last; "whole" unless a deadline cut a list short. A pair the
 camera refuses stops the grid.
 
+--number N (repeated), for an option with one field of digit boxes side by side (Focus Bracket's Number of Shots):
+each box of the field stepped to N's digit in turn, Up where it is higher, else Down, no Enter on the way, then Enter
+once on the field's last box, one download. A box that stands still or comes round short of its digit is said and
+the number passed over, nothing chosen; so is one whose stepping moved another box. Each next opening reads the boxes
+before any key steps them: a number the camera kept otherwise is a finding, as in a walk ("applied": false, "asked",
+"kept"). The number held is put back last, as one attempt with the numbers.
+
 Readings, as kit/provers/optboxes_run.py reads its boxes: the lit box by OCR, the second reader asked about the lit box
 itself on every doubt (camkit.reading.doubts) and always where the value decides a proof (the owner's rule: the reader is
 asked before a row fails), OCR plain and the reader apart stopping the row; the field's name by OCR, the reader where it
@@ -60,11 +67,12 @@ count in the words of the definition's Drive Mode bracket lists, "0.5 EV 3 Img."
 them; any other, the fields' values joined " | "), "box" and "read_by" the lit box's reading and who gave it ("ocr",
 "both", "reader"), "shown" OCR's reading of it, "box_vlm" and "box_reader" the second reader's and its name, "final" on
 the put-back and with it "whole" (False where the deadline cut the walk short), "attempt", "changes". A grid's lines
-say "walk": "grid", "index" ["grid", box 0's place, box 1's place from its low end], "field" and "value" box 1's.
+say "walk": "grid", "index" ["grid", box 0's place, box 1's place from its low end], "field" and "value" box 1's; a
+named number's "walk": "number", "index" ["number", N], "value" the number its boxes make.
 kit/pass2_report.py credits a record moved by the lines of two fields or more, or by a grid's, with "label", a record
 only one field's lines moved with that field's "value"; a put-back's value only where its walk was whole, as the value
-held would stand out among a part walk's (docs/decisions/0016). A record a whole grid moved is no sample: every pair
-is listed, the one held among them.
+held would stand out among a part walk's (docs/decisions/0016), and never a named number's. A record a whole grid moved
+is no sample: every pair is listed, the one held among them.
 """
 import argparse
 import json
@@ -900,6 +908,195 @@ def grid_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look, 
           + ("" if not g.cut else ", a deadline cutting a list short: not every pair"), flush=True)
 
 
+# ------------------------------------------------------------------------------------------------ a named number (--number)
+
+class Named:
+    """A digit field's named numbers (--number): the last number's line waiting for the next opening, and each box's
+    digits by picture, read once."""
+
+    def __init__(self):
+        self.pending = None
+        self.cache = {}         # box -> [(picture, digit)]
+
+
+def digit_field(look_: Look) -> tuple | None:
+    """(first box, last box) of the option's one field of digit boxes side by side under one name (Focus Bracket's
+    Number of Shots); None where it draws none, or more than one."""
+    runs = []
+    for k, lab in enumerate(look_.labels):
+        if runs and look_.labels[runs[-1][0]] == lab:
+            runs[-1][1] = k
+        else:
+            runs.append([k, k])
+    found = [(a, b) for a, b in runs if b > a and all(re.fullmatch(r"\d", key(look_.values[k])) for k in range(a, b + 1))]
+    return found[0] if len(found) == 1 else None
+
+
+def digit_at(cam, b: int, n: Named, name: str) -> str:
+    """The digit the lit box b shows: by its picture where seen before, else read by both readers (lit_read)."""
+    pic = box_pic(cam, b)
+    seen = n.cache.setdefault(b, [])
+    hit = next((d for p, d in seen if same_pic(p, pic)), None)
+    if hit is not None:
+        return hit
+    r = lit_read(cam, True)
+    d = key(r.text)
+    if not re.fullmatch(r"\d", d):
+        raise Failed(f"{name}: box {b} reads {r.text!r}, not one digit ({cam.frame.path.name})")
+    seen.append((pic, d))
+    return d
+
+
+def set_digit(cam, option: str, b: int, count: int, have: str, want: str, n: Named, name: str) -> str:
+    """Box b stepped from digit `have` to `want`, nothing chosen: Up where `want` is higher, else Down, each press judged
+    by the box's picture (stood_still) and its digit read (digit_at). Returns "" once the box shows `want`; else why not
+    (it stood still at an end, or came round, short of it): the camera does not offer the number so."""
+    way = "up" if int(want) > int(have) else "down"
+    seen = [have]
+    for _ in range(10):
+        if stood_still(cam, option, b, count, way, name):
+            return f"box {b} stands still on {seen[-1]}, its {'top' if way == 'up' else 'low'} end, short of {want}"
+        d = digit_at(cam, b, n, name)
+        if d == want:
+            return ""
+        if d in seen:
+            return f"box {b} came round to {d} without showing {want}"
+        seen.append(d)
+    return f"box {b} never showed {want} in ten presses"
+
+
+def put_number(cam, option, labels, look_: Look, span: tuple, digits: str, n: Named, opened: dict, name: str,
+               first: str | None = None) -> tuple:
+    """From the option lit: Right into the digit field (span: its first and last box), each box stepped to its digit of
+    `digits` in turn (set_digit), never Enter on the way. `first`: the digits the boxes must open on (the first visit's,
+    the look's). Returns (why the number cannot be put in, None), nothing chosen, or ("", the last box's reading) once
+    every box shows its digit and no other box moved: the field's earlier boxes as Right left them, the others as the
+    first visit saw them (`opened`, filled then)."""
+    b0, b1 = span
+    count = len(look_.labels)
+    into_box(cam, option, labels, b0, count)
+    if not opened:
+        opened.update({k: box_pic(cam, k) for k in range(count) if not b0 <= k <= b1})
+    left = {}
+    for j, b in enumerate(range(b0, b1 + 1)):
+        if j:
+            into_next(cam, option, b, count)
+            left[b - 1] = box_pic(cam, b - 1)
+        have = digit_at(cam, b, n, name)
+        if first is not None and have != first[j]:
+            raise Failed(f"{name}: box {b} holds {have!r}, the look read {first[j]!r}")
+        if have != digits[j]:
+            why = set_digit(cam, option, b, count, have, digits[j], n, name)
+            if why:
+                return why, None
+    moved = [k for k in range(count) if k != b1 and not same_pic(box_pic(cam, k), left.get(k, opened.get(k)))]
+    if moved:
+        return f"box {moved[0]} changed while the boxes after it were set", None
+    r = lit_read(cam, True)
+    if key(r.text) != digits[-1]:
+        raise Failed(f"{name}: box {b1} reads {r.text!r}, not {digits[-1]!r} ({cam.frame.path.name}); nothing chosen")
+    return "", r
+
+
+def read_number(cam, option, labels, look_: Look, span: tuple, n: Named, name: str) -> int:
+    """From the option lit: Right through the digit field, each box's digit read as it is lit (digit_at), nothing
+    stepped; the number they show."""
+    b0, b1 = span
+    count = len(look_.labels)
+    into_box(cam, option, labels, b0, count)
+    shown = []
+    for b in range(b0, b1 + 1):
+        if b > b0:
+            into_next(cam, option, b, count)
+        shown.append(digit_at(cam, b, n, name))
+    return int("".join(shown))
+
+
+def kept_number(n: Named, shown: int, held: int, out, name: str) -> None:
+    """The last number's line written once the boxes show what the camera kept (read_number): as it stands where they
+    show the number asked; where they show another and the download after that OK bears it out (a record moved to that
+    number, or none moved and they show the number held), "applied": false with "asked" and "kept", nothing credited
+    (Focus Bracket's 000 kept as 2); otherwise the walk stops."""
+    asked = int(n.pending["value"])
+    if shown == asked:
+        flush(n, out)
+        return
+    ch = n.pending["changes"]
+    if not any(c.get("after") == shown and isinstance(c.get("after"), int) and not isinstance(c.get("after"), bool)
+               for c in ch) and (ch or shown != held):
+        raise Failed(f"{name}: the boxes opened on {shown}, not {asked}, which the last OK chose, and its download does "
+                     "not bear them out")
+    print(f"   the camera kept {shown}, not {asked}, the number asked (its download bears the boxes out): nothing "
+          "credited to it", flush=True)
+    flush(n, out, applied=False, asked=str(asked), kept=str(shown))
+
+
+def named_walk(cam, link, eyes, cycle, model, path, option, labels, look_: Look, base, out, run,
+               numbers: list) -> None:
+    """Each named number put into the option's digit field and chosen once (--number, the module's), one download each,
+    as one attempt; the number held put back last. A number the boxes will not hold is said and passed over, nothing
+    chosen. Each line waits for the next opening (read_number, kept_number); one still waiting when the walk stops is
+    written saying what applied is not known."""
+    name = f"{' > '.join(path)} > {option}"
+    span = digit_field(look_)
+    b0, b1 = span
+    count = len(look_.labels)
+    width = b1 - b0 + 1
+    first = "".join(key(v) for v in look_.values[b0:b1 + 1])
+    held = int(first)
+    attempt = f"{run.dir.name}-{time.time_ns():x}"
+    n, opened = Named(), {}
+    print(f"{name}: {look_.labels[b0]} holds {held}; the numbers {', '.join(map(str, numbers))} put in, one a download",
+          flush=True)
+    try:
+        for k, number in enumerate([*numbers, held]):
+            final = k == len(numbers)
+            digits = str(number).zfill(width)
+            row = open_row(cam, cycle, model, path)
+            to_option(cam, option, labels)
+            if n.pending is not None:
+                kept_number(n, read_number(cam, option, labels, look_, (b0, b1), n, name), held, out, name)
+                cam.press("menu")                   # back to the option lit, nothing changed
+            why, r = put_number(cam, option, labels, look_, (b0, b1), digits, n, opened, name,
+                                first if not opened else None)
+            if why:
+                if final:
+                    raise Failed(f"{name}: the number held, {held}, cannot be put back: {why}")
+                print(f"   {number}: not put in: {why}; nothing chosen", flush=True)
+                close_screen(cam, link)
+                continue
+            values = list(look_.values)
+            values[b0:b1 + 1] = list(digits)
+            fields = look_.fields(values)
+            field = next(f for f in fields if f["label"] == look_.labels[b0])
+            lab = together(fields)
+            chosen = enter(cam, option, labels, b1, count, r.text, box_pic(cam, b1))
+            got = after_ok(cam, name, label=lab, back=lambda at=row: same_place(place(cam), at), info=False)
+            row_frame = cam.frame.path.name
+            to_shooting(link, eyes, "the download after OK")
+            dat = link.download(f"{path[-1]}-number-{number}".replace(" ", "-"))
+            wait_lock(time.monotonic(), eyes, clock=time)
+            ch = camset.diff(camset.read(base), camset.read(dat))
+            rec = {"path": [*path, option], "kind": "list", "via": VIA, "walk": "number", "index": ["number", number],
+                   "field": look_.labels[b0], "value": field["value"], "label": lab, "fields": fields, "box": r.text,
+                   "read_by": r.by, "shown": r.ocr, "box_vlm": r.vlm, "box_reader": r.reader, "chosen_frame": chosen,
+                   "row_frame": row_frame, "dat": dat.name, "base": base.name,
+                   **({"notice": got.notice} if got.notice else {}), "applied": got.applied, "final": final,
+                   "attempt": attempt, "changes": changes_of(ch)}
+            if final or not got.applied:
+                out.write(json.dumps(rec, ensure_ascii=False) + "\n")
+                out.flush()
+            else:
+                n.pending = rec
+            print(f"   {look_.labels[b0]} = {number} ({lab}): " + ("refused by the camera" if not got.applied else
+                  ", ".join(f"{c.key} {c.before!r}->{c.after!r}" for c in ch[:4]) or "no change"), flush=True)
+            if final and ch:
+                raise Failed(f"{name}: {held} put back, {len(ch)} records still differ from the base")
+    finally:
+        flush(n, out, applied=None)          # never seen again: what applied is not known
+    finish_attempt(run, attempt, name)
+
+
 def map_labels(map_path, path: list) -> list:
     """The carousel's options as the row's own map names them ([] where the map has no such carousel)."""
     rows = read_json(Path(map_path)).get("rows") or []
@@ -917,6 +1114,9 @@ def main(argv=None):
     ap.add_argument("--grid", action="store_true",
                     help="every pair of the option's two fields, one pair a download (Cont. Bracket's Exposure Value "
                          "and Number of Shots)")
+    ap.add_argument("--number", type=int, action="append", default=None,
+                    help="put this number into the option's digit field and choose it once (repeat it for more), the "
+                         "number held put back last")
     ap.add_argument("--most", type=int, default=MOST, help=f"values a walk proves each way at most ({MOST})")
     ap.add_argument("--context", default=None, help="the state the proofs are made in (\"Drive Mode dial on BRK\")")
     add_scan_argument(ap)
@@ -928,9 +1128,12 @@ def main(argv=None):
                  "nothing was sent to the camera")
     if a.most < 1:
         sys.exit("--most: one value at least")
-    ways = [w for w, on in (("--look", a.look), ("--box", a.box is not None), ("--grid", a.grid)) if on]
+    ways = [w for w, on in (("--look", a.look), ("--box", a.box is not None), ("--grid", a.grid),
+                            ("--number", a.number is not None)) if on]
     if len(ways) > 1:
         sys.exit(f"{' and '.join(ways)}: one way of proving a run, nothing was sent to the camera")
+    if a.number is not None and min(a.number) < 0:
+        sys.exit("--number: a number of zero or more, nothing was sent to the camera")
     cycle, model = load_scan(a.scan)
     run = Run(PROOF_RUN)
     eyes = eyes_from_config(run)
@@ -965,6 +1168,14 @@ def body(s, eyes, cycle, model, path, a, labels, out, run) -> None:
     if a.grid and (len(seen.labels) != 2 or len(seen.fields()) != 2):
         raise Failed(f"--grid: {a.option} draws {len(seen.labels)} boxes in {len(seen.fields())} fields, not two fields "
                      "of one box each; nothing chosen")
+    if a.number is not None:
+        span = digit_field(seen)
+        if span is None:
+            raise Failed(f"--number: {a.option} draws no one field of digit boxes side by side; nothing chosen")
+        width = span[1] - span[0] + 1
+        big = [n for n in a.number if len(str(n)) > width]
+        if big:
+            raise Failed(f"--number {big}: {seen.labels[span[0]]} has {width} digit boxes; nothing chosen")
     # the base: the option chosen as its boxes stand, so its own record never moves in a proof
     row = open_row(cam, cycle, model, path)
     to_option(cam, a.option, labels)
@@ -981,6 +1192,8 @@ def body(s, eyes, cycle, model, path, a, labels, out, run) -> None:
           "is compared with it", flush=True)
     if a.grid:
         grid_walk(cam, link, eyes, cycle, model, path, a.option, labels, seen, base, out, run, a.most)
+    elif a.number is not None:
+        named_walk(cam, link, eyes, cycle, model, path, a.option, labels, seen, base, out, run, a.number)
     else:
         for b in boxes:
             walk_box(cam, link, eyes, cycle, model, path, a.option, labels, seen, b, base, out, run, a.most)
