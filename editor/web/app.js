@@ -4272,9 +4272,16 @@ function pageInUse() {
 
 /** Collapse all and Expand all, as the window's: Cmd+Shift+↑ / ↓ on a Mac, Ctrl+Shift+↑ / ↓ elsewhere, in words and as
  *  `aria-keyshortcuts`. */
-const ON_MAC = /Mac|iPhone|iPad/.test(navigator.platform || "");
-const FOLD_KEYS = ON_MAC ? ["⌘⇧↑", "⌘⇧↓"] : ["Ctrl+Shift+↑", "Ctrl+Shift+↓"];
-const FOLD_ARIA = ON_MAC ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+ArrowUp", "Control+Shift+ArrowDown"];
+let onMac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+const FOLD_KEYS = onMac ? ["⌘⇧↑", "⌘⇧↓"] : ["Ctrl+Shift+↑", "Ctrl+Shift+↓"];
+const FOLD_ARIA = onMac ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+ArrowUp", "Control+Shift+ArrowDown"];
+
+/** A right-click menu, the My Menu pop-up or Compare's value picker open: the fold keys are left to it, as the
+ *  window leaves them to its own. */
+function popupOpen() {
+  const mm = $("mymenu");
+  return !!cmpMenuBox || !!cmp.pick || (!mm.hidden && mm.childElementCount > 0);
+}
 
 /** Collapse all and Expand all over what folds in the view in front (`foldAll`), each saying what it does (`fold`,
  *  `open`) and its keys, in words and as `aria-keyshortcuts`. */
@@ -4359,9 +4366,11 @@ function shortcut(e) {
   if (textBox(a)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
   const k = e.key.toLowerCase();
-  // Collapse all / Expand all (`foldAll`), with Shift; a list or a menu with the keyboard keeps its arrows
+  // Collapse all / Expand all (`foldAll`), as the window takes them: Cmd+Shift on a Mac, Ctrl+Shift elsewhere, never
+  // with Alt (refused above); a list with the keyboard keeps its arrows, an open menu or the picker the keys
   if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
-    if (a && a.tagName === "SELECT") return false;
+    if (onMac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey) return false;
+    if ((a && a.tagName === "SELECT") || popupOpen()) return false;
     if (!foldAll(e.key === "ArrowUp")) return false;
   } else if (k === "=" || k === "+") setFontScale(getFontScale() + 0.1);
   else if (k === "-" || k === "_") setFontScale(getFontScale() - 0.1);

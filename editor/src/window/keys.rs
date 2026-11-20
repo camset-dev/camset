@@ -99,17 +99,24 @@ impl App {
 
     /// Collapse all and Expand all by the keys (`KEY_COLLAPSE_ALL`, `KEY_EXPAND_ALL`, `fold_all`), taken before the
     /// arrows move anything (`bar_nav`, `keyboard_nav`), only where something folds (Compare's table, a tab of Edit, the
-    /// exposure page); a text field with the keyboard keeps them for its text, and an open menu or list for itself.
+    /// exposure page); a text field with the keyboard keeps them for its text, and an open menu, list or right-click
+    /// menu for itself; never with Alt held too, as the page takes them.
     pub(crate) fn fold_keys(&mut self, ctx: &egui::Context) {
         if let Some(id) = self.refocus.take() {
             ctx.memory_mut(|m| m.request_focus(id));
         }
         let here = matches!(self.mode, Mode::Compare) && !self.compare_records || matches!((self.mode, &self.view), (Mode::Edit, View::Tab(_) | View::Exposure));
-        if self.doc.is_none() || !here || typing(ctx) || ctx.memory(|m| m.any_popup_open()) {
+        let popup = ctx.memory(|m| m.any_popup_open()) || ctx.is_context_menu_open();
+        if self.doc.is_none() || !here || typing(ctx) || popup {
             return;
         }
-        let collapse = ctx.input_mut(|i| i.consume_shortcut(&KEY_COLLAPSE_ALL));
-        let expand = ctx.input_mut(|i| i.consume_shortcut(&KEY_EXPAND_ALL));
+        // the shortcut's modifiers exactly (`matches_exact`): with Alt held too it is no fold, as on the page
+        let take = |s: &egui::KeyboardShortcut| ctx.input_mut(|i| {
+            let at = i.events.iter().position(|e| matches!(e, egui::Event::Key { key, pressed: true, modifiers, .. } if *key == s.logical_key && modifiers.matches_exact(s.modifiers)));
+            at.map(|at| i.events.remove(at)).is_some()
+        });
+        let collapse = take(&KEY_COLLAPSE_ALL);
+        let expand = take(&KEY_EXPAND_ALL);
         if collapse || expand {
             self.fold_all(collapse);
             // egui moves the focus a control has with the arrow too: it comes back the next frame

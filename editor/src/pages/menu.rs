@@ -2638,6 +2638,45 @@ pub(crate) mod facts_tests {
         done(&dir, &user);
     }
 
+    /// The reviewer's finding 4: the window takes the fold keys as the page does: never with Alt held too, and not
+    /// while a list, a popup or a right-click menu is open.
+    #[test]
+    fn the_fold_keys_are_left_alone_with_alt_or_a_menu_open() {
+        let (mut app, dir, user) = sample_app("fold_keys_alike", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let lines = app.group_lines(&rows);
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, .. } => Some(App::fold_key(tab, group, path)), _ => None }).collect();
+        let first = lines.iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs | egui::Modifiers::ALT);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "Alt held too: nothing folds");
+        // a popup open
+        w.ctx.memory_mut(|m| m.open_popup(egui::Id::new("a popup")));
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "a popup open: nothing folds");
+        w.ctx.memory_mut(|m| m.close_popup());
+        // a right-click menu open, by a right click on the row's name
+        let _ = w.run(&mut app, vec![]);
+        let frame = &mut w.frame;
+        let out = w.ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, frame));
+        let tree = out.platform_output.accesskit_update.expect("the window's tree");
+        let rect = tree.nodes.iter().find(|(_, n)| n.label() == Some(first.name.as_str())).and_then(|(_, n)| n.bounds()).expect("the row's name");
+        let at = egui::pos2(((rect.x0 + rect.x1) / 2.0) as f32, ((rect.y0 + rect.y1) / 2.0) as f32);
+        let click = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE };
+        let _ = w.run(&mut app, vec![egui::Event::PointerMoved(at)]);
+        let _ = w.run(&mut app, vec![click(true)]);
+        let _ = w.run(&mut app, vec![click(false)]);
+        let _ = w.run(&mut app, vec![]);
+        assert!(w.ctx.is_context_menu_open(), "the row's right-click menu is open");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "a right-click menu open: nothing folds");
+        done(&dir, &user);
+    }
+
     /// A single row of the camera's menu that holds others folds by the keyboard alone: Up and Down stop on it (column 4
     /// says what it is), Enter or Space folds or shows what it holds, Left folds it and Right shows it, and Down goes on
     /// to the next row.

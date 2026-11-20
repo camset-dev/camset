@@ -322,6 +322,38 @@ console.log(JSON.stringify(out));
 
 
 @needs_node
+def test_the_fold_keys_are_taken_as_the_window_takes_them(tmp_path):
+    """The reviewer's finding 4: the page takes the fold keys as the window does: never with Alt held too, Cmd+Shift
+    on a Mac and Ctrl+Shift elsewhere (not the other), and not while a right-click menu, the My Menu pop-up or
+    Compare's value picker is open."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k, mods) => ({ key: k, ctrlKey: false, metaKey: false, shiftKey: true, altKey: false, preventDefault() {}, ...mods });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+$("content").replaceChildren(...drawTab([drive, other], { places: true, flat: false }));
+const folds = (e) => { foldAll(false); shortcut(e); return $("content").querySelectorAll("details.grp").every((d) => !d.open); };
+const out = {};
+onMac = false;
+out.ctrl = folds(key("ArrowUp", { ctrlKey: true }));
+out.cmd_elsewhere = folds(key("ArrowUp", { metaKey: true }));
+out.alt = folds(key("ArrowUp", { ctrlKey: true, altKey: true }));
+onMac = true;
+out.cmd_mac = folds(key("ArrowUp", { metaKey: true }));
+out.ctrl_mac = folds(key("ArrowUp", { ctrlKey: true }));
+onMac = false;
+cmpMenuBox = el("div"); out.menu = folds(key("ArrowUp", { ctrlKey: true })); cmpMenuBox = null;
+cmp.pick = { box: el("div") }; out.picker = folds(key("ArrowUp", { ctrlKey: true })); cmp.pick = null;
+$("mymenu").append(el("button", {}, "Add")); $("mymenu").hidden = false;
+out.mymenu = folds(key("ArrowUp", { ctrlKey: true }));
+$("mymenu").hidden = true;
+out.after = folds(key("ArrowUp", { ctrlKey: true }));
+console.log(JSON.stringify(out));
+""")
+    assert got == {"ctrl": True, "cmd_elsewhere": False, "alt": False, "cmd_mac": True, "ctrl_mac": False,
+                   "menu": False, "picker": False, "mymenu": False, "after": True}
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an
