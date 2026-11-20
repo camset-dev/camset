@@ -362,3 +362,25 @@ def test_one_settings_records_proved_in_different_modes_are_each_kept_to_their_o
     got = placement.by_menu(d, tree, MENUS)
     assert (got["global:0x0001"]["row_menus"], got["global:0x0002"]["row_menus"]) == menus
 
+
+def test_a_row_given_by_hand_finds_the_second_of_two_rows_of_one_label_and_a_row_named_as_its_group():
+    """Two rows of one label (Custom Key/Dial Set., a still and a movie row, in every menu): a record whose proofs went
+    through the second takes it by "#1" in its row given by hand, and every menu shows both rows, each with its own
+    record; a row named as its group ("Drive Mode") is found with its tab first."""
+    rows = [page("1/2", "Operation Customize", row("Custom Key/Dial Set."), row("Custom Key/Dial Set."), row("Fn Menu Settings")),
+            page("2/2", "Drive Mode", row("Drive Mode"))]
+    tree = {"model": "TEST", "firmware": "1.00", "tabs": [{"tab": "Setup", "pages": copy.deepcopy(rows)}],
+            "modes": [{"mode": m, "tabs": [{"tab": "Setup", "pages": copy.deepcopy(rows)}]} for m in ("Movie", "S&Q")]}
+    s = lambda k, n, *m: {**setting(k, n, "Operation Customize", *m), "tab": "Setup"}          # noqa: E731
+    d = {"model": "TEST", "tabs": ["Setup"], "menu": [], "settings": [
+        s("global:0x0001", "Custom Key (Still): AEL Button", "Custom Key/Dial Set."),
+        s("global:0x0002", "Custom Key (Movie): AEL Button", "Custom Key/Dial Set."),
+        s("global:0x0003", "A record the row writes", "Something 1")]}
+    hand = {"global:0x0002": ["Setup > Custom Key/Dial Set.#1"], "global:0x0003": ["Setup > Drive Mode"]}
+    top = placement.settings(d, tree, None, placement.with_hand(hand))
+    assert top["global:0x0001"]["row_at"] == [0] and top["global:0x0002"]["row_at"] == [1]
+    assert top["global:0x0001"]["row"] == top["global:0x0002"]["row"] == ["Custom Key/Dial Set."]
+    assert top["global:0x0003"]["row"] == ["Drive Mode"]
+    got = placement.by_menu(d, tree, MENUS, hand=hand)
+    assert all(got[k] == {"row_menus": ["Still", "Movie", "S&Q"]} for k in ("global:0x0001", "global:0x0002", "global:0x0003"))
+

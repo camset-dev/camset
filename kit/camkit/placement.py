@@ -249,11 +249,14 @@ class Tree:
 
     def segments(self, path, tab, whole=False) -> list:
         """A path's labels; the tab's and its groups' names it starts with left out, unless `whole` (a row named as
-        its group: Drive Mode, White Balance)."""
+        its group: Drive Mode, White Balance), which leaves out only the tab's name it starts with (a row given by hand
+        with its tab first: "Focus > Focus Area")."""
         t = self.by_tab.get(tab) or {"groups": []}
         segs = split(path)
         names = {norm(tab)} | {norm(g["name"]) for g in t["groups"]}
         while segs and norm(segs[0]) in names and not whole:
+            segs.pop(0)
+        if whole and len(segs) > 1 and norm(segs[0]) == norm(tab):
             segs.pop(0)
         return segs
 
