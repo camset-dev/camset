@@ -91,7 +91,7 @@ import unicodedata
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, row_names, runs  # noqa: E402
+from camkit import ROOT, camset, datafiles, definitions, jsonl, match, models, paths, placement, row_names, runs  # noqa: E402
 from runner import read_json, write_json  # noqa: E402
 
 
@@ -746,9 +746,10 @@ STATE_ITEM = re.compile(r"(.+?) = .+")    # "Row = option": a context's or a set
 
 
 def state_items(r: dict) -> list:
-    """A proof's context items (split at "," and ";") and setup rows (kit/provers/afreg_run.py's "setup": the rows the
+    """A proof's context items, as the kit reads a context everywhere (camkit.placement.context_items: split at "," and
+    ";", an item's trailing parenthetical left out), and setup rows (kit/provers/afreg_run.py's "setup": the rows the
     run set before it)."""
-    return [w.strip() for w in re.split(r"[,;] ", r.get("context") or "") + list(r.get("setup") or []) if w.strip()]
+    return placement.context_items(r.get("context") or "") + [w.strip() for w in r.get("setup") or [] if w.strip()]
 
 
 def walked_rows(proofs: list) -> dict:

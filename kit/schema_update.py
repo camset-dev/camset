@@ -700,8 +700,9 @@ HELP = RUN_ROOT / "kit2_help"
 def menu_place(m: str) -> tuple:
     """A proof's menu row ("ISO > ISO AUTO Maximum [Movie mode]") as (mode, path keys)."""
     from page_model import key_text
-    # S&Q's menu is Movie mode's, with its help (runs/kit2_page_scan_sq, 2026-10-30)
-    ctx = "Movie mode" if re.search(r"\[(Movie mode|S&Q mode)", m) else "Stills mode"
+    # S&Q's menu is Movie mode's, with its help (runs/kit2_page_scan_sq, 2026-10-30); the mode as the kit reads a
+    # proof's context everywhere (camkit.placement.mode_of)
+    ctx = "Movie mode" if placement.mode_of(m, ["Movie", "S&Q"]) else "Stills mode"
     path = re.sub(r" \[[^\]]*\]", "", m).split(" / ")[0].split(" @")[0]
     return ctx, tuple(key_text(x).lower() for x in path.split(" > "))
 

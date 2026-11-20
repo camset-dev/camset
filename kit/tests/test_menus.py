@@ -414,6 +414,26 @@ def test_the_camera_file_may_word_the_menu_buttons_label():
     assert list(v.iter_errors({"menus_label": ""}))
 
 
+def test_one_reading_of_a_proofs_context_for_placement_and_the_report():
+    """A proof's context is read one way across the kit: its items split at "," or ";" before a space, each with its
+    trailing parenthetical left out; the mode a path was proved in is the one an item names, and the report's state
+    items are the same items. A Movie proof written "[Movie mode; Log Shooting On]" or "[Movie mode (dial set with the
+    menu)]" is a Movie proof, in the Movie menu alone, as "[Movie mode]" is."""
+    import pass2_report
+    every = ["Stills", "Movie", "S&Q", "Time-lapse"]
+    assert placement.context_items("Movie mode (dial set with the menu); PP10 Gamma: Movie") == ["Movie mode", "PP10 Gamma: Movie"]
+    assert placement.context_items("File Format: SLOT 1 JPEG, SLOT 2 RAW") == ["File Format: SLOT 1 JPEG", "SLOT 2 RAW"]
+    for said, mode in (("Movie mode; Log Shooting On", "Movie"), ("Movie mode (dial set with the menu)", "Movie"),
+                       ("Movie mode (dial set with the menu), Picture Profile copies apart", "Movie"),
+                       ("S&Q mode (Time-lapse)", "S&Q"), ("Stills, Set with Menu", "Stills"),
+                       ("Shoot Mode A (dial set with the menu)", None), ("PP10 Gamma: Movie", None)):
+        assert placement.mode_of(f"Row [{said}]", every) == mode, said
+        assert pass2_report.state_items({"context": said}) == placement.context_items(said), said
+    for said in ("Movie mode", "Movie mode; Log Shooting On", "Movie mode (dial set with the menu)"):
+        d = doc(setting("global:0x0003", "Breathing Comp.", "Rec", f"Lens Compensation > Breathing Comp. [{said}]"))
+        assert by_key(d)["global:0x0003"] == {"row_menus": ["Movie"]}, said
+
+
 @pytest.mark.parametrize("table", ["renamed", "none"])
 def test_with_no_menu_tree_the_definitions_menus_stay_as_they_are(tmp_path, monkeypatch, table):
     """A fresh clone or CI (no private menu tree): from_data cannot rebuild a setting's menus, so it touches none of

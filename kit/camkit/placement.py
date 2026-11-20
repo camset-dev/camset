@@ -83,14 +83,27 @@ def steps(path: str) -> list:
     return out
 
 
+CONTEXT_ITEM = re.compile(r"[,;]\s+")           # between a context's items ("Movie mode; PP10 Gamma: Movie")
+TRAILING = re.compile(r"\s*\([^()]*\)$")        # an item's trailing parenthetical ("Movie mode (dial set with the menu)")
+
+
+def context_items(text: str) -> list:
+    """A proof's context as its items, the kit's one reading of it (mode_of here, kit/pass2_report.py's state_items):
+    split at each "," or ";" a space follows ("Movie mode; PP10 Gamma: Movie", "File Format: SLOT 1 JPEG, SLOT 2 RAW"),
+    each item's trailing parenthetical left out ("Movie mode (dial set with the menu)" is "Movie mode", "S&Q mode
+    (Time-lapse)" is "S&Q mode")."""
+    return [w for x in CONTEXT_ITEM.split(text or "") if (w := TRAILING.sub("", x.strip()).strip())]
+
+
 def context(path: str) -> list:
-    """The words of a path's context in brackets ("[Movie mode, Log Shooting On]"), one entry per comma."""
-    return [w.strip() for m in re.findall(r"\[([^\]]*)\]", path or "") for w in m.split(",") if w.strip()]
+    """The items of a path's context in brackets ("[Movie mode, Log Shooting On]"), as context_items reads them."""
+    return [w for m in re.findall(r"\[([^\]]*)\]", path or "") for w in context_items(m)]
 
 
 def mode_of(path: str, modes) -> str | None:
-    """The shooting mode of `modes` (the menu tree's mode names) a path's context names: "[Movie mode]" or "[movie]"
-    is the mode "Movie"; None when it names none."""
+    """The shooting mode of `modes` (the menu tree's mode names) a path's context names, an item of it (context) that is
+    the mode's name, or its name and "mode": "[Movie mode]", "[movie]", "[Movie mode (dial set with the menu)]" and
+    "[Movie mode; Log Shooting On]" are the mode "Movie"; None when it names none."""
     for w in context(path):
         for m in modes:
             if norm(w) and norm(w) in (norm(m), norm(m) + "mode"):
