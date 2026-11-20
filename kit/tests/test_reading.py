@@ -1752,13 +1752,18 @@ def test_the_census_judges_the_grey_questions_against_a_truth_that_needs_no_pers
     asked = []
     census_config(monkeypatch, GreyReader(root / "kit2_pass2" / "shots", asked))
     monkeypatch.setattr(rc, "pixel_level", lambda frame: GREY_LEVELS.get(frame.name))
+    # the carousel's lit icon: Slow's dim (grey), Fast's in between (cannot tell)
+    monkeypatch.setattr(rc, "icon_level", lambda frame: {"00006.png": (True, 110.0)}.get(frame.name, (None, 170.0)))
     before = files_of(root)
     assert rc.main([str(root), "--questions", "--json", "--variants", "grey", "--cache", str(tmp_path / "answers")]) == 0
     got = json.loads(capsys.readouterr().out)
     g = got["grey"]
     assert g["truth"]["list"] == {"frames": 5, "grey": 2, "white": 2, "sources disagree": 1, "grey by refused": 1,
                                   "grey by pixels": 1, "grey by drawn": 1, "white by applied": 1, "white by pixels": 1}
-    assert g["truth"]["carousel"] == {"frames": 2, "grey": 1, "white": 1, "grey by refused": 1, "white by applied": 1}
+    assert g["truth"]["carousel"] == {"frames": 2, "grey": 1, "white": 1, "grey by refused": 1, "white by applied": 1,
+                                      "icon on grey: grey": 1, "icon on grey: lowest": 110, "icon on grey: highest": 110,
+                                      "icon on white: cannot tell": 1, "icon on white: lowest": 170,
+                                      "icon on white: highest": 170}
     assert g["truth"]["checklist"] == {"frames": 1, "no truth": 1} and "checklist" not in g["scores"]
     assert g["sampled"] == {"list": {"grey": 2, "white": 2}, "carousel": {"grey": 1, "white": 1}}
     lit = g["scores"]["list"]

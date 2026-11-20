@@ -899,24 +899,39 @@ def grey_truth(item: Item, level=None) -> tuple:
 
 
 def pixel_level(frame: Path):
-    """proving.screens.drawn_grey's measure of the lit option on a frame file (None where it measures none)."""
+    """proving.screens.drawn_grey's measure of the lit option on a list's or side list's frame file (None where it
+    measures none, and on any other screen: a carousel's lit icon is measured apart, icon_level)."""
     from proving.screens import drawn_grey
 
     from camkit import screen
     from camkit.frames import load
     f = load(frame)
     s = screen.read(f)
-    return drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[1]
+    return drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[1] if s.kind in ("list", "sidelist") else None
 
 
-def grey_sample(items: list, per_kind: int, usable=None, level=None) -> tuple:
+def icon_level(frame: Path):
+    """(proving.screens.icon_grey's verdict on a carousel's lit icon, its measure) on a carousel's frame file, (None,
+    None) on any other screen: measured against the carousel's lines, never part of their truth."""
+    from proving.screens import icon_grey
+
+    from camkit import screen
+    from camkit.frames import load
+    f = load(frame)
+    return icon_grey(f.image) if screen.read(f).kind == "dialog" else (None, None)
+
+
+def grey_sample(items: list, per_kind: int, usable=None, level=None, icon=None) -> tuple:
     """({kind: [(item, truth, sources)]}, {kind: counts}): of each kind whose question asks the grey (GREY_KINDS), up
     to per_kind frames whose truth is grey and as many whose truth is white, chosen the same way every time (by a hash
     of the frame's run and name, as sample()), black frames (usable) left out; the counts say, over every frame of the
     kind, how many have each truth, by source, and how many sources disagreed. The pixels are measured on a list's and
-    a side list's frames alone (PIXEL_KINDS), once a frame, by `level` (default pixel_level)."""
+    a side list's frames alone (PIXEL_KINDS), once a frame, by `level` (default pixel_level); a carousel's lit icon is
+    measured against its frames' truth, by `icon` (default icon_level): "icon on <truth>: grey, white, cannot tell",
+    and its lowest and highest measure."""
     import hashlib
     level = level or pixel_level
+    icon = icon or icon_level
     measured = {}
     out, counts = {}, {}
     for kind in GREY_KINDS:
@@ -935,6 +950,13 @@ def grey_sample(items: list, per_kind: int, usable=None, level=None) -> tuple:
             c["sources disagree" if apart else truth or "no truth"] += 1
             for s in sources if truth else ():
                 c[f"{truth} by {s}"] += 1
+            if kind == "carousel" and truth:
+                # the carousel's lit icon (proving.screens.icon_grey) against its lines: what it tells on each truth
+                said, level = icon(it.frame)
+                c[f"icon on {truth}: {'cannot tell' if said is None else 'grey' if said else 'white'}"] += 1
+                if level is not None:
+                    c[f"icon on {truth}: lowest"] = min(c.get(f"icon on {truth}: lowest", 999), round(level))
+                    c[f"icon on {truth}: highest"] = max(c.get(f"icon on {truth}: highest", -1), round(level))
             if truth and len(chosen[truth]) < per_kind:
                 chosen[truth].append((it, truth, sources))
         if c:
@@ -2058,6 +2080,10 @@ def show_grey(g: dict) -> None:
               f"none {c.get('no truth', 0)}, sources disagree {c.get('sources disagree', 0)} ("
               + ", ".join(f"{k} {v}" for k, v in sorted(c.items()) if " by " in k)
               + f"); sampled grey {sampled.get('grey', 0)}, white {sampled.get('white', 0)}")
+        icons = [(k, v) for k, v in sorted(c.items()) if k.startswith("icon on ")]
+        if icons:
+            print("    the lit icon's red (proving.screens.icon_grey) against the lines: "
+                  + ", ".join(f"{k.removeprefix('icon on ')} {v}" for k, v in icons))
         by_question = g["scores"].get(kind, {})
         if not by_question:
             continue

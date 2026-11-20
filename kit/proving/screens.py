@@ -126,14 +126,42 @@ OPTION_X = {"list": BAR_X["list"], "sidelist": (305, 595)}      # an option's te
 
 
 def drawn_grey(cam) -> tuple:
-    """(whether the option under the cursor of a list or side list is drawn grey: True, False, or None where it cannot
-    be told; the measure, or None) on the screen on show, by GREY_LINE's rule on its lit bar's band (6 px in from
-    either edge); None on any other screen or without a bar."""
+    """(whether the option under the cursor is drawn grey: True, False, or None where it cannot be told; the measure,
+    or None) on the screen on show: on a list or side list by GREY_LINE's rule on its lit bar's band (6 px in from
+    either edge), on a carousel by its lit icon's red (icon_grey); None on any other screen, or a list without a bar."""
     s = cam.read()
+    if getattr(cam.frame, "image", None) is None:
+        return None, None
+    if getattr(s, "kind", None) == "dialog":
+        return icon_grey(cam.frame.image)
     bar = getattr(s, "bar", None)
-    if getattr(s, "kind", None) not in OPTION_X or not bar or getattr(cam.frame, "image", None) is None:
+    if getattr(s, "kind", None) not in OPTION_X or not bar:
         return None, None
     return _grey_band(cam.frame.image, s.kind, *bar)
+
+
+# A carousel's lit option, told grey by its icon in the column at the left, the one icon drawn red: bright where the
+# camera takes the option, dim dark red where it greys it (kit2_pass2 119966 against 119947). The measure is the 95th
+# percentile of the red of the column's reddish pixels (red over ICON_INK, 40 over green and blue); on the first camera's
+# carousel proof frames it read 102-124 on all 13 options the camera refused (Flash Mode's and ISO's, two rows alone)
+# and 209-255 on all 221 it applied (kit/tools/reader_census.py --variants grey counts it again, 2026-11-20); between
+# ICON_GREY and ICON_WHITE, or with fewer than ICON_MIN such pixels, it cannot be told
+CAROUSEL_COLUMN = (0, 40, 108, 410)             # x0, y0, x1, y1: the column of icons, left of its rule
+ICON_INK, ICON_GREY, ICON_WHITE, ICON_MIN = 90, 145, 185, 100
+
+
+def icon_grey(image) -> tuple:
+    """(whether a carousel's lit option is drawn grey, by its icon's red: True, False or None; the measure or None)."""
+    x0, y0, x1, y1 = CAROUSEL_COLUMN
+    a = np.asarray(image)[y0:y1, x0:x1].astype(np.int16)
+    if a.ndim != 3 or a.shape[2] < 3:
+        return None, None
+    r, g, b = a[..., 0], a[..., 1], a[..., 2]
+    red = r[(r > ICON_INK) & (r > g + 40) & (r > b + 40)]
+    if len(red) < ICON_MIN:
+        return None, None
+    p = float(np.percentile(red, 95))
+    return (True if p <= ICON_GREY else False if p >= ICON_WHITE else None), p
 
 
 def _grey_band(image, kind: str, t: int, b: int) -> tuple:

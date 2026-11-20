@@ -1537,7 +1537,7 @@ def test_where_the_measure_cannot_read_an_option_it_says_nothing():
     a, bar = option_line(225, ink=False)
     assert PS.drawn_grey(grey_cam(a, bar)) == (None, None), "no text on the line"
     assert PS.drawn_grey(grey_cam(a, None)) == (None, None), "no bar"
-    assert PS.drawn_grey(grey_cam(a, bar, "dialog")) == (None, None), "a carousel: not judged"
+    assert PS.drawn_grey(grey_cam(a, bar, "dialog")) == (None, None), "a carousel with no red icon: not judged"
     assert PS.drawn_grey(SimpleNamespace(frame=frame_of(None), read=lambda: SimpleNamespace(kind="list", bar=bar))) \
         == (None, None)
 
@@ -1836,7 +1836,7 @@ def list_world(monkeypatch, cam, help_text="Gives priority to the flash sync spe
     monkeypatch.setattr(help_run, "guide", guide)
     monkeypatch.setattr(D, "help_refused", lambda kind, image: "")
     monkeypatch.setattr(greyed, "drawn_grey", lambda c: (c.option in cam.grey, 120.0) if c.read().kind == "list"
-                        else (None, None))
+                        else getattr(cam, "icon", {}).get(c.option, (None, None)))    # a carousel's lit icon
     monkeypatch.setattr(greyed, "REASONS", {})
     monkeypatch.setattr(greyed, "LABELS", {"Shutter Type", "Flash Mode"})
     for name, value in (("place", lambda c: "here"), ("same_place", lambda a, b: True), ("to_row", lambda *a: None),
@@ -2322,6 +2322,62 @@ def test_on_a_carousel_the_reader_alone_tells_an_option_grey(monkeypatch, tmp_pa
     said_by_reader(monkeypatch, cam2, {})
     lines2, said2, guides2 = list_world(monkeypatch, cam2, kind="dialog")
     assert guides2 == [] and cam2.keys.count("enter") == 3 and "greyed" not in by_label(lines2)["On"]
+
+
+def test_on_a_carousel_the_lit_icon_tells_and_the_reader_is_asked_only_where_it_cannot(monkeypatch, tmp_path):
+    """prove_row on a carousel: On's lit icon dim (grey), Off's bright (white), so neither is asked about; Auto, the
+    put-back, never is; the line says the icon told it. An icon that cannot tell (Off) asks the reader, as before."""
+    import prove_run as P
+    from proving import greyed
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(P, "carousel_text", lambda c: SHUTTER[c.option])
+    cam = CarouselCam(grey=(), refuse=(1,), saved=0)
+    cam.icon = {1: (True, 110.0), 2: (False, 230.0), 0: (False, 230.0)}
+    asked = said_by_reader(monkeypatch, cam, {1: False, 2: True})
+    lines, said, guides = list_world(monkeypatch, cam, kind="dialog")
+    got = by_label(lines)
+    assert asked == [] and guides == ["Flash Sync Spd. Prty.: On"]
+    assert (got["On"]["greyed_by"], got["On"]["entered"]) == ("pixels", "for its reason")
+    assert got["Off"]["applied"] and got["Off"]["grey_readings"] == {"pixels": False, "level": 230.0, "reader": None,
+                                                                     "not_asked": greyed.ICON_TELLS}
+    cam2 = CarouselCam(grey=(), refuse=(1,), saved=0)
+    cam2.icon = {1: (True, 110.0), 2: (None, 170.0)}
+    asked2 = said_by_reader(monkeypatch, cam2, {2: True})
+    lines2, _, _ = list_world(monkeypatch, cam2, kind="dialog")
+    assert asked2 == [2] and by_label(lines2)["Off"]["greyed_by"] == "reader"
+
+
+def icon_frame(colour):
+    """A carousel's frame: its column of icons at the left, the lit one drawn in colour, the others white."""
+    import numpy as np
+    a = np.zeros((480, 640, 3), np.uint8)
+    for y in (80, 150, 290):
+        a[y:y + 30, 30:80] = (230, 230, 230)
+    a[215:255, 25:85] = colour
+    return a
+
+
+def test_a_carousels_lit_icon_tells_grey_by_its_red():
+    from proving import screens as PS
+    assert PS.icon_grey(icon_frame((230, 60, 40)))[0] is False          # bright: the camera takes it
+    assert PS.icon_grey(icon_frame((115, 30, 30)))[0] is True           # dim dark red: greyed
+    assert PS.icon_grey(icon_frame((165, 50, 40)))[0] is None           # in between: cannot be told
+    assert PS.icon_grey(icon_frame((230, 230, 230))) == (None, None)    # no red: none lit
+    cam = SimpleNamespace(frame=SimpleNamespace(image=icon_frame((115, 30, 30))), read=lambda: SimpleNamespace(
+        kind="dialog", bar=None))
+    assert PS.drawn_grey(cam)[0] is True
+
+
+@pytest.mark.parametrize("name, grey", [("119947_reread.png", True), ("123252_reread.png", True),
+                                        ("115883_reread.png", True), ("226337_reread.png", True),
+                                        ("119966_reread.png", False), ("119930_reread.png", False)])
+def test_the_cameras_carousels_are_told_grey_by_their_lit_icon(name, grey):
+    """ISO 100 under S-Cinetone and Flash Mode's options the camera refused (dim), ISO 125 and ISO AUTO it applied
+    (bright), kit2_pass2."""
+    from proving import screens as PS
+    f = load(need(A1 / "kit2_pass2" / "shots" / name))
+    s = screen.read(f)
+    assert s.kind == "dialog" and PS.drawn_grey(SimpleNamespace(frame=f, read=lambda: s))[0] is grey, name
 
 
 def test_the_list_prover_asks_its_whole_list_once_a_visit(monkeypatch, tmp_path):

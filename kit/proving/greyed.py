@@ -12,17 +12,17 @@ it, and why it is greyed is read once a row (the row's one Enter for that, which
     SKIP    drawn grey and its reason read, or NEVER_ENTER: no key at all on it; the line says greyed as drawn
 
 Whether an option is drawn grey, two eyes can tell, each on the frame the cursor stands on (drawing): the pixels
-(proving.screens.drawn_grey: a list's and a side list's lit band) and the second reader, never
+(proving.screens.drawn_grey: a list's and a side list's lit band, a carousel's lit icon) and the second reader, never
 a third nor one standing in for the second (the owner, 2026-11-19: "the VLM text needs to include which text is
 grey"). On a list and a side list the reader's flag for the option comes from its answer about the whole list on show
 (Flags: camkit.vlm's entries.v2, asked in the background when the list opens and again where the cursor reaches an
-option no screenful asked showed, never once an option), matched to the option by its label; on a carousel, whose
-pixels are not judged, from its question about the lit option (carousel.v2.grey), asked in line. Either eye
+option no screenful asked showed, never once an option), matched to the option by its label; on a carousel, from its
+question about the lit option (carousel.v2.grey), asked in line and only where the lit icon cannot tell. Either eye
 saying grey makes it grey; where the pixels cannot tell, the reader's flag decides (waited for); where they read white,
 an answer already in is taken and none is waited for; a reader that gives no flag changes nothing, so a reader calling
 an option white never makes the kit press on one the pixels call grey: the reader only ever adds care. Its answer is
 not taken where it cannot change what is pressed (unasked): on the value the row was saved on, on an option the pixels
-call grey, on a row where it misjudged an option. judge's answer (Verdict) says
+call grey, on a row where it misjudged an option, on a carousel option its icon tells. judge's answer (Verdict) says
 which eyes told it grey ("pixels", "reader" or "both": told) and carries both readings (Drawing.kept), which every line
 it judged keeps ("grey_readings"), a grey one with "greyed_by" beside "greyed": "drawn" (line, marks).
 
@@ -59,12 +59,14 @@ EYES = ("pixels", "reader")
 #   (the second reader) called grey 90.8% of the 142 grey side-list entries the cursor was not on and 59.5% of the 37 it
 #   was on, and no white entry grey (272 and 72), 7.5 s an answer at four at once. The third readers are never asked
 #   about grey: Gemma (26B) called 9.2% and GLM-4.6V-Flash 16.2% of those 142 grey, and neither one lit grey entry of 37
-# - a carousel (ASKED): its lit option, carousel.v2.grey, its pixels not judged; Qwen called 8 of 13 grey options grey
-#   and 6 of 60 white, carousel.v2.grey2 (pinned, the census's alone) fewer grey (6 of 13) and as many white
+# - a carousel (ASKED): its lit option, carousel.v2.grey, only where its lit icon's red cannot tell (icon_grey: 102-124
+#   on all 13 refused options, 209-255 on all 221 applied carousel frames); Qwen called 8 of 13 grey options grey and 6
+#   of 60 white, carousel.v2.grey2 (pinned, the census's alone) fewer grey (6 of 13) and as many white
 ASKED = {"dialog": "carousel"}
 LISTS = {"list", "sidelist"}
 ENTRIES = "entries.v2"      # camkit.vlm's whole-list question
 NO_STAND_IN = "the second reader is away: a reader standing in for it is never asked whether an option is grey"
+ICON_TELLS = "the carousel's lit icon tells it, which no answer changes"
 _POOL: list = []            # one worker for the whole-list questions, apart from the evidence question's (_pool)
 
 
@@ -344,13 +346,15 @@ def unasked(k: int, saved, deaf, pixels, kind=None) -> str:
     """Why the reader's answer is not taken for option k, where it cannot change what is pressed on it ("" where it
     can): the value the row was saved on (entered as its put-back, whatever either eye says); a row where the reader
     misjudged an option (its answer is not heard there); an option the pixels call grey on a row where they are heard
-    (grey, whatever the reader says)."""
+    (grey, whatever the reader says); a carousel option its lit icon tells (ICON_TELLS)."""
     if k == saved:
         return "the value the row was saved on, entered as its put-back whatever is said"
     if "reader" in deaf:
         return "the reader misjudged an option of this row, and is not heard on it"
     if pixels and "pixels" not in deaf:
         return "the pixels tell it grey, which no answer changes"
+    if kind in ASKED and pixels is not None and "pixels" not in deaf:
+        return ICON_TELLS
     return ""
 
 
