@@ -1176,6 +1176,63 @@ def test_the_whole_list_candidates_are_pinned_and_asked_by_no_kit_caller():
     assert "list" not in greyed.WHOLE_LIST
 
 
+# the census's candidates for the lit item (2026-11-20, from the label audit's frames checked by eye), pinned as written
+CURSOR_CANDIDATES = {"lit.cursor.v3": "aa0132b9704a71ac", "lit.cursor.stars.v3": "0e053cd4e77fe4fc",
+                     "lit.cursor.icons.v3": "13720eb69ff5c351"}
+
+
+def test_the_lit_items_cursor_candidates_are_pinned_and_asked_by_no_kit_caller():
+    """The three wordings for the lit item stay with the census (CANDIDATES, never camkit.vlm.PROMPTS or a kind's
+    question, so no run asks them), pinned by digest: each is lit.v2's text, then that the option with the orange radio
+    dot and the left column's category are never the lit item, then (one each) the stars drawn as stars or the icon
+    before the name left out with the name's own words kept, then lit.v2's "none" sentence and JSON line. The census's
+    variant "cursor" asks them on a list, a side list and a table's picker, and on no other kind."""
+    import hashlib
+
+    import reader_census as rc
+    lit = vlm.PROMPTS["lit.v2"]
+    head, tail = lit.split(" If no item is highlighted")[0], lit[lit.index(" If no item is highlighted"):]
+    for key, digest in CURSOR_CANDIDATES.items():
+        text = rc.CANDIDATES[key]
+        assert hashlib.sha1(text.encode()).hexdigest()[:16] == digest and key not in vlm.PROMPTS, key
+        assert text.startswith(head) and text.endswith(tail) and "radio button with an orange dot" in text, key
+        assert "never copy a category" in text and key not in {q.prompt for q in reading.QUESTIONS.values()}, key
+    assert STAR in rc.CANDIDATES["lit.cursor.stars.v3"] and STAR not in rc.CANDIDATES["lit.cursor.v3"]
+    assert "keep every word of the name itself" in rc.CANDIDATES["lit.cursor.icons.v3"]
+    picker = rc.Item("table picker", Path("f.png"), "A", ["A", "B"])
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"cursor"})] == ["cursor", "cursor: stars", "cursor: icons"]
+    assert [q[0] for q in rc.questions_of(picker, [picker], {"new", "cursor"})][0] == "new"
+    assert rc.questions_of(rc.Item("scale", Path("f.png"), "1", ["1", "2"]), [], {"cursor"}) == []
+    assert "cursor" in rc.VARIANTS and set(rc.CURSOR) == {"list", "side list", "table picker"}
+
+
+def test_the_census_takes_the_listed_frames_alone_and_the_list_only_from_outside_the_runs(tmp_path, monkeypatch,
+                                                                                          capsys, own_runs):
+    """--frames: the sample is the listed frames' items, all of them and no other, each listed by its path from the
+    run root as the label audit writes it; the file is refused inside the runs and the repository (as --truth is), and
+    --per-kind and --held-out do not go with it."""
+    import reader_census
+    root, asked = questions_run(tmp_path), []
+    census_config(monkeypatch, QuestionsReader(root / "kit2_pass2" / "shots", asked))
+    listed = tmp_path / "frames.json"
+    listed.write_text(json.dumps(["kit2_pass2/shots/00001.png", "kit2_pass2/shots/00003.png"]), encoding="utf-8")
+    args = [str(root), "--questions", "--json", "--kinds", "list", "--variants", "new,cursor", "--dry-run",
+            "--cache", str(tmp_path / "answers"), "--frames", str(listed)]
+    assert reader_census.main(args) == 0
+    got = json.loads(capsys.readouterr().out)
+    assert got["sampled"]["list"]["frames"] == 2 and got["asked"]["fake"]["would ask"] == 2 * 4 and asked == []
+    for inside in (root / "frames.json", ROOT / "frames.json"):
+        with pytest.raises(SystemExit):
+            reader_census.main([*args[:-1], str(inside)])
+        assert not inside.exists()
+    for extra in (["--per-kind", "2"], ["--held-out"]):
+        with pytest.raises(SystemExit):
+            reader_census.main([*args, *extra])
+    listed.write_text(json.dumps(["00001.png"]), encoding="utf-8")
+    with pytest.raises(SystemExit):
+        reader_census.main(args)
+
+
 def test_each_kind_of_screen_has_a_question_of_its_own_beside_the_old_ones():
     """The old questions keep their text (the answers already cached are keyed by it, and every caller asks them); each
     kind of screen's new question is a key of its own and asks for its field in one pinned JSON line, in plain ASCII;

@@ -62,7 +62,10 @@ sample of the same size from the frames the first does not take, to check a chan
 on; --truth judges every answer also against a truth checked by eye, a file of {kind: {label as recorded: label as
 drawn}} kept outside the repository and the runs (refused inside them, private/ apart), for labels a run recorded as
 OCR read an icon or a garbled letter; a fix that would make two of a reading's options one is not made there, and
-counted.
+counted. "cursor" (since 2026-11-20) asks the lit item's candidates the label audit's frames checked by eye called for
+(CURSOR: the option with the radio dot and the left column's category never the lit item; the stars, or the icon
+before the name, besides); --frames cuts the sample to a list of frames kept where --truth is (the audit's frames where
+its readers went wrong, and as many where they went right), every item on them taken.
 Where a proof kept OCR's reading ("shown"), each answer is also counted against it (BOTH): a reader's wrong answer OCR
 reads alike is the dangerous case, which OCR-main and reader-backup (decision 22) would not catch. A self-check ("unsure")
 in an answer is counted against whether the answer was right; the seconds each question took are said.
@@ -420,7 +423,8 @@ def third_vote(tally: "Tally", shown: str, who: str, said: str, ocr2, label: str
 # no JSON object), "not asked" (past the reader's --minutes, or after it failed FAIL_RUN times in a row)
 VERDICTS = ("right", "another option", "no option", "no answer", "reader failed", "not asked")
 JUDGED = VERDICTS[:4]
-VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare")
+VARIANTS = ("old", "new", "options", "decoy", "v3", "best", "grey", "entries", "entries.radio", "entries.compare",
+            "cursor")
 # a Claude model asked through the Claude Code command line (--claude-cli MODEL), on the person's own signed-in plan:
 # census-only (CliReader), never a reader a camera run could pick up; one call at a time
 CLI = "claude"                       # the command, found on PATH (CAMSET_CLAUDE_CLI names another)
@@ -854,6 +858,29 @@ CANDIDATES.update({
         "before them (a grey or an orange radio button, an icon). Judge the highlighted option's letters the same way. "
         + _ENTRY_TAIL),
 })
+# Candidates for the lit item on a list, a side list and a table's picker (2026-11-20), from the label audit's frames
+# checked by eye: of 249 readings that named no published name on a frame showing it, 46 named the option with the
+# orange radio dot (the value the camera held) instead of the one on the orange bar, 37 the lit category in the left
+# column of a two-column picker, 40 miscounted rating stars and 24 copied the icon text before the name ("50M", "X.FINE",
+# "RAW"). lit.cursor.v3 adds to lit.v2 the radio dot and the category column; the two others each add one more thing
+# to it, the stars drawn as stars and the icon left out, so that each change is measured alone. Measured by the
+# census's variant "cursor" (with --frames, on the audit's frames); no kit caller asks them.
+_CURSOR = (" The highlighted item is the one the orange bar or box covers. A round radio button with an orange dot "
+           "inside marks the value the camera holds now, which is often another item: never copy an item for its orange "
+           "dot alone. Where the screen has a column of numbered categories at the left, never copy a category: the "
+           "item is in the list the orange bar is in, at the right.")
+_NONE = " If no item is highlighted, write none. " + _JSON + '{"selected": "<the text>"}'
+CANDIDATES.update({
+    "lit.cursor.v3": _LIT + _CURSOR + _NONE,
+    "lit.cursor.stars.v3": (
+        _LIT + _CURSOR + " Where the item holds rating stars, write each star as \u2605, as many as are drawn: count "
+        "every star, in every row (four stars stand as two rows of two, five as rows of two, one and two)." + _NONE),
+    # (\u2605 above: BLACK STAR, as the definition writes a rating's stars)
+    "lit.cursor.icons.v3": (
+        _LIT + _CURSOR + " A small icon or short code drawn before the item's name, such as a size (50M), a quality "
+        "mark (X.FINE, STD) or RAW, is no part of the name: leave it out, but keep every word of the name itself, "
+        "such as AF or ISO at its start." + _NONE),
+})
 QUESTION_TEXTS = {**vlm.PROMPTS, **CANDIDATES}
 
 
@@ -875,6 +902,11 @@ HYPOTHESES = {
     "look scale": [("v3: crop", "lookscale.v2", _ends, "scale crop")],
     "title": [("v3: v2", "title.v2", _field("title"), None)],
 }
+# the lit item's candidates of 2026-11-20 (variant "cursor"), per kind: the radio dot and the category column, then the
+# stars or the icon besides
+CURSOR_V3 = [("cursor", "lit.cursor.v3", _selected, None), ("cursor: stars", "lit.cursor.stars.v3", _selected, None),
+             ("cursor: icons", "lit.cursor.icons.v3", _selected, None)]
+CURSOR = {"list": CURSOR_V3, "side list": CURSOR_V3, "table picker": CURSOR_V3}
 CROPS = {"lit crop": None, "scale crop": (540, 70, 640, 272)}   # the scale's ends: proving.looks.look_cell's boxes
 # "best": each kind's best measured question, one per reading: the new one (QUESTIONS), but where a v3 that is no
 # question of QUESTIONS measured better on both samples (the list's routing), that one in its place
@@ -1197,8 +1229,9 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
     """[(question id, the question's whole text, pick, what the reader is shown: image_of's transform)] item is judged
     by: the old questions, the kind's new one (camkit.reading.QUESTIONS), the new one with the options expected there
     handed to the reader ("options") or with every option but the one the file proved ("decoy": a reader that picks
-    from the list rather than read the screen names another option there), and the candidates for a third ("v3",
-    HYPOTHESES). A number-entry screen's options are said box by box (frame_items: the frame's items, a box each)."""
+    from the list rather than read the screen names another option there), the candidates for a third ("v3",
+    HYPOTHESES) and the lit item's candidates of 2026-11-20 ("cursor", CURSOR). A number-entry screen's options are said
+    box by box (frame_items: the frame's items, a box each)."""
     out = []
     if "old" in variants:
         out += [(f"old: {key}", vlm.PROMPTS[key], pick, None) for key, pick in OLD[item.kind]]
@@ -1210,6 +1243,8 @@ def questions_of(item: Item, frame_items: list, variants) -> list:
         for qid, key, v3_pick, transform in HYPOTHESES.get(item.kind, ()):
             if "v3" in variants or qid in BEST.get(item.kind, ()):
                 out.append((qid, _question(key(item) if callable(key) else key), v3_pick, transform))
+    if "cursor" in variants:
+        out += [(qid, _question(key), c_pick, transform) for qid, key, c_pick, transform in CURSOR.get(item.kind, ())]
     if item.kind in NO_OPTIONS or not {"options", "decoy"} & set(variants):
         return out
     if item.kind == "number field":
@@ -1725,6 +1760,12 @@ def measure(places: list, args) -> dict:
         if frame not in lit:
             lit[frame] = not black(load(frame))
         return lit[frame]
+    if getattr(args, "frames", None):
+        # the sample is the listed frames' items, all of them (listed_frames)
+        want = listed_frames(args.frames, places)
+        items = [it for it in items if frame_key(it.frame) in want]
+        entry_all = [it for it in entry_all if frame_key(it.frame) in want]
+        args.per_kind = max(1, len(items), len(entry_all))
     chosen = sample(items, args.per_kind, usable)
     if args.held_out:
         # a second sample of the same size, the same way, from the frames the first did not take (never tuned on)
@@ -2001,22 +2042,45 @@ def read_truth(path, places: list = ()) -> dict:
     the run recorded OCR's reading of an icon or a garbled letter. Refused (a SystemExit), before it is read, inside
     the runs (in_runs, places the ones read) and inside the clone other than under private/, whose files are never
     committed (docs/decisions/0018)."""
-    from camkit import ROOT
-    target = Path(path).expanduser().resolve()
-    if in_runs(target, list(places)):
-        sys.exit("--truth: the file given is inside the runs, which this tool only reads; keep it outside the repository "
-                 "or in private/")
-    root = Path(ROOT).resolve()
-    if target.is_relative_to(root) and not target.is_relative_to((root / "private").resolve()):
-        sys.exit("--truth: the file given is inside the repository, where it could be committed (the owner's labels: "
-                 "docs/decisions/0016); keep it outside the repository or in private/")
-    try:
-        got = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as e:
-        sys.exit(f"--truth: cannot be read ({type(e).__name__})")
+    got = private_json(path, places, "--truth", "the owner's labels")
     if not isinstance(got, dict) or not all(isinstance(v, dict) for v in got.values()):
         sys.exit("--truth: it must be {kind: {recorded label: label as drawn}}")
     return got
+
+
+def private_json(path, places: list, flag: str, what: str):
+    """A JSON file of the owner's (--truth, --frames), read only where it is kept outside the runs and the repository or
+    in private/: refused (a SystemExit) before it is read inside the runs (in_runs) or inside the clone other than under
+    private/, whose files are never committed (docs/decisions/0016, 0018)."""
+    from camkit import ROOT
+    target = Path(path).expanduser().resolve()
+    if in_runs(target, list(places)):
+        sys.exit(f"{flag}: the file given is inside the runs, which this tool only reads; keep it outside the "
+                 "repository or in private/")
+    root = Path(ROOT).resolve()
+    if target.is_relative_to(root) and not target.is_relative_to((root / "private").resolve()):
+        sys.exit(f"{flag}: the file given is inside the repository, where it could be committed ({what}: "
+                 "docs/decisions/0016); keep it outside the repository or in private/")
+    try:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError) as e:
+        sys.exit(f"{flag}: cannot be read ({type(e).__name__})")
+
+
+def listed_frames(path, places: list = ()) -> set:
+    """--frames: the frames the sample is cut to, a JSON list of each frame's path from its camera's run root
+    ("kit2_pass2/shots/00123_down.png", as kit/tools/label_audit.py's private list writes them), kept where --truth is
+    (private_json): every item of a kind asked on a listed frame is taken, none other (the audit's frames where its
+    readers went wrong, and as many where they went right, to measure a candidate on both)."""
+    got = private_json(path, places, "--frames", "the frames' names")
+    if not isinstance(got, list) or not all(isinstance(f, str) and f.count("/") >= 2 for f in got):
+        sys.exit("--frames: it must be a list of frame paths from the run root, as \"<run>/shots/<frame>.png\"")
+    return set(got)
+
+
+def frame_key(frame: Path) -> str:
+    """A frame's path from its camera's run root: its run, shots/ and its name (listed_frames)."""
+    return "/".join(Path(frame).parts[-3:])
 
 
 def corrected(item: Item, fixes: dict, left_out: collections.Counter | None = None) -> Item:
@@ -2298,6 +2362,9 @@ def main(argv=None) -> int:
     q.add_argument("--truth", default=None, help="a file of {kind: {label as recorded: label as drawn}} kept outside "
                                                  "the repository (or in private/) and the runs: each answer judged "
                                                  "against it too")
+    q.add_argument("--frames", default=None, help="a JSON list of frame paths from the run root (\"<run>/shots/<frame>"
+                                                  ".png\"), kept where --truth is: the sample is those frames' items, "
+                                                  "all of them, and no other (--per-kind and --held-out unused)")
     q.add_argument("--claude-cli", action="append", default=[], metavar="MODEL",
                    help="a Claude model asked through the Claude Code command line on the person's signed-in plan, "
                         "no API key from the environment passed on (sonnet, haiku, opus or a full id; repeatable; one "
@@ -2316,10 +2383,12 @@ def main(argv=None) -> int:
         ap.error("--cache goes with --ask or --questions")
     if args.ask and args.questions:
         ap.error("--ask and --questions are two modes: give one")
-    if not args.questions and (args.reader or args.kinds or args.held_out or args.truth or args.claude_cli
-                               or args.dry_run or args.max_questions is not None):
-        ap.error("--reader, --kinds, --held-out, --truth, --claude-cli, --dry-run and --max-questions go with "
-                 "--questions")
+    if not args.questions and (args.reader or args.kinds or args.held_out or args.truth or args.frames
+                               or args.claude_cli or args.dry_run or args.max_questions is not None):
+        ap.error("--reader, --kinds, --held-out, --truth, --frames, --claude-cli, --dry-run and --max-questions go "
+                 "with --questions")
+    if args.frames and (args.held_out or args.per_kind is not None):
+        ap.error("--frames takes every listed frame: --held-out and --per-kind do not go with it")
     if not 1 <= args.parallel <= 8:
         ap.error("--parallel: from 1 to 8")
     for m in args.claude_cli:
