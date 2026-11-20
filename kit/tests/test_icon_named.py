@@ -79,6 +79,8 @@ def ms(monkeypatch):
     monkeypatch.setattr(mode_switch, "bar_text", lambda cam: cam.bar(cam.options[cam.at]))
     monkeypatch.setattr(mode_switch, "list_labels", lambda path, mode="Stills": RATIOS if path == ["Aspect Ratio"] else
                         MOVIE if (path, mode) == (["File Format"], "Movie") else None)
+    # the made-up list draws every option white (its frames have no picture): the grey refusal is test_mode_switch_grey's
+    monkeypatch.setattr(mode_switch, "option_drawn", lambda cam: (False, None))
     return mode_switch
 
 
@@ -243,6 +245,7 @@ def test_set_row_in_stills_reads_pass_1s_labels_as_before(tmp_path, monkeypatch)
     maps(tmp_path, monkeypatch)
     monkeypatch.setattr(mode_switch, "find", lambda cam, cycle, model, label: None)
     monkeypatch.setattr(mode_switch, "bar_text", lambda cam: cam.bar(cam.options[cam.at]))
+    monkeypatch.setattr(mode_switch, "option_drawn", lambda cam: (False, None))     # drawn white (no picture)
     for want in STILLS:
         cam = ListCam(STILLS, bar=lambda o: f"o {o}" if o == "RAW" else o)
         mode_switch.set_row(cam, None, None, ["File Format"], want, lambda m: None)
