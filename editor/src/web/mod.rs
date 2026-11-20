@@ -197,7 +197,23 @@ impl App {
         let from = "from the web page".to_string();
         // the page asked the person before a request that replaces file A over unsaved edits
         let discard = r.discard || body["discard"].as_bool() == Some(true);
-        // the camera's menu the page shows (`menu`, per page session as `target` is), else the one the set opens on
+        // the camera's menu the page drew with (`menu`, sent with every request but the state's, as `target` is): one the
+        // definition does not have is refused; a request that names its rows by a filter (recall and register of the
+        // rows shown, a merge, a copy from Compare, the comparison's export) names it where the definition lists menus,
+        // so the editor never takes a menu of its own for rows the page showed
+        if let Some(m) = body["menu"].as_str().filter(|m| action != "state" && self.schema.camera.menu_named(m).is_none()) {
+            return WebReply::error(400, &format!("This camera's definition has no camera menu named \"{m}\". The page asks for its menus again in a moment; try again then."));
+        }
+        let by_filter = match action {
+            "recall" | "register" => body["shown"].as_bool() == Some(true),
+            "csv" => body["compare"].as_bool() == Some(true),
+            "copy" | "copy_rows" | "merge" => true,
+            _ => false,
+        };
+        if by_filter && !self.menus().is_empty() && !body["menu"].is_string() {
+            return WebReply::error(400, "Not done: the page did not say which camera menu its rows are in. Reload the page and try again.");
+        }
+        // else the one the set opens on (the state's, which is how the page learns the menu to draw with)
         let menu = self.web_menu(&body, target);
         let menu = menu.as_deref();
         match action {
@@ -867,14 +883,16 @@ impl App {
         out["about"] = self.web_about();
         // the camera's menus to pick one of, where the definition lists two or more and the rows are laid out as on the
         // camera (`menus`): each by its name with its hover (`menu_hover`: the file's own says it was saved in it), the
-        // one the answer is for, the selector's words, and the opening of the file (`opened`), for which the page keeps a
-        // choice of its own (a newly opened file opens on its own menu, as in the window)
+        // one the answer is for and the selector's words
+        // the opening of the file (`opened`: this run of the editor's and its counter's, so another run's openings are
+        // other ones too), whether menus are shown or not: the page keeps a choice of menu for this opening only (a file
+        // opened since, while the flat list is on too, opens on its own menu, as in the window)
+        out["opened"] = json!(self.doc.as_ref().map(|d| format!("{}:{}", std::process::id(), d.opened)));
         if let Some(m) = menu {
             out["menus"] = json!(self.menus().iter().map(|x| json!({ "name": x.name, "title": self.menu_hover(&x.name) })).collect::<Vec<_>>());
             out["menu"] = json!(m);
             out["menus_label"] = json!(self.schema.camera.text.menus_label());
             out["menus_hover"] = json!(self.schema.camera.text.menus_hover());
-            out["opened"] = json!(self.doc.as_ref().map(|d| d.opened));
             // the sets a column of Compare may show (`shown_sections`): every menu's; the picker offers this menu's
             // (`sections` in Compare's answer, `column_sets_in`, as the window's)
             out["column_sets"] = json!(self.shown_sections());
@@ -2228,7 +2246,8 @@ impl App {
     /// window's buttons do: every setting the memories keep, whatever the page's search and tab show
     /// (`memory_rows`), through `copy_row` and `apply`, so it is one step to undo and shows in All
     /// edits. Only a request that says `shown: true` copies just the rows its search `q` and `tab` leave, or, from
-    /// Compare, the rows its entry of the Menu (`entry`) shows in its camera's menu (`entry_rows`).
+    /// Compare, the rows its entry of the Menu (`entry`) shows in the camera's menu the request names (`compare_rows`;
+    /// `web_answer` refuses one that names none where the definition lists menus), never a menu of the editor's own.
     fn web_recall(&mut self, recall: bool, body: &Value, from: &str) -> WebReply {
         if !self.editable() {
             return WebReply::error(409, &self.view_only_why(true));
@@ -2240,7 +2259,7 @@ impl App {
         let (src, dst) = if recall { (memory, live) } else { (live, memory) };
         let q = body["q"].as_str().unwrap_or("").trim();
         let rows = if body["shown"].as_bool() == Some(true) && body["entry"].is_string() {
-            let menu = self.web_menu(body, 0);
+            let menu = self.web_menu(body, body["target"].as_u64().unwrap_or(0) as usize);
             self.compare_rows(menu.as_deref(), &Self::web_entry(body), q).iter().filter(|r| r.2[0].in_sets).cloned().collect()
         } else if body["shown"].as_bool() == Some(true) {
             let tab = body["tab"].as_str().filter(|t| !t.is_empty());
@@ -5374,7 +5393,7 @@ pub(crate) mod tests {
         assert_eq!(s["menus"], json!(names.iter().map(|n| json!({ "name": n, "title": app.menu_hover(n) })).collect::<Vec<_>>()));
         assert!(names.iter().any(|n| app.menu_hover(n).contains("This file was saved in")), "the file's own menu says so");
         assert_eq!((s["menus_label"].as_str(), s["menus_hover"].as_str()), (Some(app.schema.camera.text.menus_label()), Some(app.schema.camera.text.menus_hover())));
-        assert!(s["opened"].is_u64());
+        assert!(s["opened"].is_string());
         assert_eq!(s["column_sets"], json!(app.shown_sections()), "Compare's columns may show every menu's sets");
         let mut rows_seen = 0;
         let mut links = 0;
@@ -5562,35 +5581,125 @@ pub(crate) mod tests {
         done(&dir, &user);
     }
 
-    /// Without the camera's menus in the definition (or with them and the flat list) the page's answers are as before
-    /// menus: no selector's keys in the state, no menu in a link or a row, and a menu named in a request changes nothing.
+    /// Without the camera's menus in the definition (or with them and the flat list) the page's answers carry none of
+    /// the selector's keys and no menu in a link or a row, a request with no menu named lists what one naming none
+    /// does, and one naming a menu the definition does not have is refused in plain words. The state names the opening
+    /// of the file in any case (`opened`, new at each opening and in each run of the editor), so the page lets go of a
+    /// menu picked for another file also while no menu is shown. (That the page's answers without menus are the ones
+    /// main gave is a one-time check of the dump, not this test.)
     #[test]
-    fn without_camera_menus_the_page_is_as_before() {
+    fn without_camera_menus_the_page_names_no_menu_and_refuses_one_named() {
         use crate::test_support::{done, sample_app, strip_menus, stub_menus};
         let (mut app, dir0, user0) = sample_app("web_menus_none", Some(strip_menus));
         assert!(app.menus().is_empty());
         let s = ask(&mut app, "state", json!({ "target": 0 }));
-        for k in ["menus", "menu", "menus_label", "menus_hover", "opened", "column_sets"] {
+        for k in ["menus", "menu", "menus_label", "menus_hover", "column_sets"] {
             assert!(s.get(k).is_none(), "{k}");
         }
+        let opened = s["opened"].clone();
+        assert!(opened.is_string(), "the file's opening, without menus too: {opened}");
         let text = |v: &Value| v.to_string();
         let tab = app.schema.tabs[0].clone();
         for (name, body) in [("tab", json!({ "target": 0, "tab": tab })), ("tab", json!({ "target": 0, "q": "iso" })), ("main", json!({ "target": 0, "set": 1 })),
             ("mymenu_page", json!({ "target": 0 })), ("exposure", json!({}))] {
             let plain = ask(&mut app, name, body.clone());
-            let mut named = body.clone();
-            named["menu"] = json!("Movie");
-            assert_eq!(text(&ask(&mut app, name, named)), text(&plain), "{name}: a menu named changes nothing");
+            let mut none = body.clone();
+            none["menu"] = Value::Null;
+            assert_eq!(text(&ask(&mut app, name, none)), text(&plain), "{name}: no menu named, as none sent");
             for k in ["\"open_menu\"", "\"full_name\"", "\"open_key\""] {
                 assert!(!text(&plain).contains(k), "{name}: {k}");
             }
+            let mut named = body.clone();
+            named["menu"] = json!("Movie");
+            let refused = answer(&mut app, name, named);
+            assert_eq!(refused.status, 400, "{name}: a menu the definition does not have");
+            assert!(String::from_utf8_lossy(&refused.body).contains("no camera menu named \\\"Movie\\\""), "{name}: {}", String::from_utf8_lossy(&refused.body));
         }
+        // the state is how the page learns the menus: it never refuses one, it answers without it
+        assert_eq!(ask(&mut app, "state", json!({ "target": 0, "menu": "Movie" }))["opened"], opened);
+        // another file opened: another opening
+        let (b, _, _) = changed_sample(&app);
+        ask_upload(&mut app, "open", &b, "wsa_opened_again.DAT");
+        assert_ne!(ask(&mut app, "state", json!({}))["opened"], opened);
         done(&dir0, &user0);
-        // the definition's menus with the flat list: none shown, as before menus
+        // the definition's menus with the flat list: none shown, a menu the definition has is no refusal
         let (mut app, dir, user) = sample_app("web_menus_flat", Some(stub_menus));
         app.prefs.flat_list = true;
         let s = ask(&mut app, "state", json!({ "target": 0, "menu": "Movie" }));
-        assert!(s.get("menus").is_none() && s.get("menu").is_none());
+        assert!(s.get("menus").is_none() && s.get("menu").is_none() && s["opened"].is_string());
+        let first = app.schema.tabs[0].clone();
+        assert_eq!(answer(&mut app, "tab", json!({ "target": 0, "tab": first, "menu": "Movie" })).status, 200);
+        done(&dir, &user);
+    }
+
+    /// The set of the open file the stub's menus open on (the first memory set of `menu`'s first mode), and that menu.
+    fn a_set_of(app: &App, mode: &str) -> (usize, String) {
+        let set = (1..app.n_sections()).find(|&s| app.schema.camera.memory_mode(s) == Some(mode)).expect("a memory set of the mode");
+        (set, app.opening_menu(set).expect("its menu"))
+    }
+
+    /// Recall or Register of "only the rows shown" from the page's Compare copies the rows the page showed: those of the
+    /// camera menu the request names, never a menu the editor works out for itself (the review's scenario: editing a
+    /// Movie memory, no menu picked, Compare on a tab, Recall the first dial memory, only the rows shown: Movie's rows
+    /// the memories keep are recalled, and a setting that only another menu's rows hold is left as it was). A request
+    /// that names its rows by a filter (recall and register of the rows shown, a merge, a copy, the comparison's
+    /// export) without a menu, where the definition lists them, is refused and changes nothing; so is any request that
+    /// names a menu the definition does not have.
+    #[test]
+    fn a_copy_of_the_rows_shown_takes_the_rows_of_the_menu_the_page_names() {
+        use crate::test_support::{done, sample_app, stub_menus};
+        let (mut app, dir, user) = sample_app("web_menus_recall", Some(stub_menus));
+        let (set, movie) = a_set_of(&app, "Movie");
+        let live = app.opening_menu(0).unwrap();
+        assert_ne!(movie, live, "the live settings open on another menu than the set edited");
+        let dial = app.dial_sets()[0];
+        // a tab both menus list, whose rows the memories keep differ between the menus
+        let tabs = |app: &App, m: &str| app.bar_keys(true, 0, Some(m), "", false).into_iter().filter_map(|k| match k { BarKey::Tab(t) => Some(t), _ => None }).collect::<Vec<_>>();
+        let slots = |app: &App, m: &str, t: &str| app.compare_rows(Some(m), &BarKey::Tab(t.to_string()), "").iter().filter(|r| r.2[0].in_sets)
+            .flat_map(|r| r.2.iter().map(|s| s.slot())).collect::<std::collections::HashSet<Slot>>();
+        // a tab both menus list, with rows only the live settings' menu shows
+        let tab = tabs(&app, &movie).into_iter().filter(|t| tabs(&app, &live).contains(t))
+            .find(|t| slots(&app, &live, t).iter().any(|s| !slots(&app, &movie, t).contains(s))).expect("a tab whose rows differ between the menus");
+        let mine = slots(&app, &movie, &tab);
+        // file A with the first dial memory holding other values than the live settings, in one record of the rows
+        // shown in the Movie menu and one only the other menu's rows hold
+        let changeable = |slot: &Slot| app.schema.settings.iter().find(|x| x.slot() == *slot && x.scalar && x.text.is_none() && x.range.is_none() && x.values.len() >= 2
+            && x.area == "global" && x.in_sets && !x.expert && !app.locked(x, 0) && app.shape_ok_in(x, 0)).cloned();
+        let theirs = slots(&app, &live, &tab).into_iter().filter(|s| !mine.contains(s)).find_map(|s| changeable(&s)).expect("a record of the other menu's rows alone");
+        let ours = mine.iter().find_map(changeable).expect("a record of the Movie menu's rows");
+        let mut c = test_parse(crate::test_support::SAMPLE_BYTES).unwrap();
+        for x in [&theirs, &ours] {
+            let v = c.sections[dial].get(x.id).and_then(|r| r.get(x.index)).unwrap();
+            let other = x.values.iter().map(|(o, _)| *o).find(|o| *o != v).unwrap();
+            c.sections[dial].get_mut(x.id).unwrap().put(x.index, other).unwrap();
+        }
+        ask_upload(&mut app, "open", &c.to_bytes(), "wsa_menus_recall_A.DAT");
+        let differs = |app: &App, slot: Slot| { let d = app.doc.as_ref().unwrap(); d.value(dial, slot) != d.value(0, slot) };
+        assert!(differs(&app, theirs.slot()) && differs(&app, ours.slot()));
+        let other = vec![theirs.slot()];
+        let body = json!({ "memory": dial, "shown": true, "q": "", "entry": format!("tab:{tab}"), "menu": movie, "target": set });
+        // without the menu, where the definition lists them: refused, nothing changed
+        let mut none = body.clone();
+        none.as_object_mut().unwrap().remove("menu");
+        let before = app.doc.as_ref().unwrap().changes().len();
+        for (name, b) in [("recall", none.clone()), ("register", none.clone()),
+            ("copy_rows", json!({ "from": ["a", dial], "to": ["a", 0], "keys": [], "entry": format!("tab:{tab}"), "target": set })),
+            ("merge", json!({ "base": ["a", 0], "a": ["a", 0], "b": ["a", 0], "kind": "b_into_a", "entry": format!("tab:{tab}"), "target": set })),
+            ("csv", json!({ "compare": true, "cols": [["a", 0], ["a", dial]], "entry": format!("tab:{tab}"), "target": 0 }))] {
+            let r = answer(&mut app, name, b);
+            assert_eq!(r.status, 400, "{name}: {}", String::from_utf8_lossy(&r.body));
+            assert!(String::from_utf8_lossy(&r.body).contains("camera menu"), "{name}: says why: {}", String::from_utf8_lossy(&r.body));
+        }
+        assert_eq!(app.doc.as_ref().unwrap().changes().len(), before, "nothing changed");
+        // with it: the menu's rows, and no other
+        ask(&mut app, "recall", body);
+        let d = app.doc.as_ref().unwrap();
+        assert!(mine.iter().all(|s| d.value(0, *s) == d.value(dial, *s) || app.schema.settings.iter().any(|x| x.slot() == *s && (app.locked(x, 0) || !app.shape_ok_in(x, 0)))),
+            "every record of the rows shown in {movie} recalled");
+        assert!(!other.is_empty() && other.iter().all(|s| d.value(0, *s) != d.value(dial, *s)), "no record of {live}'s rows alone");
+        // a menu the definition does not have
+        let r = answer(&mut app, "recall", json!({ "memory": dial, "shown": true, "entry": "all", "menu": "No such menu", "target": set }));
+        assert_eq!(r.status, 400);
         done(&dir, &user);
     }
 }

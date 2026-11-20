@@ -1859,13 +1859,22 @@ console.log(JSON.stringify({ lines }));
                             "not proved on the camera yet", None]
 
 
-# the camera's menus as the editor's state names them (`menus`, `menu`, the selector's words), on a definition with three
+# the camera's menus as the editor's state names them (`menus`, `menu`, the selector's words), on a definition with three;
+# the page's own `api` runs (it says where the page is: `placed`), and the editor behind `fetch` keeps each request's name
+# and the body it went out with (`bodies`, `sentTo`), answering from `replies` by name
 MENUS = """
 state = { ...state, menus: [{ name: "Still", title: "" }, { name: "Movie", title: "Movies. This file was saved in Movie mode." }, { name: "S&Q", title: "Slow" }],
   menu: "Movie", menus_label: "Camera menu:", menus_hover: "The camera's menu shows other settings in each shooting mode.", edits: 0, known: 1 };
 drawSide = pageDrawSide;
-const asked = [];
-api = async (name, body) => { asked.push([name, JSON.parse(JSON.stringify(body))]); return { groups: [], sets: [], tiles: [], rows: [] }; };
+const bodies = [];
+const replies = {};
+fetch = async (url, init) => {
+  const name = String(url).replace("/api/", "");
+  bodies.push([name, typeof init.body === "string" ? JSON.parse(init.body) : null]);
+  const j = (replies[name] || (() => ({ groups: [], sets: [], tiles: [], rows: [] })))();
+  return { status: 200, ok: true, statusText: "OK", headers: { get: (k) => (k === "Content-Type" ? "application/json" : null) }, json: async () => j };
+};
+const sentTo = (name) => bodies.filter(([n]) => n === name).map(([, b]) => b);
 let refreshed = 0;
 refresh = async () => { refreshed += 1; };
 const selector = () => $("side").children[0];
@@ -1892,7 +1901,7 @@ def test_the_camera_menu_selector_heads_the_menu_column(tmp_path):
   buttons()[2].click();
   out.after = { menu: view.menu, cur: curMenu(), refreshed, pressed: pressed().map((p) => p[1]), sent: sent.length };
   await pages.tab.load(); await pages.main.load(); await pages.search.load(); await pages.mymenu.load(); await pages.exposure.load();
-  out.asked = asked.map(([n, b]) => [n, b.menu]);
+  out.asked = bodies.map(([n, b]) => [n, b.menu]);
   // the keyboard: each button in the Tab order, Enter on it picks it
   out.reach = buttons().map((b) => [b.tagName, b.disabled, b.getAttribute("tabindex")]);
   viaKeys(); buttons()[0].focus(); buttons()[0].dispatchEvent({ type: "keydown", key: "Enter" });
@@ -1950,8 +1959,10 @@ maybeDraw = () => { drawn += 1; };
   $("side").querySelectorAll(".mi button").find((b) => b.textContent.startsWith("Shooting")).click();
   out.picked = { entry: cmp.entry, drawn, sent: sent.length, on: entries().filter((e) => e[1]).map((e) => e[0]) };
   view.menu = "S&Q";
-  out.body = cmpBody();
-  out.where = cmpWhere({ key: "k:a" });
+  await pages.compare.load();
+  out.body = sentTo("compare")[0];
+  await api("copy", cmpWhere({ from: ["a", 0], to: ["a", 3], key: "k:a" }));
+  out.where = sentTo("copy")[0];
   // the entry the editor showed (one the menu does not list gives All settings)
   drawCompare = () => [];
   drawCompareAnswer({ ...cmp.last, entry: "all", rows: [] });
@@ -1975,7 +1986,7 @@ maybeDraw = () => { drawn += 1; };
     assert got["picked"] == {"entry": "tab:Shooting", "drawn": 1, "sent": 0, "on": ["Shooting  (12)2"]}
     assert (got["body"]["entry"], got["body"]["menu"], got["body"]["target"]) == ("tab:Shooting", "S&Q", 0)
     assert "tab" not in got["body"]
-    assert got["where"] == {"key": "k:a", "entry": "tab:Shooting", "target": 0, "menu": "S&Q"}
+    assert got["where"] == {"from": ["a", 0], "to": ["a", 3], "key": "k:a", "entry": "tab:Shooting", "target": 0, "menu": "S&Q"}
     assert got["answered"] == "all"
     assert got["columns"] == [["a", 0], ["a", 4]] and got["without"] == [["a", 0]]
 
@@ -2035,3 +2046,93 @@ drawContent = async () => {
     assert got["moved"] == {"menu": "S&Q", "tab": "Shoot", "row": "k:b", "detail": True, "refreshed": 1}
     assert got["same"] == {"menu": "S&Q", "refreshed": 0}
     assert got["detail"][:2] == ["SteadyShot (Movie)", "Open in Movie > Shoot > Drive"]
+
+
+@needs_node
+def test_every_request_names_the_camera_menu_the_page_drew_with_and_its_set(tmp_path):
+    """Every request but the state's goes out naming the camera's menu the page drew with (`curMenu`: the editor's when
+    none was picked) and the set it edits, unless it names its own set (a row's, a cell's column), so the editor never
+    works a menu out for itself for rows the page showed (the review's case: editing a Movie memory, no menu picked,
+    Compare on a tab, Recall of only the rows shown). A change, a Revert, a page of rows, Recall of the rows shown, a
+    merge, the comparison's export and the picker's row each say it; Recall, the merge and the export also name the
+    Menu column's entry. The state names only a menu picked (none here: the editor then names the set's own)."""
+    got = run(tmp_path, MENUS + """
+act = pageAct;
+view.target = 4; view.menu = null;
+state.targets = [[0, "Live", true], [1, "Memory 1", true], [4, "Memory 4", true]];
+replies.set = () => ({ row: row("k:a", "Alpha"), rows: [], rev: "r2" });
+replies.compare_cell = () => ({ row: row("k:a", "Alpha", { target: 1 }) });
+replies.state = () => ({ ...state });
+const settle = async () => { for (let i = 0; i < 6; i++) await tick(); };
+(async () => {
+  await setSetting(row("k:a", "Alpha", { target: 0 }), { value: 2 });
+  await act("revert", { target: rowTarget({}), key: "k:a" });
+  await pages.tab.load();
+  // Compare on a tab, only the rows shown: Recall, a merge, the export, the picker's row
+  view.mode = "compare"; cmp.entry = "tab:Shooting"; cmp.q = ""; cmp.cols = [["a", 0], ["a", 1]];
+  wholeSets.onlyShown = true;
+  cmp.last = { cols: [{ src: "a", section: 0, name: "A · Live", editable: true }, { src: "a", section: 1, name: "A · M1", editable: true }], editable: true,
+    dial: [[1, "Memory 1"]], whole_sets: [{ section: 1, recall: "Recall Memory 1", recall_tip: "", register: "Register Memory 1", register_tip: "" }],
+    sections: [], rows: [], shown: 0, total: 0, entries: [], counts: [0, 2],
+    three: { cols: [["base", 0], ["a", 0], ["b", 0]], a: 0, b: 2, both: 0, conflict: 0, against: "", tags: {}, filters: [["all", "All rows"]] } };
+  $("content").replaceChildren(...drawCompare());
+  const button = (t) => $("content").querySelectorAll("button").find((b) => b.textContent.startsWith(t));
+  button("Recall Memory 1").click(); await settle();
+  button("Merge B into A").click(); await settle();
+  $("b-csv-cmp").click(); await settle();
+  cmp.pick = { box: el("div"), key: "k:a", col: ["a", 1], name: "A · M1", x: 0, y: 0, keys: false, from: null, focused: false };
+  await cmpPickRefresh();
+  $("app").hidden = false;
+  await poll();
+  const one = (name) => sentTo(name)[0];
+  console.log(JSON.stringify({ set: one("set"), revert: one("revert"), tab: one("tab"), recall: one("recall"), merge: one("merge"), csv: one("csv"),
+    cell: one("compare_cell"), state: sentTo("state").pop() }));
+})();
+""")
+    assert got["set"] == {"target": 0, "key": "k:a", "value": 2, "menu": "Movie"}, "a change names the menu, its row its own set"
+    assert got["revert"] == {"target": 4, "key": "k:a", "menu": "Movie"}
+    assert (got["tab"]["menu"], got["tab"]["target"]) == ("Movie", 4)
+    assert got["recall"] == {"memory": 1, "q": "", "entry": "tab:Shooting", "shown": True, "target": 4, "menu": "Movie"}, "the rows shown, in the menu shown"
+    assert (got["merge"]["entry"], got["merge"]["menu"], got["merge"]["target"], got["merge"]["kind"]) == ("tab:Shooting", "Movie", 4, "b_into_a")
+    assert (got["csv"]["entry"], got["csv"]["menu"], got["csv"]["target"], got["csv"]["compare"]) == ("tab:Shooting", "Movie", 4, True)
+    assert got["cell"] == {"target": 1, "key": "k:a", "menu": "Movie"}, "the picker's row in the cell's set, its links in the menu shown"
+    assert got["state"] == {"target": 4}, "the state names only a menu picked"
+
+
+@needs_node
+def test_a_menu_picked_lasts_for_its_file_and_while_the_definition_has_it(tmp_path):
+    """A camera menu picked on the page is kept for the file it was picked for: polls of the same opening keep it; a
+    file opened since (another `opened`, the flat list on or not) lets go of it, and the state is asked for again
+    without it so the page opens on the set's own menu, as the window does. A pick the camera's menus no longer hold
+    (another definition) is not the menu shown (`curMenu` gives the editor's), and the next state lets go of it."""
+    got = run(tmp_path, MENUS + """
+$("app").hidden = false;
+const base = { ...state };
+(async () => {
+  const out = {};
+  replies.state = () => ({ ...base, opened: "7:1" });
+  await poll();
+  view.menu = "S&Q";
+  replies.state = () => ({ ...base, opened: "7:1", menu: "S&Q" });
+  await poll();
+  out.kept = view.menu;
+  replies.state = () => ({ ...base, opened: "7:2", menu: "Still" });
+  await poll();
+  out.reset = view.menu;
+  out.asks = sentTo("state").map((b) => b.menu ?? null);
+  view.menu = "Gone";
+  out.cur = curMenu();
+  await poll();
+  out.gone = view.menu;
+  // the flat list: no menus in the state, the file's opening told all the same
+  view.menu = "S&Q";
+  replies.state = () => ({ ...base, menus: undefined, menu: undefined, opened: "7:3" });
+  await poll();
+  out.flat = view.menu;
+  console.log(JSON.stringify(out));
+})();
+""")
+    assert got["kept"] == "S&Q"
+    assert got["reset"] is None and got["asks"] == [None, "S&Q", "S&Q", None], "another file: asked again without the pick"
+    assert got["cur"] == "Still" and got["gone"] is None
+    assert got["flat"] is None, "a file opened while no menu is shown lets go of the pick too"

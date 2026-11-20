@@ -183,12 +183,8 @@ let askOpen = null;        // how the question shown ends (with false when anoth
 let polls = 0;             // the newest state request; an older one answered later is dropped, so it cannot undo a newer state
 /** The editor out of reach: since when, how many polls in a row failed, the file open before. */
 const away = { since: 0, fails: 0, file: null, slow: false };
-/** A request's body with the camera's menu picked on this page (`view.menu`), when one is: without it the editor lists
- *  the rows in the menu the set edited opens on, as the window does. */
-const withMenu = (body) => (view.menu ? { ...body, menu: view.menu } : body);
-
-/** The camera's menu the page shows: the one picked, while the definition still lists it, else the editor's
- *  (`state.menu`); null where the definition lists no menus. */
+/** The camera's menu the page shows, the one every request names (`placed`): the one picked, while the definition still
+ *  lists it, else the editor's (`state.menu`); null where the definition lists no menus. */
 function curMenu() {
   const menus = (state && state.menus) || [];
   if (view.menu && menus.some((m) => m.name === view.menu)) return view.menu;
@@ -275,8 +271,18 @@ const session = {
   },
 };
 
+/** Where the page is, as every request says it: the camera's menu it drew with (`curMenu`; null where it shows none)
+ *  and the set it edits (`target`, unless the request names its own: a row's set, a cell's column), so the editor
+ *  never takes a menu of its own for rows the page showed. The state's names only a menu picked on this page, the one
+ *  it is to draw with (none: the one the set edited opens on, which the state then names). The login names neither. */
+function placed(name, body) {
+  if (name === "login" || name === "logout") return body;
+  if (name === "state") return view.menu ? { ...body, menu: view.menu } : body;
+  return { target: view.target, ...body, menu: curMenu() };
+}
+
 /** One request to the editor: JSON in and out, or a file up (`file`) or down (a Response). A file sent up carries
- *  `body.discard` as a header, as it has no JSON body. */
+ *  `body.discard` as a header, as it has no JSON body. A JSON request says where the page is (`placed`). */
 async function api(name, body = {}, file = null) {
   const withSession = !!session.token;
   const headers = session.headers();
@@ -288,7 +294,7 @@ async function api(name, body = {}, file = null) {
     payload = file;
   } else {
     headers["Content-Type"] = "application/json";
-    payload = JSON.stringify(body);
+    payload = JSON.stringify(placed(name, body));
   }
   let r;
   try {
@@ -453,7 +459,7 @@ async function poll() {
   if ($("app").hidden) return;
   const n = ++polls;
   try {
-    const s = await api("state", withMenu({ target: view.target }));
+    const s = await api("state", { target: view.target });
     if (n !== polls) return;
     // a file opened since the camera's menu was picked opens on its own menu, as in the window: asked for again so
     if (s.opened !== xp.opened) {
@@ -464,6 +470,8 @@ async function poll() {
         return poll();
       }
     }
+    // a menu picked that the camera's menus no longer hold (another definition): the one the editor names from now on
+    if (view.menu && s.menus && !s.menus.some((m) => m.name === view.menu)) view.menu = null;
     state = s;
     away.slow = false;
     backAgain(s);
@@ -1169,18 +1177,18 @@ function maybeDraw() {
 
 /** The pages by name (`pageName`): how each is fetched from the editor and drawn from its answer, and for the pages
  *  of settings how a newer answer is patched in (false when its rows are not the same ones: the page is drawn anew). */
-// the pages that list rows or link to them ask in the camera's menu the page shows (`withMenu`)
+// the pages that list rows or link to them ask in the camera's menu the page shows, as every request does (`placed`)
 const pages = {
-  main: { load: () => api("main", withMenu({ target: view.target, set: view.set })), draw: drawMain, patch: patchMain },
-  tab: { load: () => api("tab", withMenu({ target: view.target, tab: view.tab })), draw: (j) => drawTab(j.groups, j), patch: (a, b) => patchGroups(a.groups, b.groups) },
-  search: { load: () => api("tab", withMenu({ target: view.target, q: view.q })), draw: (j) => drawSearch(j.groups), patch: (a, b) => patchGroups(a.groups, b.groups) },
+  main: { load: () => api("main", { target: view.target, set: view.set }), draw: drawMain, patch: patchMain },
+  tab: { load: () => api("tab", { target: view.target, tab: view.tab }), draw: (j) => drawTab(j.groups, j), patch: (a, b) => patchGroups(a.groups, b.groups) },
+  search: { load: () => api("tab", { target: view.target, q: view.q }), draw: (j) => drawSearch(j.groups), patch: (a, b) => patchGroups(a.groups, b.groups) },
   edits: { load: () => api("changes"), draw: (j) => drawChanges(j.changes) },
   memories: { load: () => api("memories", { q: memView.q, ...(memView.all === null ? {} : { all: memView.all }), ...(memView.only === null ? {} : { only_diff: memView.only }) }),
     draw: drawMemories },
-  exposure: { load: () => api("exposure", withMenu({})), draw: drawExposure },
-  mymenu: { load: () => api("mymenu_page", withMenu({ target: view.target })), draw: drawMyMenu },
+  exposure: { load: () => api("exposure"), draw: drawExposure },
+  mymenu: { load: () => api("mymenu_page", { target: view.target }), draw: drawMyMenu },
   unmapped: { load: () => api("unmapped", { target: view.target, q: view.q, only: view.only }), draw: drawUnmapped },
-  records: { load: () => api("records", withMenu({ target: view.target, q: view.q, only_unmapped: xp.rm.unmapped, only_edited: xp.rm.edited, open: [...xp.rm.open] })),
+  records: { load: () => api("records", { target: view.target, q: view.q, only_unmapped: xp.rm.unmapped, only_edited: xp.rm.edited, open: [...xp.rm.open] }),
     draw: drawRecords },
   compare: { load: () => api("compare", cmpBody()), draw: drawCompareAnswer },
   compare_records: { load: () => api("compare_records", cmpBody()), draw: (j) => { cmp.last = j; return drawCompareRecords(); } },
@@ -1322,8 +1330,8 @@ const replyRows = (j) => (!j ? [] : Array.isArray(j.rows) ? j.rows.filter(Boolea
 function setSetting(r, body) {
   // from the compare's picker: the cell's column goes with it, and the compare, not a page of rows, shows the answer
   if (r.col) return cmpPickSet(r, body);
-  // the rows the editor answers with are drawn as the page's camera menu shows them (`withMenu`)
-  return act("set", withMenu({ target: rowTarget(r), key: r.key, ...body }), null, {
+  // the rows the editor answers with are drawn as the page's camera menu shows them (`placed`)
+  return act("set", { target: rowTarget(r), key: r.key, ...body }, null, {
     done: (j) => {
       const rows = replyRows(j);
       patchRows(rows, r.key);
@@ -2465,13 +2473,13 @@ function cmpRaw() {
 /** What the compare asks the editor for: the page's columns, search, entry of the Menu column, camera menu (the set
  *  edited opens on its own: `target`) and filters. */
 function cmpBody() {
-  return withMenu({ cols: cmp.cols || [], q: cmp.q, entry: cmp.entry, target: view.target, only_diff: cmpOnly(), raw: cmpRaw(), three: cmp.three, keep: cmp.kept });
+  return { cols: cmp.cols || [], q: cmp.q, entry: cmp.entry, target: view.target, only_diff: cmpOnly(), raw: cmpRaw(), three: cmp.three, keep: cmp.kept };
 }
 
-/** A copy from Compare's rows: in a camera's menu a row holds the record for that menu, so the copy names the entry and
- *  the menu its row was shown in. */
+/** A copy from Compare's rows: in a camera's menu a row holds the record for that menu, so the copy names the entry its
+ *  row was shown in (and, as every request, the menu: `placed`). */
 function cmpWhere(body) {
-  return curMenu() ? withMenu({ ...body, entry: cmp.entry, target: view.target }) : body;
+  return { ...body, entry: cmp.entry };
 }
 
 /** The compare drawn from the editor's answer: the cursor kept on a row still shown; back from Edit ("← Back to
@@ -2673,7 +2681,7 @@ function drawCompare() {
   // one click to recall a memory into the live settings of file A, or to register the live settings into a memory
   if (j.editable && j.dial.length) {
     // "only the rows shown": the search and the Menu column's entry, in the page's camera menu
-    const filter = cmp.q || cmp.entry !== "all" ? withMenu({ q: cmp.q, entry: cmp.entry }) : null;
+    const filter = cmp.q || cmp.entry !== "all" ? { q: cmp.q, entry: cmp.entry } : null;
     // in the window's words
     out.push(el("div", { class: "cmp-tools" }, el("strong", {}, "Whole sets:"), ...j.whole_sets.flatMap((b) => wholeSetButtons(b, filter)),
       filter ? onlyShownBox() : null));
@@ -2708,7 +2716,7 @@ function drawCompare() {
 /** The three-way line: the counts, the filter, and the merge buttons (the window's, over the same rows). */
 function cmpThree(j) {
   const t = j.three;
-  const merge = (kind) => act("merge", withMenu({ base: t.cols[0], a: t.cols[1], b: t.cols[2], kind, q: cmp.q, entry: cmp.entry, target: view.target }));
+  const merge = (kind) => act("merge", { base: t.cols[0], a: t.cols[1], b: t.cols[2], kind, q: cmp.q, entry: cmp.entry, target: view.target });
   // drawn at once, though the list keeps the focus (`maybeDraw` waits while a list of the page has it, for a row's list
   // open under the hand); the focus stays on it (`drawContent`)
   const sel = el("select", { "aria-label": "Rows of the three-way compare", onchange: () => { cmp.three = sel.value; cmp.cursor = null; cmp.kept = null; drawContent(contentKey()); } },
@@ -4357,7 +4365,7 @@ $("b-close-base").addEventListener("click", () => act("close_base"));
 $("b-swap").addEventListener("click", () => { if (!saysWhy($("b-swap"))) act("swap_ab"); });
 $("b-download-a").addEventListener("click", () => { if (!saysWhy($("b-download-a"))) downloadFile(); });
 $("b-csv-cmp").addEventListener("click", () => saysWhy($("b-csv-cmp")) || downloadAnswer("csv",
-  withMenu({ target: view.target, compare: true, cols: cmp.cols, only_diff: cmpOnly(), raw: cmpRaw(), q: cmp.q, entry: cmp.entry }), "compare.csv"));
+  { target: view.target, compare: true, cols: cmp.cols, only_diff: cmpOnly(), raw: cmpRaw(), q: cmp.q, entry: cmp.entry }, "compare.csv"));
 $("cmp-q").addEventListener("input", () => {
   clearTimeout(cmpSearchTimer);
   cmpSearchTimer = setTimeout(() => { cmp.q = $("cmp-q").value.trim(); maybeDraw(); }, 300);
