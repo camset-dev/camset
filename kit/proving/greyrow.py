@@ -30,8 +30,8 @@ For one row, the cursor on it on a menu or submenu page, in this order, each ste
      first; its OK only where the camera refuses MENU and OK is plainly its only button); a screen that asks (its text a
      confirmation, or a question mark) gets MENU, never an answer; any other screen (the row opened after all, whatever
      its kind) MENU alone, which must leave it on a menu page or the shooting screen; the shooting screen gets nothing;
-     the camera's playback view ends the run (StopsRun), the session's close leaving it (proving.nav). No other key: no Enter, no
-     second Right.
+     the camera's playback view ends the run (StopsRun), the session's close leaving it (proving.nav). No other key: no Enter but
+     that lone OK, no second Right.
 
 The line written (the module's outcomes, "right" whether the Right went out): what was read and pressed. The guide's and
 the notice's words are Sony's and the camera's state: they stay in the run's folder (decision 13). The blocker a line

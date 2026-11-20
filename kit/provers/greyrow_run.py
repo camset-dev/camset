@@ -10,7 +10,7 @@ other runners go (MENU, the scan's Down cycle to its top-level row, each submenu
 is grey (proving.greyrow.ask_why): drawn grey now, on a frame grabbed afresh; the camera's Help where the footer offers
 it (guarded, decision 7); one Right only where the guide gives no reason and the kit may open the row as it would if it
 were white, never twice on a row in the run; after it, a notice left with MENU (its OK only where the camera refuses
-MENU and OK is plainly its only button), a question or any other screen MENU alone, never Enter. A row the kit may not
+MENU and OK is plainly its only button), a question or any other screen MENU alone, no other Enter. A row the kit may not
 open or reach (never-open, a row whose opening acts, a format, delete or reset, a row above it this body has not been
 seen to open) is passed over before anything is pressed; a row not seen opened itself gets its Help alone (its first
 open is the crawl's procedure, camkit.first_open). Then MENU back to the shooting screen, and the next row.

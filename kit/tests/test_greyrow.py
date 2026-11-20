@@ -1,6 +1,7 @@
 """Why a menu row is grey, asked of the camera (proving.greyrow, kit/provers/greyrow_run.py; the owner, 2026-11-20): Help
 first, then one Right for the camera's notice, only where Help was read and gave no reason, only on a row the kit may
-open, never twice; after it MENU (a notice by camkit.live.leave_notice), never an answer, never Enter. Made-up cameras
+open, never twice; after it MENU, or a notice's lone OK where it refuses MENU (camkit.live.leave_notice), never an
+answer, no other Enter. Made-up cameras
 for the rules; the camera's own frames replayed where runs/ holds them (skipped otherwise), the guides' words read from
 the help walk's own file there, never written here (decision 13)."""
 import json
@@ -47,7 +48,8 @@ class GreyCam:
     goes out (camkit.link)."""
 
     KINDS = {"row": "menu", "notice": "notice", "asking notice": "notice", "question": "dialog", "list": "list",
-             "lost": "list", "shooting": "shooting", "unknown": "unknown", "playback": "playback"}
+             "lost": "list", "shooting": "shooting", "unknown": "unknown", "playback": "playback",
+             "lone notice": "notice"}
 
     def __init__(self, after="notice", grey=True, help_button=True, label="Framing Stabilizer"):
         self.after, self.grey, self.help_button, self.label = after, grey, help_button, label
@@ -68,11 +70,13 @@ class GreyCam:
     def press(self, key, **kw):
         if self.stop:
             raise StopRequested("STOP file")
-        if key == "menu" and self.where == "asking notice":
+        if key == "menu" and self.where in ("asking notice", "lone notice"):
             raise CameraRefused("button not accepted")
         self.keys.append(key)
         if key == "right" and self.where == "row":
             self.where = {"nothing": "row"}.get(self.after, self.after)
+        elif key == "enter" and self.where == "lone notice" and kw.get("require_notice"):
+            self.where = "row"                  # the notice's lone OK, given only as leave_notice gives it
         elif key == "menu":
             self.where = {"notice": "shooting", "question": "row", "list": "row", "lost": "unknown",
                           "row": "shooting"}.get(self.where, self.where)
@@ -261,6 +265,15 @@ def test_a_notice_that_asks_is_never_answered(monkeypatch):
     with pytest.raises(CameraRefused):
         ask(cam)
     assert after_right(cam) == [] and "enter" not in cam.keys
+
+
+def test_a_notice_that_refuses_menu_gets_its_lone_ok_the_one_enter(monkeypatch):
+    """What the docs say: after the Right, MENU, or the notice's lone OK where it refuses MENU (camkit.live.leave_notice,
+    bound to that notice: require_notice); that OK is the one Enter that goes, and the camera's own check judges it."""
+    cam = GreyCam(after="lone notice")
+    world(monkeypatch, cam)
+    line, said, tried = ask(cam)
+    assert after_right(cam) == ["enter"] and (line["outcome"], line["after"]["left_by"]) == (greyrow.NOTICE, "ok")
 
 
 def test_menu_that_leaves_an_unknown_screen_fails_the_row_with_its_right_said(monkeypatch):

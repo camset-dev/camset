@@ -55,8 +55,8 @@ Playback (`Link.c4_refused` says how).
 
 On a menu row drawn grey, guarded Help comes first: only where its guide gives no reason ("This function is currently
 disabled.") does `kit/provers/greyrow_run.py` press Right once on the row for the camera's notice, judged as any
-opening press, never on a row the kit may not open nor twice in a run, then MENU (`proving.greyrow`; the a1 II's
-owner, 2026-11-20).
+opening press, never on a row the kit may not open nor twice in a run, then MENU, or the notice's lone OK where it
+refuses MENU (`proving.greyrow`; the a1 II's owner, 2026-11-20).
 
 See also: [decision 21](0021-on-the-shooting-screen-no-key-but-menu-unless-it-is-named.md) (on the shooting screen
 no key but MENU unless the run names it; the multi-selector's centre there is whatever the body assigns to it, and

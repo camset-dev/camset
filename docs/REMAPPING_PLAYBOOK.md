@@ -331,8 +331,9 @@ shown (section 1, rule 2).
 
 To learn what greys a menu row, ask the camera: `kit/provers/greyrow_run.py --in MODE --row ROW` reads the row's Help
 first and, only where its guide says no more than "This function is currently disabled.", presses Right once on the row
-for the camera's notice, then MENU: never on a row the kit may not open (one not yet seen opened on the body gets its
-Help alone), never twice in a run, never Enter (decision 7). The blocker its notice names is a lead, the setting to try,
+for the camera's notice, then MENU, or the notice's lone OK where it refuses MENU: never on a row the kit may not open
+(one not yet seen opened on the body gets its Help alone), never twice on one row in a run, however it is spelled
+(decision 7). The blocker its notice names is a lead, the setting to try,
 never the values that grey the row: the value a start file holds is the owner's (decision 16), so `inactive_when`'s
 values and the value that un-greys the row come only from runs where the kit set each value of that setting itself from
 a known start file and saw the row grey or white, every value classified before the entry is written. The words stay in
