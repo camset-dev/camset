@@ -59,6 +59,20 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The editor
 
+- **Rows the camera tells apart by an icon alone carry the icon's words:** where a definition gives them (`row_icons`),
+  the two Custom Key/Dial Set. rows read "(Still)" and "(Movie)" after their label, in Edit, Compare, a row's place and
+  the page alike, and the definition viewer draws the same. The search finds a setting by the words of its row as drawn
+  too, so "Custom Key Still" finds that row's settings.
+- **Compare lists the settings only the memories keep:** a memory's focus frames, stored exposure and mode are rows
+  whenever a memory of the menu shown is one of the columns, in the window and on the page, as Edit lists them for that
+  memory, with their differences counted between the memories (the live settings hold none of them). A search that
+  finds them with no such column says why none is shown, and a copy never reaches the live settings.
+- **Collapse all and Expand all by the keys, and reverts that keep groups whole:** Cmd/Ctrl+Shift+↑ and ↓ fold and
+  open every foldable group of the view in front from any pane, in the window and on the page (Edit's tabs, Compare,
+  search, My Menu, Exposure, the record map, and the Memories page, which now folds), each view with its own buttons,
+  and a single heading folds by the keyboard too. Outside Expert mode, All edits, History and the page's requests put
+  My Menu back as one list and a fraction's two parts back together, and a Compare row's note names the other menus as
+  Compare shows them.
 - **The camera's menu in each shooting mode, and Edit's Menu in Compare:** where a definition lists its camera's menus
   (`camera.menus`, each setting's `row_menus` and `row_places`), the window and the web page show one at a time under
   Camera menu:, opening on the file's mode, each row titled as the camera draws it, with that mode's value and a note
@@ -207,6 +221,12 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### The mapping kit
 
+- **`mode_switch.py --set` chooses no option drawn grey and opens no row drawn grey:** it asks the camera's Help on a
+  grey option where it may, closes the list with MENU and stops, as it does where whether an option is grey cannot be told.
+- **The grey-row test of the old label list holds on any definition:** with "Focus Mode" now also a value name, that
+  list names no blocker for Focus Mode Dial instead of the shorter one, and the test expects whichever its data gives.
+- **A picker slot listed for review keeps its name's source on a pass over the writer's own output:** its readers'
+  where its reading spells the name, "derived" where the name is its family's sure reading, else "schema kept".
 - **A stopped Recall Custom run (`customshoot_values.py`, `customshoot_run.py`) presses nothing more but MENU:** its
   start file goes back and is checked, it exits 8 (4 for a STOP file left before it, which it names, or a working copy
   only a hand can put back), it gives `customshoot_values.py --put-back --against <its start file>` only where opening
@@ -217,6 +237,14 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   by, where it gave up at 130 s; twice the camera had only been late.
 - **A restore's check says what it waits for,** the camera's restart and up to 5 minutes, before its first try, and a
   first Ctrl-C meanwhile says the check goes on and that a second one would leave it undone.
+- **`greyrow_run.py` takes a misread "This function is currently disabled." for no reason,** as OCR's "This tunction is
+  currently disabled." was taken for one on five rows, which then got no Right. A real reason is still a reason.
+- **`carousel_fields_run.py` walks the boxes of an option with a short name,** such as movie Self-timer's On: with a
+  box lit, OCR's reading of the title stands where it is exactly that option's name, since the second reader then
+  answers the lit box. A title naming another option still stops the walk, and so does a proof that moves the option's
+  own record, which each line now keeps beside the title read.
+- **`carousel_fields_run.py` judges a box lit on the frame its title was read from,** as it judges the option: a box
+  seen lit just after a Right and gone once the title settled no longer passes, so no walk ends on an empty look.
 - **The grey-row tests no longer pin what a live run folder holds:** every notice in the a1 II's
   `kit2_greyrow/greyrows.jsonl` is judged by the blocker rule, however many rows later runs add, and the first run's
   expectations are a copy kept in the test, names and labels only.

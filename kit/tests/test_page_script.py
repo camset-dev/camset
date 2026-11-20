@@ -140,6 +140,378 @@ console.log(JSON.stringify({ lines, before, opened, folded, redrawn, unfolded, s
 
 
 @needs_node
+def test_collapse_and_expand_all_by_the_keys_and_the_buttons(tmp_path):
+    """Item 4: Ctrl+Shift+↑ / ↓ (Cmd on a Mac) fold and open everything that folds, as the Collapse all and Expand all
+    buttons do (one function, `foldAll`): in a tab of Edit its groups and the camera's rows that hold others drawn, in
+    Compare its tabs; a group whose rows are not made yet has its headings folded and unfolded too; the keyboard in a
+    group that closes goes to the group's head; a text field with the keyboard keeps the keys; the buttons say the keys
+    and carry them as aria-keyshortcuts."""
+    got = run(tmp_path, LAYOUT + """
+redrawCompare = () => {};
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+// no text field with the keyboard to start with (the harness starts in one)
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+// a third group, closed, its rows not made, a heading of it folded on an earlier visit
+const third = { name: "Third", color: "#111", rows: [row("k:f", "Phi")], layout: [{ head: "Mode", depth: 0, path: ["Mode"] }, { key: "k:f", depth: 1 }] };
+const thirdKey = JSON.stringify(["Shoot", "Third", ["Mode"]]);
+xp.rowFolds.add(thirdKey);
+const drawn = drawTab([drive, other, third], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const heads = () => $("content").querySelectorAll(".rowhead").map((h) => h.classList.contains("folded"));
+const folds = () => ({ groups: groups(), heads: heads(), open: [...openGroups.get("Shoot")].sort(), keys: [...xp.rowFolds].sort() });
+const out = { start: groups() };
+const speed = $("content").querySelector(".rowhead > .name");
+speed.focus();
+out.taken = shortcut(key("ArrowUp"));
+out.focus_to_head = document.activeElement === $("content").querySelector("details.grp").firstChild;
+out.keys_collapsed = folds();
+shortcut(key("ArrowDown"));
+out.keys_expanded = folds();
+const [collapse, expand] = drawn[0].querySelectorAll(".fold-all button");
+collapse.click();
+out.button_collapsed = folds();
+expand.click();
+out.button_expanded = folds();
+out.said = collapse.title.includes(FOLD_KEYS[0]) && collapse.getAttribute("aria-keyshortcuts") === FOLD_ARIA[0]
+  && expand.title.includes(FOLD_KEYS[1]) && expand.getAttribute("aria-keyshortcuts") === FOLD_ARIA[1];
+const input = el("input");
+$("content").append(input);
+input.focus();
+out.typing = shortcut(key("ArrowUp"));
+out.after_typing = groups();
+input.blur();
+view.mode = "compare"; cmp.records = false;
+cmp.last = { rows: [{ tab: "Shoot", group: "Drive" }, { tab: "Look", group: "Color" }] };
+cmp.folded.clear();
+shortcut(key("ArrowUp"));
+out.cmp_keys = [...cmp.folded].sort();
+shortcut(key("ArrowDown"));
+out.cmp_cleared = cmp.folded.size;
+foldAll(true);
+out.cmp_button = [...cmp.folded].sort();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [True, False, False] and got["taken"] is True and got["focus_to_head"] is True
+    keys = sorted(['["Shoot","Drive",["Speed"]]', '["Shoot","Drive",["Empty"]]', '["Shoot","Third",["Mode"]]'])
+    assert got["keys_collapsed"] == {"groups": [False, False, False], "heads": [True], "open": [], "keys": keys}
+    assert got["keys_expanded"] == {"groups": [True, True, True], "heads": [False], "open": ["Drive", "Other", "Third"], "keys": []}
+    assert got["button_collapsed"] == got["keys_collapsed"] and got["button_expanded"] == got["keys_expanded"]
+    assert got["said"] is True
+    assert got["typing"] is False and got["after_typing"] == [True, True, True]
+    assert got["cmp_keys"] == ["t\u0000Look", "t\u0000Shoot"] and got["cmp_cleared"] == 0 and got["cmp_button"] == got["cmp_keys"]
+
+
+@needs_node
+def test_the_keys_fold_the_search_results_and_my_menu_too(tmp_path):
+    """The keys fold every group of the view in front, whichever it is: the search results and My Menu's tab as a tab,
+    each with its own Collapse all and Expand all (the keys in words and as aria-keyshortcuts); where nothing folds the
+    keys are left to the browser."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const look = (where, drawn) => {
+  $("content").replaceChildren(...drawn);
+  const o = { start: groups(), taken: shortcut(key("ArrowUp")) };
+  o.collapsed = groups(); o.kept = [...openGroups.get(where)];
+  shortcut(key("ArrowDown"));
+  o.expanded = groups(); o.open = [...openGroups.get(where)].sort();
+  const bs = drawn[0].querySelectorAll(".fold-all button");
+  o.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts"), b.title.includes(FOLD_KEYS[bs.indexOf(b)])]);
+  bs[0].click(); o.button_collapsed = groups();
+  return o;
+};
+view.mode = "edit"; view.page = "tab"; view.q = "a";
+const search = look("?", drawSearch([drive, other]));
+view.q = ""; view.page = "mymenu";
+const mymenu = look("mymenu", drawMyMenu({ name: "My Menu", missing: "No My Menu here", groups: [drive, other] }));
+$("content").replaceChildren(el("p", {}, "nothing folds here"));
+const nothing = shortcut(key("ArrowUp"));
+const none = drawMyMenu({ name: "My Menu", missing: "No My Menu here", groups: [] })[0].querySelectorAll(".fold-all button").length;
+console.log(JSON.stringify({ search, mymenu, nothing, none }));
+""")
+    buttons = [["Collapse all", "Control+Shift+ArrowUp", True], ["Expand all", "Control+Shift+ArrowDown", True]]
+    assert got["search"] == {"start": [True, True], "taken": True, "collapsed": [False, False], "kept": [],
+                             "expanded": [True, True], "open": ["Drive", "Other"], "buttons": buttons,
+                             "button_collapsed": [False, False]}
+    assert got["mymenu"] == {"start": [True, False], "taken": True, "collapsed": [False, False], "kept": [],
+                             "expanded": [True, True], "open": ["Drive", "Other"], "buttons": buttons,
+                             "button_collapsed": [False, False]}
+    assert got["nothing"] is False and got["none"] == 0
+
+
+@needs_node
+def test_the_keys_fold_the_exposure_pages_sections(tmp_path):
+    """The exposure page's "What decides" sections fold and open by the keys as by its own Collapse all and Expand all
+    (every foldable group of the view in front), kept as a click keeps them; the keyboard in a section that closes goes
+    to its head; a text field with the keyboard keeps the keys."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const set = (key) => ({ key, name: key, tab: "T", group: "G", open_group: "G", open_tab: "T", live: true, proved: null });
+const j = { title: "Exposure", intro: "i", sides: [["aperture", "Aperture"], ["shutter", "Shutter speed"], ["iso", "ISO"]],
+  scales: { aperture: null, shutter: null, iso: null }, columns: [],
+  decides: [{ side: "aperture", name: "the aperture", effect: "e", settings: [set("a")] },
+            { side: "iso", name: "ISO", effect: "e", settings: [set("b")] }] };
+view.mode = "edit"; view.page = "exposure"; view.q = "";
+const drawn = drawExposure(j);
+$("content").replaceChildren(...drawn);
+const opened = () => $("content").querySelectorAll("details.ex").map((d) => d.open);
+const out = { start: opened() };
+out.taken = shortcut(key("ArrowDown"));
+out.keys_expanded = opened(); out.kept = [...exOpen].sort();
+$("content").querySelector("details.ex .ex-set button").focus();
+shortcut(key("ArrowUp"));
+out.keys_collapsed = opened(); out.kept_after = [...exOpen];
+out.focus_to_head = document.activeElement === $("content").querySelector("details.ex").firstChild;
+const bs = $("content").querySelectorAll(".ex-whats > .fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts"), b.title]);
+bs[1].click(); out.button_expanded = opened();
+bs[0].click(); out.button_collapsed = opened();
+const input = el("input"); $("content").append(input); input.focus();
+out.typing = shortcut(key("ArrowDown")); out.after_typing = opened();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [False, False] and got["taken"] is True
+    assert got["keys_expanded"] == [True, True] and got["kept"] == ["aperture", "iso"]
+    assert got["keys_collapsed"] == [False, False] and got["kept_after"] == [] and got["focus_to_head"] is True
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp", 'Fold every "What decides" section (Ctrl+Shift+\u2191)'],
+                              ["Expand all", "Control+Shift+ArrowDown", 'Open every "What decides" section (Ctrl+Shift+\u2193)']]
+    assert got["button_expanded"] == got["keys_expanded"] and got["button_collapsed"] == got["keys_collapsed"]
+    assert got["typing"] is False and got["after_typing"] == [False, False]
+
+
+@needs_node
+def test_the_fold_keys_work_from_every_pane(tmp_path):
+    """The owner's report: the keys fold and open from wherever the focus is on the page (the Menu, a row's control, a
+    heading, a tick box, Compare's table), and only a box to type in keeps them."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+$("content").replaceChildren(...drawTab([drive, other], { places: true, flat: false }));
+const groups = () => $("content").querySelectorAll("details.grp").map((d) => d.open);
+const side = el("button", {}, "Shoot"); $("side").append(side);
+const tickBox = el("input", { type: "checkbox" }); $("side").append(tickBox);
+const textBox = el("input", { type: "search" }); $("side").append(textBox);
+const places = { menu: side, row: $("content").querySelector(".row:not(.rowhead) button, .row:not(.rowhead) .val") || $("content").querySelector(".row:not(.rowhead)"),
+  heading: $("content").querySelector(".rowhead > .name"), summary: $("content").querySelector("details.grp > summary"), tick: tickBox };
+const out = {};
+for (const [name, at] of Object.entries(places)) {
+  at.focus();
+  shortcut(key("ArrowUp")); const folded = groups();
+  shortcut(key("ArrowDown")); const opened = groups();
+  out[name] = [folded, opened];
+}
+textBox.focus();
+out.text = [shortcut(key("ArrowUp")), groups()];
+textBox.blur();
+view.mode = "compare"; cmp.records = false; cmp.folded.clear();
+cmp.last = { rows: [{ tab: "Shoot", group: "Drive" }] };
+redrawCompare = () => {};
+const cell = el("button", {}, "a cell"); $("content").replaceChildren(cell); cell.focus();
+shortcut(key("ArrowUp"));
+out.compare = [...cmp.folded];
+console.log(JSON.stringify(out));
+""")
+    for pane in ("menu", "row", "heading", "summary", "tick"):
+        assert got[pane] == [[False, False], [True, True]], pane
+    assert got["text"] == [False, [True, True]], "a box to type in keeps the keys"
+    assert got["compare"] == ["t\u0000Shoot"]
+
+
+@needs_node
+def test_the_fold_keys_are_taken_as_the_window_takes_them(tmp_path):
+    """The reviewer's finding 4: the page takes the fold keys as the window does: never with Alt held too, Cmd+Shift
+    on a Mac and Ctrl+Shift elsewhere (not the other), and not while a right-click menu, the My Menu pop-up or
+    Compare's value picker is open."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k, mods) => ({ key: k, ctrlKey: false, metaKey: false, shiftKey: true, altKey: false, preventDefault() {}, ...mods });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+$("content").replaceChildren(...drawTab([drive, other], { places: true, flat: false }));
+const folds = (e) => { foldAll(false); shortcut(e); return $("content").querySelectorAll("details.grp").every((d) => !d.open); };
+const out = {};
+onMac = false;
+out.ctrl = folds(key("ArrowUp", { ctrlKey: true }));
+out.cmd_elsewhere = folds(key("ArrowUp", { metaKey: true }));
+out.alt = folds(key("ArrowUp", { ctrlKey: true, altKey: true }));
+onMac = true;
+out.cmd_mac = folds(key("ArrowUp", { metaKey: true }));
+out.ctrl_mac = folds(key("ArrowUp", { ctrlKey: true }));
+onMac = false;
+cmpMenuBox = el("div"); out.menu = folds(key("ArrowUp", { ctrlKey: true })); cmpMenuBox = null;
+cmp.pick = { box: el("div") }; out.picker = folds(key("ArrowUp", { ctrlKey: true })); cmp.pick = null;
+$("mymenu").append(el("button", {}, "Add")); $("mymenu").hidden = false;
+out.mymenu = folds(key("ArrowUp", { ctrlKey: true }));
+$("mymenu").hidden = true;
+out.after = folds(key("ArrowUp", { ctrlKey: true }));
+console.log(JSON.stringify(out));
+""")
+    assert got == {"ctrl": True, "cmd_elsewhere": False, "alt": False, "cmd_mac": True, "ctrl_mac": False,
+                   "menu": False, "picker": False, "mymenu": False, "after": True}
+
+
+@needs_node
+def test_the_record_maps_bytes_fold_by_the_keys_and_the_buttons(tmp_path):
+    """The reviewer's inventory, B: the record map's bytes fold and show by the keys as by its own Collapse all and
+    Expand all (the keys in words and as aria-keyshortcuts): Expand all asks the editor for the bytes of every
+    multi-byte record listed, Collapse all for none; a map with no multi-byte record has neither."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+let redraws = 0;
+redraw = () => { redraws += 1; };
+const rec = (id, big) => ({ id, big, offset: "000000", hex: "0x" + id, shape: big ? "u8[16]" : "u16", value: "v", raw: "r", raw_full: "r", edited: false, setting: null });
+view.mode = "edit"; view.page = "records"; view.q = "";
+const j = { title: "Live: records in file order", unmapped_words: "u", rows: [rec(1, true), rec(2, false), rec(3, true)] };
+const drawn = drawRecords(j);
+$("content").replaceChildren(...drawn);
+const out = { taken: shortcut(key("ArrowDown")) };
+out.expanded = [...xp.rm.open].sort();
+shortcut(key("ArrowUp")); out.collapsed = [...xp.rm.open];
+const bs = drawn[0].querySelectorAll(".fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts")]);
+bs[1].click(); out.button_expanded = [...xp.rm.open].sort();
+bs[0].click(); out.button_collapsed = [...xp.rm.open];
+out.redraws = redraws;
+out.none = drawRecords({ ...j, rows: [rec(2, false)] })[0].querySelectorAll(".fold-all button").length;
+console.log(JSON.stringify(out));
+""")
+    assert got["taken"] is True and got["expanded"] == [1, 3] and got["collapsed"] == []
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp"], ["Expand all", "Control+Shift+ArrowDown"]]
+    assert got["button_expanded"] == [1, 3] and got["button_collapsed"] == [] and got["redraws"] == 4
+    assert got["none"] == 0
+
+
+@needs_node
+def test_collapse_all_closes_the_rows_details_too(tmp_path):
+    """The reviewer's inventory, D: the page's Collapse all closes a row's own details too (by the keys as by the
+    button); Expand all opens the groups and leaves every row's details closed, as the window shows one setting's at a
+    time."""
+    got = run(tmp_path, LAYOUT + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+view.mode = "edit"; view.page = "tab"; view.tab = "Shoot"; view.q = "";
+const withHelp = (g) => ({ ...g, rows: g.rows.map((r) => ({ ...r, help: "Help for " + r.name })) });
+const drawn = drawTab([withHelp(drive), withHelp(other)], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const name = $("content").querySelector(".row .name.dt");
+const open = () => $("content").querySelectorAll(".row.open").length;
+name.click();
+const out = { opened: open(), kept: xp.detail.size };
+shortcut(key("ArrowUp"));
+out.after_keys = [open(), xp.detail.size];
+shortcut(key("ArrowDown"));
+out.after_expand = [open(), xp.detail.size, $("content").querySelectorAll("details.grp").every((d) => d.open)];
+name.click();
+drawn[0].querySelectorAll(".fold-all button")[0].click();
+out.after_button = [open(), xp.detail.size];
+console.log(JSON.stringify(out));
+""")
+    assert got["opened"] == 1 and got["kept"] == 1, got
+    assert got["after_keys"] == [0, 0] and got["after_expand"] == [0, 0, True] and got["after_button"] == [0, 0]
+
+
+@needs_node
+def test_the_memories_groups_fold_by_the_keys_the_buttons_and_one_heading(tmp_path):
+    """The Memories page's groups fold (all open to start with): every one by the keys as by its Collapse all and
+    Expand all (the keys in words and as aria-keyshortcuts), one by a click on its heading or Enter on it; the
+    keyboard on a row a fold hides goes to that group's heading."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const cell = (text, differs) => ({ text, differs, section: 1, takes: [true, true] });
+const r = (key, name) => ({ key, name, live: { text: "a" }, cells: [cell("b", true)] });
+const j = { title: "Memories", intro: "i", buttons: [], editable: true, others: [], cols: [[1, "M1"]], only_diff: false,
+  groups: [{ tab: "Shoot", group: "Drive", color: "#000", rows: [r("k:a", "Alpha"), r("k:b", "Beta")] },
+           { tab: "Focus", group: "AF", color: "#111", rows: [r("k:c", "Gamma")] }] };
+view.mode = "edit"; view.page = "memories"; view.q = "";
+const drawn = drawMemories(j);
+$("content").replaceChildren(...drawn);
+const hidden = () => $("content").querySelectorAll("tr").filter((tr) => !tr.classList.contains("mem-head") && tr.parentElement && tr.parentElement.tagName === "TBODY").map((tr) => tr.hidden);
+const out = { start: hidden() };
+const arrow = $("content").querySelector(".mem-arrows button");
+arrow.focus();
+out.taken = shortcut(key("ArrowUp"));
+out.collapsed = [hidden(), [...memView.closed].sort()];
+out.focus_to_head = document.activeElement.classList.contains("mem-fold") && document.activeElement.textContent === "\u23f5 Shoot > Drive";
+shortcut(key("ArrowDown"));
+out.expanded = [hidden(), memView.closed.size];
+const bs = drawn[0].querySelectorAll(".fold-all button");
+out.buttons = bs.map((b) => [b.textContent, b.getAttribute("aria-keyshortcuts")]);
+bs[0].click(); out.button_collapsed = hidden();
+bs[1].click(); out.button_expanded = hidden();
+const head = $("content").querySelector(".mem-fold");
+head.click(); out.one = [hidden(), head.getAttribute("aria-expanded")];
+head.dispatchEvent({ type: "keydown", key: "Enter", preventDefault() {} }); out.enter = hidden();
+console.log(JSON.stringify(out));
+""")
+    assert got["start"] == [False, False, False] and got["taken"] is True
+    assert got["collapsed"] == [[True, True, True], ["Focus > AF", "Shoot > Drive"]] and got["focus_to_head"] is True
+    assert got["expanded"] == [[False, False, False], 0]
+    assert got["buttons"] == [["Collapse all", "Control+Shift+ArrowUp"], ["Expand all", "Control+Shift+ArrowDown"]]
+    assert got["button_collapsed"] == [True, True, True] and got["button_expanded"] == [False, False, False]
+    assert got["one"] == [[True, True, False], "false"] and got["enter"] == [False, False, False]
+
+
+@needs_node
+def test_memories_a_search_opens_the_groups_of_its_hits(tmp_path):
+    """The reviewer's mend 3: on the Memories page a new search opens the groups of its hits, as a jump to a row under a
+    folded heading does in Edit; a group folded during the same search stays folded."""
+    got = run(tmp_path, """
+const cell = (text, differs) => ({ text, differs, section: 1, takes: [true, true] });
+const r = (key, name) => ({ key, name, live: { text: "a" }, cells: [cell("b", true)] });
+const j = { title: "Memories", intro: "i", buttons: [], editable: true, others: [], cols: [[1, "M1"]], only_diff: false,
+  groups: [{ tab: "Shoot", group: "Drive", color: "#000", rows: [r("k:a", "Alpha")] }] };
+view.mode = "edit"; view.page = "memories"; view.q = "";
+const heads = () => $("content").querySelectorAll(".mem-fold").map((h) => h.getAttribute("aria-expanded"));
+memView.closed.add("Shoot > Drive"); memView.closed.add("Focus > AF");
+$("content").replaceChildren(...drawMemories(j));
+const out = { before: heads() };
+memView.q = "alp";
+$("content").replaceChildren(...drawMemories(j));
+out.searched = [heads(), [...memView.closed]];
+memView.closed.add("Shoot > Drive");
+$("content").replaceChildren(...drawMemories(j));
+out.same_search = heads();
+console.log(JSON.stringify(out));
+""")
+    assert got["before"] == ["false"]
+    assert got["searched"] == [["true"], ["Focus > AF"]], "the hit's group opened, the others left as they were"
+    assert got["same_search"] == ["false"], "folded during the same search, it stays folded"
+
+
+@needs_node
+def test_two_rows_of_one_label_fold_apart(tmp_path):
+    """Two headings of one label in one group, apart by their places (`at`, as the editor sends them: on the camera an
+    icon alone tells them apart): folding one leaves the other's rows shown, by a click and by Collapse all's keys
+    alike, each kept by its own key."""
+    got = run(tmp_path, """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+const g = { name: "Operation Customize", color: "#000", rows: [row("k:a", "Key A"), row("k:b", "Key B")],
+  layout: [{ head: "Custom Key/Dial Set. (Still)", depth: 0, path: ["Custom Key/Dial Set."], at: [5] }, { key: "k:a", depth: 1 },
+           { head: "Custom Key/Dial Set. (Movie)", depth: 0, path: ["Custom Key/Dial Set."], at: [6] }, { key: "k:b", depth: 1 }] };
+view.mode = "edit"; view.page = "tab"; view.tab = "Setup"; view.q = "";
+const drawn = drawTab([g], { places: true, flat: false });
+$("content").replaceChildren(...drawn);
+const hidden = () => $("content").querySelectorAll(".grid > .row").map((n) => n.hidden);
+const heads = $("content").querySelectorAll(".rowhead > .name");
+heads[0].click();
+const out = { one: hidden(), keys: [...xp.rowFolds] };
+heads[0].click();
+shortcut(key("ArrowUp"));
+out.all = [...xp.rowFolds].sort();
+console.log(JSON.stringify(out));
+""")
+    assert got["one"] == [False, True, False, False], "the Still heading folded, the Movie one's row shown"
+    assert got["keys"] == ['["Setup","Operation Customize",["Custom Key/Dial Set."],[5]]']
+    assert got["all"] == ['["Setup","Operation Customize",["Custom Key/Dial Set."],[5]]', '["Setup","Operation Customize",["Custom Key/Dial Set."],[6]]']
+
+
+@needs_node
 def test_a_tab_without_an_entry_goes_where_the_editor_routes_it(tmp_path):
     """menuPlace: a tab with its own Menu entry is shown there; a tab with none goes where the editor's routes say:
     My Menu's tab to the My Menu page, "Not in the menus" to the first tab when the flat list has no such entry, an
@@ -1377,6 +1749,52 @@ const stops = () => heads().map((b) => b.getAttribute("tabindex")).join(" ");
 const on = () => document.activeElement.dataset.col || document.activeElement.textContent;
 const settle = async () => { for (let i = 0; i < 4; i++) await tick(); };
 """
+
+
+@needs_node
+def test_compare_collapse_by_the_keys_gives_the_focus_to_the_tabs_heading(tmp_path):
+    """The reviewer's finding 3: in Compare, Collapse all by the keys while a cell has the keyboard takes that cell
+    out of sight; its tab's heading takes the keyboard, so the arrows and a screen reader have somewhere to be."""
+    got = run(tmp_path, MATRIX + """
+const key = (k) => ({ key: k, ctrlKey: true, metaKey: false, shiftKey: true, altKey: false, preventDefault() {} });
+cmp.cols = [["a", 0], ["a", 3]]; cmp.folded.clear();
+cmp.last = answer();
+$("content").replaceChildren(...drawCompare());
+const rows = () => $("content").querySelectorAll("tr").filter((tr) => tr.dataset.key === "k:a");
+const cell = rows()[0].querySelectorAll("button, [tabindex]")[0];
+cell.focus();
+const before = document.activeElement === cell;
+shortcut(key("ArrowUp"));
+const a = document.activeElement;
+console.log(JSON.stringify({ before, rows: rows().length, head: a.classList.contains("cmp-fold"), fold: a.dataset.fold, inside: $("content").contains(a) }));
+""")
+    assert got == {"before": True, "rows": 0, "head": True, "fold": "t\u0000Shoot", "inside": True}
+
+
+@needs_node
+def test_a_memory_only_row_is_never_the_live_settings(tmp_path):
+    """A setting only the memories keep (`live: false` on its row): its name opens it in Edit in the first column of
+    file A that keeps it, a memory's, never the live settings; a memory cell's menu copies into the other memory, never
+    into the live column; Open in Edit from a memory column opens that memory."""
+    got = run(tmp_path, MATRIX + """
+cmp.cols = [["a", 0], ["a", 3], ["a", 4]];
+setName[4] = "Memory 2";
+const j = answer();
+const memRow = { ...j.rows[0], key: "set:0x019c", name: "AF point position X (current)", live: false, in_sets: true,
+  cells: [{ text: "—", stored: false, editable: false, differs: false }, { text: "320", stored: true, editable: true, differs: false }, { text: "330", stored: true, editable: true, differs: true }] };
+j.rows = [memRow];
+cmp.last = j;
+const opened = [];
+cmpOpenInEdit = async (r, section) => { opened.push(section); };
+const tr = cmpRow(j, memRow, 0);
+tr.querySelector(".cmp-link").click();
+const items = cmpCellMenu(j, memRow, 1).filter((it) => Array.isArray(it)).map((it) => it[0]);
+const live = cmpCellMenu(j, memRow, 0);
+console.log(JSON.stringify({ opened, items, live: live.length }));
+""")
+    assert got["opened"] == [3], "the name opens the first memory column, never the live settings"
+    assert any("Memory 2" in i for i in got["items"]) and not any("Live" in i and "Copy" in i for i in got["items"]), got["items"]
+    assert got["live"] == 0, "the live column's cell keeps none of it: no menu"
 
 
 @needs_node

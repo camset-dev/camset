@@ -132,6 +132,18 @@ def option_prefix_out(label: str, options: set) -> str:
     return tail if tail and any(same_option(head, o) for o in options) else label
 
 
+def kept_source(final: str, read: str, sure: set) -> str | None:
+    """The source of a picker slot's name where its own reading was not sure and its note was listed for review (the
+    schema's name kept against it for the moment): None, its readers' own, where that reading agrees with the name the
+    slot ends with as pass 2's report judges a picker (pass2_report.judge_functions: no note), so that a pass over its
+    own output, whose report holds no note there, says the same; "derived" where that name is a sure reading of the
+    code on another slot of its family (`sure`: those readings, cleaned); else "schema kept"."""
+    from pass2_report import judge_functions, same_label
+    if not judge_functions({read: 0}, {0: final})[1]:
+        return None
+    return "derived" if any(same_label(final, s) for s in sure) else "schema kept"
+
+
 def one_name(labels) -> str:
     """One name for a value two options write the same way ("HEIF(4:2:0)" and "HEIF(4:2:2)" both store 4): their
     common start, cut back to a word ("HEIF"), when it holds two characters or more and is not a bare number; else

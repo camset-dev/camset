@@ -185,7 +185,9 @@ def test_the_first_runs_blockers_are_named_whole_by_the_runner_labels_and_were_n
     value somewhere (Shoot Mode and Touch Operation are Fn functions too) and holds no table's item (Focus Mode Dial,
     under Mode Dial Control Set), so blocker_of found nothing or a shorter label. runner.blocker_labels, the ledger's
     own vocabulary beside the page model's, names each one whole; misnamed, the live test's judge, says what was
-    wrong with each of the old namings."""
+    wrong with each of the old namings. What the old list gives for Focus Mode Dial follows the definition it reads
+    (the shorter label, or none once "Focus Mode" is some setting's value too), so the test holds on a definition
+    before and after a data pass."""
     from camkit import coverage
     import runner
     doc = a1ii_definition()
@@ -195,10 +197,16 @@ def test_the_first_runs_blockers_are_named_whole_by_the_runner_labels_and_were_n
         assert coverage.blocker_of(NOTICE.format(blocker), labels) == {"row": blocker}, row
         assert misnamed(NOTICE.format(blocker), labels, doc) == "", row
     assert coverage.blocker_of(NOTICE.format("Shoot Mode"), old) is None, "the defect, as it stood"
-    assert coverage.blocker_of(NOTICE.format("Focus Mode Dial"), old) == {"row": "Focus Mode"}, "the shorter label"
+    # the allow-list holds no table's item, so never Focus Mode Dial whole: the shorter "Focus Mode" where it keeps
+    # that label, none where the definition makes "Focus Mode" a value too and the list withholds it (the definition
+    # of data pass 10 does: a value name as the camera draws it); misnamed calls either wrong
+    assert "Focus Mode Dial" not in old
+    shorter = "Focus Mode" in old
+    assert coverage.blocker_of(NOTICE.format("Focus Mode Dial"), old) == ({"row": "Focus Mode"} if shorter else None)
     assert misnamed(NOTICE.format("Shoot Mode"), old, doc).startswith("no row named, though")
-    assert misnamed(NOTICE.format("Focus Mode Dial Set with Dial"), old, doc) == \
-        "'Focus Mode' leaves 'dial set with dial', no value of it"
+    assert misnamed(NOTICE.format("Focus Mode Dial Set with Dial"), old, doc) == (
+        "'Focus Mode' leaves 'dial set with dial', no value of it" if shorter else
+        "no row named, though 'Focus Mode Dial Set with Dial' starts with 'Focus Mode Dial'")
     # a value the definition gives the blocker passes, a word that is none does not; the footer's OK is left out
     assert misnamed(NOTICE.format("Focus Mode Dial Set with Dial •ОК"), labels, doc) == ""
     assert misnamed(NOTICE.format("Log Shooting Off • 0K"), labels, doc) == ""

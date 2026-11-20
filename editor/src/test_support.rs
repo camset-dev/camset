@@ -24,6 +24,28 @@ pub(crate) fn sample_app(tag: &str, strip: Option<fn(&mut serde_json::Value)>) -
 /// the ones named for stills ("(Still)"), and those on the same row as one named for Movie, Still's only; every other
 /// placed setting all three. A copy (`copy_of`) and a setting placed nowhere get none; no `row_places`. Whatever menus
 /// the shipped definition lists go first (`strip_menus`), so the stub is the same world whatever it carries.
+/// The a1 II's rows the camera tells apart by an icon alone, given their words (`row_icons`) as the next data pass will:
+/// the two Custom Key/Dial Set. rows (Still, Movie), the two Fn Menu Settings (Still, Playback), the two Recording Media
+/// (Still, Movie); the definition as shipped otherwise.
+pub(crate) fn row_icons_stub(v: &mut serde_json::Value) {
+    for s in v["settings"].as_array_mut().unwrap() {
+        let row: Vec<String> = s["row"].as_array().map(|r| r.iter().filter_map(|x| x.as_str().map(str::to_string)).collect()).unwrap_or_default();
+        let at: Vec<i64> = s["row_at"].as_array().map(|r| r.iter().filter_map(serde_json::Value::as_i64).collect()).unwrap_or_default();
+        let mut icons: Vec<Option<&str>> = vec![None; row.len()];
+        for (i, label) in row.iter().enumerate() {
+            icons[i] = match (label.as_str(), at.get(..=i)) {
+                ("Custom Key/Dial Set.", Some([5])) | ("Fn Menu Settings", Some([8])) | ("Recording Media", Some([16, 0])) => Some("Still"),
+                ("Custom Key/Dial Set.", Some([6])) | ("Recording Media", Some([16, 1])) => Some("Movie"),
+                ("Fn Menu Settings", Some([9])) => Some("Playback"),
+                _ => None,
+            };
+        }
+        if icons.iter().any(Option::is_some) {
+            s["row_icons"] = serde_json::json!(icons);
+        }
+    }
+}
+
 pub(crate) fn stub_menus(v: &mut serde_json::Value) {
     strip_menus(v);
     v["camera"]["menus"] = serde_json::json!([

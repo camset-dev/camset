@@ -475,7 +475,10 @@ def test_the_published_record_names_keep_their_records():
     """Every identifier a published record names file of the a1 II gave a record (github/main, gitea/main, the tags
     v0.2.0 and v0.2.1, where this clone holds them) is that record's in the committed file's memory, in its enum or
     retired; and, whatever this clone holds, the ten its records bore before they were renamed are retired with their
-    records, and the three moved in b3afe42 and 06ed34b are back with theirs."""
+    records, the three data pass 10 renamed (2026-11-20: 0x0248 "S&Q Frame Rate", 0x0312 "Fixed Speed STBY", 0x049c
+    "HDMI Info. Display", as the camera draws them) are retired with theirs, and the three moved in b3afe42 and 06ed34b
+    are back with theirs. A retired identifier lives in the file's own memory alone, never as an alias in the enum or
+    the reader compiled from it (camset_ksy: renamed, never reused)."""
     import camset_ksy
     kept, retired = camset_ksy.published(A1)
     owner = {**retired, **{i: rid for rid, i in kept.items()}}
@@ -483,7 +486,9 @@ def test_the_published_record_names_keep_their_records():
                        "operation_in_vertical_orientatir": 0x0473, "movie_hdmi_output_raw": 0x0495,
                        "camera_position_state": 0x04E2, "movie_interval_rec_frame_rate_setting": 0x1137,
                        "movie_interval_rec_recording_setting": 0x1145, "unknown_1479": 0x1479,
-                       "custom_box_in_use_height_x_1000": 0x148C, "custom_box_in_use_width_x_1000": 0x148E}
+                       "custom_box_in_use_height_x_1000": 0x148C, "custom_box_in_use_width_x_1000": 0x148E,
+                       "frame_rate": 0x0248, "fixed_speed_sby": 0x0312, "monitoring_output_display_hdmi": 0x049C}
+    assert not set(retired) & set(kept.values())
     assert (kept[0x01EA], kept[0x01EE], kept[0x1126]) == ("jpeg_heif_quality", "jpeg_heif_image_size", "unknown_camera_state")
     path = camset_ksy.ids_path(A1).relative_to(ROOT).as_posix()
     read = 0

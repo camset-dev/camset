@@ -483,7 +483,7 @@ def fields_world(monkeypatch, own_runs, cam):
         c.where, c.field = "shooting", None
     link = SimpleNamespace(download=download)
     for name, value in (
-            ("title_reads", lambda c, labels: labels[c.opt] if c.where == "dialog" else None),
+            ("title_reads", lambda c, labels, **kw: labels[c.opt] if c.where == "dialog" else None),
             ("lit_read", lambda c, always: F.BoxRead(c.value(c.field), c.value(c.field), c.value(c.field), "made-up", "both")
              if lit(c) else (_ for _ in ()).throw(F.Failed("no box lit"))),
             ("word_read", lambda c: c.spec[c.opt][c.field]["label"]),
@@ -1086,7 +1086,7 @@ def test_no_enter_on_a_box_whose_title_no_longer_names_the_option(own_runs, monk
     cam = FieldsCam()
     F, _, _ = fields_world(monkeypatch, own_runs, cam)
     on_box(cam, edit=(1, 1))
-    monkeypatch.setattr(F, "title_reads", lambda c, labels: "Single Bracket")
+    monkeypatch.setattr(F, "title_reads", lambda c, labels, **kw: "Single Bracket")
     with pytest.raises(F.Failed, match="no Enter: its title no longer names 'Cont. Bracket'"):
         F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", F.box_pic(cam, 0))
     assert "enter" not in cam.keys
@@ -1151,6 +1151,187 @@ def test_enter_judges_the_box_on_a_fresh_frame(own_runs, monkeypatch):
     cam.edit[0] = 1
     chosen = F.enter(cam, "Cont. Bracket", OPTIONS, 0, 2, "0.5EV", want)
     assert cam.keys == ["enter"] and chosen.endswith("_enter-check.png")
+
+
+# ------------------------------------------------------------------------------------- the title with a box lit
+
+SELF_TIMER = ["On", "Off"]                 # movie Self-timer's options (kit2_crawl_mv_selftimer's own map)
+
+
+class TitleReplay:
+    """The camera's own frames replayed: `frames` the frame on show first, then the one each press brings
+    ({frame: {key: next}}), `settles` the frame a settled look takes after one ({frame: next}); read() is the pixel
+    reader's on the frame on show, which OCR reads by its path."""
+
+    def __init__(self, first, frames=None, settles=None):
+        self.frames, self.settles, self.keys = frames or {}, settles or {}, []
+        self.show(first)
+
+    def show(self, name):
+        self.frame = load(need(A1 / name))
+        self.name = name
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        self.show(self.frames[self.name][key])
+
+    def refresh(self, tag, frame=None):
+        self.show(self.settles.get(self.name, self.name))
+
+    def read(self):
+        return screen.read(self.frame)
+
+
+def replayed(monkeypatch, said):
+    """carousel_fields_run's title read on the replayed frames: its own settled look (title_settled: the frame a look
+    after the press took), OCR on the frame itself, and the second reader standing in for by what it said on that very
+    frame (`said`: {frame name: the option it named}, from its cached answers of the day), each question noted."""
+    import carousel_fields_run as F
+    asked = []
+    monkeypatch.setattr(F, "title_settled", lambda cam: cam.refresh("reread"))
+
+    def vlm_option(cam):
+        asked.append(cam.frame.path.name)
+        return said.get(cam.frame.path.name)
+    monkeypatch.setattr(F, "vlm_option", vlm_option)
+    return F, asked
+
+
+# 2026-11-20, mv_selftimer_look (kit2_pass2): the carousel open on On (270325), Right into box 0 (270327, settled on
+# 270328: box 0 lit under "Rec Start delay", the title still "On"). The second reader's answers to its option question,
+# cached that day: "On" with the option lit, "3 s" (the lit box) with box 0 lit
+SELF_TIMER_SAID = {"270325_reread.png": "On", "270326_fresh.png": "On", "270327_right.png": "3 s",
+                   "270328_reread.png": "3 s"}
+
+
+def test_a_short_title_stands_on_ocr_once_a_box_is_lit_on_the_cameras_frames(monkeypatch):
+    """The look of 2026-11-20 stopped here: OCR read the title "On", a short word and so a doubt, the second reader was
+    asked its option question and, with a box lit, named the box ("3 s"), so box_refused said the title no longer named
+    On while the camera stood on it. With a box lit, OCR's reading stands where it names one option and its only doubt
+    is its shortness; the reader is asked with the option lit, as before."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    cam = TitleReplay("kit2_pass2/shots/270325_reread.png", {"kit2_pass2/shots/270326_fresh.png":
+                                                          {"right": "kit2_pass2/shots/270327_right.png"}},
+                    {"kit2_pass2/shots/270325_reread.png": "kit2_pass2/shots/270326_fresh.png",
+                     "kit2_pass2/shots/270327_right.png": "kit2_pass2/shots/270328_reread.png"})
+    F.into_box(cam, "On", SELF_TIMER, 0, None)
+    assert cam.keys == ["right"] and cam.name.endswith("270328_reread.png")
+    assert asked == ["270326_fresh.png"], "the reader on the option lit alone, never on the box"
+    assert F.box_refused(cam, "On", SELF_TIMER, 0, 2) == ""
+
+
+def test_with_a_box_lit_a_title_naming_another_option_is_refused_on_ocr_alone(monkeypatch):
+    """A box lit under a title OCR reads plainly as another option's is refused, and no reader asked: "On" (270328)
+    judged as the box of Off, the proof's option; Single Bracket's box (kit2_fin_brtype_f_look 00007) judged as Cont.
+    Bracket's; and a made-up box lit under a title OCR reads exactly as the short sibling's, "Off", judged as On's."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    cam = TitleReplay("kit2_pass2/shots/270328_reread.png")
+    assert F.box_refused(cam, "Off", SELF_TIMER, 0, 2) == "its title no longer names 'Off'"
+    cam = TitleReplay("kit2_fin_brtype_f_look/shots/00007_right.png")
+    assert F.box_refused(cam, "Cont. Bracket", OPTIONS, 0, 2) == "its title no longer names 'Cont. Bracket'"
+    monkeypatch.setattr(F, "title_settled", lambda cam: None)
+    monkeypatch.setattr(F, "carousel_text", lambda cam: "Off")
+    sibling = SimpleNamespace(read=lambda: SimpleNamespace(kind="dialog", field=0, boxes=[(1, 2), (3, 4)]),
+                              frame=SimpleNamespace(path=Path("00001_made-up.png")))
+    assert F.box_refused(sibling, "On", SELF_TIMER, 0, 2) == "its title no longer names 'On'"
+    assert asked == [], "OCR named an option plainly enough each time"
+
+
+def test_the_option_is_judged_lit_on_the_frame_its_title_was_read_from(monkeypatch):
+    """option_refused saw no box lit on the frame before the title settled (270325, the option lit) and the title was
+    read from the settled frame, a box lit there (270328): the option is not taken for lit, so into_box sends no Right
+    from what is a box (possibly the last); the short title's rule is box_refused's alone, so the reader is asked
+    about the title read with the option meant to be lit, and its answer (the box, "3 s") names no option."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    cam = TitleReplay("kit2_pass2/shots/270325_reread.png", settles={"kit2_pass2/shots/270325_reread.png":
+                                                                    "kit2_pass2/shots/270328_reread.png"})
+    assert F.option_refused(cam, "On", SELF_TIMER) == "box 0 is lit, not the option"
+    assert asked == ["270328_reread.png"]
+    with pytest.raises(F.Failed, match="no Right into its boxes: box 0 is lit, not the option"):
+        F.into_box(TitleReplay("kit2_pass2/shots/270325_reread.png", settles={
+            "kit2_pass2/shots/270325_reread.png": "kit2_pass2/shots/270328_reread.png"}), "On", SELF_TIMER, 0, None)
+
+
+def test_the_box_is_judged_lit_on_the_frame_its_title_was_read_from(monkeypatch):
+    """box_refused saw box 0 lit on the frame before the title settled (270327, just after the Right) and the title was
+    read from the settled frame, no box lit there (270326, the option lit; the order is made up from the day's frames):
+    the box is not taken for lit, whatever the title names, so into_box never ends on a frame with no box lit (an empty
+    look, nothing proved, exit 0) and no Up, Down or Enter goes on what is the option."""
+    F, asked = replayed(monkeypatch, SELF_TIMER_SAID)
+    stale = {"kit2_pass2/shots/270327_right.png": "kit2_pass2/shots/270326_fresh.png"}
+    cam = TitleReplay("kit2_pass2/shots/270327_right.png", settles=stale)
+    assert F.box_refused(cam, "On", SELF_TIMER, 0, 2) == "box None is lit, not box 0"
+    assert asked == ["270326_fresh.png"], "the title read from the settled frame, the option lit there"
+    cam = TitleReplay("kit2_pass2/shots/270326_fresh.png", {"kit2_pass2/shots/270326_fresh.png":
+                                                         {"right": "kit2_pass2/shots/270327_right.png"}}, stale)
+    with pytest.raises(F.Failed, match="Right on the option did not light its first box: box None is lit, not box 0"):
+        F.into_box(cam, "On", SELF_TIMER, 0, None)
+    assert cam.keys == ["right"]
+
+
+@pytest.mark.parametrize("name, option, field", [("kit2_fin_brtype_cont/shots/00006_right.png", "Cont. Bracket", 0),
+                                                 ("kit2_fin_brtype_cont_img/shots/00007_right.png", "Cont. Bracket", 1),
+                                                 ("kit2_fin_brtype_f_look2/shots/00008_right.png", "Focus Bracket", 0)])
+def test_bracket_types_long_titles_read_as_before_with_a_box_lit(monkeypatch, name, option, field):
+    """Bracket Type's own frames, a box lit under a title OCR reads plainly: the check passes on OCR alone, as it did
+    before the short title's rule, and no reader is asked. It holds with the rule taken out too, on purpose: it guards
+    the rule's scope, that long titles read as they always did."""
+    F, asked = replayed(monkeypatch, {})
+    cam = TitleReplay(name)
+    assert F.box_refused(cam, option, OPTIONS, field, None) == "" and asked == []
+
+
+@pytest.mark.parametrize("ocr_text, said, got", [("Оn", "On", "On"),         # a Cyrillic O: a lookalike doubt, the reader asked
+                                                 ("", "3 s", None),           # nothing read: the reader, naming the box
+                                                 ("Of", "3 s", None)])        # a reading naming no option exactly
+def test_with_a_box_lit_any_doubt_but_shortness_still_asks_the_reader(monkeypatch, ocr_text, said, got):
+    """It holds with the rule taken out too, on purpose: it guards the rule's scope, that no doubt but a short word's
+    lets OCR stand alone."""
+    import carousel_fields_run as F
+    asked = []
+    monkeypatch.setattr(F, "title_settled", lambda cam: None)
+    monkeypatch.setattr(F, "carousel_text", lambda cam: ocr_text)
+    monkeypatch.setattr(F, "vlm_option", lambda cam: asked.append(1) or said)
+    cam = SimpleNamespace(read=lambda: SimpleNamespace(kind="dialog", field=0, boxes=[(1, 2), (3, 4)]),
+                          frame=SimpleNamespace(path=Path("00001_made-up.png")))
+    assert F.title_reads(cam, SELF_TIMER, box_lit=True) == got and asked == [1]
+
+
+def test_a_proof_that_moves_the_options_own_record_is_not_kept_and_stops_the_walk(own_runs, monkeypatch, capsys):
+    """Two options of short names that both draw boxes (made up: Single Bracket given Cont. Bracket's boxes), the proof
+    asked of Single Bracket: its base chose it (Bracket Type's record, global:0x02bf, 0 -> 1, the option's own). At the
+    next visit the carousel stands on Cont. Bracket (made up) and its title reads as Single Bracket exactly, as OCR may
+    read a short title. Enter on that box chose Cont. Bracket: the download moves 0x02bf back off the base's value, so the
+    line is written "applied": false with the record it moved and the title read and by whom, and the walk stops, its
+    start file back."""
+    misread = {"pending": False, "on": False}
+
+    class Sibling(FieldsCam):
+        def press(self, key, **kw):
+            if misread["pending"] and key == "right" and self.where == "row":
+                misread["pending"], misread["on"] = False, True
+                self.saved = 0                 # the next opening stands on the sibling (made up)
+            super().press(key, **kw)
+    cam = Sibling()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.spec[1], cam.at[1] = CONT_BOXES, [b["held"] for b in CONT_BOXES]
+
+    def title(c, labels, **kw):                # OCR's reading, kept as title_reads keeps it (TITLE_READ)
+        if c.where != "dialog":
+            return None
+        named = "Single Bracket" if misread["on"] and c.opt in (0, 1) else labels[c.opt]
+        F.TITLE_READ.update(title=named, read=named, by="ocr")
+        return named
+    monkeypatch.setattr(F, "title_reads", title)
+    cam.downloaded = lambda tag: tag.endswith("-base") and misread.__setitem__("pending", True)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Single Bracket", "--box", "0")
+    out = capsys.readouterr().out
+    assert "the option's own record the base set" in out and "global:0x02bf" in out, out
+    lines = fields_lines()
+    assert lines and lines[-1]["applied"] is False and lines[-1]["option_moved"] == ["global:0x02bf"]
+    assert lines[-1]["title"] == "Single Bracket" and "title_by" in lines[-1]
+    assert cam.saved == 0 and cam.closes, "the session's start file back (the made-up camera's own start)"
 
 
 # ------------------------------------------------------------------------------------- a value the camera does not keep
@@ -1808,7 +1989,7 @@ def test_the_failed_runs_frames_take_every_number_and_the_put_back(eyes, monkeyp
     press but those the camera answered, where the old check said "box 1 changed while the boxes after it were set" on
     each (box 1's picture cut with box 2 lit and again with box 3 lit)."""
     import carousel_fields_run as F
-    monkeypatch.setattr(F, "title_reads", lambda c, labels: "Focus Bracket" if c.read().kind == "dialog" else None)
+    monkeypatch.setattr(F, "title_reads", lambda c, labels, **kw: "Focus Bracket" if c.read().kind == "dialog" else None)
     monkeypatch.setattr(F, "lit_read", lambda c, always: F.BoxRead(c.said(), c.said(), c.said(), "made-up", "both"))
     look_ = F.Look(["Step Width"] + ["Number of Shots"] * 3, ["4(Standard)", "0", "0", "3"])
     n, opened = F.Named(), {}

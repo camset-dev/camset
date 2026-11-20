@@ -120,10 +120,20 @@ pub(crate) struct RowInfo {
     pub(crate) vals: Vec<Option<i64>>,
     pub(crate) stored: Vec<bool>,
     pub(crate) edited: Vec<bool>,
-    /// A column after the first holds another value than the first.
+    /// The row's baseline: the first column that keeps its setting (the first column, but for a setting only the
+    /// memories keep with the live settings first, which hold none of it). None where no column keeps it.
+    pub(crate) base: Option<usize>,
+    /// A column after the baseline that keeps the setting holds another value than the baseline.
     pub(crate) differs: bool,
     pub(crate) class: Option<Three>,
     pub(crate) mark: RowMark,
+}
+
+impl RowInfo {
+    /// Whether column `i` keeps the setting and holds another value than the row's baseline (`base`).
+    pub(crate) fn differs_at(&self, i: usize) -> bool {
+        self.stored[i] && self.base.is_some_and(|b| b != i && self.vals[i] != self.vals[b])
+    }
 }
 
 /// A row of the compare matrix: (the Menu entry or tab it is under, group, the linked settings that store it).
@@ -133,8 +143,9 @@ pub(crate) type Row = (String, String, Vec<Setting>);
 /// lower case, the camera's menu (None: as before menus), the Menu entry, Expert mode, whether the rows are laid out as
 /// on the camera (which records a row holds, `same_row`), and whether they hold the records a Main tile shows that the
 /// live settings' rows leave out (`tile_records`: Compare's do, `matrix_rows_for`'s do not), and under a search what
-/// they depend on in the files (`rows_files_key`).
-pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool, bool, Vec<i64>);
+/// they depend on in the files (`rows_files_key`), and whether they hold the settings only the memories keep
+/// (`lists_memory_settings`).
+pub(crate) type RowsKey = (u64, String, Option<String>, BarKey, bool, bool, bool, Vec<i64>, bool);
 
 /// How many lists of compare rows are kept: every entry of the Menu in the menu shown, each menu's whole list for its
 /// button's count, and a few the web page asks for.
@@ -412,7 +423,7 @@ impl App {
     /// panel allows it. File B and the base never do.
     pub(crate) fn cell_editable(&self, c: Col, linked: &[Setting]) -> bool {
         let Some(s) = linked.first() else { return false };
-        if !c.editable() || !self.editable() || !(c.section == 0 || s.in_sets) || c.section >= self.n_sections() || !linked.iter().all(|l| self.shape_ok_in(l, c.section)) {
+        if !c.editable() || !self.editable() || !kept_in(s, c.section) || c.section >= self.n_sections() || !linked.iter().all(|l| self.shape_ok_in(l, c.section)) {
             return false;
         }
         // view only in that set outside Expert mode (a copy, or a setting no menu writes: `locked_why`), or one of My
@@ -435,7 +446,7 @@ impl App {
             return Vec::new();
         }
         self.cols.iter().copied()
-            .filter(|c| c.editable() && *c != from && (c.section == 0 || s.in_sets) && c.section < self.n_sections() && !self.locked(s, c.section))
+            .filter(|c| c.editable() && *c != from && kept_in(s, c.section) && c.section < self.n_sections() && !self.locked(s, c.section))
             .collect()
     }
 
@@ -685,7 +696,7 @@ impl App {
     /// `matrix_rows_for` without a copy (`compare_rows` with no camera menu, without the records a Main tile shows that
     /// the live settings' rows leave out).
     pub(crate) fn matrix_rows_shared(&self, q: &str, tab: Option<&str>) -> std::rc::Rc<Vec<Row>> {
-        self.rows_with(None, &tab.filter(|t| !t.is_empty()).map_or(BarKey::All, |t| BarKey::Tab(t.to_string())), q, false)
+        self.rows_with(None, &tab.filter(|t| !t.is_empty()).map_or(BarKey::All, |t| BarKey::Tab(t.to_string())), q, false, None)
     }
 
     /// The camera's menu Compare shows: the one the Menu shows (`menu_shown`), one choice for Edit and Compare; None
@@ -710,27 +721,69 @@ impl App {
     /// (`entry_rows`). Every record a Main tile shows is All's too, under the entry that shows it (`tile_records`). Kept
     /// for what they were worked out for (`RowsKey`), so a frame does not work them out again.
     pub(crate) fn compare_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> std::rc::Rc<Vec<Row>> {
-        self.rows_with(menu, entry, q, true)
+        self.compare_rows_in(menu, entry, q, &self.cols)
+    }
+
+    /// `compare_rows` for the columns `cols` (the page's own, a copy's, a merge's): with the settings only the memories
+    /// keep where a memory of the menu is among them (`lists_memory_settings`), as Edit lists them for that memory.
+    pub(crate) fn compare_rows_in(&self, menu: Option<&str>, entry: &BarKey, q: &str, cols: &[Col]) -> std::rc::Rc<Vec<Row>> {
+        self.rows_with(menu, entry, q, true, self.memory_column(menu, cols))
+    }
+
+    /// Whether Compare lists the settings only the memories keep (`area` "set": a slot's focus frames, its stored
+    /// exposure and mode): with a memory among the columns `cols`, in menu `menu` one Edit offers there (`menu_sets`: a
+    /// memory of one of the menu's modes, any in Expert mode; without menus any memory). The live settings hold none of
+    /// them, so with the live settings alone they are listed nowhere.
+    pub(crate) fn lists_memory_settings(&self, menu: Option<&str>, cols: &[Col]) -> bool {
+        self.memory_column(menu, cols).is_some()
+    }
+
+    /// The set of the first column that makes Compare list the settings only the memories keep (`lists_memory_settings`),
+    /// whose rows Edit lists for them.
+    fn memory_column(&self, menu: Option<&str>, cols: &[Col]) -> Option<usize> {
+        let offered = menu.filter(|m| self.menu_named(m).is_some()).map(|m| self.menu_sets(Some(m)));
+        cols.iter().map(|c| c.section).find(|&s| s != 0 && s < self.n_sections() && offered.as_ref().is_none_or(|o| o.contains(&s)))
+    }
+
+    /// Compare's line under a search that finds settings only the memories keep where no memory of the menu is a
+    /// column (`lists_memory_settings`), so none is shown: how many, and what shows them. None otherwise.
+    pub(crate) fn compare_memory_note(&self, menu: Option<&str>, q: &str, cols: &[Col]) -> Option<String> {
+        let q = Self::query(q);
+        if q.is_empty() || self.lists_memory_settings(menu, cols) {
+            return None;
+        }
+        let menu = menu.filter(|m| self.menu_named(m).is_some());
+        let n = self.schema.settings.iter()
+            .filter(|s| s.area == "set" && (self.prefs.expert || !Self::expert_only(s)) && Self::matches_query(s, &q))
+            .filter(|s| menu.is_none_or(|m| self.menus_of(s).iter().any(|x| x == m) || self.menus_of(s).is_empty()))
+            .count();
+        (n > 0).then(|| {
+            let whose = if menu.is_some() { "a memory of this menu" } else { "a memory" };
+            format!("{n} setting(s) that match are kept only in the memories: they are shown when {whose} is one of the columns.")
+        })
     }
 
     /// `compare_rows`, with the records a Main tile shows that the live settings' rows leave out (`tiles`) or without
     /// them (`matrix_rows_for`: the Memories page and a recall compare the sets' own rows).
-    fn rows_with(&self, menu: Option<&str>, entry: &BarKey, q: &str, tiles: bool) -> std::rc::Rc<Vec<Row>> {
+    fn rows_with(&self, menu: Option<&str>, entry: &BarKey, q: &str, tiles: bool, mem: Option<usize>) -> std::rc::Rc<Vec<Row>> {
         let menu = menu.filter(|m| self.menu_named(m).is_some());
-        let key: RowsKey = (self.schema_gen, Self::query(q), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles, self.rows_files_key(q));
+        let key: RowsKey = (self.schema_gen, Self::query(q), menu.map(str::to_string), entry.clone(), self.prefs.expert, self.camera_layout(), tiles, self.rows_files_key(q), mem.is_some());
         if let Some((_, rows)) = self.rows_cache.borrow().iter().find(|(k, _)| *k == key) {
             return rows.clone();
         }
         let under = |s: &Setting, t: &str| self.entry_here(s) == t;
         let named = |t: String| -> Vec<Row> {
-            self.rows_with(None, &BarKey::All, q, tiles).iter().filter(|r| under(&r.2[0], &t)).map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone())).collect()
+            self.rows_with(None, &BarKey::All, q, tiles, mem).iter().filter(|r| under(&r.2[0], &t)).map(|(_, g, linked)| (t.clone(), g.clone(), linked.clone())).collect()
         };
         let rows = match (menu, entry) {
-            (Some(m), e) => self.entry_rows(Some(m), e, &key.1),
+            (Some(m), e) => self.entry_rows_in(Some(m), e, &key.1, mem),
             (None, BarKey::All) => {
-                let mut rows = self.build_matrix_rows(&key.1, None);
+                let mut rows = self.build_matrix_rows(&key.1, None, mem.is_some());
+                // a tile's record that those rows hold already (a memory's, with a memory column) is not listed twice
+                let held: std::collections::HashSet<String> = rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
                 // the records a Main tile shows that those rows leave out, each beside its group (`tile_records`)
-                for s in self.tile_records(&key.1).into_iter().filter(|_| tiles) {
+                // (a memory's record only with a memory column: the live settings hold none of it)
+                for s in self.tile_records(&key.1).into_iter().filter(|s| tiles && !held.contains(&s.key) && (mem.is_some() || s.area != "set")) {
                     let at = rows.iter().rposition(|r| r.0 == s.tab && r.1 == s.group).or_else(|| rows.iter().rposition(|r| r.0 == s.tab)).map_or(rows.len(), |i| i + 1);
                     rows.insert(at, (s.tab.clone(), s.group.clone(), vec![s]));
                 }
@@ -738,7 +791,7 @@ impl App {
             }
             (None, BarKey::Tab(t)) => named(t.clone()),
             (None, BarKey::MyMenu) => named(self.schema.camera.text.my_menu_name().to_string()),
-            (None, BarKey::Main) => self.entry_rows(None, &BarKey::Main, &key.1),
+            (None, BarKey::Main) => self.entry_rows_in(None, &BarKey::Main, &key.1, mem),
         };
         let rows = std::rc::Rc::new(rows);
         let mut cache = self.rows_cache.borrow_mut();
@@ -762,9 +815,10 @@ impl App {
     /// Whether a row differs between the columns `cols` (the first the baseline): a later column that keeps the setting
     /// holds another value (`RowInfo::differs`).
     pub(crate) fn row_differs(&self, cols: &[Col], s: &Setting) -> bool {
-        let Some(&base) = cols.first() else { return false };
-        let b = self.col_value(base, s);
-        cols[1..].iter().any(|c| (c.section == 0 || s.in_sets) && self.col_value(*c, s) != b)
+        // the row's baseline is the first column that keeps the setting (`RowInfo::base`)
+        let Some(at) = cols.iter().position(|c| kept_in(s, c.section)) else { return false };
+        let b = self.col_value(cols[at], s);
+        cols[at + 1..].iter().any(|c| kept_in(s, c.section) && self.col_value(*c, s) != b)
     }
 
     /// Compare's entries of the Menu in the camera's menu `menu`, for the search `q`, the window's and the page's
@@ -772,10 +826,15 @@ impl App {
     /// lists them (`bar_keys`), each with how many rows it lists (`compare_rows`) and as its badge how many of them
     /// differ (`differs`, given a row's leading record).
     pub(crate) fn compare_bar(&self, menu: Option<&str>, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<BarEntry> {
+        self.compare_bar_in(menu, q, &self.cols, differs)
+    }
+
+    /// `compare_bar` for the columns `cols` (the page's), whose memories decide the rows (`compare_rows_in`).
+    pub(crate) fn compare_bar_in(&self, menu: Option<&str>, q: &str, cols: &[Col], differs: &dyn Fn(&Setting) -> bool) -> Vec<BarEntry> {
         let menu = menu.filter(|m| self.menu_named(m).is_some());
         let off = self.schema.camera.text.off_menu_name();
         self.bar_keys(true, 0, menu, q, false).into_iter().map(|key| {
-            let rows = self.compare_rows(menu, &key, q);
+            let rows = self.compare_rows_in(menu, &key, q, cols);
             let (count, badge) = (Some(rows.len()), rows.iter().filter(|r| differs(&r.2[0])).count());
             let (label, color, hover) = match &key {
                 BarKey::All => (ALL_SETTINGS.to_string(), None, None),
@@ -793,7 +852,12 @@ impl App {
     /// How many rows differ in each of the camera's menus (`menus`, in their order), every setting it lists with the
     /// search `q` (`compare_rows` of All settings): the counts the menu buttons show in Compare.
     pub(crate) fn menu_differences(&self, q: &str, differs: &dyn Fn(&Setting) -> bool) -> Vec<usize> {
-        self.menus().iter().map(|m| self.compare_rows(Some(&m.name), &BarKey::All, q).iter().filter(|r| differs(&r.2[0])).count()).collect()
+        self.menu_differences_in(q, &self.cols, differs)
+    }
+
+    /// `menu_differences` for the columns `cols` (the page's).
+    pub(crate) fn menu_differences_in(&self, q: &str, cols: &[Col], differs: &dyn Fn(&Setting) -> bool) -> Vec<usize> {
+        self.menus().iter().map(|m| self.compare_rows_in(Some(&m.name), &BarKey::All, q, cols).iter().filter(|r| differs(&r.2[0])).count()).collect()
     }
 
     /// Work out the compare matrix's rows as before menus: the live settings matching `q` (lower case) in `tab` (its own
@@ -802,11 +866,13 @@ impl App {
     /// whatever the search or the tab leaves out, so a copy takes them all, as Edit's and the page's changes do; each
     /// Picture Profile's parameter is a row of its own under its profile's group, and a copy the camera keeps of a
     /// setting is never in that setting's row. Each group kept together where it first appears.
-    pub(crate) fn build_matrix_rows(&self, q: &str, tab: Option<&str>) -> Vec<Row> {
+    /// With `mem`, the settings only the memories keep too (`lists_memory_settings`).
+    pub(crate) fn build_matrix_rows(&self, q: &str, tab: Option<&str>, mem: bool) -> Vec<Row> {
         let tab_idx: std::collections::HashMap<&str, usize> = self.schema.tabs.iter().enumerate().map(|(i, t)| (t.as_str(), i)).collect();
         let tab_idx = |t: &str| tab_idx.get(t).copied().unwrap_or(99);
-        // My Menu's places in Expert mode or out of it, as its page shows them, which a search finds as `place_rows` does
-        let shown = |s: &&Setting| s.area == "global" && (self.prefs.expert || !Self::expert_only(s) || self.is_mymenu_place(s));
+        // My Menu's places in Expert mode or out of it, as its page shows them, which a search finds as `place_rows` does;
+        // the settings only the memories keep with a memory column (`mem`)
+        let shown = |s: &&Setting| (s.area == "global" || (mem && s.area == "set")) && (self.prefs.expert || !Self::expert_only(s) || self.is_mymenu_place(s));
         let mut list: Vec<&Setting> = self.schema.settings.iter().filter(shown)
             .filter(|s| q.is_empty() || if self.is_mymenu_place(s) { self.place_found(s, q) } else { Self::matches_query(s, q) })
             .filter(|s| tab.is_none_or(|t| s.tab == t))
@@ -860,7 +926,9 @@ impl App {
         let row = self.compare_rows(menu.as_deref(), &self.compare_key(), &self.search).iter()
             .find(|r| r.2.iter().any(|x| x.key == s.key)).map_or_else(|| s.tab.clone(), |r| r.0.clone());
         self.mode = Mode::Edit;
-        self.target = if section == 0 || s.in_sets { section } else { 0 };
+        // the set that keeps the setting: the column's, else (a setting only the memories keep, from the live column) the
+        // first memory of file A among the columns, else the live settings
+        self.target = if kept_in(s, section) { section } else if s.area == "set" { self.cols.iter().find(|c| c.editable() && c.section != 0 && kept_in(s, c.section)).map_or(section, |c| c.section) } else { 0 };
         // Edit in the menu Compare showed, on the setting's row there, where that menu lists it
         match menu.and_then(|m| self.row_in_menu(s, self.target, &m).map(|row| (m, row))) {
             Some((m, row)) => {
@@ -888,17 +956,19 @@ impl App {
     /// which hold your edits, whether it differs from the first column, its three-way standing and its change-map mark.
     pub(crate) fn row_info(&self, cols: &[Col], three: Option<(Col, Col, Col)>, s: &Setting) -> RowInfo {
         let vals: Vec<Option<i64>> = cols.iter().map(|c| self.col_value(*c, s)).collect();
-        let stored: Vec<bool> = cols.iter().map(|c| c.section == 0 || s.in_sets).collect();
+        let stored: Vec<bool> = cols.iter().map(|c| kept_in(s, c.section)).collect();
         let edited: Vec<bool> = cols.iter().zip(&vals).zip(&stored)
             .map(|((c, v), st)| *st && c.editable() && self.doc.as_ref().is_some_and(|d| d.original_value(c.section, s.slot()) != *v))
             .collect();
-        let differs = (1..cols.len()).any(|i| stored[i] && vals[i] != vals[0]);
+        // the first column that keeps the setting is the row's baseline: the live settings hold none of a memory's own
+        let base = stored.iter().position(|s| *s);
+        let differs = base.is_some_and(|b| (b + 1..cols.len()).any(|i| stored[i] && vals[i] != vals[b]));
         let class = three.map(|tc| self.three_way(tc, s));
         let mark = if edited.iter().any(|e| *e) { RowMark::Edited }
             else if class == Some(Three::Conflict) { RowMark::Conflict }
             else if differs { RowMark::Differs }
             else { RowMark::Same };
-        RowInfo { vals, stored, edited, differs, class, mark }
+        RowInfo { vals, stored, edited, base, differs, class, mark }
     }
 }
 
@@ -1053,8 +1123,9 @@ pub(crate) mod copy_tests {
         assert_eq!((app.col_value(Col::a(0), &one.2[0]), app.col_value(Col::a(0), &two.2[0])), (Some(b1), Some(a2)), "the other profile is left as it was");
         // the page counts the same rows
         let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["b", 0]], "only_diff": false })).body).unwrap();
-        // (Compare's All: the rows as before menus and the records a Main tile shows that those leave out)
-        assert_eq!(j["total"], serde_json::json!(app.compare_rows(None, &BarKey::All, "").len()));
+        // (Compare's All for the page's columns: the rows as before menus and the records a Main tile shows that those
+        // leave out, a memory's own with a memory column only, which these are not)
+        assert_eq!(j["total"], serde_json::json!(app.compare_rows_in(None, &BarKey::All, "", &[Col::a(0), Col::b(0)]).len()));
         assert_eq!(j["rows"].as_array().unwrap().len() as u64, j["shown"].as_u64().unwrap());
         assert!(j["rows"].as_array().unwrap().iter().filter(|r| r["key"] == serde_json::json!(one.2[0].key) || r["key"] == serde_json::json!(two.2[0].key)).count() == 2, "both rows on the page");
         // every row Compare lists is under one entry of its Menu (a tab, Other, the entry for what the menus do not
@@ -1512,6 +1583,10 @@ pub(crate) mod copy_tests {
             for menu in &menus {
                 let menu = menu.as_deref();
                 let at = format!("menus {with_menus} menu {menu:?}");
+                // a memory of this menu among the columns, so a memory's own records are listed (`lists_memory_settings`),
+                // the window's and the page's alike
+                let mem = menu.map_or(1, |m| app.menu_sets(Some(m)).into_iter().find(|&s| s != 0).unwrap_or(1));
+                app.cols = vec![Col::a(0), Col::a(mem)];
                 let tiles = &sets[menu.and_then(|m| app.menu_tile_set(m)).unwrap_or(0)].tiles;
                 let main = app.compare_rows(menu, &BarKey::Main, "");
                 let shown: Vec<String> = main.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect();
@@ -1547,13 +1622,16 @@ pub(crate) mod copy_tests {
                 under.sort();
                 assert_eq!(under, all, "{at}: each record of All under one entry");
                 // the page: the same rows under Main, with the same titles
-                let mut body = serde_json::json!({ "cols": [["a", 0], ["a", 1]], "entry": "main", "only_diff": false });
+                let mut body = serde_json::json!({ "cols": [["a", 0], ["a", mem]], "entry": "main", "only_diff": false });
                 if let Some(m) = menu { body["menu"] = serde_json::json!(m); }
                 let a = crate::web::tests::answer(&mut app, "compare", body);
                 let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
                 let page: Vec<(String, String)> = j["rows"].as_array().unwrap().iter().map(|r| (r["key"].as_str().unwrap().to_string(), r["name"].as_str().unwrap().to_string())).collect();
                 let window: Vec<(String, String)> = main.iter().map(|r| (r.2[0].key.clone(), app.compare_title(r))).collect();
                 assert_eq!(page, window, "{at}: the page's Main as the window's");
+                // with the live settings alone, none of a memory's own records: they hold none of them
+                let live = app.compare_rows_in(menu, &BarKey::Main, "", &[Col::a(0)]);
+                assert!(live.iter().all(|r| r.2.iter().all(|s| s.area != "set")), "{at}: no memory record with the live settings alone");
             }
             done(&dir, &user);
         }
@@ -1669,6 +1747,89 @@ pub(crate) mod copy_tests {
         done(&dir, &user);
     }
 
+    /// Follow-up 2: a note on a Compare row names the other menus by Compare's binding (each menu its own mode's copy),
+    /// where it differs from Edit's: a file whose mode is not known, ISO's movie copy apart from it when the file was
+    /// opened. A change of Movie's row in Compare writes that copy alone, which S&Q's Compare row shows too, so the note
+    /// names S&Q; Edit's rows (which show the setting itself there) say it changes Movie's alone. The page the same.
+    #[test]
+    fn a_compare_rows_note_names_the_menus_compare_shows() {
+        use crate::test_support::{done, sample_app, stub_menus, SAMPLE_BYTES};
+        let (mut app, dir, user) = sample_app("cmp_note_bind", Some(stub_menus));
+        let rec = app.schema.settings.iter().find(|s| Some(&s.key) == app.schema.camera.live_mode.as_ref().map(|m| &m.key)).cloned().unwrap();
+        let (iso, movie) = ["global:0x0334", "global:0x0df4"].map(|k| app.schema.settings.iter().find(|s| s.key == k).cloned().unwrap()).into();
+        let mut c = test_parse(SAMPLE_BYTES).unwrap();
+        c.sections[0].get_mut(rec.id).unwrap().put(rec.index, 9).unwrap();
+        let held = c.sections[0].get(movie.id).unwrap().get(movie.index).unwrap();
+        let other = movie.values.iter().map(|(v, _)| *v).find(|v| *v != held).unwrap();
+        c.sections[0].get_mut(movie.id).unwrap().put(movie.index, other).unwrap();
+        let f = dir.join("CAMSET04.DAT");
+        std::fs::write(&f, c.to_bytes()).unwrap();
+        app.open(f);
+        let row = app.compare_rows(Some("Movie"), &BarKey::All, "").iter().find(|r| r.2[0].key == movie.key).map(|r| r.2[0].clone()).expect("Movie's ISO row shows the movie copy");
+        let (compare, _) = app.copy_note_bound(&row, 0, &Bind::Menu).unwrap();
+        assert!(compare.starts_with("Changing this changes it in the S&Q menu too"), "{compare}");
+        // the same row told of by Edit's binding (each menu the setting itself here): Movie's alone, untrue in Compare
+        let (edit, _) = app.copy_note(&row, 0).unwrap();
+        assert!(edit.starts_with("Changing this changes it in the Movie menu alone"), "{edit}");
+        // the change itself: S&Q's Compare row moves with it
+        let v = movie.values.iter().map(|(v, _)| *v).find(|v| *v != other && *v != held).unwrap();
+        let sq = |app: &App| app.col_value(Col::a(0), &app.row_record(&iso, "S&Q", &Bind::Menu).clone());
+        app.apply(vec![Action::Set(0, row.slot(), v)]);
+        assert_eq!(sq(&app), Some(v), "S&Q's Compare row changed with it");
+        app.undo();
+        // the page's Compare cell says the same
+        let a = crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", 1]], "menu": "Movie", "only_diff": false }));
+        let j: serde_json::Value = serde_json::from_slice(&a.body).unwrap();
+        let r = j["rows"].as_array().unwrap().iter().find(|r| r["key"] == movie.key.as_str()).cloned().unwrap();
+        assert!(r["cells"][0]["why"].as_str().is_some_and(|w| w.contains("in the S&Q menu too")), "{r}");
+        done(&dir, &user);
+    }
+
+    /// Follow-up 3: a fraction's two parts changed in two steps (two Expert-mode edits, one part each) never come apart in
+    /// History: the first step's line holds both parts, and its Revert puts the pair back as it was before that step
+    /// (the second step's part too), a pair a file held, never one part from one state and one from another; its words
+    /// say so; All edits' line puts both back as the file was opened.
+    #[test]
+    fn a_fractions_parts_changed_in_two_steps_go_back_together() {
+        use crate::test_support::{done, sample_app, strip_menus};
+        let (mut app, dir, user) = sample_app("cmp_fraction_steps", Some(strip_menus));
+        let tile = app.schema.camera.main_tiles.clone().unwrap().0[0].tiles.iter().find(|t| t.kind == TileKind::Fraction).cloned().unwrap();
+        let find = |app: &App, k: &Option<String>| app.schema.settings.iter().find(|s| Some(&s.key) == k.as_ref()).cloned().unwrap();
+        let (num, den) = (find(&app, &tile.numerator_key), find(&app, &tile.denominator_key));
+        let m = app.dial_sets()[0];
+        let speed = |app: &App| (app.col_value(Col::a(m), &num), app.col_value(Col::a(m), &den));
+        let opened = speed(&app);
+        app.prefs.expert = true;
+        app.apply(vec![Action::Set(m, num.slot(), opened.0.unwrap() + 1)]);
+        app.last_edit = None;
+        app.apply(vec![Action::Set(m, den.slot(), opened.1.unwrap() + 3)]);
+        assert_eq!(app.undo.len(), 2);
+        for expert in [false, true] {
+            app.prefs.expert = expert;
+            let doc = app.doc.as_ref().unwrap();
+            let line = app.history_lines(0, &doc.edited).iter().find(|l| l.slots.contains(&num.slot())).cloned().unwrap();
+            assert!(line.slots.contains(&den.slot()), "expert {expert}: the first step's line holds both parts");
+            assert!(app.edit_line_revert_words(&line, true).is_some_and(|w| w.contains(&tile.caption)), "expert {expert}: its words");
+            // the reviewer's finding 2: the later change to the other part goes back too, and its words say so; the
+            // second step's line, with nothing changed since, says nothing of the kind, the page as the window
+            let words = app.history_revert_words(0, &line, &doc.edited).unwrap();
+            assert!(words.contains(&format!("A later edit changed {} since", den.name)), "expert {expert}: {words}");
+            let second = app.history_lines(1, &doc.edited).iter().find(|l| l.slots.contains(&den.slot())).cloned().unwrap();
+            assert!(!app.history_revert_words(1, &second, &doc.edited).unwrap().contains("later edit"), "expert {expert}");
+            let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "history", serde_json::json!({})).body).unwrap();
+            assert!(j["steps"].as_array().unwrap().iter().any(|s| s["step"] == 0 && s["revert_words"].as_str().is_some_and(|w| w.contains("A later edit changed"))), "expert {expert}: the page");
+            let doc = app.doc.as_ref().unwrap();
+            let acts = line.put_back(&app.undo[0], &doc.edited);
+            app.history_revert(acts);
+            assert_eq!(speed(&app), opened, "expert {expert}: the pair as before that step");
+            app.undo();
+            let doc = app.doc.as_ref().unwrap();
+            let lines: Vec<EditLine> = app.edit_lines(&doc.original, &doc.edited).into_iter().filter(|l| l.slots.contains(&num.slot()) || l.slots.contains(&den.slot())).collect();
+            assert!(lines.len() == 1 && app.edit_line_revert_words(&lines[0], false).is_some_and(|w| w.contains("together")), "expert {expert}: All edits' one line");
+        }
+        done(&dir, &user);
+    }
+
     /// Second integration review, MUST 3: Edit's Main shows the Shutter Speed tile but changes it nowhere (a tile of two
     /// settings is not edited in place), so outside Expert mode Compare writes neither of its parts: no arrow, picker
     /// or copy target, a copy leaves them and says so, the reason is where one presses, in the window and on the page.
@@ -1769,6 +1930,229 @@ pub(crate) mod copy_tests {
         let acts = app.copy_row(std::slice::from_ref(&place), Col::b(0), Col::a(0));
         app.apply(acts);
         assert_eq!(app.col_value(Col::a(0), &place), Some(other), "Expert mode copies it");
+        done(&dir, &user);
+    }
+}
+
+/// The settings only the memories keep (`area` "set": a slot's focus frames, its stored exposure and mode, and a flag of
+/// unknown meaning), listed in Compare whenever a memory slot is one of the columns compared, where Edit lists them for
+/// that slot, and everything Compare does with a row holding for them.
+#[cfg(test)]
+pub(crate) mod memory_settings_tests {
+    use super::*;
+    use crate::test_support::{done, sample_app, strip_menus};
+
+    /// The settings only the memories keep, as Edit shows them outside Expert mode (or in it).
+    fn memory_only(app: &App) -> Vec<Setting> {
+        app.schema.settings.iter().filter(|s| s.area == "set" && (app.prefs.expert || !App::expert_only(s))).cloned().collect()
+    }
+
+    fn keys_in(rows: &[Row]) -> std::collections::HashSet<String> {
+        rows.iter().flat_map(|r| r.2.iter().map(|s| s.key.clone())).collect()
+    }
+
+    /// Listed where Edit lists them for the slot: with a memory of the menu's own modes among the columns, under the same
+    /// entries and groups as Edit's for that memory (a slot registered in Movie under Movie's menu); with the live
+    /// settings alone, nowhere; with two slots of different modes, in each of their menus and in no other; in Expert
+    /// mode with any memory column in any menu, as Edit offers every set there. No row twice (a tile's records).
+    #[test]
+    fn memory_only_settings_are_listed_with_a_memory_of_the_menu_among_the_columns() {
+        let (mut app, dir, user) = sample_app("cmp_mem_rows", None);
+        let mem = memory_only(&app);
+        assert_eq!(mem.len(), 57, "the a1 II's settings only the memories keep, outside Expert mode");
+        let got = |app: &App, m: &str, e: &BarKey, cols: &[Col]| keys_in(&app.compare_rows_in(Some(m), e, "", cols));
+        let none_of = |keys: &std::collections::HashSet<String>| mem.iter().all(|s| !keys.contains(&s.key));
+        let all_of = |keys: &std::collections::HashSet<String>| mem.iter().all(|s| keys.contains(&s.key));
+        let (live, still, movie, mixed) = ([Col::a(0)], [Col::a(0), Col::a(1)], [Col::a(0), Col::a(4)], [Col::a(1), Col::a(4)]);
+        assert!(none_of(&got(&app, "Still", &BarKey::All, &live)), "the live settings alone hold none of them");
+        assert!(all_of(&got(&app, "Still", &BarKey::All, &still)), "a Still memory: every one in the Still menu");
+        assert!(none_of(&got(&app, "Movie", &BarKey::All, &still)), "not in the Movie menu, which a Still memory is not in");
+        assert!(all_of(&got(&app, "Movie", &BarKey::All, &movie)), "a Movie memory: every one in the Movie menu");
+        for m in ["Still", "Movie"] {
+            assert!(all_of(&got(&app, m, &BarKey::All, &mixed)), "a Still and a Movie memory: in the {m} menu");
+        }
+        assert!(none_of(&got(&app, "S&Q", &BarKey::All, &mixed)), "and in no other");
+        // under Edit's entries and groups for that memory
+        for (m, t) in [("Still", 1), ("Movie", 4)] {
+            for tab in ["Shooting", "Focus"] {
+                let edit: Vec<(String, String)> = app.tab_groups_in(t, Some(m), tab, "", false).into_iter()
+                    .flat_map(|(g, _, rows)| rows.into_iter().flatten().filter(|s| s.area == "set").map(move |s| (g.clone(), s.key)))
+                    .collect();
+                let cols = [Col::a(0), Col::a(t)];
+                let cmp: Vec<(String, String)> = app.compare_rows_in(Some(m), &BarKey::Tab(tab.into()), "", &cols).iter()
+                    .flat_map(|r| r.2.iter().filter(|s| s.area == "set").map(|s| (r.1.clone(), s.key.clone())).collect::<Vec<_>>())
+                    .collect();
+                // Edit's, and besides them only a Main tile's records (a fraction's parts, Expert-only), as All always lists
+                let tiles: std::collections::HashSet<String> = app.tile_records("").into_iter().map(|s| s.key).collect();
+                assert!(edit.iter().all(|x| cmp.contains(x)), "{m} > {tab}: Edit's rows for memory {t} under the same groups: {edit:?} / {cmp:?}");
+                assert!(cmp.iter().all(|x| edit.contains(x) || tiles.contains(&x.1)), "{m} > {tab}: nothing else but a tile's records");
+                assert!(!cmp.is_empty());
+            }
+        }
+        // no row twice, a tile's memory records too
+        let rows = app.compare_rows_in(Some("Still"), &BarKey::All, "", &still);
+        let n: usize = rows.iter().map(|r| r.2.len()).sum();
+        assert_eq!(n, keys_in(&rows).len(), "no setting twice in All");
+        // Expert mode: any memory column in any menu
+        app.prefs.expert = true;
+        let mem_x = memory_only(&app);
+        let keys = got(&app, "Movie", &BarKey::All, &still);
+        assert!(mem_x.iter().all(|s| keys.contains(&s.key)), "Expert mode: a Still memory's in the Movie menu too");
+        app.prefs.expert = false;
+        // the window's own columns
+        app.cols = still.to_vec();
+        assert!(all_of(&keys_in(&app.compare_rows(Some("Still"), &BarKey::All, ""))), "the window's Compare, by its columns");
+        app.cols = live.to_vec();
+        assert!(none_of(&keys_in(&app.compare_rows(Some("Still"), &BarKey::All, ""))));
+        done(&dir, &user);
+    }
+
+    /// A definition without menus: All settings and the definition's tabs list them with a memory column, under their
+    /// own tab and group; with the live settings alone, nowhere.
+    #[test]
+    fn without_menus_they_are_all_settings_rows_with_a_memory_column() {
+        let (app, dir, user) = sample_app("cmp_mem_flat", Some(strip_menus));
+        let mem = memory_only(&app);
+        let all = keys_in(&app.compare_rows_in(None, &BarKey::All, "", &[Col::a(0), Col::a(1)]));
+        assert!(mem.iter().all(|s| all.contains(&s.key)), "missing {:?}", mem.iter().filter(|s| !all.contains(&s.key)).map(|s| &s.key).collect::<Vec<_>>());
+        assert!(mem.iter().all(|s| !keys_in(&app.compare_rows_in(None, &BarKey::All, "", &[Col::a(0)])).contains(&s.key)));
+        // under the entries Edit lists them in for that memory (each under its definition's group, as Compare without menus
+        // groups every row)
+        let tiles: std::collections::HashSet<String> = app.tile_records("").into_iter().map(|s| s.key).collect();
+        for tab in app.menu_tabs() {
+            let edit: std::collections::HashSet<String> = app.tab_groups_in(1, None, &tab, "", false).into_iter()
+                .flat_map(|(_, _, rows)| rows.into_iter().flatten().filter(|s| s.area == "set").map(|s| s.key)).collect();
+            let rows = app.compare_rows_in(None, &BarKey::Tab(tab.clone()), "", &[Col::a(0), Col::a(1)]);
+            let cmp: std::collections::HashSet<String> = rows.iter().flat_map(|r| r.2.iter().filter(|s| s.area == "set").map(|s| s.key.clone())).collect();
+            assert!(edit.is_subset(&cmp), "{tab}: Edit's rows for memory 1");
+            assert!(cmp.iter().all(|k| edit.contains(k) || tiles.contains(k)), "{tab}: nothing else but a tile's records");
+            assert!(rows.iter().all(|r| r.2.iter().filter(|s| s.area == "set").all(|s| r.1 == s.group)), "{tab}: each under its definition's group");
+        }
+        done(&dir, &user);
+    }
+
+    /// Their differences are counted among the slots that keep them: the live settings hold none of them, so a live
+    /// baseline is no difference; the first column that keeps a setting is its row's baseline. The cells, the counts and
+    /// the window's and the page's marks alike.
+    #[test]
+    fn memory_only_rows_differ_among_the_slots_never_against_the_live_settings() {
+        let (mut app, dir, user) = sample_app("cmp_mem_diff", None);
+        let mem = memory_only(&app);
+        let x = mem.iter().find(|s| s.key == "set:0x019c").cloned().unwrap();
+        let y = mem.iter().find(|s| s.key == "set:0x019e").cloned().unwrap();
+        let cols = [Col::a(0), Col::a(1), Col::a(2)];
+        let v = app.col_value(Col::a(1), &x).unwrap();
+        app.prefs.expert = true;
+        assert!(app.apply(vec![Action::Set(2, x.slot(), v + 10)]).is_none());
+        app.prefs.expert = false;
+        let ix = app.row_info(&cols, None, &x);
+        assert_eq!(ix.stored, vec![false, true, true], "the live settings keep none of them");
+        assert_eq!(ix.base, Some(1), "the first column that keeps it is the row's baseline");
+        assert!(ix.differs && !ix.differs_at(1) && ix.differs_at(2) && !ix.differs_at(0));
+        let iy = app.row_info(&cols, None, &y);
+        assert!(!iy.differs && !(0..3).any(|i| iy.differs_at(i)), "the same in both memories: no difference, the live baseline holding nothing");
+        assert!(app.row_differs(&cols, &x) && !app.row_differs(&cols, &y));
+        // the page's cells and counts
+        let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", 1], ["a", 2]], "only_diff": false, "entry": "tab:Focus", "menu": "Still" })).body).unwrap();
+        let row = |k: &str| j["rows"].as_array().unwrap().iter().find(|r| r["key"] == k).cloned().unwrap_or_else(|| panic!("{k} listed"));
+        let (rx, ry) = (row(&x.key), row(&y.key));
+        assert_eq!(rx["cells"][0]["stored"], false);
+        assert_eq!(rx["cells"][0]["text"], "—");
+        assert_eq!((rx["cells"][1]["differs"].as_bool(), rx["cells"][2]["differs"].as_bool()), (Some(false), Some(true)));
+        assert_ne!(rx["mark"], "same", "an edit of the second memory: differs");
+        assert_eq!(ry["mark"], "same");
+        assert_eq!(rx["live"], false, "the page knows the live settings keep none of it");
+        done(&dir, &user);
+    }
+
+    /// Everything Compare does with a row holds for them: an arrow or the picker copies between the memories (never into
+    /// the live settings, which do not keep them), Revert puts a value back, a merge takes B's, the CSV lists them, Open in
+    /// Edit opens the memory that keeps them on their row. A box's X and Y and its size are copied one by one, as Edit
+    /// writes them (no rule ties them: the definition's frame data is read only to be checked).
+    #[test]
+    fn everything_compare_does_with_a_row_holds_for_them() {
+        let (mut app, dir, user) = sample_app("cmp_mem_ops", None);
+        let mem = memory_only(&app);
+        let x = mem.iter().find(|s| s.key == "set:0x019c").cloned().unwrap();
+        let cols = vec![Col::a(0), Col::a(1), Col::a(2)];
+        app.cols = cols.clone();
+        let v1 = app.col_value(Col::a(1), &x).unwrap();
+        // copy targets and the picker: the other memory, never the live settings
+        assert_eq!(app.copy_targets(Col::a(1), &x), vec![Col::a(2)]);
+        assert!(!app.cell_editable(Col::a(0), std::slice::from_ref(&x)), "no picker in the live column");
+        assert!(app.copy_row(std::slice::from_ref(&x), Col::a(1), Col::a(0)).is_empty(), "nothing into the live settings");
+        // an arrow from M2 into M1, then Revert
+        app.prefs.expert = true;
+        assert!(app.apply(vec![Action::Set(2, x.slot(), v1 + 6)]).is_none());
+        app.prefs.expert = false;
+        let acts = app.copy_row(std::slice::from_ref(&x), Col::a(2), Col::a(1));
+        assert!(!acts.is_empty());
+        assert!(app.apply(acts).is_none());
+        assert_eq!(app.col_value(Col::a(1), &x), Some(v1 + 6), "copied between the memories");
+        let (_, back) = app.cell_revert(std::slice::from_ref(&x), 1);
+        assert!(app.apply(back).is_none());
+        assert_eq!(app.col_value(Col::a(1), &x), Some(v1), "Revert puts it back");
+        // the CSV: the live column empty, the memories' values
+        let (csv, _) = app.csv_text_in(Some("Still"), Some((&cols, false, false)), 0, "", &BarKey::Tab("Focus".into()), false);
+        let line = csv.lines().find(|l| l.contains(&x.name)).unwrap_or_else(|| panic!("{} in the CSV", x.name));
+        assert!(line.split(',').nth(3).is_some_and(|c| c.is_empty() || c == "\"\""), "the live settings keep none of it: {line}");
+        // Open in Edit: the memory that keeps it, on its row
+        app.open_in_edit_from_compare(&x, 1);
+        assert_eq!((app.target, app.item_key.as_deref()), (1, Some(x.key.as_str())));
+        app.mode = Mode::Compare;
+        // a merge: B's change to a memory's frame comes into A
+        let mut b = app.doc.as_ref().unwrap().edited.clone();
+        b.sections[1].get_mut(x.id).unwrap().put(x.index, v1 + 2).unwrap();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        app.base = Some((PathBuf::from("base.DAT"), app.doc.as_ref().unwrap().edited.clone()));
+        let three = (Col::base(1), Col::a(1), Col::b(1));
+        app.cols = vec![three.0, three.1, three.2];
+        let rows = app.compare_rows_in(Some("Still"), &BarKey::Tab("Focus".into()), "", &app.cols.clone());
+        assert!(rows.iter().any(|r| r.2[0].key == x.key), "listed with these memory columns");
+        let (acts, n) = app.merge_rows(&rows, three, Three::BOnly, three.2);
+        assert!(n >= 1 && app.apply(acts).is_none());
+        assert_eq!(app.col_value(Col::a(1), &x), Some(v1 + 2), "the merge took B's value");
+        done(&dir, &user);
+    }
+
+    /// The one of them whose meaning is not known (0x00cb, a flag a Stills registration in S or M writes): Compare lists it
+    /// where Edit does for that memory (Focus > AF/MF), and as Edit outside Expert mode it is view only there (no proof
+    /// stands for it: `locked_why`): no picker, no copy target, no arrow, even where the two memories hold other values;
+    /// in Expert mode it takes them, as Edit's row does.
+    #[test]
+    fn the_unknown_flag_is_view_only_in_compare_as_in_edit() {
+        let (mut app, dir, user) = sample_app("cmp_mem_flag", None);
+        let u = app.schema.settings.iter().find(|s| s.key == "set:0x00cb").cloned().unwrap();
+        let edit_group = app.tab_groups_in(1, Some("Still"), "Focus", "", false).into_iter().find(|(_, _, rows)| rows.iter().flatten().any(|s| s.key == u.key)).map(|(g, ..)| g);
+        let cols = vec![Col::a(0), Col::a(1), Col::a(2)];
+        let rows = app.compare_rows_in(Some("Still"), &BarKey::Tab("Focus".into()), "", &cols);
+        let cmp_group = rows.iter().find(|r| r.2.iter().any(|s| s.key == u.key)).map(|r| r.1.clone());
+        assert!(edit_group.is_some() && cmp_group == edit_group, "under Edit's group: {edit_group:?} / {cmp_group:?}");
+        app.cols = cols;
+        app.prefs.expert = true;
+        let v = app.col_value(Col::a(1), &u).unwrap();
+        assert!(app.apply(vec![Action::Set(2, u.slot(), v ^ 1)]).is_none());
+        app.prefs.expert = false;
+        assert!(app.locked(&u, 1) && app.locked(&u, 2), "Edit: view only outside Expert mode");
+        assert!(!app.cell_editable(Col::a(1), std::slice::from_ref(&u)) && app.copy_targets(Col::a(2), &u).is_empty(), "no picker, no copy target");
+        assert_eq!(app.arrows_between(Col::a(1), Col::a(2), &u), (false, false), "no arrow though the memories differ");
+        assert!(app.row_info(&app.cols.clone(), None, &u).differs, "its difference is counted, as any row's");
+        app.prefs.expert = true;
+        assert!(app.cell_editable(Col::a(1), std::slice::from_ref(&u)) && app.copy_targets(Col::a(2), &u) == vec![Col::a(1)], "Expert mode: as Edit's row");
+        done(&dir, &user);
+    }
+
+    /// A search that would find one of them with no memory of the menu among the columns says why none is shown.
+    #[test]
+    fn a_search_says_why_a_memorys_setting_is_not_shown() {
+        let (mut app, dir, user) = sample_app("cmp_mem_search", None);
+        let note = |app: &App, cols: &[Col], q: &str| app.compare_memory_note(Some("Still"), q, cols);
+        let words = note(&app, &[Col::a(0)], "AF point position").expect("a note");
+        assert!(words.contains("kept only in the memories"), "{words}");
+        assert!(note(&app, &[Col::a(0), Col::a(1)], "AF point position").is_none(), "shown: no note");
+        assert!(note(&app, &[Col::a(0)], "").is_none() && note(&app, &[Col::a(0)], "White Balance").is_none(), "no search, or none of them found: no note");
+        let j: serde_json::Value = serde_json::from_slice(&crate::web::tests::answer(&mut app, "compare", serde_json::json!({ "cols": [["a", 0], ["a", 1]], "q": "AF point position", "menu": "Movie" })).body).unwrap();
+        assert!(j["memory_note"].as_str().is_some_and(|w| w.contains("kept only in the memories")), "the page, in the Movie menu with a Still memory: {}", j["memory_note"]);
         done(&dir, &user);
     }
 }

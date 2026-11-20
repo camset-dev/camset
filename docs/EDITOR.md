@@ -86,7 +86,7 @@ record holds, and a change to it is not proved on the camera and is at your own 
 **The camera's menu in each shooting mode.** Where a camera's definition lists the menus of its shooting modes (Still,
 Movie and S&Q, say), the Menu shows one at a time, picked under Camera menu: as the camera's switch picks it: its tabs,
 groups and rows in that menu's order, each row titled as the camera draws it there (its details give the setting's
-full name). It opens on the mode the file was saved in, and picking another changes nothing in the file. The Editing:
+full name), with an icon's words where only an icon tells two rows apart ("Fn Menu Settings (Playback)"). It opens on the mode the file was saved in, and picking another changes nothing in the file. The Editing:
 row offers that mode's memories, the search looks in every menu, and a jump to a setting opens the menu that shows it.
 In the flat list (Settings), and for a definition that lists no menus, every setting is shown as before.
 
@@ -159,7 +159,9 @@ Compare has Edit's Menu on its left, with All settings first: a click shows that
 the rows that differ. Where the definition lists the camera's menus, Compare follows the one picked: its rows are
 grouped as Edit shows them in that menu, each shows that menu's mode's value in every column, so two files saved in
 different modes are compared like for like, each menu's button counts its differences, and the column picker offers
-that menu's memories. My Menu lists what its page in Edit shows, a row per place and then its own settings; outside
+that menu's memories. The settings only the memories keep (a memory's focus frames, its stored exposure and mode) are
+listed when a memory of the menu shown is one of the columns, where Edit lists them for that memory; the live settings
+hold none of them, so a row's baseline is its first column that keeps the setting. My Menu lists what its page in Edit shows, a row per place and then its own settings; outside
 Expert mode a place is changed on that page only, which keeps the camera's rules for My Menu, so Compare copies none.
 
 Only file A is ever changed. An arrow between two columns copies a value into file A, a right-click on a value copies

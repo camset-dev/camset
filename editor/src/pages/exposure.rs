@@ -323,6 +323,7 @@ impl App {
         let modes: Vec<Option<String>> = sections.iter().map(|&s| self.ex_mode(&ex, s)).collect();
         let cells = self.ex_cells(&ex, &sections, &modes);
         let mut goto: Option<Setting> = None;
+        let mut fold_every = None;
         // the columns share the width shown, so every memory fits beside the live settings, its words wrapped in it
         let n = sections.len().max(1) as f32;
         let room = ui.available_width() - NAME_W - GAP * n - ui.spacing().scroll.bar_width - 2.0 * ui.spacing().scroll.bar_outer_margin;
@@ -398,8 +399,20 @@ impl App {
             });
 
             ui.add_space(10.0);
+            // all folded or all open by the buttons or Cmd/Ctrl+Shift+↑ / ↓ (`fold_all`), for this one drawing
+            ui.horizontal(|ui| {
+                let ctx = ui.ctx().clone();
+                let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+                if ui.small_button("Collapse all").on_hover_text(format!("Fold every \"What decides\" section ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+                if ui.small_button("Expand all").on_hover_text(format!("Open every \"What decides\" section ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+            });
+            // a button's request acts in this same drawing, the headers being drawn below it
+            if let Some(collapse) = fold_every.take() {
+                self.fold_all(collapse);
+            }
+            let forced = self.head_fold.take();
             for (side, name, effect) in EFFECTS {
-                egui::CollapsingHeader::new(format!("What decides {name}")).id_salt(("ex", name)).show(ui, |ui| {
+                egui::CollapsingHeader::new(format!("What decides {name}")).id_salt(("ex", name)).open(forced.map(|collapse| !collapse)).show(ui, |ui| {
                     ui.label(RichText::new(effect).small());
                     for s in self.ex_decides(&ex, side) {
                         ui.horizontal(|ui| {

@@ -226,7 +226,7 @@ let searchTimer = null;    // the search box's wait for the typing to stop
 /** The Memories page's own view: the search it was opened with (the window's Memories page lists the
  *  rows its search box matches) and whether the file's other memory sets are columns too (null: as
  *  the editor's "all memory columns" preference has it). */
-const memView = { q: "", all: null, only: null };
+const memView = { q: "", all: null, only: null, closed: new Set(), seenQ: "" };    // closed: the groups folded, by "tab > group"; seenQ: the search whose hits' groups were opened
 /** The "What decides …" lists left open on the Exposure page. */
 const exOpen = new Set();
 
@@ -1499,8 +1499,8 @@ function onlyEdited(groups) {
  *  groups as the window's collapsing headers in the tab's colour. */
 function drawTab(groups, j = {}) {
   const t = (state.tab_info || []).find((x) => x.name === view.tab);
-  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), j.places ? layoutSwitch(j.flat) : null);
   groups = onlyEdited(groups);
+  const head = el("div", { class: "head" }, cmpBackButton(), el("h1", { style: { color: t && t.color } }, view.tab), groups.length ? groupFolds("of this tab") : null, j.places ? layoutSwitch(j.flat) : null);
   if (!groups.length) return [head, el("p", {}, "No settings match.")];
   return [head, ...drawGroups(groups, view.tab, view.only)];
 }
@@ -1508,9 +1508,10 @@ function drawTab(groups, j = {}) {
 function drawSearch(groups) {
   hits = groups.reduce((n, g) => n + g.rows.length, 0);
   const head = el("div", { class: "head" }, el("h1", {}, `Search: "${view.q}"`));
-  if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups and value labels.")];
+  if (!hits) return [head, el("p", {}, "Nothing matches. The search looks at setting names, groups, value labels and the camera's rows as drawn.")];
   groups = onlyEdited(groups);
   if (!groups.length) return [head, el("p", {}, `No edited settings match: none of the ${hits} setting(s) that match is edited.`)];
+  head.append(groupFolds("of the results"));
   return [head, el("p", { class: "small weak" }, `${hits} setting(s)${view.only ? ", the edited ones shown" : ""}`),
     ...drawGroups(groups, "?", true)];
 }
@@ -1533,11 +1534,12 @@ function drawGroups(groups, where, allOpen) {
   if (!openGroups.has(where)) openGroups.set(where, new Set(groups.length ? [groups[0].name] : []));
   const open = openGroups.get(where);
   return groups.map((g) => {
-    if (g.family) return drawFamily(g, open, allOpen);
+    if (g.family) return Object.assign(drawFamily(g, open, allOpen), { _where: where });
     const body = el("div", { class: "grid" });
     const d = el("details", { class: "grp", open: allOpen || open.has(g.name), "data-group": g.name },
       el("summary", { style: { "--c": g.color } }, ...groupHead(g)), body);
-    d._group = g;
+    // what Collapse all and Expand all need (`foldAll`): the view the group is in, its rows' box
+    Object.assign(d, { _group: g, _where: where, _body: body });
     const fill = () => { if (!body.childElementCount) { body.append(...groupRows(d._group, where)); foldRows(body); } };
     if (d.open) fill();
     d.addEventListener("toggle", () => {
@@ -1576,17 +1578,25 @@ function groupRows(g, where) {
   return out;
 }
 
+/** What names a heading of the camera's layout for folding in group `group` of view `where`: its labels and their
+ *  places (`at`, the window's `fold_id`), so two rows of one label (told apart on the camera by an icon alone) fold
+ *  apart. */
+function rowFoldKey(where, group, l) {
+  return JSON.stringify(l.at && l.at.length ? [where, group, l.path, l.at] : [where, group, l.path]);
+}
+
 /** A row of the camera's menu that holds no setting of its own here: a heading that folds the rows under it, kept
  *  folded while the page is open, as the window keeps its own. */
 function rowHead(l, g, where) {
-  const key = JSON.stringify([where, g.name, l.path]);
+  const key = rowFoldKey(where, g.name, l);
   const name = el("div", { class: "name", title: "A row of the camera's menu: click to fold or show the settings under it" }, l.head);
-  const head = el("div", { class: "row rowhead", "data-depth": l.depth, style: { "--depth": String(l.depth) } }, name);
+  const head = el("div", { class: "row rowhead", "data-depth": l.depth, "data-fold": key, style: { "--depth": String(l.depth) } }, name);
   const show = () => {
     const folded = xp.rowFolds.has(key);
     head.classList.toggle("folded", folded);
     name.setAttribute("aria-expanded", String(!folded));
   };
+  head._show = show;
   pressable(name, () => {
     if (xp.rowFolds.has(key)) xp.rowFolds.delete(key); else xp.rowFolds.add(key);
     show();
@@ -1821,6 +1831,7 @@ function drawRow(r) {
       show(on);
     });
     show(xp.detail.has(r.key));
+    row._show = show;
     row.append(box);
   }
   // where it sits on the camera, as the window's hover says
@@ -2043,7 +2054,7 @@ function drawChanges(list) {
     el("thead", {}, el("tr", {}, el("th", {}, "Where"), el("th", {}, "Setting"), el("th", {}, "Was"), el("th", {}, "Now"), el("th", {}, ""))),
     el("tbody", {}, ...list.map((c) => el("tr", {},
       el("td", {}, c.where), el("td", {}, c.name), el("td", {}, sameNumber(c.was)), el("td", { class: "now" }, sameNumber(c.now)),
-      el("td", {}, el("button", { class: "small", onclick: () => (c.key ? act("revert", { target: c.section, key: c.key }) : act("revert_record", { section: c.section, id: c.id })) }, "Revert")))))))];
+      el("td", {}, el("button", { class: "small", title: c.revert_words || undefined, onclick: () => (c.key ? act("revert", { target: c.section, key: c.key }) : act("revert_record", { section: c.section, id: c.id })) }, "Revert")))))))];
 }
 
 // --- Memories ---
@@ -2117,12 +2128,35 @@ function drawMemories(j) {
       el("button", { class: "small", onclick: () => $("b-clear").click() }, "Show all")));
   }
   if (!j.groups.length) return [...kids, el("p", {}, j.only_diff ? "No memory holds another value than the live settings here." : "No settings match.")];
+  // every group folded or open (`foldAll`), with their keys
+  kids[0].append(foldButtons("Fold every group", "Open every group"));
+  // a new search opens the groups of its hits, as a jump to a row under a folded heading opens it in Edit; a group
+  // folded during the same search stays folded
+  if (memView.q !== memView.seenQ) {
+    if (memView.q) for (const g of j.groups) memView.closed.delete(`${g.tab} > ${g.group}`);
+    memView.seenQ = memView.q;
+  }
   const names = new Map(j.cols);
   const body = el("tbody");
   for (const g of j.groups) {
-    body.append(el("tr", {}, el("td", { colspan: 2 + j.cols.length, class: "strong", style: { color: g.color } }, el("span", {}, `${g.tab} > ${g.group}`))));
+    // the group's heading folds or shows its rows, by a click, Enter or Space; the page keeps it while it is open
+    const key = `${g.tab} > ${g.group}`;
+    const name = el("span", { class: "mem-fold", title: "Click to fold or show this group's settings" }, "");
+    const head = el("tr", { class: "mem-head", "data-fold": key }, el("td", { colspan: 2 + j.cols.length, class: "strong", style: { color: g.color } }, name));
+    const rows = [];
+    head._show = () => {
+      const closed = memView.closed.has(key);
+      name.textContent = `${closed ? "⏵" : "⏷"} ${key}`;
+      name.setAttribute("aria-expanded", String(!closed));
+      for (const tr of rows) tr.hidden = closed;
+    };
+    pressable(name, () => {
+      if (memView.closed.has(key)) memView.closed.delete(key); else memView.closed.add(key);
+      head._show();
+    });
+    body.append(head);
     for (const r of g.rows) {
-      body.append(el("tr", {},
+      const tr = el("tr", {},
         el("td", {}, r.name),
         el("td", {}, memValue(r.live, false)),
         ...r.cells.map((c) => el("td", {}, el("span", { class: "mem-cell" },
@@ -2132,8 +2166,11 @@ function drawMemories(j) {
             !c.takes || c.takes[0] ? el("button", { class: "small", title: withNote(c.into_live || "Put this value into the live settings", r.live.copies), "aria-label": c.into_live || "Put this value into the live settings",
               onclick: () => act("memory_copy", { key: r.key, from: c.section, to: 0 }) }, plain("⬅")) : null,
             !c.takes || c.takes[1] ? el("button", { class: "small", title: withNote(c.from_live || `Put the live value into ${names.get(c.section)}`, c.copies), "aria-label": c.from_live || `Put the live value into ${names.get(c.section)}`,
-              onclick: () => act("memory_copy", { key: r.key, from: 0, to: c.section }) }, plain("➡")) : null) : null)))));
+              onclick: () => act("memory_copy", { key: r.key, from: 0, to: c.section }) }, plain("➡")) : null) : null))));
+      rows.push(tr);
+      body.append(tr);
     }
+    head._show();
   }
   kids.push(el("div", { class: "scrollx mem-scroll" }, el("table", { class: "egrid mem" },
     el("thead", {}, el("tr", {}, el("th", {}, "Setting"), el("th", {}, "Live"), ...j.cols.map(([, n]) => el("th", {}, n)))),
@@ -2259,12 +2296,13 @@ function drawExposure(j) {
           typeof s.proved === "boolean" ? el("span", { class: "small " + (s.proved ? "ex-proved" : "weak") }, s.proved_words || (s.proved ? "proved on the camera" : "not proved on the camera yet")) : null,
           el("button", { class: "small", onclick: () => exShowInMenu(s) }, "Show in menu")))));
     det.addEventListener("toggle", () => { if (det.open) exOpen.add(d.side); else exOpen.delete(d.side); });
+    det._side = d.side;
     return det;
   });
   return [el("div", { class: "head" }, el("h1", {}, j.title)),
     el("p", { class: "small weak" }, j.intro),
     el("div", { class: "scrollx ex-wrap" }, grid),
-    el("div", { class: "ex-whats" }, ...decides)];
+    el("div", { class: "ex-whats" }, decides.length ? foldButtons("Fold every \"What decides\" section", "Open every \"What decides\" section") : null, ...decides)];
 }
 
 // --- My Menu ---
@@ -2297,7 +2335,7 @@ function myMenuItems(r, done = () => {}) {
  *  that opens the setting it opens (with that setting's value), Remove and Move up / Move down; then the settings of
  *  My Menu's own tab by group, as rows. Always the live settings, which a note says while a memory is edited. */
 function drawMyMenu(j) {
-  const out = [el("div", { class: "head" }, el("h1", {}, j.name))];
+  const out = [el("div", { class: "head" }, el("h1", {}, j.name), j.groups.length ? groupFolds("below") : null)];
   if (j.memory) out.push(el("p", {}, j.memory));
   if (!j.pages) out.push(el("p", {}, j.missing));
   else {
@@ -2452,6 +2490,9 @@ function drawRecords(j) {
     filter("unmapped", "Only unmapped"), filter("edited", "Only edited", "Records whose value differs from the file as it was opened"),
     el("span", { class: "small weak" }, "Search matches record ids (0x1234), setting names and values. Click a setting to open it; click the shape of a multi-byte record for its bytes."));
   if (!j.rows.length) return [head, el("hr"), el("p", {}, "No records match.")];
+  // the records listed, whose bytes Expand all shows (`foldAll`), and its buttons where any has bytes to show
+  xp.rm.rows = j.rows;
+  if (j.rows.some((r) => r.big)) head.append(foldButtons("Fold every record's bytes", "Show the bytes of every multi-byte record listed"));
   const row = (r) => {
     const open = r.big && xp.rm.open.has(r.id);
     const toggle = () => { if (open) xp.rm.open.delete(r.id); else xp.rm.open.add(r.id); redraw(); };
@@ -2716,8 +2757,10 @@ function drawCompare() {
   const none = diffs ? "" : "No row shown differs from the baseline: there is no difference to step to.";
   out.push(el("div", { class: "cmp-tools" },
     el("span", {}, `${j.shown} of ${j.total} settings shown`),
-    el("button", { title: "Fold every tab; click a tab or group heading to open it", onclick: () => { for (const r of j.rows) cmp.folded.add(foldKeys(r)[0]); redrawCompare(); } }, "Collapse all"),
-    el("button", { onclick: () => { cmp.folded.clear(); redrawCompare(); } }, "Expand all"),
+    // a search that finds settings only the memories keep, none shown with these columns: why (the editor's words)
+    j.memory_note ? el("span", { class: "small weak" }, j.memory_note) : null,
+    el("button", { title: `Fold every tab; click a tab or group heading to open it (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
+    el("button", { title: `Open every tab and group (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"),
     el("span", { class: "vsep" }),
     offButton({ title: "Previous difference (Shift+F3 or Alt+Up)", "aria-label": "Previous difference", "aria-keyshortcuts": "Shift+F3 Alt+ArrowUp", "data-ctl": "cmp-prev" },
       "⏶ Previous", () => cmpStep(-1), none),
@@ -2843,12 +2886,18 @@ function cmpTable(j) {
   return { table, marks };
 }
 
+/** Whether row `r`'s setting lives in set `section`, as the editor's `kept_in`: the live settings hold the live ones
+ *  (`live`, false for a setting only the memories keep), a memory the ones the memories keep (`in_sets`). */
+function keptIn(r, section) {
+  return section === 0 ? r.live !== false : !!r.in_sets;
+}
+
 /** One setting's row: its name (the record on hover), its three-way tag, and per column its value,
  *  filled where it differs from the baseline or was edited, with the copy arrows between columns. */
 function cmpRow(j, r, i) {
   const tag = r.three && j.three ? j.three.tags[r.three] : null;
   // the name is a link, as the window's: it opens the setting in Edit, in the first column of file A that keeps it
-  const into = j.cols.find((c) => c.editable && (c.section === 0 || r.in_sets));
+  const into = j.cols.find((c) => c.editable && keptIn(r, c.section));
   const section = into ? into.section : 0;
   // where it is kept, in the editor's words (the record in Expert mode only)
   const link = el("span", { class: "cmp-link", title: `${r.where}\nClick to open it in Edit` }, r.name);
@@ -2898,7 +2947,7 @@ function cmpCellMenu(j, r, ci) {
   // a value cut short in its cell, in full (a touch screen shows no hover text)
   const whole = cell.text_full && cell.text_full !== cell.text ? [cell.text_full, "-"] : [];
   // a set where the setting is view only outside Expert mode (`locked`, the editor's) takes no copy, as the window's menu offers none
-  const targets = j.cols.filter((t) => t.editable && !(t.src === c.src && t.section === c.section) && (t.section === 0 || r.in_sets) && !(r.locked || []).includes(t.section));
+  const targets = j.cols.filter((t) => t.editable && !(t.src === c.src && t.section === c.section) && keptIn(r, t.section) && !(r.locked || []).includes(t.section));
   const canCopy = j.editable && targets.length > 0;
   // a column of file A also opens the setting in Edit, in that column's set
   const open = c.editable ? [[`Open in Edit: ${c.name}`, "Open this setting in Edit, in this column's set", () => cmpOpenInEdit(r, c.section)]] : [];
@@ -3348,9 +3397,11 @@ async function cmpOpenInEdit(r, section) {
   cmpHideMenu();
   // the column's set where it keeps the setting, as the window opens it: one of file A's columns Compare shows (another
   // camera menu's memory set too, which the Editing row of the menu shown does not offer), or one the Editing row offers
-  const keeps = section === 0 || r.in_sets;
+  const keeps = keptIn(r, section);
   const known = ((cmp.last && cmp.last.cols) || []).some((c) => c.editable && c.section === section) || state.targets.some(([i]) => i === section);
-  const target = keeps && known ? section : 0;
+  // one only the memories keep, asked for in a set that does not keep it: the first memory of file A among the columns
+  const memory = r.live === false ? ((cmp.last && cmp.last.cols) || []).find((c) => c.editable && c.section !== 0) : null;
+  const target = keeps && known ? section : memory ? memory.section : 0;
   const ci = ((cmp.last && cmp.last.cols) || []).findIndex((c) => c.editable && c.section === target);
   const edited = ci >= 0 && !!r.cells[ci] && r.cells[ci].edited;
   if (view.only && !edited) {
@@ -4044,7 +4095,7 @@ function drawHistory() {
         el("thead", {}, el("tr", {}, ...["#", "Setting", "Before", "After", ""].map((x) => el("th", {}, x)))),
         el("tbody", {}, ...h.steps.map((x) => el("tr", {},
           el("td", {}, String(x.step + 1)), el("td", {}, x.name), el("td", {}, x.before), el("td", { class: "hist-after" }, x.after),
-          el("td", {}, x.revert === false ? null : el("button", { class: "small", title: "Put this setting back to its value before this edit",
+          el("td", {}, x.revert === false ? null : el("button", { class: "small", title: x.revert_words || "Put this setting back to its value before this edit",
             onclick: () => act("revert_history", { step: x.step, section: x.section, id: x.id, key: x.key }) }, "Revert")))))))];
   }
   fillWindow("history", "Edit history", ...body);
@@ -4266,6 +4317,123 @@ function pageInUse() {
   return !!state && !$("app").hidden && !$("app").inert && !away.since;
 }
 
+/** Collapse all and Expand all, as the window's: Cmd+Shift+↑ / ↓ on a Mac, Ctrl+Shift+↑ / ↓ elsewhere, in words and as
+ *  `aria-keyshortcuts`. */
+let onMac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+const FOLD_KEYS = onMac ? ["⌘⇧↑", "⌘⇧↓"] : ["Ctrl+Shift+↑", "Ctrl+Shift+↓"];
+const FOLD_ARIA = onMac ? ["Meta+Shift+ArrowUp", "Meta+Shift+ArrowDown"] : ["Control+Shift+ArrowUp", "Control+Shift+ArrowDown"];
+
+/** A right-click menu, the My Menu pop-up or Compare's value picker open: the fold keys are left to it, as the
+ *  window leaves them to its own. */
+function popupOpen() {
+  const mm = $("mymenu");
+  return !!cmpMenuBox || !!cmp.pick || (!mm.hidden && mm.childElementCount > 0);
+}
+
+/** Collapse all and Expand all over what folds in the view in front (`foldAll`), each saying what it does (`fold`,
+ *  `open`) and its keys, in words and as `aria-keyshortcuts`. */
+function foldButtons(fold, open) {
+  return el("span", { class: "fold-all" },
+    el("button", { class: "small", title: `${fold} (${FOLD_KEYS[0]})`, "aria-keyshortcuts": FOLD_ARIA[0], onclick: () => foldAll(true) }, "Collapse all"),
+    el("button", { class: "small", title: `${open} (${FOLD_KEYS[1]})`, "aria-keyshortcuts": FOLD_ARIA[1], onclick: () => foldAll(false) }, "Expand all"));
+}
+
+/** `foldButtons` over groups of settings: every group `where` says ("of this tab", "of the results", "below"). */
+function groupFolds(where) {
+  return foldButtons(`Fold every group ${where} and every row of the camera's menu that holds others`, `Open every group ${where} and every row of the camera's menu`);
+}
+
+/** Collapse all (`collapse`) or expand all, by the buttons or the keys, as the window's (`fold_all`): in Compare its
+ *  tabs and groups (`cmp.folded`, as its Collapse all and Expand all have always done); in Edit every group of the view
+ *  in front, whichever it is (a tab, the search results, My Menu's tab: `openGroups`), and the camera's rows that hold
+ *  others in them (`xp.rowFolds`), and the exposure page's "What decides" sections (`exOpen`); the window draws the
+ *  search results and My Menu as lists, with nothing to fold. The
+ *  page keeps them as it keeps any fold, while it is open. A control with the keyboard in a group a fold closes gives
+ *  it to that group's head. False where nothing folds, so the browser keeps the keys there. */
+function foldAll(collapse) {
+  if (view.mode === "compare") {
+    if (cmp.records || !cmp.last || !cmp.last.rows) return false;
+    // the row with the keyboard: if the fold takes it out of sight, its tab's heading takes the keyboard
+    const a = document.activeElement;
+    const holder = a && a.closest && $("content").contains(a) ? a.closest("tr[data-key]") : null;
+    const held = holder && cmp.last.rows.find((r) => r.key === holder.dataset.key);
+    if (collapse) for (const r of cmp.last.rows) cmp.folded.add(foldKeys(r)[0]);
+    else cmp.folded.clear();
+    redrawCompare();
+    if (held && !$("content").contains(document.activeElement)) {
+      const head = $("content").querySelectorAll(".cmp-fold").find((h) => h.dataset.fold === foldKeys(held)[0]);
+      if (head) head.focus({ preventScroll: true });
+    }
+    return true;
+  }
+  // the Memories page: every group folded or open; a row with the keyboard that a fold hides gives it to its heading
+  if (pageName() === "memories") {
+    const heads = $("content").querySelectorAll("tr.mem-head");
+    if (!heads.length) return false;
+    const a = document.activeElement;
+    const row = a && a.closest ? a.closest("tr") : null;
+    for (const h of heads) {
+      if (collapse) memView.closed.add(h.dataset.fold); else memView.closed.delete(h.dataset.fold);
+      h._show();
+    }
+    if (row && row.hidden) {
+      let p = row.previousElementSibling;
+      while (p && !p.classList.contains("mem-head")) p = p.previousElementSibling;
+      if (p) p.querySelector(".mem-fold").focus({ preventScroll: true });
+    }
+    return true;
+  }
+  // the record map: every record's bytes folded, or those of the records listed shown (the editor sends them)
+  if (pageName() === "records") {
+    const big = (xp.rm.rows || []).filter((r) => r.big);
+    if (!big.length) return false;
+    if (collapse) xp.rm.open.clear(); else for (const r of big) xp.rm.open.add(r.id);
+    redraw();
+    return true;
+  }
+  const groups = [...$("content").querySelectorAll("details.grp")].filter((d) => d._where !== undefined);
+  const sections = [...$("content").querySelectorAll("details.ex")].filter((d) => d._side !== undefined);
+  if (!groups.length && !sections.length) return false;
+  for (const d of sections) {
+    if (collapse) exOpen.delete(d._side); else exOpen.add(d._side);
+    d.open = !collapse;
+  }
+  for (const d of groups) {
+    if (!openGroups.has(d._where)) openGroups.set(d._where, new Set());
+    const open = openGroups.get(d._where);
+    if (collapse) open.delete(d.dataset.group); else open.add(d.dataset.group);
+    d.open = !collapse;
+    // every heading of its layout, its rows made or not yet (a group's rows are made when it is first opened)
+    for (const l of (d._group && d._group.layout) || []) {
+      if (!("head" in l)) continue;
+      const k = rowFoldKey(d._where, d._group.name, l);
+      if (collapse) xp.rowFolds.add(k); else xp.rowFolds.delete(k);
+    }
+  }
+  for (const h of $("content").querySelectorAll(".rowhead[data-fold]")) if (h._show) h._show();
+  for (const d of groups) if (d._body) foldRows(d._body);
+  // Collapse all closes the rows' own details too, those of every row the groups hold, drawn or not; Expand all opens
+  // none: a row's details are one setting's own (its help, its proof), as the window shows one setting's at a time
+  if (collapse) {
+    for (const d of groups) for (const r of (d._group && d._group.rows) || []) xp.detail.delete(r.key);
+    for (const row of $("content").querySelectorAll(".row")) if (row._show && row.dataset.key) row._show(xp.detail.has(row.dataset.key));
+  }
+  // the keyboard where it can still be seen: a group closed over it gives it to that group's head
+  const a = document.activeElement;
+  const shut = a && a.closest && a.closest("details.grp");
+  if (shut && !shut.open && !shut.firstChild.contains(a)) shut.firstChild.focus();
+  return true;
+}
+
+/** A text field with the caret in it (`a`, the focused element): a box to type in, not a tick box, a radio button or a
+ *  slider, which leave the shortcuts to the page as any other control does. */
+function textBox(a) {
+  if (!a) return false;
+  if (a.tagName === "TEXTAREA" || a.isContentEditable) return true;
+  const type = (a.getAttribute && a.getAttribute("type")) || a.type || "text";
+  return a.tagName === "INPUT" && !["checkbox", "radio", "range", "button", "submit", "reset", "color", "file"].includes(type.toLowerCase());
+}
+
 /** The shortcuts, unless a text field has the keyboard: the text size (Cmd/Ctrl +, − and 0), and Undo and Redo
  *  (Cmd/Ctrl+Z, Shift+Cmd/Ctrl+Z, Cmd/Ctrl+Y) only while the page is in use, so a key on the login sends no request
  *  (one without the code counts as a wrong code) and none undoes an edit behind the window that is about it. Until
@@ -4273,10 +4441,16 @@ function pageInUse() {
  *  that has the keyboard, so the list shows the value put back (`undoKeys`). True when the key was taken. */
 function shortcut(e) {
   const a = document.activeElement;
-  if (a && (a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable)) return false;
+  if (textBox(a)) return false;
   if (!(e.ctrlKey || e.metaKey) || e.altKey) return false;
   const k = e.key.toLowerCase();
-  if (k === "=" || k === "+") setFontScale(getFontScale() + 0.1);
+  // Collapse all / Expand all (`foldAll`), as the window takes them: Cmd+Shift on a Mac, Ctrl+Shift elsewhere, never
+  // with Alt (refused above); a list with the keyboard keeps its arrows, an open menu or the picker the keys
+  if (e.shiftKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+    if (onMac ? !e.metaKey || e.ctrlKey : !e.ctrlKey || e.metaKey) return false;
+    if ((a && a.tagName === "SELECT") || popupOpen()) return false;
+    if (!foldAll(e.key === "ArrowUp")) return false;
+  } else if (k === "=" || k === "+") setFontScale(getFontScale() + 0.1);
   else if (k === "-" || k === "_") setFontScale(getFontScale() - 0.1);
   else if (k === "0") setFontScale(1.0);
   else if ((k === "z" || (k === "y" && !e.shiftKey)) && pageInUse()) {

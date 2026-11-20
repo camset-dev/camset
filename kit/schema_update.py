@@ -153,7 +153,8 @@ from runner import read_json  # noqa: E402
 import writer.gate  # noqa: E402,F401   (the tests point its accepted file at their own)
 from writer import proofs as writer_proofs  # noqa: E402   (menu_row reads the camera's reworded contexts from it)
 from writer.labels import (LATIN, MODE_LETTERS, PICKER_FAMILY, TICKED, UNTICKED, axis_tail_out,  # noqa: E402,F401
-                           check_labels, clean, ev_label, family_name, icon_word, one_name, option_prefix_out, picker_family,
+                           check_labels, clean, ev_label, family_name, icon_word, kept_source, one_name, option_prefix_out,
+                           picker_family,
                            same_option, snap, squashed, tick_values, value_order)
 from writer.mirror import (mirror_key, mirror_names, mirror_of, mirror_place)  # noqa: E402,F401
 from writer.notes import (ALLOWANCE, EVIDENCE, PAREN, TAIL, add_line, apply_fix, fix_differs, note_is,  # noqa: E402,F401
@@ -1836,6 +1837,19 @@ def main():
                 derived[x["key"]][pair[0]] = "derived"
                 if over[x["key"]].get(pair[0]) == "schema kept":
                     over[x["key"]][pair[0]] = "derived"
+    # a slot listed for review, its name as it now stands: its readers' source where its reading agrees with that name,
+    # "derived" where the name is its family's sure reading, else "schema kept" (kept_source), the same on a pass over
+    # this output, whose report holds no note there
+    now = {x["key"]: x for x in doc["settings"]}
+    for k, v, _had, read in review:
+        final = dict((w, lab) for w, lab in now[k].get("values") or []).get(v)
+        fam = picker_family(now[k]["name"]) or now[k]["name"].split(":")[0]
+        sure = {lab for lab, src in reads.get((fam, v), {}).items() if src == "two readers"}
+        src = kept_source(str(final), clean(read), sure) if final is not None else "schema kept"
+        if src is None:
+            over[k].pop(v, None)
+        else:
+            over[k][v] = src
     disputed_out(doc, disputed & set(by_key))
     for k in disputed:
         proved.pop(k, None)

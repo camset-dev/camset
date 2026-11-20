@@ -225,6 +225,18 @@ impl App {
             "tab" => WebReply::json(self.web_tab(target, menu, body["tab"].as_str(), body["q"].as_str().unwrap_or(""))),
             "main" => WebReply::json(self.web_main(target, body["set"].as_u64().unwrap_or(0) as usize, menu)),
             "set" => self.web_set(target, &body, &from),
+            // All edits' line of My Menu (`MYMENU_LINE`): all of My Menu back as the file was opened, as the window's
+            "revert" if body["key"].as_str() == Some(MYMENU_LINE) && !self.prefs.expert => {
+                if !self.editable() {
+                    return WebReply::error(409, &self.view_only_why(true));
+                }
+                let (words, acts) = self.mymenu_revert_all();
+                if let Some(why) = self.apply(acts) {
+                    return WebReply::error(409, &why);
+                }
+                self.status = self.with_moved(format!("{words} {from}"));
+                WebReply::json(json!({ "ok": true }))
+            }
             "revert" => {
                 let Some(linked) = self.web_linked(target, body["key"].as_str().unwrap_or("")) else { return WebReply::error(404, "No such setting here.") };
                 // as the window's Revert: a copy in step with its setting takes the setting and its other copies back
@@ -266,10 +278,12 @@ impl App {
                 if si >= self.n_sections() {
                     return WebReply::error(400, "This file has no such set.");
                 }
-                if let Some(why) = self.apply(vec![Action::Revert(si, (id, None))]) {
+                // a page of My Menu goes back with the whole list, as the file was opened (`mymenu_record`)
+                let (words, acts) = if self.mymenu_record(si, id) { self.mymenu_revert_all() } else { (format!("Record 0x{id:04x} reverted"), vec![Action::Revert(si, (id, None))]) };
+                if let Some(why) = self.apply(acts) {
                     return WebReply::error(409, &why);
                 }
-                self.status = self.with_moved(format!("Record 0x{id:04x} reverted {from}"));
+                self.status = self.with_moved(format!("{words} {from}"));
                 WebReply::json(json!({ "ok": true }))
             }
             "revert_flagged" => {
@@ -536,12 +550,14 @@ impl App {
                 };
                 // a row of the page's Compare in a camera's menu holds the records for that menu (`compare_rows`):
                 // those its entry shows first, then any setting's own row
+                // (for the copy's own columns, whose memories list the settings only the memories keep: `compare_rows_in`)
+                let copy_cols: Vec<Col> = std::iter::once(src).chain(dsts.iter().copied()).collect();
                 let shown = match menu {
-                    Some(_) => (*self.compare_rows(menu, &Self::web_entry(&body), "")).clone(),
+                    Some(_) => (*self.compare_rows_in(menu, &Self::web_entry(&body), "", &copy_cols)).clone(),
                     None => Vec::new(),
                 };
                 // every row Compare lists without a menu, a Main tile's memory records too (`tile_records`)
-                let rows = (*self.compare_rows(None, &BarKey::All, "")).clone();
+                let rows = (*self.compare_rows_in(None, &BarKey::All, "", &copy_cols)).clone();
                 self.rows_set.take();               // what this copy's rows cover, and nothing left from another
                 let (mut actions, mut n, mut name) = (Vec::new(), 0, String::new());
                 let mut chosen: Vec<&Row> = Vec::new();
@@ -605,7 +621,7 @@ impl App {
                 // of the Menu in its camera's menu, with its search
                 let entry = Self::web_entry(&body);
                 self.rows_set.take();
-                let rows = self.compare_rows(menu, &entry, body["q"].as_str().unwrap_or("").trim());
+                let rows = self.compare_rows_in(menu, &entry, body["q"].as_str().unwrap_or("").trim(), &[tb, ta, tbb]);
                 let (actions, n) = self.merge_rows(&rows, (tb, ta, tbb), want, take);
                 let left = self.copy_skipped.get();
                 // a switch that keeps copies apart, unticked by the merge, asks first unless its family comes too
@@ -1054,7 +1070,7 @@ impl App {
                 let lines = self.group_lines(&rows);
                 if lines.iter().any(|l| !matches!(l, Line::Row { depth: 0, .. })) {
                     layout = Some(lines.iter().map(|l| match l {
-                        Line::Heading { label, depth, path } => json!({ "head": label, "depth": depth, "path": path }),
+                        Line::Heading { label, depth, path, at } => json!({ "head": label, "depth": depth, "path": path, "at": at }),
                         Line::Row { index, depth } => json!({ "key": rows[*index][0].key, "depth": depth }),
                         Line::Mode(mode) => json!({ "mode": menu_rows::mode_words(mode), "name": mode }),
                         Line::More => json!({ "more": menu_rows::MORE }),
@@ -1172,7 +1188,7 @@ impl App {
                 let lines = menu_rows::lay_out(&rows);
                 if lines.iter().any(|l| !matches!(l, Line::Row { depth: 0, .. })) {
                     layout = Some(lines.iter().map(|l| match l {
-                        Line::Heading { label, depth, path } => json!({ "head": label, "depth": depth, "path": path }),
+                        Line::Heading { label, depth, path, at } => json!({ "head": label, "depth": depth, "path": path, "at": at }),
                         Line::Row { index, depth } => json!({ "key": rows[*index][0].key, "depth": depth }),
                         Line::Mode(mode) => json!({ "mode": menu_rows::mode_words(mode), "name": mode }),
                         Line::More => json!({ "more": menu_rows::MORE }),
@@ -1805,6 +1821,7 @@ impl App {
         let Some(doc) = &self.doc else { return json!({ "changes": [] }) };
         let changes: Vec<Value> = self.edit_lines(&doc.original, &doc.edited).into_iter().map(|l| json!({
             "section": l.si, "id": l.id, "key": l.key, "where": self.schema.camera.target_name(l.si), "name": l.name, "was": l.before, "now": l.after,
+            "revert_words": self.edit_line_revert_words(&l, false),
         })).collect();
         json!({ "changes": changes })
     }
@@ -1968,26 +1985,28 @@ impl App {
         let entry = if self.bar_keys(true, 0, menu, q, false).contains(entry) { entry.clone() } else { BarKey::All };
         out["entry"] = json!(Self::web_entry_key(&entry));
         let Some(doc) = &self.doc else { return out };
-        let stored = |c: &Col, s: &Setting| c.section == 0 || s.in_sets;
         let differs = |s: &Setting| self.row_differs(cols, s);
-        // the bar of Compare and each menu's differences, the window's own functions (`compare_bar`, `menu_differences`)
-        out["entries"] = json!(self.compare_bar(menu, q, &differs).into_iter().map(|e| json!({
+        // the bar of Compare and each menu's differences, the window's own functions (`compare_bar`, `menu_differences`),
+        // for the page's columns
+        out["entries"] = json!(self.compare_bar_in(menu, q, cols, &differs).into_iter().map(|e| json!({
             "key": Self::web_entry_key(&e.key), "name": e.label, "color": e.color.map(css_color), "count": e.count, "differ": e.badge, "title": e.hover,
         })).collect::<Vec<_>>());
         if menu.is_some() {
-            let counts = self.menu_differences(q, &differs);
+            let counts = self.menu_differences_in(q, cols, &differs);
             out["menus"] = json!(self.menus().iter().zip(counts).map(|(m, n)| json!({ "name": m.name, "differ": n })).collect::<Vec<_>>());
+        }
+        // a search that finds settings only the memories keep, none shown with these columns: why (`compare_memory_note`)
+        if let Some(note) = self.compare_memory_note(menu, q, cols) {
+            out["memory_note"] = json!(note);
         }
         if cols.len() < 2 {
             return out;
         }
-        let base = cols[0];
-        // the entry's rows, the window's (`compare_rows`): in a camera's menu in its layout, each holding the record for it
-        let rows = self.compare_rows(menu, &entry, q);
-        let counts: Vec<usize> = cols.iter().map(|c| rows.iter().filter(|r| {
-            let s = &r.2[0];
-            stored(c, s) && self.col_value(*c, s) != self.col_value(base, s)
-        }).count()).collect();
+        // the entry's rows, the window's (`compare_rows`): in a camera's menu in its layout, each holding the record for
+        // it, and the window's standing of each (`row_info`: its baseline the first column that keeps its setting)
+        let rows = self.compare_rows_in(menu, &entry, q, cols);
+        let infos: std::collections::HashMap<&str, RowInfo> = rows.iter().map(|r| (r.2[0].key.as_str(), self.row_info(cols, None, &r.2[0]))).collect();
+        let counts: Vec<usize> = (0..cols.len()).map(|i| rows.iter().filter(|r| infos[r.2[0].key.as_str()].differs_at(i)).count()).collect();
         let three = self.web_three_cols(cols);
         let word = |t: Three| match t {
             Three::Same => "same",
@@ -2019,18 +2038,18 @@ impl App {
         let mut diffs = 0;
         let list: Vec<Value> = shown.iter().map(|(t, g, linked)| {
             let s = &linked[0];
-            let b = self.col_value(base, s);
+            let info = &infos[s.key.as_str()];
             let class = three.map(|tc| self.three_way(tc, s));
             let mut mark = "same";
             let cells: Vec<Value> = cols.iter().enumerate().map(|(i, c)| {
                 let v = self.col_value(*c, s);
-                let st = stored(c, s);
+                let st = info.stored[i];
                 let mut text = if !st { "—".to_string() } else if s.text.is_some() { self.col_text(*c, s).unwrap_or_default() } else { Self::describe(s, v) };
                 if let Some(v) = v.filter(|_| raw) {
                     text = format!("{}  [{v}]", Self::describe(s, Some(v)));
                 }
                 let edited = c.editable() && st && doc.original_value(c.section, s.slot()) != v;
-                let differs_here = i > 0 && st && v != b;
+                let differs_here = info.differs_at(i);
                 if edited {
                     mark = "edited";
                 } else if differs_here && mark == "same" {
@@ -2062,7 +2081,7 @@ impl App {
                     .chain(self.locked_why(s, c.section).filter(|_| file_a).map(|(w, _)| w))
                     .chain(self.compare_why(s).filter(|_| file_a))
                     .chain(self.fraction_words(s).filter(|_| file_a))
-                    .chain(self.copy_note(s, c.section).filter(|_| file_a).map(|(w, _)| w)).collect();
+                    .chain(self.copy_note_bound(s, c.section, &Bind::Menu).filter(|_| file_a).map(|(w, _)| w)).collect();
                 if !why.is_empty() {
                     cell["why"] = json!(why.join("\n\n"));
                 }
@@ -2082,10 +2101,10 @@ impl App {
             let locked: Vec<usize> = (0..self.n_sections()).filter(|&si| self.locked(s, si) || self.compare_why(s).is_some()).collect();
             // its name opens it in Edit in the first column of file A that keeps it (the page's `cmpOpenInEdit`), where
             // the window's Open in Edit lands from this menu (`compare_place`)
-            let into = cols.iter().find(|c| c.editable() && stored(c, s)).map_or(0, |c| c.section);
+            let into = cols.iter().find(|c| c.editable() && kept_in(s, c.section)).map_or(0, |c| c.section);
             let mut row = json!({
                 "tab": t, "group": g, "color": css_color(tab_color(&self.schema.camera, t)),
-                "key": s.key, "name": self.compare_title(&(t.clone(), g.clone(), linked.clone())), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "locked": locked,
+                "key": s.key, "name": self.compare_title(&(t.clone(), g.clone(), linked.clone())), "record": format!("0x{:04x}", s.id), "in_sets": s.in_sets, "live": kept_in(s, 0), "locked": locked,
                 // the name's hover, as the window's (the record number in Expert mode only), by the setting's own name
                 "where": self.where_kept(self.def_of(s)),
                 "three": class.map(word), "differs": d, "mark": mark, "arrows": arrows, "cells": cells,
@@ -2266,7 +2285,8 @@ impl App {
         // the rows the page's Compare shows: its entry of the Menu (All settings where it names none) in its menu
         let rows = if body["shown"].as_bool() == Some(true) {
             let menu = self.web_menu(body, body["target"].as_u64().unwrap_or(0) as usize);
-            self.compare_rows(menu.as_deref(), &Self::web_entry(body), q).iter().filter(|r| r.2[0].in_sets).cloned().collect()
+            let cols = self.web_cols(body).unwrap_or_else(|_| vec![live, memory]);
+            self.compare_rows_in(menu.as_deref(), &Self::web_entry(body), q, &cols).iter().filter(|r| r.2[0].in_sets).cloned().collect()
         } else {
             self.memory_rows()
         };
@@ -2460,8 +2480,11 @@ impl App {
                 let key = body["key"].as_str();
                 let Some((name, acts)) = self.doc.as_ref().zip(self.undo.get(step)).and_then(|(d, before)| {
                     let rec = before.sections.get(si)?.get(id)?;
-                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let after = self.undo.get(step + 1).unwrap_or(&d.edited);
+                    // a page of My Menu goes back with the whole list, as History's My Menu line puts it back
+                    // (`mymenu_record`); none where this edit left My Menu as it was
+                    let key = if key.is_none() && self.mymenu_record(si, id) { Some(MYMENU_LINE) } else { key };
+                    let Some(key) = key else { return Some((format!("Record 0x{id:04x}"), vec![Action::SetRecord(si, rec.clone())])) };
                     let line = self.edit_lines(before, after).into_iter().find(|l| l.si == si && l.id == id && l.key.as_deref() == Some(key))?;
                     Some((self.placed_name(si, &line.name), line.put_back(before, &d.edited)))
                 }) else {
@@ -3094,7 +3117,7 @@ impl App {
             // setting by setting, as the window's History lists them (`edit_lines`), a Revert putting back that setting alone
             for l in self.edit_lines(before, after) {
                 steps.push(json!({ "step": i, "section": l.si, "id": l.id, "key": l.key, "name": self.placed_name(l.si, &l.name), "before": l.before, "after": l.after,
-                    "revert": self.editable() }));
+                    "revert": self.editable(), "revert_words": self.history_revert_words(i, &l, &doc.edited) }));
             }
         }
         json!({ "steps": steps })

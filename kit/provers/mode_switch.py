@@ -357,6 +357,74 @@ def bar_names(reading, option: str, labels: list | None) -> bool:
     return want is not None and match.icon_named(labels, reading) == want
 
 
+def help_refused(kind: str, image) -> str:
+    """drive.help_refused: why C4 may not be pressed here as Help, or "" (imported at the call: drive imports the
+    provers)."""
+    from drive import help_refused as refused
+    return refused(kind, image)
+
+
+def row_drawn(cam) -> tuple:
+    """(whether the lit row of the menu or submenu page on show is drawn grey: True, False or None; the measure):
+    proving.greyrow.row_grey, the reading kit/provers/greyrow_run.py judges a row by."""
+    from proving.greyrow import row_grey
+    return row_grey(cam)
+
+
+def row_refused(cam, path: list) -> None:
+    """Failed where the lit row (the last of `path`) is drawn grey: no Right on it, nothing pressed. Where its drawing
+    cannot be told the row opens as before: a Right on a row that is grey after all brings the camera's notice, which
+    set_row stops on, and chooses nothing."""
+    grey, measure = row_drawn(cam)
+    if grey:
+        raise Failed(f"{' > '.join(path)}: the row is drawn grey (its label reads {measure:.0f}, {cam.frame.path.name}), "
+                     "so it was not opened: kit/provers/greyrow_run.py asks the camera why; nothing was pressed on it")
+
+
+def option_drawn(cam) -> tuple:
+    """(whether the option under the cursor of the list on show is drawn grey: True, False, or None where neither eye
+    can tell; the proving.greyed.Drawing it was judged by), by the provers' own reading (proving.greyed.drawing: a
+    list's lit band by its pixels, as kit/prove_run.py --never-enter-grey judges a list's option; where the pixels
+    cannot tell, the second reader's flag where it is asked, as greyed.judge takes it)."""
+    from proving import greyed
+    d = greyed.drawing(cam)
+    if d.grey_by():
+        return True, d
+    if d.pixels is False or (d.pixels is None and d.reader is False):
+        return False, d
+    return None, d
+
+
+def grey_refused(cam, path: list, option: str, labels) -> str:
+    """Why `option`, under the cursor of the open list of the row at `path`, is not chosen, or "" where it is drawn
+    white, judged on the frame on show, the one Enter would go on (option_drawn). Drawn grey: the camera's Help on it,
+    through the kit's guarded Help alone where the screen allows it (proving.greyed.by_help: C4, the guide's OK, the
+    list back on the option; drive.help_refused says where not), then MENU out of the list (proving.greyed.leave). A
+    drawing neither eye can tell is no choice either (no guess): MENU alone. The words say what the option is, that it
+    is drawn grey or not told, what Help named (its blocker only, never its text) and what was pressed."""
+    from proving import greyed
+    name = " > ".join(path)
+    grey, d = option_drawn(cam)
+    if grey is False:
+        return ""
+    frame = cam.frame.path.name
+    level = f", its text reads {d.level:.0f}" if d.level is not None else ""
+    if grey is None:
+        greyed.leave(cam, name)
+        return (f"{name}={option}: whether {option!r} is drawn grey cannot be told ({frame}{level}), so it was not "
+                "chosen, no guess made: nothing was pressed on it but MENU, which closed its list")
+    why = help_refused(cam.read().kind, cam.frame.image)
+    if why:
+        said, pressed = f"the camera's Help was not asked: {why}", "MENU"
+    else:
+        reason = greyed.by_help(cam, name, option, lambda: bar_names(bar_text(cam), option, labels))
+        said = f"the camera's Help on it: {reason.said()}" if reason else "the camera's Help could not be asked"
+        pressed = "Help (C4) and its guide's OK, then MENU"
+    greyed.leave(cam, name)
+    return (f"{name}={option}: {option!r} is drawn grey in its list (told by the {greyed.told(d.grey_by())}{level}, "
+            f"{frame}), so it was not chosen; {said}; nothing was pressed on it but {pressed}, which closed its list")
+
+
 def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills"):
     """A list row (a top-level row, or a submenu's: "Proxy Settings > Px Proxy Recording") put on `option` and left
     there: to the row by the scan, Right, Down through the list to the option (by the bar's text), OK; an
@@ -370,10 +438,16 @@ def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills
     Brightness Setup"): OK brings the panel back, its title the panel's own, with its slider lit (an OK in its footer,
     kit2_hdmi_watch 02362 -> 02363), which is the choice made, no information to take. What a screen after the choice
     reads is never said nor put in a failure (it can show the owner's values: a panel's number, a notice): the frame is
-    named and the words go to the run's events.jsonl."""
+    named and the words go to the run's events.jsonl.
+    Nothing drawn grey is entered to choose it (the owner's rule): a row the lit bar reads drawn grey is not opened
+    (row_drawn; its notice is kit/provers/greyrow_run.py's to ask, after the camera's Help), and the option under the
+    cursor is judged on the frame Enter would go on (grey_refused): drawn grey, or a drawing neither eye can tell, is
+    no choice; the run stops with status 1, the switch waiting for its --restore."""
     find(cam, cycle, model, path[0])
+    row_refused(cam, path[:1])
     if len(path) > 1:
         enter_any(cam, path, 0)
+        row_refused(cam, path)
     cam.press("right")
     if cam.read().kind != "list":
         raise Failed(f"Right on {' > '.join(path)!r} opened {cam.read().kind}, not a list ({cam.frame.path.name})")
@@ -387,6 +461,9 @@ def set_row(cam, cycle, model, path: list, option: str, say, mode: str = "Stills
         cam.run.log("set_row_missed", step=" > ".join(path), frame=cam.frame.path.name, bar=bar_text(cam))
         raise Failed(f"{' > '.join(path)!r}: {option!r} did not come round in its list ({cam.frame.path.name}; what "
                      "its bar read is in the run's events.jsonl)")
+    refused = grey_refused(cam, path, option, labels)
+    if refused:
+        raise Failed(refused)
     say(f"{' > '.join(path)}: choosing {option!r}")
     cam.press("enter")
     kind = cam.read().kind

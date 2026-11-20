@@ -62,7 +62,14 @@ impl App {
                 ui.separator();
             }
         });
+        let mut fold_every = None;
         ui.horizontal_wrapped(|ui| {
+            // every group folded or open (`fold_all`), with their keys
+            let ctx = ui.ctx().clone();
+            let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+            if ui.small_button("Collapse all").on_hover_text(format!("Fold every group ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+            if ui.small_button("Expand all").on_hover_text(format!("Open every group ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+            ui.separator();
             if ui.checkbox(&mut self.prefs.memories_only_diff, "Only rows that differ from Live")
                 .on_hover_text("Show only the settings where a memory holds another value than the live settings").changed() {
                 self.prefs.save();
@@ -77,10 +84,28 @@ impl App {
         let rows: Vec<&(String, String, Vec<Setting>)> = kept.into_iter()
             .filter(|r| !self.prefs.memories_only_diff || dial.iter().any(|&m| self.memory_differs(Col::a(m), &r.2[0])))
             .collect();
+        if let Some(collapse) = fold_every {
+            self.fold_all(collapse);
+        }
+        // a new search opens the groups of its hits, as a jump to a row under a folded heading opens it in Edit; a group
+        // folded during the same search stays folded
+        let q = self.search.trim().to_string();
+        if q != self.mem_search_seen {
+            if !q.is_empty() {
+                for (t, g, _) in &rows {
+                    self.mem_closed.remove(&format!("{t} > {g}"));
+                }
+            }
+            self.mem_search_seen = q;
+        }
         if rows.is_empty() {
             ui.label(if self.prefs.memories_only_diff { "No memory holds another value than the live settings here." } else { "No settings match." });
             return actions;
         }
+        let mut toggle: Option<String> = None;
+        // each group's heading, and the group whose row control has egui's focus this frame
+        let mut heads: std::collections::HashMap<String, egui::Id> = Default::default();
+        let mut focus_now: Option<String> = None;
         let mut last_group = String::new();
         // the columns share the width shown, so every memory fits beside the live settings: the names and values are
         // cut short to their column (in full on hover)
@@ -97,11 +122,21 @@ impl App {
             ui.end_row();
             for (tab, group, linked) in rows {
                 let g = format!("{tab} > {group}");
+                let closed = self.mem_closed.contains(&g);
                 if g != last_group {
-                    fixed(ui, RichText::new(&g).strong().color(tab_ink(ui.visuals(), &self.schema.camera, tab)), name_w);
+                    // the group's heading folds or shows its rows, by a click or by Enter or Space with the focus on it
+                    let head = RichText::new(format!("{} {g}", if closed { "⏵" } else { "⏷" })).strong().color(tab_ink(ui.visuals(), &self.schema.camera, tab));
+                    let r = ui.scope(|ui| { ui.set_width(name_w); ui.add(egui::Label::new(head).truncate().sense(egui::Sense::click())) }).inner;
+                    heads.insert(g.clone(), r.id);
+                    if r.on_hover_text(if closed { "Click to show this group's settings" } else { "Click to fold this group's settings" }).clicked() {
+                        toggle = Some(g.clone());
+                    }
                     for _ in 0..=dial.len() { ui.label(""); }
                     ui.end_row();
-                    last_group = g;
+                    last_group = g.clone();
+                }
+                if closed {
+                    continue;
                 }
                 let s = &linked[0];
                 let text = |c: Col| -> String {
@@ -123,14 +158,37 @@ impl App {
                             // saying what the copy changes there where the camera keeps the value in more than one record
                             // (`copy_note`)
                             let say = |words: &str, into: usize| match self.copy_note(s, into) { Some((note, _)) => format!("{words}\n\n{note}"), None => words.to_string() };
-                            if !self.locked(s, 0) && named(ui.small_button("⬅"), &back).on_hover_text(say(&back, 0)).clicked() { actions.extend(self.copy_row(linked, c, live)); }
-                            if !self.locked(s, m) && named(ui.small_button("➡"), &to).on_hover_text(say(&to, m)).clicked() { actions.extend(self.copy_row(linked, live, c)); }
+                            if !self.locked(s, 0) {
+                                let b = named(ui.small_button("⬅"), &back).on_hover_text(say(&back, 0));
+                                if b.has_focus() { focus_now = Some(g.clone()); }
+                                if b.clicked() { actions.extend(self.copy_row(linked, c, live)); }
+                            }
+                            if !self.locked(s, m) {
+                                let b = named(ui.small_button("➡"), &to).on_hover_text(say(&to, m));
+                                if b.has_focus() { focus_now = Some(g.clone()); }
+                                if b.clicked() { actions.extend(self.copy_row(linked, live, c)); }
+                            }
                         }
                     });
                 }
                 ui.end_row();
             }
         });
+        // a row control with egui's focus last frame whose group is folded now (by the keys or Collapse all): the focus
+        // goes to that group's heading, never left on a control no longer drawn; again the next frame (`refocus`, in
+        // place of the control), as egui moves its focus with the keys' arrow after this frame
+        let was = std::mem::replace(&mut self.mem_focus_group, focus_now);
+        if self.mem_focus_group.is_none() {
+            if let Some(id) = was.filter(|g| self.mem_closed.contains(g)).and_then(|g| heads.get(&g).copied()) {
+                ui.memory_mut(|m| m.request_focus(id));
+                self.refocus = Some(id);
+            }
+        }
+        if let Some(g) = toggle {
+            if !self.mem_closed.remove(&g) {
+                self.mem_closed.insert(g);
+            }
+        }
         actions
     }
 

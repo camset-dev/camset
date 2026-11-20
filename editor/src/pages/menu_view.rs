@@ -208,7 +208,7 @@ impl App {
     /// what the menus do not hold; in Compare All settings first), the keys taken so the columns' keys do not move too.
     /// Only plain arrows: Alt with them steps through Compare's differences.
     pub(crate) fn bar_nav(&mut self, ctx: &egui::Context) {
-        if self.doc.is_none() || self.focus != Focus::Tabs || ctx.wants_keyboard_input() || ctx.memory(|m| m.any_popup_open()) {
+        if self.doc.is_none() || self.focus != Focus::Tabs || typing(ctx) || ctx.memory(|m| m.any_popup_open()) {
             return;
         }
         let menu = self.menu_shown();
@@ -233,6 +233,9 @@ impl App {
             i.events.retain(|e| !arrow(egui::Key::ArrowUp)(e) && !arrow(egui::Key::ArrowDown)(e));
             (up, down)
         });
+        if up || down {
+            self.keep_focus(ctx);
+        }
         let step = if down { 1 } else if up { -1 } else { return };
         let next = match pos { Some(p) => step_in(keys.len(), p, step), None => (!keys.is_empty()).then_some(0) };
         let Some(key) = next.map(|i| keys[i].clone()) else { return };
@@ -316,8 +319,17 @@ impl App {
             }
             match Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) {
                 None => {
-                    let first = menu_rows::order(&lines).first().map(|&i| &rows[i][0]);
-                    self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
+                    let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
+                    // a row of the camera's menu chosen by the keys stays the choice while it is shown
+                    let head_shown = self.item_head.as_ref().is_some_and(|p| lines.iter().zip(&hidden).any(|(l, h)| !h && matches!(l, Line::Heading { path, at, .. } if menu_rows::fold_id(path, at) == *p)));
+                    if !head_shown {
+                        // the first row a fold leaves shown, or where every row is under a folded one, the first heading
+                        let first = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(&rows[*index][0]), _ => None });
+                        self.select(None, self.group.clone(), first.map(|s| (s.name.as_str(), s.key.as_str())));
+                        if first.is_none() {
+                            self.item_head = lines.iter().zip(&hidden).find_map(|(l, h)| match l { Line::Heading { path, at, .. } if !h => Some(menu_rows::fold_id(path, at)), _ => None });
+                        }
+                    }
                 }
                 // a jump to a row a folded row of the camera hides unfolds it
                 Some(i) => {
@@ -330,17 +342,31 @@ impl App {
             }
         }
         let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&fold_key(p)));
-        let shown: Vec<usize> = lines.iter().zip(&hidden).filter_map(|(l, h)| match l { Line::Row { index, .. } if !h => Some(*index), _ => None }).collect();
-        // Up/Down move through the items as drawn, like the camera's menu (Left/Right pick the column: see keyboard_nav)
+        // Up/Down move through the items as drawn, like the camera's menu, stopping on its rows that hold others too
+        // (Left/Right pick the column, or fold a row that holds others: see keyboard_nav)
         let mut moved = false;
-        if !*family && self.focus == Focus::Items && !ui.ctx().wants_keyboard_input() {
+        if !*family && self.focus == Focus::Items && !typing(ui.ctx()) {
+            let stops: Vec<usize> = (0..lines.len()).filter(|&a| !hidden[a] && matches!(lines[a], Line::Row { .. } | Line::Heading { .. })).collect();
             let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
-            let pos = shown.iter().position(|&i| Some(i) == cur).unwrap_or(0);
+            let at = lines.iter().position(|l| match l {
+                Line::Heading { path, at, .. } => self.item_head.as_ref() == Some(&menu_rows::fold_id(path, at)),
+                Line::Row { index, .. } => self.item_head.is_none() && Some(*index) == cur,
+                _ => false,
+            });
+            let pos = at.and_then(|a| stops.iter().position(|&s| s == a)).unwrap_or(0);
             let (up, down) = ui.input(|i| (i.key_pressed(egui::Key::ArrowUp), i.key_pressed(egui::Key::ArrowDown)));
-            let to = if down && pos + 1 < shown.len() { Some(shown[pos + 1]) } else if up && pos > 0 { Some(shown[pos - 1]) } else { None };
-            if let Some(i) = to {
-                self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
-                moved = true;
+            let to = if down && pos + 1 < stops.len() { Some(stops[pos + 1]) } else if up && pos > 0 { Some(stops[pos - 1]) } else { None };
+            match to.map(|a| &lines[a]) {
+                Some(Line::Row { index, .. }) => {
+                    self.select(None, self.group.clone(), Some((&rows[*index][0].name, &rows[*index][0].key)));
+                    moved = true;
+                }
+                Some(Line::Heading { path, at, .. }) => {
+                    self.select(None, self.group.clone(), None);
+                    self.item_head = Some(menu_rows::fold_id(path, at));
+                    moved = true;
+                }
+                _ => {}
             }
         }
         let current = if *family { None } else { Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref()) };
@@ -383,7 +409,19 @@ impl App {
         });
 
         if *family {
+            let mut fold_every = None;
             egui::CentralPanel::default().show_inside(ui, |ui| {
+                // the family's table folded or open (`fold_all`), with its keys, as on the page
+                ui.horizontal(|ui| {
+                    let ctx = ui.ctx().clone();
+                    let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+                    if ui.small_button("Collapse all").on_hover_text(format!("Fold the table ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+                    if ui.small_button("Expand all").on_hover_text(format!("Open the table ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+                });
+                // a button's request acts in this same drawing, the table being drawn below it
+                if let Some(collapse) = fold_every.take() {
+                    self.fold_all(collapse);
+                }
                 egui::ScrollArea::both().id_salt("family_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     self.pp_table(ui, gname, &rows[0], editable, &mut actions);
                 });
@@ -394,6 +432,9 @@ impl App {
                 egui::ScrollArea::vertical().id_salt("detail_scroll").auto_shrink([false, false]).show(ui, |ui| {
                     if let Some(row) = current.map(|i| &rows[i]) {
                         self.detail_panel(ui, tab, gname, row, editable, &mut actions);
+                    } else if let Some(label) = self.item_head.as_ref().and_then(|p| lines.iter().find_map(|l| match l { Line::Heading { label, path, at, .. } if menu_rows::fold_id(path, at) == *p => Some(label.clone()), _ => None })) {
+                        ui.heading(label);
+                        ui.label("A row of the camera's menu that holds the settings under it. Enter or Space folds or shows them, Left folds them and Right shows them; Up and Down go on through the rows.");
                     }
                 });
             });
@@ -401,9 +442,17 @@ impl App {
             let mut pick_item = None;
             let mut fold = None;
             let mut set_flat = None;
+            let mut fold_every = None;
             egui::CentralPanel::default().show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(gname).strong());
+                    // the camera's rows that hold others, all folded or all shown (`fold_all`), with their keys
+                    if lines.iter().any(|l| matches!(l, Line::Heading { .. })) {
+                        let ctx = ui.ctx().clone();
+                        let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+                        if ui.small_button("Collapse all").on_hover_text(format!("Fold every row of the camera's menu here that holds others ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+                        if ui.small_button("Expand all").on_hover_text(format!("Show every row of the camera's menu here ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
+                    }
                     // the layout switch, when the definition says where its settings sit on the camera
                     if self.places() {
                         ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
@@ -439,18 +488,27 @@ impl App {
                                     ui.end_row();
                                     continue;
                                 }
-                                Line::Heading { label, depth, path } => {
-                                    let closed = self.folded.contains(&fold_key(path));
+                                Line::Heading { label, depth, path, at } => {
+                                    // named for folding by its labels and their places (`fold_id`): two rows of one
+                                    // label fold apart
+                                    let id = menu_rows::fold_id(path, at);
+                                    let closed = self.folded.contains(&fold_key(&id));
                                     // the edited settings under it, shown while it is folded
                                     let under = lines[li + 1..].iter().take_while(|l| matches!(l, Line::Row { depth: d, .. } | Line::Heading { depth: d, .. } if d > depth));
                                     let edited = under.filter(|l| matches!(l, Line::Row { index, .. } if rows[*index].iter().any(|s| self.changed(s)))).count();
                                     ui.horizontal(|ui| {
                                         ui.add_space(ROW_INDENT * *depth as f32);
                                         let head = RichText::new(format!("{} {label}", if closed { "⏵" } else { "⏷" })).strong();
+                                        // chosen by the keys (`item_head`): marked as a chosen row is
+                                        let chosen = self.item_head.as_ref() == Some(&id);
+                                        let head = if chosen { head.background_color(ui.visuals().selection.bg_fill) } else { head };
                                         let r = ui.add(egui::Label::new(head).sense(egui::Sense::click()))
                                             .on_hover_text(if closed { "A row of the camera's menu: click to show the settings under it" } else { "A row of the camera's menu: click to fold the settings under it" });
                                         if r.clicked() {
-                                            fold = Some(path.clone());
+                                            fold = Some(id.clone());
+                                        }
+                                        if chosen && moved {
+                                            r.scroll_to_me(None);
                                         }
                                         if closed && edited > 0 {
                                             Self::badge(ui, edited.to_string(), "settings edited under this row");
@@ -536,14 +594,22 @@ impl App {
                     let at = lines.iter().position(|l| matches!(l, Line::Row { index, .. } if Some(*index) == current));
                     if let Some(at) = at.filter(|&a| hidden[a]) {
                         let near = shown.iter().find(|(a, _)| *a > at).or(shown.iter().rev().find(|(a, _)| *a < at));
-                        if let Some(&(_, i)) = near {
-                            self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key)));
+                        match near {
+                            Some(&(_, i)) => self.select(None, self.group.clone(), Some((&rows[i][0].name, &rows[i][0].key))),
+                            // none left shown: the row of the camera's menu just folded
+                            None => {
+                                self.select(None, self.group.clone(), None);
+                                self.item_head = Some(path.clone());
+                            }
                         }
                     }
                 }
             }
             if let Some(flat) = set_flat {
                 self.set_flat_list(flat);
+            }
+            if let Some(collapse) = fold_every {
+                self.fold_all(collapse);
             }
         }
         if let Some(g) = pick_group {
@@ -553,11 +619,72 @@ impl App {
         actions
     }
 
+    /// Collapse all (`collapse`) or expand all, by the buttons or by Cmd/Ctrl+Shift+↑ / ↓ (`KEY_COLLAPSE_ALL`,
+    /// `KEY_EXPAND_ALL`), the page's alike: in Compare its tabs and groups, as its Collapse all and Expand all have always
+    /// done; in a tab of Edit the camera's rows that hold others in the group shown (the group column picks one group at a
+    /// time; the Menu's entries are pages, not folds), or a family group's table; on the exposure page its "What decides"
+    /// sections, on the record map its records' bytes (`head_fold`), on the Memories page its groups (`mem_closed`). A row
+    /// chosen that a fold hides gives way to the nearest row still shown, as a click on its heading does, or to none where
+    /// every row is under a folded one. The rule: every foldable group of the view in front, as on the page.
+    pub(crate) fn fold_all(&mut self, collapse: bool) {
+        match (self.mode, self.view.clone()) {
+            (Mode::Compare, _) if !self.compare_records => {
+                if collapse {
+                    let rows = self.compare_rows(self.compare_menu().as_deref(), &self.compare_key(), &self.search);
+                    for (t, _, _) in rows.iter() {
+                        self.matrix_closed.insert((t.clone(), String::new()));
+                    }
+                } else {
+                    self.matrix_closed.clear();
+                }
+            }
+            (Mode::Edit, View::Tab(tab)) => {
+                let groups = self.tab_groups(&tab);
+                let Some((gname, family, rows)) = groups.iter().find(|(n, _, _)| Some(n) == self.group.as_ref()).or(groups.first()) else { return };
+                // a family's table (Picture Profiles, Creative Looks): its one collapsing header
+                if *family {
+                    self.head_fold = Some(collapse);
+                    return;
+                }
+                let lines = self.group_lines(rows);
+                for l in &lines {
+                    if let Line::Heading { path, at, .. } = l {
+                        let k = Self::fold_key(&tab, gname, &menu_rows::fold_id(path, at));
+                        if collapse { self.folded.insert(k); } else { self.folded.remove(&k); }
+                    }
+                }
+                let hidden = menu_rows::hidden(&lines, |p| self.folded.contains(&Self::fold_key(&tab, gname, p)));
+                let cur = Self::pick_row(rows, self.item.as_ref(), self.item_key.as_ref());
+                if let Some(at) = lines.iter().position(|l| matches!(l, Line::Row { index, .. } if Some(*index) == cur)).filter(|&a| hidden[a]) {
+                    let shown = |a: &usize| !hidden[*a] && matches!(lines[*a], Line::Row { .. });
+                    let near = (0..at).rev().find(shown).or_else(|| (at..lines.len()).find(shown));
+                    let row = near.and_then(|a| match lines[a] { Line::Row { index, .. } => Some(rows[index][0].clone()), _ => None });
+                    self.select(None, Some(gname.clone()), row.as_ref().map(|s| (s.name.as_str(), s.key.as_str())));
+                    // none left shown: the row of the camera's menu, still shown, that holds it, so the keys have somewhere to be
+                    if row.is_none() {
+                        self.item_head = (0..at).rev().find_map(|a| match &lines[a] { Line::Heading { path, at: places, .. } if !hidden[a] => Some(menu_rows::fold_id(path, places)), _ => None });
+                    }
+                }
+            }
+            (Mode::Edit, View::Exposure | View::Records) => self.head_fold = Some(collapse),
+            // the Memories page's groups, those the search shows
+            (Mode::Edit, View::Memories) => {
+                if collapse {
+                    let groups: Vec<String> = self.matrix_rows_shared(&self.search, None).iter().filter(|r| r.2[0].in_sets).map(|(t, g, _)| format!("{t} > {g}")).collect();
+                    self.mem_closed.extend(groups);
+                } else {
+                    self.mem_closed.clear();
+                }
+            }
+            _ => {}
+        }
+    }
+
     pub(crate) fn search_view(&mut self, ui: &mut egui::Ui) -> Vec<Action> {
         let hits = self.search_hits();
         ui.heading(format!("Search: \"{}\"", self.search.trim()));
         if hits.is_empty() {
-            ui.label("Nothing matches. The search looks at setting names, groups and value labels.");
+            ui.label("Nothing matches. The search looks at setting names, groups, value labels and the camera's rows as drawn.");
             return Vec::new();
         }
         ui.label(RichText::new(format!("{} setting(s). Click one to open it in its menu.", hits.len())).small().color(tone::weak(ui.visuals())));
@@ -710,7 +837,7 @@ mod menus_window_tests {
         assert!(in_order(&drawn, &want), "{want:?} in {drawn:?}");
         let edit = app.bar_keys(false, 0, None, "", false);
         // Compare: file B with one value changed, two columns
-        let rows = app.build_matrix_rows("", None);
+        let rows = app.build_matrix_rows("", None, false);
         let changed = rows.iter().map(|r| r.2[0].clone()).find(|s| s.scalar && s.values.len() >= 2 && app.col_value(Col::a(0), s).is_some()).unwrap();
         let mut b = app.doc.as_ref().unwrap().original.clone();
         other_value(&app, &mut b, &changed);
@@ -719,13 +846,16 @@ mod menus_window_tests {
         let (drawn, said) = w.settle(&mut app);
         assert!(!drawn.contains(&label), "no selector");
         assert!(!said.iter().any(|(_, r, l, _)| *r == Role::ComboBox || l == "Tab compared"), "no list of tabs: the Menu picks");
-        // All settings: the rows Compare always had, and the records a Main tile shows that those leave out (a memory's
-        // own, a fraction's Expert-only parts: `tile_records`), each a row beside its group
-        let tiles: Vec<String> = app.tile_records("").into_iter().map(|s| s.key).collect();
-        assert!(!tiles.is_empty());
+        // All settings: the rows Compare always had, and the records a Main tile shows that those leave out (`tile_records`),
+        // each a row beside its group: with no memory among these columns (A's and B's live settings) those the live
+        // settings hold; a memory's own (a fraction's Expert-only parts too) wait for a memory column
+        let every: Vec<Setting> = app.tile_records("");
+        assert!(!every.is_empty());
+        let tiles: Vec<String> = every.iter().filter(|s| s.area != "set").map(|s| s.key.clone()).collect();
         let shown = names(&app.matrix_rows());
         assert_eq!(shown.iter().filter(|r| !tiles.contains(&r.2[0])).cloned().collect::<Vec<_>>(), names(&rows), "All settings: the rows Compare always had");
-        assert_eq!(shown.iter().filter(|r| tiles.contains(&r.2[0])).count(), tiles.len(), "and each tile record once");
+        assert_eq!(shown.iter().filter(|r| tiles.contains(&r.2[0])).count(), tiles.len(), "and each tile record the live settings hold once");
+        assert!(every.iter().filter(|s| s.area == "set").all(|s| !shown.iter().any(|r| r.2[0] == s.key)), "a memory's own records wait for a memory column");
         assert_eq!(names(&app.matrix_rows_for("", None)), names(&rows), "the Memories page's and a recall's rows without them");
         // and those are the definition's live settings outside Expert mode, and My Menu's places as its page shows them
         // (Compare's left bar is Edit's for every definition: All holds My Menu's places too), each record in one row
@@ -753,9 +883,10 @@ mod menus_window_tests {
                 got.extend(r.2.iter().map(|s| s.key.clone()));
             }
             // the records of the rows Edit's own page lists under that tab (`tab_groups`), not Compare's code, and the
-            // records a Main tile shows (a memory's own) that it shows (`tile_records`)
+            // records a Main tile shows that it shows (`tile_records`), but a memory's own, which wait for a memory column
+            // (these columns are A's and B's live settings)
             let mut want: Vec<String> = app.tab_groups(t).into_iter().flat_map(|(_, _, rows)| rows.into_iter().flatten().map(|s| s.key)).collect();
-            want.extend(app.tile_records("").into_iter().filter(|s| app.entry_of(s) == *t).map(|s| s.key));
+            want.extend(app.tile_records("").into_iter().filter(|s| app.entry_of(s) == *t && s.area != "set").map(|s| s.key));
             got.sort();
             want.sort();
             want.dedup();

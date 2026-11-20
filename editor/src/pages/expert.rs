@@ -62,8 +62,10 @@ impl App {
                 ui.label(&l.before);
                 ui.label(RichText::new(&l.after).color(tone::edit(ui.visuals())));
                 // this setting back as the file was last opened or saved, its other records with it; another setting
-                // kept in the same record keeps its edit
-                if ui.small_button("Revert").clicked() {
+                // kept in the same record keeps its edit; My Menu's line all of My Menu, and it says so
+                let r = ui.small_button("Revert");
+                let r = match self.edit_line_revert_words(&l, false) { Some(w) => r.on_hover_text(w), None => r };
+                if r.clicked() {
                     actions.extend(l.slots.iter().map(|&slot| Action::Revert(l.si, slot)));
                 }
                 ui.end_row();
@@ -213,15 +215,30 @@ impl App {
         let only_unmapped = ui.data(|d| d.get_temp::<bool>(egui::Id::new("rm_unmapped"))).unwrap_or(false);
         let only_interesting = ui.data(|d| d.get_temp::<bool>(egui::Id::new("rm_interesting"))).unwrap_or(false);
         let mut expanded: std::collections::HashSet<u16> = ui.data(|d| d.get_temp(egui::Id::new("rm_expanded"))).unwrap_or_default();
+        let mut fold_every = None;
         let (mut u, mut i) = (only_unmapped, only_interesting);
         ui.horizontal(|ui| {
             ui.label(RichText::new(format!("{}: records in file order", self.schema.camera.target_name(self.target))).strong());
             ui.separator();
             ui.checkbox(&mut u, "Only unmapped");
             ui.checkbox(&mut i, "Only edited").on_hover_text("Records whose value differs from the file as it was opened");
+            // every multi-byte record's bytes folded, or those listed shown (`fold_all`), with their keys
+            let ctx = ui.ctx().clone();
+            let keys = |s: &egui::KeyboardShortcut| ctx.format_shortcut(s);
+            if ui.small_button("Collapse all").on_hover_text(format!("Fold every record's bytes ({})", keys(&KEY_COLLAPSE_ALL))).clicked() { fold_every = Some(true); }
+            if ui.small_button("Expand all").on_hover_text(format!("Show the bytes of every multi-byte record listed ({})", keys(&KEY_EXPAND_ALL))).clicked() { fold_every = Some(false); }
             ui.label(RichText::new("Search matches record ids (0x1234), setting names and values. Click a setting to open it; click the shape of a multi-byte record for its bytes.").small().color(tone::weak(ui.visuals())));
         });
         ui.data_mut(|d| { d.insert_temp(egui::Id::new("rm_unmapped"), u); d.insert_temp(egui::Id::new("rm_interesting"), i); });
+        // Collapse all closes every record's bytes; Expand all opens those of the records listed (`head_fold`): the keys'
+        // request, or a button's above, in this same drawing
+        if let Some(collapse) = fold_every.take() {
+            self.fold_all(collapse);
+        }
+        let forced = self.head_fold.take();
+        if forced == Some(true) {
+            expanded.clear();
+        }
         // fields the schema knows inside array records, and the records as listed: worked out once, not per frame
         let fields = self.record_fields(in_set);
         let rows = self.record_rows();
@@ -247,6 +264,9 @@ impl App {
                     continue;
                 }
                 shown += 1;
+                if forced == Some(false) && row.big {
+                    expanded.insert(row.id);
+                }
                 let color = if row.edited { Some(tone::edit(ui.visuals())) } else if setting.is_none() { Some(tone::unnamed(ui.visuals())) } else { None };
                 let paint = |t: String| { let t = RichText::new(t).monospace(); if let Some(c) = color { t.color(c) } else { t } };
                 ui.label(paint(format!("{:06x}", row.offset)));

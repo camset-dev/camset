@@ -221,14 +221,17 @@ impl App {
         s.expert
     }
 
-    /// The name, group or a value label holds `q` (lower case).
     /// The search as every answer takes it, the window's and the page's: trimmed and in lower case, once.
     pub(crate) fn query(q: &str) -> String {
         q.trim().to_lowercase()
     }
 
+    /// The name, group or a value label holds `q` (lower case), or each of its words is in the setting's row as drawn
+    /// (`menu_rows::drawn_row`, its labels with their words), so "Custom Key Still" finds the settings under the row the
+    /// camera draws as "Custom Key/Dial Set." with a stills icon.
     pub(crate) fn matches_query(s: &Setting, q: &str) -> bool {
         s.name.to_lowercase().contains(q) || s.group.to_lowercase().contains(q) || s.values.iter().any(|(_, l)| l.to_lowercase().contains(q))
+            || (s.placed() && { let row = menu_rows::drawn_row(s).to_lowercase(); q.split_whitespace().all(|w| row.contains(w)) && !q.trim().is_empty() })
     }
 
     /// The Menu entry that shows the settings of `tab`: a tab the definition lists is its own entry, My Menu's tab
@@ -791,6 +794,7 @@ impl App {
         }
         self.group = group;
         (self.item, self.item_key) = row.map_or((None, None), |(n, k)| (Some(n.to_string()), Some(k.to_string())));
+        self.item_head = None;
         self.sub_focus = None;
     }
 
@@ -1166,7 +1170,7 @@ impl App {
             } else {
                 // the copy's record at the setting's place, in its tab and group, under its name
                 let mut b = rec.place_in(menu);
-                (b.name, b.tab, b.group, b.row, b.row_at, b.row_tab, b.row_group, b.under_option) = (p.name, p.tab, p.group, p.row, p.row_at, p.row_tab, p.row_group, p.under_option);
+                (b.name, b.tab, b.group, b.row, b.row_at, b.row_icons, b.row_tab, b.row_group, b.under_option) = (p.name, p.tab, p.group, p.row, p.row_at, p.row_icons, p.row_tab, p.row_group, p.under_option);
                 b
             };
             row_of.insert(s.key.clone(), rows.len());
@@ -1192,7 +1196,7 @@ impl App {
                 *on.entry(place(s)).or_default() += 1;
             }
             let titles: Vec<Option<String>> = rows.iter().map(|s| {
-                (counted(s) && !s.on_page() && on.get(&place(s)) == Some(&1)).then(|| s.row.last().map(|l| menu_rows::drawn(l).to_string()).filter(|l| !l.is_empty())).flatten()
+                (counted(s) && !s.on_page() && on.get(&place(s)) == Some(&1)).then(|| s.row.last().map(|l| menu_rows::with_words(l, s.row_words(s.row.len() - 1))).filter(|l| !l.is_empty())).flatten()
             }).collect();
             let mut alike: std::collections::HashMap<(HeadKey, String), usize> = Default::default();
             for (s, t) in rows.iter().zip(&titles).filter(|(s, _)| counted(s)) {
@@ -1314,7 +1318,9 @@ impl App {
     /// setting under one entry once: All is every tab's and My Menu's, in the Menu's order; My Menu its own tab's
     /// settings (`text.my_menu_name`); Main the settings of the menu's tiles (`menu_tile_set`, else the first set) under
     /// each tile's caption, which the tabs list too. Compare lists them through `compare_rows`.
-    pub(crate) fn entry_rows(&self, menu: Option<&str>, entry: &BarKey, q: &str) -> Vec<(String, String, Vec<Setting>)> {
+    /// With the settings only the memories keep where `mem` names a memory set (`lists_memory_settings`): those Edit
+    /// lists for that memory under the entry, among the live settings' rows, laid out as Edit lays them out.
+    pub(crate) fn entry_rows_in(&self, menu: Option<&str>, entry: &BarKey, q: &str, mem: Option<usize>) -> Vec<(String, String, Vec<Setting>)> {
         let q = Self::query(q);
         let menu = menu.filter(|m| self.menu_named(m).is_some());
         let matches = |s: &Setting| q.is_empty() || Self::matches_query(s, &q) || Self::matches_query(self.def_of(s), &q);
@@ -1329,7 +1335,7 @@ impl App {
             rows
         };
         match entry {
-            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_) | BarKey::MyMenu)).flat_map(|k| self.entry_rows(menu, k, &q)).collect(),
+            BarKey::All => self.bar_keys(true, 0, menu, "", false).iter().filter(|k| matches!(k, BarKey::Tab(_) | BarKey::MyMenu)).flat_map(|k| self.entry_rows_in(menu, k, &q, mem)).collect(),
             BarKey::Main => {
                 let Some(sets) = self.schema.camera.main_tiles.as_ref() else { return Vec::new() };
                 let at = menu.and_then(|m| self.menu_tile_set(m)).unwrap_or(0);
@@ -1339,7 +1345,8 @@ impl App {
                     // every record the tile shows, in the live settings or a memory, as Edit's Main draws it: a fraction's
                     // two parts too, Expert-only or not (`tile_records`)
                     let keys: Vec<&String> = tile.keys.iter().chain(&tile.memory_keys).chain(&tile.numerator_key).chain(&tile.denominator_key).collect();
-                    let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i])
+                    // a memory's record only with a memory column (`mem`): the live settings hold none of it
+                    let list: Vec<Setting> = keys.iter().filter_map(|k| self.index_of_key(k)).map(|i| &self.schema.settings[i]).filter(|s| mem.is_some() || s.area != "set")
                         .map(|s| match menu { Some(m) => self.row_record(s, m, &Bind::Menu).clone(), None => s.clone() })
                         .filter(|s| matches(s)).collect();
                     out.extend(link(list).into_iter().map(|r| (self.schema.camera.text.main_title().to_string(), tile.caption.clone(), r)));
@@ -1350,7 +1357,7 @@ impl App {
                 // as Edit's My Menu page: its places, page by page, then the settings of its own tab, under its name
                 let name = self.schema.camera.text.my_menu_name().to_string();
                 let mut out = self.place_rows(&q);
-                out.extend(self.entry_rows(menu, &BarKey::Tab(name.clone()), &q));
+                out.extend(self.entry_rows_in(menu, &BarKey::Tab(name.clone()), &q, mem));
                 out
             }
             BarKey::Tab(t) => {
@@ -1358,9 +1365,18 @@ impl App {
                     Some(m) => self.listed_in(0, m, &Bind::Menu, Some(t)),
                     None => self.settings_in(0, Some(t)).cloned().collect(),
                 }.into_iter().filter(|s| matches(s)).collect();
+                // the settings only the memories keep, as Edit lists them for the memory `mem` under this entry
+                if let Some(ms) = mem {
+                    let kept: Vec<Setting> = match menu {
+                        Some(m) => self.listed_in(ms, m, &Bind::Menu, Some(t)),
+                        None => self.settings_in(ms, Some(t)).cloned().collect(),
+                    };
+                    list.extend(kept.into_iter().filter(|s| s.area == "set" && matches(s)));
+                }
                 // the records a Main tile shows that the live settings' rows leave out, under the entry that shows them
-                // (`tile_records`), so Main's rows are All's
-                list.extend(self.tile_records(&q).into_iter().filter(|s| self.entry_here(s) == *t).map(|s| match menu { Some(m) => s.place_in(m), None => s }));
+                // (`tile_records`), so Main's rows are All's; none twice
+                let held: std::collections::HashSet<String> = list.iter().map(|s| s.key.clone()).collect();
+                list.extend(self.tile_records(&q).into_iter().filter(|s| self.entry_here(s) == *t && !held.contains(&s.key) && (mem.is_some() || s.area != "set")).map(|s| match menu { Some(m) => s.place_in(m), None => s }));
                 let groups = self.groups_of(list, t);
                 // a family's setting on the page an option opens comes with that page's group, not again in the family's
                 let on_pages: std::collections::HashSet<String> = groups.iter().filter(|(_, family, _)| !family).flat_map(|(_, _, rows)| rows.iter().flatten().map(|s| s.key.clone())).collect();
@@ -1654,7 +1670,7 @@ pub(crate) mod facts_tests {
         let at = |hits: &[Setting], n: &str| hits.iter().position(|s| s.name == n).unwrap();
         app.search = "continuous".into();
         assert!(at(&app.search_hits(), &speed.name) < at(&app.search_hits(), "Drive Mode Limit: Continuous Shooting: Hi"));
-        let in_compare = |app: &App, n: &str| app.build_matrix_rows("continuous", Some("Shooting")).iter().position(|r| r.2[0].name == n).unwrap();
+        let in_compare = |app: &App, n: &str| app.build_matrix_rows("continuous", Some("Shooting"), false).iter().position(|r| r.2[0].name == n).unwrap();
         assert!(in_compare(&app, &speed.name) < in_compare(&app, "Drive Mode Limit: Continuous Shooting: Hi"));
         app.set_flat_list(true);
         assert!(!app.camera_layout() && app.places(), "the switch stays, set to the flat list");
@@ -1784,7 +1800,7 @@ pub(crate) mod facts_tests {
         assert_eq!(app.shown_group_of(&hold), "Shooting Mode");
         let rows = group(&app, "Shooting Mode");
         let lines = app.group_lines(&rows);
-        assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, depth: 1, path } if label == "Recall Custom hold 1" && path[0] == "Reg. Custom Shoot Set")), "{lines:?}");
+        assert!(lines.iter().any(|l| matches!(l, Line::Heading { label, depth: 1, path, .. } if label == "Recall Custom hold 1" && path[0] == "Reg. Custom Shoot Set")), "{lines:?}");
         let tc = group(&app, "TC/UB");
         assert_eq!(app.group_lines(&tc)[0], Line::Mode("Movie".into()), "TC/UB is the Movie menu's only");
         let iq = group(&app, "Image Quality/Rec");
@@ -1895,7 +1911,9 @@ pub(crate) mod facts_tests {
             app.schema_gen += 1;
         }
         let unplaced = loose(&app).unwrap();
-        let speeds = App::fold_key("Shooting", "Drive Mode", &["Cont. Shooting Speed".to_string()]);
+        // the heading over it, by its fold id (`fold_id`: its label and its place)
+        assert_eq!(hi.row.first().map(String::as_str), Some("Cont. Shooting Speed"));
+        let speeds = App::fold_key("Shooting", "Drive Mode", &menu_rows::fold_id(&hi.row[..1], &hi.row_at[..1]));
         for flat in [false, true] {
             app.set_flat_list(flat);
             for (s, from_compare) in [(&hi, false), (&fixed, true), (&unplaced, false), (&fixed, false)] {
@@ -2510,12 +2528,560 @@ pub(crate) mod facts_tests {
             crate::test_support::texts(&out.shapes)
         }
 
+        /// A key pressed with `modifiers`, then the window settled.
+        fn key_with(&mut self, app: &mut App, key: egui::Key, modifiers: egui::Modifiers) {
+            let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers }]);
+            let _ = self.run(app, vec![]);
+            let _ = self.run(app, vec![]);
+        }
+
         /// An arrow key pressed, then the window settled.
         fn key(&mut self, app: &mut App, key: egui::Key) {
             let _ = self.run(app, vec![egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers: egui::Modifiers::NONE }]);
             let _ = self.run(app, vec![]);
             let _ = self.run(app, vec![]);
         }
+    }
+
+    /// Item 4: Collapse all and Expand all by Cmd/Ctrl+Shift+↑ / ↓, in Edit (the camera's rows that hold others in the
+    /// group shown: Shooting > Drive Mode) and in Compare (its tabs and groups), leave what the buttons leave; the row
+    /// chosen under a heading gives way to a row still shown; a text field with the keyboard keeps the keys.
+    #[test]
+    fn collapse_and_expand_all_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_keys", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let groups = app.tab_groups(tab);
+        let (_, _, rows) = groups.iter().find(|(g, _, _)| g == group).cloned().unwrap();
+        let lines = app.group_lines(&rows);
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
+        assert!(!heads.is_empty(), "the group has rows that hold others");
+        // a row under one of them (a heading above it)
+        let under = lines.iter().enumerate().find_map(|(at, l)| match l { Line::Row { index, .. } if !menu_rows::headings_above(&lines, at).is_empty() => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&under.name, &under.key)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        let by_keys = app.folded.clone();
+        assert!(heads.iter().all(|k| by_keys.contains(k)), "Edit: every row that holds others folded");
+        assert_ne!(app.item_key.as_deref(), Some(under.key.as_str()), "the row chosen gave way to one still shown");
+        assert_eq!(app.group.as_deref(), Some(group), "the group stays");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "Edit: every one shown");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.folded, by_keys, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(heads.iter().all(|k| !app.folded.contains(k)));
+        // a text field with the keyboard keeps the keys for its text
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "the search box had the keyboard");
+        w.ctx.memory_mut(|m| m.surrender_focus(egui::Id::new(SEARCH_ID)));
+        // Compare: its tabs, by the keys as by the button
+        let b = app.doc.as_ref().unwrap().original.clone();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        let closed = app.matrix_closed.clone();
+        assert!(!closed.is_empty(), "Compare: every tab folded");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(app.matrix_closed.is_empty());
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.matrix_closed, closed, "the button leaves what the keys leave");
+        done(&dir, &user);
+    }
+
+    /// The Memories page's groups fold (all open to start with): every one by the keys as by its Collapse all and Expand
+    /// all, one by a click on its heading or by Space or Enter with the focus on it.
+    #[test]
+    fn the_memories_groups_fold_by_the_keys_the_buttons_and_one_heading() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_memories", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        app.view = View::Memories;
+        let groups: std::collections::HashSet<String> = app.matrix_rows_shared("", None).iter().filter(|r| r.2[0].in_sets).map(|(t, g, _)| format!("{t} > {g}")).collect();
+        let _ = w.run(&mut app, vec![]);
+        assert!(app.mem_closed.is_empty() && groups.len() > 1, "all open to start with");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert_eq!(app.mem_closed, groups, "Collapse all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(app.mem_closed.is_empty(), "Expand all by the keys");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(app.mem_closed, groups, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(app.mem_closed.is_empty());
+        // one heading, the first drawn: by a click, then by Space with the focus on it
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (id, _, label) = said.iter().find(|(_, r, l)| *r == Role::Label && l.starts_with("⏷ ")).cloned().expect("a heading drawn");
+        let first = label.trim_start_matches("⏷ ").to_string();
+        let click = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Click, target: id, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(click)]);
+        let _ = w.run(&mut app, vec![]);
+        assert!(app.mem_closed.contains(&first) && app.mem_closed.len() == 1, "a click folds that group alone");
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (id, ..) = *said.iter().find(|(_, r, l)| *r == Role::Label && *l == format!("⏵ {first}")).expect("the heading, folded");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: id, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        w.key(&mut app, egui::Key::Space);
+        assert!(app.mem_closed.is_empty(), "Space with the focus on it shows it again");
+        done(&dir, &user);
+    }
+
+    /// Two headings of one label in one group fold apart, on main's definition as it is (no words yet): the a1 II's two
+    /// Custom Key/Dial Set. rows and its two Fn Menu Settings, each named for folding by its labels and places
+    /// (`fold_id`). A click folds one alone; Collapse all folds each by its own key; a jump to a row under the second
+    /// unfolds the second alone; Enter on a chosen heading folds that one alone.
+    #[test]
+    fn two_headings_of_one_label_fold_apart() {
+        use egui::accesskit::{Action as A11y, ActionRequest, Role};
+        let (mut app, dir, user) = sample_app("fold_twins", None);
+        let (tab, group) = ("Setup", "Operation Customize");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let lines = app.group_lines(&rows);
+        let twins = |label: &str| -> Vec<(usize, Vec<String>)> {
+            lines.iter().enumerate().filter_map(|(i, l)| match l { Line::Heading { path, at, depth: 0, .. } if path.last().map(String::as_str) == Some(label) => Some((i, menu_rows::fold_id(path, at))), _ => None }).collect()
+        };
+        let (keys, fns) = (twins("Custom Key/Dial Set."), twins("Fn Menu Settings"));
+        assert!(keys.len() == 2 && fns.len() == 2, "the two pairs on main's definition: {keys:?} {fns:?}");
+        assert!(keys[0].1 != keys[1].1 && fns[0].1 != fns[1].1, "four fold ids");
+        let folded_of = |app: &App| menu_rows::hidden(&lines, |p| app.folded.contains(&App::fold_key(tab, group, p)));
+        // the rows under each heading
+        let under = |at: usize| -> Vec<usize> { let d = match &lines[at] { Line::Heading { depth, .. } => *depth, _ => 0 }; (at + 1..lines.len()).take_while(|&j| match &lines[j] { Line::Heading { depth, .. } | Line::Row { depth, .. } => *depth > d, _ => false }).collect() };
+        // a click on the first Custom Key heading, in the window
+        let mut w = Win::new();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let first = said.iter().find(|(_, r, l)| *r == Role::Label && l == "⏷ Custom Key/Dial Set.").map(|(id, ..)| *id).expect("the heading");
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(ActionRequest { action: A11y::Click, target: first, data: None })]);
+        let _ = w.run(&mut app, vec![]);
+        // one of the two folded (the tree lists the two nodes in its own order), the other left open
+        let hidden = folded_of(&app);
+        let shut: Vec<bool> = keys.iter().map(|(_, id)| app.folded.contains(&App::fold_key(tab, group, id))).collect();
+        assert_eq!(shut.iter().filter(|x| **x).count(), 1, "the click folded one heading alone: {:?}", app.folded);
+        let (closed, open) = if shut[0] { (keys[0].0, keys[1].0) } else { (keys[1].0, keys[0].0) };
+        assert!(under(closed).iter().all(|&j| hidden[j]), "its rows hidden");
+        assert!(under(open).iter().all(|&j| !hidden[j]), "the other's rows shown");
+        // Collapse all: each by its own key
+        app.folded.clear();
+        app.fold_all(true);
+        for (_, id) in keys.iter().chain(&fns) {
+            assert!(app.folded.contains(&App::fold_key(tab, group, id)), "{id:?} folded by its own key");
+        }
+        // a jump to a row under the second Fn Menu Settings unfolds that one alone
+        let target = match &lines[under(fns[1].0)[0]] { Line::Row { index, .. } => rows[*index][0].clone(), _ => unreachable!() };
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&target.name, &target.key)));
+        let _ = w.run(&mut app, vec![]);
+        assert!(!app.folded.contains(&App::fold_key(tab, group, &fns[1].1)) && app.folded.contains(&App::fold_key(tab, group, &fns[0].1)), "the jump unfolded its own heading alone");
+        // Enter on the chosen second Custom Key heading folds it alone
+        app.folded.clear();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
+        app.item_head = Some(keys[1].1.clone());
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        w.key(&mut app, egui::Key::Enter);
+        assert!(app.folded.contains(&App::fold_key(tab, group, &keys[1].1)) && !app.folded.contains(&App::fold_key(tab, group, &keys[0].1)), "Enter folded the chosen one alone");
+        done(&dir, &user);
+    }
+
+    /// Rows the camera tells apart by an icon alone (`row_icons`, stubbed as the next data pass gives them) draw its words
+    /// wherever a row level is drawn or said: Edit's headings and a screen reader's name for them, a row's title in a
+    /// menu, its place on hover, the page's layout and places, Compare's titles in the window and on the page; a search
+    /// finds a heading by its drawn name. What rows are stays on `row` and `row_at`: the headings' paths keep the labels.
+    #[test]
+    fn rows_told_apart_by_an_icon_draw_its_words_everywhere() {
+        use crate::web::tests::answer;
+        let (mut app, dir, user) = sample_app("row_icons", Some(crate::test_support::row_icons_stub));
+        let (_, _, rows) = app.tab_groups("Setup").into_iter().find(|(g, _, _)| g == "Operation Customize").unwrap();
+        let lines = app.group_lines(&rows);
+        let heads: Vec<(String, Vec<String>)> = lines.iter().filter_map(|l| match l { Line::Heading { label, depth: 0, path, .. } => Some((label.clone(), path.clone())), _ => None }).collect();
+        for (h, label) in [("Custom Key/Dial Set. (Still)", "Custom Key/Dial Set."), ("Custom Key/Dial Set. (Movie)", "Custom Key/Dial Set."), ("Fn Menu Settings (Still)", "Fn Menu Settings"), ("Fn Menu Settings (Playback)", "Fn Menu Settings")] {
+            assert!(heads.iter().any(|(x, path)| x == h && path.last().map(String::as_str) == Some(label)), "{h}, its path the label alone, in {heads:?}");
+        }
+        // the window draws them, and a screen reader names them so
+        app.select(Some(View::Tab("Setup".into())), Some("Operation Customize".into()), None);
+        let mut w = Win::new();
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        assert!(said.iter().any(|(_, _, l)| l == "⏷ Custom Key/Dial Set. (Movie)"), "the heading's accessible name");
+        // a row alone on its place titled as the camera draws it, its words with it: Shooting > Media's two Recording Media
+        let media = app.tab_groups("Shooting").into_iter().find(|(g, _, _)| g == "Media").unwrap().2;
+        let titles: Vec<String> = media.iter().map(|r| r[0].name.clone()).filter(|n| n.starts_with("Recording Media")).collect();
+        assert!(titles.contains(&"Recording Media (Still)".to_string()) && titles.contains(&"Recording Media (Movie)".to_string()), "{titles:?}");
+        // its place on hover
+        let cell = rows.iter().flatten().find(|s| s.row_at.first() == Some(&6)).cloned().unwrap();
+        assert!(menu_rows::place_words(&cell).unwrap().contains("Custom Key/Dial Set. (Movie)"));
+        // a search finds the heading by its drawn name, the Movie one not
+        let hits = app.search_hits_in(0, app.menu_shown().as_deref(), "Custom Key Still");
+        assert!(hits.iter().any(|(s, _)| s.row_at.first() == Some(&5) && s.row.first().map(String::as_str) == Some("Custom Key/Dial Set.")), "the Still heading's settings found");
+        assert!(!hits.iter().any(|(s, _)| s.row_at.first() == Some(&6) && s.row.first().map(String::as_str) == Some("Custom Key/Dial Set.")), "not the Movie one's");
+        // the page: the layout's headings and a row's place
+        let j: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "tab": "Setup" })).body).unwrap();
+        let group = j["groups"].as_array().unwrap().iter().find(|g| g["name"] == "Operation Customize").cloned().unwrap();
+        assert!(group["layout"].as_array().unwrap().iter().any(|l| l["head"] == "Fn Menu Settings (Playback)"), "the page's heading");
+        assert!(group["rows"].as_array().unwrap().iter().any(|r| r["place"].as_str().is_some_and(|p| p.contains("Custom Key/Dial Set. (Still)"))), "the page's place");
+        let found: serde_json::Value = serde_json::from_slice(&answer(&mut app, "tab", serde_json::json!({ "target": 0, "q": "Custom Key Still" })).body).unwrap();
+        assert!(found["groups"].as_array().is_some_and(|g| !g.is_empty()), "the page's search");
+        // Compare: the two Recording Media rows titled with their words, the window's and the page's
+        let menu = app.compare_menu();
+        let cmp = app.compare_rows(menu.as_deref(), &BarKey::Tab("Shooting".into()), "");
+        let titles: Vec<String> = cmp.iter().map(|r| app.compare_title(r)).filter(|n| n.starts_with("Recording Media")).collect();
+        assert!(titles.contains(&"Recording Media (Still)".to_string()) && titles.contains(&"Recording Media (Movie)".to_string()), "{titles:?}");
+        let mut body = serde_json::json!({ "cols": [["a", 0], ["a", 1]], "only_diff": false, "entry": "tab:Shooting" });
+        if let Some(m) = &menu { body["menu"] = serde_json::json!(m); }
+        let page: serde_json::Value = serde_json::from_slice(&answer(&mut app, "compare", body).body).unwrap();
+        assert!(page["rows"].as_array().unwrap().iter().any(|r| r["name"] == "Recording Media (Movie)"), "the page's Compare");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's mend 3: on the Memories page a new search opens the groups of its hits, as a jump to a row under a
+    /// folded heading does in Edit, and a group folded during that search stays folded; a row control with egui's focus
+    /// whose group folds gives the focus to that group's heading, never left on a control no longer drawn.
+    #[test]
+    fn memories_a_search_opens_its_groups_and_a_fold_gives_the_focus_to_the_heading() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("mem_search_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        (app.view, app.prefs.memories_only_diff) = (View::Memories, false);
+        // a setting of the memories made to differ between Memory 1 and Live, so its row has arrows
+        let (tab, grp, s) = app.matrix_rows_shared("", None).iter().map(|r| (r.0.clone(), r.1.clone(), r.2[0].clone()))
+            .find(|(_, _, s)| s.in_sets && s.area == "global" && s.scalar && s.text.is_none() && s.values.len() >= 2 && s.copies.is_empty() && s.copy_of.is_none() && !app.locked(s, 0) && !app.locked(s, 1)).unwrap();
+        let cur = app.doc.as_ref().unwrap().value(1, s.slot()).unwrap();
+        let v = s.values.iter().map(|(v, _)| *v).find(|v| *v != cur).unwrap();
+        assert!(app.apply(vec![Action::Set(1, s.slot(), v)]).is_none());
+        let g = format!("{tab} > {grp}");
+        let settle = |w: &mut Win, app: &mut App| for _ in 0..3 { let _ = w.run(app, vec![]); };
+        settle(&mut w, &mut app);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(app.mem_closed.contains(&g), "every group folded");
+        app.search = s.name.clone();
+        settle(&mut w, &mut app);
+        assert!(!app.mem_closed.contains(&g), "the search opened its hit's group");
+        app.mem_closed.insert(g.clone());
+        settle(&mut w, &mut app);
+        assert!(app.mem_closed.contains(&g), "folded during the same search, it stays folded");
+        // the row's arrow focused, then every group folded by the keys: the heading has the focus
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        let back = App::arrow_words(&app.col_name(Col::a(1)), &app.col_name(Col::a(0)));
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (arrow, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && *l == back).expect("the row's arrow");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: arrow, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == arrow.0), "the arrow has the focus");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        settle(&mut w, &mut app);
+        let said = w.run(&mut app, vec![]);
+        let (head, ..) = *said.iter().find(|(_, r, l)| *r == Role::Label && *l == format!("⏵ {g}")).expect("the folded heading");
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == head.0), "the heading has the focus");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's mend 2: once a control holds egui's focus (as Tab or a screen reader leaves it), the arrows still move
+    /// the menu's choice, in the items column and the groups column, and the control keeps the focus; Tab still moves
+    /// through the controls; a text field with the caret keeps the arrows for its text.
+    #[test]
+    fn the_arrows_move_the_choice_with_a_control_focused() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("arrows_focus", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let first = app.group_lines(&rows).iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        let said = w.run(&mut app, vec![]);
+        let (button, ..) = *said.iter().find(|(_, r, l)| *r == Role::Button && l == "Expand all").expect("a button");
+        let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: button, data: None };
+        let _ = w.run(&mut app, vec![egui::Event::AccessKitActionRequest(focus)]);
+        let focused = |w: &Win| w.ctx.memory(|m| m.focused()).map(|f| f.value());
+        assert_eq!(focused(&w), Some(button.0), "the button has the focus");
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert!(app.item_key.as_deref() != Some(first.key.as_str()) || app.item_head.is_some(), "Down moved the choice in the items column");
+        assert_eq!(focused(&w), Some(button.0), "and the button kept the focus");
+        app.focus = Focus::Groups;
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_ne!(app.group.as_deref(), Some(group), "Down moved to the next group");
+        assert_eq!(focused(&w), Some(button.0), "the button kept the focus");
+        // Tab moves through the controls from the one focused
+        w.key(&mut app, egui::Key::Tab);
+        assert!(focused(&w).is_some_and(|f| f != button.0), "Tab moved the focus to another control");
+        // a text field with the caret keeps the arrows
+        let now = app.group.clone();
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_eq!(app.group, now, "the search box with the caret kept the arrow");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's mend 1: a Collapse all the view in front does not take acts on no later view. On a family group,
+    /// Cmd/Ctrl+Shift+↑ and a plain ↓ in the same frame: the ↓ moves to the next group, the request is dropped after that
+    /// frame's panel, and the family's table, back in front, is open as it was.
+    #[test]
+    fn a_fold_request_not_taken_acts_on_no_later_view() {
+        let (mut app, dir, user) = sample_app("fold_stale", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = app.schema.tabs.iter().find_map(|t| app.tab_groups(t).into_iter().find(|(_, family, _)| *family).map(|(g, _, _)| (t.clone(), g))).expect("a family group");
+        app.select(Some(View::Tab(tab.clone())), Some(group.clone()), None);
+        app.focus = Focus::Groups;
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            w.drawn(app).iter().any(|t| t.contains("Values the camera never produces are not offered."))
+        };
+        assert!(open(&mut w, &mut app));
+        let key = |key, modifiers| egui::Event::Key { key, physical_key: None, pressed: true, repeat: false, modifiers };
+        let _ = w.run(&mut app, vec![key(egui::Key::ArrowUp, egui::Modifiers::COMMAND | egui::Modifiers::SHIFT), key(egui::Key::ArrowDown, egui::Modifiers::NONE)]);
+        assert_ne!(app.group.as_deref(), Some(group.as_str()), "the plain Down moved to the next group");
+        assert!(app.head_fold.is_none(), "the request the view in front did not take is gone after the panel");
+        let _ = w.run(&mut app, vec![]);
+        app.select(Some(View::Tab(tab)), Some(group), None);
+        assert!(open(&mut w, &mut app), "the family's table, back in front, is open as it was");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's inventory, B: the record map (Expert mode) folds and shows its records' bytes by the keys as by its
+    /// own Collapse all and Expand all: Expand all the multi-byte records listed, Collapse all every one.
+    #[test]
+    fn the_record_maps_bytes_fold_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_records", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        (app.prefs.expert, app.view) = (true, View::Records);
+        let open = |w: &mut Win, app: &mut App| {
+            let _ = w.run(app, vec![]);
+            let _ = w.run(app, vec![]);
+            w.ctx.data(|d| d.get_temp::<std::collections::HashSet<u16>>(egui::Id::new("rm_expanded"))).unwrap_or_default()
+        };
+        let big: std::collections::HashSet<u16> = app.record_rows().iter().filter(|r| r.big).map(|r| r.id).collect();
+        assert!(!big.is_empty() && open(&mut w, &mut app).is_empty(), "every record folded to start with");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        let shown = open(&mut w, &mut app);
+        assert_eq!(shown, big, "Expand all: every multi-byte record listed");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(open(&mut w, &mut app).is_empty(), "Collapse all");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert_eq!(open(&mut w, &mut app), shown, "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert!(open(&mut w, &mut app).is_empty());
+        done(&dir, &user);
+    }
+
+    /// The reviewer's inventory, A: a family group's table (Picture Profiles, Creative Looks) folds and opens by the keys
+    /// as by its own Collapse all and Expand all, as on the page.
+    #[test]
+    fn a_family_groups_table_folds_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_family", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = app.schema.tabs.iter().find_map(|t| app.tab_groups(t).into_iter().find(|(_, family, _)| *family).map(|(g, _, _)| (t.clone(), g))).expect("a family group");
+        app.select(Some(View::Tab(tab)), Some(group), None);
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            w.drawn(app).iter().any(|t| t.contains("Values the camera never produces are not offered."))
+        };
+        assert!(open(&mut w, &mut app), "open to start with");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(!open(&mut w, &mut app), "Collapse all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(open(&mut w, &mut app), "Expand all by the keys");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert!(!open(&mut w, &mut app), "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert!(open(&mut w, &mut app));
+        done(&dir, &user);
+    }
+
+    /// The owner's report ("in the edit, when in the pane 3 of 4 I'm not able to collapse or expand"): the keys fold
+    /// and open from every pane of Edit (the Menu, the groups, the settings, a control with egui's focus) and of Compare,
+    /// and only a text field with the caret in it keeps them.
+    #[test]
+    fn the_fold_keys_work_from_every_pane() {
+        let (mut app, dir, user) = sample_app("fold_panes", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let heads: Vec<String> = app.group_lines(&rows).iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), None);
+        let _ = w.run(&mut app, vec![]);
+        for pane in [Focus::Tabs, Focus::Groups, Focus::Items] {
+            app.focus = pane;
+            w.key_with(&mut app, egui::Key::ArrowUp, cs);
+            assert!(heads.iter().all(|k| app.folded.contains(k)), "Edit, {pane:?}: Collapse all");
+            w.key_with(&mut app, egui::Key::ArrowDown, cs);
+            assert!(heads.iter().all(|k| !app.folded.contains(k)), "Edit, {pane:?}: Expand all");
+        }
+        // a control with egui's focus that is no text field: the first button, focused as a screen reader focuses it
+        let tab_to_control = |w: &mut Win, app: &mut App| {
+            let _ = w.run(app, vec![]);
+            let said = w.run(app, vec![]);
+            let (id, ..) = *said.iter().find(|(_, r, _)| *r == egui::accesskit::Role::Button).expect("a button");
+            let focus = egui::accesskit::ActionRequest { action: egui::accesskit::Action::Focus, target: id, data: None };
+            let _ = w.run(app, vec![egui::Event::AccessKitActionRequest(focus)]);
+            let _ = w.run(app, vec![]);
+            assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == id.0), "the button has the focus");
+            assert!(!typing(&w.ctx), "and it is no text field");
+            id.0
+        };
+        let held = tab_to_control(&mut w, &mut app);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| app.folded.contains(k)), "Edit, a control focused: Collapse all");
+        assert!(w.ctx.memory(|m| m.focused()).is_some_and(|f| f.value() == held), "the focus is back on the control that had it");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)));
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "the search box with the caret keeps them");
+        w.ctx.memory_mut(|m| m.surrender_focus(egui::Id::new(SEARCH_ID)));
+        // Compare: from its Menu and from a control with the focus
+        let b = app.doc.as_ref().unwrap().original.clone();
+        app.compare = Some((PathBuf::from("B.DAT"), b));
+        (app.mode, app.cols, app.matrix_only_diff) = (Mode::Compare, vec![Col::a(0), Col::b(0)], false);
+        let _ = w.run(&mut app, vec![]);
+        for pane in [Focus::Tabs, Focus::Items] {
+            app.focus = pane;
+            w.key_with(&mut app, egui::Key::ArrowUp, cs);
+            assert!(!app.matrix_closed.is_empty(), "Compare, {pane:?}: Collapse all");
+            w.key_with(&mut app, egui::Key::ArrowDown, cs);
+            assert!(app.matrix_closed.is_empty(), "Compare, {pane:?}: Expand all");
+        }
+        tab_to_control(&mut w, &mut app);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(!app.matrix_closed.is_empty(), "Compare, a control focused: Collapse all");
+        done(&dir, &user);
+    }
+
+    /// The reviewer's finding 4: the window takes the fold keys as the page does: never with Alt held too, and not
+    /// while a list, a popup or a right-click menu is open.
+    #[test]
+    fn the_fold_keys_are_left_alone_with_alt_or_a_menu_open() {
+        let (mut app, dir, user) = sample_app("fold_keys_alike", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let lines = app.group_lines(&rows);
+        let heads: Vec<String> = lines.iter().filter_map(|l| match l { Line::Heading { path, at, .. } => Some(App::fold_key(tab, group, &menu_rows::fold_id(path, at))), _ => None }).collect();
+        let first = lines.iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&first.name, &first.key)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowUp, cs | egui::Modifiers::ALT);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "Alt held too: nothing folds");
+        // a popup open
+        w.ctx.memory_mut(|m| m.open_popup(egui::Id::new("a popup")));
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "a popup open: nothing folds");
+        w.ctx.memory_mut(|m| m.close_popup());
+        // a right-click menu open, by a right click on the row's name
+        let _ = w.run(&mut app, vec![]);
+        let frame = &mut w.frame;
+        let out = w.ctx.run(egui::RawInput::default(), |ctx| eframe::App::update(&mut app, ctx, frame));
+        let tree = out.platform_output.accesskit_update.expect("the window's tree");
+        let rect = tree.nodes.iter().find(|(_, n)| n.label() == Some(first.name.as_str())).and_then(|(_, n)| n.bounds()).expect("the row's name");
+        let at = egui::pos2(((rect.x0 + rect.x1) / 2.0) as f32, ((rect.y0 + rect.y1) / 2.0) as f32);
+        let click = |pressed| egui::Event::PointerButton { pos: at, button: egui::PointerButton::Secondary, pressed, modifiers: egui::Modifiers::NONE };
+        let _ = w.run(&mut app, vec![egui::Event::PointerMoved(at)]);
+        let _ = w.run(&mut app, vec![click(true)]);
+        let _ = w.run(&mut app, vec![click(false)]);
+        let _ = w.run(&mut app, vec![]);
+        assert!(w.ctx.is_context_menu_open(), "the row's right-click menu is open");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert!(heads.iter().all(|k| !app.folded.contains(k)), "a right-click menu open: nothing folds");
+        done(&dir, &user);
+    }
+
+    /// A single row of the camera's menu that holds others folds by the keyboard alone: Up and Down stop on it (column 4
+    /// says what it is), Enter or Space folds or shows what it holds, Left folds it and Right shows it, and Down goes on
+    /// to the next row.
+    #[test]
+    fn a_heading_folds_by_the_keyboard() {
+        let (mut app, dir, user) = sample_app("fold_head_keys", Some(crate::test_support::strip_menus));
+        let mut w = Win::new();
+        let (tab, group) = ("Shooting", "Drive Mode");
+        let rows = app.tab_groups(tab).into_iter().find(|(g, _, _)| g == group).unwrap().2;
+        let lines = app.group_lines(&rows);
+        // the first heading and the row just above it (or, at the top, the row just below)
+        let h = lines.iter().position(|l| matches!(l, Line::Heading { .. })).unwrap();
+        let Line::Heading { path: labels, label, at, .. } = &lines[h] else { unreachable!() };
+        let path = &menu_rows::fold_id(labels, at);
+        let key = App::fold_key(tab, group, path);
+        let next = lines[h + 1..].iter().find_map(|l| match l { Line::Row { index, .. } => Some(rows[*index][0].clone()), _ => None }).unwrap();
+        app.select(Some(View::Tab(tab.into())), Some(group.into()), Some((&next.name, &next.key)));
+        app.focus = Focus::Items;
+        let _ = w.run(&mut app, vec![]);
+        // Up from the row under it, until the heading is chosen
+        for _ in 0..(lines.len()) {
+            if app.item_head.as_ref() == Some(path) { break; }
+            w.key(&mut app, egui::Key::ArrowUp);
+        }
+        assert_eq!(app.item_head.as_ref(), Some(path), "Up stops on the heading");
+        assert!(app.item.is_none(), "no setting chosen with it");
+        assert!(w.drawn(&mut app).iter().any(|t| t.contains("Enter or Space folds or shows them")), "column 4 says what it is");
+        w.key(&mut app, egui::Key::Space);
+        assert!(app.folded.contains(&key), "Space folds it");
+        w.key(&mut app, egui::Key::Enter);
+        assert!(!app.folded.contains(&key), "Enter shows it");
+        w.key(&mut app, egui::Key::ArrowLeft);
+        assert!(app.folded.contains(&key) && app.focus == Focus::Items, "Left folds it, the column stays");
+        w.key(&mut app, egui::Key::ArrowRight);
+        assert!(!app.folded.contains(&key), "Right shows it");
+        assert_eq!(app.item_head.as_ref(), Some(path), "still chosen: {label}");
+        w.key(&mut app, egui::Key::ArrowDown);
+        assert_eq!(app.item_key.as_deref(), Some(next.key.as_str()), "Down goes on to the row under it");
+        assert!(app.item_head.is_none());
+        done(&dir, &user);
+    }
+
+    /// The exposure page's "What decides" sections fold and open by Cmd/Ctrl+Shift+↑ / ↓ as by its own Collapse all and
+    /// Expand all (every foldable group of the view in front), and a text field with the keyboard keeps the keys.
+    #[test]
+    fn the_exposure_pages_sections_fold_by_the_keys_and_the_buttons() {
+        use egui::accesskit::Role;
+        let (mut app, dir, user) = sample_app("fold_keys_ex", None);
+        let mut w = Win::new();
+        let cs = egui::Modifiers::COMMAND | egui::Modifiers::SHIFT;
+        app.view = View::Exposure;
+        // which sections show what they hold, once the header's animation is over
+        let open = |w: &mut Win, app: &mut App| {
+            for _ in 0..8 {
+                let _ = w.run(app, vec![]);
+            }
+            let drawn = w.drawn(app);
+            crate::pages::exposure::EFFECTS.iter().map(|(_, _, effect)| drawn.iter().any(|t| t.contains(&effect[..24]))).collect::<Vec<_>>()
+        };
+        assert_eq!(open(&mut w, &mut app), [false; 3], "folded to start with");
+        let heads = w.drawn(&mut app);
+        assert!(["What decides the aperture", "What decides the shutter speed", "What decides ISO"].iter().all(|h| heads.iter().any(|t| t == h)), "the page is drawn: {heads:?}");
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert_eq!(open(&mut w, &mut app), [true; 3], "Expand all by the keys");
+        w.key_with(&mut app, egui::Key::ArrowUp, cs);
+        assert_eq!(open(&mut w, &mut app), [false; 3], "Collapse all by the keys");
+        w.click(&mut app, Role::Button, "Expand all");
+        assert_eq!(open(&mut w, &mut app), [true; 3], "the button leaves what the keys leave");
+        w.click(&mut app, Role::Button, "Collapse all");
+        assert_eq!(open(&mut w, &mut app), [false; 3]);
+        // a text field with the keyboard keeps the keys for its text
+        w.ctx.memory_mut(|m| m.request_focus(egui::Id::new(SEARCH_ID)));
+        let _ = w.run(&mut app, vec![]);
+        w.key_with(&mut app, egui::Key::ArrowDown, cs);
+        assert_eq!(open(&mut w, &mut app), [false; 3], "the search box had the keyboard");
+        done(&dir, &user);
     }
 
     /// Integration review finding 1: with a row chosen, Up/Down in the groups column move to the next group, with menus

@@ -1357,6 +1357,7 @@ def test_the_real_set_row_sets_a_panels_setup_row_and_says_no_screen_word(monkey
     monkeypatch.setattr(S.ocr, "read", lambda paths, eng=None: {p: cam.lines() for p in paths})
     monkeypatch.setattr(mode_switch, "open_menu", lambda c: None)
     monkeypatch.setattr(mode_switch, "find", lambda c, cycle, model, label: None)
+    monkeypatch.setattr(mode_switch, "option_drawn", lambda c: (False, None))   # drawn white: the panel has no picture
     monkeypatch.setattr(mode_switch, "info_notice_ok", lambda *a, **k: pytest.fail("the panel taken for an information"))
     monkeypatch.setattr(afreg_run, "set_setup_row", afreg_run.set_setup_row)
     closes, dats = [], {Path("start.DAT"): {STATE_KEY: 0}}
@@ -1466,6 +1467,7 @@ def test_set_row_whose_ok_leaves_its_list_open_stops(monkeypatch):
     cam = PanelMenu(answers=False)
     monkeypatch.setattr(S.ocr, "read", lambda paths, eng=None: {p: cam.lines() for p in paths})
     monkeypatch.setattr(mode_switch, "find", lambda c, cycle, model, label: None)
+    monkeypatch.setattr(mode_switch, "option_drawn", lambda c: (False, None))   # drawn white: the panel has no picture
     with pytest.raises(S.Failed, match=r"OK on 'Manual' went unanswered, its list still open \(\d+_panel\.png\)"):
         mode_switch.set_row(cam, None, None, ["Made-up Panel", "Setup Row"], "Manual", lambda m: None)
     assert cam.presses == ["right", "right", "down", "enter"]
