@@ -48,7 +48,9 @@ confirmed (a box of one value moves neither way). A pair the camera refuses stop
 --number N (repeated), for an option with one field of digit boxes side by side (Focus Bracket's Number of Shots):
 each box of the field stepped to N's digit in turn, Up where it is higher, else Down, no Enter on the way, then Enter
 once on the field's last box, one download. A box that stands still or comes round short of its digit is said and
-the number passed over, nothing chosen; so is one whose stepping moved another box. Each next opening reads the boxes
+the number passed over, nothing chosen; so is one whose stepping moved another box (every other box's picture before
+its first press and after its last, that box lit both times: the sides the pixel reader finds for a box move with the
+lit box beside it), or a box outside the field not as the first visit saw it. Each next opening reads the boxes
 before any key steps them: a number the camera kept otherwise is a finding, as in a walk ("applied": false, "asked",
 "kept"). The number held is put back last, as one attempt with the numbers.
 
@@ -1093,33 +1095,49 @@ def set_digit(cam, option: str, b: int, count: int, have: str, want: str, n: Nam
     return f"box {b} never showed {want} in ten presses"
 
 
+def others_pics(cam, b: int, count: int) -> dict:
+    """Every box's picture but box b's on the frame on show, box b lit: what box b's stepping is judged by (moved_box).
+    A picture is cut by the sides the pixel reader finds, and those of a box beside the lit one move with it (Focus
+    Bracket's box 1 is x 393-446 beside box 2 lit and 393-450 with box 3 lit: two shapes of one digit, kit2_pass2
+    269127/269128), so pictures are compared only with one box lit."""
+    return {k: box_pic(cam, k) for k in range(count) if k != b}
+
+
+def moved_box(cam, pics: dict) -> int | None:
+    """The first box whose picture on the frame on show is not its picture in `pics`, taken with the same box lit."""
+    return next((k for k, p in pics.items() if not same_pic(box_pic(cam, k), p)), None)
+
+
 def put_number(cam, option, labels, look_: Look, span: tuple, digits: str, n: Named, opened: dict, name: str,
                first: str | None = None) -> tuple:
     """From the option lit: Right into the digit field (span: its first and last box), each box stepped to its digit of
     `digits` in turn (set_digit), never Enter on the way. `first`: the digits the boxes must open on (the first visit's,
     the look's). Returns (why the number cannot be put in, None), nothing chosen, or ("", the last box's reading) once
-    every box shows its digit and no other box moved: the field's earlier boxes as Right left them, the others as the
-    first visit saw them (`opened`, filled then)."""
+    every box shows its digit and no box moved but the one stepped: each box's stepping judged by every other box's
+    picture before its first press and after its last (others_pics), the boxes outside the field by theirs as the first
+    visit saw them (`opened`, filled then), the field's first box lit each time."""
     b0, b1 = span
     count = len(look_.labels)
     into_box(cam, option, labels, b0, count)
     if not opened:
         opened.update({k: box_pic(cam, k) for k in range(count) if not b0 <= k <= b1})
-    left = {}
+    k = moved_box(cam, opened)
+    if k is not None:
+        return f"box {k} is not as the first visit saw it", None
     for j, b in enumerate(range(b0, b1 + 1)):
         if j:
             into_next(cam, option, b, count)
-            left[b - 1] = box_pic(cam, b - 1)
         have = digit_at(cam, b, n, name)
         if first is not None and have != first[j]:
             raise Failed(f"{name}: box {b} holds {have!r}, the look read {first[j]!r}")
         if have != digits[j]:
+            before = others_pics(cam, b, count)
             why = set_digit(cam, option, b, count, have, digits[j], n, name)
             if why:
                 return why, None
-    moved = [k for k in range(count) if k != b1 and not same_pic(box_pic(cam, k), left.get(k, opened.get(k)))]
-    if moved:
-        return f"box {moved[0]} changed while the boxes after it were set", None
+            k = moved_box(cam, before)
+            if k is not None:
+                return f"box {k} changed while box {b} was stepped", None
     r = lit_read(cam, True)
     if key(r.text) != digits[-1]:
         raise Failed(f"{name}: box {b1} reads {r.text!r}, not {digits[-1]!r} ({cam.frame.path.name}); nothing chosen")

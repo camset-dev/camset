@@ -370,6 +370,9 @@ class FieldsCam:
         self.drop = None                      # (key, n): the n-th press of key goes unanswered (a new frame, no change)
         self.correct = None                   # correct(option, edit) -> the boxes the camera keeps on Enter
         self.rule = None                      # rule(option, edit, field, key) -> the boxes after Up or Down on a field
+        self.lit_moves = False                # an unlit box's picture changes with the box lit (the camera's digit
+        #                                       boxes: the pixel reader finds their sides where the lit box beside them
+        #                                       leaves them, kit2_pass2 269127/269128)
         self.shoot("start")
 
     def shoot(self, tag):
@@ -482,7 +485,8 @@ def fields_world(monkeypatch, own_runs, cam):
             ("lit_read", lambda c, always: F.BoxRead(c.value(c.field), c.value(c.field), c.value(c.field), "made-up", "both")
              if lit(c) else (_ for _ in ()).throw(F.Failed("no box lit"))),
             ("word_read", lambda c: c.spec[c.opt][c.field]["label"]),
-            ("box_pic", lambda c, k: (c.opt, k, c.edit[k], c.field == k) if lit(c) and k < len(c.edit) else None),
+            ("box_pic", lambda c, k: (c.opt, k, c.edit[k], c.field == k, c.field if c.lit_moves else None)
+             if lit(c) and k < len(c.edit) else None),
             ("same_pic", lambda a, b: a is not None and a == b),
             ("menu_from_shooting", lambda c, **k: setattr(c, "where", "menu")), ("scan_position", lambda c, cycle: 0),
             ("go_to", lambda c, cycle, model, j, row: 0), ("enter_any", enter_any),
@@ -1578,9 +1582,15 @@ def capped(opt, edit):
     return [edit[0], 2, 5, 0] if n > 250 else edit
 
 
-def number_cam() -> FieldsCam:
+def number_cam(own_top=False) -> FieldsCam:
+    """Focus Bracket on 003 as the a1 II answers its digit boxes (kit2_pass2 268989-269285, 2026-11-20): each Up or Down
+    moves the lit box alone, coming round, and any three digits stand while stepping (000 among them, 264137); the
+    camera corrects the number only on OK, below 2 to 2; and an unlit box's picture changes with the box lit. Above a
+    made-up top of 250 it keeps 250 (capped); with `own_top`, every number the boxes show, up to 299 (the SDK's range
+    for it, [2, 299, 1])."""
     cam = shots_cam()
-    cam.correct = capped
+    cam.correct = lowest_two if own_top else capped
+    cam.lit_moves = True
     return cam
 
 
@@ -1602,6 +1612,194 @@ def test_a_named_number_is_put_in_with_no_enter_on_the_way_one_download_each(own
     assert len(downloads) == 5 and cam.keys.count("enter") == 5, "the base and one a number, no Enter on the way"
     assert "the camera kept 250, not 299" in capsys.readouterr().out
     assert cam.at[2] == [1, 0, 0, 3]
+
+
+def test_the_ends_299_and_2_then_4_and_7_from_a_held_3(own_runs, monkeypatch, capsys):
+    """--number 299 --number 2 --number 4 --number 7, the runs of 2026-11-20, on a camera that keeps 299: each number put
+    in box by box with its other boxes' pictures judged with the box lit as before its stepping (where the old check,
+    across two lit boxes, passed every number over), chosen once, its download holding it, kept as asked on the next
+    opening; 003 put back last with Right alone, its download the base's."""
+    cam = number_cam(own_top=True)
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--number", "299", "--number", "2", "--number", "4", "--number", "7")
+    assert "not put in" not in capsys.readouterr().out
+    lines = fields_lines()
+    assert [(x["index"], x["value"], x["applied"], x.get("kept"), x["final"],
+             [(c["key"], c["before"], c["after"]) for c in x["changes"]]) for x in lines] == [
+        (["number", n], str(n), True, None, False, [("global:0x9003", 3, n)]) for n in (299, 2, 4, 7)] + [
+        (["number", 3], "3", True, None, True, [])]
+    assert len(downloads) == 6 and cam.keys.count("enter") == 6, "the base and one a number, no Enter on the way"
+    assert cam.at[2] == [1, 0, 0, 3]
+
+
+def test_a_number_below_the_bottom_is_kept_as_2(own_runs, monkeypatch, capsys):
+    """--number 1 --number 2: the boxes show 001 and OK is taken, the camera keeps 2 (264137, 000 kept as 2): the next
+    opening shows 002 and the download holds 2, so 1's line says what was asked and what was kept, "applied": false;
+    2 then needs no press in the boxes and is kept as asked."""
+    cam = number_cam(own_top=True)
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--number", "1", "--number", "2")
+    assert "the camera kept 2, not 1" in capsys.readouterr().out
+    assert [(x["value"], x["applied"], x.get("asked"), x.get("kept"), [c["after"] for c in x["changes"]], x["final"])
+            for x in fields_lines()] == [("1", False, "1", "2", [2], False), ("2", True, None, None, [2], False),
+                                         ("3", True, None, None, [], True)]
+    assert len(downloads) == 4
+
+
+@pytest.mark.parametrize("fault, said", [
+    ("drop", "box 2 stood still on one Up and moved on the next"),       # the tens box's third Up went unanswered
+    ("lost", "after Up on box 2: the screen reads as unknown")])         # the screen stopped reading as the carousel
+def test_a_failure_in_the_middle_of_a_number_leaves_nothing_chosen(own_runs, monkeypatch, capsys, fault, said):
+    """--number 299 stopped while the tens box is stepped: the run stops there, no Enter after the base's, no proof
+    line, no download but the base's; the session puts the start file back."""
+    import boxes_run
+    cam = number_cam(own_top=True)
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+    setattr(cam, fault, ("up", 5))
+    with pytest.raises(SystemExit) as stop:
+        run_fields(F, root, "Focus Bracket", "--number", "299", "--number", "2")
+    assert stop.value.code == boxes_run.EXIT_INCOMPLETE
+    assert said in capsys.readouterr().out
+    assert fields_lines() == [] and cam.keys.count("enter") == 1 and len(downloads) == 1
+    assert cam.at[2] == [1, 0, 0, 3]
+
+
+def test_a_box_outside_the_field_not_as_the_first_visit_saw_it_passes_the_number_over(own_runs, monkeypatch, capsys):
+    """Step Width moves after 299's download (made up): the next visit compares it, the digit field's first box lit as
+    on the first visit, and passes 2 over, nothing chosen; the put-back cannot be made so and stops the run."""
+    cam = number_cam(own_top=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.downloaded = lambda tag: tag == "Bracket-Type-number-299" and cam.at[2].__setitem__(0, 2)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--number", "299", "--number", "2")
+    out = capsys.readouterr().out
+    assert "2: not put in: box 0 is not as the first visit saw it" in out
+    assert "the number held, 3, cannot be put back: box 0 is not as the first visit saw it" in out
+    assert [(x["value"], x["applied"]) for x in fields_lines()] == [("299", True)] and cam.keys.count("enter") == 2
+
+
+# The two runs that failed on 2026-11-20 (logs kit2_fin_logs/brk_whole_05_focus_numbers.log over HDMI and
+# brk_focus_osd_01_numbers.log over OSD), --number 299 2 4 7 on Focus Bracket held on 003: each visit's frames from the
+# option lit to the last press before the old check passed the number over, the put-back's last
+SHOTS_DIR = ("kit2_pass2", "shots")
+VISITS = {"hdmi": [(269026, 269067), (269075, 269081), (269089, 269095), (269103, 269115), (269123, 269128)],
+          "osd": [(269173, 269213), (269222, 269228), (269237, 269243), (269252, 269264), (269273, 269278)]}
+
+
+def shot(name: str) -> Path:
+    return need(A1.joinpath(*SHOTS_DIR, name))
+
+
+def frame_numbered(n: int) -> Path:
+    """kit2_pass2's frame number n, whatever it was taken after (the test skips without it)."""
+    found = next((p for p in (A1.joinpath(*SHOTS_DIR, f"{n}_{t}.png") for t in ("right", "up", "down", "reread", "fresh"))
+                  if p.exists()), None)
+    return need(found or A1.joinpath(*SHOTS_DIR, f"{n}_*.png"))
+
+
+class ReplayCam:
+    """The camera's own frames of one visit replayed press by press: a press must be the key the next frame was taken
+    after (its name's tag), the fresh looks the run took on the way passed over; a fresh look takes the next frame where
+    it is one, else shows the frame on show again (the screen did not change). The lit box's digit as the frames show
+    it, each Up one more and each Down one less from the 003 the look read (269034 shows 2, 269054 9, 269067 9), stands
+    in for the readers, who are not what is tested."""
+    LOOKS = ("reread", "fresh")
+
+    def __init__(self, lo, hi):
+        need(A1.joinpath(*SHOTS_DIR))
+        self.paths = [frame_numbered(n) for n in range(lo, hi + 1)]
+        self.keys, self.digits = [], []
+        lit, held = None, ["4(Standard)", "0", "0", "3"]
+        for p in self.paths:
+            t = self.tag(p)
+            if t == "right":
+                lit = 0 if lit is None else lit + 1
+            elif t in ("up", "down"):
+                held[lit] = str((int(held[lit]) + (1 if t == "up" else -1)) % 10)
+            self.digits.append(None if lit is None else held[lit])
+        self.show(0)
+
+    @staticmethod
+    def tag(p: Path) -> str:
+        return p.stem.split("_", 1)[1]
+
+    def show(self, i):
+        self.i, self.frame = i, load(self.paths[i])
+        self.screen = screen.read(self.frame)
+
+    def press(self, key, **kw):
+        self.keys.append(key)
+        j = self.i + 1
+        while j < len(self.paths) and self.tag(self.paths[j]) in self.LOOKS:
+            j += 1
+        assert j < len(self.paths) and self.tag(self.paths[j]) == key, \
+            f"{key} after {self.frame.path.name}, where the run pressed {self.tag(self.paths[j]) if j < len(self.paths) else 'nothing'}"
+        self.show(j)
+
+    def refresh(self, tag):
+        if self.i + 1 < len(self.paths) and self.tag(self.paths[self.i + 1]) in self.LOOKS:
+            self.show(self.i + 1)
+
+    def read(self):
+        return self.screen
+
+    def said(self) -> str:
+        return self.digits[self.i]
+
+
+@pytest.mark.parametrize("eyes", ["hdmi", "osd"])
+def test_the_failed_runs_frames_take_every_number_and_the_put_back(eyes, monkeypatch):
+    """put_number on the camera's own frames of both failed runs, each visit in turn as the run made them (299, 2, 4, 7,
+    then the 003 put back with Right alone): every number stands in the boxes, Enter would go on the last box, and no
+    press but those the camera answered, where the old check said "box 1 changed while the boxes after it were set" on
+    each (box 1's picture cut with box 2 lit and again with box 3 lit)."""
+    import carousel_fields_run as F
+    monkeypatch.setattr(F, "title_reads", lambda c, labels: "Focus Bracket" if c.read().kind == "dialog" else None)
+    monkeypatch.setattr(F, "lit_read", lambda c, always: F.BoxRead(c.said(), c.said(), c.said(), "made-up", "both"))
+    look_ = F.Look(["Step Width"] + ["Number of Shots"] * 3, ["4(Standard)", "0", "0", "3"])
+    n, opened = F.Named(), {}
+    for (lo, hi), digits in zip(VISITS[eyes], ["299", "002", "004", "007", "003"], strict=True):
+        cam = ReplayCam(lo, hi)
+        first = None if opened else "003"
+        why, r = F.put_number(cam, "Focus Bracket", OPTIONS, look_, (1, 3), digits, n, opened, "Focus Bracket", first)
+        assert (why, r and r.text) == ("", digits[-1]), f"{digits} on {cam.frame.path.name}"
+        assert cam.i == len(cam.paths) - 1, f"{digits}: every press the camera answered, and no other"
+        assert "enter" not in cam.keys
+
+
+def frame_cam(name: str):
+    """One of the camera's frames on show, as box_pic reads it (the screen and the image of the frame on show)."""
+    f = load(shot(name))
+    s = screen.read(f)
+    return SimpleNamespace(frame=f, read=lambda: s)
+
+
+@pytest.mark.parametrize("before, after", [("269127_right.png", "269128_right.png"),      # HDMI, the put-back
+                                           ("269277_right.png", "269278_right.png")])     # OSD, the put-back
+def test_an_unlit_digit_boxs_picture_changes_with_the_box_lit(before, after):
+    """What passed every number over on 2026-11-20: box 1 holds 0 on both frames, box 2 lit on the first and box 3 on the
+    second, nothing pressed between but Right. The pixel reader finds box 1's right side where the lit box beside it
+    leaves it (x 446 beside box 2, 449 or 450 with box 3 lit), so its two pictures are two shapes, one digit's lit pixels
+    each: an unlit box is never compared across two lit boxes."""
+    import carousel_fields_run as F
+    a, b = frame_cam(before), frame_cam(after)
+    assert (a.read().field, b.read().field) == (2, 3)
+    pa, pb = F.box_pic(a, 1), F.box_pic(b, 1)
+    assert pa.shape != pb.shape and not F.same_pic(pa, pb) and int(pa.sum()) == int(pb.sum())
+
+
+@pytest.mark.parametrize("before, after, lit", [
+    ("269036_fresh.png", "269054_fresh.png", 2),    # HDMI: the tens box stepped 0 to 9 (203 to 293)
+    ("269056_fresh.png", "269067_up.png", 3),       # HDMI: the units box 3 to 9 (293 to 299)
+    ("269182_fresh.png", "269200_fresh.png", 2),    # OSD
+    ("269202_fresh.png", "269213_up.png", 3)])
+def test_with_one_box_lit_the_other_boxes_pictures_stand(before, after, lit):
+    """The same runs' frames: while one box is stepped, each other box's picture, cut with that box lit, is the same
+    before its first press and after its last (no pixel apart on these frames), the box stepped's is not."""
+    import carousel_fields_run as F
+    a, b = frame_cam(before), frame_cam(after)
+    assert a.read().field == b.read().field == lit
+    assert [F.same_pic(F.box_pic(a, k), F.box_pic(b, k)) for k in range(4)] == [k != lit for k in range(4)]
 
 
 def test_a_number_the_boxes_will_not_hold_is_said_and_nothing_is_chosen(own_runs, monkeypatch, capsys):
@@ -1650,18 +1848,38 @@ def stepped(cam, opt, edit, field, key) -> list:
     return out
 
 
-def test_a_number_whose_stepping_moves_another_box_is_not_chosen(own_runs, monkeypatch, capsys):
-    """--number 7: each Up on the units box sets the tens box to 5 (made up). Before Enter every other box must show
-    what it showed when Right left it: the number is said and passed over, no Enter; the put-back goes on."""
+def carry_units_to_tens(cam, opt, edit, field, key):
+    """Each Up on the units box sets the tens box to 5 (made up)."""
+    out = stepped(cam, opt, edit, field, key)
+    return [out[0], out[1], 5, out[3]] if opt == 2 and field == 3 and key == "up" else out
+
+
+def carry_tens_to_units(cam, opt, edit, field, key):
+    """Each Up on the tens box moves the units box one on too (made up)."""
+    out = stepped(cam, opt, edit, field, key)
+    return [*out[:3], (out[3] + 1) % 10] if opt == 2 and field == 2 and key == "up" else out
+
+
+def clamp_at_250(cam, opt, edit, field, key):
+    """A number above a made-up top of 250 pulled back to it while stepping, the other boxes changed with it."""
+    out = stepped(cam, opt, edit, field, key)
+    return [out[0], 2, 5, 0] if opt == 2 and int("".join(map(str, out[1:]))) > 250 else out
+
+
+@pytest.mark.parametrize("rule, number, said", [
+    (carry_units_to_tens, "7", "7: not put in: box 2 changed while box 3 was stepped"),
+    (carry_tens_to_units, "40", "40: not put in: box 3 changed while box 2 was stepped"),
+    (clamp_at_250, "255", "255: not put in: box 3 changed while box 2 was stepped"),     # 253 pulled back to 250
+    (clamp_at_250, "299", "299: not put in: box 2 stands still on 5, its top end, short of 9")])
+def test_a_number_whose_stepping_moves_another_box_is_not_chosen(own_runs, monkeypatch, capsys, rule, number, said):
+    """A camera that carries between its digit boxes or pulls a number back into its range while stepping (made up;
+    the a1 II does neither): each box's stepping is judged by every other box's picture before its first press and
+    after its last, box lit as it was, so the number is said and passed over, no Enter; the put-back goes on."""
     cam = number_cam()
     F, root, downloads = fields_world(monkeypatch, own_runs, cam)
-
-    def rule(opt, edit, field, key):
-        out = stepped(cam, opt, edit, field, key)
-        return [out[0], out[1], 5, out[3]] if opt == 2 and field == 3 and key == "up" else out
-    cam.rule = rule
-    run_fields(F, root, "Focus Bracket", "--number", "7")
-    assert "7: not put in: box 2 changed while the boxes after it were set" in capsys.readouterr().out
+    cam.rule = lambda *a: rule(cam, *a)
+    run_fields(F, root, "Focus Bracket", "--number", number)
+    assert said in capsys.readouterr().out
     assert [(x["value"], x["final"]) for x in fields_lines()] == [("3", True)] and cam.keys.count("enter") == 2
 
 
