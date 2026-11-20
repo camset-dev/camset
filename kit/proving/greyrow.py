@@ -8,7 +8,8 @@ runs to learn that Touch Operation shuts it).
 
 For one row, the cursor on it on a menu or submenu page, in this order, each step pressing nothing where it stops:
   0. A row the kit may not open or reach whatever its colour (closed: never-open, what acts as it opens, a format,
-     delete or reset, a row above it not seen opened) gets no key, Help's neither, as kit/help_run.py passes it over;
+     delete or reset, a row above it not seen opened, a path typed with an older name the camera's ROW_NAMES renames)
+     gets no key, Help's neither, as kit/help_run.py passes it over;
      nor does a lit bar that, read on the fresh frame, reads nothing or as such a row itself (bar_refused), whatever
      the path as typed said.
   1. Drawn grey now: the lit bar's label measured on a frame grabbed afresh, never the page scan's (row_grey: the
@@ -43,7 +44,7 @@ import re
 
 import numpy as np
 
-from camkit import coverage, first_open, safety, screen
+from camkit import coverage, first_open, row_names, safety, screen
 from camkit.live import leave_notice, lit_text, text_of
 from camkit.screen import same_state
 
@@ -131,6 +132,21 @@ def on_row(lit: str, label: str) -> bool:
     return bool(str(lit or "").strip()) and on_label(lit, label)
 
 
+def bar_label(lit: str, label: str) -> str | None:
+    """The row's label as the lit bar draws it now: `label` where the bar's text, folded (safety.plain), is that label
+    alone or before what is no letter or digit of a longer word (its value), with an icon's letters in front of it (a
+    leading token of at most camkit.row_names.ICON_LEAD characters) or not, as camkit.first_open.Seen.lit_row tells a
+    bar's label; None where the bar reads another label, or nothing."""
+    seen, want = safety.plain(lit), safety.plain(label)
+    if not seen or not want:
+        return None
+    token, _, rest = seen.partition(" ")
+    for text in (seen, rest if 0 < len(token) <= row_names.ICON_LEAD else ""):
+        if text.startswith(want) and not text[len(want):len(want) + 1].isalnum():
+            return label
+    return None
+
+
 def bar_refused(lit: str, path, seen) -> str:
     """Why the lit bar, as read now, may not be opened, or "": a bar that reads nothing (the never-open check cannot judge
     it), a never-open text (safety.never_open), or one the look lap's own list refuses (safety.look_lap_refused: what
@@ -176,10 +192,15 @@ def closed(path, seen, stored=None) -> str:
     action, a format, delete or reset, credentials, the camera's identity, a connection, a Wi-Fi or Bluetooth setting,
     sound, light or motion), or refused by the look lap's own list (safety.look_lap_refused: what never opens, the Screen
     Reader, a row whose opening acts, a format, delete or reset not seen opened), or a row above it this body has not
-    been seen to open, which reaching it would open. No run's --allow lifts any of these here. Every "seen" here is
+    been seen to open, which reaching it would open, or a path typed with a name the camera's ROW_NAMES renames
+    (an older name: ask by the camera's). No run's --allow lifts any of these here. Every "seen" here is
     first_open.drawn's, the records under the labels the camera draws now: no row is seen through an older name
     (camkit.row_names)."""
     drawn = first_open.drawn(seen)
+    camera = row_names.renamed(path)
+    if tuple(camera) != tuple(str(x) for x in path):
+        return (f"{' > '.join(map(str, path))!r} is an older name of {' > '.join(camera)!r} (ROW_NAMES): ask by the "
+                "camera's name, the one every safety check judges")
     if stored:
         return f"never-open ({stored})"
     for i, label in enumerate(path):
@@ -204,7 +225,10 @@ def open_refused(path, lit: str, seen, stored=None) -> str:
     why = closed(path, seen, stored) or bar_refused(lit, path, seen)
     if why:
         return why
-    if not first_open.drawn(seen)(path):    # as the camera draws it: never seen through an older name
+    drawn_as = bar_label(lit, path[-1])
+    if drawn_as is None:
+        return f"the lit row {str(lit).strip()!r} does not read as {path[-1]!r}, so its seen cannot be judged as drawn"
+    if not first_open.drawn(seen)((*path[:-1], drawn_as)):     # the label the bar draws, as written in the records
         return ("not seen opened on this body: its first open is the crawl's procedure (camkit.first_open: RESTORE_BY_HAND "
                 "before, the settings checked after), which this run does not make")
     return ""

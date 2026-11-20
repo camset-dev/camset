@@ -287,22 +287,74 @@ def test_a_parent_seen_only_under_an_older_name_is_not_reached(monkeypatch, own_
 
 def test_a_rows_right_spent_under_one_name_is_spent_under_the_other(monkeypatch, renaming):
     """"Never twice" takes an older and a newer name of one row as one row (label_key: first_open.key, renamed by
-    ROW_NAMES); with no table in force the two would be two keys."""
-    cam = GreyCam(label=OLDER[-1])
-    world(monkeypatch, cam)
+    ROW_NAMES; with no table in force the two would be two keys): a Right spent under the older name (an earlier run's
+    line) is spent for the camera's name, and one spent under the camera's name leaves the older name nothing, the older
+    name being passed over before any key besides."""
     seen = SimpleNamespace(seen=lambda p: True, unseen=lambda p: [])        # every row seen, both names alike
-    line, said, tried = ask(cam, path=OLDER, seen=seen)
-    assert line["right"] and greyrow.label_key(OLDER) == greyrow.label_key(DRAWN) == (
-        "labels", "proxy settings", "proxy recording")
-    cam.where, cam.keys, cam.lit, cam.label = "row", [], DRAWN[-1], DRAWN[-1]
-    again, said, tried = ask(cam, path=DRAWN, seen=seen, tried=tried)
+    assert greyrow.label_key(OLDER) == greyrow.label_key(DRAWN) == ("labels", "proxy settings", "proxy recording")
+    cam = GreyCam(label=DRAWN[-1])
+    world(monkeypatch, cam)
+    again, said, tried = ask(cam, path=DRAWN, seen=seen, tried={greyrow.label_key(OLDER)})
     assert (again["outcome"], again["right"], cam.keys) == (greyrow.TRIED, False, ["c4"])
+    cam.where, cam.keys = "row", []
+    line, said, tried = ask(cam, path=DRAWN, seen=seen)
+    assert line["right"] and tried == {greyrow.label_key(OLDER)}
+    cam.where, cam.keys, cam.label = "row", [], OLDER[-1]
+    older, said, tried = ask(cam, path=OLDER, seen=seen, tried=tried)
+    assert (older["outcome"], older["right"], cam.keys) == (greyrow.PASSED, False, [])
 
 
 def test_with_no_table_nothing_is_renamed(own_runs):
     from camkit import row_names
     row_names.forget()
     assert greyrow.label_key(OLDER) != greyrow.label_key(DRAWN)
+
+
+def records_under(path):
+    """A seen record as camkit.first_open.seen_record builds one with a table in force: seen() keyed renamed, its
+    seen_as_drawn() on the records as written, which hold the row opened under `path` only."""
+    from camkit import first_open
+    return first_open.Seen(opened=first_open._with_parents(first_open.key(path)),
+                           drawn=first_open.Seen(opened=first_open._with_parents(first_open.raw_key(path))))
+
+
+@pytest.mark.parametrize("typed, records, right", [(OLDER, OLDER, False), (OLDER, DRAWN, False),
+                                                   (DRAWN, OLDER, False), (DRAWN, DRAWN, True)],
+                         ids=["older typed, older records", "older typed, camera's records",
+                              "camera's typed, older records", "camera's typed, camera's records"])
+def test_with_a_table_only_the_cameras_name_on_records_under_it_gets_its_right(monkeypatch, renaming, typed, records,
+                                                                                right):
+    """The camera drawing "Proxy Recording" (its bar reads so) and ROW_NAMES naming "Px Proxy Recording" its older name:
+    a path typed with the older name is passed over before any key (ask by the camera's name, which every safety check
+    judges), and the row's own seen is asked of the label the bar draws, as written in the records; so of the four
+    ways, only the camera's name typed on records under the camera's name gets its Right (the review's probe: the older
+    name typed on records under it went C4, Right, MENU)."""
+    import help_run
+    cam = GreyCam(label=typed[-1])
+    world(monkeypatch, cam)
+    cam.lit = DRAWN[-1]
+    monkeypatch.setattr("help_run.on_label", help_run.on_label)             # the real, loose match
+    line, said, tried = ask(cam, path=list(typed), seen=records_under(records))
+    assert line["right"] is right, (line, cam.keys)
+    if typed == OLDER:
+        assert (line["outcome"], cam.keys) == (greyrow.PASSED, []) and "camera's name" in line["why"]
+    elif not right:
+        assert (line["outcome"], cam.keys) == (greyrow.HELP_ONLY, ["c4"])
+
+
+@pytest.mark.parametrize("lit, asked, want", [
+    ("Proxy Recording", "Proxy Recording", "Proxy Recording"),
+    ("Proxy Recording Off", "Proxy Recording", "Proxy Recording"),          # its value after it
+    ("Px Proxy Recording", "Proxy Recording", "Proxy Recording"),           # an icon's letters in front
+    ("S&Q Record Setting", "Record Setting", "Record Setting"),
+    ("Proxy Recordings", "Proxy Recording", None),                          # a longer word: another label
+    ("Proxy Rec. Settings", "Proxy Recording", None),
+    ("", "Proxy Recording", None),
+    ("Recording Media Proxy Recording", "Proxy Recording", None)])
+def test_the_label_the_bar_draws(lit, asked, want):
+    """bar_label: the row's label where the bar's text is it, alone or before a value, an icon's letters in front of it
+    or not; None where the bar reads another label."""
+    assert greyrow.bar_label(lit, asked) == want
 
 
 @pytest.mark.parametrize("text", [
@@ -409,9 +461,17 @@ def test_the_cameras_own_refusal_of_the_right_is_said_and_spent(monkeypatch):
 
 
 def test_a_row_no_longer_lit_or_grey_after_help_gets_no_right(monkeypatch):
+    """After Help, a bar that reads another row is refused before the Right (open_refused: its seen cannot be judged as
+    the camera draws it), and a row no longer drawn grey gets none either."""
     cam = GreyCam()
     world(monkeypatch, cam)
     monkeypatch.setattr(greyrow, "lit_of", lambda c: c.label if "c4" not in c.keys else "Focal Length")
+    line, said, tried = ask(cam)
+    assert (line["outcome"], line["right"], cam.keys, tried) == (greyrow.HELP_ONLY, False, ["c4"], set())
+    assert "does not read as" in line["why"]
+    cam = GreyCam()
+    world(monkeypatch, cam)
+    monkeypatch.setattr(greyrow, "row_grey", lambda c: (True, 120.0) if "c4" not in c.keys else (False, 230.0))
     line, said, tried = ask(cam)
     assert (line["outcome"], line["right"], cam.keys, tried) == (greyrow.MOVED, False, ["c4"], set())
 
