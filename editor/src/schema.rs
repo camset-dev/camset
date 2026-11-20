@@ -198,7 +198,8 @@ pub struct Setting {
 
 /// Where a setting sits in one of the camera's menus (`Setting::row_places`), where that is not where its top-level
 /// `row`, `row_at`, `row_tab`, `row_group` and `under_option` say: each field given here is read in their place for
-/// that menu, each left out is the top-level one.
+/// that menu, each left out is the top-level one. `under_option` given as null says the place there has no option
+/// above it (`Some(None)`), where the setting's own place is under one.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(default)]
 pub struct RowPlace {
@@ -206,7 +207,14 @@ pub struct RowPlace {
     pub row_at: Option<Vec<i64>>,
     pub row_tab: Option<String>,
     pub row_group: Option<String>,
-    pub under_option: Option<String>,
+    #[serde(deserialize_with = "given")]
+    pub under_option: Option<Option<String>>,
+}
+
+/// A field that may be given as null, told from one left out (with `#[serde(default)]`, None): given, it is `Some`,
+/// null or not.
+fn given<'de, D: serde::Deserializer<'de>, T: Deserialize<'de>>(d: D) -> Result<Option<T>, D::Error> {
+    T::deserialize(d).map(Some)
 }
 
 /// One of the camera's menus (`Camera::menus`): one position of its switch of shooting modes, whose menu shows other
@@ -662,7 +670,7 @@ impl Setting {
             if let Some(r) = &p.row_at { s.row_at = r.clone(); }
             if p.row_tab.is_some() { s.row_tab = p.row_tab.clone(); }
             if p.row_group.is_some() { s.row_group = p.row_group.clone(); }
-            if p.under_option.is_some() { s.under_option = p.under_option.clone(); }
+            if let Some(u) = &p.under_option { s.under_option = u.clone(); }
         }
         s.row_mode = None;
         s.row_menus = vec![menu.to_string()];
@@ -2564,6 +2572,10 @@ mod tests {
         assert_eq!(p.place_in("S&Q").row, p.row, "laid out once");
         let q = audio.place_in("Movie");
         assert_eq!((q.row.clone(), q.row_mode.as_deref()), (vec!["Audio".to_string()], None));
+        // a menu's place with no option above it (`"under_option": null`) where its own place is under one; a field left
+        // out keeps the top-level one (page file, finding C1)
+        let pp = s(serde_json::json!({ "under_option": "PP2", "row_places": { "S&Q": { "row": ["Black Level"], "row_at": [7], "under_option": null }, "Movie": { "row": ["Black Level"], "row_at": [7] } } }));
+        assert_eq!((pp.place_in("S&Q").under_option, pp.place_in("Movie").under_option.as_deref(), pp.place_in("Still").under_option.as_deref()), (None, Some("PP2"), Some("PP2")));
         // two records of one name on one row in two menus' rows are two rows
         let (a, b) = (s(serde_json::json!({ "row_menus": ["Still"] })), s(serde_json::json!({ "key": "global:0x0002", "id": 2, "row_menus": ["Movie"] })));
         assert!(!a.same_row(&b) && !a.links_with(&b));

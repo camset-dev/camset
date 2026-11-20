@@ -38,12 +38,13 @@ def placed(s) -> bool:
 
 def place_in(s, menu: str) -> dict:
     """The setting as camera menu `menu` lays it out (Setting::place_in): row_places[menu] before the top-level place,
-    field by field, no other mode's menu named (row_mode), that menu alone in row_menus, marked shown_in."""
+    field by field (an under_option given as null: no option above it there), no other mode's menu named (row_mode),
+    that menu alone in row_menus, marked shown_in."""
     if s.get("shown_in") == menu:
         return dict(s)
     p = dict(s)
     for k, v in ((s.get("row_places") or {}).get(menu) or {}).items():
-        if k in ("row", "row_at", "row_tab", "row_group", "under_option") and v is not None:
+        if k in ("row", "row_at", "row_tab", "row_group") and v is not None or k == "under_option":
             p[k] = v
     p.pop("row_mode", None)
     p.update(row_menus=[menu], row_places={}, shown_in=menu)

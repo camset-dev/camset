@@ -146,6 +146,15 @@ def test_a_setting_in_the_cameras_menus():
     assert mr.menu_list({"camera": {"menus": MENUS[:1]}}) == []
 
 
+def test_a_menus_place_with_no_option_above_it():
+    """editor/src/schema.rs's a_setting_in_the_cameras_menus (page file, finding C1): an under_option given as null in
+    a menu's row_places says that place has no option above it, where the setting's own place is under one; a field
+    left out keeps the top-level one."""
+    pp = s("pp", "Black Level", ["Picture Profile", "PP2", "Black Level"], [3, 1, 7], under="PP2",
+           row_places={"S&Q": {"row": ["Black Level"], "row_at": [7], "under_option": None}, "Movie": {"row": ["Black Level"], "row_at": [7]}})
+    assert [mr.place_in(pp, m)["under_option"] for m in ("S&Q", "Movie", "Still")] == [None, "PP2", "PP2"]
+
+
 def test_what_one_menu_lists():
     """App::listed: the rows a menu holds; a setting the camera keeps a copy of per mode as its copy for the menu, in a
     menu not of the mode the file was saved in, under the setting's name; its copies no rows; a row alone on its place
