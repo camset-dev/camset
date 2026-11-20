@@ -181,6 +181,10 @@ RECORD_STATUSES = (
 )
 RECORD_NAMES = tuple(n for n, _ in RECORD_STATUSES)
 # the public form merges the last three: whether a record varied is the owner's evidence
+# what the public form's "unmapped" says of a record, true of every one of them whether it ever changed or not: which
+# changed stays in this private build (docs/decisions/0027); in the public form's about and the counts the tool prints
+UNMAPPED_MEANS = ("no setting covers the record: the mapping found no menu row that changes it, so it does not know "
+                  "what the record holds, and a change to it is not proved on the camera")
 PUBLIC_RECORD = {"changed, no row attributed": "unmapped", "unmapped, never seen to change": "unmapped",
                  "unmapped, not examined": "unmapped"}
 PUBLIC_RECORD_NAMES = RECORD_NAMES[:4] + ("unmapped",)
@@ -2493,7 +2497,7 @@ ABOUT = ("What is settled about this camera's menus and file, printed by kit/too
          "a row of the maker's Save/Load list seen to change nothing): one status per row, per value of each setting "
          "and per record, in the order of precedence docs/DATA_CONTRACTS.md gives (docs/decisions/0023). Nothing "
          "observed of the camera's state, never a run, a date, a hash, a current option or a value "
-         "(docs/decisions/0016).")
+         "(docs/decisions/0016). A record \"unmapped\": " + UNMAPPED_MEANS + " (docs/decisions/0027).")
 
 
 def _row_out(e: dict, keys, private: bool) -> dict:

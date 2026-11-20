@@ -79,7 +79,9 @@ not been checked on a camera yet, and the camera may refuse a file where it was 
 **Expert mode** (Settings > Editing & Compare) is for mapping work and support. It shows what a photographer rarely
 needs (settings with no name yet, the copies the camera keeps, every memory, record numbers, raw values), lets you
 change the view-only settings, and with "Offer values…" lists values not yet checked on the camera, in italics. The
-camera may refuse a whole file that holds such a change. The checks before a save or a write still list every one.
+camera may refuse a whole file that holds such a change. The checks before a save or a write still list every one. A
+record no setting names is "unmapped": the mapping found no menu row that changes it, so it does not know what the
+record holds, and a change to it is not proved on the camera and is at your own risk.
 
 **Settings the camera keeps twice.** The camera keeps some values more than once: on the a1 II, ISO, White Balance
 and each Picture Profile parameter have a copy for stills and one for movies. Each copy is a row of its own, with a

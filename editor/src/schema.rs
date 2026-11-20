@@ -342,6 +342,16 @@ pub struct UnprovedSets {
 /// "Proved on the camera": the window's and the page's, in the proof badge and on the Exposure page.
 pub const SHARED_LIST_WORDS: &str = "partly on another setting of the same kind";
 
+/// What "unmapped" means of a record no setting names, on hover in the record maps (the window's and the page's): true
+/// of every such record, whether or not it ever changed, which the public files never say (docs/decisions/0027).
+pub const UNMAPPED_WORDS: &str = "Unmapped: the mapping found no menu row that changes this record, so it does not know \
+what the record holds. A change to it is not proved on the camera and is at your own risk.";
+
+/// The same at the head of the Unmapped records page, the window's and the page's, with what to do before changing one.
+pub const UNMAPPED_PAGE_WORDS: &str = "Unmapped records: the mapping found no menu row that changes them, so it does not \
+know what they hold. A change to one is not proved on the camera and is at your own risk: the camera may refuse or \
+misread it, so test an edited file one change at a time.";
+
 /// Why no proof can reach a setting, in a few words, by its kind (`unproved_reason.kind`, the definition schema's); the
 /// definition's `why` says it in full on hover. `in_set`: said of one memory set (`unproved_sets`). A kind this editor
 /// does not know, from a newer definition, reads as no proof possible.
@@ -2325,6 +2335,23 @@ mod tests {
         let older = made(serde_json::json!({ "values": [[0, "Alpha"], [1, "Bravo"]], "proved": { "values": [0, 1] } }));
         assert!(!older.list_shared() && !older.maybe_lent(0) && older.proof_badge().0 == "Proved on the camera (2/2)");
         assert!(!made(serde_json::json!({ "values": [[0, "Alpha"]] })).maybe_lent(0), "no proof, no list");
+    }
+
+    /// What "unmapped" means, in the words the window and the page show (docs/decisions/0027): no menu row found that
+    /// changes the record, so what it holds is not known, and a change is unproved and at the user's own risk; true of
+    /// every record no setting names, so neither says whether one ever changed, nor counts or names any, nor which files.
+    #[test]
+    fn unmapped_says_what_it_means_and_nothing_of_one_record() {
+        for words in [UNMAPPED_WORDS, UNMAPPED_PAGE_WORDS] {
+            for said in ["the mapping found no menu row that changes", "does not know what", "not proved on the camera", "your own risk"] {
+                assert!(words.contains(said), "{said}: {words}");
+            }
+            assert!(!words.chars().any(|c| c.is_ascii_digit()), "no count: {words}");
+            for unsaid in ["never seen", "never changed", "settings file", "download"] {
+                assert!(!words.to_lowercase().contains(unsaid), "{unsaid}: {words}");
+            }
+        }
+        assert!(UNMAPPED_PAGE_WORDS.contains("test an edited") && UNMAPPED_PAGE_WORDS.contains("one change at a time"));
     }
 
     /// What the write window judges by (`checked_on_camera`): a value a proof established, in a set the proof reaches,

@@ -79,6 +79,8 @@ def show_counts(led, public: bool) -> None:
         total = sum(n[1] for n in got.values()) or 1
         print(f"{said}: " + ", ".join(f"{s} {got[s][0]} ({got[s][1]} value bytes, {100 * got[s][1] / total:.1f}%)"
                                       for s in order if s in got))
+    if public:
+        print(f"unmapped: {ledger.UNMAPPED_MEANS} (docs/decisions/0027)")
     if led.unresolved:
         print(f"\n{len(led.unresolved)} looks name no row of the ledger (the private form lists them)")
 

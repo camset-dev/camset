@@ -2317,7 +2317,8 @@ function drawUnmapped(j) {
   return [
     el("div", { class: "head" }, el("h1", {}, "Unmapped records")),
     el("div", { class: "head" }, el("label", { class: "check" }, allow, "Allow raw edits", desk ? el("span", { class: "small weak" }, " (set in the desktop app)") : null),
-      el("span", { class: "um-warn" }, "Raw values have unknown meaning. The camera may reject or misread them; test edited files one change at a time.")),
+      // what "unmapped" means, in the editor's own words (`UNMAPPED_PAGE_WORDS`), as the window says it
+      el("span", { class: "um-warn" }, j.about)),
     el("hr"),
     el("div", { class: "scrollx" }, el("table", { class: "egrid" },
       el("thead", {}, el("tr", {}, el("th", {}, "Record"), el("th", {}, "Shape"), el("th", {}, "Value"))),
@@ -2345,7 +2346,7 @@ function drawRecords(j) {
         : el("td", {}, r.shape),
       r.setting
         ? pressable(el("td", { class: "rm-setting", title: `${r.setting.tab} > ${r.setting.group}\n${r.setting.note}` }, r.setting.title), () => openSetting(r.setting))
-        : el("td", { class: "rm-setting rm-unmapped" }, "— unmapped —"),
+        : el("td", { class: "rm-setting rm-unmapped", title: j.unmapped_words }, "— unmapped —"),
       open && r.bytes ? el("td", {}, el("pre", { class: "rm-dump" }, r.bytes.dump)) : el("td", {}, r.value),
       el("td", { title: r.raw_full }, r.raw));
   };
@@ -3189,7 +3190,7 @@ function drawCompareRecords() {
     const mono = (t) => el("td", { class: "cmp-mono" + (s ? "" : " cmp-amber") }, t);
     return el("tr", {}, mono(r.offset), mono(r.id), mono(r.shape),
       s ? el("td", {}, pressable(el("span", { class: "cmp-link", title: `${s.tab} > ${s.group}\n${s.note}` }, s.name), () => cmpOpenSetting(s, base.section)))
-        : el("td", { class: "cmp-amber" }, "— unmapped —"),
+        : el("td", { class: "cmp-amber", title: j.unmapped_words }, "— unmapped —"),
       ...r.cells.map((c, i) => {
         const chars = [...c.text];
         const long = chars.length > 28;

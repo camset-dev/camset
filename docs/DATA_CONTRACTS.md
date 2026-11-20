@@ -385,7 +385,10 @@ mark alone (`proved.shared`), says "proved or named from a shared list" of each 
 {{ coverage_table("rows") }}
 
 A record's status (the public form merges the last three into `unmapped`, for whether a record varied is the owner's
-evidence; a byte field, `<record>@<offset>`, is two bytes, as the editor reads one):
+evidence: `unmapped` says only that the mapping found no menu row that changes the record, so it does not know what the
+record holds, and the public files never list or count which unmapped records changed,
+[decision 27](decisions/0027-what-unmapped-means-and-what-stays-private.md); a byte field, `<record>@<offset>`, is two
+bytes, as the editor reads one):
 
 {{ coverage_table("records") }}
 

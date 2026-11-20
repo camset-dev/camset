@@ -22,6 +22,7 @@
 //! page is turned off or the editor quits, waiting requests answer 503 with `"closed": true`.
 
 use super::*;
+use camset_editor::schema::{UNMAPPED_PAGE_WORDS, UNMAPPED_WORDS};
 use serde_json::{json, Value};
 use std::collections::HashMap;
 use std::sync::mpsc;
@@ -1819,6 +1820,7 @@ impl App {
         }
         out["total"] = json!(base_sec.records.len());
         out["rows"] = json!(rows);
+        out["unmapped_words"] = json!(UNMAPPED_WORDS);
         out
     }
 
@@ -2629,7 +2631,8 @@ impl App {
                     "id": r.id, "hex": hex, "shape": format!("{}×{}", r.elem_size, r.count), "value": r.display_value(), "int": r.as_int(), "changed": changed,
                 }))
             }).collect();
-        json!({ "allow_raw_edits": self.allow_raw_edits, "editable": self.editable() && self.allow_raw_edits, "rows": rows })
+        json!({ "allow_raw_edits": self.allow_raw_edits, "editable": self.editable() && self.allow_raw_edits, "rows": rows,
+            "about": UNMAPPED_PAGE_WORDS })
     }
 
     /// The record map (`records_view`): every record of the set in file order with its byte offset, shape, the
@@ -2698,7 +2701,7 @@ impl App {
                 "setting": setting, "value": value, "raw": short, "raw_full": raw, "edited": edited, "bytes": bytes }));
         }
         let name = self.schema.camera.target_name(target);
-        json!({ "name": name, "title": format!("{name}: records in file order"), "rows": rows })
+        json!({ "name": name, "title": format!("{name}: records in file order"), "rows": rows, "unmapped_words": UNMAPPED_WORDS })
     }
 
     /// The Backups window's list (`list_backups`), newest first, and the two folders it comes from (home as "~").
@@ -3680,6 +3683,21 @@ pub(crate) mod tests {
         let mapped = app.schema.settings.iter().find(|s| s.area == "global" && s.index.is_none() && doc.value(0, s.slot()).is_some()).unwrap().id;
         assert_eq!(answer(&mut app, "raw_set", json!({ "target": 0, "id": mapped, "value": 0 })).status, 400);
         assert_eq!(answer(&mut app, "raw_set", json!({ "target": 0, "id": 0xffff, "value": 0 })).status, 404);
+    }
+
+    /// What "unmapped" means (docs/decisions/0027), as the window says it: the page's Unmapped records page carries
+    /// the editor's words at its head, its record map and Compare's carry them for an unmapped record's hover, the same
+    /// words for every such record, and the page shows them where the window does.
+    #[test]
+    fn unmapped_says_what_it_means_on_every_page_that_lists_one() {
+        let mut app = App::new(vec![], Prefs { expert: true, ..Prefs::default() });
+        app.open_sample();
+        assert_eq!(ask(&mut app, "unmapped", json!({ "target": 0 }))["about"], json!(UNMAPPED_PAGE_WORDS));
+        assert_eq!(ask(&mut app, "records", json!({ "target": 0 }))["unmapped_words"], json!(UNMAPPED_WORDS));
+        assert_eq!(ask(&mut app, "compare_records", json!({ "cols": [["a", 0]], "only_diff": false }))["unmapped_words"], json!(UNMAPPED_WORDS));
+        assert!(SCRIPT.contains(r#"el("span", { class: "um-warn" }, j.about)"#));
+        assert_eq!(SCRIPT.matches("title: j.unmapped_words }, \"— unmapped —\"").count(), 2, "the record map and Compare's");
+        assert!(!SCRIPT.contains("Raw values have unknown meaning"), "the page's old words, gone with the window's");
     }
 
     /// The record map: every record in file order from the first after the header (0x3c, then the set's count),

@@ -97,7 +97,7 @@ impl App {
                             jump = Some(s.clone());
                         }
                     }
-                    None => { ui.label(RichText::new("— unmapped —").color(amber)); }
+                    None => { ui.label(RichText::new("— unmapped —").color(amber)).on_hover_text(camset_editor::schema::UNMAPPED_WORDS); }
                 }
                 for (i, (v, d)) in values.iter().enumerate() {
                     let short: String = if v.chars().count() > 28 { format!("{}…", v.chars().take(28).collect::<String>()) } else { v.clone() };

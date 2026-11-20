@@ -192,4 +192,5 @@ Two settings files from other a1 II bodies were compared with this layout. They 
 ## Open
 
 - What 0x1126 is.
-- Which records the remaining unmapped live records hold.
+- What the unmapped records hold: the mapping found no menu row that changes them, so it does not know, and a change to
+  one is not proved on the camera.

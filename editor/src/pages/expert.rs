@@ -1,6 +1,7 @@
 //! The pages for mapping work (Expert mode): the records without a name yet, the record map, and All edits.
 
 use crate::*;
+use camset_editor::schema::{UNMAPPED_PAGE_WORDS, UNMAPPED_WORDS};
 
 /// A record of the set shown, as the Record map and the Unmapped page list it, worked out once per state of the
 /// file (`RecordsKey`): where it starts, its shape, the setting it holds (an index into the definition's settings),
@@ -163,7 +164,7 @@ impl App {
                 self.prefs.allow_raw_edits = self.allow_raw_edits;
                 self.prefs.save();
             }
-            ui.label(RichText::new("Raw values have unknown meaning. The camera may reject or misread them; test edited files one change at a time.").color(tone::caution(ui.visuals())));
+            ui.label(RichText::new(UNMAPPED_PAGE_WORDS).color(tone::caution(ui.visuals())));
         });
         ui.separator();
         if self.doc.is_none() { return actions };
@@ -264,7 +265,7 @@ impl App {
                             jump = Some(s.clone());
                         }
                     }
-                    None => { ui.label(RichText::new("— unmapped —").color(tone::unnamed(ui.visuals()))); }
+                    None => { ui.label(RichText::new("— unmapped —").color(tone::unnamed(ui.visuals()))).on_hover_text(UNMAPPED_WORDS); }
                 }
                 // the bytes of a record shown open, from the file as it is now
                 let r = section.and_then(|sec| sec.get(row.id)).filter(|_| big && expanded.contains(&row.id));

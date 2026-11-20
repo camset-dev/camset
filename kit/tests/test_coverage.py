@@ -432,6 +432,28 @@ def test_the_public_form_validates_and_holds_no_private_key(camera, tmp_path):
         jsonschema.Draft202012Validator(schema).validate(bad)
 
 
+def test_unmapped_says_what_it_means_and_never_which_changed(camera, monkeypatch, capsys):
+    """Decision 27: the public form's about and the counts --public-only prints say what "unmapped" means, true of
+    every record no setting covers (no menu row found that changes it, what it holds not known, a change to it not
+    proved), and the public form never tells which of them changed: the one the leads saw change (0x0200), the one
+    they call never seen to change (0x0201) and the one nothing examined (0x0202) are alike "unmapped" there, and the
+    private build keeps them apart."""
+    import coverage as tool
+    doc = coverage.public_doc(ledger())
+    assert coverage.UNMAPPED_MEANS in doc["about"] and "no menu row that changes it" in coverage.UNMAPPED_MEANS
+    assert not any(c.isdigit() for c in coverage.UNMAPPED_MEANS)
+    public = {r["key"]: r["status"] for r in doc["records"]}
+    assert {public[k] for k in ("global:0x0200", "global:0x0201", "global:0x0202")} == {"unmapped"}
+    private = {r["key"]: r["status"] for r in ledger().records}
+    assert len({private[k] for k in ("global:0x0200", "global:0x0201", "global:0x0202")}) == 3
+    monkeypatch.setattr(sys, "argv", ["coverage.py", "--public-only"])
+    tool.main()
+    assert f"unmapped: {coverage.UNMAPPED_MEANS}" in capsys.readouterr().out
+    monkeypatch.setattr(sys, "argv", ["coverage.py"])
+    tool.main()
+    assert "unmapped: " not in capsys.readouterr().out, "the private counts name each status apart"
+
+
 def test_the_checkers_refuse_a_state_word_a_date_a_run_a_commit_and_free_text(camera, tmp_path, monkeypatch):
     """The reviewer's probes: a blocker naming a row with its value, a remote blocker carrying a date with its time, a
     run and a short commit, field names that are no address field, a 12-hex prefix in a note; also a greyed row not

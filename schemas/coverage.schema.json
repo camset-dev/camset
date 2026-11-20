@@ -260,7 +260,8 @@
       "named, no proof possible",
       "named, not proved",
       "unmapped"
-     ]
+     ],
+     "description": "unmapped: no setting covers the record: the mapping found no menu row that changes it, so it does not know what the record holds, and a change to it is not proved on the camera. Which unmapped records ever changed stays in the mapper's private ledger, never listed or counted here (docs/decisions/0027)."
     },
     "kind": {
      "type": "array",
