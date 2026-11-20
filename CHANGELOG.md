@@ -176,9 +176,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The mapping kit
 
 - **`drive.py` and `crawl_run.py` start and end through the kit's one session, as the provers do,** and a test fails
-  any runner that downloads its start file or uploads a file outside it but the few it names with why. After putting
-  its start file back, a run of theirs with HDMI eyes now reconnects once the camera's shooting screen is back from its restart (about 15 to
-  18 s) instead of after a fixed 20 s; everything else the two do is as it was.
+  any runner that downloads its start file or uploads a file outside it but the few it names with why. With HDMI eyes
+  and a working feed, their check after putting the start file back reconnects once the camera is back from its restart,
+  about 12 to 14 s into the check where it waited 20 s, and that watch, the provers' too, no longer takes a notice
+  already on show for the restart's.
 - **The coverage ledger keeps every record a look saw change,** where a later look of the same row, action and option
   took that look's place: such a record was left "never seen to change". The row's status is still its latest look's.
 - **`kit/tools/lut_import.py --allow "Manage User LUTs" --seen-empty FRAME` imports one user LUT, a `.cube` file from
