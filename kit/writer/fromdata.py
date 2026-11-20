@@ -636,16 +636,28 @@ ACCEPT_LOST = "--accept-lost-menus"
 def lost_refusal(target, doc: dict, accepted=None) -> str | None:
     """Why the definition `doc` must not be written over the one at `target`, in plain words, or None: it would list
     settings in fewer camera menus than the definition there does (lost_menus), unless the run acknowledges exactly
-    that many (`accepted`: kit/schema_update.py's --accept-lost-menus N, a number so no steps file passes it by habit)."""
+    that many (`accepted`: kit/schema_update.py's --accept-lost-menus N, a number so no steps file passes it by habit).
+    The words carry the rows themselves, grouped by row and the menus lost as the fewer-menus print groups them, and
+    give the flag only after what must be decided first: most often the menu tree was not rebuilt."""
     if not Path(target).exists():
         return None
-    lost = lost_menus(definitions.load_public(target), doc)
+    old = definitions.load_public(target)
+    lost = lost_menus(old, doc)
     if not lost or accepted == len(lost):
         return None
-    return (f"{paths.shown(target)}: {len(lost)} settings would no longer be listed in a camera menu they list now "
-            f"(each said above, \"menus: ... no longer listed\"). Nothing was written: rebuild the camera's menu tree "
-            f"if it was not (kit/tools/menu_tree.py, each mode as its pass's steps say), or, if those menus are lost on "
-            f"purpose, run the command again with {ACCEPT_LOST} {len(lost)}")
+    by_key = {s["key"]: s for s in old["settings"]}
+    rows = {}
+    for k, _, menus in lost:
+        s = by_key[k]
+        at = (s.get("row_tab") or s.get("tab") or "Other", " > ".join(s.get("row") or []) or "(no row)", tuple(menus))
+        rows[at] = rows.get(at, 0) + 1
+    said = "".join(f"\n  {tab} > {row}: {n} setting{'s' if n != 1 else ''}, no longer in {', '.join(menus)}"
+                   for (tab, row, menus), n in sorted(rows.items()))
+    return (f"{paths.shown(target)}: {len(lost)} settings would no longer be listed in a camera menu they list now:{said}\n"
+            "Nothing was written. Most often this means the camera's menu tree was not rebuilt with this kit: stop here, "
+            "rebuild it (kit/tools/menu_tree.py, each mode as the pass's steps say) and run the command again. Only if "
+            "you have looked at each row above and mean those settings to leave those menus (a reading of the camera that "
+            f"changed on purpose), run it again with {ACCEPT_LOST} {len(lost)}.")
 
 
 def refuse_before_writing(target, doc: dict, accept_stale: bool = False, taken_out=(), accept_lost=None) -> None:

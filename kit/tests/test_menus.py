@@ -810,7 +810,10 @@ def test_a_write_that_would_take_a_menu_off_a_setting_says_each_and_needs_their_
     target = tmp_path / "TEST_fw1.00.json"
     target.write_text(json.dumps(definitions.split(was)[0]), encoding="utf-8")
     why = fromdata.lost_refusal(target, again)
-    assert why and "1 settings would no longer be listed in a camera menu" in why and "--accept-lost-menus 1" in why
+    assert why and "1 settings would no longer be listed in a camera menu they list now:\n  Shooting > Drive Mode: 1 setting, " \
+        "no longer in S&Q\n" in why                                                 # the rows in the refusal itself
+    assert why.index("stop here, rebuild it") < why.index("Only if you have looked at each row above") < why.index(
+        "--accept-lost-menus 1")                                                    # the flag only after the decision
     assert fromdata.lost_refusal(target, again, 1) is None and fromdata.lost_refusal(target, again, 2) == why
     assert fromdata.lost_refusal(target, was) is None and fromdata.lost_refusal(tmp_path / "none.json", again) is None
     with pytest.raises(SystemExit) as e:

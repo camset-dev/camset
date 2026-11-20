@@ -928,7 +928,9 @@ def menu_problems(doc: dict) -> list:
 def icons_disagree(doc: dict) -> list:
     """Each row whose settings disagree on what its icon means (row_icons, at that level: a word, another or none),
     in a place or a menu's place: the editor draws a heading's words only where every setting on or under the row gives
-    the same, so the writer gives them alike (camkit.placement.with_icons, one row one node)."""
+    the same, so the writer gives them alike (camkit.placement.with_icons, one row one node). Not compared yet: one
+    setting's own place as a menu shows it against another's row_places entry for that same menu (no such case on
+    2026-11-20: the one row_places entry, 0x02e7's, carries no icons); a menu's own grouping would have to merge the two."""
     said = collections.defaultdict(set)          # (menu or None, tab, labels, row_at) down to a level -> its words
     for s in doc.get("settings") or []:
         tab = s.get("row_tab") or s.get("tab")
