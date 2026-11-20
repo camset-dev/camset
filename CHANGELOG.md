@@ -7,6 +7,10 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 
 ### Read first
 
+- **The coverage ledger's public form is no longer committed:** `kit/tools/coverage.py --print` prints it from the
+  public sources and the seen file, the same in any clone, and `check_public.py` refuses a copy in `data/`. A mapping
+  branch that tracks `data/<model>_fw<fw>/coverage_<model>_fw<fw>.json` takes it out with `git rm` after merging `main`
+  (decision 23).
 - **`--network` now makes `crawl_run.py` and `drive.py` a look lap**: it opens every menu row to look at with no owner
   decision, but what never opens, a row whose opening acts, and a format, delete or reset not yet seen opened on the
   body (decision 24); a decision now only names the options a run may choose.
@@ -362,9 +366,9 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
   want kept (`kit/tools/owner_statement.py cards`), and so that a lost link can be put right; `kit/tools/take_picture.py`
   takes one picture for the Playback rows, only when you answer its question at your own terminal.**
 - **A coverage ledger** (`kit/tools/coverage.py`, decision 23) says for every menu row, value and record what is
-  settled and what is left (`--todo`); `--write` writes a public form and a seen file into the data folder, holding
-  nothing of your camera's state, and once they are committed, run it again after each `kit/schema_update.py --write`,
-  or `check_public.py` refuses the form. `drive.py`, `crawl_run.py` and `prove_run.py` print what it says of a row
+  settled and what is left (`--todo`); `--write` writes a seen file into the data folder (the facts your looks
+  established, nothing of your camera's state), `--print` prints the public form built from it and the public sources,
+  and `--check` says whether both are lean. `drive.py`, `crawl_run.py` and `prove_run.py` print what it says of a row
   before pressing on it, and `crawl_run.py` or `prove_run.py` given `--skip-settled` leave settled rows out (never on
   the crawl that builds pass 1's map).
 - `kit/tools/leads.py` reads your camera's own downloads and says which records no setting covers ever changed, and
