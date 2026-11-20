@@ -1087,24 +1087,30 @@ PAIRS = {f"{ev[:3]} EV {'2 Img. +' if s == 0 else '2 Img. -' if s == 1 else SHOT
          CODES[e] + s for e, ev in enumerate(EVS) for s in range(TOPS[e] + 1)}
 
 
-def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False, drift=False) -> FieldsCam:
+def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False, drift=False, jump=False, wrap=False) -> FieldsCam:
     """Bracket Type with Cont. Bracket's pairs: box 1 offers what box 0's step allows. `strict`: box 0 moving while box
     1 stands off its low end fails the test (the grid moves box 0 only from there); else the camera clamps box 1 to what
     the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held). `apart`: beside the
     pair's record, one of the step alone and one of the count alone (made-up: every camera's rule, not the a1 II's).
-    `drift`: the first Up on box 1 moves box 0 one step on too."""
+    `drift`: the first Up on box 1 moves box 0 one step on too. `jump`: once 0.3 EV 9 Img. is chosen, the first Down on
+    box 1 from 9 Images skips 7 Images. `wrap`: box 1 comes round at both ends."""
     cam = FieldsCam()
     cam.spec = {0: [box("Exposure Value", EVS, EVS[held[0]]), box("Number of Shots", SHOTS_OF, SHOTS_OF[held[1]])],
                 2: FOCUS_BOXES}
     cam.at[0] = list(held)
-    drifted = []
+    once = []
 
     def rule(opt, edit, field, key):
         ev, sh = edit
         d = 1 if key == "up" else -1
-        if field == 1 and drift and key == "up" and not drifted:
-            drifted.append(key)
+        if field == 1 and drift and key == "up" and "drift" not in once:
+            once.append("drift")
             return [ev + 1, max(0, min(TOPS[ev + 1], sh + d))]
+        if field == 1 and jump and key == "down" and sh == 5 and cam.at[0] == [0, 5] and "jump" not in once:
+            once.append("jump")
+            return [ev, 3]
+        if field == 1 and wrap:
+            return [ev, (sh + d) % (TOPS[ev] + 1)]
         if field == 1:
             return [ev, max(0, min(TOPS[ev], sh + d))]
         to = max(0, min(len(EVS) - 1, ev + d))
@@ -1291,6 +1297,40 @@ def test_no_enter_where_box_0_moved_during_the_first_scan(own_runs, monkeypatch,
     assert cam.keys.count("enter") == 1 and fields_lines() == [], "the base's Enter alone"
 
 
+def test_a_grid_stops_on_box_0_opening_on_another_step_than_the_last_ok_chose(own_runs, monkeypatch, capsys):
+    """After 0.3 EV 9 Img. the camera holds 0.5 EV 9 Img. (made up): box 0 is checked on opening, before box 1, which
+    shows 9 Images either way; nothing more is chosen."""
+    cam = grid_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.downloaded = lambda tag: tag == "Bracket-Type-grid-0-5" and cam.at[0].__setitem__(0, 1)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert "box 0 opened on '0.5EV', not '0.3EV', which the last OK chose" in capsys.readouterr().out
+    assert cam.keys.count("enter") == 2, "the base's and the first pair's"
+
+
+def test_a_step_onto_a_value_seen_before_must_show_it(own_runs, monkeypatch, capsys):
+    """Down from 9 Images onto 7 Images, seen there by the scan, shows 5 Images (the camera skipped one, made up): the
+    grid stops before any Enter on it."""
+    cam = grid_cam(jump=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert "box 1 reads '5 Images' where it read '7 Images' before" in capsys.readouterr().out
+    assert cam.keys.count("enter") == 2, "the base's and the first pair's"
+
+
+def test_a_scan_stops_on_a_box_that_comes_round(own_runs, monkeypatch, capsys):
+    """Box 1 comes round past its low end to 9 Images and on down to 3 Images again: a value seen before on the scan's
+    way stops the row, nothing chosen (the grid walks boxes with two ends only)."""
+    cam = grid_cam(strict=False, wrap=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Cont. Bracket", "--grid")
+    assert "box 1 reads '3 Images' (" in capsys.readouterr().out
+    assert cam.keys.count("enter") == 1 and fields_lines() == []
+
+
 def test_a_grid_takes_two_fields_of_one_box_each(own_runs, monkeypatch, capsys):
     cam = FieldsCam()
     F, root, downloads = fields_world(monkeypatch, own_runs, cam)
@@ -1381,3 +1421,59 @@ def test_the_report_credits_named_numbers_by_their_field_and_never_the_put_back(
     opts = counted_rows(root)[f"Bracket Settings > Bracket Type > Focus Bracket [{CTX}]"]
     assert R.values_of(opts)["global:0x9003"] == {"2": 2, "7": 7}
     assert R.option_fields_sampled(opts) == set()
+
+
+def stepped(cam, opt, edit, field, key) -> list:
+    """FieldsCam's own Up or Down on a field, for a rule that adds to it."""
+    b = cam.spec[opt][field]
+    n, i = len(b["values"]), edit[field] + (1 if key == "up" else -1)
+    out = list(edit)
+    out[field] = i % n if b["wraps"] else max(0, min(n - 1, i))
+    return out
+
+
+def test_a_number_whose_stepping_moves_another_box_is_not_chosen(own_runs, monkeypatch, capsys):
+    """--number 7: each Up on the units box sets the tens box to 5 (made up). Before Enter every other box must show
+    what it showed when Right left it: the number is said and passed over, no Enter; the put-back goes on."""
+    cam = number_cam()
+    F, root, downloads = fields_world(monkeypatch, own_runs, cam)
+
+    def rule(opt, edit, field, key):
+        out = stepped(cam, opt, edit, field, key)
+        return [out[0], out[1], 5, out[3]] if opt == 2 and field == 3 and key == "up" else out
+    cam.rule = rule
+    run_fields(F, root, "Focus Bracket", "--number", "7")
+    assert "7: not put in: box 2 changed while the boxes after it were set" in capsys.readouterr().out
+    assert [(x["value"], x["final"]) for x in fields_lines()] == [("3", True)] and cam.keys.count("enter") == 2
+
+
+def test_boxes_opening_on_another_number_with_no_record_to_bear_it_out_stop_the_walk(own_runs, monkeypatch, capsys):
+    """--number 299: the camera shows 250 on the next opening, but its record holds 260 (made up): nothing says the
+    camera kept 250, so the walk stops before any key steps the boxes, the 299 line saying what applied is not known."""
+    cam = number_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    real = cam.records
+
+    def records():
+        got = real()
+        if got["global:0x9003"] == 250:
+            got["global:0x9003"] = 260
+        return got
+    cam.records = records
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--number", "299", "--number", "2")
+    assert "the boxes opened on 250, not 299, which the last OK chose, and its download does not bear them out" in \
+        capsys.readouterr().out
+    assert [(x["value"], x["applied"]) for x in fields_lines()] == [("299", None)] and cam.keys.count("enter") == 2
+
+
+def test_the_first_number_starts_only_from_the_boxes_the_look_read(own_runs, monkeypatch, capsys):
+    """The camera holds 005 once the base is chosen, where the look read 003 (made up): the first visit stops on the
+    units box, before any key steps it, nothing chosen but the base."""
+    cam = number_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    cam.downloaded = lambda tag: tag == "Bracket-Type-Focus-Bracket-base" and cam.at[2].__setitem__(3, 5)
+    with pytest.raises(SystemExit):
+        run_fields(F, root, "Focus Bracket", "--number", "7")
+    assert "box 3 holds '5', the look read '3'" in capsys.readouterr().out
+    assert cam.keys.count("enter") == 1 and fields_lines() == []

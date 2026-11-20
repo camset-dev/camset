@@ -1454,15 +1454,15 @@ def fields_lines(opts: dict) -> list:
 
 
 def held_together(lines: list, key: str) -> bool:
-    """Whether record `key` holds a carousel option's fields together (option_fields_values): a grid's lines (every pair
-    of two fields, "walk": "grid") or the lines of two fields or more moved it, or a field the lines name ("fields") has
-    no walk that finished among them (no put-back, "final": never walked, or its attempt cut short and left out), so
-    nothing says the record leaves that field out."""
-    moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
-    moved_by = {o.get("field") for o in moving}
+    """Whether record `key` holds a carousel option's fields together (option_fields_values): the lines of two fields or
+    more moved it, or a field the lines name ("fields") has no walk that finished among them (no put-back, "final":
+    never walked, or its attempt cut short and left out), so nothing says the record leaves that field out. A grid's
+    line (every pair of two fields, "walk": "grid") is its second field's, the one its Enter went on: a record only grid
+    lines move holds both but where the first field's walk finished without moving it, then it holds the second alone."""
+    moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
     named = {f.get("label") for o in lines for f in o.get("fields") or [] if isinstance(f, dict)}
     finished = {o.get("field") for o in lines if o.get("final")}
-    return any(o.get("walk") == "grid" for o in moving) or len(moved_by) > 1 or not named <= finished
+    return len(moved_by) > 1 or not named <= finished
 
 
 def whole_grids(lines: list) -> set:
