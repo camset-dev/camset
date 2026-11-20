@@ -60,9 +60,11 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 ### The editor
 
 - **Collapse all and Expand all by the keys, and reverts that keep groups whole:** Cmd/Ctrl+Shift+↑ and ↓ fold and
-  open everything in Edit and Compare, in the window and on the page, beside new buttons in Edit. Outside Expert mode,
-  All edits and History put My Menu back as one list and a fraction's two parts back together, and a Compare row's
-  note names the other menus as Compare shows them.
+  open every foldable group of the view in front from any pane, in the window and on the page (Edit's tabs, Compare,
+  search, My Menu, Exposure, the record map, and the Memories page, which now folds), each view with its own buttons,
+  and a single heading folds by the keyboard too. Outside Expert mode, All edits, History and the page's requests put
+  My Menu back as one list and a fraction's two parts back together, and a Compare row's note names the other menus as
+  Compare shows them.
 - **The camera's menu in each shooting mode, and Edit's Menu in Compare:** where a definition lists its camera's menus
   (`camera.menus`, each setting's `row_menus` and `row_places`), the window and the web page show one at a time under
   Camera menu:, opening on the file's mode, each row titled as the camera draws it, with that mode's value and a note
