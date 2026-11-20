@@ -464,6 +464,45 @@ def test_a_hosted_reader_is_sent_no_frame_refused_for_any_reading_it_holds(own_r
     assert not [a for a in asked if a[0] == "far"] and got["asked"]["far"]["questions"] == 0
 
 
+def test_the_list_keeps_what_a_run_did_not_read_and_a_run_that_read_nothing_writes_none(own_runs, tmp_path,
+                                                                                       monkeypatch, capsys):
+    import label_audit
+    root, definition = camera(own_runs, tmp_path)
+    readers(monkeypatch, root, [])
+    base = ["--json", "--definition", str(definition)]
+    run_audit([*base, "--cache", str(tmp_path / "a1")], capsys)
+    ledger = root / label_audit.LEDGER
+    first = ledger.read_bytes()
+    assert len(first.splitlines()) == 5
+    # nothing answered (no answer kept, no time to ask): the list as it was
+    _, got = run_audit([*base, "--cache", str(tmp_path / "a2"), "--minutes", "0"], capsys)
+    assert ledger.read_bytes() == first and "listed" not in got
+    # the checklist alone, now every family confirming it: its two lines go, the three others stay
+    monkeypatch.setitem(BOXES, "gm", True)
+    _, got = run_audit([*base, "--cache", str(tmp_path / "a3"), "--kinds", "checklist", "--sources", ""], capsys)
+    lines = [json.loads(x) for x in ledger.read_text(encoding="utf-8").splitlines()]
+    assert got["listed"] == {"this run": 0, "kept from before": 3}
+    assert [(d["key"], d["verdict"]) for d in lines] == [("global:0x0001", "none agree, all on another reading"),
+                                                         ("global:0x0001", "none agree, apart"),
+                                                         ("global:0x0001", "some agree")]
+    # a line whose name the definition no longer publishes as it was goes too
+    doc = json.loads(definition.read_text(encoding="utf-8"))
+    doc["settings"][0]["values"][2][1] = "Zqx Gamma Two"
+    definition.write_text(json.dumps(doc), encoding="utf-8")
+    _, got = run_audit([*base, "--cache", str(tmp_path / "a3"), "--kinds", "checklist", "--sources", ""], capsys)
+    assert got["listed"] == {"this run": 0, "kept from before": 2}
+
+
+def test_a_hand_table_name_comes_in_by_its_source_only():
+    import label_audit as la
+    n = la.Name("k", 1, "Zqx Fn", "hand table")
+    n.kind = "table picker"
+    assert not la.in_scope(n, la.SOURCES, la.KINDS, False)
+    assert la.in_scope(n, ["hand table"], la.KINDS, False) and la.in_scope(n, [], [], True)
+    n.source = "two readers"
+    assert la.in_scope(n, la.SOURCES, la.KINDS, False)
+
+
 def test_the_private_file_is_under_the_run_root_owner_only_ignored_and_refused(own_runs, tmp_path, monkeypatch,
                                                                               capsys):
     import check_public

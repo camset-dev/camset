@@ -10,7 +10,8 @@ proved by the camera's own file; what rests on a reading is each value's name, a
 what backs it (kit/writer/proofs.py NAME_SOURCES). The audit takes:
   scope    every value name whose source is one of --sources (default "one reader" and "vision model"), and every
            name whose proof frame is of a kind of --kinds (default: checklist, star rating, table picker; the kinds of
-           camkit.reading.QUESTIONS, as kit/tools/reader_census.py names them), or with --all every name
+           camkit.reading.QUESTIONS, as kit/tools/reader_census.py names them) but one a hand table pins, which only
+           --sources brings in; or with --all every name
   frame    the proof line that backs the name, as the pass-2 report credits it (kit2_pass2/report.json: a row, a
            record and the label credited with the value; kit/pass2_report.py's report_proofs and rows_of: the latest
            line of each option, its own run's frame; a carousel axis's line by its own label, as the report credits
@@ -48,9 +49,11 @@ for any reading it holds.
 Output. The console gets counts only, per source and per kind (no reading, label, value or file name: decision 16, as
 the census prints); --json prints them as one JSON object and nothing else on standard output. The names not every
 family confirmed go, one JSON line each, to <root>/_label_audit/labels.jsonl (LEDGER), owner-only (0600 in a 0700
-folder on POSIX), rewritten whole by each run that asks (a dry run writes nothing): the setting's key, the value's code,
-the published name, its source, the kind, the report row, the frame's path from <root>, each reader's model, family,
-reading and verdict, and the verdict, ordered with "none agree, all on another reading" first. It is kept beside the
+folder on POSIX): the setting's key, the value's code, the published name, its source, the kind, the report row, the
+frame's path from <root>, each reader's model, family, reading and vote, and the verdict, ordered by verdict (LISTED),
+"none agree, all on another reading" first. A run that read some name rewrites it whole, its own lines with every line
+of before whose name it did not read (outside its scope, or not answered about) and the definition still publishes as
+it was; a run that read none, and a dry run, leave it as it was. It is kept beside the
 frames it names, in the camera's run root, because it holds what the runs hold (the camera's labels, the readers'
 readings, the frames' names): runs/ is git-ignored and kit/tools/check_public.py refuses any file under it, so it never
 reaches a commit, an issue or the docs (decision 16).
@@ -233,7 +236,9 @@ def find_lines(names: list, root: Path, report: list, lines: dict) -> dict:
 
 
 def in_scope(n: Name, sources, kinds, everything: bool) -> bool:
-    return everything or n.source in sources or (n.kind is not None and n.kind in kinds)
+    """A name of a source asked for, or of a kind of screen asked for (but a name a hand table pins, which only
+    --sources brings in), or with --all any."""
+    return everything or n.source in sources or (n.kind is not None and n.kind in kinds and n.source != "hand table")
 
 
 # ------------------------------------------------------------------------------------------------ the frames
@@ -557,7 +562,8 @@ def verdict_of(votes: dict) -> str:
 # ------------------------------------------------------------------------------------------------ the run
 
 def audit(root: Path, args) -> tuple:
-    """(the counts, the ledger's lines) of one audit of the camera whose run root is root."""
+    """(the counts, the ledger's lines, the names some family answered about as {(key, value)}, every name the
+    definition publishes as {(key, value): name}) of one audit of the camera whose run root is root."""
     main = root / runs.MAIN_RUN
     if not (main / "report.json").is_file():
         sys.exit(f"{paths.shown(main / 'report.json')}: no pass-2 report (kit/pass2_report.py writes it); nothing audited")
@@ -599,7 +605,7 @@ def audit(root: Path, args) -> tuple:
         counts["readers left out"] = not_local
     if args.dry_run:
         counts["dry run"] = True
-    lines_out, read_by = [], collections.Counter()
+    lines_out, read_by, read = [], collections.Counter(), set()
     by_source = collections.defaultdict(collections.Counter)
     by_kind = collections.defaultdict(collections.Counter)
     for n in scope:
@@ -619,6 +625,8 @@ def audit(root: Path, args) -> tuple:
         by_source[n.source][verdict] += 1
         by_kind[n.kind][verdict] += 1
         read_by[len(votes)] += 1
+        if votes:
+            read.add((n.key, n.value))
         if verdict in LISTED:
             lines_out.append({"verdict": verdict, "key": n.key, "value": n.value, "name": n.name, "source": n.source,
                               "kind": n.kind, "row": n.row, "frame": n.frame.relative_to(root).as_posix()
@@ -629,24 +637,46 @@ def audit(root: Path, args) -> tuple:
     # how many families' votes each name asked about stands on (of len(set(families)) asked): fewer where a reader
     # failed, ran out of time or may not be sent the frame
     counts["names by families that answered"] = {str(k): v for k, v in sorted(read_by.items())}
-    lines_out.sort(key=lambda d: (VERDICTS.index(d["verdict"]), d["key"], d["value"]))
-    return counts, lines_out
+    current = {(n.key, n.value): n.name for n in names}
+    return counts, lines_out, read, current
 
 
-def write_ledger(root: Path, lines: list) -> Path:
-    """The ledger (LEDGER under root), written whole, owner-only on POSIX: a 0700 folder and a 0600 file."""
+def order(d: dict) -> tuple:
+    """A ledger line's place: by its verdict (LISTED's order), then its key and value."""
+    return (LISTED.index(d["verdict"]) if d.get("verdict") in LISTED else len(LISTED), str(d.get("key")),
+            str(d.get("value")))
+
+
+def write_ledger(root: Path, lines: list, read: set, current: dict) -> tuple:
+    """(the ledger, how many lines it kept from before): LEDGER under root, owner-only on POSIX (a 0700 folder and a
+    0600 file), written whole: this run's lines, and every line of before whose name this run did not read (outside its
+    scope, or not answered about) and the definition still publishes as it was (current: {(key, value): name}); a name
+    this run read is listed only where it is listed now. The caller writes it only when some name was read."""
     f = root / LEDGER
+    kept = []
+    try:
+        old = f.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        old = []
+    for raw in old:
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            continue
+        k = (d.get("key"), d.get("value")) if isinstance(d, dict) else None
+        if k is not None and k not in read and current.get(k) is not None and current.get(k) == d.get("name"):
+            kept.append(d)
     f.parent.mkdir(parents=True, exist_ok=True)
     if os.name == "posix":
         os.chmod(f.parent, runs.PRIVATE_DIR)
     part = f.with_name(f.name + ".part")
     fd = os.open(part, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, runs.PRIVATE_FILE)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as out:
-        out.writelines(json.dumps(d, ensure_ascii=False) + "\n" for d in lines)
+        out.writelines(json.dumps(d, ensure_ascii=False) + "\n" for d in sorted([*kept, *lines], key=order))
     if os.name == "posix":
         os.chmod(part, runs.PRIVATE_FILE)
     part.replace(f)
-    return f
+    return f, len(kept)
 
 
 def show(counts: dict, ledger: Path | None) -> None:
@@ -672,8 +702,11 @@ def show(counts: dict, ledger: Path | None) -> None:
         print("dry run: nothing was asked and nothing written ('would ask' is what a run would ask each reader; "
               "'from a cache' is free)")
     elif ledger is not None:
-        print(f"the names not every family confirmed: {paths.shown(ledger)} (private: it holds the camera's labels "
-              "and the readers' readings)")
+        print(f"the names not every family confirmed: {paths.shown(ledger)}, {counts['listed']['this run']} from this "
+              f"run and {counts['listed']['kept from before']} kept from earlier runs (private: it holds the camera's "
+              "labels and the readers' readings)")
+    else:
+        print("no name was read: the private list is left as it was")
 
 
 def main(argv=None) -> int:
@@ -720,8 +753,11 @@ def main(argv=None) -> int:
         sys.exit(f"{root} is not a folder")
     # with --json, standard output carries the JSON alone: what the kit says on the way goes to standard error
     with contextlib.redirect_stdout(sys.stderr) if args.json else contextlib.nullcontext():
-        counts, lines = audit(root, args)
-        ledger = None if args.dry_run else write_ledger(root, lines)
+        counts, lines, read, current = audit(root, args)
+        ledger = None
+        if not args.dry_run and read:          # a run that read nothing leaves the list as it was
+            ledger, kept = write_ledger(root, lines, read, current)
+            counts["listed"] = {"this run": len(lines), "kept from before": kept}
     if args.json:
         print(json.dumps(counts, indent=1))
     else:
