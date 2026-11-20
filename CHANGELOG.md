@@ -195,7 +195,8 @@ on GitHub with the editor's packages attached ([RELEASING](docs/RELEASING.md)).
 - **`kit/prove_run.py`'s carousel axis proofs take the screen after OK as its list proofs do,** an information screen
   left with MENU once the cursor is off its "Don't show this again." box (Framing Stabilizer = On: Manual), where the
   row failed. With `--eyes osd` an axis of a row in the reviewed scope's OSD group is read through the camera's own
-  picture as that row's list is, not off a blanked HDMI frame.
+  picture as that row's list is, not off a blanked HDMI frame, and without it is left out as the list is; `--first` on
+  such an axis needs `--eyes osd-all`.
 - **`kit/provers/carousel_fields_run.py --grid` proves every pair of an option's two fields, one a download, and
   `--number N` puts a named number into a digit field with no Enter on the way** (Bracket Type's Cont. and Single
   Bracket pairs, Focus Bracket's Number of Shots, each end taken only after presses the camera answered). The report
