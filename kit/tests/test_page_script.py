@@ -280,6 +280,23 @@ def test_open_in_edit_opens_the_section_that_keeps_the_setting(tmp_path):
 
 
 @needs_node
+def test_open_in_edit_opens_another_menus_memory_set(tmp_path):
+    """cmpOpenInEdit from a column of another camera menu's memory set (one the Editing row of the menu shown does not
+    offer): Edit on that set, as the window opens it, and the Editing row the editor then answers (which keeps the set
+    edited) keeps it."""
+    got = run(tmp_path, COMPARE + """
+(async () => {
+  state.targets = [[0, "Live", true], [1, "Memory 1", true]];
+  cmp.last = { cols: [{ editable: true, section: 0 }, { editable: true, section: 4 }] };
+  const opened = await edit(r(), 4, false);
+  keepViewValid({ ...state, tabs: ["Shoot"], targets: [[0, "Live", true], [1, "Memory 1", true], [4, "Movie Memory 1", true]] });
+  console.log(JSON.stringify({ opened: opened.target, kept: view.target }));
+})();
+""")
+    assert got == {"opened": 4, "kept": 4}
+
+
+@needs_node
 def test_the_back_to_compare_button_lasts_while_the_setting_is_shown(tmp_path):
     """"← Back to Compare" heads the tab "Open in Edit" opened while that tab is shown in that set, again when the
     person comes back to it, never on another tab, set or page; it takes the page back to Compare on the row it was

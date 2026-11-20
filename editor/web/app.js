@@ -3346,8 +3346,11 @@ async function cmpOpenSetting(s, section) {
  *  is turned off when it would hide the setting. */
 async function cmpOpenInEdit(r, section) {
   cmpHideMenu();
+  // the column's set where it keeps the setting, as the window opens it: one of file A's columns Compare shows (another
+  // camera menu's memory set too, which the Editing row of the menu shown does not offer), or one the Editing row offers
   const keeps = section === 0 || r.in_sets;
-  const target = keeps && state.targets.some(([i]) => i === section) ? section : 0;
+  const known = ((cmp.last && cmp.last.cols) || []).some((c) => c.editable && c.section === section) || state.targets.some(([i]) => i === section);
+  const target = keeps && known ? section : 0;
   const ci = ((cmp.last && cmp.last.cols) || []).findIndex((c) => c.editable && c.section === target);
   const edited = ci >= 0 && !!r.cells[ci] && r.cells[ci].edited;
   if (view.only && !edited) {
