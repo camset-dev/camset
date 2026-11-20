@@ -526,6 +526,35 @@ def test_a_sampled_record_every_value_of_which_a_line_chose_is_proved(capsys):
     assert "global:0x0001" in capsys.readouterr().out
 
 
+def test_a_record_walked_whole_takes_its_names_only_from_what_a_reader_read(capsys):
+    """The review of 2026-11-19: noting every label of a record walked whole as read gave ISO Range Limit's six
+    records "one reader" for each of their 34 values, where the report names them "number" (the number the field
+    prover set, never a reading) and the ISO table names them ("derived"), and it read rows sampled from the option the
+    camera held, which the writers count and never name from. Only a reader's words are noted (read_by_a_reader), from
+    rows not sampled from the start. Made-up record and lines."""
+    from writer import proofs
+    k = "global:0x0b63"
+    by_key = {k: {"key": k, "name": "ISO Range Limit", "values": [[2, "ISO 50"], [3, "ISO 64"]]}}
+
+    def line(t, after):
+        return {"path": ["Tango"], "kind": "fields", "index": [0, t], "label": f"x{t}", "applied": True,
+                "dat": f"{t}.DAT", "changes": [{"key": k, "before": 9, "after": after}]}
+    lines = [line(0, 2), line(1, 3)]
+    field = {"row": "Tango [field 0]", "records": {k: {"proved": {"ISO 50": 2, "ISO 64": 3},
+                                                       "names": {"ISO 50": "number", "ISO 64": "number"}}}}
+    held = {"row": "Tango list", "records": {k: {"proved": {"ISO 50": 2, "ISO 64": 3}, "sampled_from_start": True,
+                                                 "names": {"ISO 50": "two readers", "ISO 64": "two readers"}}}}
+    read = {"row": "Tango read", "records": {k: {"proved": {"ISO 64": 3}, "names": {"ISO 64": "one reader (ocr)"}}}}
+    for report, want in (([field, held], {}), ([field, held, read], {3: "one reader"})):
+        readers, sampled = {k: {}}, {k: {"proofs": 2, "linear": None}}
+        got = proofs.walked_whole(report, proofs.written_by_row(lines, set()), sampled, by_key, {}, {}, readers)
+        assert got == [k] and readers[k] == want, report
+    assert [proofs.read_by_a_reader(w) for w in ("two readers", "one reader (map)", "vision model", "disputed", "number",
+                                                  "box", "grid readout", "carousel", "pixels", None)] == \
+        [True, True, True, True, False, False, False, False, False, False]
+    capsys.readouterr()
+
+
 def test_a_walk_that_chose_the_held_option_too_is_proved_whole(capsys):
     """Playback's Aspect Marker Level (2026-11-19): every level 0 to 15 chosen, fifteen seen written from the
     sixteenth, the one the camera held, chosen last with nothing to show; filed as a sample (a range, numbers), it was

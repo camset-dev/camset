@@ -277,6 +277,13 @@ def written_values(proofs: list, skip: set, reported=None, by_row: dict = None) 
     return dict(out)
 
 
+def read_by_a_reader(said) -> bool:
+    """Whether pass2_report's word for what backs a label (a record's `names`) is a reader's reading of the screen:
+    two readers, one ("one reader (ocr)", "one reader (map)", a disputed one, OCR disagreeing), or the vision model;
+    never a number the prover set ("number"), a box's or a grid's own reading, a carousel's or pixels."""
+    return said in ("two readers", "vision model", "disputed", "ocr disagrees") or str(said or "").startswith("one reader")
+
+
 def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved: dict, still=None,
                  readers: dict | None = None) -> list:
     """The records a writer files as samples (`sampled`: a number field's, a box's, a grid's, a scale's, a list of
@@ -291,8 +298,10 @@ def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved
     is no sample: it is proved, each value listed (`proved`), and taken out of `sampled`; none of its values is left
     that no line chose, so the list says nothing of the camera's own setting (docs/decisions/0016). A record with a
     value no line chose stays a sample (review 2026-11-18: ISO Range Limit, walked whole in one run and sampled again in
-    later ones). With `readers` (note_readers'), each such record's names take its rows' readings, as a list's do.
-    Returns their keys, each printed."""
+    later ones). With `readers` (note_readers'), each such record's names take its rows' readings where a reader read
+    them (read_by_a_reader), as a list's do: never a number field's own number, a box's or a grid's ("number", "box",
+    "grid readout": ISO Range Limit's values keep the ISO table's names, "derived"), nor a row sampled from the option
+    the camera held, which the writers count and never name from. Returns their keys, each printed."""
     chose, still = collections.defaultdict(set), still or {}
     for e in report:
         for k, r in e["records"].items():
@@ -310,8 +319,11 @@ def walked_whole(report: list, by_row: dict, sampled: dict, by_key: dict, proved
             del sampled[k]
             out.append(k)
             for e in report if readers is not None else ():
-                if k in e["records"]:
-                    note_readers(readers, k, e["records"][k])
+                r = e["records"].get(k)
+                if r and not r.get("sampled_from_start"):           # a count, its readings nowhere (decision 16)
+                    names = r.get("names") or {}
+                    read = {lab: v for lab, v in (r.get("proved") or {}).items() if read_by_a_reader(names.get(lab))}
+                    note_readers(readers, k, {**r, "proved": read})
             print(f"  walked whole  {k} {by_key[k]['name'][:44]}: each of its {len(codes)} values chosen; proved, no "
                   "longer a sample")
     return out
