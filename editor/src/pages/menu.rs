@@ -359,7 +359,8 @@ impl App {
     pub(crate) fn where_in(&self, s: &Setting, target: usize, now: Option<&str>) -> String {
         let (menu, _, _) = self.jump_place(s, target, now);
         let shown = match &menu { Some(m) => self.listed_record(s, target, m), None => s.clone() };
-        let here = if self.off_menu(&shown) { format!("{} > {}", self.schema.camera.text.off_menu_name(), self.group_here(&shown)) } else { format!("{} > {}", self.layout_tab(&shown), self.group_here(&shown)) };
+        // the entry a click opens (`entry_here`, as the jump: My Menu's page for one of its places)
+        let here = format!("{} > {}", self.entry_here(&shown), self.group_here(&shown));
         match menu { Some(m) => format!("{m} > {here}"), None => here }
     }
 
@@ -2167,6 +2168,25 @@ pub(crate) mod facts_tests {
         done(&d2, &u2);
     }
 
+    /// Second integration review, item 5: in Expert mode a search hit for a place of My Menu says where a click on it
+    /// opens (My Menu's page, `entry_here`), with menus and without, as the jump lands.
+    #[test]
+    fn a_places_search_hit_says_my_menus_page() {
+        use crate::test_support::{strip_menus, stub_menus};
+        for stub in [strip_menus as fn(&mut serde_json::Value), stub_menus] {
+            let (mut app, dir, user) = sample_app("menus_place_where", Some(stub));
+            app.prefs.expert = true;
+            let place = app.schema.settings.iter().find(|s| app.is_mymenu_place(s)).cloned().unwrap();
+            let said = app.where_shown(&place);
+            let my = app.schema.camera.text.my_menu_name().to_string();
+            let menu = app.menu_shown().map(|m| format!("{m} > ")).unwrap_or_default();
+            assert!(said.starts_with(&format!("{menu}{my} > ")), "{said}");
+            app.go_to(&place);
+            assert_eq!(app.view, View::MyMenu, "the click opens My Menu's page");
+            done(&dir, &user);
+        }
+    }
+
     /// Integration review finding 3: the rows as before menus (Compare's rows without a menu, the Memories page,
     /// recall, the page's copy lookup) come in one order, whatever menu the window shows and whatever was asked before.
     #[test]
@@ -2404,12 +2424,21 @@ pub(crate) mod facts_tests {
             assert!(app.focus == Focus::Groups);
             w.key(&mut app, egui::Key::ArrowDown);
             assert_eq!((app.view.clone(), app.group.clone()), (View::Tab(tab.clone()), Some(groups[at + 1].clone())), "menus: {}", menus.is_some());
+            // the group step alone (`keyboard_nav`, before the pages draw and `follow_selection` acts): the next group,
+            // no row, its name and key together (`select`)
+            app.go_to(&jpeg);
+            app.focus = Focus::Groups;
+            let down = egui::RawInput { events: vec![egui::Event::Key { key: egui::Key::ArrowDown, physical_key: None, pressed: true, repeat: false, modifiers: Default::default() }], ..Default::default() };
+            let _ = egui::Context::default().run(down, |ctx| app.keyboard_nav(ctx));
+            assert_eq!((app.group.clone(), app.item.as_deref(), app.item_key.as_deref()), (Some(groups[at + 1].clone()), None, None), "menus: {}", menus.is_some());
             // My Menu's page, a row of its own picked there, then Setup
             let iso = setting(&app, "global:0x0334");
             app.go_to(&iso);
             app.view = View::MyMenu;
             w.click_where(&mut app, &[Role::Button, Role::Link, Role::Label], |l| l == "Display From My Menu", "Display From My Menu");
             assert_eq!(app.item.as_deref(), Some("Display From My Menu"));
+            // the pick chose that row by its name and its key (`select`)
+            assert_eq!(app.item_key.as_deref(), Some("global:0x01d7"), "menus: {}", menus.is_some());
             w.click_where(&mut app, &[Role::Button], |l| l.starts_with("Setup  ("), "Setup");
             assert_eq!(app.view, View::Tab("Setup".into()), "menus: {}", menus.is_some());
             if menus.is_some() {
