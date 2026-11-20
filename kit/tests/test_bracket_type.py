@@ -1087,10 +1087,11 @@ PAIRS = {f"{ev[:3]} EV {'2 Img. +' if s == 0 else '2 Img. -' if s == 1 else SHOT
          CODES[e] + s for e, ev in enumerate(EVS) for s in range(TOPS[e] + 1)}
 
 
-def grid_cam(held=(0, 2), strict=True, clamp=True) -> FieldsCam:
+def grid_cam(held=(0, 2), strict=True, clamp=True, apart=False) -> FieldsCam:
     """Bracket Type with Cont. Bracket's pairs: box 1 offers what box 0's step allows. `strict`: box 0 moving while box
     1 stands off its low end fails the test (the grid moves box 0 only from there); else the camera clamps box 1 to what
-    the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held)."""
+    the new step allows (`clamp`) or box 0 stands still (a camera whose step refuses the count held). `apart`: beside the
+    pair's record, one of the step alone and one of the count alone (made-up: every camera's rule, not the a1 II's)."""
     cam = FieldsCam()
     cam.spec = {0: [box("Exposure Value", EVS, EVS[held[0]]), box("Number of Shots", SHOTS_OF, SHOTS_OF[held[1]])],
                 2: FOCUS_BOXES}
@@ -1108,7 +1109,8 @@ def grid_cam(held=(0, 2), strict=True, clamp=True) -> FieldsCam:
                 return [ev, sh]
         return [to, min(sh, TOPS[to])]
     cam.rule = rule
-    cam.records = lambda: {"global:0x02bf": cam.saved, "global:0x13f9": CODES[cam.at[0][0]] + cam.at[0][1]}
+    cam.records = lambda: {"global:0x02bf": cam.saved, "global:0x13f9": CODES[cam.at[0][0]] + cam.at[0][1],
+                           **({"global:0x9001": cam.at[0][0], "global:0x9004": cam.at[0][1]} if apart else {})}
     return cam
 
 
@@ -1154,6 +1156,31 @@ def test_the_report_lists_a_whole_grids_pairs_and_samples_none(own_runs, monkeyp
     rows = counted_rows(root)
     assert R.values_of(rows[CONT_ROW]) == {"global:0x13f9": PAIRS}
     assert R.option_fields_sampled(rows[CONT_ROW]) == set()
+
+
+def test_a_record_only_some_pairs_move_stays_sampled_beside_a_whole_grid(own_runs, monkeypatch, tmp_path, capsys):
+    """The review of 2026-11-19: held on 0.7 EV 5 Img., a record of the step alone and one of the count alone beside the
+    pair's. The pairs at 0.7EV leave the step's record as it was, those of 5 Images the count's, so neither is moved by
+    every pair: credited, the put-back would name the pair held as its step's (or count's) one value. Both stay sampled,
+    in the report written whole too; the pair's record, which every pair moved, is listed."""
+    import subprocess
+
+    import pass2_report as R
+    import test_definitions as D
+    cam = grid_cam((2, 3), apart=True)
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Cont. Bracket", "--grid")
+    rows = counted_rows(root)
+    assert R.option_fields_sampled(rows[CONT_ROW]) == {"global:0x9001", "global:0x9004"}
+    assert R.values_of(rows[CONT_ROW])["global:0x13f9"] == PAIRS
+    lines = fields_lines()
+    run = D.write_run(tmp_path, lines, done=[lines[-1]["attempt"]])
+    r = subprocess.run([sys.executable, str(ROOT / "kit" / "pass2_report.py"), str(run), "--no-schema"],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 0, r.stderr
+    (entry,) = json.loads((run / "report.json").read_text(encoding="utf-8"))
+    assert {k: x.get("sampled_from_start", False) for k, x in entry["records"].items()} == \
+        {"global:0x13f9": False, "global:0x9001": True, "global:0x9004": True}
 
 
 def test_the_writer_lists_every_pair_of_a_whole_grid(own_runs, monkeypatch, tmp_path, capsys):

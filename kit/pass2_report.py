@@ -33,7 +33,7 @@ and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among 
 fields (kit/provers/carousel_fields_run.py: Bracket Type's Cont. Bracket) are its row "ROW > OPTION", a record two
 fields' lines move credited with both fields together ("0.5 EV 3 Img."), one only one field's lines move with that
 field's value as drawn (option_fields_values); a record whose values would tell the pair held is marked
-"sampled_from_start" (option_fields_sampled), never one a whole grid of every pair moved (whole_grids).
+"sampled_from_start" (option_fields_sampled), never one every pair of a whole grid moved (every_pair_moved).
 
 A registration mirror line ("kind": "registration mirror": kit/provers/memreg_run.py's, a live setting chosen in its
 menu and a memory slot registered to see the slot's copy take it; kit/provers/framepos_run.py --zone-grid's, a frame's
@@ -1471,6 +1471,21 @@ def whole_grids(lines: list) -> set:
     return {o.get("attempt") for o in lines if o.get("walk") == "grid" and o.get("final") and o.get("whole") is True}
 
 
+def every_pair_moved(lines: list) -> set:
+    """The records every pair of a whole grid (whole_grids) moved: each line of its attempt but the put-back changed
+    them, a line that chose the pair held on the way aside (the grid chooses it where it is box 1's low end, its label
+    the put-back's). A record only some pairs move (one field's alone, a flag) is none: the pairs that leave it as it
+    was are credited nothing, and the put-back, credited the base's value, would name the pair held at its step."""
+    out = set()
+    for attempt in whole_grids(lines):
+        grid = [o for o in lines if o.get("attempt") == attempt and o.get("walk") == "grid"]
+        held = {o.get("label") for o in grid if o.get("final")}
+        pairs = [{c["key"] for c in o["changes"]} for o in grid if not o.get("final") and o.get("label") not in held]
+        if pairs:
+            out |= set.intersection(*pairs)
+    return out
+
+
 def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
     """record key -> {label: value} for a carousel option's fields (OPTION_FIELDS: Bracket Type's Cont. Bracket, with the
     drive mode dial on BRK). Each line changed one field ("field", its name as drawn) and says how every field read
@@ -1526,16 +1541,17 @@ def option_fields_sampled(opts: dict) -> set:
     counts their proofs and lists none of their values): a record that holds the fields together (held_together: each
     field is walked from what the other held, so the values proved cross at the pair held, and one arm alone tells the
     other field's value held), and a record a field moved whose walk the deadline cut short (its put-back "whole": false:
-    the values proved stand round the one held). A record a whole grid moved (whole_grids: every pair the boxes offer
-    chosen, one a download, the pair held among them) is none: its values are every pair, whatever the camera held."""
+    the values proved stand round the one held). A record every pair of a whole grid moved (every_pair_moved: every
+    pair the boxes offer chosen, one a download, each writing it) is none: its values are every pair, the one held among
+    them, whatever the camera held."""
     lines = fields_lines(opts)
     cut = {o.get("field") for o in lines if o.get("final") and o.get("whole") is False}
-    grids = whole_grids(lines)
+    exempt = every_pair_moved(lines)
     out = set()
     for key in {c["key"] for o in lines for c in o["changes"]}:
-        moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
-        if any(o.get("attempt") in grids for o in moving):
+        if key in exempt:
             continue
+        moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
         if held_together(lines, key) or {o.get("field") for o in moving} & cut:
             out.add(key)
     return out

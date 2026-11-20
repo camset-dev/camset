@@ -71,8 +71,8 @@ say "walk": "grid", "index" ["grid", box 0's place, box 1's place from its low e
 named number's "walk": "number", "index" ["number", N], "value" the number its boxes make.
 kit/pass2_report.py credits a record moved by the lines of two fields or more, or by a grid's, with "label", a record
 only one field's lines moved with that field's "value"; a put-back's value only where its walk was whole, as the value
-held would stand out among a part walk's (docs/decisions/0016), and never a named number's. A record a whole grid moved
-is no sample: every pair is listed, the one held among them.
+held would stand out among a part walk's (docs/decisions/0016), and never a named number's. A record every pair of a
+whole grid moved is no sample: every pair is listed, the one held among them.
 """
 import argparse
 import json
