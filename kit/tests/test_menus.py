@@ -665,3 +665,44 @@ def test_a_menus_place_says_no_option_here_with_null():
         {"key": "global:0x0001", "row": ["Drive Mode"], "row_at": [2], "under_option": "Continuous Shooting",
          "row_menus": ["Still", "Movie"], "row_places": {"Movie": got}}]}
     assert check_public.menu_problems(d) == []
+
+
+def test_check_public_holds_the_menus_to_names_and_places_in_every_form(tmp_path, monkeypatch):
+    """check_public refuses, through lean_problems with a message of its own (what is wrong and what to do, never
+    "carries evidence"): My Menu's item pages however written ("MyMenu1", "★My Menu1", "My Menu Page 1"), a page
+    counter with its word ("Page 38/63") or alone with a menu's two-digit total ("38/63"), a row on My Menu's tab
+    outside its setting page (an owner's item), and row_menus on a copy. A label that is no page counter stands: a
+    fraction with a one-digit total ("1/3", a step's name), and any option's name ("1/60" under_option, a shutter
+    speed)."""
+    def place(**more):
+        return {"key": "global:0x0001", "row": ["Drive Mode"], "row_at": [2], "row_menus": ["Still"], **more}
+    good = {**doc(), "camera": {"menus": MENUS, "text": {}}, "settings": [
+        place(), place(key="global:0x0002", row=["Bracket Settings", "1/3"], row_at=[3, 0]),
+        place(key="global:0x0003", under_option="1/60"),
+        place(key="global:0x0004", row=["Add Item"], row_at=[0], row_tab="My Menu", row_group="My Menu Setting"),
+        {"key": "global:0x0005", "row": ["Drive Mode"], "row_at": [2], "copy_of": "global:0x0001"}]}
+    assert check_public.menu_problems(good) == []
+    bad = copy.deepcopy(good)
+    bad["settings"] += [place(key="global:0x0011", row_group="MyMenu1"), place(key="global:0x0012", row_group="★My Menu1"),
+                        place(key="global:0x0013", row_group="My Menu Page 1"), place(key="global:0x0014", row=["Page 38/63"]),
+                        place(key="global:0x0015", row=["38/63"]),
+                        place(key="global:0x0016", row=["Drive Mode"], row_tab="My Menu", row_group="Favourites"),
+                        {"key": "global:0x0017", "row": ["Drive Mode"], "row_at": [2], "copy_of": "global:0x0001", "row_menus": ["Still"]}]
+    got = "\n".join(check_public.menu_problems(bad))
+    for words in ("global:0x0011: row: 'MyMenu1' is one of My Menu's item pages", "'★My Menu1' is one of My Menu's item pages",
+                  "'My Menu Page 1' is one of My Menu's item pages", "'Page 38/63' is a page counter", "'38/63' is a page counter",
+                  "global:0x0016: a row on My Menu's tab outside its setting page ('Favourites')", "global:0x0017: row_menus on a copy"):
+        assert words in got, words
+    assert not [x for x in check_public.menu_problems(bad) if x.startswith(("global:0x0002", "global:0x0003", "global:0x0004"))]
+    defs = tmp_path / "editor" / "definitions"
+    defs.mkdir(parents=True)
+    (defs / "TEST_fw1.00.json").write_text(json.dumps(bad), encoding="utf-8")
+    monkeypatch.setattr(check_public, "ROOT", tmp_path)
+    said = check_public.lean_problems()
+    menus = [x for x in said if "say more than names and places" in x]
+    assert any(x.endswith("places its camera menus say more in all") for x in said)
+    assert menus and all("carries evidence" not in x for x in menus)
+    assert all(x.startswith("editor/definitions/TEST_fw1.00.json: its camera menus say more than names and places") for x in menus)
+    assert "MENUS or HAND_PLACES" in menus[0]
+    blob = check_public.blob_problems("editor/definitions/TEST_fw1.00.json", json.dumps(bad))          # a commit's copy
+    assert blob and all(x.startswith("its camera menus say more than names and places") for x in blob)
