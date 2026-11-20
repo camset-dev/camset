@@ -32,7 +32,8 @@ read it as any option's is. A row of boxes (a proof line's "boxes": boxes_run's,
 and its numbers are read as the boxes draw them, Zebra's "±5" and "100+" among them (num). A carousel option's own
 fields (kit/provers/carousel_fields_run.py: Bracket Type's Cont. Bracket) are its row "ROW > OPTION", a record two
 fields' lines move credited with both fields together ("0.5 EV 3 Img."), one only one field's lines move with that
-field's value as drawn (option_fields_values); a record whose values would tell the pair held is marked
+field's value as drawn (option_fields_values), as is one only named numbers' lines move, each to its number; a record
+whose values would tell the pair held is marked
 "sampled_from_start" (option_fields_sampled), never one every pair of a whole grid moved (every_pair_moved).
 
 A registration mirror line ("kind": "registration mirror": kit/provers/memreg_run.py's, a live setting chosen in its
@@ -1494,13 +1495,27 @@ def fields_lines(opts: dict) -> list:
     return [o for o in opts.values() if o.get("via") == OPTION_FIELDS and o.get("applied") is True]
 
 
+def holds_the_number(o: dict, key: str) -> bool:
+    """Whether a named number's line ("walk": "number", carousel_fields_run.py --number) left record `key` holding the
+    very number its field was given ("value": "299", the record 299)."""
+    after = next((c["after"] for c in o["changes"] if c["key"] == key), None)
+    return o.get("walk") == "number" and isinstance(after, int) and not isinstance(after, bool) and \
+        str(after) == str(o.get("value", "")).strip()
+
+
 def held_together(lines: list, key: str) -> bool:
     """Whether record `key` holds a carousel option's fields together (option_fields_values): the lines of two fields or
     more moved it, or a field the lines name ("fields") has no walk that finished among them (no put-back, "final":
     never walked, or its attempt cut short and left out), so nothing says the record leaves that field out. A grid's
     line (every pair of two fields, "walk": "grid") is its second field's, the one its Enter went on: a record only grid
-    lines move holds both but where the first field's walk finished without moving it, then it holds the second alone."""
-    moved_by = {o.get("field") for o in lines if any(c["key"] == key for c in o["changes"])}
+    lines move holds both but where the first field's walk finished without moving it, then it holds the second alone.
+    A record only named numbers' lines move, each to the number its field was given (holds_the_number), holds that
+    field alone: it stores the number, whatever the other fields stood on (Drive Mode's Focus Bracket, its Step Width
+    never walked there)."""
+    moving = [o for o in lines if any(c["key"] == key for c in o["changes"])]
+    moved_by = {o.get("field") for o in moving}
+    if moving and len(moved_by) == 1 and all(holds_the_number(o, key) for o in moving):
+        return False
     named = {f.get("label") for o in lines for f in o.get("fields") or [] if isinstance(f, dict)}
     finished = {o.get("field") for o in lines if o.get("final")}
     return len(moved_by) > 1 or not named <= finished
@@ -1533,7 +1548,8 @@ def option_fields_values(opts: dict, sources: dict | None = None) -> dict:
     after it ("label", all of them together, "0.5 EV 3 Img." for a step and a count, as the Drive Mode bracket lists
     word them) and how its own field read ("value", "0.5EV"). A record holds the fields together (held_together) unless
     only one field's lines moved it and every field the lines name ("fields") had a walk that finished (its put-back
-    counted): then it holds that field alone, its value credited to the line's "value", from that field's lines only.
+    counted), or only named numbers' lines moved it, each to its number: then it holds that field alone, its value
+    credited to the line's "value", from that field's lines only.
     Together, each value is credited to the line's "label": a field never walked, or walked and cut short of its
     put-back (its attempt's lines left out), says nothing of whether the record holds it. A field's put-back ("final")
     changes nothing: its value is the record's before in its own session (its base), as a list's own start is, but only

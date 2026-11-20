@@ -1889,6 +1889,66 @@ def test_the_report_credits_named_numbers_by_their_field_and_never_the_put_back(
     assert R.option_fields_sampled(opts) == set()
 
 
+def test_named_numbers_alone_are_credited_by_their_value_though_the_other_field_was_never_walked(own_runs, monkeypatch):
+    """--number 2 --number 7 with Step Width never walked in the row: the record moved to each number named, so it
+    holds the number alone, credited 2 and 7 by the field's value, never by the label that carries Step Width as it
+    stood, and not marked sampled; the put-back credits nothing."""
+    import pass2_report as R
+    cam = number_cam()
+    F, root, _ = fields_world(monkeypatch, own_runs, cam)
+    run_fields(F, root, "Focus Bracket", "--number", "2", "--number", "7")
+    opts = counted_rows(root)[f"Bracket Settings > Bracket Type > Focus Bracket [{CTX}]"]
+    assert R.values_of(opts)["global:0x9003"] == {"2": 2, "7": 7}
+    assert R.option_fields_sampled(opts) == set()
+
+
+def drive_number(n: int, changes, final=False, k=0) -> dict:
+    """A named number's line as Drive Mode > Focus Bracket's run wrote it on the camera (kit2_pass2, 2026-11-20): Step
+    Width never walked in that row, the number's record moved to the number."""
+    return {"path": ["Drive Mode", "Focus Bracket"], "kind": "list", "via": "a carousel option's own fields",
+            "walk": "number", "index": ["number", n], "field": "Number of Shots", "value": str(n),
+            "label": f"4(Standard) | {n}", "fields": [{"label": "Step Width", "value": "4(Standard)"},
+                                                      {"label": "Number of Shots", "value": str(n)}],
+            "box": str(n)[-1], "read_by": "reader", "shown": str(n)[-1], "box_vlm": str(n)[-1], "box_reader": "vllm",
+            "dat": f"{269500 + k}_Drive-Mode-number-{n}.DAT", "base": "269449_Drive-Mode-Focus-Bracket-base.DAT",
+            "applied": True, "final": final, "attempt": "kit2_pass2-d", "context": "Drive Mode dial on *",
+            "changes": [{"key": key, "before": b, "after": a} for key, b, a in changes]}
+
+
+DRIVE_NUMBERS = [drive_number(299, [("global:0x10aa", 3, 299)], k=0), drive_number(2, [("global:0x10aa", 3, 2)], k=1),
+                 drive_number(4, [("global:0x10aa", 3, 4)], k=2), drive_number(7, [("global:0x10aa", 3, 7)], k=3),
+                 drive_number(3, [], final=True, k=4)]
+
+
+def test_the_drive_mode_rows_numbers_credit_the_number_record_by_value():
+    """The five lines of Drive Mode > Focus Bracket (2026-11-20): 0x10aa took 299, 2, 4 and 7, each the number named, so
+    it is credited by the field's value, read by the vision model, not sampled (where the old rule, Step Width never
+    walked there, held it with Step Width and its labels named no number); the put-back credits nothing."""
+    import pass2_report as R
+    opts = dict(enumerate(DRIVE_NUMBERS))
+    sources = {}
+    assert R.option_fields_values(opts, sources) == {"global:0x10aa": {"299": 299, "2": 2, "4": 4, "7": 7}}
+    assert set(sources["global:0x10aa"].values()) == {"vision model"}
+    assert not R.held_together(DRIVE_NUMBERS, "global:0x10aa") and R.option_fields_sampled(opts) == set()
+
+
+@pytest.mark.parametrize("why, lines", [
+    ("a record not holding the number named", [drive_number(299, [("global:0x9005", 0, 1)]),     # a made-up flag
+                                                drive_number(7, [("global:0x10aa", 3, 7)], k=1)]),
+    ("a line of another walk moved it too", [drive_number(299, [("global:0x10aa", 3, 299)]),
+                                             {**drive_number(5, [("global:0x10aa", 3, 5)], k=1), "walk": None,
+                                              "index": [1, 2]}]),
+    ("lines of two fields moved it", [drive_number(299, [("global:0x10aa", 3, 299)]),
+                                      {**drive_number(299, [("global:0x10aa", 3, 299)], k=1), "field": "Step Width"}])])
+def test_named_numbers_hold_the_fields_together_otherwise(why, lines):
+    """Where the record does not hold each number named, or other lines move it too, the old rule stands: Step Width
+    never walked, the record holds the fields together, credited by the label and marked sampled."""
+    import pass2_report as R
+    key = next(c["key"] for c in lines[0]["changes"])
+    assert R.held_together(lines, key), why
+    assert key in R.option_fields_sampled(dict(enumerate(lines)))
+
+
 def stepped(cam, opt, edit, field, key) -> list:
     """FieldsCam's own Up or Down on a field, for a rule that adds to it."""
     b = cam.spec[opt][field]
